@@ -1,0 +1,593 @@
+/*
+ * Agents and setup's roster (docs/design/visual-language.md, 6.17): one row per harness on
+ * hairlines inside one frame, as Vercel lists projects. A row says what detection found in words, a
+ * square and a grey ladder; volt appears only when the agent needs you. Detection is the one
+ * thing that moves: the mark's pixel loader while an agent is looked for, then the status and
+ * version settle once and the green square arrives.
+ */
+
+/* ----------------------------------------------------------------------- the page */
+
+.agents-screen {
+  display: block;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.agents-page {
+  box-sizing: border-box;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: calc(var(--ui-titlebar-height) + var(--g-space-4)) var(--g-space-40) var(--g-space-64);
+}
+
+/* Ghost pills carry 12px of padding; the bar pulls them out so their words sit on the column. */
+.agents-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+  margin: 0 calc(var(--g-space-12) * -1);
+}
+
+.agents-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-24);
+  margin: var(--g-space-40) 0 var(--g-space-24);
+}
+
+.agents-head h1 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+/* Title and count stack to 48px, so Refresh centres 8px down on the grid. */
+.agents-head p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.agents-head .g-button {
+  flex: none;
+}
+
+/* ----------------------------------------------------------------------- the list */
+
+/*
+ * The frame and the hairlines between rows are drawn over the rows (a ring and 1px lines), not as
+ * borders, so every row is exactly 60px and starts on the 4px grid.
+ */
+.agent-list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--g-radius-12);
+  list-style: none;
+}
+
+.agent-list::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  pointer-events: none;
+}
+
+.agent-row,
+.agent-list-more {
+  position: relative;
+}
+
+:is(.agent-row, .agent-list-more) + :is(.agent-row, .agent-list-more)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 1px;
+  background-color: var(--g-line);
+  pointer-events: none;
+}
+
+.agent-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  padding-right: var(--g-space-16);
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .agent-row-main:hover {
+    background-color: var(--g-surface-1);
+  }
+}
+
+.agent-row[data-open] .agent-row-main {
+  background-color: var(--g-surface-1);
+}
+
+/* The focused row takes the list's focus: a lifted fill and a 2px rail (3.7). */
+.agent-row-main:has(.agent-row-toggle:focus-visible) {
+  background-color: var(--g-surface-2);
+  box-shadow: inset 2px 0 0 var(--g-fg-1);
+}
+
+.agent-row-main:has(.agent-row-toggle:active) {
+  background-color: var(--g-surface-2);
+  transition-duration: 0ms;
+}
+
+.agent-row-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--g-space-16);
+  min-width: 0;
+  min-height: 60px;
+  padding: 0 0 0 var(--g-space-16);
+  border: 0;
+  background: none;
+  color: var(--g-fg-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-row-toggle:focus-visible {
+  outline: none;
+}
+
+.agent-row-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+/* Name and version stack to 36px, as a settings row's label and line do (6.16). */
+.agent-row-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.agent-row-name strong {
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Versions are what a machine made: Geist Mono, tabular, one step down the ladder. */
+.agent-row-version {
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+  width: 120px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.agent-row-status:is([data-phase="missing"], [data-phase="checking"]) {
+  color: var(--g-fg-3);
+  font-weight: 400;
+}
+
+.agent-row-status[data-phase="signin"] {
+  color: var(--g-volt);
+}
+
+.agent-row-status[data-phase="broken"] {
+  color: var(--g-red);
+}
+
+.agent-row-dot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 6px;
+  height: 6px;
+}
+
+/* Not installed: an empty square, the same size as the found ones, in the decorative grey. */
+.agent-row-hollow {
+  width: 6px;
+  height: 6px;
+  box-shadow: inset 0 0 0 1px var(--g-fg-4);
+}
+
+.agent-row-verified {
+  flex: none;
+  width: 96px;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.agent-row-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--g-space-8);
+  width: 120px;
+}
+
+.agent-menu-spacer {
+  width: 28px;
+  height: 28px;
+}
+
+.agent-guide {
+  text-decoration: none;
+}
+
+.agent-guide svg {
+  color: var(--g-fg-3);
+}
+
+.agent-menu-trigger[aria-expanded="true"] {
+  background-color: var(--g-surface-4);
+  color: var(--g-fg-1);
+}
+
+/* What an action said, under its row, in the row's text column. */
+.agent-row-note {
+  margin: 0;
+  padding: 0 var(--g-space-16) var(--g-space-12) var(--g-space-64);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.agent-row[data-open] .agent-row-note {
+  background-color: var(--g-surface-1);
+}
+
+.agent-row-note[data-error] {
+  color: var(--g-red);
+}
+
+.agent-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--g-space-12);
+  padding: var(--g-space-64) var(--g-space-24);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-12);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.agent-list-empty p {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------- details */
+
+.agent-detail {
+  padding: 0 var(--g-space-16) var(--g-space-20) var(--g-space-64);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  animation: agent-open var(--g-dur-panel) var(--g-ease-quint) both;
+}
+
+.agent-detail-lead,
+.agent-detail-reason {
+  max-width: 64ch;
+  margin: 0 0 var(--g-space-12);
+  overflow-wrap: anywhere;
+}
+
+.agent-detail-reason {
+  color: var(--g-fg-3);
+}
+
+.agent-facts {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  max-width: 640px;
+  margin: 0;
+}
+
+.agent-facts :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-6) 0;
+  border-top: 1px solid var(--g-line);
+  line-height: var(--g-leading-ui);
+}
+
+.agent-facts dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+}
+
+.agent-facts dd {
+  min-width: 0;
+  color: var(--g-fg-1);
+  overflow-wrap: anywhere;
+}
+
+.agent-facts code {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  font-variant-ligatures: none;
+}
+
+.agent-facts-aside {
+  color: var(--g-fg-3);
+}
+
+.agent-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0 0;
+}
+
+.agent-detail-actions > .g-button-ghost:first-child {
+  margin-left: calc(var(--g-space-12) * -1);
+}
+
+/* --------------------------------------------------------------------- the menu */
+
+.agent-menu {
+  position: fixed;
+  z-index: 50;
+  transform-origin: top right;
+  animation: agent-menu-in var(--g-dur-base) var(--g-ease) both;
+}
+
+.agent-menu .g-menu-item {
+  text-decoration: none;
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+.agent-menu-out {
+  flex: none;
+  margin-left: auto;
+  color: var(--g-fg-3);
+}
+
+/* --------------------------------------------------------- setup's compact roster */
+
+/* Open at the sides: only the top and bottom hairlines, drawn over the rows like the frame. */
+.agent-list[data-compact] {
+  overflow: visible;
+  border-radius: 0;
+}
+
+.agent-list[data-compact]::after {
+  box-shadow:
+    inset 0 1px var(--g-line),
+    inset 0 -1px var(--g-line);
+}
+
+.agent-list[data-compact] .agent-row-main {
+  margin: 0 calc(var(--g-space-8) * -1);
+  padding-right: var(--g-space-8);
+  border-radius: var(--g-radius-8);
+}
+
+/* 52px, so a 28px action sits 12px in on the grid. */
+.agent-list[data-compact] .agent-row-toggle {
+  gap: var(--g-space-12);
+  min-height: 52px;
+  padding-left: var(--g-space-8);
+}
+
+.agent-list[data-compact] .agent-row-status {
+  width: auto;
+}
+
+.agent-list[data-compact] .agent-row[data-open] .agent-row-main {
+  border-radius: var(--g-radius-8) var(--g-radius-8) 0 0;
+}
+
+.agent-list[data-compact] .agent-detail,
+.agent-list[data-compact] .agent-row-note {
+  margin: 0 calc(var(--g-space-8) * -1);
+  padding-right: var(--g-space-8);
+  padding-left: calc(var(--g-space-8) + var(--g-space-24) + var(--g-space-12));
+}
+
+.agent-list[data-compact] .agent-detail {
+  margin-bottom: var(--g-space-8);
+  padding-bottom: var(--g-space-16);
+  border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
+}
+
+.agent-list[data-compact] .agent-facts {
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.agent-list-more button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  width: calc(100% + var(--g-space-16));
+  height: 44px;
+  margin: 0 calc(var(--g-space-8) * -1);
+  padding: 0 var(--g-space-8) 0 calc(var(--g-space-8) + var(--g-space-24) + var(--g-space-12));
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background: none;
+  color: var(--g-fg-2);
+  font: inherit;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .agent-list-more button:hover {
+    background-color: var(--g-surface-1);
+    color: var(--g-fg-1);
+  }
+}
+
+.agent-list-more button:active {
+  background-color: var(--g-surface-2);
+  transition-duration: 0ms;
+}
+
+.agent-list-more svg {
+  color: var(--g-fg-3);
+  transition: transform var(--g-dur-base) var(--g-ease);
+}
+
+.agent-list-more button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+/* ------------------------------------------------------------------- detection */
+
+/* Found: the status and the version settle into place once; the green square arrives last. */
+:where(.agent-row-status, .agent-row-version) {
+  animation: agent-settle var(--g-dur-row) var(--g-ease-reveal) both;
+}
+
+.agent-row-status .g-status-dot {
+  animation: agent-dot var(--g-dur-letter) var(--g-ease-out) var(--g-dur-micro) both;
+}
+
+/*
+ * Looking: the mark's pixel loader walks its six cells (AgentMark's thinking state) while the words
+ * wait in fg-3. It is the row's one live indicator (section 7), so nothing else in the row moves.
+ */
+
+@keyframes agent-settle {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes agent-dot {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes agent-open {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes agent-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Reduced motion: every state shows at once; the loader holds its still frame (4.5). */
+@media (prefers-reduced-motion: reduce) {
+  .agent-row-status,
+  .agent-row-version,
+  .agent-row-status .g-status-dot,
+  .agent-detail,
+  .agent-menu {
+    animation: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(
+    .agent-row-status,
+    .agent-row-version,
+    .agent-row-status .g-status-dot,
+    .agent-detail,
+    .agent-menu
+  ) {
+  animation: none;
+}
+
+/* ----------------------------------------------------------------------- narrow */
+
+@media (max-width: 860px) {
+  .agent-row-verified {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .agents-page {
+    padding-inline: var(--g-space-16);
+  }
+
+  .agents-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--g-space-16);
+  }
+
+  .agent-row-status {
+    width: auto;
+  }
+
+  .agent-row-actions {
+    width: auto;
+  }
+}

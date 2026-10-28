@@ -87,7 +87,7 @@ describe("the automation attributes of the chat screens", () => {
       );
     const before = html(null);
     expect(marked(before, "new-chat")).toEqual([{ tag: "form" }]);
-    expect(marked(before, "new-chat-agent")).toEqual([{ tag: "select" }]);
+    expect(marked(before, "new-chat-agent")).toEqual([{ tag: "div" }]);
     expect(marked(before, "new-chat-refresh")).toEqual([{ tag: "button" }]);
     expect(marked(before, "new-chat-pick-folder")).toEqual([{ tag: "button" }]);
     expect(marked(before, "new-chat-folder")).toEqual([{ tag: "span", folder: "" }]);
@@ -109,8 +109,10 @@ describe("the automation attributes of the chat screens", () => {
       },
     ]);
     expect(marked(after, "new-chat-folder")).toEqual([{ tag: "span", folder: "/work/app" }]);
-    // The run finds an agent by its option's value.
-    expect(after).toContain('<option value="mock" selected="">Demo agent</option>');
+    // The run finds an agent by its radio's value, inside new-chat-agent.
+    expect(after).toMatch(
+      /<input type="radio"(?=[^>]*value="mock")(?=[^>]*checked="")(?=[^>]*aria-label="Demo agent, ready")/,
+    );
   });
 
   it("mark the chat list: New chat and each chat's id, status, attention and folder state", () => {

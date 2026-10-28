@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   WorktreeSetup,
@@ -94,8 +95,13 @@ export function WorktreeSetupPanel({
     });
   return (
     <section className="git-section" aria-labelledby="worktree-setup-title">
-      <button className="g-button" type="button" disabled={busy} onClick={onBack}>
-        Back to worktrees
+      <button
+        className="g-button g-button-ghost g-button-28 git-back"
+        type="button"
+        disabled={busy}
+        onClick={onBack}
+      >
+        <ArrowLeft size={14} aria-hidden="true" /> Back to worktrees
       </button>
       <h3 id="worktree-setup-title">Setup for {branch}</h3>
       <p>
@@ -135,7 +141,7 @@ export function WorktreeSetupPanel({
               onChange={(event) => setFiles(event.currentTarget.value)}
             />
           </label>
-          <p>
+          <p className="git-help">
             Only listed files are copied. Existing destination files are kept. File contents are
             never saved in this recipe.
           </p>
@@ -160,7 +166,7 @@ export function WorktreeSetupPanel({
               onChange={(event) => setArgs(event.currentTarget.value)}
             />
           </label>
-          <p>
+          <p className="git-help">
             Each line is one argument. For a script, choose its interpreter as the program and its
             path as an argument.
           </p>

@@ -1,17 +1,6 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import {
-  ArrowLeft,
-  ArrowRight,
-  BookOpen,
-  FileText,
-  History,
-  Package,
-  Plug,
-  RefreshCw,
-  Search,
-  Wrench,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, RefreshCw, Search } from "lucide-react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { vendorApi as nativeVendorApi, type VendorApi } from "../../lib/config-vendor/api";
 import { errorMessage } from "../../lib/errors";
 import { type LibraryApi, libraryApi } from "../../lib/library/api";
@@ -30,12 +19,12 @@ import "./library.css";
 
 const LABELS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared" };
 const KINDS = [
-  { value: "all", label: "Everything", icon: BookOpen },
-  { value: "skill", label: "Skills", icon: Wrench },
-  { value: "instructions", label: "Instructions", icon: FileText },
-  { value: "mcp_server", label: "MCP servers", icon: Plug },
-  { value: "plugin", label: "Plugins", icon: Package },
-  { value: "package", label: "Packages", icon: Package },
+  { value: "all", label: "Everything" },
+  { value: "skill", label: "Skills" },
+  { value: "instructions", label: "Instructions" },
+  { value: "mcp_server", label: "MCP servers" },
+  { value: "plugin", label: "Plugins" },
+  { value: "package", label: "Packages" },
 ] as const;
 
 export interface LibraryFolder {
@@ -47,7 +36,16 @@ const sourceLabel = (source: LibrarySourceStatus) =>
   `${LABELS[source.provider]} · ${source.scope === "user" ? "Personal" : "Project"}${source.id.endsWith(":claude-mcp") ? " MCP" : ""}`;
 const kindLabel = (kind: LibraryItemKind) =>
   KINDS.find((entry) => entry.value === kind)?.label ?? kind;
+const sourceName = (sources: readonly LibrarySourceStatus[], id: string) => {
+  const source = sources.find((entry) => entry.id === id);
+  return source ? sourceLabel(source) : id;
+};
 
+/**
+ * The Library (Vercel's project pages): the views on the left, what the agents use as rows on
+ * hairlines, and the chosen item with its file in a well. Copies and restores are reviewed in a
+ * dialog before anything changes an agent's files.
+ */
 export function LibraryScreen({
   onBack,
   initialFolderId = null,
@@ -74,6 +72,7 @@ export function LibraryScreen({
   const [history, setHistory] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [vendor, setVendor] = useState<{ item: LibraryItem | null } | null>(null);
+  const attention = useId();
   const refresh = () => setGeneration((value) => value + 1);
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation is the explicit Refresh action.
   useEffect(() => {
@@ -104,6 +103,8 @@ export function LibraryScreen({
         .includes(query.toLowerCase()),
   );
   const chosen = visible.find((item) => itemKey(item) === selected) ?? null;
+  const recovery = receipts.some((receipt) => receipt.state === "recovery_required");
+  const unavailable = inventory?.sources.filter((source) => !source.available) ?? [];
   const complete = (message: string) => {
     setStatus(message);
     refresh();
@@ -117,36 +118,27 @@ export function LibraryScreen({
         </button>
       </header>
       <div className="library-heading">
-        <h1>
-          Library
-          <span>The instructions and tools your agents use.</span>
-        </h1>
+        <div>
+          <h1>Library</h1>
+          <p>The instructions and tools your agents use.</p>
+        </div>
         <div className="library-heading-actions">
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon"
+            aria-label="Refresh Library"
+            title="Refresh"
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="g-button g-button-outline"
             onClick={() => setVendor({ item: null })}
           >
-            <Package size={14} aria-hidden="true" /> Manage integrations
-          </button>
-          <button
-            type="button"
-            className="g-button g-button-outline library-toggle"
-            aria-pressed={history}
-            onClick={() => setHistory(!history)}
-          >
-            <History size={14} aria-hidden="true" /> Copy history
-            {receipts.some((receipt) => receipt.state === "recovery_required")
-              ? " · Needs review"
-              : ""}
-          </button>
-          <button
-            type="button"
-            className="g-button g-button-ghost"
-            onClick={refresh}
-            disabled={loading}
-          >
-            <RefreshCw size={14} aria-hidden="true" /> Refresh
+            Manage integrations
           </button>
         </div>
       </div>
@@ -162,41 +154,35 @@ export function LibraryScreen({
             onChange={(event) => setQuery(event.currentTarget.value)}
           />
         </label>
-        <label className="library-select">
-          Source
-          <select
-            className="g-select"
-            aria-label="Project configuration source"
-            value={folder ?? ""}
-            onChange={(event) => setFolder(event.currentTarget.value || null)}
-          >
-            <option value="">Personal configuration</option>
-            {initialFolderId && !folders.some((item) => item.id === initialFolderId) ? (
-              <option value={initialFolderId}>Selected project</option>
-            ) : null}
-            {folders.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="library-select">
-          Agent
-          <select
-            className="g-select"
-            aria-label="Filter by agent"
-            value={provider}
-            onChange={(event) => setProvider(event.currentTarget.value)}
-          >
-            <option value="all">All agents</option>
-            {Object.entries(LABELS).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <select
+          className="g-select library-select"
+          aria-label="Project configuration source"
+          value={folder ?? ""}
+          onChange={(event) => setFolder(event.currentTarget.value || null)}
+        >
+          <option value="">Personal configuration</option>
+          {initialFolderId && !folders.some((item) => item.id === initialFolderId) ? (
+            <option value={initialFolderId}>Selected project</option>
+          ) : null}
+          {folders.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="g-select library-select"
+          aria-label="Filter by agent"
+          value={provider}
+          onChange={(event) => setProvider(event.currentTarget.value)}
+        >
+          <option value="all">All agents</option>
+          {Object.entries(LABELS).map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
       {error ? (
         <p className="library-feedback" role="alert">
@@ -210,7 +196,7 @@ export function LibraryScreen({
       ) : null}
       <div className="library-body">
         <nav className="library-categories" aria-label="Library categories">
-          {KINDS.map(({ value, label, icon: Icon }) => (
+          {KINDS.map(({ value, label }) => (
             <button
               type="button"
               key={value}
@@ -220,7 +206,6 @@ export function LibraryScreen({
                 setHistory(false);
               }}
             >
-              <Icon size={16} aria-hidden="true" />
               <span>{label}</span>
               <small>
                 {inventory?.items.filter((item) => value === "all" || item.item.kind === value)
@@ -228,19 +213,41 @@ export function LibraryScreen({
               </small>
             </button>
           ))}
-          <div className="library-source-note">
-            <span>On this device</span>
-            <p>Copies are reviewed before they change an agent's files.</p>
-          </div>
-          <details className="library-sources">
-            <summary>Configuration sources</summary>
-            {inventory?.sources.map((source) => (
-              <p key={source.id}>
-                {sourceLabel(source)}
-                <small>{source.available ? "Available" : (source.message ?? "Unavailable")}</small>
-              </p>
-            ))}
-          </details>
+          <hr />
+          <button
+            type="button"
+            aria-current={history ? "page" : undefined}
+            aria-describedby={recovery ? attention : undefined}
+            onClick={() => setHistory(true)}
+          >
+            <span>Copy history</span>
+            {recovery ? <span className="library-attention" aria-hidden="true" /> : null}
+          </button>
+          {recovery ? (
+            <span id={attention} hidden>
+              A copy needs review.
+            </span>
+          ) : null}
+          {inventory?.sources.length ? (
+            <details className="library-sources">
+              <summary>
+                Sources
+                <small>
+                  {unavailable.length
+                    ? `${unavailable.length} unavailable`
+                    : `${inventory.sources.length} available`}
+                </small>
+              </summary>
+              {inventory.sources.map((source) => (
+                <p key={source.id}>
+                  {sourceLabel(source)}
+                  <small>
+                    {source.available ? "Available" : (source.message ?? "Unavailable")}
+                  </small>
+                </p>
+              ))}
+            </details>
+          ) : null}
         </nav>
         {history ? (
           <HistoryView
@@ -254,28 +261,27 @@ export function LibraryScreen({
         ) : (
           <>
             <section className="library-items" aria-label="Library items">
-              <div className="library-list-heading">
-                <span>{KINDS.find((entry) => entry.value === kind)?.label}</span>
-                <small>{visible.length} items</small>
-              </div>
               {loading ? (
                 <p className="library-empty" role="status">
                   Reading configuration…
                 </p>
               ) : visible.length === 0 ? (
                 <div className="library-empty">
-                  <BookOpen size={20} aria-hidden="true" />
                   <h2>{query ? "No matching items" : "Nothing here yet"}</h2>
                   <p>
                     {query
                       ? "Try a different name or agent."
-                      : "Items appear here when supported configuration files exist in these sources."}
+                      : "Items appear when these sources hold supported files."}
                   </p>
                 </div>
               ) : (
                 <ul>
-                  {visible.map((item) => (
-                    <li key={itemKey(item)}>
+                  {visible.map((item, index) => (
+                    <li
+                      key={itemKey(item)}
+                      className="g-enter"
+                      style={{ "--g-row-index": Math.min(index, 8) } as CSSProperties}
+                    >
                       <button
                         type="button"
                         aria-pressed={selected === itemKey(item)}
@@ -288,11 +294,10 @@ export function LibraryScreen({
                           <strong>{item.label}</strong>
                           <small>
                             {LABELS[item.provider]} ·{" "}
-                            {item.scope === "user" ? "Personal" : "Project"} ·{" "}
-                            {kindLabel(item.item.kind)}
+                            {item.scope === "user" ? "Personal" : "Project"}
+                            {kind === "all" ? ` · ${kindLabel(item.item.kind)}` : ""}
                           </small>
                         </span>
-                        <ArrowRight size={14} aria-hidden="true" />
                       </button>
                     </li>
                   ))}
@@ -300,7 +305,10 @@ export function LibraryScreen({
               )}
               {inventory?.notices.length ? (
                 <details className="library-notices">
-                  <summary>{inventory.notices.length} source notices</summary>
+                  <summary>
+                    {inventory.notices.length}{" "}
+                    {inventory.notices.length === 1 ? "source notice" : "source notices"}
+                  </summary>
                   {inventory.notices.map((notice) => (
                     <p key={notice}>{notice}</p>
                   ))}
@@ -319,9 +327,8 @@ export function LibraryScreen({
               />
             ) : (
               <section className="library-detail library-unselected" aria-label="Item preview">
-                <FileText size={20} aria-hidden="true" />
                 <h2>No item selected</h2>
-                <p>Select an item to inspect its contents and review a copy.</p>
+                <p>Choose an item to read it and review a copy.</p>
               </section>
             )}
           </>
@@ -427,7 +434,7 @@ function ItemDetail({
   const blocked =
     item.copy_blocked ??
     (!["skill", "instructions", "mcp_server"].includes(item.item.kind)
-      ? "Copying this item needs its agent's configuration workflow. Inspection is available here."
+      ? "Copying this item needs its agent's configuration workflow. You can read it here."
       : null);
   const destinations = sources.filter(
     (source) =>
@@ -440,33 +447,31 @@ function ItemDetail({
         : !source.id.endsWith(":claude-mcp")) &&
       (source.provider !== "shared" || item.item.kind === "skill"),
   );
+  const managed =
+    (item.item.kind === "plugin" || item.item.kind === "package") && item.provider !== "shared";
   return (
     <section className="library-detail" aria-label="Item preview">
       <header>
-        <h2>{item.label}</h2>
-        <p>
-          {LABELS[item.provider]} · {item.scope === "user" ? "Personal" : "Project"}
-          <span className="library-kind">{kindLabel(item.item.kind)}</span>
-        </p>
-        <code>{item.relative_path}</code>
-        {(item.item.kind === "plugin" || item.item.kind === "package") &&
-        item.provider !== "shared" ? (
-          item.scope === "user" ? (
-            <button
-              type="button"
-              className="g-button g-button-outline g-button-28"
-              onClick={manage}
-            >
-              Manage with {LABELS[item.provider]}
-            </button>
-          ) : (
-            <p>
-              Manage this project integration through its vendor. Personal actions are available in
-              Manage integrations.
-            </p>
-          )
+        <div>
+          <h2>{item.label}</h2>
+          <p>
+            {LABELS[item.provider]} · {item.scope === "user" ? "Personal" : "Project"} ·{" "}
+            {kindLabel(item.item.kind)}
+          </p>
+          <code>{item.relative_path}</code>
+        </div>
+        {managed && item.scope === "user" ? (
+          <button type="button" className="g-button g-button-outline g-button-28" onClick={manage}>
+            Manage with {LABELS[item.provider]}
+          </button>
         ) : null}
       </header>
+      {managed && item.scope !== "user" ? (
+        <p className="library-detail-note">
+          Manage this project integration through its vendor. Personal ones are in Manage
+          integrations.
+        </p>
+      ) : null}
       {error ? (
         <p className="library-feedback" role="alert">
           {error}
@@ -474,15 +479,17 @@ function ItemDetail({
       ) : null}
       {preview ? (
         <>
-          <div className="library-file-heading">
-            <span>Contents</span>
-            <small>
-              {preview.files.length > 1
-                ? `${preview.files.length} files`
-                : `${item.bytes.toLocaleString()} bytes`}
-            </small>
+          <div className="library-well">
+            <div className="library-file-heading">
+              <span>{item.relative_path.split("/").pop()}</span>
+              <small>
+                {preview.files.length > 1
+                  ? `${preview.files.length} files`
+                  : `${item.bytes.toLocaleString()} bytes`}
+              </small>
+            </div>
+            <pre className="library-code">{preview.text}</pre>
           </div>
-          <pre className="library-code">{preview.text}</pre>
           {preview.files.length > 1 ? (
             <details className="library-file-list">
               <summary>Supporting files</summary>
@@ -502,7 +509,9 @@ function ItemDetail({
           ))}
         </>
       ) : !error ? (
-        <p role="status">Reading item…</p>
+        <p role="status" className="library-detail-note">
+          Reading item…
+        </p>
       ) : null}
       <div className="library-copy-controls">
         {blocked ? (
@@ -533,7 +542,6 @@ function ItemDetail({
               onClick={() => void prepare()}
             >
               {busy ? "Preparing…" : "Review copy"}
-              <ArrowRight size={14} aria-hidden="true" />
             </button>
           </>
         )}
@@ -541,29 +549,29 @@ function ItemDetail({
       {plan ? (
         <Modal title="Review copy" size="lg" className="library-review" onClose={cancel}>
           <p className="library-review-intro">
-            {item.label} <ArrowRight size={14} aria-hidden="true" />{" "}
-            {sources.find((source) => source.id === plan.to_source)
-              ? sourceLabel(
-                  sources.find((source) => source.id === plan.to_source) as LibrarySourceStatus,
-                )
-              : plan.to_source}
+            Copying <strong>{item.label}</strong> from{" "}
+            <strong>{sourceName(sources, item.item.source_id)}</strong> to{" "}
+            <strong>{sourceName(sources, plan.to_source)}</strong>.
           </p>
           <div className="library-comparison">
             <section>
               <h3>Before</h3>
-              <pre className="library-code">{plan.before_text ?? "New file"}</pre>
+              <pre>{plan.before_text ?? "New file"}</pre>
             </section>
             <section>
               <h3>After</h3>
-              <pre className="library-code">{plan.after_text}</pre>
+              <pre>{plan.after_text}</pre>
             </section>
           </div>
-          <details>
-            <summary>{plan.files.length} files in this copy</summary>
+          <details className="library-review-files">
+            <summary>
+              {plan.files.length} {plan.files.length === 1 ? "file" : "files"} in this copy
+            </summary>
             <ul>
               {plan.files.map((file) => (
                 <li key={file.path}>
-                  <code>{file.path}</code> · {file.before_revision ? "Replace" : "Create"}
+                  <code>{file.path}</code>
+                  <span>{file.before_revision ? "Replace" : "Create"}</span>
                 </li>
               ))}
             </ul>
@@ -573,7 +581,7 @@ function ItemDetail({
               {notice}
             </p>
           ))}
-          <footer>
+          <div className="g-dialog-actions library-actions">
             <button type="button" className="g-button" disabled={busy} onClick={cancel}>
               Cancel
             </button>
@@ -585,7 +593,7 @@ function ItemDetail({
             >
               {busy ? "Saving…" : "Apply copy"}
             </button>
-          </footer>
+          </div>
         </Modal>
       ) : null}
     </section>
@@ -629,33 +637,30 @@ function HistoryView({
   return (
     <section className="library-history" aria-label="Copy history">
       <h2>Copy history</h2>
-      <p>Restore original files after a copy. Later edits are protected.</p>
+      <p>Restore the original files after a copy. Files edited since are left alone.</p>
       {receipts.length === 0 ? (
-        <p className="library-empty">No retained copies in these sources.</p>
+        <div className="library-empty">
+          <h3>No copies yet</h3>
+          <p>Copies you apply from the Library appear here.</p>
+        </div>
       ) : (
         <ul>
           {receipts.map((receipt) => (
-            <li key={`${receipt.source_id}:${receipt.id}`}>
+            <li key={`${receipt.source_id}:${receipt.id}`} data-state={receipt.state}>
               <div>
-                <strong>
-                  {sources.find((source) => source.id === receipt.source_id)
-                    ? sourceLabel(
-                        sources.find(
-                          (source) => source.id === receipt.source_id,
-                        ) as LibrarySourceStatus,
-                      )
-                    : receipt.source_id}
-                </strong>
-                <span>{receipt.files.join(", ")}</span>
+                <strong>{receipt.files.join(", ")}</strong>
                 <small>
-                  {receipt.state === "complete"
-                    ? "Copied"
-                    : receipt.state === "rolled_back"
-                      ? "Restored"
-                      : "Recovery needed"}{" "}
-                  · {receipt.id}
+                  {sourceName(sources, receipt.source_id)} ·{" "}
+                  <span className="library-receipt-state">
+                    {receipt.state === "complete"
+                      ? "Copied"
+                      : receipt.state === "rolled_back"
+                        ? "Restored"
+                        : "Needs recovery"}
+                  </span>
                 </small>
               </div>
+              <code title="Copy receipt">{receipt.id}</code>
               <button
                 type="button"
                 className="g-button g-button-outline g-button-28"
@@ -677,11 +682,12 @@ function HistoryView({
             if (!busy) setSelected(null);
           }}
         >
-          <p>
-            This restores the retained originals for the selected copy. If any affected file has
-            been edited since, the operation stops before making a change.
+          <p className="library-review-intro">
+            Restores the files kept from before this copy to{" "}
+            <strong>{sourceName(sources, selected.source_id)}</strong>. If one was edited since,
+            nothing changes.
           </p>
-          <ul>
+          <ul className="library-restore-files">
             {selected.files.map((file) => (
               <li key={file}>
                 <code>{file}</code>
@@ -689,11 +695,11 @@ function HistoryView({
             ))}
           </ul>
           {error ? (
-            <p role="alert" className="library-feedback">
+            <p role="alert" className="library-dialog-error">
               {error}
             </p>
           ) : null}
-          <footer>
+          <div className="g-dialog-actions library-actions">
             <button
               type="button"
               className="g-button"
@@ -710,7 +716,7 @@ function HistoryView({
             >
               {busy ? "Restoring…" : "Restore originals"}
             </button>
-          </footer>
+          </div>
         </Modal>
       ) : null}
     </section>

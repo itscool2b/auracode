@@ -486,11 +486,11 @@ async function waitAttention(chatId: string, want: boolean): Promise<void> {
   );
 }
 
-/** Chooses `value` in a select and waits until the page took it. */
+/** Chooses `value` in a select, a picker or a radio group and waits until the page took it. */
 async function choose(select: HTMLElement | null, what: string, value: string): Promise<void> {
-  const row = select?.querySelector<HTMLButtonElement>(
-    `button[data-picker-value="${CSS.escape(value)}"]`,
-  );
+  const row =
+    select?.querySelector<HTMLButtonElement>(`button[data-picker-value="${CSS.escape(value)}"]`) ??
+    select?.querySelector<HTMLInputElement>(`input[type="radio"][value="${CSS.escape(value)}"]`);
   if (row) {
     await waitFor(`${what} to be enabled`, () => !row.disabled);
     click(row, what);
@@ -589,12 +589,20 @@ async function createChat(): Promise<string> {
   return attr(view, "chat-id");
 }
 
-/** The agent option New chat offers for `agentId`, once the agents are listed. */
-async function agentOption(agentId: string): Promise<HTMLOptionElement> {
-  await waitFor("the New chat screen", () => one("new-chat"));
+/**
+ * How New chat lists `agentId` once the agents are listed: a choice inside `new-chat-agent`, or,
+ * for an agent that cannot run here, its row under Other agents with the reason.
+ */
+async function agentOption(agentId: string): Promise<{ disabled: boolean; text: string }> {
+  const form = await waitFor("the New chat screen", () => one("new-chat"));
+  const value = CSS.escape(agentId);
   return waitFor(`New chat to list the agent ${agentId}`, () => {
-    const select = one("new-chat-agent");
-    return select?.querySelector<HTMLOptionElement>(`option[value="${agentId}"]`) ?? null;
+    const choice = one("new-chat-agent")?.querySelector<HTMLInputElement>(
+      `input[type="radio"][value="${value}"]`,
+    );
+    if (choice) return { disabled: choice.disabled, text: text(choice.closest("label")) };
+    const unavailable = form.querySelector(`[data-test-unavailable="${value}"]`);
+    return unavailable ? { disabled: true, text: text(unavailable) } : null;
   });
 }
 

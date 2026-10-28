@@ -27,20 +27,16 @@ export const ALLOWLIST = [
     reason: "The checkbox's check is an SVG data URL, which cannot read a custom property.",
   },
   {
+    file: "components/settings/settings.css",
+    fragment: "stroke='%23000'",
+    reason:
+      "Settings draws the chat's checkbox; its check is an SVG data URL, which cannot read a custom property.",
+  },
+  {
     file: "components/TerminalSheet.css",
     fragment: "fill='%23ededed'",
     reason:
       "The passed status's pixel check is an SVG data URL, which cannot read a custom property.",
-  },
-  {
-    file: "components/setup/setup.css",
-    fragment: "clamp(28px, 2.3vw, var(--g-text-display))",
-    reason: "Setup's heading steps from display size down to 28px so each tone keeps one line.",
-  },
-  {
-    file: "components/setup/setup.css",
-    fragment: "line-height: 1.1875",
-    reason: "The fluid heading needs display's 38/32 ratio, not a fixed leading.",
   },
   {
     file: "components/setup/setup.css",

@@ -13,12 +13,19 @@ credential inspection or model prompt is triggered by opening setup or Agents. E
 maintenance buttons use the existing Rust vendor commands; Sign in opens the existing terminal sheet
 whose Start action is separately explicit.
 
-The dark checklist and its side panel follow the inspected original
-[Grok Console flow](https://mobbin.com/flows/0a988ace-d6ce-4fcb-a1bd-5e1db4b71236). The panel is
-Graphite's dither field (docs/design/visual-language.md, 4.15 and 6.17). Agent rows resolve in place;
-narrow panels omit labels that would clip. Keyboard focus moves to each step's heading. Enter
-advances except inside controls, editable content and dialogs. Motion preferences also stop the
-shared frame clock, rather than merely hiding its animation with CSS.
+Setup is four skippable steps (Welcome, Your agents, Account, First project) in one calm, centred
+column after Grok's start screen, over Graphite's dither field gathered at the window's sides as on
+the website hero (docs/design/visual-language.md, 4.15 and 6.17). Motion is no longer a step: Full
+already follows the system's reduced motion and Settings changes it; a setup saved at the motion
+step resumes at First project. The account step says that accounts are optional and invite-only.
+Agent rows resolve in place. Keyboard focus moves to each step's heading. Enter advances except
+inside controls, editable content, menus and dialogs. Motion preferences also stop the shared frame
+clock, rather than merely hiding its animation with CSS.
+
+Agents (6.17a) is one list: a row per harness with its status, version and verified date, at most
+one action (Install for the one-click installers, Update when a newer release is known, Sign in
+after a check found it needed) and a menu for the rest. Opening Agents looks up maintenance
+metadata for installed agents; it never checks sign-in, updates or installs by itself.
 
 Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
 performs the write. A project created before a setup-save failure is reused on retry. Existing
@@ -39,7 +46,8 @@ folder-drop and terminal acceptance, final globe-to-dock boot polish, and the en
 clone flows remain acceptance work. No real account or agent was used in development checks.
 
 `node apps/desktop/scripts/check-setup.mjs` runs the production React components in Chromium and
-WebKit against synthetic command responses. It covers passive detection, keyboard progression,
-motion/resume, completion/restart/skip, a failed setup save after project creation, minimum viewport,
+WebKit against synthetic command responses. It covers the centred layout at two window sizes,
+passive detection and the roster, keyboard progression, resume (including the retired motion step),
+completion/restart/skip, a failed setup save after project creation, minimum viewport,
 reduced-motion intro bypass, warm startup, and accessibility. Core unit tests independently verify
 the actual storage behavior. Screenshots are written to `target/setup-browser/`.

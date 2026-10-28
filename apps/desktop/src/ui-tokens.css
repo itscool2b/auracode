@@ -16,8 +16,8 @@
   --ui-titlebar-height: 52px;
   /* The gap between the window edge and its panes, and between two panes. */
   --ui-pane-inset: var(--g-space-8);
-  /* The transcript's lead column: marks and chevrons centre on x 11, words start at x 22 (6.4). */
-  --ui-gutter: 22px;
+  /* The transcript's lead column: marks and chevrons centre on x 12, words start at x 24 (6.4). */
+  --ui-gutter: 24px;
 
   /* Over the OS window material (macOS vibrancy, Windows Mica) where a screen leaves it showing. */
   --ui-window-tint: rgb(7 7 10 / 0.42);

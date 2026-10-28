@@ -1,5 +1,4 @@
 /** Development-only visual harness. It never starts a process or uses the native transport. */
-import { PanelLeft } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
@@ -7,10 +6,9 @@ import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/reco
 import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindings";
 import { AgentDock } from "../components/chat/AgentDock";
 import { ChatList } from "../components/chat/ChatList";
+import { SidebarBand } from "../components/chat/ChatsScreen";
 import { ChatView } from "../components/chat/ChatView";
-import { CommandPalette } from "../components/chat/CommandPalette";
-import { NewChat } from "../components/chat/NewChat";
-import { NewChatDraft } from "../lib/chat/appStore";
+import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
 import {
   attachResult,
   chatSummary,
@@ -23,6 +21,7 @@ import {
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
+import { NewChatPreview } from "./newChatPreview";
 import { withPreviewContext } from "./previewContext";
 
 const AGENT: AgentEntry = {
@@ -36,6 +35,52 @@ const AGENT: AgentEntry = {
   installation: null,
   latest_release: null,
 };
+
+/** The catalog as a real machine might report it: native and adapter twins, one still detecting. */
+const DOCK_AGENTS: AgentEntry[] = [
+  AGENT,
+  {
+    ...AGENT,
+    id: "claude-acp",
+    name: "Claude Code (ACP)",
+    description: "Claude Code through its ACP adapter",
+  },
+  {
+    ...AGENT,
+    id: "codex",
+    name: "Codex",
+    description: "Your installed Codex CLI",
+    availability: { state: "ready", version: "0.164.0", path: "Recorded protocol fixture" },
+  },
+  {
+    ...AGENT,
+    id: "codex-acp",
+    name: "Codex (ACP)",
+    description: "Codex through its ACP adapter",
+    availability: { state: "missing", reason: "codex-acp is not installed." },
+  },
+  {
+    ...AGENT,
+    id: "pi",
+    name: "Pi",
+    description: "Your installed Pi coding agent",
+    availability: { state: "checking" },
+  },
+  {
+    ...AGENT,
+    id: "cursor",
+    name: "Cursor",
+    description: "Cursor CLI through ACP",
+    availability: { state: "missing", reason: "cursor-agent is not installed." },
+  },
+  {
+    ...AGENT,
+    id: "mock",
+    name: "Demo agent (scripted, no AI)",
+    description: "A scripted demo with no AI",
+    availability: { state: "ready", version: null, path: "built in" },
+  },
+];
 
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
 function recorded(source: { events: readonly { type: string; data: unknown }[] }): AuraEvent[] {
@@ -417,6 +462,7 @@ function Preview() {
     ? requested
     : "settled";
   const [palette, setPalette] = useState(false);
+  const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
@@ -615,26 +661,17 @@ function Preview() {
       }),
     );
   }, [mode, status, chat]);
-  const draft = useMemo(() => new NewChatDraft(transport), [transport]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
     <div
       className="chat-app"
       data-theme="dark"
       data-glass="none"
+      data-os={new URLSearchParams(location.search).get("os") ?? "windows"}
       data-sidebar-collapsed={collapsed}
     >
       <aside className="chat-sidebar" aria-label="Sidebar">
-        <div className="chat-drag" />
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-toggle"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((value) => !value)}
-        >
-          <PanelLeft size={16} />
-        </button>
+        <SidebarBand collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
         <ChatList
           onSearch={() => setPalette(true)}
           chats={[
@@ -652,10 +689,14 @@ function Preview() {
           onNewChat={() => setSelected(null)}
         />
         <AgentDock
-          agents={[AGENT]}
+          agents={DOCK_AGENTS}
           chats={[chat]}
           profile={{ id: "local", kind: "local", display_name: "Local", created_at: 1 }}
           onChoose={() => setSelected(null)}
+          onAgents={() => alert("This is a development-only protocol fixture. No agents run here.")}
+          onSettings={() =>
+            alert("This is a development-only protocol fixture. No agents run here.")
+          }
           onDiagnostics={() =>
             alert("This is a development-only protocol fixture. No agents run here.")
           }
@@ -664,15 +705,10 @@ function Preview() {
       <main className="chat-main">
         <div className="chat-drag" />
         {selected === null ? (
-          <NewChat
-            agents={[AGENT]}
-            refreshing={false}
-            draft={draft}
-            onRefreshAgents={() => {}}
-            onCreated={() => setSelected("preview")}
-          />
+          <NewChatPreview base={AGENT} onCreated={() => setSelected("preview")} />
         ) : (
           <ChatView
+            onCommands={setChatCommands}
             chatId="preview"
             transport={transport}
             listed={chat}
@@ -688,6 +724,7 @@ function Preview() {
           onClose={() => setPalette(false)}
           onChat={() => setSelected("preview")}
           commands={[
+            ...(selected !== null ? chatCommands : []),
             {
               id: "new",
               title: "New chat",

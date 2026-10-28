@@ -45,14 +45,7 @@ export function ToolGroup({
     .join(" · ");
   return (
     <div className="chat-tool-group">
-      {byline ? (
-        <div className="chat-byline">
-          <span className="chat-gutter">
-            <AgentMark agent={agentId} size={16} label={agentName} />
-          </span>
-          <span>{agentName}</span>
-        </div>
-      ) : null}
+      {byline ? <span className="sr-only">{agentName}</span> : null}
       <button
         type="button"
         className="chat-tool-group-toggle"

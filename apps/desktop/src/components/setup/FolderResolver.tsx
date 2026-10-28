@@ -121,9 +121,9 @@ export function FolderResolver({
     remote?.startsWith("https://github.com/") || remote?.startsWith("ssh://git@github.com/");
   return (
     <section className="folder-resolver" aria-labelledby={title}>
-      <h3 id={title}>Find {value?.folder.display_name ?? "project folder"} on this device</h3>
-      <p className="setup-footnote">
-        Folder paths stay on this device. Agent history requires a separate Continue here review.
+      <p id={title} className="folder-resolver-lead">
+        Find <strong>{value?.folder.display_name ?? "the project folder"}</strong> on this device.
+        Its path stays here; agent history needs its own Continue here review.
       </p>
       {value?.notices.map((notice) => (
         <p className="setup-footnote" key={notice}>
@@ -144,13 +144,16 @@ export function FolderResolver({
       )}
       {value?.folder.kind === "git" && (
         <>
-          <p className="setup-path">{remote}</p>
-          <h4>Code roots</h4>
-          <p className="setup-footnote">
-            Search only these selected folders, up to three levels below each root.
-          </p>
+          <dl className="setup-rows folder-resolver-remote">
+            <dt>Repository</dt>
+            <dd>{remote}</dd>
+          </dl>
+          <h3>
+            Code roots
+            <small>Searched up to three levels below each root.</small>
+          </h3>
           {value.roots.length ? (
-            <ul>
+            <ul className="folder-resolver-roots">
               {value.roots.map((root) => (
                 <li key={root}>
                   <span className="setup-path">{root}</span>{" "}
@@ -169,7 +172,7 @@ export function FolderResolver({
           ) : (
             <p className="setup-footnote">No code roots selected.</p>
           )}
-          <footer>
+          <footer className="folder-resolver-search">
             <button
               type="button"
               className="g-button g-button-ghost g-button-28"
@@ -210,7 +213,7 @@ export function FolderResolver({
           )}
         </>
       )}
-      <footer>
+      <footer className="folder-resolver-other">
         <button
           type="button"
           className="g-button g-button-ghost g-button-28"
@@ -232,7 +235,7 @@ export function FolderResolver({
       </footer>
       {review && (
         <section aria-label="Review folder location">
-          <h4>Use this folder</h4>
+          <h3>Use this folder</h3>
           <p className="setup-path">{review.path}</p>
           <ul>
             {review.notices.map((notice) => (

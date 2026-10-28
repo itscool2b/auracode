@@ -1,3 +1,4 @@
+import { Logo } from "@auracode/ui/graphite";
 import { PanelLeft } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AppInfo, ProjectSummary } from "../../bindings";
@@ -9,12 +10,41 @@ import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList } from "./ChatList";
 import { ChatView } from "./ChatView";
-import { CommandPalette } from "./CommandPalette";
+import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { NewChat } from "./NewChat";
 import { ProjectDialog } from "./ProjectDialog";
 
 const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
+
+/**
+ * The sidebar's top band (Grok): the logo at the left and the collapse toggle at the right. The
+ * band drags the window; on macOS the logo sits clear of the traffic lights (`data-os` on the app).
+ */
+export function SidebarBand({
+  collapsed,
+  onToggle,
+}: {
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <>
+      <div className="chat-drag" data-tauri-drag-region="" />
+      <Logo size={24} className="chat-sidebar-logo" />
+      <button
+        type="button"
+        className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-toggle"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-keyshortcuts="Control+\ Meta+\"
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+      >
+        <PanelLeft size={16} />
+      </button>
+    </>
+  );
+}
 
 /**
  * The chats: the sidebar with New chat and the projects' chats, the banners, and the open chat
@@ -59,6 +89,7 @@ export function ChatsScreen({
   );
   const [chatOptions, setChatOptions] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
+  const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const chatIds = snapshot.chats?.map((chat) => chat.id).join(",") ?? "";
   useEffect(() => {
     if (openChatRequest) setSelected(openChatRequest.id);
@@ -81,25 +112,28 @@ export function ChatsScreen({
     return () => app.stop();
   }, [app]);
 
+  useEffect(() => {
+    if (!active) return;
+    const toggle = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.key !== "\\") return;
+      event.preventDefault();
+      setCollapsed((value) => !value);
+    };
+    window.addEventListener("keydown", toggle);
+    return () => window.removeEventListener("keydown", toggle);
+  }, [active]);
+
   return (
     // Dark only: the window is pure black and every pane is opaque, whatever material the OS offers.
     <div
       className="chat-app"
       data-theme="dark"
       data-glass={info.glass}
+      data-os={info.os}
       data-sidebar-collapsed={collapsed}
     >
       <aside className="chat-sidebar" aria-label="Sidebar">
-        <div className="chat-drag" data-tauri-drag-region="" />
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-toggle"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((value) => !value)}
-        >
-          <PanelLeft size={16} />
-        </button>
+        <SidebarBand collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
         <ChatList
           active={active}
           onSearch={transport.search && active ? () => setPalette(true) : undefined}
@@ -168,6 +202,7 @@ export function ChatsScreen({
             }}
             key={selected}
             chatId={selected}
+            onCommands={setChatCommands}
             transport={transport}
             listed={snapshot.chats?.find((chat) => chat.id === selected) ?? null}
             storage={snapshot.storage}
@@ -190,6 +225,7 @@ export function ChatsScreen({
               : undefined
           }
           commands={[
+            ...(selected !== null ? chatCommands : []),
             ...(onSettings
               ? [
                   {

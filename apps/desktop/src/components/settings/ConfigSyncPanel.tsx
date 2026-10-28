@@ -26,6 +26,12 @@ const OPERATIONS: Record<ConfigOperation, string> = {
 };
 const PROVIDERS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared" };
 
+/**
+ * Configuration sync as settings rows in one well (X Money's groups): each agent file with where it
+ * applies, where it stands, a switch to keep it on this device and Review. Every change is reviewed
+ * in a dialog first (one sentence, the choice, four versions, Cancel and one action); History holds
+ * what was applied here, each with its own reviewed restore.
+ */
 export function ConfigSyncPanel({
   active,
   profileId = null,
@@ -107,25 +113,32 @@ export function ConfigSyncPanel({
   };
   if (!active)
     return (
-      <section className="settings-section config-sync-empty">
-        <h2>Your setup, on every device</h2>
-        <p>
-          Configuration sync is part of the invite-only cloud preview. Sign in with your invited
-          email and open your Account workspace to review agent instructions, skills and settings.
-          Local use is free and stays on this computer.
-        </p>
-        <button type="button" className="g-button g-button-outline" onClick={onAccount}>
-          Open Account settings <ArrowRight size={14} aria-hidden="true" />
-        </button>
+      // Vercel's empty state: one title, one line, and the one way forward.
+      <section className="settings-section" aria-labelledby="config-sync-empty-title">
+        <div className="settings-group config-sync-blank">
+          <h2 id="config-sync-empty-title">Your setup, on every device</h2>
+          <p>
+            Sign in with your invited email and open your Account workspace to sync agent
+            instructions, skills and settings.
+          </p>
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28"
+            onClick={onAccount}
+          >
+            Open Account settings <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
       </section>
     );
   return (
     <section className="settings-section config-sync" aria-label="Configuration sync">
-      <div className="config-sync-toolbar">
-        <p>
-          Choose what to sync once. Selected items stay in sync automatically; conflicts need your
-          review. Cloud sync requires preview access. Credentials stay on each device.
-        </p>
+      <p className="settings-lead">
+        Choose what syncs once and it stays in sync; conflicts wait for your review. Credentials
+        stay on each device.
+      </p>
+      <div className="settings-heading config-sync-heading">
+        <h2>{showHistory ? "Change history" : "Agent configuration"}</h2>
         <button
           type="button"
           className="g-button g-button-outline g-button-28 config-sync-toggle"
@@ -137,16 +150,27 @@ export function ConfigSyncPanel({
         </button>
         <button
           type="button"
-          className="g-button g-button-ghost g-button-28"
+          className="g-button g-button-ghost g-button-icon g-button-28"
+          aria-label="Refresh"
+          title="Refresh"
           disabled={loading || busy}
           onClick={refresh}
         >
           <RefreshCw size={14} aria-hidden="true" />
-          Refresh
         </button>
       </div>
+      {inventory?.notices.length ? (
+        <details className="settings-disclosure config-sync-notices">
+          <summary>Some configuration needs attention ({inventory.notices.length})</summary>
+          <ul>
+            {[...new Set(inventory.notices)].map((notice) => (
+              <li key={notice}>{notice}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       {status ? (
-        <p className={status.completed ? "config-sync-status" : "settings-error"} role="status">
+        <p className={status.completed ? "settings-footnote" : "settings-error"} role="status">
           {status.message}
         </p>
       ) : null}
@@ -160,36 +184,28 @@ export function ConfigSyncPanel({
           Reading your configuration…
         </p>
       ) : null}
-      {inventory?.notices.length ? (
-        <details className="config-sync-notices">
-          <summary>Some configuration needs attention ({inventory.notices.length})</summary>
-          <ul>
-            {[...new Set(inventory.notices)].map((notice) => (
-              <li key={notice}>{notice}</li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
       {showHistory ? (
         <div className="settings-group">
-          <h2 className="config-sync-list-heading">Local change history</h2>
           {!history.length && !loading ? (
-            <p className="config-sync-empty">
-              No configuration changes have been applied on this device.
-            </p>
+            <div className="config-sync-blank">
+              <h3>No changes yet</h3>
+              <p>Configuration changes applied on this device appear here.</p>
+            </div>
           ) : null}
           {history.map((receipt) => (
-            <div className="config-sync-row" key={receipt.id}>
-              <div>
-                <strong>{receipt.label}</strong>
-                <p>
-                  {PROVIDERS[receipt.provider]} ·{" "}
-                  {receipt.status === "recovery_required"
-                    ? "Recovery required"
-                    : receipt.status === "rolled_back"
-                      ? "Restored"
-                      : "Applied"}
-                </p>
+            <div className="settings-row" key={receipt.id}>
+              <div className="settings-row-text">
+                <div>
+                  <strong className="config-sync-name">{receipt.label}</strong>
+                  <p>
+                    {PROVIDERS[receipt.provider]} ·{" "}
+                    {receipt.status === "recovery_required"
+                      ? "Recovery required"
+                      : receipt.status === "rolled_back"
+                        ? "Restored"
+                        : "Applied"}
+                  </p>
+                </div>
               </div>
               {receipt.status !== "rolled_back" ? (
                 <button
@@ -206,72 +222,73 @@ export function ConfigSyncPanel({
         </div>
       ) : (
         <div className="settings-group">
-          <h2 className="config-sync-list-heading">Agent configuration</h2>
           {!inventory?.items.length && !loading && !error ? (
-            <p className="config-sync-empty">
-              No supported configuration to sync yet. Add instructions, skills or settings through
-              an installed agent, then refresh.
-            </p>
+            <div className="config-sync-blank">
+              <h3>Nothing to sync yet</h3>
+              <p>Add instructions, skills or settings through an installed agent, then refresh.</p>
+            </div>
           ) : null}
           {inventory?.items.map((item) => (
-            <div className="config-sync-row" key={item.id}>
-              <div>
-                <strong>{item.label}</strong>
-                <p>
-                  {item.provider ? `${PROVIDERS[item.provider]} · ` : ""}
-                  {item.scope === "portable"
-                    ? "All devices"
-                    : item.scope === "macos"
-                      ? "macOS"
-                      : item.scope === "windows"
-                        ? "Windows"
-                        : "Awaiting details"}
-                </p>
-                <span
-                  className="config-sync-state"
-                  data-attention={item.operation === "conflict" || item.skipped}
-                >
-                  {item.device_only
-                    ? "Only on this device"
-                    : item.skipped
-                      ? "Previous change needs review"
-                      : OPERATIONS[item.operation]}
-                  {item.first_link ? " · First connection" : ""}
-                </span>
-                {item.detail ? <p>{item.detail}</p> : null}
+            <div className="settings-row" key={item.id}>
+              <div className="settings-row-text">
+                <div>
+                  <strong className="config-sync-name">{item.label}</strong>
+                  <p>
+                    {item.provider ? `${PROVIDERS[item.provider]} · ` : ""}
+                    {item.scope === "portable"
+                      ? "All devices"
+                      : item.scope === "macos"
+                        ? "macOS"
+                        : item.scope === "windows"
+                          ? "Windows"
+                          : "Awaiting details"}
+                  </p>
+                  <span
+                    className="config-sync-state"
+                    data-attention={item.operation === "conflict" || item.skipped}
+                  >
+                    {item.device_only
+                      ? "Only on this device"
+                      : item.skipped
+                        ? "Previous change needs review"
+                        : OPERATIONS[item.operation]}
+                    {item.first_link ? " · First connection" : ""}
+                  </span>
+                  {item.detail ? <p>{item.detail}</p> : null}
+                  <label className="config-sync-local">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-checked={item.device_only}
+                      className="g-switch"
+                      checked={item.device_only}
+                      disabled={busy || loading}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        void action(async () => {
+                          await api.deviceOnly(item.id, checked);
+                          if (alive.current) refresh();
+                        });
+                      }}
+                    />
+                    Keep on this device
+                  </label>
+                </div>
               </div>
-              <div className="config-sync-actions">
-                <label>
-                  <input
-                    type="checkbox"
-                    className="g-switch"
-                    checked={item.device_only}
-                    disabled={busy || loading}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      void action(async () => {
-                        await api.deviceOnly(item.id, checked);
-                        if (alive.current) refresh();
-                      });
-                    }}
-                  />
-                  Keep on this device
-                </label>
-                <button
-                  type="button"
-                  className="g-button g-button-outline g-button-28"
-                  disabled={busy || loading}
-                  onClick={() => setSelected(item)}
-                >
-                  Review <ArrowRight size={14} aria-hidden="true" />
-                </button>
-              </div>
+              <button
+                type="button"
+                className="g-button g-button-outline g-button-28"
+                disabled={busy || loading}
+                onClick={() => setSelected(item)}
+              >
+                Review <ArrowRight size={14} aria-hidden="true" />
+              </button>
             </div>
           ))}
           {inventory?.next_cursor ? (
             <button
               type="button"
-              className="g-button config-sync-more"
+              className="settings-link config-sync-more"
               disabled={busy || loading}
               onClick={() =>
                 void action(async () => {
@@ -295,7 +312,7 @@ export function ConfigSyncPanel({
                 })
               }
             >
-              Load more
+              <span>Load more</span>
             </button>
           ) : null}
         </div>
@@ -317,41 +334,42 @@ export function ConfigSyncPanel({
               : "Restore local configuration"
           }
           size="md"
+          className="config-sync-dialog"
           onClose={() => setRestore(null)}
           closeDisabled={busy}
         >
-          <div className="config-sync-restore">
-            <p>
-              Restore <strong>{restore.label}</strong> to its state before this change. Later edits
-              to the same item may prevent restoration. Other settings stay in place.
+          <p className="config-sync-lead">
+            Restores <strong>{restore.label}</strong> to how it was before this change. Other
+            settings stay in place, and later edits to the same item can stop the restore.
+          </p>
+          <dl className="config-sync-facts">
+            <dt>Agent</dt>
+            <dd>{PROVIDERS[restore.provider]}</dd>
+            <dt>Afterwards</dt>
+            <dd>Review the item again to choose what your other devices get.</dd>
+          </dl>
+          {error ? (
+            <p role="alert" className="config-sync-error">
+              {error}
             </p>
-            <p>
-              After restoring, review the item again to decide what to share with your other
-              devices.
-            </p>
-            {error ? (
-              <p role="alert" className="settings-error">
-                {error}
-              </p>
-            ) : null}
-            <div className="config-sync-footer">
-              <button
-                type="button"
-                className="g-button"
-                disabled={busy}
-                onClick={() => setRestore(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="g-button g-button-primary"
-                disabled={busy}
-                onClick={() => void action(async () => completed(await api.rollback(restore.id)))}
-              >
-                {busy ? "Restoring…" : "Restore this item"}
-              </button>
-            </div>
+          ) : null}
+          <div className="g-dialog-actions config-sync-footer">
+            <button
+              type="button"
+              className="g-button"
+              disabled={busy}
+              onClick={() => setRestore(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-primary"
+              disabled={busy}
+              onClick={() => void action(async () => completed(await api.rollback(restore.id)))}
+            >
+              {busy ? "Restoring…" : "Restore this item"}
+            </button>
           </div>
         </Modal>
       ) : null}
@@ -443,112 +461,113 @@ function ConfigReview({
       size="lg"
       onClose={onClose}
       closeDisabled={busy}
-      className="config-sync-review"
+      className="config-sync-dialog config-sync-review"
     >
-      <div className="config-sync-review-body">
-        <div className="config-sync-review-heading">
-          <strong>{item.label}</strong>
-          <p>{item.provider ? PROVIDERS[item.provider] : "Agent configuration"}</p>
+      <p className="config-sync-lead">
+        <strong>{item.label}</strong>
+        {item.provider ? ` from ${PROVIDERS[item.provider]}` : ""}. Choose how this device and your
+        account meet.
+      </p>
+      <fieldset className="g-segmented config-sync-choices">
+        <legend className="sr-only">How to resolve this item</legend>
+        {(
+          [
+            ["automatic", "Merge safely"],
+            ["keep_local", "Keep this device"],
+            ["use_remote", "Use account version"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            className="g-segment"
+            aria-pressed={choice === value}
+            disabled={busy}
+            onClick={() => setChoice(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </fieldset>
+      {error ? (
+        <div className="config-sync-failed" role="alert">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="g-button g-button-28"
+            disabled={busy}
+            onClick={() => setVersion((value) => value + 1)}
+          >
+            Review again
+          </button>
         </div>
-        <fieldset className="g-segmented config-sync-choices">
-          <legend className="sr-only">How to resolve this item</legend>
-          {(
-            [
-              ["automatic", "Merge safely"],
-              ["keep_local", "Keep this device"],
-              ["use_remote", "Use account version"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              type="button"
-              key={value}
-              className="g-segment"
-              aria-pressed={choice === value}
-              disabled={busy}
-              onClick={() => setChoice(value)}
-            >
-              {label}
+      ) : !preview ? (
+        <p role="status" className="config-sync-preparing">
+          Preparing your review…
+        </p>
+      ) : null}
+      {preview ? (
+        <>
+          {preview.conflicts.length ? (
+            <p className="config-sync-warning">
+              Both versions changed: {preview.conflicts.join(", ")}. Choose which one to keep.
+            </p>
+          ) : null}
+          <div className="config-sync-comparison">
+            {(
+              [
+                ["Last synchronized", preview.base],
+                ["This device", preview.local],
+                ["Account", preview.remote],
+                ["Result", preview.result],
+              ] as const
+            ).map(([title, value]) => (
+              <section key={title} data-result={title === "Result" || undefined}>
+                <h3>{title}</h3>
+                <pre>{value ?? "No item"}</pre>
+              </section>
+            ))}
+          </div>
+          {preview.warnings.length ? (
+            <ul className="config-sync-warnings">
+              {[...new Set(preview.warnings)].map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
+          {preview.deletes_item ? (
+            <label className="config-sync-delete">
+              <input
+                type="checkbox"
+                checked={confirmDelete}
+                disabled={busy}
+                onChange={(event) => setConfirmDelete(event.target.checked)}
+              />
+              I reviewed the removal of this item.
+            </label>
+          ) : null}
+          <div className="g-dialog-actions config-sync-footer">
+            <span>{OPERATIONS[preview.item.operation]}</span>
+            <button type="button" className="g-button" disabled={busy} onClick={onClose}>
+              Cancel
             </button>
-          ))}
-        </fieldset>
-        {error ? (
-          <div className="settings-error" role="alert">
-            <p>{error}</p>
             <button
               type="button"
-              className="g-button"
-              disabled={busy}
-              onClick={() => setVersion((value) => value + 1)}
+              className={
+                preview.deletes_item ? "g-button g-button-danger" : "g-button g-button-primary"
+              }
+              disabled={busy || !preview.can_apply || (preview.deletes_item && !confirmDelete)}
+              onClick={() => void apply()}
             >
-              Review again
+              {busy
+                ? "Applying…"
+                : preview.deletes_item
+                  ? "Apply reviewed removal"
+                  : "Apply reviewed change"}
             </button>
           </div>
-        ) : !preview ? (
-          <p role="status" className="settings-footnote">
-            Preparing your review…
-          </p>
-        ) : null}
-        {preview ? (
-          <>
-            {preview.warnings.length ? (
-              <ul className="config-sync-warnings">
-                {[...new Set(preview.warnings)].map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            ) : null}
-            {preview.conflicts.length ? (
-              <p className="config-sync-warning">
-                Both versions changed: {preview.conflicts.join(", ")}. Choose which version to keep.
-              </p>
-            ) : null}
-            <div className="config-sync-comparison">
-              {(
-                [
-                  ["Last synchronized", preview.base],
-                  ["This device", preview.local],
-                  ["Account", preview.remote],
-                  ["Result", preview.result],
-                ] as const
-              ).map(([title, value]) => (
-                <section key={title}>
-                  <h3>{title}</h3>
-                  <pre>{value ?? "No item"}</pre>
-                </section>
-              ))}
-            </div>
-            {preview.deletes_item ? (
-              <label className="config-sync-delete">
-                <input
-                  type="checkbox"
-                  checked={confirmDelete}
-                  disabled={busy}
-                  onChange={(event) => setConfirmDelete(event.target.checked)}
-                />
-                I reviewed the removal of this item.
-              </label>
-            ) : null}
-            <div className="config-sync-footer">
-              <span>{OPERATIONS[preview.item.operation]}</span>
-              <button type="button" className="g-button" disabled={busy} onClick={onClose}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="g-button g-button-primary"
-                disabled={busy || !preview.can_apply || (preview.deletes_item && !confirmDelete)}
-                onClick={() => void apply()}
-              >
-                {busy
-                  ? "Applying…"
-                  : preview.deletes_item
-                    ? "Apply reviewed removal"
-                    : "Apply reviewed change"}
-              </button>
-            </div>
-          </>
-        ) : null}
-      </div>
+        </>
+      ) : null}
     </Modal>
   );
 }

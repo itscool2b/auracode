@@ -3046,3 +3046,144 @@ Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root
 check in Chromium and WebKit with no axe violations (`check-settings` needs the website built
 first for its verification fixture). Before and after sheets of every preview mode, fixture and
 main dialog are in the ignored `target/design-research/sheets/app-2a-*.png`.
+
+### App restyle step 2b: the Grok chat shell (2026-10-27)
+
+Branch `app-chat-shell` (from `app-one-system`) rebuilds the chat shell after Grok's web app.
+
+- **Sidebar:** the seal and turtle logo at the top left (x 84 on macOS, clear of the traffic
+  lights, through `data-os`), the collapse toggle (now also ⌘\), Search and New chat with their
+  keys under the hand only, a foldable Projects section without counts, and Archived chats as a
+  quiet last line. Rows share one style and sit 4px apart.
+- **Agent dock:** one tile per usable product (native before the ACP adapter; the demo only when
+  nothing else is usable); missing and alternate variants wait behind "+N", whose rows start a
+  chat or open the Agents screen. Detecting, found, sign-in or update, working and needs-you each
+  have a look and one small motion; reduced motion holds still.
+- **Account row:** round initials, the name and its storage or sync state, and a kebab menu
+  (Settings, Agents, Diagnostics) after Vercel's user row.
+- **Header:** title and project, the status with its live mark only while it says something, and
+  two controls (Changes and the chat menu). Git workspace, Terminal and editor, history, export,
+  debug bundle, log and the session lifecycle live in the menu and, by name, in the palette.
+- **Transcript:** no byline; Grok's action row (copy, retry, fork, receipt icons and the time) in
+  place of the receipt; an even-radius prompt block with icon actions; a 24px gutter.
+- **Composer and picker:** one pill with attach, the agent chip (agent, model, autonomy ticks) and
+  one send control (Stop recedes once a message is typed; Steer and Queue share one pill). The
+  agent, model, effort and autonomy choices are one popover after Grok's voice popover.
+- **Calm treatment:** permission input as key and value rows, Graphite radios in questions, the
+  queue as one segment, quiet panel tabs and palette scopes, no palette key legend.
+- **Layout probe:** `apps/desktop/scripts/check-layout.mjs` walks every `?preview=` mode plus the
+  shell's floating layers in Chromium and WebKit at 1440x900 and 1024x700, and fails on
+  overflow, padded containers off the 4px grid, overlapping controls, focus without a visible
+  change, and text under 4.5:1. The chat surfaces are clean (100 of 100 views); findings remain in
+  New chat, settings, account, setup, Agents, Git, project tools, worktree setup, config sync,
+  data transfer and keep-local, which the parallel 2b branches own.
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 351 with 19 skipped, design lab 352, web 4), and in Chromium and WebKit
+`check-chat`, `check-steering`, `check-questions`, `check-session-fallback`, `check-git-review`,
+`check-project-tools`, `check-profile-status` (now opening the account menu first) and
+`check-settings` (which includes settings navigation). Side-by-side sheets against the Grok and
+Vercel references are in the ignored `target/design-research/sheets/app-2b-chat-*.png`.
+
+### App restyle step 2b: New chat, Settings and Account (2026-10-27)
+
+Branch `app-settings` (on `app-one-system`) redesigns New chat, Settings, Account and the update,
+profile and configuration sync panels after the owner's references: Grok's start screen and
+settings, X Money's grouped rows, Vercel's empty states. Behaviour, test hooks and accessible
+names are kept unless noted.
+
+- **New chat:** the logo, one two-tone display line, one hint and one composer card. Agents that
+  can run here are pills over native radios whose mark shows the state: the loader while
+  detected, the code once found (settling in once, still under reduced motion), the volt square
+  when a sign-in check says it needs you. Unavailable agents and their reasons sit under Other
+  agents. The rules moved from `chat.css` to `new-chat.css`. The agent picker is no longer a
+  select, so `testIds.test.tsx`, `screens.test.tsx` and the smoke run's `choose()` and
+  `agentOption()` read the radio by its value; the smoke run was not executed against a real
+  build in this step.
+- **Settings:** icon nav with Grok's filled pill, no page subtitles, wells of rows with one control
+  each. General is one well, Shortcuts one keycap table (New chat and the menu keys added), About
+  the logo, name and version over Updates, This device, Diagnostics and notices.
+- **Account:** Profiles, Cloud account, Devices and Security. Each sign-in step is one row with its
+  form under it; sign-in errors are one red line under the field; Sign out and the reset entry are
+  chevron rows. Turnstile sits in a well over a status line with a loader, check or red square.
+- **Configuration sync:** files in mono with their state and keep-local switch, Review as the one
+  action, Vercel empty states.
+- **Docs:** visual language 6.13 (New chat) and 6.16 (Settings) describe what is built. The style
+  guard allowlists settings.css's checkbox data URL like the shell's.
+
+Sheets of every screen at 1440 x 900 and 1024 x 700 beside their references are in the ignored
+`target/design-research/sheets/app-2b-settings-*.png`.
+
+### App restyle step 2b: Agents, onboarding, Library, sync and dialogs (2026-10-27)
+
+Branch `app-secondary` (on `app-one-system`) redesigns the secondary surfaces against the owner's
+Vercel and Grok references, translated to Graphite dark. Chat and settings were redesigned in
+parallel on other branches and are not touched here.
+
+- **Agents** (visual language 6.17a): Vercel's project list. One framed list, a 64px row per
+  harness with its mark, name, version, status (a word and a 6px square; volt only for Needs
+  sign-in), the date auracode last verified it, at most one action (Install, Update or Sign in) and
+  a kebab menu for the rest. A row opens its details and the executable picker. Detection shows
+  the mark's pixel loader, then the status and version settle once and the green square arrives.
+  The one-click list is `ONE_CLICK` in `AgentRow.tsx` (it moved from `AgentsScreen.tsx`).
+- **Onboarding** (6.17): four skippable steps in one centred column (Grok's start screen) over
+  the dither field gathered at the window's sides (the website hero). The side panel, the numbered
+  checklist, the motion step and "Skip this step" are gone; a setup saved at the motion step
+  resumes at First project. The account step says plainly that accounts are optional and
+  invite-only.
+- **Library** (6.18) and **configuration sync**: Vercel list cleanliness; Copy history is a view
+  after one divider; review, apply, restore and recovery dialogs follow one pattern (the title, one
+  sentence, rows or a hairline grid, Cancel and one primary or the red pill).
+- **Dialogs and takeover screens** (6.19, 6.21): the terminal sheet, clone, install review,
+  vendor command, folder resolver, startup error and configuration recovery on the same pattern.
+- **Checks:** `check-setup.mjs` now asserts the centred layout, the roster and the retired-step
+  resume instead of the removed panel and motion radios, and audits Agents with a row menu open
+  from the keyboard. Biome's descending-specificity warnings in these stylesheets went from 22 to
+  none (repository total 70 to 48).
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 348 with 19 skipped, design lab 352, web 4), and in Chromium and WebKit
+`check-setup`, `check-setup-actions`, `check-agent-installations`, `check-chat-auth`,
+`check-library`, `check-config-sync`, `check-config-recovery`, `check-worktree-setup`,
+`check-git-review`, `check-workspace-removal`, `check-repository-publication`,
+`check-folder-resolution` and `check-settings`, each passing with its axe audits clean. Sheets
+of each screen at 1440x900 and 1024x700 beside its reference, with checklists, are in the ignored
+`target/design-research/sheets/app-2b-secondary-*.png`. Not done here: the hand walkthrough of
+the built app and the Windows and macOS CI run, which belong to the integration of steps 2a to 2c.
+
+### App restyle step 2b: integration (2026-10-27)
+
+Branch `app-redesign` (from `app-one-system`) merges `app-chat-shell`, `app-settings` and
+`app-secondary` in that order, then brings over the reviewed OpenCode install from
+`opencode-install` (the Rust installer as is; `opencode` joins `ONE_CLICK` in `AgentRow.tsx`).
+
+- **Conflicts:** `chat.css` keeps the shell's picker rules and drops the old New chat block, now
+  `new-chat.css`; `preview.tsx` keeps the shell's palette commands and uses `NewChatPreview`;
+  configuration sync takes the settings rows and wells from `app-settings` for the panel and the
+  review, restore and recovery dialogs from `app-secondary`, with one merged `config-sync.css`;
+  the progress log keeps all three entries.
+- **Layout:** the probe found 44 of 152 views with findings after the merges (250 off the grid, 4
+  focus, no overlap), all in New chat, settings, account, verification, config sync, Agents, the
+  Git and project tools dialogs and their fixtures. Settings, account and Agents rows are now one
+  60px row (the label 20 over its line 16, a 28px control 16px in); the strong segmented control is
+  a 36px track with its 28px segments 4px in, in settings and dialogs alike; dialogs, the Agents
+  frame and its hairlines and New chat's folder row draw their lines inset; New chat's drop snaps
+  to the grid; the verification frame shows a keyboard focus ring through the window's blur into
+  it, since a cross-origin frame never matches `:focus`. The probe now exempts only the window
+  offset of a modal dialog centred by its margins. A full run in Chromium and WebKit is clean: 152
+  of 152 views.
+- **Seams:** the settings sidebar takes the chat sidebar's geometry (the logo in the band, rows 4px
+  apart, words at x 44); the Library's views share the settings nav's spacing and divider; the
+  Library and Agents page heads stack alike. The worktree setup, keep-local, data transfer,
+  project tools and verification fixtures show their panels in their real containers.
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 351 with 19 skipped, design lab 352, web 4); every
+`apps/desktop/scripts/check-*.mjs` in Chromium and WebKit with its axe audits clean
+(`check-notices` and `check-settings-navigation` run inside `check-settings`); `cargo clippy -p
+aura-agents --lib --tests -- -D warnings` and `cargo test -p aura-agents --lib installer`. The
+overview sheet of every preview mode is the ignored
+`target/design-research/sheets/app-2b-integrated-overview.png`. Not covered by the probe: the
+Library and setup actions fixtures, which have their own pages instead of `?preview=` routes (the
+Library still has 11 findings per view there). Not done: the hand walkthrough of the built app and
+the Windows and macOS CI run.

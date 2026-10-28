@@ -25,7 +25,7 @@ export function CloneProject({
     <>
       <button
         type="button"
-        className="g-button g-button-ghost setup-clone"
+        className="g-button g-button-ghost g-button-28 setup-clone"
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
@@ -45,6 +45,10 @@ export function CloneProject({
   );
 }
 
+/**
+ * Clone in three states on one dialog (Vercel's transfer dialog): the form, the reviewed command
+ * as rows, then the running or finished clone. Nothing starts before Start clone.
+ */
 function CloneDialog({
   api,
   pickParent,
@@ -64,6 +68,7 @@ function CloneDialog({
   const started = useRef<string | null>(null);
   const pending = useRef(false);
   const title = useId();
+  const hint = useId();
   const [remote, setRemote] = useState(fixedRemote ?? "");
   const [parent, setParent] = useState("");
   const [name, setName] = useState("");
@@ -181,7 +186,7 @@ function CloneDialog({
   const content = (
     <dialog
       ref={dialog}
-      className={dialogClassName("md", "setup-clone-dialog")}
+      className={dialogClassName("md", "setup-dialog setup-clone-dialog")}
       aria-labelledby={title}
       onCancel={(event) => {
         event.preventDefault();
@@ -201,9 +206,9 @@ function CloneDialog({
             prepare();
           }}
         >
-          <p>
-            Use a public HTTPS repository or SSH access you have already set up. No sign-in runs
-            here.
+          <p className="setup-dialog-lead">
+            Copy a repository into a new folder. Use a public HTTPS address or SSH access you
+            already set up; no sign-in runs here.
           </p>
           <label className="setup-field">
             GitHub repository
@@ -217,120 +222,142 @@ function CloneDialog({
               onChange={(event) => setRemote(event.currentTarget.value)}
             />
           </label>
-          <button type="button" className="setup-folder" disabled={busy} onClick={choose}>
-            <FolderOpen size={18} aria-hidden="true" />
-            <span>
-              <strong>Choose parent folder</strong>
-              <small className={parent ? "setup-path" : undefined}>
-                {parent || "Pick where the new folder will be created"}
-              </small>
-            </span>
-          </button>
-          <label className="setup-field">
-            New folder name
+          <div className="setup-field">
+            <span aria-hidden="true">Location</span>
+            <button type="button" className="setup-picker" disabled={busy} onClick={choose}>
+              <FolderOpen size={16} aria-hidden="true" />
+              <span>
+                <strong>Choose parent folder</strong>
+                {parent ? <small className="setup-path">{parent}</small> : null}
+              </span>
+            </button>
+          </div>
+          <div className="setup-field">
+            <label htmlFor={`${hint}-name`}>New folder name</label>
             <input
+              id={`${hint}-name`}
               className="g-input"
               required
               maxLength={100}
               value={name}
               disabled={busy}
               placeholder="my-project"
+              aria-describedby={hint}
               onChange={(event) => setName(event.currentTarget.value)}
             />
-          </label>
-          <p className="setup-footnote">
-            Existing folders are never reused. A canceled clone keeps its partial files.
-          </p>
-          <button
-            type="submit"
-            className="g-button g-button-primary g-button-36"
-            disabled={busy || !parent || !remote || !name}
-          >
-            {busy ? "Preparing…" : "Review clone"}
-          </button>
+            <small id={hint} className="setup-hint">
+              Existing folders are never reused. A canceled clone keeps its partial files.
+            </small>
+          </div>
+          {error ? (
+            <p role="alert" className="setup-alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="g-dialog-actions setup-dialog-actions">
+            <button type="button" className="g-button" disabled={busy} onClick={close}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="g-button g-button-primary"
+              disabled={busy || !parent || !remote || !name}
+            >
+              {busy ? "Preparing…" : "Review clone"}
+            </button>
+          </div>
         </form>
       ) : null}
       {review ? (
-        <section className="setup-clone-review">
-          <dl>
+        <section className="setup-clone-review" aria-label="Clone review">
+          <p className="setup-dialog-lead">Check where the repository will be cloned.</p>
+          <dl className="setup-rows">
             <dt>Repository</dt>
             <dd>{review.remote}</dd>
             <dt>Destination</dt>
             <dd>{review.destination}</dd>
           </dl>
-          <ul>
+          <ul className="setup-notices">
             {review.notices.map((notice) => (
               <li key={notice}>{notice}</li>
             ))}
           </ul>
-          <footer>
-            <button
-              type="button"
-              className="g-button g-button-ghost g-button-36"
-              disabled={busy}
-              onClick={back}
-            >
+          {error ? (
+            <p role="alert" className="setup-alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="g-dialog-actions setup-dialog-actions">
+            <button type="button" className="g-button" disabled={busy} onClick={back}>
               Back
             </button>
             <button
               type="button"
-              className="g-button g-button-primary g-button-36"
+              className="g-button g-button-primary"
               disabled={busy}
               onClick={start}
             >
               {busy ? "Starting…" : "Start clone"}
             </button>
-          </footer>
+          </div>
         </section>
       ) : null}
       {record ? (
-        <section className="setup-clone-result">
-          <p role="status">{record.detail}</p>
-          <p className="setup-path">{record.destination}</p>
-          {active ? (
-            <button
-              type="button"
-              className="g-button g-button-outline"
-              disabled={busy}
-              onClick={() => void run(() => api.cancel(record.id))}
-            >
-              Cancel clone
-            </button>
-          ) : (
-            <>
-              {record.state === "ready" ? (
-                <button
-                  type="button"
-                  className="g-button g-button-primary"
-                  onClick={() => chooseFolder(record.destination)}
-                >
-                  Use this folder
-                </button>
-              ) : null}
-              <button type="button" className="g-button g-button-ghost" onClick={back}>
-                Review another clone
-              </button>
-            </>
-          )}
-          <p className="setup-footnote">
-            Recovery record: <span className="setup-path">{record.journal}</span>
+        <section className="setup-clone-result" aria-label="Clone progress">
+          <p role="status" className="setup-clone-status" data-state={record.state}>
+            {record.detail}
           </p>
+          <dl className="setup-rows">
+            <dt>Folder</dt>
+            <dd>{record.destination}</dd>
+            <dt>Recovery record</dt>
+            <dd>{record.journal}</dd>
+          </dl>
+          {error ? (
+            <p role="alert" className="setup-alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="g-dialog-actions setup-dialog-actions">
+            {active ? (
+              <button
+                type="button"
+                className="g-button"
+                disabled={busy}
+                onClick={() => void run(() => api.cancel(record.id))}
+              >
+                Cancel clone
+              </button>
+            ) : (
+              <>
+                <button type="button" className="g-button" onClick={back}>
+                  Review another clone
+                </button>
+                {record.state === "ready" ? (
+                  <button
+                    type="button"
+                    className="g-button g-button-primary"
+                    onClick={() => chooseFolder(record.destination)}
+                  >
+                    Use this folder
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
         </section>
       ) : null}
-      {error ? (
-        <p role="alert" className="setup-error">
-          {error}
-        </p>
-      ) : null}
       {!review && !record && history.length > 0 ? (
-        <section className="setup-clone-history">
-          <h3>Previous clones in this parent</h3>
+        <section className="setup-clone-history" aria-label="Previous clones">
+          <h3>Previous clones here</h3>
           <ul>
             {history.map((item) => (
               <li key={item.id}>
-                <strong>{item.state === "ready" ? "Ready" : "Retained for review"}</strong>
-                <p className="setup-path">{item.destination}</p>
-                <p>{item.detail}</p>
+                <div>
+                  <strong>{item.state === "ready" ? "Ready" : "Kept for review"}</strong>
+                  <span className="setup-path">{item.destination}</span>
+                  <small>{item.detail}</small>
+                </div>
                 {item.state === "ready" ? (
                   <button
                     type="button"
@@ -340,7 +367,6 @@ function CloneDialog({
                     Use folder
                   </button>
                 ) : null}
-                <small className="setup-path">{item.journal}</small>
               </li>
             ))}
           </ul>

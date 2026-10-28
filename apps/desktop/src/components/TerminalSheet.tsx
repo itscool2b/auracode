@@ -250,12 +250,13 @@ export function TerminalSheet({
           </h2>
           <p id={description}>
             {purpose === "installation"
-              ? "Review and run the package manager. Terminal output is not saved."
+              ? "Runs the package manager below. Closing stops it."
               : purpose === "setup"
-                ? "Run the reviewed command. Terminal output is not saved."
+                ? "Runs the reviewed command. Closing stops it."
                 : purpose === "project"
-                  ? "Open a shell in the reviewed project folder. Terminal output is not saved."
-                  : "Run the agent's own sign-in flow. Terminal output is not saved."}
+                  ? "Opens a shell in the reviewed project folder. Closing stops it."
+                  : "Runs the agent's own sign-in. Closing stops it."}{" "}
+            Terminal output is not saved.
           </p>
         </div>
         <DialogClose label={`Close ${purpose} terminal`} onClick={close} />
@@ -281,14 +282,13 @@ export function TerminalSheet({
           </a>
         </p>
       ) : null}
-      <footer className="terminal-sheet__footer">
-        <span className="terminal-sheet__hint">
-          Closing this sheet stops its {purpose} process.
+      <footer className="g-dialog-actions terminal-sheet__footer">
+        <span className="terminal-sheet__copied" role="status">
+          {copyMessage}
         </span>
-        <span role="status">{copyMessage}</span>
         <button
           type="button"
-          className="g-button g-button-ghost"
+          className="g-button"
           disabled={!ready}
           onClick={() => {
             const selected = terminal.current?.getSelection();

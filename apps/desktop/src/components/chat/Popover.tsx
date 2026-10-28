@@ -1,7 +1,11 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { focusPickerChoice } from "./PickerChoices";
 
-/** A native disclosure with outside-click and Escape dismissal, retaining keyboard focus. */
+/**
+ * A native disclosure with outside-click and Escape dismissal, retaining keyboard focus. `tip`
+ * swaps the platform tooltip for Graphite's (4.6): a small surface-3 label that fades in after
+ * 500ms of hover. `onOpenChange` lets a parent follow the open state.
+ */
 export function Popover({
   label,
   trigger,
@@ -9,6 +13,8 @@ export function Popover({
   className = "",
   shortcut,
   triggerLabel,
+  tip,
+  onOpenChange,
 }: {
   readonly label: string;
   readonly trigger: ReactNode;
@@ -16,6 +22,8 @@ export function Popover({
   readonly className?: string;
   readonly shortcut?: string;
   readonly triggerLabel?: string;
+  readonly tip?: string;
+  readonly onOpenChange?: (open: boolean) => void;
 }) {
   const root = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
@@ -60,11 +68,15 @@ export function Popover({
     <details
       ref={root}
       className={`chat-popover ${className}`}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        setOpen(event.currentTarget.open);
+        onOpenChange?.(event.currentTarget.open);
+      }}
     >
       <summary
         aria-label={triggerLabel ?? label}
-        title={label}
+        title={tip ? undefined : label}
+        data-tip={tip}
         aria-keyshortcuts={shortcut ? `Control+${shortcut} Meta+${shortcut}` : undefined}
       >
         {trigger}
@@ -74,4 +86,10 @@ export function Popover({
       </section>
     </details>
   );
+}
+
+/** Closes the popover (or menu) that holds `element`, as choosing one of its items should. */
+export function closePopover(element: Element | null): void {
+  const details = element?.closest("details");
+  if (details) details.open = false;
 }

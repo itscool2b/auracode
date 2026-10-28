@@ -17,10 +17,7 @@ function Preview() {
   return (
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="settings-content">
-        <header>
-          <h1>{mode === "locked" ? "Your account workspace is locked" : "Account"}</h1>
-          <p>Open your encrypted workspace or continue with Local.</p>
-        </header>
+        <h1>{mode === "locked" ? "Your account workspace is locked" : "Account"}</h1>
         <ProfilePicker
           activeId={mode === "locked" ? "account" : "local"}
           locked={mode === "locked"}
@@ -38,7 +35,7 @@ function Preview() {
             )
           }
         />
-        <p className="account-notice" role="status">
+        <p className="settings-footnote" role="status">
           {result || "Current workspace preserved"}
         </p>
         <output aria-label="Activation count" hidden>

@@ -14,6 +14,24 @@ export function rawInputSummary(input: Value | null): string | null {
   return text.length > RAW_INPUT_CHARS ? `${text.slice(0, RAW_INPUT_CHARS)}…` : text;
 }
 
+/**
+ * A flat request input (`{ command: "npm test", cwd: "/work" }`) as key and value rows, which read
+ * at a glance where raw JSON does not; anything nested, long or large stays the raw text.
+ */
+export function inputRows(input: Value | null): [string, string][] | null {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
+  const entries = Object.entries(input);
+  if (entries.length === 0 || entries.length > 8) return null;
+  const rows: [string, string][] = [];
+  for (const [key, value] of entries) {
+    if (value === null || typeof value === "object") return null;
+    const text = String(value);
+    if (text.length > 240 || text.includes("\n")) return null;
+    rows.push([key, text]);
+  }
+  return rows;
+}
+
 /** A decision as `data-test-decision` carries it: the chosen option's id, or `cancelled`. */
 export function decisionMark(decision: PermissionDecision): string {
   return decision.type === "cancelled" ? "cancelled" : decision.option_id;
@@ -37,7 +55,8 @@ export function PermissionCard({
   readonly onRespond: (optionId: string | null) => void;
 } & BlobProps) {
   const { request: ask, resolution } = item;
-  const raw = rawInputSummary(ask.raw_input);
+  const rows = inputRows(ask.raw_input);
+  const raw = rows === null ? rawInputSummary(ask.raw_input) : null;
   const closed = resolution !== null || request?.gone === true;
   const busy = request?.busy === true;
   return (
@@ -57,6 +76,16 @@ export function PermissionCard({
           {ask.title}
         </span>
       </div>
+      {rows !== null ? (
+        <dl className="chat-kv">
+          {rows.map(([key, value]) => (
+            <div key={key}>
+              <dt>{key}</dt>
+              <dd className="ui-mono">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {raw !== null ? <pre className="ui-pre">{raw}</pre> : null}
       <Locations locations={ask.locations} />
       {ask.content.map((content, index) => (

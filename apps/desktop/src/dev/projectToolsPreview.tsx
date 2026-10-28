@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { ProjectToolsDialog } from "../components/chat/ProjectToolsDialog";
 import type { ProjectToolsApi } from "../lib/projectTools";
 import type { TerminalTransport } from "../lib/terminal";
+import "../components/settings/settings.css";
 
 const calls: string[] = [];
 const params = new URLSearchParams(location.search);
@@ -65,9 +66,9 @@ Object.assign(window, { projectToolsFixture: { calls: () => [...calls] } });
 function Fixture() {
   const [open, setOpen] = useState(true);
   return (
-    <main className="g-root" data-theme="dark">
+    <main className="g-root settings-content" data-theme="dark">
       <h1>Project tools fixture</h1>
-      <button type="button" onClick={() => setOpen(true)}>
+      <button type="button" className="g-button" onClick={() => setOpen(true)}>
         Open project tools
       </button>
       {open ? (

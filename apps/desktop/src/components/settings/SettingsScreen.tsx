@@ -1,5 +1,16 @@
-import { Keycap, Wordmark } from "@auracode/ui/graphite";
-import { ArrowLeft, ArrowUpRight, FolderOpen } from "lucide-react";
+import { Keycap, Logo } from "@auracode/ui/graphite";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Bot,
+  CircleUser,
+  Info,
+  Keyboard,
+  LibraryBig,
+  type LucideIcon,
+  RefreshCcw,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import type { AppInfo, MotionPreference, SetupSnapshot } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
@@ -15,28 +26,31 @@ import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
 
 type Page = "general" | "account" | "configuration" | "shortcuts" | "about";
-const TITLES: Record<Page, readonly [string, string]> = {
-  general: ["General", "Motion, setup and where your data lives."],
-  account: ["Account", "Profiles, sign-in, devices and recovery."],
-  configuration: ["Configuration sync", "Agent instructions, skills and settings on every device."],
-  shortcuts: ["Shortcuts", "The keys that work across auracode."],
-  about: ["About auracode", "Version, updates and the software inside."],
-};
+const PAGES: readonly (readonly [Page, string, LucideIcon])[] = [
+  ["general", "General", SlidersHorizontal],
+  ["account", "Account", CircleUser],
+  ["configuration", "Configuration sync", RefreshCcw],
+  ["shortcuts", "Shortcuts", Keyboard],
+  ["about", "About", Info],
+];
 
-function Row({
+/** A settings row: the label, an optional one-line description, and at most one control. */
+export function Row({
   title,
   detail,
   children,
 }: {
   readonly title: string;
-  readonly detail: ReactNode;
+  readonly detail?: ReactNode;
   readonly children?: ReactNode;
 }) {
   return (
     <div className="settings-row">
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
+      <div className="settings-row-text">
+        <div>
+          <strong>{title}</strong>
+          {detail ? <p>{detail}</p> : null}
+        </div>
       </div>
       {children}
     </div>
@@ -45,7 +59,12 @@ function Row({
 
 /** One keycap per key in a chord; a repeated key shows twice. */
 function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
-  const names: Record<string, string> = { "⌘": "Command", "⇧": "Shift" };
+  const names: Record<string, string> = {
+    "⌘": "Command",
+    "⇧": "Shift",
+    "↑": "Up arrow",
+    "↓": "Down arrow",
+  };
   const caps = keys === "Esc again" ? ["Esc", "Esc"] : keys.split(" ");
   return (
     <span className="settings-keys">
@@ -114,59 +133,50 @@ function General({
   };
   return (
     <>
-      <section className="settings-section">
-        <h2>Workspace</h2>
-        <div className="settings-group">
-          <Row
-            title="Interface motion"
-            detail="Full motion still respects reduced motion on your device."
+      <div className="settings-group">
+        <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
+          <fieldset className="settings-segmented settings-control" disabled={!saved || busy}>
+            <legend className="sr-only">Motion</legend>
+            {(["full", "reduced", "off"] as const).map((value) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="settings-motion"
+                  value={value}
+                  checked={saved?.preferences.motion === value}
+                  onChange={() => void motion(value)}
+                />
+                <span>{value === "full" ? "Full" : value === "reduced" ? "Reduced" : "Off"}</span>
+              </label>
+            ))}
+          </fieldset>
+        </Row>
+        <Row title="Welcome and setup" detail="Review your agents and pick a first project again.">
+          <button className="g-button g-button-outline g-button-28" type="button" onClick={onSetup}>
+            Run setup
+          </button>
+        </Row>
+        <Row
+          title="Data folder"
+          detail={
+            info.data_dir ? (
+              <span className="settings-mono">{info.data_dir}</span>
+            ) : (
+              "Chats stay on this device."
+            )
+          }
+        >
+          <button
+            className="g-button g-button-outline g-button-28"
+            type="button"
+            disabled={!info.data_dir}
+            onClick={() => void reveal().catch((failure) => setError(errorMessage(failure)))}
           >
-            <fieldset className="settings-segmented" disabled={!saved || busy}>
-              <legend className="sr-only">Interface motion</legend>
-              {(["full", "reduced", "off"] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="settings-motion"
-                    value={value}
-                    checked={saved?.preferences.motion === value}
-                    onChange={() => void motion(value)}
-                  />
-                  <span>{value === "full" ? "Full" : value === "reduced" ? "Reduced" : "Off"}</span>
-                </label>
-              ))}
-            </fieldset>
-          </Row>
-          <Row
-            title="Welcome and setup"
-            detail="Review your agents and choose your first project again."
-          >
-            <button className="g-button" type="button" onClick={onSetup}>
-              Run setup
-            </button>
-          </Row>
-        </div>
-        {saved?.notice ? <p className="settings-footnote">{saved.notice}</p> : null}
-      </section>
-      <section className="settings-section">
-        <h2>Local storage</h2>
-        <div className="settings-group">
-          <Row
-            title="Your data"
-            detail="Chats stay on this device. No account is needed for local work."
-          >
-            <button
-              className="g-button"
-              type="button"
-              disabled={!info.data_dir}
-              onClick={() => void reveal().catch((failure) => setError(errorMessage(failure)))}
-            >
-              <FolderOpen size={14} aria-hidden="true" /> Open folder
-            </button>
-          </Row>
-          {info.data_dir ? <p className="settings-path">{info.data_dir}</p> : null}
-        </div>
-      </section>
+            Open folder
+          </button>
+        </Row>
+      </div>
+      {saved?.notice ? <p className="settings-footnote">{saved.notice}</p> : null}
       {error ? (
         <div className="settings-error" role="alert">
           <p>{error}</p>
@@ -246,64 +256,80 @@ export function SettingsScreen({
     document.addEventListener("keydown", dismiss);
     return () => document.removeEventListener("keydown", dismiss);
   }, [onBack]);
+  const open = (next: Page) => {
+    setPage(next);
+    requestAnimationFrame(() => heading.current?.focus());
+  };
   const mac = info.os === "macos";
   const key = mac ? "⌘" : "Ctrl";
   const shortcuts = [
-    ["Open settings", `${key} ,`],
+    ["New chat", `${key} N`],
     ["Search chats, projects and files", `${key} K`],
     ["Open context panel", `${key} J`],
     ["Choose agent, model and effort", `${key} .`],
+    ["Open settings", `${key} ,`],
     ["Send message", "Enter"],
     ["New line", "Shift Enter"],
     ["Interrupt agent", "Esc"],
     ["Force stop after interrupt", "Esc again"],
+    ["Move through a menu", "↑ ↓"],
+    ["Close a menu or dialog", "Esc"],
   ];
+  const title = PAGES.find(([value]) => value === page)?.[1] ?? "";
   return (
-    <div className="settings-shell g-root">
+    <div className="settings-shell g-root" data-os={info.os}>
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="settings-drag" data-tauri-drag-region="" />
+        <Logo size={24} className="settings-logo" />
         <button type="button" className="settings-back" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </button>
         <h2>Settings</h2>
         <nav>
-          {(["general", "account", "configuration", "shortcuts", "about"] as const).map((value) => (
+          {PAGES.map(([value, label, Icon]) => (
             <button
               key={value}
               type="button"
               aria-current={page === value ? "page" : undefined}
-              onClick={() => {
-                setPage(value);
-                requestAnimationFrame(() => heading.current?.focus());
-              }}
+              onClick={() => open(value)}
             >
-              {value === "about" ? "About" : TITLES[value][0]}
+              <Icon size={16} aria-hidden="true" />
+              <span className="settings-nav-label">{label}</span>
             </button>
           ))}
           <hr />
           <button type="button" onClick={onAgents}>
-            Agents <ArrowUpRight size={14} aria-hidden="true" />
+            <Bot size={16} aria-hidden="true" />
+            <span className="settings-nav-label">Agents</span>
+            <ArrowUpRight size={14} aria-hidden="true" />
           </button>
           {onLibrary ? (
             <button type="button" onClick={onLibrary}>
-              Library <ArrowUpRight size={14} aria-hidden="true" />
+              <LibraryBig size={16} aria-hidden="true" />
+              <span className="settings-nav-label">Library</span>
+              <ArrowUpRight size={14} aria-hidden="true" />
             </button>
           ) : null}
         </nav>
-        <div className="settings-identity">
-          <Wordmark size={14} />
-          <span>{info.app_version}</span>
-        </div>
       </aside>
       <main className="settings-main">
         <div className="settings-drag" data-tauri-drag-region="" />
         <div className="settings-content">
-          <header>
+          {page === "about" ? (
+            <header className="settings-identity">
+              <Logo size={40} />
+              <div>
+                <h1 ref={heading} tabIndex={-1}>
+                  <span className="sr-only">About </span>auracode
+                </h1>
+                <p>Version {info.app_version}</p>
+              </div>
+            </header>
+          ) : (
             <h1 ref={heading} tabIndex={-1}>
-              {TITLES[page][0]}
+              {title}
             </h1>
-            <p>{TITLES[page][1]}</p>
-          </header>
+          )}
           {page === "general" ? (
             <General info={info} api={setup} onSetup={onSetup} reveal={reveal} />
           ) : null}
@@ -324,76 +350,57 @@ export function SettingsScreen({
             <ConfigSyncPanel
               profileId={info.profile?.id ?? null}
               active={info.profile?.kind === "account" && !info.profile_locked}
-              onAccount={() => {
-                setPage("account");
-                requestAnimationFrame(() => heading.current?.focus());
-              }}
+              onAccount={() => open("account")}
             />
           ) : null}
           {page === "shortcuts" ? (
-            <section className="settings-section">
-              <h2>Everyday actions</h2>
-              <dl className="settings-group settings-shortcuts">
-                {shortcuts.map(([title, keys]) => (
-                  <div key={title}>
-                    <dt>{title}</dt>
-                    <dd>
-                      <Keys keys={keys ?? ""} mac={mac} />
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="settings-footnote">
-                Menus also support arrow keys, Enter and Escape. Shortcuts respect open dialogs and
-                active text composition.
-              </p>
-            </section>
+            <dl className="settings-group settings-shortcuts">
+              {shortcuts.map(([action, keys]) => (
+                <div key={action}>
+                  <dt>{action}</dt>
+                  <dd>
+                    <Keys keys={keys ?? ""} mac={mac} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
           {page === "about" ? (
             <>
-              <section className="settings-section">
-                <h2>Application</h2>
-                <div className="settings-group">
-                  <Row
-                    title="auracode"
-                    detail={
-                      <>
-                        Version <span className="settings-mono">{info.app_version}</span>
-                      </>
-                    }
-                  />
-                  <Row
-                    title="This device"
-                    detail={
-                      <>
-                        {info.os === "macos" ? "macOS" : "Windows"} {info.os_version} ·{" "}
-                        <span className="settings-mono">{info.arch}</span>
-                      </>
-                    }
-                  />
-                  <Row
-                    title="Diagnostics"
-                    detail="Startup information and local troubleshooting tools."
+              <div className="settings-group">
+                <UpdatePanel api={updates} />
+                <Row
+                  title="This device"
+                  detail={
+                    <>
+                      {info.os === "macos" ? "macOS" : "Windows"} {info.os_version} ·{" "}
+                      <span className="settings-mono">{info.arch}</span>
+                    </>
+                  }
+                />
+                <Row title="Diagnostics" detail="Startup details and local troubleshooting tools.">
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    onClick={onDiagnostics}
                   >
-                    <button className="g-button" type="button" onClick={onDiagnostics}>
-                      Open
-                    </button>
-                  </Row>
-                  <Row
-                    title="Third-party notices"
-                    detail="Licenses for the open source software included in auracode."
+                    Open
+                  </button>
+                </Row>
+                <Row
+                  title="Third-party notices"
+                  detail="Licenses for the open source software inside auracode."
+                >
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    onClick={() => setNotices(true)}
                   >
-                    <button className="g-button" type="button" onClick={() => setNotices(true)}>
-                      View
-                    </button>
-                  </Row>
-                </div>
-              </section>
+                    View
+                  </button>
+                </Row>
+              </div>
               {notices ? <NoticesDialog onClose={() => setNotices(false)} /> : null}
-              <UpdatePanel api={updates} />
-              <p className="settings-footnote">
-                Your installed agents keep their own accounts and credentials.
-              </p>
             </>
           ) : null}
         </div>
