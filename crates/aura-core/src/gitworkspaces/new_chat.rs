@@ -168,7 +168,10 @@ impl GitWorkspaces {
             starting_commit,
             branch: branch.clone(),
             branch_generated,
-            path: record.path.clone(),
+            // Shown to the person: the plain spelling of a Windows verbatim path.
+            path: crate::fsutil::plain_path(Path::new(&record.path))
+                .to_string_lossy()
+                .into_owned(),
             bring_changes: request.bring_changes,
             local_branches: branches.into_iter().take(MAX_LISTED_BRANCHES).collect(),
             setup: None,

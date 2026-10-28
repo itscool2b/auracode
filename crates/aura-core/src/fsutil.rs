@@ -303,6 +303,95 @@ pub(crate) fn file_name_lossy(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Win32's MAX_PATH less the terminating NUL: a plain path longer than this needs the verbatim
+/// prefix to stay reachable for programs that are not long-path aware.
+const MAX_PLAIN_PATH: usize = 259;
+
+/// The plain spelling of a Windows verbatim path, which `std::fs::canonicalize` returns:
+/// `\\?\C:\work` is `C:\work` and `\\?\UNC\server\share\work` is `\\server\share\work`. The prefix
+/// goes only when the plain spelling names the same folder: it fits MAX_PATH and no part needs
+/// the prefix (`.` or `..`, a trailing dot or space, a DOS device name such as `CON` or `COM1`, a
+/// character Win32 parsing rejects, an empty part). Anything else, a volume GUID path for one, and
+/// every non-verbatim path (all of them off Windows) comes back unchanged.
+pub(crate) fn plain_path(path: &Path) -> PathBuf {
+    match path.to_str().and_then(plain_windows_path) {
+        Some(plain) => PathBuf::from(plain),
+        None => path.to_path_buf(),
+    }
+}
+
+/// [`plain_path`] on text: `Some` only when `text` is a verbatim path whose plain spelling is safe.
+pub(crate) fn plain_windows_path(text: &str) -> Option<String> {
+    let rest = text.strip_prefix(r"\\?\")?;
+    let (root, tail) = match rest.get(..4) {
+        Some(unc) if unc.eq_ignore_ascii_case(r"UNC\") => {
+            let mut parts = rest[4..].splitn(3, '\\');
+            let server = parts.next()?;
+            let share = parts.next()?;
+            if !plain_part(server) || !plain_part(share) {
+                return None;
+            }
+            (format!(r"\\{server}\{share}"), parts.next().unwrap_or(""))
+        }
+        _ => {
+            let bytes = rest.as_bytes();
+            if bytes.len() < 2 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' {
+                return None;
+            }
+            let tail = &rest[2..];
+            if !tail.is_empty() && !tail.starts_with('\\') {
+                return None;
+            }
+            (
+                rest[..2].to_owned(),
+                tail.strip_prefix('\\').unwrap_or(tail),
+            )
+        }
+    };
+    let mut plain = root;
+    if tail.is_empty() {
+        if !plain.starts_with(r"\\") {
+            plain.push('\\');
+        }
+    } else {
+        for part in tail.split('\\') {
+            if !plain_part(part) {
+                return None;
+            }
+            plain.push('\\');
+            plain.push_str(part);
+        }
+    }
+    (plain.encode_utf16().count() <= MAX_PLAIN_PATH).then_some(plain)
+}
+
+/// Whether one path part reads the same with and without the verbatim prefix.
+fn plain_part(part: &str) -> bool {
+    if part.is_empty()
+        || part == "."
+        || part == ".."
+        || part.ends_with(['.', ' '])
+        || part
+            .chars()
+            .any(|c| c < ' ' || matches!(c, '<' | '>' | ':' | '"' | '/' | '|' | '?' | '*'))
+    {
+        return false;
+    }
+    // A DOS device name stays one with an extension or trailing spaces before it: `CON.txt`.
+    let stem = part.split('.').next().unwrap_or(part).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    let device = matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+        && upper.chars().count() == 4
+        && upper
+            .chars()
+            .nth(3)
+            .is_some_and(|c| c.is_ascii_digit() || matches!(c, '¹' | '²' | '³')));
+    !device
+}
+
 /// The directory containing `path`; `.` for a bare file name.
 pub(crate) fn parent_dir(path: &Path) -> &Path {
     match path.parent() {
@@ -647,6 +736,97 @@ mod win_acl {
 mod tests {
     use super::*;
     use serde::Deserialize;
+
+    #[test]
+    fn verbatim_paths_take_their_plain_spelling_when_it_names_the_same_folder() {
+        let plain = |text: &str| plain_windows_path(text);
+        assert_eq!(
+            plain(r"\\?\C:\Users\me\work").as_deref(),
+            Some(r"C:\Users\me\work")
+        );
+        assert_eq!(plain(r"\\?\d:\").as_deref(), Some(r"d:\"));
+        assert_eq!(plain(r"\\?\C:").as_deref(), Some(r"C:\"));
+        assert_eq!(
+            plain(r"\\?\UNC\server\share\repo").as_deref(),
+            Some(r"\\server\share\repo")
+        );
+        assert_eq!(
+            plain(r"\\?\unc\server\share").as_deref(),
+            Some(r"\\server\share")
+        );
+        assert_eq!(
+            plain(r"\\?\C:\Users\me\café 1.2\x").as_deref(),
+            Some(r"C:\Users\me\café 1.2\x"),
+            "dots and spaces inside a name are fine"
+        );
+        assert_eq!(
+            plain(r"\\?\C:\console\COM10\lpt\NULL").as_deref(),
+            Some(r"C:\console\COM10\lpt\NULL"),
+            "names that only start like a device are fine"
+        );
+    }
+
+    #[test]
+    fn verbatim_paths_keep_their_prefix_when_the_plain_spelling_would_differ() {
+        for text in [
+            r"\\?\C:\work\.",
+            r"\\?\C:\work\..\other",
+            r"\\?\C:\work\trailing.",
+            r"\\?\C:\work\trailing ",
+            r"\\?\C:\work\CON",
+            r"\\?\C:\work\con.txt",
+            r"\\?\C:\work\nul .log",
+            r"\\?\C:\work\COM1",
+            r"\\?\C:\work\lpt9\x",
+            r"\\?\C:\work\COM¹",
+            r"\\?\C:\work\CONOUT$",
+            r"\\?\C:\work\a:b",
+            r"\\?\C:\work\a/b",
+            r"\\?\C:\work\a*b",
+            r"\\?\C:\work\\double",
+            r"\\?\C:\work\",
+            r"\\?\Volume{0b1c2d3e-0000-0000-0000-100000000000}\work",
+            r"\\?\GLOBALROOT\Device\HarddiskVolume3\work",
+            r"\\?\UNC\server",
+            r"\\?\UNC\\share\repo",
+            r"\\?\1:\work",
+            r"\\?\C:work",
+        ] {
+            assert_eq!(plain_windows_path(text), None, "{text}");
+        }
+        let long = format!(r"\\?\C:\{}", "a".repeat(MAX_PLAIN_PATH - 3));
+        assert_eq!(
+            plain_windows_path(&long).map(|plain| plain.len()),
+            Some(MAX_PLAIN_PATH),
+            "exactly MAX_PATH less the NUL still fits"
+        );
+        let longer = format!(r"\\?\C:\{}", "a".repeat(MAX_PLAIN_PATH - 2));
+        assert_eq!(plain_windows_path(&longer), None, "longer keeps the prefix");
+        let wide = format!(r"\\?\C:\{}", "😀".repeat(129));
+        assert_eq!(
+            plain_windows_path(&wide),
+            None,
+            "the limit counts UTF-16 units"
+        );
+    }
+
+    #[test]
+    fn plain_paths_and_other_platforms_pass_through() {
+        for text in [
+            r"C:\Users\me\work",
+            r"\\server\share\repo",
+            "/Users/me/work",
+            "relative",
+            r"\\.\C:\work",
+        ] {
+            assert_eq!(plain_path(Path::new(text)), PathBuf::from(text), "{text}");
+            assert_eq!(plain_windows_path(text), None, "{text}");
+        }
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\work")),
+            PathBuf::from(r"C:\work")
+        );
+    }
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Sample {

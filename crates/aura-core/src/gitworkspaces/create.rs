@@ -87,7 +87,10 @@ impl GitWorkspaces {
             token: token.clone(),
             source: source.view.clone(),
             branch,
-            path: record.path.clone(),
+            // Shown to the person: the plain spelling of a Windows verbatim path.
+            path: crate::fsutil::plain_path(Path::new(&record.path))
+                .to_string_lossy()
+                .into_owned(),
             bring_changes: input.bring_changes,
             warnings,
             expires_at: now + 600_000,

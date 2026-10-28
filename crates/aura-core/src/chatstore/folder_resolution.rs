@@ -98,6 +98,7 @@ pub(crate) fn execute(
             kind,
             remote,
         } => {
+            let path = super::stored_path_text(&path);
             let current:(String,Option<String>,Option<String>)=conn.query_row("SELECT pf.kind,pf.git_remote_url,fl.path FROM project_folders pf JOIN projects p ON p.id=pf.project_id LEFT JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0",params![folder_id,device],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?)))?;
             let expected = if kind == FolderKind::Git {
                 "git"

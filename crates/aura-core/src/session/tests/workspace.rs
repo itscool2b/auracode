@@ -152,6 +152,29 @@ async fn projects_update_clear_optional_values_and_reuse_device_folder() {
     assert_eq!(snapshot.projects, vec![updated]);
 }
 
+/// Windows canonical paths are verbatim (`\\?\C:\...`). A project folder is saved and shown in its
+/// plain spelling, and adding the same folder in its verbatim spelling finds the saved one.
+#[tokio::test]
+async fn project_folders_are_saved_in_their_plain_spelling() {
+    let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    let project = project(&rig, "First").await;
+    let canonical = std::fs::canonicalize(&rig.folder).expect("canonical");
+    let plain = crate::fsutil::plain_path(&canonical);
+    let shown = project.folders[0]
+        .path
+        .clone()
+        .expect("a path on this device");
+    assert_eq!(shown, plain.to_string_lossy());
+    assert!(!shown.starts_with(r"\\?\"), "{shown}");
+    let again = rig
+        .manager
+        .project_add_folder(&project.id, &canonical.to_string_lossy())
+        .await
+        .expect("the verbatim spelling");
+    assert_eq!(again.id, project.folders[0].id);
+    assert_eq!(again.path.as_deref(), Some(shown.as_str()));
+}
+
 #[tokio::test]
 async fn manual_titles_survive_late_agent_titles_and_archived_chats_remain_addressable() {
     let (driver, handle) = waiting_driver("rename");
