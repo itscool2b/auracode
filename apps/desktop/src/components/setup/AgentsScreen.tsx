@@ -127,6 +127,7 @@ export function AgentsScreen({
                 agent={agent}
                 transport={transport}
                 onRefresh={refresh}
+                onConnection={(agentId, connection) => app.setAgentConnection(agentId, connection)}
                 index={index}
               />
             ))}

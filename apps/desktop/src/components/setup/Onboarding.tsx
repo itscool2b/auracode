@@ -10,6 +10,7 @@ import type {
   SetupSnapshot,
   SetupStep,
 } from "../../bindings";
+import { realAgents } from "../../lib/chat/agentLineup";
 import type { AppStore } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
@@ -652,13 +653,10 @@ function ProjectClone({
   );
 }
 
-/** Transport aliases stay visible on Agents; setup shows one row per harness. */
+/**
+ * Setup's roster: one row per agent, as Rust reports them (an adapter or a text fallback is a
+ * connection of its agent, not a row), without the scripted demo.
+ */
 export function primaryAgents(agents: readonly AgentEntry[]): readonly AgentEntry[] {
-  return agents.filter(
-    (agent) =>
-      !agent.id.endsWith("-acp") &&
-      !agent.id.endsWith("-stream") &&
-      agent.id !== "mock" &&
-      agent.id !== "opencode-v2",
-  );
+  return realAgents(agents);
 }

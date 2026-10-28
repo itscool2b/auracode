@@ -222,6 +222,14 @@ export async function terminalClose(terminalId: string): Promise<void> {
   await settle(commands.terminalClose(terminalId));
 }
 
+/** An agent's Connection setting (`null`: Automatic); answers every agent as `agentsList` does. */
+export function agentSetConnection(
+  agentId: string,
+  connection: string | null,
+): Promise<AgentEntry[]> {
+  return settle(commands.agentSetConnection(agentId, connection));
+}
+
 export async function agentUpdate(agentId: string): Promise<void> {
   await settle(commands.agentUpdate(agentId));
 }

@@ -539,6 +539,41 @@ mod tests {
         }
     }
 
+    /// One section per agent, from the same one-entry-per-agent list New chat reads: Claude Code
+    /// running through its ACP adapter (its CLI too old for the native driver) is installed, with
+    /// one section, and no adapter or OpenCode line gets its own.
+    #[test]
+    fn an_agent_running_through_its_adapter_is_one_installed_section() {
+        let adapter = AgentEntry {
+            connections: Some(aura_protocol::session::AgentConnections {
+                preferred: None,
+                active: Some("claude-acp".into()),
+                options: Vec::new(),
+            }),
+            ..agent("claude", Some("2.1.309"), None)
+        };
+        let facts = PluginFacts {
+            agents: vec![adapter, agent("opencode", Some("2.1.4"), None)],
+            ..Default::default()
+        };
+        let library = assemble(&facts);
+        let sections: Vec<(&str, bool)> = library
+            .agents
+            .iter()
+            .map(|agent| (agent.agent_id.as_str(), agent.installed))
+            .collect();
+        assert_eq!(
+            sections,
+            [
+                ("claude", true),
+                ("codex", false),
+                ("pi", false),
+                ("opencode", true)
+            ]
+        );
+        assert_eq!(library.agents[0].version.as_deref(), Some("2.1.309"));
+    }
+
     #[test]
     fn each_agent_gets_its_own_section_with_what_it_supports() {
         let mut facts = PluginFacts {

@@ -143,6 +143,12 @@ export const commands = {
 	agentAuthStatus: (agentId: string) => typedError<AgentAuthStatus, AppError>(__TAURI_INVOKE("agent_auth_status", { agentId })),
 	/**  Explicit update action. No updates run as part of detection or release checks. */
 	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
+	/**
+	 *  An agent's Connection setting on this device: one of its connection ids, or `null` for
+	 *  Automatic. New sessions use it; a chat's saved session keeps its own connection. Answers every
+	 *  agent as `agents_list` reports them, without probing again.
+	 */
+	agentSetConnection: (agentId: string, connection: string | null) => typedError<AgentEntry[], AppError>(__TAURI_INVOKE("agent_set_connection", { agentId, connection })),
 	terminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("terminal_reserve")),
 	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
@@ -454,7 +460,38 @@ export type AccountVaultStatus = {
 /**  The vendor's own local authentication check. This does not promise a successful paid request. */
 export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
 
-/**  An agent auracode can start, as the New chat screen shows it. */
+/**  One way auracode can start an agent. */
+export type AgentConnection = {
+	/**  The connection's catalog id (`claude-acp`), which saved native sessions record. */
+	id: string,
+	/**  "Direct", "ACP adapter". */
+	label: string,
+	description: string,
+	availability: Availability,
+	launch: string,
+	needs_download: boolean,
+};
+
+/**  An agent's connections and the device's Connection setting for it. */
+export type AgentConnections = {
+	/**
+	 *  The connection chosen in the agent's details; `None` is Automatic: the first connection,
+	 *  in `options` order, that can run here.
+	 */
+	preferred: string | null,
+	/**
+	 *  The connection a new session uses now. `None` while detection runs or when none can run.
+	 *  A chat's saved session keeps resuming through the connection that made it.
+	 */
+	active: string | null,
+	options: AgentConnection[],
+};
+
+/**
+ *  An agent auracode can start, as the New chat screen shows it: one entry per agent. For an
+ *  agent with several connections, every field but `id` and `name` describes the connection a
+ *  new session would use now (or the preferred one while none can run).
+ */
 export type AgentEntry = {
 	id: string,
 	name: string,
@@ -470,6 +507,11 @@ export type AgentEntry = {
 	latest_release?: LatestRelease | null,
 	/**  The installed version against its latest known release, computed by detection. */
 	harness?: HarnessStatus | null,
+	/**
+	 *  The ways auracode can start this agent, when it has more than one (Claude Code's own
+	 *  protocol or its ACP adapter). `None` for an agent with one connection.
+	 */
+	connections?: AgentConnections | null,
 };
 
 /**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */

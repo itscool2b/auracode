@@ -38,7 +38,7 @@ const agents: AgentEntry[] = [
       "Cursor",
       "Grok Build",
       "oh-my-pi",
-      "OpenCode V1",
+      "OpenCode",
       "Pi",
     ][index] ?? id,
   description: "Synthetic detection fixture. No vendor command can run here.",
@@ -67,6 +67,53 @@ const agents: AgentEntry[] = [
         }
       : null,
 }));
+// Claude Code and Codex each run directly or through their ACP adapter: one entry each, with the
+// Connection setting in their details (Automatic picks the direct connection here).
+const ADAPTERS: Readonly<Record<string, [string, string]>> = {
+  claude: ["claude-acp", "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"],
+  codex: ["codex-acp", "@agentclientprotocol/codex-acp 2.2.2 with your codex"],
+};
+for (const agent of agents) {
+  const adapter = ADAPTERS[agent.id];
+  if (!adapter) continue;
+  agent.connections = {
+    preferred: null,
+    active: agent.availability.state === "ready" ? agent.id : null,
+    options: [
+      {
+        id: agent.id,
+        label: "Direct",
+        description: `Your ${agent.name}, driven directly.`,
+        availability: agent.availability,
+        launch: agent.id,
+        needs_download: false,
+      },
+      {
+        id: adapter[0],
+        label: "ACP adapter",
+        description: `Your ${agent.name}, driven through its ACP adapter.`,
+        availability: agent.availability,
+        launch: adapter[1],
+        needs_download: true,
+      },
+    ],
+  };
+}
+/** Rust's answer to a Connection change: new sessions use the chosen connection, or Automatic's. */
+const setConnection = (agentId: string, connection: string | null) => {
+  const agent = agents.find((entry) => entry.id === agentId);
+  if (!agent?.connections) throw new Error("This agent has one connection.");
+  const runs = agent.availability.state === "ready";
+  const chosen = connection ?? agent.id;
+  const option = agent.connections.options.find((entry) => entry.id === chosen);
+  agent.connections = {
+    ...agent.connections,
+    preferred: connection,
+    active: runs ? chosen : null,
+  };
+  agent.needs_download = option?.needs_download ?? false;
+  agent.launch = option?.launch ?? agent.launch;
+};
 // `?detect` resolves one agent per detection poll, so rows can be seen settling one by one.
 let resolved = params.has("detect") ? 0 : agents.length;
 const detected = (): AgentEntry[] =>
@@ -82,6 +129,10 @@ const transport = new FakeTransport({
   agentsRefresh: async () => {
     resolved = agents.length;
     return agents;
+  },
+  agentSetConnection: async (agentId, connection) => {
+    setConnection(agentId, connection);
+    return detected();
   },
   pickFolder: async () => "C:/fixture/Orbit",
 });

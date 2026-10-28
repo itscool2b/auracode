@@ -316,6 +316,32 @@ describe("the app store", () => {
     store.stop();
   });
 
+  it("applies a Connection setting to the agents at once, without probing again", async () => {
+    const adapter = {
+      ...agent("claude", { state: "ready", version: "Claude Code 2.1.310", path: "/bin/claude" }),
+      connections: {
+        preferred: "claude-acp",
+        active: "claude-acp",
+        options: [],
+      },
+    };
+    const fake = new FakeTransport({
+      agentSetConnection: () => Promise.resolve([adapter]),
+    });
+    const store = new AppStore(fake);
+    await store.setAgentConnection("claude", "claude-acp");
+    expect(fake.callsOf("agentSetConnection")).toEqual([["claude", "claude-acp"]]);
+    expect(store.getSnapshot().agents?.[0]?.connections?.active).toBe("claude-acp");
+    expect(fake.callsOf("agentsRefresh")).toHaveLength(0);
+    // A refusal reaches the caller, and the agents stay as they were.
+    const refusing = new FakeTransport({
+      agentSetConnection: () => Promise.reject(new Error("This agent has one connection.")),
+    });
+    const other = new AppStore(refusing);
+    await expect(other.setAgentConnection("hermes", "hermes")).rejects.toThrow("one connection");
+    expect(other.getSnapshot().agents).toBeNull();
+  });
+
   it("adds a chat this window created at the top", async () => {
     const fake = new FakeTransport({
       chatsList: () => Promise.resolve([chatSummary("a", { updated_at: 1 })]),
@@ -339,7 +365,7 @@ describe("choosing an agent", () => {
     });
     expect(
       agentChoice(
-        agent("claude-acp", {
+        agent("claude", {
           state: "broken",
           reason: "Node.js 22 or newer is required (found 20.11.0).",
         }),

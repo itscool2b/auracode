@@ -231,6 +231,58 @@ try {
         "Claude Code actions",
       );
       await assertNoVendorCalls();
+      // One entry per agent: Claude Code's ACP adapter is a connection in its details, chosen
+      // there (Automatic by default), never a second row.
+      assert.deepEqual(
+        await page.locator(".agent-row-name strong").allTextContents(),
+        [
+          "Hermes",
+          "Claude Code",
+          "Codex",
+          "Antigravity",
+          "Cursor",
+          "Grok Build",
+          "oh-my-pi",
+          "OpenCode",
+          "Pi",
+        ],
+        `${engine}: one row per agent`,
+      );
+      await page
+        .locator(".agent-row", { has: page.locator("strong", { hasText: /^Claude Code$/ }) })
+        .locator(".agent-row-toggle")
+        .click();
+      const connection = page.getByRole("combobox", { name: "Claude Code connection" });
+      await connection.waitFor();
+      assert.equal(await connection.inputValue(), "", `${engine}: Automatic by default`);
+      assert.deepEqual(await connection.locator("option").allTextContents(), [
+        "Automatic (Direct)",
+        "Direct",
+        "ACP adapter",
+      ]);
+      await connection.selectOption("claude-acp");
+      await page.waitForFunction(() =>
+        window.setupFixture.methods().includes("agentSetConnection"),
+      );
+      await page
+        .getByRole("combobox", { name: "Claude Code connection" })
+        .locator("option", { hasText: "Automatic (ACP adapter)" })
+        .waitFor({ state: "attached" });
+      assert.equal(await connection.inputValue(), "claude-acp");
+      await page.screenshot({ path: resolve(out, `${engine}-agents-connection.png`) });
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} Agents connection accessibility`,
+      );
+      await connection.selectOption("");
+      await page
+        .getByRole("combobox", { name: "Claude Code connection" })
+        .locator("option", { hasText: "Automatic (Direct)" })
+        .waitFor({ state: "attached" });
+      assert.equal(await connection.inputValue(), "");
+      await assertNoVendorCalls();
       await page.getByRole("button", { name: "Run setup again" }).click();
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.getByRole("button", { name: "Skip setup", exact: true }).click();
@@ -292,7 +344,7 @@ try {
       await intro.close();
       assert.deepEqual(errors, [], `${engine} page errors`);
       console.log(
-        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, clone by keyboard into a first project, Agents menu keyboard, local demo, passive detection and accessibility passed`,
+        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, clone by keyboard into a first project, Agents menu keyboard, one row per agent with its Connection setting, local demo, passive detection and accessibility passed`,
       );
     } finally {
       await browser.close();
