@@ -72,7 +72,7 @@ pub(crate) struct Found {
 
 impl Found {
     pub fn exists(&self) -> bool {
-        self.kind != FileKind::Missing
+        !matches!(self.kind, FileKind::Missing | FileKind::Dangling)
     }
 
     /// The path as it exists on disk, for reads and writes.
@@ -84,7 +84,7 @@ impl Found {
     pub fn expect(&self) -> Expect {
         match self.kind {
             FileKind::Missing => Expect::Missing,
-            FileKind::Link | FileKind::Outside if self.link_raw.is_some() => {
+            FileKind::Link | FileKind::Outside | FileKind::Dangling if self.link_raw.is_some() => {
                 Expect::Link(self.link_raw.clone().unwrap_or_default())
             }
             _ => Expect::File(self.bytes.clone().unwrap_or_default()),
@@ -950,6 +950,10 @@ impl<'a> Model<'a> {
                 "{} links outside this folder, so auracode doesn't follow or change it.",
                 file.display
             )),
+            FileKind::Dangling => Some(format!(
+                "{} is a link to a file that doesn't exist. Agents read nothing there; remove the link to use this name.",
+                file.display
+            )),
             FileKind::Directory => Some(format!("{} is a folder, not a file.", file.display)),
             FileKind::NotText => Some(format!(
                 "{} is not UTF-8 text. Edit it in another editor.",
@@ -1380,36 +1384,67 @@ fn scan_file(
 }
 
 /// Resolves symbolic links to instruction files in the same folder and finds hard links.
+/// Where a link really leads, as the operating system follows it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum LinkTarget {
+    /// Inside the folder, at this relative path (forward slashes).
+    Inside(String),
+    /// Outside the folder, or not resolvable for a reason other than a missing target.
+    Outside,
+    /// The target does not exist.
+    Dangling,
+}
+
+/// Classifies a link from the canonical folder and the link path's own canonical resolution.
+/// Never resolves `..` by text: a linked folder in the target makes text and the OS disagree.
+pub(crate) fn classify_link(root: Option<&Path>, target: std::io::Result<PathBuf>) -> LinkTarget {
+    let target = match target {
+        Ok(target) => target,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return LinkTarget::Dangling,
+        Err(_) => return LinkTarget::Outside,
+    };
+    let Some(root) = root else {
+        return LinkTarget::Outside;
+    };
+    match target.strip_prefix(root) {
+        Ok(rest) if !rest.as_os_str().is_empty() => {
+            let rest = rest.to_string_lossy().replace('\\', "/");
+            if rest
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+            {
+                LinkTarget::Outside
+            } else {
+                LinkTarget::Inside(rest)
+            }
+        }
+        _ => LinkTarget::Outside,
+    }
+}
+
 pub(crate) fn link_files(roots: &[Root], files: &mut [Found]) {
     for index in 0..files.len() {
-        let Some(raw) = files[index].link_raw.clone() else {
+        if files[index].link_raw.is_none() {
             continue;
-        };
+        }
         let root = &roots[files[index].root];
-        let target = if raw.is_absolute() {
-            let canonical_root = std::fs::canonicalize(&root.path).ok();
-            let canonical_target = std::fs::canonicalize(&raw).ok();
-            match (canonical_root, canonical_target) {
-                (Some(base), Some(target)) => target
-                    .strip_prefix(&base)
-                    .ok()
-                    .map(|rest| rest.to_string_lossy().replace('\\', "/")),
-                _ => None,
-            }
-        } else {
-            imports::resolve(
-                files[index].disk_path(),
-                &raw.to_string_lossy().replace('\\', "/"),
-            )
-        };
-        let found = target.and_then(|target| {
-            (0..files.len()).find(|other| {
+        // Ask the OS: canonicalizing the link's own path follows it, and every linked folder in
+        // its target, exactly as an agent opening the file would.
+        let canonical_root = std::fs::canonicalize(&root.path).ok();
+        let resolved = std::fs::canonicalize(root.path.join(files[index].disk_path()));
+        let found = match classify_link(canonical_root.as_deref(), resolved) {
+            LinkTarget::Inside(target) => (0..files.len()).find(|other| {
                 *other != index
                     && files[*other].root == files[index].root
                     && files[*other].kind == FileKind::File
                     && files[*other].disk_path().eq_ignore_ascii_case(&target)
-            })
-        });
+            }),
+            LinkTarget::Outside => None,
+            LinkTarget::Dangling => {
+                files[index].kind = FileKind::Dangling;
+                continue;
+            }
+        };
         if let Some(target) = found {
             files[index].kind = FileKind::Link;
             files[index].link_to = Some(target);

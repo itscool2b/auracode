@@ -132,7 +132,13 @@ fn symlink(target: &str, link: &Path) -> bool {
     let made = std::os::windows::fs::symlink_file(target, link);
     #[cfg(unix)]
     let made = std::os::unix::fs::symlink(target, link);
-    // Windows needs Developer Mode or elevation for symlinks; those tests skip without it.
+    // Windows needs Developer Mode or elevation for symlinks; those parts skip without it.
+    if made.is_err() {
+        eprintln!(
+            "skipping a symlink case: this system refused to create {}",
+            link.display()
+        );
+    }
     made.is_ok()
 }
 
@@ -953,32 +959,119 @@ fn shared_files_are_named_and_agent_specific_files_are_offered() {
 }
 
 #[test]
-fn link_targets_resolve_inside_the_folder_or_count_as_outside() {
-    // Exercises the link classification without needing symlink privileges.
+fn link_classification_follows_the_resolved_target_never_the_link_text() {
+    // The classifier sees only the canonical root and the OS's own resolution of the link, so
+    // `a/../..` text, or a linked folder inside the target, cannot disguise where it leads.
+    use model::{LinkTarget, classify_link};
     let fixture = setup();
-    fixture.write("AGENTS.md", b"Rules.\n");
+    let root = std::fs::canonicalize(&fixture.project).unwrap();
+    let inside = |path: &str| LinkTarget::Inside(path.to_owned());
+    assert_eq!(
+        classify_link(Some(&root), Ok(root.join("AGENTS.md"))),
+        inside("AGENTS.md")
+    );
+    assert_eq!(
+        classify_link(Some(&root), Ok(root.join(".claude").join("CLAUDE.md"))),
+        inside(".claude/CLAUDE.md")
+    );
+    // What `a/../../AGENTS.md`, or `linked-folder/../AGENTS.md` through a folder link, resolves
+    // to when the OS follows it out of the folder.
+    let parent = root.parent().unwrap().to_path_buf();
+    assert_eq!(
+        classify_link(Some(&root), Ok(parent.join("AGENTS.md"))),
+        LinkTarget::Outside
+    );
+    assert_eq!(
+        classify_link(Some(&root), Ok(parent.join(".ssh").join("config"))),
+        LinkTarget::Outside
+    );
+    // A sibling whose name starts with the folder's name is still outside.
+    let sibling = PathBuf::from(format!("{}-other", root.display())).join("AGENTS.md");
+    assert_eq!(classify_link(Some(&root), Ok(sibling)), LinkTarget::Outside);
+    assert_eq!(
+        classify_link(Some(&root), Ok(root.clone())),
+        LinkTarget::Outside
+    );
+    let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+    assert_eq!(
+        classify_link(Some(&root), Err(missing)),
+        LinkTarget::Dangling
+    );
+    let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    assert_eq!(classify_link(Some(&root), Err(denied)), LinkTarget::Outside);
+    assert_eq!(
+        classify_link(None, Ok(root.join("AGENTS.md"))),
+        LinkTarget::Outside
+    );
+}
+
+#[test]
+fn a_relative_link_through_a_linked_folder_is_classified_by_where_the_os_resolves_it() {
+    let fixture = setup();
+    fixture.write("AGENTS.md", b"Inside.\n");
+    let outside = fixture.home.join("outside").join("inner");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(
+        fixture.home.join("outside").join("AGENTS.md"),
+        b"Outside.\n",
+    )
+    .unwrap();
+    if !folder_link(&outside, &fixture.project.join("linked")) {
+        eprintln!("skipped: this system refused to create a folder link");
+        return;
+    }
+    // By text `linked/../AGENTS.md` is the project's AGENTS.md; the OS may follow `linked` first.
+    if !symlink("linked/../AGENTS.md", &fixture.project.join("CLAUDE.md")) {
+        eprintln!("skipped: creating a file symlink needs Developer Mode or elevation here");
+        return;
+    }
+    let snapshot = snapshot(&fixture.project(ALL)).unwrap();
+    let claude = file(&snapshot, "project:CLAUDE.md");
+    let real = std::fs::canonicalize(fixture.project.join("CLAUDE.md")).unwrap();
+    let root = std::fs::canonicalize(&fixture.project).unwrap();
+    if real.starts_with(&root) {
+        assert_eq!(claude.kind, FileKind::Link);
+    } else {
+        assert_eq!(claude.kind, FileKind::Outside);
+        assert!(!claude.editable);
+    }
+}
+
+#[test]
+fn a_dangling_link_reads_as_nothing_and_is_never_written() {
+    let fixture = setup();
+    if !symlink("missing.md", &fixture.project.join("CLAUDE.md")) {
+        eprintln!("skipped: creating a file symlink needs Developer Mode or elevation here");
+        return;
+    }
     let context = fixture.project(ALL);
-    let mut model = model::Model::scan(&context).unwrap();
-    let claude = model.file("project:CLAUDE.md").unwrap();
-    let agents = model.file("project:AGENTS.md").unwrap();
-    for (raw, inside) in [
-        (PathBuf::from("AGENTS.md"), true),
-        (PathBuf::from("./AGENTS.md"), true),
-        (fixture.project.join("AGENTS.md"), true),
-        (PathBuf::from("../AGENTS.md"), false),
-        (PathBuf::from("../../.ssh/config"), false),
-        (fixture.home.join("elsewhere.md"), false),
-    ] {
-        model.files[claude].kind = FileKind::Outside;
-        model.files[claude].link_raw = Some(raw.clone());
-        model.files[claude].link_to = None;
-        model::link_files(&model.roots, &mut model.files);
-        if inside {
-            assert_eq!(model.files[claude].kind, FileKind::Link, "{raw:?}");
-            assert_eq!(model.files[claude].link_to, Some(agents));
-        } else {
-            assert_eq!(model.files[claude].kind, FileKind::Outside, "{raw:?}");
-        }
+    let snapshot = snapshot(&context).unwrap();
+    let claude = file(&snapshot, "project:CLAUDE.md");
+    assert_eq!(claude.kind, FileKind::Dangling);
+    assert!(!claude.editable);
+    assert_eq!(agent(&snapshot, "claude").status, AgentStatus::NotSet);
+    let save = Change::Save {
+        file: "project:CLAUDE.md".into(),
+        text: "x".into(),
+    };
+    assert!(prepare(&context, &save).is_err());
+    assert!(!fixture.project.join("missing.md").exists());
+}
+
+/// A folder link: a junction on Windows (no privileges needed), a symlink elsewhere.
+fn folder_link(target: &Path, link: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link).is_ok()
     }
 }
 

@@ -60,6 +60,8 @@ pub enum FileKind {
     /// A link that leaves the folder, a linked parent folder, or a link to another kind of file.
     /// auracode never follows it.
     Outside,
+    /// A link whose target does not exist. Agents read nothing there; auracode never writes it.
+    Dangling,
     Directory,
     /// Not UTF-8 text. Copies stay byte-identical; editing happens in another editor.
     NotText,
