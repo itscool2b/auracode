@@ -890,7 +890,10 @@ radius 16 (`--ui-pane-radius`), inset 8px from the window's top, right and botto
 sidebar, with a calm rim drawn outside it (1px `--g-line-faint`, so nothing inside can cover it),
 its top edge lit one step brighter (an inset 1px `--g-line`), and a faint light falling from the
 top under the content (a 2% white radial, 280px deep, never over a word). Settings and Diagnostics
-draw the same pane. With the right panel open the main pane narrows and the panel pane (surface-1,
+draw the same pane. Agents and the Plugin library stand alone in it (`.pane-shell`): the pane 8px in
+from every edge of the black window, no sidebar beside it, their content where it was on black, and
+the fills they drew one step above black (a row under the hand, an open row, a quiet well) one
+surface up on the pane. With the right panel open the main pane narrows and the panel pane (surface-1,
 the same radius and rim, 380 wide, 320 to 560 by dragging the 8px gutter, arrow keys in 20px steps
 while it has focus) sits 8px to its right. The top 52px is the drag region; macOS
 traffic lights at x 18 to 70; Windows caption buttons are 46x52 hit areas with 10px fg-2 glyphs,
@@ -1355,15 +1358,16 @@ saved at the retired motion step resumes at First project. The one primary is "G
 
 ### 6.17a Agents
 
-Vercel's project list. Back to chats and Run setup again (ghosts) on the top line; "Agents" in
-`.g-text-title` with "3 of 9 installed on this computer." under it and Refresh (outline) at right.
+Vercel's project list, in the inset pane on its own (6.1). Back to chats and Run setup again
+(ghosts) on the top line; "Agents" in `.g-text-title` with "3 of 9 installed on this computer."
+under it and Refresh (outline) at right.
 One frame (a 1px line ring drawn over the rows, radius 12) of 60px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
 over the version in mono 12/16 fg-3, the status in 12/16 (a 16px slot and a word: a green check
 in a green-tinted circle and "Installed", a volt dot and "Needs sign-in", a red dot and
 "Unavailable", an fg-4 ring and fg-3 "Not installed", the pulse and fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3
 tabular, at most one outline 28 action (Install, Update or Sign in) and a kebab menu (plain rows,
 one divider) for the rest: Sign in, Check sign-in, Update, Installation guide, Copy path. A row
-opens its details on surface-1: the description, facts on hairlines (runs from, installed with,
+opens its details one surface above the pane (surface-2): the description, facts on hairlines (runs from, installed with,
 latest release, updates, verified) and the executable picker.
 
 **Detection** (setup's roster, Agents and New chat alike; Shallows' small-space motion): while an
@@ -1383,13 +1387,13 @@ OpenCode, Hermes). Every other agent keeps its Installation guide.
 
 ### 6.18 Plugin library
 
-Vercel's project pages: Back, "Plugin library" in `.g-text-title` with one line under it and
-Refresh (ghost icon) at right. Below, a 200px column of agents as plain 32px rows (a 16px
+Vercel's project pages, in the inset pane on its own (6.1): Back, "Plugin library" in
+`.g-text-title` with one line under it and Refresh (ghost icon) at right. Below, a 200px column of agents as plain 32px rows (a 16px
 `AgentMark`, the name, a volt status dot only when an update is available; the current one filled
 surface-3), and the chosen agent as one scrolling page beside it: its 32px mark, name 16/22 600 over
 the version in mono and "Updated 4 minutes ago" in 12/16 fg-3, the page's one primary (Add plugin, or
 Add package for Pi) and a kebab for the rest (Refresh listings, Add marketplace, Copy history, Open
-Agents). Under it the harness line in a surface-1 well (a volt dot and Update when a release is
+Agents). Under it the harness line in a surface-2 well (a volt dot and Update when a release is
 newer, a red dot when the binary failed, plain fg-2 otherwise), the reread notice after a version
 change, the agent's one-sentence summary, and Sync across devices as one settings row with its
 switch. Each feature follows as a 14/20 600 heading with its count, one 12/16 fg-3 line saying where

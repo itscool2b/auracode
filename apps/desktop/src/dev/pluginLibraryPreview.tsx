@@ -337,15 +337,17 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
   const initial = mode === "plugins-pi" ? "pi" : mode === "plugins-failed" ? "codex" : "claude";
   createRoot(container).render(
     <StrictMode>
-      <PluginLibraryScreen
-        initialAgent={initial}
-        api={api}
-        libraryApi={libraryApi}
-        vendorApi={syntheticVendor}
-        now={() => NOW}
-        onBack={() => calls.push("back")}
-        onAgents={() => calls.push("agents")}
-      />
+      <div className="pane-shell g-root">
+        <PluginLibraryScreen
+          initialAgent={initial}
+          api={api}
+          libraryApi={libraryApi}
+          vendorApi={syntheticVendor}
+          now={() => NOW}
+          onBack={() => calls.push("back")}
+          onAgents={() => calls.push("agents")}
+        />
+      </div>
     </StrictMode>,
   );
 }

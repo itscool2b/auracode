@@ -165,6 +165,83 @@
   }
 }
 
+/*
+ * Pages that stand alone, Agents and the Plugin library, sit in the same inset pane (6.17a, 6.18):
+ * the black window around it, the pane 8px in from every edge with no sidebar beside it, its calm
+ * rim, lit top edge and faint light. The page scrolls inside the pane. Their content keeps its
+ * place in the window: the pane's inset comes off the top padding that clears the titlebar.
+ */
+.pane-shell {
+  display: flex;
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--ui-pane-inset);
+  background-color: var(--g-bg);
+}
+
+.pane-shell > :is(.agents-screen, .plugins-screen) {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  border-radius: var(--ui-pane-radius);
+  background-color: var(--g-surface-1);
+  box-shadow:
+    0 0 0 1px var(--ui-pane-rim),
+    inset 0 1px 0 var(--ui-pane-rim-top);
+}
+
+/* The pane's light, as the chat's: under the content, never over a word. */
+.pane-shell > :is(.agents-screen, .plugins-screen)::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 280px;
+  background-image: radial-gradient(72% 100% at 50% 0, var(--ui-pane-light), transparent);
+  pointer-events: none;
+}
+
+.pane-shell .agents-page {
+  padding-top: calc(var(--ui-titlebar-height) + var(--g-space-4) - var(--ui-pane-inset));
+}
+
+.pane-shell .library-topbar {
+  padding-top: calc(var(--ui-titlebar-height) + var(--g-space-4) - var(--ui-pane-inset));
+}
+
+/*
+ * Fills these pages drew one step above the black window step up one surface on the pane, as the
+ * roster does on setup's card, so the hand, an open row and a quiet well still read against it.
+ * Container rules only: the rows keep their own styles.
+ */
+@media (hover: hover) {
+  .pane-shell .agent-row-main:hover {
+    background-color: var(--g-surface-2);
+  }
+}
+
+.pane-shell
+  :is(
+    .agent-row[data-open] .agent-row-main,
+    .agent-row[data-open] .agent-row-update,
+    .agent-row[data-open] .agent-row-note,
+    .agent-detail,
+    .plugins-harness,
+    .library-feedback
+  ) {
+  background-color: var(--g-surface-2);
+}
+
+.pane-shell
+  :is(
+    .agent-row-main:has(.agent-row-toggle:focus-visible),
+    .agent-row-main:has(.agent-row-toggle:active)
+  ) {
+  background-color: var(--g-surface-3);
+}
+
 .chat-centered {
   margin: auto;
   padding: var(--g-space-24);

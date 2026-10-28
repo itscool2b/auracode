@@ -377,17 +377,20 @@ export function App({
         }}
       />
     );
+  // Agents and the Plugin library stand alone in the inset pane (shell.css, .pane-shell).
   if (view === "agents")
     return (
-      <AgentsScreen
-        app={chats}
-        transport={transport}
-        onBack={() => setView("chats")}
-        onSetup={() => {
-          setRestartSetup(true);
-          setView("setup");
-        }}
-      />
+      <div className="pane-shell g-root">
+        <AgentsScreen
+          app={chats}
+          transport={transport}
+          onBack={() => setView("chats")}
+          onSetup={() => {
+            setRestartSetup(true);
+            setView("setup");
+          }}
+        />
+      </div>
     );
   if (view === "chats" || view === "settings" || view === "library") {
     return (
@@ -453,10 +456,12 @@ export function App({
           />
         ) : null}
         {view === "library" ? (
-          <PluginLibraryScreen
-            onBack={() => setView("settings")}
-            onAgents={() => setView("agents")}
-          />
+          <div className="pane-shell g-root">
+            <PluginLibraryScreen
+              onBack={() => setView("settings")}
+              onAgents={() => setView("agents")}
+            />
+          </div>
         ) : null}
       </>
     );
