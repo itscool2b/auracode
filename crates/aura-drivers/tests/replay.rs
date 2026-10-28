@@ -252,8 +252,11 @@ mod replay {
             }
             "basic" if !events.iter().any(|event| matches!(event, DriverEvent::Event { event: AuraEvent::MessageDelta { text, .. }, .. } if text == "hello back")) => violations.push("native assistant content was not replayed".into()),
             "result-before-idle" => {
+                // An open prompt refuses another; after its result, Claude Code queues a prompt
+                // even while it still reports background work (the session sends one only after
+                // its idle grace or the person's Send now).
                 if !ended("TOO-EARLY", StopReason::Error) || !ended("T2", StopReason::EndTurn) {
-                    violations.push("native result incorrectly made another prompt dispatchable before idle".into());
+                    violations.push("an open prompt accepted another, or a finished one refused the next while Claude still worked".into());
                 }
             }
             "permission-withdrawal" => {

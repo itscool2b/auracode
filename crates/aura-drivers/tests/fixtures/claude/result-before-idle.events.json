@@ -108,22 +108,6 @@
     {
       "type": "turn_ended",
       "data": {
-        "turn_id": "T1",
-        "stop_reason": "end_turn",
-        "usage": {
-          "input_tokens": 3,
-          "output_tokens": 4,
-          "cache_read_tokens": null,
-          "cache_write_tokens": null,
-          "reasoning_tokens": null,
-          "scope": "turn"
-        },
-        "error": null
-      }
-    },
-    {
-      "type": "turn_ended",
-      "data": {
         "turn_id": "TOO-EARLY",
         "stop_reason": "error",
         "usage": null,
@@ -135,9 +119,19 @@
       }
     },
     {
-      "type": "run_state",
+      "type": "turn_ended",
       "data": {
-        "idle": true
+        "turn_id": "T1",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3,
+          "output_tokens": 4,
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
+          "reasoning_tokens": null,
+          "scope": "turn"
+        },
+        "error": null
       }
     },
     {

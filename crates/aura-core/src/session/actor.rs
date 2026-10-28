@@ -38,9 +38,10 @@ use aura_protocol::session::{
     SessionLists,
 };
 use aura_protocol::{
-    AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, LimitWindow, Millis,
-    NoticeLevel, PermissionDecision, PermissionRequest, PromptPart, PromptState, ResolvedBy,
-    SessionInfo, SessionStatus, SlashCommand, StopReason, UiAnswer, UiPrompt, UiRequest, UsageInfo,
+    AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, HoldCause,
+    LimitWindow, Millis, NoticeLevel, PermissionDecision, PermissionRequest, PromptPart,
+    PromptState, QueueWait, ResolvedBy, SessionInfo, SessionStatus, SlashCommand, StopReason,
+    UiAnswer, UiPrompt, UiRequest, UsageInfo,
 };
 use futures::FutureExt;
 use futures::future::BoxFuture;
@@ -196,6 +197,11 @@ pub(crate) enum ChatMsg {
     ResumeQueue {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// The queued prompt goes next ("Send now"); answers the queue after the change.
+    SendNow {
+        prompt_id: String,
+        reply: oneshot::Sender<Result<Vec<QueuedPrompt>, SessionError>>,
+    },
     Interrupt {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -274,7 +280,9 @@ impl ChatMsg {
             }
             ChatMsg::Blob { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::QueuedText { reply, .. } => drop(reply.send(Err(error))),
-            ChatMsg::EditQueued { reply, .. } | ChatMsg::MoveQueued { reply, .. } => {
+            ChatMsg::EditQueued { reply, .. }
+            | ChatMsg::MoveQueued { reply, .. }
+            | ChatMsg::SendNow { reply, .. } => {
                 drop(reply.send(Err(error)));
             }
             ChatMsg::CancelQueued { reply, .. }
@@ -383,8 +391,11 @@ struct LiveDriver {
     abort: AbortHandle,
     ready: bool,
     /// `None` keeps the original turn-based contract. Otherwise only an idle report permits
-    /// another prompt, even after the current prompt's result has arrived.
+    /// another prompt, even after the current prompt's result has arrived...
     run_idle: Option<bool>,
+    /// ...or the idle grace: the agent reported work in progress with no prompt of auracode's
+    /// open for `idle_grace` without reporting idle. Cleared by the next prompt or idle report.
+    idle_assumed: bool,
     native_scope: NativeSessionScope,
     stop: Stop,
     spawn_id: Option<String>,
@@ -535,6 +546,16 @@ enum Done {
     Nothing,
 }
 
+/// The agent reported work in progress with no prompt of auracode's open: since when, and when
+/// the queue stops waiting for its idle report.
+#[derive(Debug, Clone, Copy)]
+struct IdleWait {
+    generation: u64,
+    deadline: Instant,
+    since: Millis,
+    sends_at: Millis,
+}
+
 /// A prompt about to be sent.
 struct Prompt {
     parts: Vec<PromptPart>,
@@ -613,6 +634,12 @@ pub(crate) struct ChatActor {
     force_wait: Option<(Instant, u64)>,
     stop_deadline: Option<(Instant, u64)>,
     idle_deadline: Option<Instant>,
+    /// The idle grace running for the live driver, if any.
+    idle_wait: Option<IdleWait>,
+    /// Why the queue was last held (a restart, until the actor holds it itself).
+    hold_cause: HoldCause,
+    /// The queue's wait as the last flushed `SessionInfo` said it.
+    queue_wait: Option<QueueWait>,
     last_activity: Instant,
     quitting: bool,
     shutdown_reply: Option<oneshot::Sender<()>>,
@@ -725,6 +752,10 @@ impl ChatActor {
             force_wait: None,
             stop_deadline: None,
             idle_deadline: None,
+            idle_wait: None,
+            // Every queued row of a loaded chat comes back held: auracode restarted with it.
+            hold_cause: HoldCause::Restart,
+            queue_wait: None,
             last_activity: Instant::now(),
             quitting: false,
             shutdown_reply: None,
@@ -755,7 +786,7 @@ impl ChatActor {
                 changed = workspace_changes.changed() => {
                     if changed.is_err() { break; }
                     if self.require_workspace().is_err() {
-                        self.hold_queue();
+                        self.hold_queue(HoldCause::WorkspaceRemoved);
                         self.stop();
                         self.set_detail(Some("This project or folder was removed. Restore it from Removed projects and folders to continue.".into()));
                     }
@@ -801,6 +832,7 @@ impl ChatActor {
                 self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
             }
             self.update_idle();
+            self.refresh_queue_wait();
             self.finish_shutdown();
         }
         // The manager is gone: dropping the driver's command sender closes it (a shutdown with no
@@ -855,6 +887,7 @@ impl ChatActor {
             self.force_wait.map(|(at, _)| at),
             self.stop_deadline.map(|(at, _)| at),
             self.idle_deadline,
+            self.idle_wait.map(|wait| wait.deadline),
         ]
         .into_iter()
         .flatten()
@@ -908,6 +941,8 @@ impl ChatActor {
                 if self.git_reservation.as_deref() == Some(&id) {
                     self.git_reservation = None;
                     self.organizing = false;
+                    // A prompt queued meanwhile (a restore keeps the queue) goes once it may.
+                    self.dispatch_next();
                 }
             }
             ChatMsg::FolderLocated {
@@ -1065,6 +1100,10 @@ impl ChatActor {
             }
             ChatMsg::ResumeQueue { reply } => {
                 let result = self.require_workspace().map(|()| self.resume_queue());
+                drop(reply.send(result));
+            }
+            ChatMsg::SendNow { prompt_id, reply } => {
+                let result = self.send_now(&prompt_id);
                 drop(reply.send(result));
             }
             ChatMsg::Interrupt { reply } => {
@@ -1637,9 +1676,8 @@ impl ChatActor {
                 driver.ready
                     && driver.stop == Stop::None
                     && driver.events.is_some()
-                    && driver
-                        .run_idle
-                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests())
+                    && (driver.run_idle.is_none()
+                        || (driver_idle(driver) && !self.normalizer.has_open_requests()))
             })
     }
 
@@ -1726,25 +1764,116 @@ impl ChatActor {
         if from != to {
             let row = self.queue.remove(from);
             self.queue.insert(to, row);
-            let mut times: Vec<Millis> = self.queue.iter().map(|row| row.created_at).collect();
-            times.sort_unstable();
-            let mut previous: Option<Millis> = None;
-            let mut changed = Vec::new();
-            for (row, time) in self.queue.iter_mut().zip(times) {
-                let time = previous.map_or(time, |previous| time.max(previous.saturating_add(1)));
-                previous = Some(time);
-                if row.created_at != time {
-                    row.created_at = time;
-                    changed.push(row.clone());
-                }
-            }
-            for row in changed {
-                self.queue_op(Op::QueuePut(row));
-            }
-            self.info_dirty = true;
-            self.schedule_flush();
+            self.save_order(None);
         }
         Ok(self.queued_prompts())
+    }
+
+    /// Reassigns the rows' times in their current order, so a reopened chat sends them in the same
+    /// order, and saves every row whose time changed, and `also` (a row changed otherwise).
+    fn save_order(&mut self, also: Option<&str>) {
+        let mut times: Vec<Millis> = self.queue.iter().map(|row| row.created_at).collect();
+        times.sort_unstable();
+        let mut previous: Option<Millis> = None;
+        let mut changed = Vec::new();
+        for (row, time) in self.queue.iter_mut().zip(times) {
+            let time = previous.map_or(time, |previous| time.max(previous.saturating_add(1)));
+            previous = Some(time);
+            if row.created_at != time || also == Some(row.id.as_str()) {
+                row.created_at = time;
+                changed.push(row.clone());
+            }
+        }
+        for row in changed {
+            self.queue_op(Op::QueuePut(row));
+        }
+        self.info_dirty = true;
+        self.schedule_flush();
+    }
+
+    /// "Send now": `prompt_id` goes next, released if it was held; the other prompts keep their
+    /// place and their hold. Then whatever stands in its way that the person may end is ended:
+    /// a running turn is interrupted when the agent can interrupt one, an agent that reports only
+    /// background work gets the prompt at once (it queues it), and a stopped agent starts. A
+    /// starting agent, an open request or a saving checkpoint still comes first.
+    fn send_now(&mut self, prompt_id: &str) -> Result<Vec<QueuedPrompt>, SessionError> {
+        self.require_workspace()?;
+        self.require_remote_handoff()?;
+        if self.organizing {
+            return Err(SessionError::Organization(
+                "Wait for the chat change to finish.".into(),
+            ));
+        }
+        if self.quitting || self.shared.is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let from = self.waiting(prompt_id)?;
+        let mut row = self.queue.remove(from);
+        row.held = false;
+        self.queue.insert(0, row);
+        self.save_order(Some(prompt_id));
+        if self.can_dispatch() {
+            self.dispatch_next();
+            return Ok(self.queued_prompts());
+        }
+        match self.status {
+            SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired => {
+                let _ = self.start(false, false);
+            }
+            SessionStatus::Running | SessionStatus::Ready
+                if self.checkpointing.is_none() && !self.normalizer.has_open_requests() =>
+            {
+                if self.turn.is_some() {
+                    let interruptible = self
+                        .capabilities
+                        .as_ref()
+                        .is_none_or(|capabilities| capabilities.interrupt);
+                    if interruptible
+                        && !self
+                            .turn
+                            .as_ref()
+                            .is_some_and(|turn| turn.interrupt_requested)
+                    {
+                        self.interrupt_for(prompt_id);
+                    }
+                } else if let Some(driver) = &mut self.driver
+                    && driver.ready
+                    && driver.stop == Stop::None
+                    && driver.run_idle == Some(false)
+                {
+                    tracing::info!(chat_id = %self.chat_id, "Send now: the agent still reports background work; it gets the prompt now and queues it");
+                    driver.idle_assumed = true;
+                    self.idle_wait = None;
+                    self.refresh_run_status();
+                }
+            }
+            _ => {}
+        }
+        Ok(self.queued_prompts())
+    }
+
+    /// Interrupts the running turn so `prompt_id` goes next. Unlike Esc it holds nothing: the
+    /// person asked for the queue to move on.
+    fn interrupt_for(&mut self, prompt_id: &str) {
+        let Some((turn_id, tag)) = self.turn.as_mut().map(|turn| {
+            turn.interrupt_requested = true;
+            (turn.id.clone(), Arc::clone(&turn.tag))
+        }) else {
+            return;
+        };
+        tracing::info!(chat_id = %self.chat_id, prompt_id, "Send now: interrupting the running turn");
+        self.send_command(DriverCommand::Interrupt);
+        for event in self
+            .normalizer
+            .resolve_turn_requests(&turn_id, ResolvedBy::Turn)
+        {
+            self.push_normalized(event, Some(Arc::clone(&tag)));
+        }
+        self.set_status(
+            SessionStatus::Cancelling,
+            Some("Stopping the turn to send your next message".into()),
+        );
+        self.refresh_attention();
     }
 
     fn queued_prompts(&self) -> Vec<QueuedPrompt> {
@@ -1789,10 +1918,11 @@ impl ChatActor {
     }
 
     /// Holds every queued row: rows typed afterwards are not held, and go first at the next `Ready`.
-    fn hold_queue(&mut self) {
+    fn hold_queue(&mut self, cause: HoldCause) {
         if self.queue.iter().all(|row| row.held) {
             return;
         }
+        self.hold_cause = cause;
         for row in &mut self.queue {
             row.held = true;
         }
@@ -1854,6 +1984,7 @@ impl ChatActor {
                 None,
             );
             self.info_dirty = true;
+            self.hold_cause = HoldCause::WorkspaceRemoved;
             self.set_detail(Some("This workspace was removed. Restore it from Removed projects and folders before resuming this saved prompt.".into()));
             self.flush();
             return true;
@@ -1949,6 +2080,8 @@ impl ChatActor {
         if driver.run_idle.is_some() {
             driver.run_idle = Some(false);
         }
+        driver.idle_assumed = false;
+        self.idle_wait = None;
         self.queue.retain(|row| row.id != prompt.id);
         self.remote_history = false;
         self.ordinal = self.ordinal.saturating_add(1);
@@ -2054,12 +2187,8 @@ impl ChatActor {
     fn interrupt(&mut self) {
         if self.checkpointing.is_some() {
             self.cancel_checkpoint();
-            self.hold_queue();
-            if self
-                .driver
-                .as_ref()
-                .is_none_or(|driver| driver.run_idle != Some(false))
-                && !self.normalizer.has_open_requests()
+            self.hold_queue(HoldCause::Stop);
+            if self.driver.as_ref().is_none_or(driver_idle) && !self.normalizer.has_open_requests()
             {
                 self.set_status(
                     SessionStatus::Ready,
@@ -2074,7 +2203,7 @@ impl ChatActor {
                     turn.interrupt_requested = true;
                     (turn.id.clone(), Arc::clone(&turn.tag))
                 });
-                self.hold_queue();
+                self.hold_queue(HoldCause::Stop);
                 self.send_command(DriverCommand::Interrupt);
                 if let Some((turn_id, tag)) = &turn {
                     for event in self
@@ -2111,7 +2240,7 @@ impl ChatActor {
         ) {
             return;
         }
-        self.hold_queue();
+        self.hold_queue(HoldCause::Stop);
         self.pending_start = None;
         if let Some(preparing) = self.preparing.take() {
             // Dropping the preparation kills a running install or probe.
@@ -2240,7 +2369,7 @@ impl ChatActor {
         self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
-        self.hold_queue();
+        self.hold_queue(HoldCause::Stop);
         match self.status {
             SessionStatus::Stopped
             | SessionStatus::Failed
@@ -2647,6 +2776,7 @@ impl ChatActor {
             join: Some(join),
             ready: false,
             run_idle: None,
+            idle_assumed: false,
             native_scope,
             stop: Stop::None,
             spawn_id: None,
@@ -2901,7 +3031,7 @@ impl ChatActor {
             .as_ref()
             .is_some_and(|driver| driver.stop == Stop::None);
         if stoppable {
-            self.hold_queue();
+            self.hold_queue(HoldCause::Restart);
             if let Some(turn) = &mut self.turn {
                 turn.interrupt_requested = true;
             }
@@ -3017,11 +3147,10 @@ impl ChatActor {
                     .is_some_and(|driver| driver.ready && driver.stop == Stop::None)
                     && self.turn.is_none()
                 {
-                    let idle = self
-                        .driver
-                        .as_ref()
-                        .and_then(|driver| driver.run_idle)
-                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests());
+                    let idle = self.driver.as_ref().is_some_and(|driver| {
+                        driver.run_idle.is_none()
+                            || (driver_idle(driver) && !self.normalizer.has_open_requests())
+                    });
                     self.set_status(
                         if idle {
                             SessionStatus::Ready
@@ -3056,7 +3185,7 @@ impl ChatActor {
                     }
                     Err(error) if error.is_cancelled() => {}
                     failed => {
-                        self.hold_queue();
+                        self.hold_queue(HoldCause::Error);
                         let message = match failed {
                             Ok(Err(error)) => error.to_string(),
                             _ => "Saving the checkpoint stopped unexpectedly.".into(),
@@ -3255,6 +3384,10 @@ impl ChatActor {
             DriverEvent::RunState { idle } => {
                 if let Some(driver) = &mut self.driver {
                     driver.run_idle = Some(idle);
+                    if idle {
+                        driver.idle_assumed = false;
+                        self.idle_wait = None;
+                    }
                 }
             }
             DriverEvent::Ready(info) => self.on_ready(info),
@@ -3407,7 +3540,7 @@ impl ChatActor {
     }
 
     fn reject_native_identity(&mut self, kind: ErrorKind, message: String) {
-        self.hold_queue();
+        self.hold_queue(HoldCause::Error);
         self.graceful_stop(
             StopPlan {
                 cancel_grace: Duration::ZERO,
@@ -3808,7 +3941,8 @@ impl ChatActor {
                 .unwrap_or(self.queue.len());
             self.queue.insert(at, row.clone());
             self.queue_op(Op::QueuePut(row));
-            self.hold_queue();
+            self.hold_queue(HoldCause::SignIn);
+            self.hold_cause = HoldCause::SignIn;
             self.graceful_stop(
                 StopPlan {
                     cancel_grace: Duration::ZERO,
@@ -3826,7 +3960,7 @@ impl ChatActor {
             return;
         }
         if stop_reason == StopReason::Error && !turn.interrupt_requested {
-            self.hold_queue();
+            self.hold_queue(HoldCause::Error);
         }
         if !self
             .driver
@@ -4162,7 +4296,7 @@ impl ChatActor {
         for event in self.normalizer.close_untagged(ResolvedBy::System, now) {
             self.push_normalized(event, None);
         }
-        self.hold_queue();
+        self.hold_queue(HoldCause::Error);
         self.last_error = Some(ErrorInfo {
             kind: ErrorKind::AgentExited,
             message,
@@ -4203,7 +4337,7 @@ impl ChatActor {
                 },
                 tag,
             );
-            self.hold_queue();
+            self.hold_queue(HoldCause::Error);
         }
         let mut message = self.redact(&error.message);
         // A failed start's detail is usually the agent's stderr tail (5.3.2).
@@ -4352,16 +4486,56 @@ impl ChatActor {
             tracing::info!(chat_id = %self.chat_id, "stopping an idle agent nobody views");
             self.stop();
         }
+        if let Some(wait) = self.idle_wait
+            && wait.deadline <= now
+        {
+            self.idle_wait = None;
+            self.idle_grace_ended(wait.generation);
+        }
     }
 
-    /// Idle eviction: `Ready`, nobody viewing, nothing open or waiting, idle long enough.
+    /// The idle grace ran out: the agent still reports work in progress with no prompt of
+    /// auracode's open and nothing waiting for an answer. It counts as idle for the queue from now
+    /// until its next prompt or idle report; a late busy report cannot take that back.
+    fn idle_grace_ended(&mut self, generation: u64) {
+        let open_requests = self.normalizer.has_open_requests();
+        let agent = self.agent_label();
+        let Some(driver) = &mut self.driver else {
+            return;
+        };
+        if driver.generation != generation
+            || !driver.ready
+            || driver.stop != Stop::None
+            || driver.run_idle != Some(false)
+            || self.turn.is_some()
+            || open_requests
+        {
+            return;
+        }
+        driver.idle_assumed = true;
+        tracing::info!(
+            chat_id = %self.chat_id,
+            agent = %agent,
+            grace_s = self.shared.deps.timings.idle_grace.as_secs(),
+            "the agent reported work in progress and no idle within the grace after its turn; \
+             treating it as idle so queued prompts can go (the agent queues them itself)"
+        );
+        self.refresh_run_status();
+    }
+
+    /// Idle eviction: `Ready`, nobody viewing, nothing open or waiting, idle long enough. An agent
+    /// that only counts as idle after the idle grace still works, so it is not evicted.
     fn update_idle(&mut self) {
         let idle = self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.subscribers.is_empty()
             && !self.normalizer.has_open_requests()
             && !self.queue.iter().any(|row| !row.held)
-            && !self.quitting;
+            && !self.quitting
+            && self
+                .driver
+                .as_ref()
+                .is_none_or(|driver| driver.run_idle != Some(false));
         self.idle_deadline =
             idle.then(|| self.last_activity + self.shared.deps.limits.idle_eviction);
     }
@@ -4418,6 +4592,7 @@ impl ChatActor {
         if self.info_dirty {
             self.info_dirty = false;
             let info = self.session_info();
+            self.queue_wait.clone_from(&info.queue_wait);
             let (events, _) =
                 self.normalizer
                     .apply(AuraEvent::SessionUpdated(info), None, now_millis());
@@ -4587,7 +4762,9 @@ impl ChatActor {
         }
     }
 
-    /// An opted-in driver's prompt can finish while its background work is still running.
+    /// An opted-in driver's prompt can finish while its background work is still running. Work in
+    /// progress with no prompt of auracode's open and nothing to answer runs the idle grace
+    /// ([`Self::idle_grace_ended`]).
     fn refresh_run_status(&mut self) {
         if self.checkpointing.is_some() {
             return;
@@ -4595,18 +4772,40 @@ impl ChatActor {
         let Some(driver) = &self.driver else {
             return;
         };
-        let Some(idle) = driver.run_idle else {
-            return;
-        };
-        if !driver.ready || driver.stop != Stop::None || self.turn.is_some() {
+        if driver.run_idle.is_none() {
             return;
         }
-        if idle && !self.normalizer.has_open_requests() {
+        if !driver.ready || driver.stop != Stop::None || self.turn.is_some() {
+            self.idle_wait = None;
+            return;
+        }
+        let open_requests = self.normalizer.has_open_requests();
+        if driver_idle(driver) && !open_requests {
+            self.idle_wait = None;
             if self.status != SessionStatus::Ready {
                 self.set_status(SessionStatus::Ready, None);
             }
             self.dispatch_next();
-        } else if !matches!(
+            return;
+        }
+        if open_requests {
+            // The answer is the person's; the grace starts again once nothing waits for one.
+            self.idle_wait = None;
+        } else if self
+            .idle_wait
+            .is_none_or(|wait| wait.generation != driver.generation)
+        {
+            let grace = self.shared.deps.timings.idle_grace;
+            let since = now_millis();
+            self.idle_wait = Some(IdleWait {
+                generation: driver.generation,
+                deadline: Instant::now() + grace,
+                since,
+                sends_at: since
+                    .saturating_add(i64::try_from(grace.as_millis()).unwrap_or(i64::MAX)),
+            });
+        }
+        if !matches!(
             self.status,
             SessionStatus::Cancelling | SessionStatus::Running
         ) {
@@ -4614,6 +4813,84 @@ impl ChatActor {
                 SessionStatus::Running,
                 Some("Agent work is still running".into()),
             );
+        }
+    }
+
+    /// Why the queued prompts wait, while any are queued (see [`QueueWait`]). The first match in
+    /// the order a person would have to clear them wins.
+    fn compute_queue_wait(&self) -> Option<QueueWait> {
+        if self.queue.is_empty() {
+            return None;
+        }
+        if !self.store.workspace_available(&self.chat_id) {
+            return Some(QueueWait::WorkspaceRemoved);
+        }
+        if self.queue.iter().all(|row| row.held) {
+            return Some(QueueWait::Held {
+                after: self.hold_cause,
+            });
+        }
+        if self.organizing {
+            return Some(QueueWait::ChatChanging);
+        }
+        match self.status {
+            SessionStatus::Starting => return Some(QueueWait::Starting),
+            SessionStatus::Stopping | SessionStatus::Cancelling => {
+                return Some(QueueWait::Stopping);
+            }
+            SessionStatus::AuthRequired => return Some(QueueWait::SignIn),
+            SessionStatus::Failed => {
+                let missing = self.folder_state == FolderState::Missing
+                    || self
+                        .last_error
+                        .as_ref()
+                        .is_some_and(|error| error.kind == ErrorKind::FolderMissing);
+                return Some(if missing {
+                    QueueWait::FolderMissing
+                } else {
+                    QueueWait::StartFailed
+                });
+            }
+            SessionStatus::Stopped => return Some(QueueWait::Stopped),
+            SessionStatus::Ready | SessionStatus::Running => {}
+        }
+        if self.checkpointing.is_some() {
+            return Some(QueueWait::SavingCheckpoint);
+        }
+        let Some(driver) = self.driver.as_ref().filter(|driver| driver.ready) else {
+            return Some(QueueWait::Starting);
+        };
+        // A turn waits on its open requests; between turns they hold the queue only for a driver
+        // that reports its run state (the turn-based contract sends regardless).
+        if (self.turn.is_some() || driver.run_idle.is_some()) && self.normalizer.has_open_requests()
+        {
+            return Some(QueueWait::NeedsAnswer {
+                question: self.normalizer.cards().is_empty(),
+            });
+        }
+        if self.turn.is_some() || self.steering_pending || self.native_identity_pending.is_some() {
+            return Some(QueueWait::Working);
+        }
+        if !driver_idle(driver) {
+            let wait = self
+                .idle_wait
+                .filter(|wait| wait.generation == driver.generation);
+            return Some(QueueWait::FinishingTurn {
+                since: wait.map(|wait| wait.since),
+                sends_at: wait.map(|wait| wait.sends_at),
+            });
+        }
+        // Ready with nothing in the way: the next prompt is on its way.
+        None
+    }
+
+    /// Flushes a `SessionInfo` whenever the queue's wait changed.
+    fn refresh_queue_wait(&mut self) {
+        let wait = self.compute_queue_wait();
+        if wait != self.queue_wait {
+            self.queue_wait = wait;
+            self.info_dirty = true;
+            self.schedule_flush();
         }
     }
 
@@ -4676,6 +4953,7 @@ impl ChatActor {
             autonomy: self.autonomy,
             queue_held: self.queue.iter().any(|row| row.held),
             revision: self.revision,
+            queue_wait: self.compute_queue_wait(),
         }
     }
 
@@ -4715,6 +4993,14 @@ impl Drop for ChatActor {
     fn drop(&mut self) {
         self.cancel_checkpoint();
     }
+}
+
+/// Whether a driver counts as idle for the queue: it keeps the turn-based contract, reported idle,
+/// or ran out the idle grace.
+fn driver_idle(driver: &LiveDriver) -> bool {
+    driver
+        .run_idle
+        .is_none_or(|idle| idle || driver.idle_assumed)
 }
 
 /// A queued prompt's typed words and the context after them (attached files' text, image and mention

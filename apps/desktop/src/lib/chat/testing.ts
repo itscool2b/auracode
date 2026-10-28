@@ -50,6 +50,7 @@ export function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
     autonomy: "full_auto",
     queue_held: false,
     revision: 1,
+    queue_wait: null,
     ...overrides,
   };
 }
@@ -678,6 +679,11 @@ export class FakeTransport implements Transport {
   resumeQueue(chatId: string): Promise<void> {
     this.#record("resumeQueue", [chatId]);
     return this.handlers.resumeQueue?.(chatId) ?? Promise.resolve();
+  }
+
+  sendNow(chatId: string, promptId: string): Promise<QueuedPrompt[]> {
+    this.#record("sendNow", [chatId, promptId]);
+    return this.handlers.sendNow?.(chatId, promptId) ?? Promise.resolve([]);
   }
 
   interrupt(chatId: string): Promise<void> {

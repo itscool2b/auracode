@@ -572,6 +572,63 @@ pub struct SessionInfo {
     /// Increments when capabilities, options, slash commands or the autonomy state change: the UI
     /// refetches `chat_lists`.
     pub revision: u32,
+    /// Why the queued prompts are not going to the agent yet, while any are queued. `None` with
+    /// prompts queued means the next one is on its way.
+    pub queue_wait: Option<QueueWait>,
+}
+
+/// Why queued prompts wait. The first prompt that is not held goes next; when every prompt is held,
+/// they wait for the person ([`QueueWait::Held`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum QueueWait {
+    /// The agent is starting or resuming its session.
+    Starting,
+    /// The agent is working on a turn.
+    Working,
+    /// The turn ended, but the agent still reports work in progress (its Stop hooks, background
+    /// tasks) since `since`. The next prompt goes when it reports idle, or at `sends_at` without
+    /// that report.
+    FinishingTurn {
+        since: Option<Millis>,
+        sends_at: Option<Millis>,
+    },
+    /// A permission request (or, with `question`, a question) waits for the person's answer.
+    NeedsAnswer { question: bool },
+    /// A checkpoint of the folder is being saved before the next prompt goes.
+    SavingCheckpoint,
+    /// The turn is being cancelled, or the agent is stopping.
+    Stopping,
+    /// A change to this chat (a move, a revert, a Git action or a worktree setup) is in progress.
+    ChatChanging,
+    /// The agent could not start; its error card says why.
+    StartFailed,
+    /// The agent needs its own sign-in.
+    SignIn,
+    /// The agent is stopped.
+    Stopped,
+    /// The chat's folder is missing.
+    FolderMissing,
+    /// The chat's project or folder was removed.
+    WorkspaceRemoved,
+    /// Every queued prompt is held, since `after`.
+    Held { after: HoldCause },
+}
+
+/// What held the queued prompts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum HoldCause {
+    /// auracode restarted (or reopened the chat) with prompts still queued.
+    Restart,
+    /// The person stopped the turn or the agent.
+    Stop,
+    /// A turn failed, the agent crashed, or a checkpoint could not be saved.
+    Error,
+    /// The agent asked for its own sign-in.
+    SignIn,
+    /// The chat's project or folder was removed.
+    WorkspaceRemoved,
 }
 
 /// Where a chat's agent is in its life.

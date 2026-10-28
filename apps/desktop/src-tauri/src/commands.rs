@@ -487,6 +487,19 @@ pub async fn chat_resume_queue(
     Ok(state.sessions()?.resume_queue(&chat_id).await?)
 }
 
+/// "Send now": the queued prompt goes next, released if held. A running turn is interrupted
+/// first when the agent can interrupt it; a stopped agent starts. Returns the queue after the
+/// change.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_send_now(
+    state: State<'_, AppState>,
+    chat_id: String,
+    prompt_id: String,
+) -> Result<Vec<QueuedPrompt>, AppError> {
+    Ok(state.sessions()?.send_now(&chat_id, &prompt_id).await?)
+}
+
 /// Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops.
 #[tauri::command]
 #[specta::specta]

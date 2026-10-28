@@ -239,6 +239,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::chat_edit_queued,
             commands::chat_move_queued,
             commands::chat_resume_queue,
+            commands::chat_send_now,
             commands::chat_interrupt,
             commands::chat_force_stop,
             commands::chat_start,
