@@ -1,9 +1,9 @@
 /*
- * auracode.si in Graphite (docs/design/visual-language.md, section 5). Loaded after
+ * auracode.si in Graphite and Shallows (docs/design/visual-language.md, section 5). Loaded after
  * @auracode/ui/graphite.css, so its tokens, primitives and keyframes are available here. Dark only:
  * there is no light theme and no system switching. Text colours are solid tokens, weights are 400,
- * 500 or 600, and only opacity, transform, colour and background-position animate (plus the two
- * measured exceptions: the rotating word's width and grid-template-rows for disclosures).
+ * 500 or 600, and only opacity, transform and colour animate (plus one documented exception:
+ * grid-template-rows for the FAQ's disclosures).
  */
 
 /* --------------------------------------------------------------------------------- base */
@@ -20,17 +20,25 @@
   --col: min(100% - 2 * var(--g-web-gutter), var(--g-web-max));
   --section-pad: 48px;
   --heading-gap: 40px;
-  --site-display: 40px;
   --site-h2: 32px;
   --site-h2-leading: 36px;
   --site-lead: 16px;
   --site-lead-leading: 24px;
   --site-tracking: -0.035em;
+  /* A Shallows panel's distance from the viewport's edge, and its own inner padding. */
+  --edge: 8px;
+  --panel-pad: 12px;
+  /* The nav's content sits on the hero panel's inner edges. */
+  --nav-pad: 20px;
+  --site-display: clamp(36px, 11.25vw, 40px);
 }
 
 @media (min-width: 640px) {
   :root {
     --g-web-gutter: 24px;
+    --edge: 12px;
+    --panel-pad: 20px;
+    --nav-pad: 32px;
     --section-pad: 64px;
     --heading-gap: 48px;
     --site-display: 56px;
@@ -45,6 +53,8 @@
   :root {
     --g-web-gutter: 40px;
     --inset: 40px;
+    --panel-pad: 28px;
+    --nav-pad: 40px;
     --section-pad: 80px;
     --heading-gap: 56px;
     --site-display: 72px;
@@ -146,6 +156,11 @@ canvas {
 
 .g-button {
   text-decoration: none;
+}
+
+/* A magnetic pill's label leans a little further than the pill (enhance.tsx); transform only. */
+.magnetic-label {
+  display: inline-block;
 }
 
 .text-link {
@@ -268,14 +283,14 @@ canvas {
   text-wrap: pretty;
 }
 
-/* Rows entering (Aside, measured): an 8px rise over 340ms, 70ms apart, once, at 10% visible. */
+/* Blocks entering: a 16px rise and a fade, eased out, once, 80ms apart via --i. */
 .js [data-reveal] {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translate3d(0, 16px, 0);
   transition:
-    opacity var(--g-dur-row) var(--g-ease-reveal),
-    transform var(--g-dur-row) var(--g-ease-reveal);
-  transition-delay: calc(var(--i, 0) * var(--g-stagger-row));
+    opacity 700ms var(--g-ease-reveal),
+    transform 900ms var(--g-ease-reveal);
+  transition-delay: calc(var(--i, 0) * 80ms);
 }
 
 .js [data-reveal][data-revealed] {
@@ -283,38 +298,19 @@ canvas {
   transform: none;
 }
 
-/* Dither fields fade in once their first frame lands; the canvas is never under reading text. */
-.site-field {
-  background-color: var(--g-bg);
-}
-
-.js .stage-field > .g-dither-canvas {
-  transition: opacity 1250ms var(--g-ease-reveal);
-}
-
-.js .site-field:not([data-live]) > .g-dither-canvas {
-  opacity: 0;
-}
-
-.field-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  image-rendering: pixelated;
-}
-
 /* -------------------------------------------------------------------------------- nav */
 
+/*
+ * Edge to edge, like Vercel's. On the home page it rests transparent on the hero's lit surface; once
+ * the page scrolls it turns solid black, over 300ms.
+ */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 50;
   height: 64px;
   background-color: var(--g-bg);
-  transition: background-color var(--g-dur-fast) var(--g-ease);
+  transition: background-color var(--g-dur-panel) var(--g-ease);
 }
 
 .site-nav[data-live]:not([data-scrolled]) {
@@ -325,10 +321,8 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: var(--col);
   height: 100%;
-  margin-inline: auto;
-  padding-inline: var(--inset);
+  padding-inline: var(--nav-pad);
 }
 
 .nav-home {
@@ -445,29 +439,28 @@ canvas {
   }
 }
 
-/* ---------------------------------------------- the stage (x.ai's hero) */
+/* ---------------------------------------------------------------- the hero (Shallows) */
 
-.stage {
-  position: relative;
-  isolation: isolate;
-  padding-bottom: var(--section-pad);
-}
-
-.stage-field {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-}
-
+/*
+ * One lit panel inset from the viewport's edges and pulled up under the nav, so the nav rests on its
+ * surface (visual language 5.3). The light falls off over the open water and is deep by the time
+ * the product frame begins.
+ */
 .hero {
-  position: relative;
-  z-index: 2;
-  padding: 120px var(--g-web-gutter) 96px;
+  --g-shallows-depth: 760px;
+  margin: calc(var(--edge) - 64px) var(--edge) 0;
+  padding: 172px var(--panel-pad) 96px;
   text-align: center;
 }
 
+/* The swimmers keep to the open water above the product frame. */
+.hero-swimmers {
+  inset: 0 0 auto;
+  height: 640px;
+}
+
 .hero-copy {
-  max-width: 960px;
+  max-width: 880px;
   margin-inline: auto;
 }
 
@@ -476,7 +469,7 @@ canvas {
   font-size: var(--site-display);
   line-height: 1;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
 }
 
 .hero-line {
@@ -491,15 +484,11 @@ canvas {
   backface-visibility: hidden;
 }
 
-/*
- * The rotating agent name, its slot and its glint underline (x.ai, measured). The slot clips
- * sideways as its width morphs, and lets the rising letters show only 0.067em above it.
- */
+/* The rotating agent name: the slot clips the rising letters just above and below the line. */
 .agent-slot {
   position: relative;
   display: inline-block;
-  clip-path: inset(-0.067em 0 -0.3em 0);
-  transition: width 300ms var(--g-ease-out);
+  clip-path: inset(-0.08em -0.04em -0.3em -0.04em);
 }
 
 .agent-word {
@@ -512,27 +501,6 @@ canvas {
   white-space: pre;
 }
 
-.agent-rule {
-  position: absolute;
-  right: 0;
-  bottom: calc(-1 * max(3px, 0.066em));
-  left: 0;
-  height: max(2px, 0.05em);
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-fg-4);
-  background-image: linear-gradient(
-    90deg,
-    transparent 46%,
-    var(--g-volt) 46%,
-    var(--g-volt) 54%,
-    transparent 54%
-  );
-  background-repeat: no-repeat;
-  background-size: 400% 100%;
-  background-position: 150% 0;
-  transform-origin: 0 50%;
-}
-
 .agent-measure {
   position: absolute;
   top: 0;
@@ -543,47 +511,92 @@ canvas {
 }
 
 .hero-lead {
-  max-width: 560px;
-  margin: 32px auto 0;
+  max-width: 540px;
+  margin: 28px auto 0;
   color: var(--g-fg-2);
   font-size: var(--site-lead);
   line-height: var(--site-lead-leading);
   text-wrap: balance;
 }
 
-.hero-actions {
+.hero-actions,
+.closing-actions {
   display: flex;
   justify-content: center;
-  width: fit-content;
-  margin: 40px auto 0;
+}
+
+.hero-actions {
+  margin-top: 36px;
+}
+
+.hero-actions > .g-button,
+.closing-actions > .g-button {
+  justify-content: center;
+  min-width: 128px;
+}
+
+/* The real app, floating in the deep water: one ring and one long, soft shadow. */
+.product-frame {
+  width: min(100%, 1120px);
+  margin: 88px auto 0;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--g-radius-16);
+  background-color: var(--g-water-deep);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 48px 120px -24px rgb(0 0 0 / 0.8);
+}
+
+.product-frame picture,
+.product-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.product-frame img {
+  object-fit: cover;
+  object-position: top;
 }
 
 /*
- * Pills whose width the label would leave between pixels take a whole-pixel minimum, so a centred
- * or right-aligned pill still lands on the 4px grid.
+ * The hero's entrance, gated on .js so the page is whole without it: the light comes up, the
+ * headline's words rise one after another, the lead and the button follow, the swimmers fade in and
+ * the product rises out of the deep last. Transform and opacity only.
  */
-.hero-actions > .g-button,
-.closing-panel > .g-button {
-  justify-content: center;
-  min-width: 120px;
+.js .hero > .g-shallows-light {
+  animation: site-fade 1400ms var(--g-ease-reveal) both;
 }
 
-/* Hero entrance (x.ai and X Money, measured). Gated on .js, so the page is whole without it. */
 .js .hero-word {
   animation: g-rise var(--g-dur-headline) var(--g-ease-quint) both;
-  animation-delay: calc(100ms + var(--i, 0) * var(--g-stagger));
+  animation-delay: calc(120ms + var(--i, 0) * var(--g-stagger));
 }
 
 .js .hero-lead {
-  animation: site-fade 380ms var(--g-ease-reveal) 580ms both;
+  animation: site-rise 700ms var(--g-ease-reveal) 480ms both;
 }
 
 .js .hero-actions {
-  animation: site-fade 380ms var(--g-ease-reveal) 700ms both;
+  animation: site-rise 700ms var(--g-ease-reveal) 600ms both;
 }
 
-.js .agent-rule {
-  animation: g-draw-x var(--g-dur-reveal) var(--g-ease-out) 800ms both;
+.js .hero-swimmers {
+  animation: site-fade 2400ms var(--g-ease-reveal) 240ms both;
+}
+
+.js .product-frame {
+  animation: site-surface 1200ms var(--g-ease-reveal) 720ms both;
+}
+
+/* Where scroll-driven animation runs (on the compositor), the screenshot settles as it comes in. */
+@supports (animation-timeline: view()) {
+  .js .product-frame picture {
+    animation: site-settle linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 40%;
+  }
 }
 
 @keyframes site-fade {
@@ -595,842 +608,723 @@ canvas {
   }
 }
 
-/* The product frame: the real app on the content column, one ring holding its dark edges. */
-.showcase {
-  position: relative;
-  z-index: 2;
-  width: var(--col);
+@keyframes site-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes site-surface {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 40px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes site-settle {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* --------------------------------------------- capabilities (Harvey's timer tabs, Shallows) */
+
+.title-stack {
+  max-width: none;
   margin-inline: auto;
-  padding-inline: var(--inset);
-  container-type: inline-size;
-}
-
-/* The screenshot's 16:10, rounded up to the 4px grid so nothing below lands between pixels. */
-.product-frame {
-  position: relative;
-  height: round(up, 62.5cqw, 4px);
-  overflow: hidden;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-bg);
-  box-shadow: 0 0 0 1px var(--g-line-strong);
-}
-
-/* The frame arrives last in the hero choreography (x.ai's tiles: 1250ms at 760ms). */
-.js .product-frame {
-  animation: site-fade 1250ms var(--g-ease-reveal) 760ms both;
-}
-
-.product-field,
-.product-field > .g-dither-content,
-.product-field picture {
-  display: block;
-  height: 100%;
-}
-
-.product-field img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
-}
-
-/* Until the field's first frame lands, the screenshot waits, so it never flashes before the dissolve. */
-.js .product-field:not([data-live]) > .g-dither-content {
-  opacity: 0;
-}
-
-/* -------------------------------------------------- the film card (x.ai) */
-
-.film-card {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  align-items: center;
-  gap: 48px;
-  min-height: 560px;
-  margin-top: var(--heading-gap);
-  padding: 56px;
-  overflow: hidden;
-  border-radius: 24px;
-  background-color: var(--g-surface-1);
-}
-
-.film-field {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-}
-
-.film-copy {
-  display: grid;
-  align-content: center;
-  gap: 16px;
-}
-
-.film-play,
-.film-caption {
-  color: var(--g-fg-1);
-  font-size: 32px;
-  line-height: 40px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-}
-
-.film-play {
-  display: inline-flex;
-  align-items: center;
-  gap: 16px;
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  border-radius: var(--g-radius-8);
-  background: none;
-  cursor: pointer;
-  transition: color var(--g-dur-fast) var(--g-ease);
-}
-
-.film-play:hover {
-  color: var(--g-primary-hover);
-}
-
-.film-play:focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: 8px;
-}
-
-.film-icon {
-  flex: none;
-}
-
-html:not(.js) .film-play {
-  display: none;
-}
-
-.film-caption {
-  max-width: 11em;
-  color: var(--g-fg-3);
-  text-wrap: balance;
-}
-
-.film-replay {
-  justify-self: end;
-  width: min(100%, 520px);
-}
-
-.film-window {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 12px;
-  height: 440px;
-  padding: 16px;
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-bg);
-  box-shadow: var(--g-shadow);
-  color: var(--g-fg-1);
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.film-transcript {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.js .film-enter {
-  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
-}
-
-.film-empty {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-  margin-top: 112px;
-  color: var(--g-fg-3);
-  font-size: 16px;
-  line-height: 24px;
   text-align: center;
 }
 
-.film-tool {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 24px;
-  color: var(--g-fg-2);
+.title-stack > span {
+  display: block;
 }
 
-.film-receipt {
+.caps-frame {
+  margin-top: var(--heading-gap);
+}
+
+/* A quieter water than the hero's: the panel is a stage for the view, not a second hero. */
+.caps-panel {
+  --g-shallows-radius: 24px;
+  --g-water-surface: var(--g-surface-3);
+  --g-water-shallow: var(--g-surface-2);
+  --g-water-low: var(--g-surface-1);
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  min-height: 600px;
+}
+
+.caps-side {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  padding: 8px 12px;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
+  flex-direction: column;
+  padding: 36px 32px 40px 40px;
+}
+
+.caps-tabs {
+  display: grid;
+}
+
+.caps-tab {
+  position: relative;
+  display: block;
+  padding: 13px 0 15px;
+  border: 0;
+  border-radius: var(--g-radius-6);
+  background: none;
   color: var(--g-fg-3);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--g-dur-panel) var(--g-ease);
 }
 
-.film-receipt-end {
-  margin-left: auto;
+@media (hover: hover) {
+  .caps-tab:hover {
+    color: var(--g-fg-2);
+  }
 }
 
-.film-composer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 8px 8px 16px;
+.caps-tab[aria-selected="true"] {
+  color: var(--g-fg-1);
+}
+
+.caps-tab:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 4px;
+}
+
+/* The 2px timer under the active row: it fills while the cycle runs, and stays full while held. */
+.caps-track {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  width: min(100%, 280px);
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background-color: var(--g-line-strong);
+  opacity: 0;
+  transition: opacity var(--g-dur-panel) var(--g-ease);
+}
+
+.caps-tab[aria-selected="true"] .caps-track {
+  opacity: 1;
+}
+
+.caps-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--g-fg-1);
+  transform-origin: 0 50%;
+}
+
+.caps-frame[data-auto] .caps-tab[aria-selected="true"] .caps-fill {
+  animation: caps-timer 6500ms linear both;
+  animation-play-state: paused;
+}
+
+.caps-frame[data-running] .caps-tab[aria-selected="true"] .caps-fill {
+  animation-play-state: running;
+}
+
+@keyframes caps-timer {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* One sentence for the active row; the next fades in just after the last fades out. */
+.caps-notes {
+  display: grid;
+  max-width: 300px;
+  margin-top: 28px;
+}
+
+.caps-note {
+  grid-area: 1 / 1;
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 22px;
+  text-wrap: pretty;
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  visibility: hidden;
+  transition:
+    opacity 240ms var(--g-ease),
+    transform 0ms linear 240ms,
+    visibility 0ms linear 240ms;
+}
+
+.caps-note.is-active {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity 420ms var(--g-ease) 140ms,
+    transform 640ms var(--g-ease-out) 140ms,
+    visibility 0ms;
+}
+
+/* The live view: one inset window, its scenes stacked and cross-faded. */
+.caps-view {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  margin: 20px 20px 20px 0;
+  overflow: hidden;
   border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-2);
+  background-color: var(--g-water-deep);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
-.film-chip {
-  display: inline-flex;
+.m-scene {
+  display: flex;
+  flex-direction: column;
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  transform: translate3d(0, 14px, 0) scale(0.985);
+  visibility: hidden;
+  transition:
+    opacity 300ms var(--g-ease),
+    transform 0ms linear 300ms,
+    visibility 0ms linear 300ms;
+}
+
+.m-scene.is-active {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity 480ms var(--g-ease) 100ms,
+    transform 820ms var(--g-ease-out) 100ms,
+    visibility 0ms;
+}
+
+/* Fragments of the real app, built from Graphite tokens, at the app's own sizes. */
+.m-head {
+  display: flex;
   flex: none;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px 0 6px;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* ------------------------------------------------- miniatures of the real app */
-
-.mini {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  width: 100%;
-  color: var(--g-fg-1);
+  gap: 8px;
+  height: 52px;
+  padding: 0 14px 0 20px;
   font-size: 14px;
   line-height: 20px;
 }
 
-.mini-code,
-.mini-num,
-.mini-stat,
-.mini-ln,
-.mini-hunk,
-.mini-diff {
-  font-family: var(--g-mono);
-  font-variant-ligatures: none;
-  font-variant-numeric: tabular-nums;
-}
-
-.mini-code {
-  font-size: 12px;
-}
-
-.mini-quiet {
-  color: var(--g-fg-3);
-}
-
-.mini-strong {
+.m-title {
+  overflow: hidden;
   color: var(--g-fg-1);
   font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.mini-meta {
+.m-meta {
   color: var(--g-fg-3);
-  font-size: 12px;
-  line-height: 16px;
+  white-space: nowrap;
 }
 
-.mini-stat {
-  display: inline-flex;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 16px;
+.m-head-end {
+  display: flex;
+  margin-left: auto;
 }
 
-.mini-add {
-  color: var(--g-green);
-}
-
-.mini-del {
-  color: var(--g-red);
-}
-
-.mini-button {
-  display: inline-flex;
+.m-mark {
+  display: inline-grid;
   flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background-color: var(--g-surface-4);
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.m-chip {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 28px;
-  padding: 0 12px;
+  padding: 0 10px 0 5px;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   font-weight: 500;
   white-space: nowrap;
 }
 
-.mini-button-primary {
-  background-color: var(--g-primary);
-  color: var(--g-on-light);
-}
-
-.mini-button-primary .g-keycap {
-  background-color: var(--g-primary-active);
-  box-shadow: none;
-  color: var(--g-surface-4);
-}
-
-.mini-button-ghost {
-  margin-left: auto;
+.m-chip-ghost {
+  padding-left: 10px;
   background-color: transparent;
   color: var(--g-fg-2);
 }
 
-.mini-button .g-keycap {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  font-size: 10px;
+.m-chevron {
+  color: var(--g-fg-3);
 }
 
-.mini-user {
-  justify-self: end;
-  max-width: 82%;
-  padding: 8px 12px;
-  border-radius: 16px 16px 4px 16px;
+.m-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 8px 28px 20px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.m-center {
+  align-items: center;
+  justify-content: center;
+}
+
+.m-user {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 10px 16px;
+  border-radius: 18px;
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
 }
 
-.mini-byline,
-.mini-event {
+.m-turn {
+  display: grid;
+  gap: 10px;
+}
+
+.m-by {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.mini-tool {
-  color: var(--g-fg-2);
+.m-strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
 }
 
-.mini-typed {
-  min-width: 0;
-  overflow: hidden;
+.m-quiet {
+  color: var(--g-fg-3);
+}
+
+.m-text {
+  max-width: 540px;
+  color: var(--g-code-fg);
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+.m-code {
   color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: 12.5px;
+}
+
+.m-handoff {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
-.mini-caret {
+.m-handoff::before,
+.m-handoff::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--g-line);
+}
+
+.m-tool {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.m-add,
+.m-del {
+  font-family: var(--g-mono);
+  font-size: 12px;
+}
+
+.m-add {
+  color: var(--g-green);
+}
+
+.m-del {
+  color: var(--g-red);
+}
+
+.m-diff {
+  padding: 8px 0;
+  overflow: hidden;
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line-faint);
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.m-diff > p {
+  padding: 0 14px;
+  white-space: pre;
+}
+
+.m-diff > .m-diff-head {
+  padding-bottom: 4px;
+  color: var(--g-fg-3);
+}
+
+.m-diff > .m-diff-del {
+  background-color: var(--g-diff-del-line);
+}
+
+.m-diff > .m-diff-add {
+  background-color: var(--g-diff-add-line);
+}
+
+.m-ln {
   display: inline-block;
-  width: 2px;
+  width: 28px;
+  color: var(--g-fg-3);
+}
+
+.m-checkpoint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border-radius: 14px;
+  background-color: var(--g-surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-line-faint);
+}
+
+.m-checkpoint-copy {
+  display: grid;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.m-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-4);
+  color: var(--g-fg-1);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.m-pill-ghost {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-2);
+}
+
+.m-pill-light {
+  margin-left: auto;
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
+}
+
+.m-dock {
+  display: grid;
+  flex: none;
+  gap: 10px;
+  padding: 0 20px 20px;
+}
+
+.m-composer {
+  display: grid;
+  gap: 12px;
+  padding: 14px 12px 12px 18px;
+  border-radius: 20px;
+  background-color: var(--g-surface-3);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.m-placeholder {
+  color: var(--g-fg-3);
+}
+
+.m-typed {
+  display: inline-flex;
+  align-items: center;
+  color: var(--g-fg-1);
+}
+
+.m-caret {
+  display: inline-block;
+  width: 1.5px;
   height: 16px;
   margin-left: 1px;
-  vertical-align: -3px;
   background-color: var(--g-fg-1);
+  animation: m-blink 1100ms steps(1) infinite;
 }
 
-.js .mini-caret {
-  animation: caret 1s steps(1) infinite;
-}
-
-@keyframes caret {
+@keyframes m-blink {
   50% {
     opacity: 0;
   }
 }
 
-/* Approval: the transcript above, the card in the composer's place (visual language 6.4, 6.6). */
-.mini-card {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-2);
-  box-shadow: var(--g-shadow);
-}
-
-.mini-card-head {
+.m-composer-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.mini-ask {
-  flex: 1;
-  min-width: 0;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-}
-
-.mini-ask .mini-code {
-  font-size: 14px;
-}
-
-.mini-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mini-diff {
-  display: grid;
-  padding: 0 0 4px;
-  overflow: hidden;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-bg);
-  color: var(--g-code-fg);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.mini-diff > div {
-  display: flex;
-  white-space: pre;
-}
-
-.mini-hunk {
-  margin-bottom: 4px;
-  padding: 2px 12px;
-  background-color: var(--g-diff-hunk);
-  color: var(--g-fg-3);
-}
-
-.mini-ln {
-  width: 36px;
-  padding-right: 8px;
-  color: var(--g-fg-3);
-  text-align: right;
-}
-
-.mini-mk {
-  width: 16px;
-  color: var(--g-fg-3);
-}
-
-.mini-add-line {
-  background-color: var(--g-diff-add-line);
-}
-
-.mini-add-line .mini-ln,
-.mini-add-line .mini-mk {
-  color: var(--g-green);
-}
-
-.mini-del-line {
-  background-color: var(--g-diff-del-line);
-}
-
-.mini-del-line .mini-ln,
-.mini-del-line .mini-mk {
-  color: var(--g-red);
-}
-
-/* ------------------------------------------------- staggered tiles (X Money) */
-
-/*
- * Four 268px columns 16px apart, as on money.x.com: pairs of a tile and its caption, the caption
- * set against the tile's bottom edge in the next column, and a wide tile on alternate rows.
- */
-.tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 48px 16px;
-  margin-top: var(--heading-gap);
-  padding: 0;
-  list-style: none;
-}
-
-.tiles-item {
-  display: grid;
-  grid-column: span 2;
-  grid-template-columns: subgrid;
-  align-items: end;
-}
-
-.tiles-item.is-wide-end {
-  grid-column: 2 / span 3;
-}
-
-.tiles-item.is-wide-start {
-  grid-column: 1 / span 3;
-}
-
-.tiles-tile {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  height: 240px;
-  padding: 20px;
-  overflow: hidden;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-1);
-  container-type: inline-size;
-  transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
-}
-
-.tiles-item:is(.is-wide-end, .is-wide-start) .tiles-tile {
-  grid-column: span 2;
-}
-
-/* X Money: hovering one tile dims the others to half, over 500ms. */
-.tiles-grid[data-active] .tiles-item:not([data-current]) .tiles-tile {
-  opacity: 0.5;
-}
-
-.tiles-text {
-  display: grid;
-  gap: 4px;
-}
-
-/* Agents and autonomy: a menu, the selection walking down it on hover. */
-.mini-menu {
-  gap: 4px;
-  padding: 0;
-  list-style: none;
-}
-
-.mini-menu > li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 32px;
-  padding: 0 12px 0 8px;
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-2);
-  transition: background-color var(--g-dur-panel) var(--g-ease);
-}
-
-.mini-menu > li.is-selected {
-  background-color: var(--g-surface-3);
-}
-
-.mini-menu > li:not(.is-selected) .mini-strong {
-  color: var(--g-fg-2);
-}
-
-.mini-check {
-  margin-left: auto;
-  color: var(--g-fg-1);
-}
-
-.mini-autonomy > li {
-  height: auto;
-  padding: 8px 8px 8px 12px;
-}
-
-.mini-menu-copy {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-}
-
-.ticks {
-  display: inline-flex;
-  flex: none;
-  align-items: flex-end;
   gap: 2px;
-  height: 8px;
+  margin-left: -6px;
 }
 
-.ticks > span {
-  width: 2px;
-  background-color: var(--g-fg-4);
-}
-
-.ticks > span:nth-child(1) {
-  height: 4px;
-}
-
-.ticks > span:nth-child(2) {
-  height: 6px;
-}
-
-.ticks > span:nth-child(3) {
-  height: 8px;
-}
-
-.ticks > .is-on {
-  background-color: var(--g-fg-1);
-}
-
-/* Handoff: the switch and the next agent's first words, in plain view. */
-.mini-handoff .mini-user {
-  max-width: 100%;
-}
-
-.mini-answer {
-  color: var(--g-fg-2);
-}
-
-.mini-answer .mini-code {
-  color: var(--g-fg-1);
-}
-
-/* Queue: a running turn and a message waiting behind it. */
-.mini-queue-stack {
+.m-send {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 50%;
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
-.mini-segment {
+.m-menu {
+  width: min(100%, 340px);
+  padding: 6px;
+  border-radius: 14px;
+  background-color: var(--g-surface-2);
+  box-shadow:
+    0 0 0 1px var(--g-line),
+    var(--g-shadow);
+}
+
+.m-menu-up {
+  width: min(100% - 112px, 300px);
+  margin-left: 112px;
+}
+
+.m-menu-title,
+.m-menu-foot {
+  padding: 6px 10px;
+  color: var(--g-fg-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.m-menu-foot {
+  margin-top: 6px;
+  padding-top: 10px;
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.m-menu-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 9px;
+}
+
+.m-menu-row > .m-quiet {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* The selected row lifts one step; fg-3 keeps 4.5:1 on it. */
+.m-menu-row.is-on {
   background-color: var(--g-surface-3);
 }
 
-.mini-segment-text {
+.m-menu-copy {
+  display: grid;
+  padding-block: 7px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.m-menu-copy > .m-strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.m-check,
+.m-check-space {
+  flex: none;
+  width: 12px;
+  color: var(--g-fg-1);
+}
+
+.m-menu-copy + .m-check,
+.m-menu-copy + .m-check-space {
+  margin-left: auto;
+}
+
+.m-queued {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background-color: var(--g-surface-2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.m-queued-text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--g-fg-1);
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.mini-shell {
-  display: flex;
+.m-chats {
+  display: grid;
+  gap: 2px;
+  margin: 0 -10px;
+  padding: 0;
+  list-style: none;
+}
+
+.m-chat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px 96px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   min-height: 48px;
-  padding: 8px 8px 8px 12px;
-  border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
+  padding: 0 12px;
+  border-radius: 10px;
+}
+
+.m-chat.is-waiting {
   background-color: var(--g-surface-2);
 }
 
-/* Checkpoint: X Money's Front and Back, here the file after this turn and before it. */
-.mini-checkpoint {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 24px;
+.m-chat-title {
+  overflow: hidden;
+  color: var(--g-fg-1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.checkpoint-toggle {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.checkpoint-toggle > button {
+.m-chat-agent,
+.m-chat-status {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: var(--g-radius-8);
-  background: none;
-  color: var(--g-fg-3);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
+  font-size: 13px;
   white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--g-dur-fast) var(--g-ease);
 }
 
-.checkpoint-toggle > button[aria-pressed="true"],
-.checkpoint-toggle > button:hover {
-  color: var(--g-fg-1);
+.m-chat-agent {
+  color: var(--g-fg-2);
 }
 
-.checkpoint-toggle > button:focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: 2px;
+.m-chat-status {
+  justify-content: flex-end;
+  color: var(--g-fg-3);
 }
 
-.checkpoint-swatch {
-  width: 8px;
-  height: 8px;
+/* Status dots are circles; volt marks the one chat that needs you. */
+.m-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background-color: var(--g-fg-4);
 }
 
-.checkpoint-toggle > button[aria-pressed="true"] .checkpoint-swatch {
+.m-chat.is-running .m-dot {
   background-color: var(--g-fg-1);
 }
 
-.checkpoint-file {
-  display: grid;
-  gap: 8px;
-  padding: 12px 0;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-}
-
-.checkpoint-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-inline: 12px;
-}
-
-.checkpoint-code {
-  min-height: 80px;
-  padding: 0;
-  color: var(--g-code-fg);
-  font-family: var(--g-mono);
-  font-size: 12px;
-  line-height: 20px;
-  font-variant-ligatures: none;
-  list-style: none;
-}
-
-.checkpoint-code > li {
-  display: flex;
-  overflow: hidden;
-  white-space: pre;
-}
-
-.checkpoint-code > li.is-after {
-  background-color: var(--g-diff-add-line);
-}
-
-.checkpoint-code > li.is-before {
-  background-color: var(--g-diff-del-line);
-}
-
-.checkpoint-code > li.is-after > .mini-ln {
-  color: var(--g-green);
-}
-
-.checkpoint-code > li.is-before > .mini-ln {
-  color: var(--g-red);
-}
-
-/* Sessions: four chats side by side, one waiting on you. */
-.mini-sessions {
-  gap: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.mini-sessions > li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 96px;
-  align-items: center;
-  gap: 16px;
-  height: 44px;
-  padding-inline: 8px;
-  border-bottom: 1px solid var(--g-line);
-}
-
-.mini-sessions > li:last-child {
-  border-bottom: 0;
-}
-
-.mini-session-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-session-agent,
-.mini-session-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--g-fg-3);
-  white-space: nowrap;
-}
-
-.mini-session-status.is-waiting {
+.m-chat.is-waiting .m-chat-status {
   color: var(--g-volt);
 }
 
-@container (max-width: 420px) {
-  .mini-sessions > li {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .mini-session-agent {
-    display: none;
-  }
+.m-chat.is-waiting .m-dot {
+  background-color: var(--g-volt);
 }
 
-/* -------------------------------------------------------------- FAQ (X Money) */
+/* --------------------------------------------------------------------- FAQ (Vercel) */
 
-/* The tiles' four columns: the heading over the first two, the questions over the last two. */
 .faq-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
   align-items: start;
-  gap: 40px 16px;
+  gap: 40px 64px;
 }
 
 .faq-head {
   display: grid;
-  grid-column: 1 / span 2;
   justify-items: start;
-  gap: 32px;
+  gap: 24px;
 }
 
-.faq-head > .g-button {
-  justify-content: center;
-  min-width: 128px;
+.faq-link {
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .faq-list {
-  position: relative;
-  display: grid;
-  grid-column: 3 / span 2;
-  gap: 4px;
-}
-
-.faq-well {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 0;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  opacity: 0;
-  transform-origin: 50% 0;
-  transition: opacity var(--g-dur-base) var(--g-ease);
-  pointer-events: none;
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .faq-item {
-  position: relative;
-  border-radius: var(--g-radius-12);
-}
-
-.faq-item[open] {
-  background-color: var(--g-surface-2);
-}
-
-.faq-list[data-well] .faq-item[open] {
-  background-color: transparent;
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .faq-item > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 52px;
-  padding: 14px 16px;
-  border-radius: var(--g-radius-12);
+  gap: 24px;
+  min-height: 68px;
+  padding: 20px 0;
+  border-radius: var(--g-radius-6);
   color: var(--g-fg-1);
   font-size: 16px;
   line-height: 24px;
@@ -1443,11 +1337,19 @@ html:not(.js) .film-play {
   display: none;
 }
 
+.faq-item > summary:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+/* A plus whose upright turns flat as the answer opens: a minus. */
 .faq-icon {
   position: relative;
   flex: none;
   width: 12px;
   height: 12px;
+  color: var(--g-fg-3);
+  transition: color var(--g-dur-fast) var(--g-ease);
 }
 
 .faq-icon > span {
@@ -1456,8 +1358,8 @@ html:not(.js) .film-play {
   left: 0;
   width: 12px;
   height: 1px;
-  background-color: var(--g-fg-1);
-  transition: transform var(--g-dur-base) var(--g-ease-out);
+  background-color: currentColor;
+  transition: transform var(--g-dur-panel) var(--g-ease-out);
 }
 
 .faq-icon > span:last-child {
@@ -1466,6 +1368,16 @@ html:not(.js) .film-play {
 
 .faq-item[open]:not([data-state="closing"]) .faq-icon > span:last-child {
   transform: rotate(0deg);
+}
+
+.faq-item[open] .faq-icon {
+  color: var(--g-fg-1);
+}
+
+@media (hover: hover) {
+  .faq-item > summary:hover .faq-icon {
+    color: var(--g-fg-1);
+  }
 }
 
 .faq-body {
@@ -1481,70 +1393,71 @@ html:not(.js) .film-play {
 .faq-answer {
   min-height: 0;
   overflow: hidden;
-  transition: opacity var(--g-dur-panel) var(--g-ease-quint);
+  transition:
+    opacity var(--g-dur-panel) var(--g-ease-quint),
+    transform var(--g-dur-panel) var(--g-ease-quint);
 }
 
 .faq-item:is([data-state="opening"], [data-state="closing"]) .faq-answer {
   opacity: 0;
+  transform: translate3d(0, -4px, 0);
 }
 
 .faq-answer > p {
-  max-width: 520px;
-  padding: 0 16px 16px;
+  max-width: 600px;
+  padding: 0 40px 24px 0;
   color: var(--g-fg-2);
+  font-size: 16px;
+  line-height: 26px;
 }
 
-/* ------------------------------------------------- the closing panel (Aside) */
+/* ----------------------------------------------------------- the closing panel (Shallows) */
 
 .closing-panel {
-  position: relative;
-  isolation: isolate;
   display: grid;
   justify-items: center;
-  align-content: center;
-  gap: 40px;
-  padding: 152px 24px;
-  overflow: hidden;
-  border-radius: 24px;
-  background-color: var(--g-surface-1);
+  padding: 148px 24px 140px;
   text-align: center;
 }
 
-/* Like the film card's, the field is transparent over the panel's surface. */
-.closing-field {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-color: transparent;
+.closing-note {
+  text-wrap: balance;
+  margin-top: 20px;
+  color: var(--g-fg-2);
+  font-size: var(--site-lead);
+  line-height: var(--site-lead-leading);
 }
 
-.closing-title {
-  max-width: none;
+.closing-actions {
+  margin-top: 36px;
 }
 
-/* ------------------------------------------------------- footer (x.ai) */
+/* ---------------------------------------------------------------- footer (Vercel, minimal) */
 
-/*
- * x.ai's footer on the tiles' four columns: the brand over the first two, here the giant logo
- * the field forms as it scrolls in, and three link columns over the last two.
- */
 .site-footer {
-  padding-block: var(--section-pad) 48px;
+  padding-block: 56px 64px;
 }
 
 .footer-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: start;
-  gap: 64px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 48px;
+}
+
+.footer-home {
+  display: inline-flex;
+  margin: -4px;
+  padding: 4px;
+  border-radius: var(--g-radius-6);
+  color: var(--g-fg-1);
 }
 
 .footer-links {
   display: grid;
-  grid-row: 1;
-  grid-column: 3 / span 2;
-  grid-template-columns: repeat(3, 176px);
-  gap: 32px 12px;
+  grid-template-columns: repeat(3, 160px);
+  gap: 32px 16px;
 }
 
 .footer-heading {
@@ -1557,7 +1470,7 @@ html:not(.js) .film-play {
 
 .footer-col ul {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   padding: 0;
   list-style: none;
 }
@@ -1566,38 +1479,11 @@ html:not(.js) .film-play {
   color: var(--g-fg-3);
   font-size: 14px;
   line-height: 20px;
-  transition: color var(--g-dur-micro) var(--g-ease);
+  transition: color var(--g-dur-fast) var(--g-ease);
 }
 
 .footer-col a:hover {
   color: var(--g-fg-1);
-}
-
-/* The logo's 546 by 557, rounded to whole 4px steps: 400 by 408, and 316 by 320 on phones. */
-.footer-mark {
-  position: relative;
-  grid-row: 1;
-  grid-column: 1 / span 2;
-  width: 400px;
-  height: 408px;
-  color: var(--g-fg-1);
-}
-
-.footer-mark-field,
-.footer-mark-logo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* The plain logo is what a reader without JavaScript sees; with it, the field draws the logo. */
-.js .footer-mark-logo {
-  visibility: hidden;
-}
-
-html:not(.js) .footer-mark-field {
-  display: none;
 }
 
 /* ------------------------------------------------------------------- inner pages */
@@ -1648,6 +1534,7 @@ html:not(.js) .footer-mark-field {
   flex: none;
   width: 6px;
   height: 6px;
+  border-radius: 50%;
   background-color: var(--g-volt);
   transform: translateY(-1px);
 }
@@ -2091,9 +1978,11 @@ html:not(.js) .footer-mark-field {
   line-height: 16px;
 }
 
+/* Status dots are circles (owner, 2026-10-28). */
 .device-status .g-status-dot {
   width: 6px;
   height: 6px;
+  border-radius: 50%;
 }
 
 .empty {
@@ -2319,18 +2208,23 @@ html:not(.js) .footer-mark-field {
   font-weight: 500;
 }
 
-/* 404 and load errors */
-.error-column {
+/* 404 and load errors: one lit panel, a turtle crossing it, the numerals and one way home. */
+.error-panel {
   display: grid;
   justify-items: center;
-  gap: 40px;
-  padding: 80px var(--inset) 128px;
+  gap: 28px;
+  margin: 24px 0 96px;
+  padding: 112px 24px 120px;
   text-align: center;
 }
 
-.error-field {
-  width: min(100%, 720px);
-  height: clamp(140px, 24vw, 300px);
+.error-code {
+  color: var(--g-fg-1);
+  font-size: clamp(96px, 16vw, 200px);
+  line-height: 0.9;
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
 }
 
 .error-title {
@@ -2339,6 +2233,7 @@ html:not(.js) .footer-mark-field {
   line-height: var(--site-h2-leading);
   font-weight: 500;
   letter-spacing: var(--site-tracking);
+  text-wrap: balance;
 }
 
 .error-title > span {
@@ -2361,55 +2256,26 @@ html:not(.js) .footer-mark-field {
 /* --------------------------------------------------------------------- responsive */
 
 @media (max-width: 1023px) {
-  .film-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 40px;
-    padding: 40px;
-  }
-
-  .film-replay {
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .tiles-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 48px 16px;
-  }
-
-  .tiles-item,
-  .tiles-item.is-wide-end,
-  .tiles-item.is-wide-start {
-    display: grid;
-    grid-column: auto;
-    grid-template-columns: minmax(0, 1fr);
-    align-content: start;
-    align-items: start;
-    gap: 16px;
-  }
-
-  .tiles-item:is(.is-wide-end, .is-wide-start) {
-    grid-column: 1 / -1;
-  }
-
-  .tiles-item:is(.is-wide-end, .is-wide-start) .tiles-tile {
-    grid-column: auto;
-  }
-
-  .faq-grid,
-  .footer-grid {
+  .caps-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .faq-head,
-  .faq-list,
-  .footer-links {
-    grid-column: 1;
+  .caps-side {
+    padding: 28px 28px 8px;
   }
 
-  .footer-mark {
-    grid-row: 2;
-    grid-column: 1;
+  .caps-notes {
+    max-width: 520px;
+    margin-top: 20px;
+  }
+
+  .caps-view {
+    height: 520px;
+    margin: 16px;
+  }
+
+  .faq-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .account {
@@ -2431,48 +2297,37 @@ html:not(.js) .footer-mark-field {
 
 @media (max-width: 767px) {
   .hero {
-    padding-top: 88px;
-    padding-bottom: 64px;
+    padding-top: 140px;
+    padding-bottom: 40px;
   }
 
-  .film-card {
-    min-height: 0;
-    padding: 24px 16px 16px;
-    border-radius: var(--g-radius-16);
+  .hero-swimmers {
+    height: 380px;
   }
 
-  .film-play,
-  .film-caption {
-    font-size: 24px;
-    line-height: 32px;
+  .hero-far {
+    display: none;
   }
 
-  .film-window {
-    height: 400px;
-    padding: 12px;
+  .hero-lead {
+    margin-top: 20px;
   }
 
-  .tiles-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 40px;
+  .hero-actions {
+    margin-top: 28px;
   }
 
-  .tiles-item:is(.is-wide-end, .is-wide-start) {
-    grid-column: auto;
-  }
-
-  .mini-checkpoint {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .checkpoint-toggle {
-    display: flex;
+  .product-frame {
+    margin-top: 56px;
+    border-radius: var(--g-radius-12);
   }
 
   .closing-panel {
-    padding-block: 120px;
-    border-radius: var(--g-radius-16);
+    padding-block: 112px 104px;
+  }
+
+  .error-panel {
+    padding-block: 88px 96px;
   }
 
   .account-block {
@@ -2491,6 +2346,48 @@ html:not(.js) .footer-mark-field {
 }
 
 @media (max-width: 639px) {
+  .hero,
+  .closing-panel,
+  .caps-panel,
+  .error-panel {
+    --g-shallows-radius: var(--g-shallows-radius-compact);
+  }
+
+  .caps-side {
+    padding: 20px 20px 4px;
+  }
+
+  .caps-view {
+    height: 460px;
+    margin: 12px;
+    border-radius: var(--g-radius-12);
+  }
+
+  .m-head {
+    padding-left: 16px;
+  }
+
+  .m-body {
+    padding: 4px 16px 16px;
+  }
+
+  .m-dock {
+    padding: 0 12px 12px;
+  }
+
+  .m-chat {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .m-chat-agent {
+    display: none;
+  }
+
+  .m-menu-up {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .page-column {
     padding-top: 64px;
     padding-bottom: 96px;
@@ -2509,24 +2406,15 @@ html:not(.js) .footer-mark-field {
     padding: 32px 24px 24px;
   }
 
-  /* Three equal columns and a logo capped by the column, so a 320px phone never scrolls sideways. */
+  .footer-grid {
+    flex-direction: column;
+  }
+
+  /* Three equal columns, so a 320px phone never scrolls sideways. */
   .footer-links {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
     column-gap: 16px;
-  }
-
-  .footer-mark {
-    width: min(316px, 100%);
-    height: auto;
-    aspect-ratio: 316 / 320;
-  }
-
-  .mini-button-ghost {
-    margin-left: 0;
-  }
-
-  .mini-actions {
-    flex-wrap: wrap;
   }
 
   .confirm-dialog {
@@ -2541,6 +2429,10 @@ html:not(.js) .footer-mark-field {
 
 /* --------------------------------------------------------------- reduced motion */
 
+/*
+ * Everything is present at first paint; cross-fades stay (they are not motion), rises and
+ * slides do not. The swimmers and the shimmer hold still in their own styles.
+ */
 @media (prefers-reduced-motion: reduce) {
   .js [data-reveal] {
     opacity: 1;
@@ -2552,22 +2444,27 @@ html:not(.js) .footer-mark-field {
     animation: g-fade var(--g-dur-fast) linear both;
   }
 
+  .js .hero > .g-shallows-light,
   .js .hero-lead,
   .js .hero-actions,
+  .js .hero-swimmers,
   .js .product-frame,
-  .js .agent-rule,
-  .js .film-enter,
-  .js .mini-caret {
+  .js .product-frame picture,
+  .m-caret {
     animation: none;
   }
 
-  .mini-menu > li,
-  .tiles-tile,
-  .agent-slot {
-    transition: none;
+  .caps-note,
+  .caps-note.is-active,
+  .m-scene,
+  .m-scene.is-active,
+  .faq-item:is([data-state="opening"], [data-state="closing"]) .faq-answer {
+    transform: none;
   }
 
-  .js .site-field > .g-dither-canvas {
+  .caps-tab,
+  .caps-track,
+  .faq-icon > span {
     transition: none;
   }
 }
