@@ -8,12 +8,11 @@ import type {
   RecoverySetup,
   SignInChallenge,
 } from "../../lib/account/bindings";
-import { subscribeAccountSync } from "../../lib/account/sync";
+import { subscribeAccountSync, syncStatusLabel } from "../../lib/account/sync";
 import { type VerificationOrigin, verificationOrigin } from "../../lib/accountVerification";
 import { errorMessage } from "../../lib/errors";
 import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
-import { syncStatusLabel } from "../chat/ProfileStatus";
 import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
 import { KeepAsLocalPanel } from "./KeepAsLocalPanel";

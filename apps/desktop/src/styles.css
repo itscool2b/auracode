@@ -450,11 +450,12 @@
     transform: rotate(90deg);
   }
 
-  /* A status square, never a glowing dot. */
+  /* A status dot: a flat circle, never a glow. */
   .thought-dot {
     width: 6px;
     height: 6px;
     background: var(--g-fg-3);
+    border-radius: var(--g-radius-pill);
   }
 
   .thinking .thought-dot {
@@ -898,7 +899,7 @@
     gap: var(--g-space-8);
   }
 
-  /* A warning row (visual-language 6.8): a volt square, the words, and its one action. */
+  /* A warning row (visual-language 6.8): a volt dot, the words, and its one action. */
   .notice {
     display: flex;
     align-items: flex-start;
@@ -919,6 +920,7 @@
     height: 6px;
     margin-top: calc((var(--g-leading-ui) - var(--g-space-6)) / 2);
     background: var(--g-volt);
+    border-radius: var(--g-radius-pill);
   }
 
   .notice-body {

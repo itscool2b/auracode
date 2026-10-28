@@ -43,11 +43,25 @@ export const gitWorkspaceApi = {
 };
 export type GitWorkspaceApi = typeof gitWorkspaceApi;
 
-/** One folder written two ways: separators and a trailing slash differ, and Windows ignores case. */
+/**
+ * A Windows verbatim path (`\\?\C:\work`, `\\?\UNC\server\share`) in the spelling the rest of
+ * the app shows (`C:\work`, `\\server\share`). Older saved worktrees keep the verbatim form.
+ */
+function withoutVerbatimPrefix(value: string): string {
+  if (/^\\\\\?\\UNC\\/i.test(value)) return `\\\\${value.slice(8)}`;
+  if (/^\\\\\?\\[a-z]:/i.test(value)) return value.slice(4);
+  return value;
+}
+
+/**
+ * One folder written two ways: separators, a trailing slash and the Windows verbatim prefix
+ * differ, and Windows ignores case.
+ */
 export function sameFolder(left: string, right: string): boolean {
-  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "");
+  const normalize = (value: string) =>
+    withoutVerbatimPrefix(value).replaceAll("\\", "/").replace(/\/$/, "");
   // Windows folder names are compared without case; macOS can be case-sensitive.
-  const windows = /^[a-z]:[\\/]/i.test(left);
+  const windows = /^([a-z]:[\\/]|\\\\)/i.test(withoutVerbatimPrefix(left));
   return windows
     ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
     : normalize(left) === normalize(right);

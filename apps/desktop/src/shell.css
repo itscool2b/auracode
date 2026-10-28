@@ -392,7 +392,7 @@ details.setup-install-review[open] > summary::before {
 /*
  * Grok's sidebar on black: the logo and the collapse toggle in the top band, Search and New chat,
  * then the projects with their chats, and the agents and the account at the foot. Every row is
- * 32px with its icon or square at x 20 and its words at x 44, so the column has one left edge.
+ * 32px with its icon or dot at x 20 and its words at x 44, so the column has one left edge.
  */
 .chat-sidebar {
   position: relative;
@@ -401,19 +401,6 @@ details.setup-install-review[open] > summary::before {
   min-width: 0;
   min-height: 0;
   padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-8);
-}
-
-/* The logo is centred on the band (y 26), clear of the macOS traffic lights (x 18 to 70). */
-.chat-sidebar-logo {
-  position: absolute;
-  top: 14px;
-  left: 20px;
-  color: var(--g-fg-1);
-  pointer-events: none;
-}
-
-.chat-app[data-os="macos"] .chat-sidebar-logo {
-  left: 84px;
 }
 
 .chat-sidebar-toggle {
@@ -625,7 +612,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-1);
 }
 
-/* The waiting square centres on the project square's axis (x 28), in the same 16px box. */
+/* The waiting dot centres on the project dot's axis (x 28), in the same 16px box. */
 .chat-attention-mark {
   display: grid;
   flex: none;
@@ -695,7 +682,7 @@ details.setup-install-review[open] > summary::before {
   height: 12px;
 }
 
-/* A neutral 6px square marks a project; folded projects and hovered ones show the chevron. */
+/* A neutral 6px dot marks a project; folded projects and hovered ones show the chevron. */
 .chat-project-swatch {
   position: relative;
   display: grid;
@@ -711,6 +698,7 @@ details.setup-install-review[open] > summary::before {
   height: 6px;
   background-color: var(--g-fg-3);
   transition: opacity var(--g-dur-micro) var(--g-ease);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-project-swatch > svg {
@@ -824,7 +812,7 @@ details.setup-install-review[open] > summary::before {
   visibility: hidden;
 }
 
-/* The pin sits in the gutter, on the project square's axis (x 20). */
+/* The pin sits in the gutter, on the project dot's axis (x 20). */
 .chat-pin-mark {
   position: absolute;
   top: 11px;
@@ -838,148 +826,41 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-3);
 }
 
-/* ---------- Agent dock and account row (6.2) ---------- */
+/* ---------- Footer (6.2) ---------- */
 
+/*
+ * Grok's calm foot: the 24px logo on the column's left edge (x 20) and one 28px Settings button at
+ * the right, under the band's collapse toggle. Nothing else lives here.
+ */
 .chat-sidebar-footer {
   display: flex;
-  flex-direction: column;
-  gap: var(--g-space-8);
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
   margin-top: var(--g-space-8);
+  padding-left: var(--g-space-8);
 }
 
-/* One 28px tile per usable agent, on the column's left edge (x 20), then "+N" for the rest. */
-.chat-agent-dock {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--g-space-4);
-  padding: 0 var(--g-space-8);
-}
-
-.chat-popover.chat-agent-popover > summary,
-.chat-popover.chat-account-menu > summary {
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: var(--g-radius-6);
-}
-
-.chat-popover.chat-agent-popover > summary {
-  background-color: transparent;
-}
-
-/* The tile is the mark; under the hand its ring and code step up to fg (Harvey's slow settle). */
-.chat-agent-tile {
-  position: relative;
-  display: block;
-  width: 28px;
-  height: 28px;
-}
-
-.chat-agent-tile > .g-agent-mark {
-  transition:
-    box-shadow var(--g-dur-settle) var(--g-ease-settle),
-    background-color var(--g-dur-settle) var(--g-ease-settle),
-    color var(--g-dur-settle) var(--g-ease-settle);
-}
-
-@media (hover: hover) {
-  .chat-popover.chat-agent-popover > summary:hover {
-    background-color: transparent;
-  }
-
-  .chat-agent-popover > summary:hover .chat-agent-tile > .g-agent-mark {
-    background-color: var(--g-surface-4);
-    box-shadow: inset 0 0 0 1px var(--g-fg-4);
-    color: var(--g-fg-1);
-  }
-}
-
-.chat-popover.chat-agent-popover[open] > summary {
-  background-color: transparent;
-  box-shadow: none;
-}
-
-.chat-agent-popover[open] .chat-agent-tile > .g-agent-mark {
-  background-color: var(--g-surface-4);
-  box-shadow: inset 0 0 0 1px var(--g-fg-3);
+.chat-sidebar-footer-logo {
+  flex: none;
   color: var(--g-fg-1);
 }
 
-.chat-agent-popover > summary:active .chat-agent-tile > .g-agent-mark {
-  background-color: var(--g-surface-4);
-  transition-duration: 0ms;
-}
-
-/* Found: the tile settles in once (250ms, x.ai's letter ease). Reduced motion zeroes the time. */
-.chat-agent-tile:is([data-state="ready"], [data-state="sign-in"]) > .g-agent-mark {
-  animation: chat-agent-settle var(--g-dur-letter) var(--g-ease-out) both;
-}
-
-@keyframes chat-agent-settle {
-  from {
-    opacity: 0.4;
-    transform: scale(0.86);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/*
- * Detecting: an open, dashed tile with the code in fg-3 while a 1px line scans it top to bottom,
- * calmly (1400ms, linear). When the agent is found the tile fills and settles in.
- */
-.chat-agent-tile[data-state="checking"] > .g-agent-mark {
-  background-color: transparent;
-  box-shadow: none;
-  outline: 1px dashed var(--g-line-strong);
-  outline-offset: -1px;
+.chat-sidebar-settings {
+  position: relative;
   color: var(--g-fg-3);
 }
 
-.chat-agent-tile[data-state="checking"]::after {
+/* An account whose sync needs a hand: a 6px fg-1 dot on the corner, cut out of the black. */
+.chat-sidebar-settings[data-attention]::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background-color: var(--g-fg-3);
-  animation: chat-agent-scan var(--g-dur-shimmer) linear infinite;
-  pointer-events: none;
-}
-
-@keyframes chat-agent-scan {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  20% {
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    transform: translateY(25px);
-  }
-}
-
-/* Waiting on you: the volt square arrives once; it never pulses. */
-.chat-agent-tile[data-state="waiting"] > .g-agent-mark {
-  animation: chat-agent-settle var(--g-dur-letter) var(--g-ease-out) both;
-}
-
-/* A sign-in or an update: a 4px fg-1 square on the corner, cut out of the black around it. */
-.chat-agent-tile:is([data-state="sign-in"], [data-update])::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  z-index: 1;
-  width: 4px;
-  height: 4px;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-radius-pill);
   background-color: var(--g-fg-1);
   box-shadow: 0 0 0 2px var(--g-bg);
 }
@@ -989,7 +870,8 @@ details.setup-install-review[open] > summary::before {
   position: relative;
 }
 
-.chat-popover > summary[data-tip]::after {
+.chat-popover > summary[data-tip]::after,
+.chat-sidebar-settings[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -1016,153 +898,38 @@ details.setup-install-review[open] > summary::before {
 }
 
 @media (hover: hover) {
-  .chat-popover:not([open]) > summary[data-tip]:hover::after {
+  .chat-popover:not([open]) > summary[data-tip]:hover::after,
+  .chat-sidebar-settings[data-tip]:hover::after {
     opacity: 1;
     transition-delay: var(--g-dur-dim);
   }
 }
 
-.chat-account-menu > summary[data-tip]::after {
+/* The Settings tip opens up from the button's right edge, inside the sidebar. */
+.chat-sidebar-settings[data-tip]::after {
   right: 0;
   left: auto;
 }
 
-/* "+N": the agents behind it, as a dashed tile with the count in mono. */
-.chat-agent-more {
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--g-radius-6);
-  outline: 1px dashed var(--g-line-strong);
-  outline-offset: -1px;
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-key);
-  line-height: var(--g-leading-key);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  transition:
-    outline-color var(--g-dur-fast) var(--g-ease),
-    color var(--g-dur-fast) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .chat-agent-rest > summary:hover .chat-agent-more {
-    outline-color: var(--g-fg-3);
-    color: var(--g-fg-1);
-  }
-}
-
-.chat-agent-rest[open] .chat-agent-more {
-  outline-color: var(--g-fg-3);
-  color: var(--g-fg-1);
-}
+/* ---------- Quit question (6.19) ---------- */
 
 /*
- * The agent card (6.2): mark, name and version, one line about it, then its actions. Every card
- * opens upward from the dock's own left edge, so it lines up with the column whichever tile opened it.
+ * "Quit auracode?" in the window's own small dialog: what quitting stops, one fg-2 sentence per
+ * fact, then Keep auracode open (focused) and the red explicit choice.
  */
-.chat-agent-dock {
-  position: relative;
-}
-
-.chat-popover.chat-agent-popover {
-  position: static;
-}
-
-.chat-agent-popover > .chat-popover-panel {
-  bottom: calc(100% + 8px);
-  left: var(--g-space-4);
-  width: 296px;
-  gap: var(--g-space-12);
-}
-
-.chat-agent-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-12);
-}
-
-.chat-agent-card-head > span {
+.quit-question-body {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  gap: var(--g-space-8);
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
 }
 
-.chat-agent-card-head strong {
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
-}
-
-.chat-agent-card-head small {
-  overflow: hidden;
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-agent-card-actions,
-.chat-agent-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--g-space-6);
-}
-
-.chat-agent-actions:empty {
-  display: none;
-}
-
-.chat-agent-actions > :is(span, p) {
-  width: 100%;
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
-/* The other agents: plain menu rows (Vercel), the state at the end in fg-3. */
-.chat-agent-rest > .chat-popover-panel {
-  width: 264px;
-  gap: 0;
-  padding: var(--g-space-4);
-}
-
-.chat-agent-list {
-  display: flex;
-  flex-direction: column;
+.quit-question-body > p {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chat-agent-list .g-menu-item > .chat-agent-list-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-agent-list .g-menu-item > small {
-  flex: none;
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
-.chat-agent-list .g-menu-item[data-usable="false"] > .chat-agent-list-name {
-  color: var(--g-fg-2);
-}
-
-.chat-agent-manage {
-  margin-top: var(--g-space-4);
-  box-shadow: inset 0 1px var(--g-line);
-  border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
-  color: var(--g-fg-2);
 }
 
 /* ---------- Collapsed rail ---------- */
@@ -1179,11 +946,17 @@ details.setup-install-review[open] > summary::before {
   :is(
     .chat-nav-action > span,
     .chat-project-scroll,
-    .chat-sidebar-footer,
     .chat-sidebar-search,
-    .chat-sidebar-logo
+    .chat-sidebar-footer-logo
   ) {
   display: none;
+}
+
+/* The rail keeps Settings, centred under the toggle. */
+.chat-app[data-sidebar-collapsed="true"] .chat-sidebar-footer {
+  margin-top: auto;
+  justify-content: center;
+  padding-left: 0;
 }
 
 /* ---------- Chat header (6.3) ---------- */
@@ -1550,6 +1323,7 @@ details.setup-install-review[open] > summary::before {
   width: 6px;
   height: 6px;
   background-color: var(--g-fg-2);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-banner[data-level="warning"]::before {
@@ -1666,6 +1440,7 @@ details.setup-install-review[open] > summary::before {
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-move-busy-names {
@@ -2084,18 +1859,8 @@ details.setup-install-review[open] > summary::before {
   .chat-popover-panel {
     animation: none;
   }
-
-  /* Detection holds still: no scan, only the code waiting in fg-3 in its dashed tile. */
-  .chat-agent-tile[data-state="checking"]::after {
-    display: none;
-  }
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) .chat-popover-panel {
   animation: none;
-}
-
-:root:is([data-motion="reduced"], [data-motion="off"])
-  .chat-agent-tile[data-state="checking"]::after {
-  display: none;
 }

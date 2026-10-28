@@ -298,6 +298,9 @@ pub(crate) struct Shared {
     /// Subscription id -> (chat, owner).
     subscriptions: Mutex<HashMap<String, (String, String)>>,
     shutting_down: AtomicBool,
+    /// Writes an actor still held after the store closed, so they were never saved. A quit
+    /// drains every actor before the store closes, so this stays 0 unless a deadline ran out.
+    pub(crate) lost_writes: AtomicU64,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
     /// Serializes busy-folder preflight and project chat creation/moves.
@@ -426,6 +429,7 @@ impl SessionManager {
                     chat_states: Mutex::new(HashMap::new()),
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
+                    lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
                     #[cfg(feature = "account-sync")]
@@ -505,6 +509,15 @@ impl SessionManager {
         chat_id: &str,
         make: impl Fn(oneshot::Sender<Result<T, SessionError>>) -> ChatMsg,
     ) -> Result<T, SessionError> {
+        // A quit asks only the actors that run when it begins to stop and drain; an actor started
+        // after that would queue work the closing store never takes.
+        if self.shared().is_shutting_down()
+            && self
+                .existing_actor(chat_id)
+                .is_none_or(|mailbox| mailbox.is_closed())
+        {
+            return Err(SessionError::ShuttingDown);
+        }
         for _ in 0..2 {
             let (reply, answer) = oneshot::channel();
             if self.actor(chat_id).send(make(reply)).is_ok() {
@@ -1233,6 +1246,11 @@ impl SessionManager {
             forced,
             took: started.elapsed(),
         }
+    }
+
+    /// How many writes actors still held when the store had closed (each was logged by name).
+    pub fn lost_writes(&self) -> u64 {
+        self.shared().lost_writes.load(Ordering::Acquire)
     }
 
     /// `kill_tree()` on every recorded process of every chat; synchronous, callable from any

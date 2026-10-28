@@ -153,10 +153,25 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
 
-      - name: Check active profile and cached sync status
+      - name: Check the sidebar footer and cached sync status
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
+        run: pnpm --filter @auracode/desktop exec node scripts/check-sidebar-footer.mjs
+
+      - name: Check New chat's worktree choice
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-new-chat-worktree.mjs
+
+      - name: Check the docked terminal panel
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
+
+      - name: Check every preview's layout on the grid
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        run: pnpm --filter @auracode/desktop exec node scripts/check-layout.mjs
 
       - name: Check explicit chat sign-in recovery
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -185,7 +200,7 @@ jobs:
             target/workspace-removal-browser
             target/agent-installations-browser
             target/setup-actions-browser
-            target/profile-status-browser
+            target/sidebar-footer-browser
             target/chat-auth-browser
             target/web-checks
             target/release-preview-*/*.png

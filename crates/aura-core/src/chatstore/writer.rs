@@ -721,7 +721,7 @@ fn work_name(work: &Work) -> &'static str {
     }
 }
 
-fn op_name(op: &Op) -> &'static str {
+pub(crate) fn op_name(op: &Op) -> &'static str {
     match op {
         Op::InsertAgentSession(_) => "insert_agent_session",
         Op::UpdateAgentSession { .. } => "update_agent_session",

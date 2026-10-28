@@ -324,7 +324,9 @@ async fn checked_directory(value: &str) -> Result<PathBuf, SessionError> {
             ));
         }
         check_new_folder(&path)?;
-        std::fs::canonicalize(path).map_err(|_| invalid("The folder could not be resolved."))
+        std::fs::canonicalize(path)
+            .map(|path| crate::fsutil::plain_path(&path))
+            .map_err(|_| invalid("The folder could not be resolved."))
     })
     .await
     .map_err(|_| invalid("The folder could not be checked."))?
@@ -369,7 +371,7 @@ fn candidates(roots: Vec<PathBuf>) -> (Vec<PathBuf>, bool) {
                     truncated = true;
                     break;
                 }
-                result.push(path);
+                result.push(crate::fsutil::plain_path(&path));
                 continue;
             }
             Ok(_) => {

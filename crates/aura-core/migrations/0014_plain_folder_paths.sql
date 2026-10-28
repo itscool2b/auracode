@@ -1,0 +1,5 @@
+-- Folder locations saved by earlier builds on Windows can be verbatim paths (\\?\C:\...), which
+-- std::fs::canonicalize returns. New rows keep the plain spelling whenever it names the same
+-- folder. The Rust hook of this migration (store.rs, plain_folder_paths) rewrites the saved rows
+-- with the same rule; this file only records the step. As for every migration, the database is
+-- backed up first.

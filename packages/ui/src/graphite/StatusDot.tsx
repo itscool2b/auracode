@@ -6,17 +6,17 @@ export type StatusTone = "neutral" | "volt" | "green" | "red";
 export interface StatusDotProps {
   /** neutral (grey), volt (needs you, new), green (passed), red (failed). Default "neutral". */
   readonly tone?: StatusTone;
-  /** Show the walking 2x3 loader instead of a still square, its head in the tone. */
+  /** Show the walking 2x3 loader instead of a still dot, its head in the tone. */
   readonly live?: boolean;
   readonly tempo?: LoaderTempo;
-  /** Square side in px; a live loader uses a box twice as large. Default 6. */
+  /** Diameter in px; a live loader uses a box twice as large. Default 6. */
   readonly size?: number;
   /** Accessible name; without one the dot is decorative and the text beside it speaks. */
   readonly label?: string;
   readonly className?: string;
 }
 
-/** A status square: Graphite's dot is a pixel, never a circle and never a glow. */
+/** A status dot: a flat circle, never a glow. A live one is the pixel loader. */
 export function StatusDot({
   tone = "neutral",
   live = false,

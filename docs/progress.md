@@ -3563,3 +3563,112 @@ InvalidState in about one run in five. Account writes are ordered per vault entr
 process, and every account test uses the same origin and account ID, so a restore in one test made
 another test's account stale. The tests now take turns with that entry. The result: 0 failures in
 20 runs of `accounts::`, against 3 in 15 before. Production code is unchanged.
+
+### Windows native acceptance fixes (2026-10-28)
+
+Branch `native-fixes` (from local `app-integrated`: the redesigned app with the worktree flow, the
+M2b/M2c gaps, the M4 panel and the first acceptance fixes). The merge needed no bindings change.
+Each item is its own commit (the sidebar foot and the agent count share one).
+
+- **Lost writes on quit:** both drops came right as the store closed, after every chat had
+  answered its quit (`took_ms=1`): an answered actor still took messages and queued store work,
+  and a chat without a running actor could start one after the quit began. A quit's answer now
+  also waits for work in flight (page reads, an option's answer, a process winding down), bounded
+  by `shutdown_all`'s deadline; after it the actor is sealed and refuses store work with
+  `ShuttingDown`, and no actor starts once the quit began. If the store still closes with ops
+  waiting (a deadline ran out), each is named: lost writes at error level and counted, reads at
+  warn level.
+- **Verbatim paths:** a Windows verbatim path takes its plain spelling (`C:\...`,
+  `\\server\share`) when that names the same folder: it fits MAX_PATH (259 UTF-16 units) and no
+  part needs the prefix (`.`, `..`, a trailing dot or space, a DOS device name, a character Win32
+  rejects, an empty part); volume GUID paths and anything unsafe keep it. New folder locations are
+  saved that way, every `folder_locations.path` comparison binds the same spelling, worktree
+  previews show it, and the interface's folder comparison accepts both. Migration 14 rewrites saved
+  rows with the same Rust rule after the usual pre-migration backup.
+- **Each turn keeps its agent:** history pages name each turn's agent (`turn_agents`, by the rule
+  conversation and sync use), a live turn takes the chat's agent of that moment, and the transcript
+  labels each turn with its own agent, through reloads.
+- **Agent marks:** every `AgentMark` shows its two-letter code (CC, CX, OC, PI) at every size.
+- **Sidebar foot and one agent count (owner request 2026-10-28):** the sidebar ends with the logo
+  and one Settings button (Ctrl+,); the agent dock and the profile row are gone, and the band keeps
+  only the collapse toggle, so the logo shows once. Settings has Account and Agents, and the
+  palette gains Open agents. An account whose sync is paused or failing puts a small dot on the
+  Settings button and names it. One lineup (`lib/chat/agentLineup.ts`) feeds New chat's choices,
+  its "Other agents" count and the composer's picker. `check-profile-status` became
+  `check-sidebar-footer` (CI renamed with it); `check-layout` dropped the two dock menus.
+- **Status dots are circles (owner request 2026-10-28):** `StatusDot`, an `AgentMark`'s waiting and
+  failed states and every hand-drawn status mark in the app; pixels, loader cells, the pixel check,
+  diffstat squares, bullets and plan nodes stay square. The tray badge was already round.
+- **Quit question:** the window comes forward and asks in its own Graphite dialog, Keep auracode
+  open focused (Enter, Esc, the scrim and the close button keep it open), the red "Stop agents and
+  quit" as the explicit choice; it hides only once quitting goes ahead. If the page does not show
+  the question within 3 s, the system dialog asks, Keep open first and default.
+- **Account verification in the development build:** not a product bug. `/verify-device` lets
+  only the installed app's origins embed it (`frame-ancestors` and the parents it answers), and the
+  development build runs at `http://localhost:1420`. Such a build now says so at once and loads no
+  frame; the installed app keeps the frame and its 30 s "could not load" message.
+- **Hidden rendering:** the chat store applies every frame as it arrives but, while the page is
+  hidden, does not tell the view; it renders once, with everything, when the page shows again.
+
+Verified locally on Windows: `pnpm lint` (Biome 28 warnings, no errors), `pnpm typecheck`, `pnpm
+test` (root scripts 22, ui 278, desktop 5 node and 441 with 19 skipped, design lab 352, web 4);
+`cargo fmt --all --check`; `cargo clippy -p aura-protocol -p aura-core -p auracode-desktop
+--all-targets -- -D warnings` and the account-sync clippy; `cargo test -p aura-core --lib` (459),
+with `--features account-sync` (554), `-p aura-protocol --lib` (23) and `-p auracode-desktop --lib`
+(210, bindings regenerated with `turn_agents`), after cleaning the workspace crates in the shared
+target. In Chromium and WebKit every `apps/desktop/scripts/check-*.mjs` passed with its axe audits:
+`check-layout` (all 252 views clean, the quit dialog among them), `check-sidebar-footer`,
+`check-chat`, `check-settings` (with the fourteen checks it runs), `check-setup`,
+`check-setup-actions`, `check-library`, `check-new-chat-worktree`, `check-terminal-panel`,
+`check-chat-auth`, `check-agent-installations`, `check-config-recovery`,
+`check-folder-resolution`, `check-repository-publication`, `check-workspace-removal`,
+`check-account-reset` and `check-account-vault`. Sheets are the ignored
+`target/design-research/sheets/app-fixes-{sidebar,quit,marks,dots}.png`.
+
+Not done: the minimized CPU was not measured again (it needs the native debug build, whose exe in
+the shared target the owner may run, and Vite's port 1420 was held by another session), so the
+hidden-page change rests on Vitest; the quit question was seen in the browser preview, not the
+running app. Application Control (4551) blocked several freshly linked binaries; relinking let each
+run and nothing was bypassed. `.github/scripts/acceptance-gates.test.mjs` (outside `pnpm test`)
+already failed on `app-integrated`: `check-layout`, `check-new-chat-worktree` and
+`check-terminal-panel` are missing from the CI workflow. CI and the hand walkthrough of the built
+app were not run.
+
+### Website in Shallows (2026-10-28, branch `site-shallows`)
+
+The owner chose direction B, Shallows, from three concepts ("shallows looks hella good. implement
+that"), and asked that it fix the earlier review: drop the tiles section and everything below it,
+remove the film card's Pause button, make hovering a seal or turtle smooth, and lose the dither.
+`docs/design/visual-language.md` records Shallows as the brand surface (1, 4.16, section 5).
+
+- **Shared primitives** in `@auracode/ui/graphite`, committed first and alone (bd537fe) for the
+  app branch: `Creature` with `SEAL_PATH` and `TURTLE_PATH` (and small variants for 64px and
+  below), generated from splines in `creatureGeometry.ts` so the gaps between body and flippers
+  are exact; `Shallows`, the lit-water panel and its tokens; `Swimmers`, transform-only motion on
+  the shared frame clock, paused off screen and in hidden tabs, still under reduced motion, with a
+  smooth eased give-way field for the pointer instead of the old lens.
+- **Website**: the hero is one lit panel with the nav resting on it, two near silhouettes and a far
+  turtle, the rotating headline (now a FLIP glide, no blur, no glint), one Download and the real
+  app. The film card, the tiles and the giant dithered footer logo are gone. One capabilities panel
+  takes their place: six one-line rows with a 2px timer and a live view of the app that cross-fades
+  on hover, focus, click or the timer, a real tab list. Then a hairline FAQ, a closing panel in
+  lit water and a minimal footer. The 404 is a lit panel with a turtle. Status marks are circles.
+  The social card is redrawn in Shallows; the dither fallback images are no longer built, and no
+  dither code ships to the site (checked in the built JavaScript).
+- **Motion**: blocks rise 16px and fade in once; the three primary Download pills are magnetic
+  (transform only); the product settles in on scroll where scroll timelines run. Only transform
+  and opacity animate, plus the FAQ's 300ms disclosure.
+
+Checks on this branch: `pnpm lint` (37 warnings, all existing in desktop CSS), `pnpm typecheck`
+and `pnpm test` pass: scripts 22, ui 294, desktop 441 plus 5 (19 skipped), design lab 352, web 4.
+`pnpm --filter @auracode/web test:browser` passes in Chromium and WebKit, now also running axe on
+each of the six capability views and checking their keys, and that the home page has no canvas and
+no Play or Pause. `worker:build` and `worker:test` pass (5 of 5). Frame times on the built site in
+headless Chromium at 1440 by 900: 0 of 1,495 frames over 25ms across idle, sweeping the pointer over
+the swimmers, hovering the magnetic button, scrolling and switching capabilities (max 16.8ms, no
+long tasks); the trace shows 14ms of layout and 52ms of paint in total. Comparison sheets are in
+`target/design-research/sheets/site-shallows-*.png`.
+
+Not done here: the desktop app still uses the dither field on its first-launch intro and
+onboarding until its Shallows branch; `StatusDot` itself becomes a circle with the `native-fixes`
+branch (the site styles its own dots). The hand walkthrough before merge and real Safari remain.

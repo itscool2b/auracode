@@ -1,6 +1,11 @@
 use super::*;
 use aura_protocol::workspace::{ProjectCreate, ProjectInput, WorkspaceFilter};
 
+/// How a folder is saved and shown: canonical, in its plain spelling (no `\\?\` on Windows).
+fn shown(folder: &Path) -> PathBuf {
+    crate::fsutil::plain_path(&folder.canonicalize().unwrap())
+}
+
 fn input() -> ProjectInput {
     ProjectInput {
         name: "Remote workspace".into(),
@@ -43,7 +48,7 @@ async fn locate_refreshes_parked_actor_and_refuses_stale_review_or_live_native_h
         .unwrap();
     assert_eq!(
         PathBuf::from(attached.snapshot.chat.folder),
-        rig.folder.canonicalize().unwrap()
+        shown(&rig.folder)
     );
     let destination = rig._dir.path().join("copy");
     std::fs::create_dir(&destination).unwrap();
@@ -57,10 +62,7 @@ async fn locate_refreshes_parked_actor_and_refuses_stale_review_or_live_native_h
         .folder_locate_apply(review.clone())
         .await
         .unwrap();
-    assert_eq!(
-        PathBuf::from(moved.path.unwrap()),
-        destination.canonicalize().unwrap()
-    );
+    assert_eq!(PathBuf::from(moved.path.unwrap()), shown(&destination));
     assert_eq!(
         PathBuf::from(
             rig.manager
@@ -69,7 +71,7 @@ async fn locate_refreshes_parked_actor_and_refuses_stale_review_or_live_native_h
                 .unwrap()
                 .primary
         ),
-        destination.canonicalize().unwrap()
+        shown(&destination)
     );
     assert!(rig.manager.folder_locate_apply(review).await.is_err());
     rig.manager.start(&chat.id, false).await.unwrap();
@@ -95,7 +97,7 @@ async fn locate_refreshes_parked_actor_and_refuses_stale_review_or_live_native_h
         .unwrap();
     assert_eq!(
         PathBuf::from(workspace.projects[0].folders[0].path.as_ref().unwrap()),
-        destination.canonicalize().unwrap()
+        shown(&destination)
     );
 }
 
@@ -128,13 +130,7 @@ async fn search_and_apply_recheck_origin_without_network_or_index_changes() {
         .unwrap();
     assert_eq!(
         found.matches,
-        vec![
-            rig.folder
-                .canonicalize()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned()
-        ]
+        vec![shown(&rig.folder).to_string_lossy().into_owned()]
     );
     let review = rig
         .manager

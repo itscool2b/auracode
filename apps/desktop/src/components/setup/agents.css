@@ -3,7 +3,7 @@
  * hairlines inside one frame, as Vercel lists projects. A row says what detection found in words, a
  * square and a grey ladder; volt appears only when the agent needs you. Detection is the one
  * thing that moves: the mark's pixel loader while an agent is looked for, then the status and
- * version settle once and the green square arrives.
+ * version settle once and the green dot arrives.
  */
 
 /* ----------------------------------------------------------------------- the page */
@@ -222,10 +222,11 @@
   height: 6px;
 }
 
-/* Not installed: an empty square, the same size as the found ones, in the decorative grey. */
+/* Not installed: an empty ring, the same size as the found ones, in the decorative grey. */
 .agent-row-hollow {
   width: 6px;
   height: 6px;
+  border-radius: var(--g-radius-pill);
   box-shadow: inset 0 0 0 1px var(--g-fg-4);
 }
 
@@ -509,7 +510,7 @@
 
 /* ------------------------------------------------------------------- detection */
 
-/* Found: the status and the version settle into place once; the green square arrives last. */
+/* Found: the status and the version settle into place once; the green dot arrives last. */
 :where(.agent-row-status, .agent-row-version) {
   animation: agent-settle var(--g-dur-row) var(--g-ease-reveal) both;
 }

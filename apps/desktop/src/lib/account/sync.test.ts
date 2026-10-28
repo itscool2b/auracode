@@ -5,7 +5,7 @@ const native = vi.hoisted(() => ({ available: true, listen: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: native.listen }));
 vi.mock("../ipc", () => ({ inTauri: () => native.available }));
 
-import { subscribeAccountSync } from "./sync";
+import { subscribeAccountSync, syncStatusLabel } from "./sync";
 
 const status: AccountSyncStatus = {
   state: "idle",
@@ -57,5 +57,23 @@ describe("Account sync event ownership", () => {
     native.available = false;
     subscribeAccountSync("profile", vi.fn())();
     expect(native.listen).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncStatusLabel", () => {
+  it("does not call a never-synced or pending workspace synced", () => {
+    const idle = { ...status, last_sync_at: null };
+    expect(syncStatusLabel(undefined)).toBe("Sync status loading");
+    expect(syncStatusLabel(null)).toBe("Sync status unavailable");
+    expect(syncStatusLabel(idle)).toBe("Sync ready");
+    expect(syncStatusLabel({ ...idle, last_sync_at: 100, pending_changes: 2 })).toBe(
+      "2 changes pending",
+    );
+    expect(syncStatusLabel({ ...idle, last_sync_at: 100 })).toBe("Synced");
+    expect(syncStatusLabel({ ...idle, state: "paused", pending_changes: 3 })).toBe(
+      "Sync paused · 3 pending",
+    );
+    expect(syncStatusLabel({ ...idle, state: "offline" })).toBe("Offline");
+    expect(syncStatusLabel({ ...idle, state: "inactive" })).toBe("Sync inactive");
   });
 });

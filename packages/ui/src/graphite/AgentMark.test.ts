@@ -37,11 +37,28 @@ describe("AgentMark", () => {
     expect(html).toContain("width:16px");
   });
 
-  it("shows the agent's code at rest, one letter below 24px and two from 24px", () => {
-    expect(mark({ agent: "claude", size: 16 })).toContain(">C</span>");
+  it("shows the agent's full code at rest at every size, so no two agents share a mark", () => {
+    expect(mark({ agent: "claude", size: 14 })).toContain(">CC</span>");
+    expect(mark({ agent: "codex", size: 14 })).toContain(">CX</span>");
+    expect(mark({ agent: "claude", size: 16 })).toContain(">CC</span>");
+    expect(mark({ agent: "codex", size: 16 })).toContain(">CX</span>");
+    expect(mark({ agent: "opencode", size: 16 })).toContain(">OC</span>");
+    expect(mark({ agent: "pi", size: 16 })).toContain(">PI</span>");
     expect(mark({ agent: "claude", size: 24 })).toContain(">CC</span>");
     expect(mark({ agent: "codex", size: 48 })).toContain(">CX</span>");
     expect(mark({ agent: "grok", size: 56 })).toContain(">GB</span>");
+    const small = [14, 16, 20].flatMap((size) =>
+      AGENT_BRAND_IDS.filter((id) => id !== "generic").map((id) => mark({ agent: id, size })),
+    );
+    for (const html of small) expect(html).toMatch(/>[A-Z]{2}<\/span>/);
+  });
+
+  it("sizes a two-letter code to fit its tile, never under 7px", () => {
+    expect(mark({ agent: "claude", size: 12 })).toContain("font-size:7px");
+    expect(mark({ agent: "claude", size: 16 })).toContain("font-size:8px");
+    expect(mark({ agent: "claude", size: 24 })).toContain("font-size:9px");
+    expect(mark({ agent: "claude", size: 48 })).toContain("font-size:18px");
+    expect(mark({ agent: "", size: 16 })).toContain("font-size:9px");
   });
 
   it("puts each state in the glyph's place", () => {
@@ -59,6 +76,19 @@ describe("AgentMark", () => {
       expect(html, state).toContain(shapes[state]);
       expect(html, state).toContain(`data-state="${state}"`);
       if (state !== "idle") expect(html, state).not.toContain("g-agent-mark-glyph");
+    }
+  });
+
+  it("shows waiting and failed as dots centred on whole pixels", () => {
+    for (const [state, size, centre, radius] of [
+      ["waiting", 24, 12, 5],
+      ["error", 16, 8, 3],
+      ["waiting", 14, 7, 3],
+    ] as const) {
+      const html = mark({ agent: "pi", state, size });
+      expect(html, `${state} ${size}`).toContain(`<circle class="g-agent-mark-${state}"`);
+      expect(html).toContain(`cx="${centre}" cy="${centre}" r="${radius}"`);
+      expect(html).not.toContain("<rect");
     }
   });
 

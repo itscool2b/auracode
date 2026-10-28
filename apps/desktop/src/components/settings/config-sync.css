@@ -47,6 +47,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 /* Keep on this device: a switch with its words, under the item's state, on a 20px line. */
@@ -254,7 +255,7 @@
   background-color: var(--g-fg-4);
 }
 
-/* A conflict: the one line in the dialog that needs you, led by a volt square. */
+/* A conflict: the one line in the dialog that needs you, led by a volt dot. */
 .config-sync-warning {
   display: flex;
   align-items: baseline;
@@ -272,6 +273,7 @@
   height: 6px;
   background-color: var(--g-volt);
   transform: translateY(-1px);
+  border-radius: var(--g-radius-pill);
 }
 
 .config-sync-delete {

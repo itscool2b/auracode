@@ -18,6 +18,7 @@ import type {
   WorktreeChatPlan,
   WorktreeChatResult,
 } from "../../bindings";
+import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { errorMessage } from "../../lib/errors";
@@ -257,8 +258,8 @@ export function NewChat({
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
   }, [workspace, state.folder, folderId, loaded, picked, draft]);
-  const available = (agents ?? []).filter((agent) => agentChoice(agent).enabled);
-  const unavailable = (agents ?? []).filter((agent) => !agentChoice(agent).enabled);
+  // The one lineup every agent list reads, so "Other agents" counts the same everywhere.
+  const { usable: available, others: unavailable } = agentLineup(agents ?? []);
   const selected = available.find((agent) => agent.id === state.agentId) ?? null;
   // Rust reviews the worktree for the chosen agent, or the first one that can run until one is.
   const reviewAgent = selected?.id ?? available[0]?.id ?? null;

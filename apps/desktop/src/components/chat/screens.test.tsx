@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentEntry, ConfigOption } from "../../bindings";
+import { agentLineup } from "../../lib/chat/agentLineup";
 import { NewChatDraft } from "../../lib/chat/appStore";
 import { type ChatState, ChatStore } from "../../lib/chat/chatStore";
 import {
@@ -15,7 +16,6 @@ import {
   sessionInfo,
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
-import { dockAgents, dockState } from "./AgentDock";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, chatShortcutIndex, projectName, projectsOf, visibleChatIds } from "./ChatList";
 import { StillWorking } from "./ChatView";
@@ -23,8 +23,8 @@ import { SendControls, StopButton } from "./Composer";
 import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
-import { initials } from "./ProfileStatus";
 import { QueueEditor, QueueList } from "./QueueList";
+import { SidebarFooter } from "./SidebarFooter";
 import { Transcript } from "./Transcript";
 import { type TurnActions, TurnView } from "./TurnView";
 
@@ -246,44 +246,83 @@ describe("the chat list", () => {
   });
 });
 
-describe("the agent dock", () => {
+describe("the agent lineup", () => {
   const ready = { state: "ready", version: "1.0.0", path: "/bin/agent" } as const;
   const missing = { state: "missing", reason: "Not installed." } as const;
+  const broken = { state: "broken", reason: "Damaged." } as const;
+  const catalog = [
+    agent("claude", ready),
+    agent("claude-acp", ready),
+    agent("codex", missing),
+    agent("codex-acp", ready),
+    agent("pi", { state: "checking" }),
+    agent("cursor", missing),
+    agent("hermes", broken),
+    agent("mock", ready),
+  ];
 
-  it("shows one tile per usable product, native first, and keeps the rest behind +N", () => {
-    const catalog = [
-      agent("claude", ready),
-      agent("claude-acp", ready),
-      agent("codex", missing),
-      agent("codex-acp", ready),
-      agent("pi", { state: "checking" }),
-      agent("cursor", missing),
-      agent("mock", ready),
-    ];
-    const { shown, rest } = dockAgents(catalog);
-    expect(shown.map((entry) => entry.id)).toEqual(["claude", "codex-acp", "pi"]);
-    expect(rest.map((entry) => entry.id)).toEqual(["claude-acp", "codex", "cursor", "mock"]);
-    // With no real agent usable, the scripted demo is the one tile.
-    expect(dockAgents([agent("claude", missing), agent("mock", ready)]).shown).toHaveLength(1);
+  it("splits the catalog once: usable agents and the others, nothing counted twice", () => {
+    const { usable, others } = agentLineup(catalog);
+    expect(usable.map((entry) => entry.id)).toEqual([
+      "claude",
+      "claude-acp",
+      "codex-acp",
+      "pi",
+      "mock",
+    ]);
+    expect(others.map((entry) => entry.id)).toEqual(["codex", "cursor", "hermes"]);
+    expect(usable.length + others.length).toBe(catalog.length);
   });
 
-  it("gives each tile its state: needs you over working over sign-in over ready", () => {
-    const claude = agent("claude", ready);
-    const chat = (extra: Parameters<typeof chatSummary>[1]) =>
-      chatSummary("c", { agent_id: "claude", ...extra });
-    expect(dockState(claude, [])).toBe("ready");
-    expect(dockState(agent("pi", { state: "checking" }), [])).toBe("checking");
-    expect(dockState(claude, [chat({ status: "auth_required" })])).toBe("sign-in");
-    expect(dockState(claude, [chat({ status: "running" })])).toBe("running");
-    expect(dockState(claude, [chat({ status: "running" }), chat({ needs_attention: true })])).toBe(
-      "waiting",
+  it("offers one usable variant per product, native first, the demo only alone", () => {
+    expect(agentLineup(catalog).products.map((entry) => entry.id)).toEqual([
+      "claude",
+      "codex-acp",
+      "pi",
+    ]);
+    expect(
+      agentLineup([agent("claude", missing), agent("mock", ready)]).products.map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(["mock"]);
+  });
+
+  it("is what New chat counts under Other agents", () => {
+    const html = renderToStaticMarkup(
+      <NewChat
+        agents={catalog}
+        refreshing={false}
+        draft={new NewChatDraft(new FakeTransport())}
+        onRefreshAgents={noop}
+        onCreated={noop}
+      />,
     );
+    expect(html).toMatch(/new-chat-more-count">3</);
+  });
+});
+
+describe("the sidebar footer", () => {
+  const local = { id: "local", kind: "local", display_name: "Local", created_at: 1 } as const;
+
+  it("is the logo and one Settings button, with no agents or profile row", () => {
+    const html = renderToStaticMarkup(<SidebarFooter profile={local} onSettings={noop} />);
+    expect(html).toContain("chat-sidebar-footer-logo");
+    expect(html).toContain('aria-label="Open settings"');
+    expect(html).toContain('aria-keyshortcuts="Control+, Meta+,"');
+    expect(html).not.toContain("g-agent-mark");
+    expect(html).not.toContain("Stored on this device");
+    expect(html).not.toContain("data-attention");
   });
 
-  it("names the profile by its initials", () => {
-    expect(initials("Local")).toBe("L");
-    expect(initials("Work account")).toBe("WA");
-    expect(initials("  ")).toBe("?");
+  it("shows no sync dot before an account's status arrives", () => {
+    const html = renderToStaticMarkup(
+      <SidebarFooter
+        profile={{ id: "work", kind: "account", display_name: "Work", created_at: 1 }}
+        onSettings={noop}
+      />,
+    );
+    expect(html).toContain('aria-label="Open settings"');
+    expect(html).not.toContain("data-attention");
   });
 });
 
@@ -692,6 +731,43 @@ describe("turns and the transcript", () => {
     expect(html).toContain("Earlier part of this turn not loaded");
     expect(html).toContain("the end of a long turn");
     expect(html.indexOf("Load earlier")).toBeLessThan(html.indexOf("Earlier part of this turn"));
+  });
+
+  it("labels each turn with the agent that ran it after the chat switched agents", async () => {
+    const page = historyPage(
+      "c1",
+      items(
+        numbered([
+          ["t1", ev.turnStarted("t1")],
+          ["t1", ev.message("t1.m1", "Claude Code answered")],
+          ["t1", ev.turnEnded("t1")],
+          ["t2", ev.turnStarted("t2")],
+          ["t2", ev.message("t2.m1", "Codex answered")],
+          ["t2", ev.turnEnded("t2")],
+        ]),
+      ),
+      {
+        turn_agents: [
+          { turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" },
+          { turn_id: "t2", agent_id: "codex", agent_name: "Codex" },
+        ],
+      },
+    );
+    const state = await stateWith(page, {
+      chat: chatSummary("c1", { agent_id: "codex", agent_name: "Codex" }),
+      session: sessionInfo({ agent_name: "Codex" }),
+    });
+    const html = renderToStaticMarkup(
+      <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    // Each turn's byline names its own agent.
+    const bylines = [
+      ...html.matchAll(/data-test-turn-id="(t\d)"[^>]*><span class="sr-only">([^<]+)</g),
+    ].map((match) => [match[1], match[2]]);
+    expect(bylines).toEqual([
+      ["t1", "Claude Code"],
+      ["t2", "Codex"],
+    ]);
   });
 
   it("unsaved_marker_and_reattach: marks the unsaved rows where they are missing", async () => {

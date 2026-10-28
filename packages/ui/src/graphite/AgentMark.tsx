@@ -71,7 +71,7 @@ function indicatorOf(state: OrbState): Indicator {
 /**
  * An agent's identity and live state in one square tile. Idle, it shows the agent's code; any other
  * state takes the code's place (the name always sits beside the mark): a walking 2x3 loader while
- * it works, a volt square while it waits on you, a white pixel check once done, a red square when it
+ * it works, a volt dot while it waits on you, a white pixel check once done, a red dot when it
  * failed. No canvas. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
  */
 export function AgentMark({
@@ -90,9 +90,12 @@ export function AgentMark({
   const svg = useRef<SVGSVGElement>(null);
   useLoaderSteps(svg, indicator === "loader", tempo, "neutral");
 
-  const code = agentCode(agent);
-  const glyph = box >= 24 ? code : (Array.from(code)[0] ?? "?");
-  const fontSize = Math.round(box * (glyph.length > 1 ? 0.38 : 0.56));
+  // The full code at every size: one letter would make Claude Code and Codex both "C".
+  const glyph = agentCode(agent);
+  const fontSize =
+    glyph.length > 1
+      ? Math.max(7, Math.round(box * (box < 24 ? 0.5 : 0.38)))
+      : Math.round(box * 0.56);
   const style: CSSProperties = {
     width: `${box}px`,
     height: `${box}px`,
@@ -154,14 +157,15 @@ function StateShape({ indicator, size }: { readonly indicator: Indicator; readon
       </>
     );
   }
-  const square = centredSquare(size, 0.375);
+  // A status dot, centred on whole pixels: the even-parity box of the old square, as a circle.
+  const box = centredSquare(size, 0.375);
   return (
-    <rect
+    <circle
       className={indicator === "waiting" ? "g-agent-mark-waiting" : "g-agent-mark-error"}
-      x={square.x}
-      y={square.y}
-      width={square.w}
-      height={square.h}
+      cx={box.x + box.w / 2}
+      cy={box.y + box.h / 2}
+      r={box.w / 2}
+      shapeRendering="geometricPrecision"
     />
   );
 }

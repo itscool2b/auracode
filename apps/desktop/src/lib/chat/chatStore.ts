@@ -14,6 +14,7 @@ import type {
   SessionLists,
   SessionStatus,
   StorageStatus,
+  TurnAgent,
   UiAnswer,
   UsageInfo,
 } from "../../bindings";
@@ -80,6 +81,11 @@ export interface ChatState {
   readonly auth: AuthPrompt | null;
   readonly storage: StorageStatus | null;
   readonly transcript: Transcript;
+  /**
+   * The agent that ran each turn, by turn id: from history pages, and from the chat's agent when a
+   * turn starts live. A turn missing here is the chat's current agent's.
+   */
+  readonly turnAgents: ReadonlyMap<string, TurnAgent>;
   readonly hasMore: boolean;
   readonly loadingEarlier: boolean;
   /** Advances only when an older page arrives, independently of live output. */
@@ -117,7 +123,26 @@ export const STILL_WORKING_MS = 60_000;
 export interface ChatStoreOptions {
   /** Wall clock, for queued prompts' times and the still-working hint. */
   readonly now?: () => number;
+  /** Whether the page is hidden (minimized, or behind the tray), and when that changes. */
+  readonly visibility?: PageVisibility;
 }
+
+/** The page's visibility, as the store needs it. */
+export interface PageVisibility {
+  readonly hidden: () => boolean;
+  /** Calls `listener` whenever the page is hidden or shown again; returns how to stop. */
+  readonly onChange: (listener: () => void) => () => void;
+}
+
+/** `document.visibilityState`; always visible where there is no document (tests, servers). */
+export const documentVisibility: PageVisibility = {
+  hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  onChange: (listener) => {
+    if (typeof document === "undefined") return () => {};
+    document.addEventListener("visibilitychange", listener);
+    return () => document.removeEventListener("visibilitychange", listener);
+  },
+};
 
 function initialState(chatId: string): ChatState {
   return {
@@ -135,6 +160,7 @@ function initialState(chatId: string): ChatState {
     auth: null,
     storage: null,
     transcript: emptyTranscript(),
+    turnAgents: new Map(),
     hasMore: false,
     loadingEarlier: false,
     historyRevision: 0,
@@ -151,6 +177,28 @@ function initialState(chatId: string): ChatState {
     actionError: null,
     stillWorkingMinutes: null,
   };
+}
+
+/** `agents` with the agents a history page names for its turns. */
+function withTurnAgents(
+  agents: ReadonlyMap<string, TurnAgent>,
+  page: HistoryPage,
+): ReadonlyMap<string, TurnAgent> {
+  const named = page.turn_agents ?? [];
+  if (named.length === 0) return agents;
+  const next = new Map(agents);
+  for (const agent of named) next.set(agent.turn_id, agent);
+  return next;
+}
+
+/** A turn that starts live runs on the chat's agent of that moment, which it keeps. */
+function withLiveTurnAgent(state: ChatState, turnId: string): ReadonlyMap<string, TurnAgent> {
+  if (state.turnAgents.has(turnId) || state.chat === null) return state.turnAgents;
+  return new Map(state.turnAgents).set(turnId, {
+    turn_id: turnId,
+    agent_id: state.chat.agent_id,
+    agent_name: state.session?.agent_name ?? state.chat.agent_name,
+  });
 }
 
 function isCode(error: unknown, code: string): boolean {
@@ -186,6 +234,10 @@ export class ChatStore {
   readonly #now: () => number;
   readonly #listeners = new Set<() => void>();
   #state: ChatState;
+  readonly #visibility: PageVisibility;
+  #stopWatchingVisibility: (() => void) | null = null;
+  /** Changes made while the page was hidden that the view has not been told about yet. */
+  #unrendered = false;
 
   /** Every attach gets a number; frames, ends and answers of older ones are ignored. */
   #generation = 0;
@@ -236,13 +288,19 @@ export class ChatStore {
     this.chatId = chatId;
     this.#transport = transport;
     this.#now = options.now ?? (() => Date.now());
+    this.#visibility = options.visibility ?? documentVisibility;
     this.#state = initialState(chatId);
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
+    this.#stopWatchingVisibility ??= this.#visibility.onChange(this.#visibilityChanged);
     return () => {
       this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopWatchingVisibility?.();
+        this.#stopWatchingVisibility = null;
+      }
     };
   };
 
@@ -389,6 +447,7 @@ export class ChatStore {
       auth: snapshot.auth,
       storage: snapshot.storage,
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      turnAgents: withTurnAgents(new Map(), history),
       hasMore: history.has_more,
       loadingEarlier: false,
       earlierError: null,
@@ -454,7 +513,11 @@ export class ChatStore {
   #applyLive(state: ChatState, event: AuraEvent): ChatState {
     switch (event.type) {
       case "turn_started":
-        return { ...state, openTurnId: event.turn_id };
+        return {
+          ...state,
+          openTurnId: event.turn_id,
+          turnAgents: withLiveTurnAgent(state, event.turn_id),
+        };
       case "turn_ended":
         return state.openTurnId === event.turn_id ? { ...state, openTurnId: null } : state;
       case "session_updated": {
@@ -568,6 +631,7 @@ export class ChatStore {
     this.#set({
       ...this.#state,
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      turnAgents: withTurnAgents(this.#state.turnAgents, page),
       hasMore: page.has_more,
       loadingEarlier: false,
       historyRevision: this.#state.historyRevision + 1,
@@ -956,8 +1020,26 @@ export class ChatStore {
     this.#rejoinTimer = null;
   }
 
+  /**
+   * Every change updates the state at once, so nothing is lost and order is kept. While the page
+   * is hidden (minimized, or closed to the tray) the view is not told: a stream would otherwise
+   * render every frame nobody sees. It renders once, with everything, when the page shows again.
+   */
   #set(state: ChatState): void {
     this.#state = state;
+    if (this.#visibility.hidden()) {
+      this.#unrendered = true;
+      return;
+    }
+    this.#notify();
+  }
+
+  readonly #visibilityChanged = (): void => {
+    if (this.#unrendered && !this.#visibility.hidden()) this.#notify();
+  };
+
+  #notify(): void {
+    this.#unrendered = false;
     for (const listener of [...this.#listeners]) listener();
   }
 }

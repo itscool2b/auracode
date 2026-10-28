@@ -558,6 +558,123 @@ async fn quit_while_paused() {
     assert!(store.shutdown(Duration::from_secs(5)).await);
 }
 
+/// A quit drains every actor before the store closes. Writes queued while a turn runs (two
+/// prompts, the hold the quit puts on them, the interrupted turn's end) are all saved; work that
+/// reaches an actor after it answered its quit is refused instead of being queued for a closed
+/// store; and no actor starts once the quit began. Nothing is lost and nothing is logged as lost.
+#[tokio::test]
+async fn quit_drains_queued_writes_and_refuses_late_work() {
+    let (driver, _handle) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        // The turn stays open; with no steps left the driver closes on the quit's Shutdown.
+        delta("working"),
+    ]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let unloaded = rig
+        .store
+        .create_chat(NewChat {
+            agent_host: Default::default(),
+            agent_id: "mock".into(),
+            folder: rig.folder.clone(),
+            device_id: "device".into(),
+            now: now_millis(),
+        })
+        .await
+        .expect("a chat no actor loaded")
+        .id;
+    rig.manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .expect("attach");
+    rig.manager
+        .send(&chat.id, "first".into())
+        .await
+        .expect("send");
+    status(&rig, &chat.id, SessionStatus::Running).await;
+    rig.manager
+        .send(&chat.id, "queued one".into())
+        .await
+        .expect("queue");
+    rig.manager
+        .send(&chat.id, "queued two".into())
+        .await
+        .expect("queue");
+
+    let summary = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert_eq!((summary.sessions, summary.forced), (1, 0), "{summary:?}");
+
+    // Late work: refused at once, never queued behind the closing store.
+    assert!(matches!(
+        rig.manager.send(&chat.id, "late".into()).await,
+        Err(SessionError::ShuttingDown)
+    ));
+    assert!(matches!(
+        rig.manager
+            .attach(&chat.id, Arc::new(Sink::default()))
+            .await,
+        Err(SessionError::ShuttingDown)
+    ));
+    assert!(matches!(
+        rig.manager.history(&chat.id, u32::MAX, None).await,
+        Err(SessionError::ShuttingDown)
+    ));
+    assert!(matches!(
+        rig.manager.send(&unloaded, "late".into()).await,
+        Err(SessionError::ShuttingDown)
+    ));
+    assert!(
+        rig.manager.lists(&chat.id).await.is_ok(),
+        "answers from memory still work"
+    );
+
+    assert!(
+        rig.store.shutdown(Duration::from_secs(5)).await,
+        "everything queued was saved"
+    );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(rig.manager.lost_writes(), 0);
+
+    let Rig {
+        profile,
+        manager,
+        store,
+        ..
+    } = rig;
+    drop(manager);
+    drop(store);
+    let owner = ProfileOwner::acquire(&profile).expect("owner");
+    let (reopened, _) = Store::open(&profile).expect("reopen");
+    let store = ChatStore::start(
+        reopened,
+        owner,
+        &profile,
+        "device".into(),
+        Handle::current(),
+    )
+    .expect("store");
+    assert_eq!(
+        store.recovered().await.interrupted_turns,
+        0,
+        "the turn ended"
+    );
+    let load = store.load_chat(&chat.id).await.expect("load");
+    let queued: Vec<(&str, bool)> = load
+        .queue
+        .iter()
+        .map(|row| (row.text.as_str(), row.held))
+        .collect();
+    assert_eq!(queued, [("queued one", true), ("queued two", true)]);
+    assert!(store.shutdown(Duration::from_secs(5)).await);
+}
+
 /// S34: an agent flooding while saving is paused never deadlocks with its actor: the actor
 /// stops reading but keeps answering, the driver keeps answering commands while it waits for room
 /// (an option change completes), and once saving resumes everything flows and is saved.

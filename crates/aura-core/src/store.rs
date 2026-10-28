@@ -66,7 +66,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 13;
+pub const SCHEMA_VERSION: u32 = 14;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -83,24 +83,56 @@ const DEFAULT_DB_NAME: &str = "aura.db";
 /// Every schema change, in order: entry `i` takes the database from version `i` to `i + 1`. The array
 /// length is [`SCHEMA_VERSION`], so adding a migration without bumping the version fails to compile.
 /// Each migration ends with a foreign key check, because migrations run with enforcement off.
-static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
-    M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0003_agent_hosts.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0004_composer.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0005_drafts.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0006_continuations.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0007_sync.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0008_worktree_setup.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0009_config_sync.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0010_steering.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0011_sync_projection.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0012_transcript_sync.sql")).foreign_key_check(),
-    M::up(include_str!("../migrations/0013_local_import.sql")).foreign_key_check(),
-];
+/// Lazy because a migration with a Rust hook is built at run time.
+static MIGRATIONS: std::sync::LazyLock<[M<'static>; SCHEMA_VERSION as usize]> =
+    std::sync::LazyLock::new(|| {
+        [
+            M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0003_agent_hosts.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0004_composer.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0005_drafts.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0006_continuations.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0007_sync.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0008_worktree_setup.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0009_config_sync.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0010_steering.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0011_sync_projection.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0012_transcript_sync.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0013_local_import.sql")).foreign_key_check(),
+            M::up_with_hook(
+                include_str!("../migrations/0014_plain_folder_paths.sql"),
+                plain_folder_paths,
+            )
+            .foreign_key_check(),
+        ]
+    });
 
 fn migrations() -> &'static [M<'static>] {
-    &MIGRATIONS
+    &*MIGRATIONS
+}
+
+/// Migration 14: every saved folder location that is a Windows verbatim path takes its plain
+/// spelling when that names the same folder ([`fsutil::plain_windows_path`]); any other path is
+/// left as it is. Only `folder_locations.path` holds folder paths.
+fn plain_folder_paths(tx: &rusqlite::Transaction) -> rusqlite_migration::HookResult {
+    let rows: Vec<(String, String, String)> = {
+        let mut statement = tx.prepare(
+            "SELECT folder_id, device_id, path FROM folder_locations WHERE substr(path, 1, 4) = '\\\\?\\'",
+        )?;
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    for (folder, device, path) in rows {
+        if let Some(plain) = fsutil::plain_windows_path(&path) {
+            tx.execute(
+                "UPDATE folder_locations SET path = ?3 WHERE folder_id = ?1 AND device_id = ?2",
+                rusqlite::params![folder, device, plain],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// What [`Store::open`] had to do. Paths are strings so the UI can show them as they are.
@@ -2310,6 +2342,72 @@ mod tests {
         assert_eq!(project_names(&old), vec!["Alpha"]);
         let old_columns = names(&old, "SELECT name FROM pragma_table_info('projects')");
         assert!(!old_columns.contains("archived"));
+    }
+
+    /// Migration 14, after the backup: saved verbatim folder locations take their plain spelling
+    /// when it names the same folder; unsafe verbatim paths and every other path stay as saved,
+    /// and the backup keeps the old spellings.
+    #[test]
+    fn migration_14_gives_verbatim_folder_locations_their_plain_spelling() {
+        let p = paths();
+        let long = format!(r"\\?\C:\{}", "a".repeat(300));
+        let rows = [
+            ("f1", r"\\?\C:\Users\me\work", r"C:\Users\me\work"),
+            ("f2", r"\\?\UNC\server\share\repo", r"\\server\share\repo"),
+            ("f3", r"\\?\C:\work\CON", r"\\?\C:\work\CON"),
+            ("f4", r"\\?\C:\work\trailing.", r"\\?\C:\work\trailing."),
+            ("f5", long.as_str(), long.as_str()),
+            ("f6", r"D:\already\plain", r"D:\already\plain"),
+            ("f7", "/Users/me/work", "/Users/me/work"),
+        ];
+        {
+            let (store, info) =
+                open_with(&p.db, &p.backups, &migrations()[..13]).expect("version 13");
+            assert_eq!(info.schema_version, 13);
+            let conn = store.conn();
+            insert_project(conn, "p1", "Alpha");
+            for (folder, saved, _) in &rows {
+                conn.execute(
+                    "INSERT INTO project_folders (id, project_id, display_name, kind, created_at, updated_at, device_id) \
+                     VALUES (?1, 'p1', ?1, 'local', 1, 1, 'dev')",
+                    [folder],
+                )
+                .expect("folder");
+                conn.execute(
+                    "INSERT INTO folder_locations (folder_id, device_id, path) VALUES (?1, 'dev', ?2)",
+                    [folder, saved],
+                )
+                .expect("location");
+            }
+        }
+        let (store, info) = open_with(&p.db, &p.backups, migrations()).expect("current");
+        let OpenOutcome::Migrated {
+            from: 13,
+            to: 14,
+            backup: Some(backup),
+        } = &info.outcome
+        else {
+            panic!(
+                "expected Migrated from 13 to 14 with a backup, got {:?}",
+                info.outcome
+            );
+        };
+        let path_of = |conn: &Connection, folder: &str| -> String {
+            conn.query_row(
+                "SELECT path FROM folder_locations WHERE folder_id = ?1",
+                [folder],
+                |row| row.get(0),
+            )
+            .expect("path")
+        };
+        for (folder, _, expected) in &rows {
+            assert_eq!(path_of(store.conn(), folder), *expected, "{folder}");
+        }
+        let old = Connection::open(backup).expect("open backup");
+        assert_eq!(read_user_version(&old).expect("version"), 13);
+        for (folder, saved, _) in &rows {
+            assert_eq!(path_of(&old, folder), *saved, "{folder} in the backup");
+        }
     }
 
     /// Migrations on a v1 database with data in every table they touch: a backup first, every

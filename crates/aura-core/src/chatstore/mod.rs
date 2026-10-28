@@ -826,6 +826,32 @@ pub enum Op {
     Barrier(oneshot::Sender<()>),
 }
 
+/// How a folder path is kept in `folder_locations.path`, and bound where that column is compared:
+/// the plain spelling of a Windows verbatim path whenever it names the same folder
+/// ([`crate::fsutil::plain_path`]; migration 14 rewrote the rows saved before).
+pub(crate) fn stored_path(path: &std::path::Path) -> String {
+    crate::fsutil::plain_path(path)
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// [`stored_path`] for a path the caller holds as text.
+pub(crate) fn stored_path_text(path: &str) -> String {
+    crate::fsutil::plain_windows_path(path).unwrap_or_else(|| path.to_owned())
+}
+
+impl Op {
+    /// The op's name for logs.
+    pub(crate) fn name(&self) -> &'static str {
+        writer::op_name(self)
+    }
+
+    /// A read or a barrier: dropping it loses no data (its waiter learns the store closed).
+    pub(crate) fn is_read(&self) -> bool {
+        matches!(self, Op::ReadPage { .. } | Op::Barrier(_))
+    }
+}
+
 /// A chat to create in a folder on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NewChat {

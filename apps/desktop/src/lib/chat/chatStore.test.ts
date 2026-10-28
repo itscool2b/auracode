@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatSnapshot, HistoryPage, SessionLists } from "../../bindings";
 import { CommandError } from "../ipc";
-import { BLOB_PAGE, ChatStore, LISTS_DEBOUNCE_MS, STILL_WORKING_MS } from "./chatStore";
+import {
+  BLOB_PAGE,
+  ChatStore,
+  LISTS_DEBOUNCE_MS,
+  type PageVisibility,
+  STILL_WORKING_MS,
+} from "./chatStore";
 import {
   attachResult,
   autonomyState,
+  chatSummary,
   ev,
   FakeTransport,
   frame,
@@ -204,6 +211,145 @@ describe("joining a chat (the join protocol)", () => {
     fake.lastAttach().resolve(attachResult(CHAT, 5, historyPage(CHAT, [])));
     await opening;
     expect(fake.callsOf("detach")).toEqual([["sub-c1-5"]]);
+  });
+});
+
+describe("the agent of each turn", () => {
+  it("keeps the agent that ran each turn after the chat switches agents, through a reload", async () => {
+    const fake = new FakeTransport();
+    const page = historyPage(
+      CHAT,
+      items(
+        numbered([
+          ["t1", ev.turnStarted("t1")],
+          ["t1", ev.turnEnded("t1", "refusal")],
+        ]),
+      ),
+      {
+        turn_agents: [{ turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" }],
+      },
+    );
+    // The chat now runs Codex: the failed Claude Code turn keeps its own agent.
+    const store = await opened(fake, page, 2, {
+      chat: chatSummary(CHAT, { agent_id: "codex", agent_name: "Codex" }),
+      session: sessionInfo({ agent_name: "Codex" }),
+    });
+    expect(store.getSnapshot().turnAgents.get("t1")?.agent_name).toBe("Claude Code");
+    // A turn that starts live runs on the chat's agent of that moment.
+    fake.lastAttach().onFrame(frame(CHAT, 2, [ev.turnStarted("t2")]));
+    expect(store.getSnapshot().turnAgents.get("t2")).toEqual({
+      turn_id: "t2",
+      agent_id: "codex",
+      agent_name: "Codex",
+    });
+    expect(store.getSnapshot().turnAgents.get("t1")?.agent_id).toBe("claude");
+  });
+
+  it("adds the agents an older page names without losing the newer ones", async () => {
+    const older = historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])), {
+      turn_agents: [{ turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" }],
+    });
+    const fake = new FakeTransport({ history: () => Promise.resolve(older) });
+    const newest = historyPage(CHAT, items(numbered([["t2", ev.turnStarted("t2")]], 5)), {
+      has_more: true,
+      before_seq: 5,
+      turn_agents: [{ turn_id: "t2", agent_id: "codex", agent_name: "Codex" }],
+    });
+    const store = await opened(fake, newest, 6);
+    await store.loadEarlier();
+    const agents = store.getSnapshot().turnAgents;
+    expect([...agents.keys()].sort()).toEqual(["t1", "t2"]);
+    expect(agents.get("t1")?.agent_name).toBe("Claude Code");
+    expect(agents.get("t2")?.agent_name).toBe("Codex");
+  });
+});
+
+describe("a hidden page", () => {
+  /** A page whose visibility the test flips, like a minimized window. */
+  function page() {
+    let hidden = false;
+    const listeners = new Set<() => void>();
+    return {
+      visibility: {
+        hidden: () => hidden,
+        onChange: (listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      } satisfies PageVisibility,
+      set(value: boolean) {
+        hidden = value;
+        for (const listener of listeners) listener();
+      },
+      watchers: () => listeners.size,
+    };
+  }
+
+  it("keeps every frame but renders once, in order, when the page shows again", async () => {
+    const fake = new FakeTransport();
+    const shown = page();
+    const store = new ChatStore(CHAT, fake, { visibility: shown.visibility });
+    let renders = 0;
+    const stop = store.subscribe(() => {
+      renders += 1;
+    });
+    expect(shown.watchers()).toBe(1);
+    const opening = store.open();
+    const attach = fake.lastAttach();
+    attach.resolve(
+      attachResult(CHAT, 2, historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])))),
+    );
+    await opening;
+    await settled();
+    const before = renders;
+    expect(before).toBeGreaterThan(0);
+
+    shown.set(true);
+    for (const [seq, text] of [
+      [2, "one "],
+      [3, "two "],
+      [4, "three"],
+    ] as const)
+      attach.onFrame(frame(CHAT, seq, [ev.message("t1.m1", text)]));
+    attach.onFrame(frame(CHAT, 5, [ev.turnEnded("t1")]));
+    // Hidden: nothing rendered, but the state already holds every frame.
+    expect(renders).toBe(before);
+    expect(messageText(store, "t1.m1")).toBe("one two three");
+    expect(store.getSnapshot().openTurnId).toBeNull();
+
+    shown.set(false);
+    expect(renders).toBe(before + 1);
+    expect(messageText(store, "t1.m1")).toBe("one two three");
+    // Showing again with nothing new renders nothing more.
+    shown.set(true);
+    shown.set(false);
+    expect(renders).toBe(before + 1);
+
+    stop();
+    expect(shown.watchers()).toBe(0);
+    store.close();
+  });
+
+  it("renders every change at once while the page is visible", async () => {
+    const fake = new FakeTransport();
+    const shown = page();
+    const store = new ChatStore(CHAT, fake, { visibility: shown.visibility });
+    let renders = 0;
+    store.subscribe(() => {
+      renders += 1;
+    });
+    const opening = store.open();
+    const attach = fake.lastAttach();
+    attach.resolve(
+      attachResult(CHAT, 2, historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])))),
+    );
+    await opening;
+    await settled();
+    const before = renders;
+    attach.onFrame(frame(CHAT, 2, [ev.message("t1.m1", "a")]));
+    attach.onFrame(frame(CHAT, 3, [ev.message("t1.m1", "b")]));
+    expect(renders).toBe(before + 2);
+    store.close();
   });
 });
 

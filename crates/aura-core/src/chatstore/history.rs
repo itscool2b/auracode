@@ -18,7 +18,7 @@
 //! piece), so a 50 MB turn arrives in pages and the next page continues inside a cut turn the same
 //! way. Sizes are payload bytes (`octet_length`), which SQLite reads from the record header.
 
-use aura_protocol::session::{HistoryItem, HistoryPage};
+use aura_protocol::session::{HistoryItem, HistoryPage, TurnAgent};
 use aura_protocol::{AuraEvent, StopReason};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -117,6 +117,7 @@ pub(crate) fn page(
             .query_row(params![chat_id, lo], |_| Ok(()))
             .optional()?
             .is_some();
+    let turn_agents = turn_agents(conn, chat_id, lo, cursor)?;
     Ok(HistoryPage {
         chat_id: chat_id.to_owned(),
         items,
@@ -125,7 +126,43 @@ pub(crate) fn page(
         cut_turn_id,
         unsaved_from: None,
         skipped,
+        turn_agents,
     })
+}
+
+/// The agent of every turn with rows in `lo..cursor`, by the rule conversation and sync use: the
+/// agent a synced turn names, else its agent session's, else the chat's. A turn that resolves to
+/// no agent is left out (the interface then shows the chat's agent).
+fn turn_agents(
+    conn: &Connection,
+    chat_id: &str,
+    lo: u32,
+    cursor: u32,
+) -> rusqlite::Result<Vec<TurnAgent>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.id, COALESCE(t.source_agent, s.agent_id, c.active_agent, '') FROM turns t \
+         JOIN chats c ON c.id = t.chat_id LEFT JOIN agent_sessions s ON s.id = t.agent_session_id \
+         WHERE t.chat_id = ?1 AND t.id IN (SELECT DISTINCT turn_id FROM events WHERE chat_id = ?1 \
+         AND seq >= ?2 AND seq < ?3 AND turn_id IS NOT NULL) ORDER BY t.seq",
+    )?;
+    let rows = stmt.query_map(params![chat_id, lo, cursor], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut agents = Vec::new();
+    for row in rows {
+        let (turn_id, agent_id) = row?;
+        if agent_id.is_empty() {
+            continue;
+        }
+        let agent_name = aura_agents::get(&agent_id)
+            .map_or_else(|| agent_id.clone(), |spec| spec.name.to_owned());
+        agents.push(TurnAgent {
+            turn_id,
+            agent_id,
+            agent_name,
+        });
+    }
+    Ok(agents)
 }
 
 /// Step 1: the turn ranges below the cursor, newest first.
@@ -281,6 +318,56 @@ mod tests {
 
     fn seqs(page: &HistoryPage) -> Vec<u32> {
         page.items.iter().map(|item| item.seq).collect()
+    }
+
+    /// Each turn keeps the agent that ran it after the chat switches agents: its agent session's,
+    /// else the agent a synced turn names, else the chat's current agent.
+    #[test]
+    fn history_pages_name_the_agent_of_each_turn() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        let mut next = 0;
+        for ordinal in 1..=3 {
+            next = turn(&db, &chat, ordinal, next, 1, 10);
+        }
+        db.conn()
+            .execute_batch(&format!(
+                "INSERT INTO agent_sessions (id, chat_id, agent_id, cwd, created_at, updated_at, device_id) \
+                 VALUES ('s-claude', '{chat}', 'claude', '/work', 1, 1, 'dev'); \
+                 UPDATE turns SET agent_session_id = 's-claude' WHERE id = 'turn-00001'; \
+                 UPDATE turns SET source_agent = 'pi' WHERE id = 'turn-00002'; \
+                 UPDATE chats SET active_agent = 'codex' WHERE id = '{chat}';"
+            ))
+            .expect("agents");
+        let page = page(db.conn(), &chat, next, DEFAULT_PAGE_BYTES).expect("page");
+        let agents: Vec<(&str, &str, &str)> = page
+            .turn_agents
+            .iter()
+            .map(|agent| {
+                (
+                    agent.turn_id.as_str(),
+                    agent.agent_id.as_str(),
+                    agent.agent_name.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            agents,
+            [
+                ("turn-00001", "claude", "Claude Code"),
+                ("turn-00002", "pi", "Pi"),
+                ("turn-00003", "codex", "Codex"),
+            ]
+        );
+        // Only turns with rows in the page are named.
+        let older = page_before(&db, &chat, 3);
+        assert_eq!(older.len(), 1);
+    }
+
+    fn page_before(db: &TestDb, chat: &str, cursor: u32) -> Vec<TurnAgent> {
+        page(db.conn(), chat, cursor, DEFAULT_PAGE_BYTES)
+            .expect("page")
+            .turn_agents
     }
 
     #[test]

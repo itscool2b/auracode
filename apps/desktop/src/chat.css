@@ -781,6 +781,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-notice[data-level="error"]::before {
@@ -820,6 +821,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-red);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-block[data-kind="error"] .ui-pre {
@@ -1121,6 +1123,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-request-scope {
@@ -2112,6 +2115,7 @@
   height: 6px;
   margin: 0 var(--g-space-6);
   background-color: var(--g-red);
+  border-radius: var(--g-radius-pill);
 }
 
 /*

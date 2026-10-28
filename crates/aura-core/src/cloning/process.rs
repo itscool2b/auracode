@@ -174,7 +174,11 @@ async fn run(
 }
 
 fn spec(prepared: &Prepared) -> SpawnSpec {
-    let folder = prepared.parent.clone();
+    // Git starts in the new, empty folder and may not look above it, so a repository that
+    // happens to contain the chosen parent cannot lend its config (an SSH command, a credential
+    // helper, fsmonitor) to the clone. The person's global config still applies.
+    let folder = prepared.parent.join(&prepared.name);
+    let ceiling = plain_path(&prepared.parent).into_os_string();
     SpawnSpec {
         launch: LaunchSpec {
             label: "git clone".into(),
@@ -183,7 +187,10 @@ fn spec(prepared: &Prepared) -> SpawnSpec {
             cwd: ProcessCwd::Fixed(folder.clone()),
             // No terminal is attached, so Git must not wait for one. Credential helpers and
             // SSH agents the person set up still answer, in their own windows if they have any.
-            set_env: vec![("GIT_TERMINAL_PROMPT".into(), "0".into())],
+            set_env: vec![
+                ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+                ("GIT_CEILING_DIRECTORIES".into(), ceiling),
+            ],
             daemons: vec![],
             startup_timeout: Duration::from_secs(15),
         },

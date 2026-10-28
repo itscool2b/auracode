@@ -1,16 +1,10 @@
 /**
  * Small, dependency-free motion helpers for the website. Every moving thing here pauses while it is
  * offscreen or the tab is hidden, and stops for prefers-reduced-motion. Measured timings live in
- * docs/design/visual-language.md (3.8) and the Graphite tokens.
+ * docs/design/visual-language.md (3.8) and the Graphite tokens; the swimmers have their own clock
+ * in @auracode/ui (Swimmers).
  */
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type RefObject, useEffect, useState, useSyncExternalStore } from "react";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
@@ -26,23 +20,6 @@ export function useReducedMotion(): boolean {
     subscribeReduced,
     () => window.matchMedia(REDUCED).matches,
     () => false,
-  );
-}
-
-/** Whether a media query matches, live. `fallback` on the server and during hydration. */
-export function useMedia(query: string, fallback = false): boolean {
-  const subscribe = useCallback(
-    (onChange: () => void) => {
-      const media = window.matchMedia(query);
-      media.addEventListener("change", onChange);
-      return () => media.removeEventListener("change", onChange);
-    },
-    [query],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(query).matches,
-    () => fallback,
   );
 }
 
@@ -84,59 +61,4 @@ export function useInView(
     return () => observer.disconnect();
   }, [ref, rootMargin, threshold]);
   return inView;
-}
-
-/**
- * A value derived from an element's position as the page scrolls, recomputed at most once a frame
- * and quantised to `step` so React renders only when it changes.
- */
-export function useScrollValue(
-  ref: RefObject<Element | null>,
-  compute: (rect: DOMRect, viewport: number) => number,
-  { step = 0.005, initial = 0 }: { step?: number; initial?: number } = {},
-): number {
-  const [value, setValue] = useState(initial);
-  const mapping = useRef(compute);
-  mapping.current = compute;
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    let frame = 0;
-    const measure = () => {
-      frame = 0;
-      const raw = mapping.current(node.getBoundingClientRect(), window.innerHeight);
-      const next = Math.round(Math.min(1, Math.max(0, raw)) / step) * step;
-      setValue((previous) => (Math.abs(previous - next) < step / 2 ? previous : next));
-    };
-    const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(measure);
-    };
-    measure();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-    return () => {
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, [ref, step]);
-  return value;
-}
-
-/** A cubic-bezier easing as a function of time in [0, 1], for JavaScript-driven tweens. */
-export function bezier(x1: number, y1: number, x2: number, y2: number): (t: number) => number {
-  const sample = (a: number, b: number, t: number) =>
-    3 * a * (1 - t) * (1 - t) * t + 3 * b * (1 - t) * t * t + t * t * t;
-  return (x) => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 24; i++) {
-      const mid = (lo + hi) / 2;
-      if (sample(x1, x2, mid) < x) lo = mid;
-      else hi = mid;
-    }
-    return sample(y1, y2, (lo + hi) / 2);
-  };
 }
