@@ -36,18 +36,37 @@
   height: var(--ui-titlebar-height);
 }
 
-/* The main pane: one opaque surface inset from the window, with a hairline ring. */
+/*
+ * The main pane (Shallows, 6.1): one rounded, opaque panel inset from the black window, with a calm
+ * rim lit along its top edge and a faint light falling from the top, as the water's does. The chat
+ * and New chat sit in it (Settings and Diagnostics draw the same pane); the sidebar stays on the
+ * black base. The rim is drawn outside the pane, so nothing inside can cover it.
+ */
 .chat-main {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   margin: var(--ui-pane-inset) var(--ui-pane-inset) var(--ui-pane-inset) 0;
   overflow: hidden;
-  border-radius: var(--g-radius-12);
+  border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow: 0 0 0 1px var(--g-line);
+  box-shadow:
+    0 0 0 1px var(--ui-pane-rim),
+    inset 0 1px 0 var(--ui-pane-rim-top);
+}
+
+/* The light: painted under the pane's content, never over a word. */
+.chat-main::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 280px;
+  background-image: radial-gradient(72% 100% at 50% 0, var(--ui-pane-light), transparent);
+  pointer-events: none;
 }
 
 .chat-main > .chat-drag {
@@ -91,6 +110,10 @@
     box-shadow: none;
   }
 
+  .chat-main:has(.changes-panel)::before {
+    content: none;
+  }
+
   .chat-main:has(.changes-panel) > .chat-view {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -101,12 +124,12 @@
   .chat-main:has(.changes-panel) .chat-header {
     grid-column: 1;
     grid-row: 1;
-    border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
+    border-radius: var(--ui-pane-radius) var(--ui-pane-radius) 0 0;
     background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--g-line),
-      inset -1px 0 var(--g-line),
-      inset 0 1px var(--g-line);
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 1px var(--ui-pane-rim-top);
   }
 
   .chat-main:has(.changes-panel) .chat-work-area {
@@ -117,20 +140,22 @@
     grid-column: 1;
     grid-row: 2;
     overflow: hidden;
-    border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
+    border-radius: 0 0 var(--ui-pane-radius) var(--ui-pane-radius);
     background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--g-line),
-      inset -1px 0 var(--g-line),
-      inset 0 -1px var(--g-line);
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 -1px var(--ui-pane-rim);
   }
 
   .chat-main:has(.changes-panel) .changes-panel {
     grid-column: 2;
     grid-row: 1 / span 2;
     border-left: 0;
-    border-radius: var(--g-radius-12);
-    box-shadow: 0 0 0 1px var(--g-line);
+    border-radius: var(--ui-pane-radius);
+    box-shadow:
+      0 0 0 1px var(--ui-pane-rim),
+      inset 0 1px 0 var(--ui-pane-rim-top);
   }
 
   /* The panel's drag handle fills the gutter between the two panes. */

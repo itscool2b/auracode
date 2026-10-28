@@ -27,9 +27,12 @@
   min-width: 0;
   margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
   overflow: auto;
-  border-radius: var(--g-radius-12);
+  /* The chat's pane (6.1): rounded, a calm rim outside it and its top edge lit. */
+  border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  box-shadow:
+    0 0 0 1px var(--ui-pane-rim),
+    inset 0 1px 0 var(--ui-pane-rim-top);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
