@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AGENT_NAMES } from "../agents";
 import { useReducedMotion } from "../motion";
+import { Arrow } from "../ui";
 
 const agentList = `${AGENT_NAMES.slice(0, -1).join(", ")} and ${AGENT_NAMES.at(-1) ?? ""}`;
 
@@ -36,77 +37,23 @@ const QUESTIONS: readonly { question: string; answer: string }[] = [
   },
 ];
 
-const OPEN = 300;
-const SLIDE = 270;
-const QUINT = "cubic-bezier(0.23, 1, 0.32, 1)";
+/** How long an answer takes to close; it opens over the same 300ms (--g-dur-panel). */
+const CLOSE = 300;
 
 /**
- * X Money's FAQ ("Your questions, answered"): the two-tone heading and one pill at left, six rows
- * at right on the tiles' third column. One row open at a time, opening over 300ms, and the open
- * row's tinted well slides
- * from the old row to the new one in about 270ms. Built on <details>, so every answer opens without
- * JavaScript; the script only adds the motion and keeps one row open.
+ * Vercel's FAQ, clean: the two-tone heading and a quiet link at left, six questions on hairlines
+ * at right, one open at a time. Built on <details>, so every answer opens without JavaScript; the
+ * script adds the eased open and close and keeps one row open.
  */
 export function Faq() {
   const list = useRef<HTMLDivElement>(null);
-  const well = useRef<HTMLSpanElement>(null);
   const reduced = useReducedMotion();
 
   useEffect(() => {
     const root = list.current;
-    const shade = well.current;
-    if (!root || !shade) return;
+    if (!root) return;
     const items = Array.from(root.querySelectorAll<HTMLDetailsElement>("details.faq-item"));
     const timers = new Set<number>();
-    const later = (fn: () => void, ms: number) => {
-      if (ms <= 0) return fn();
-      const id = window.setTimeout(() => {
-        timers.delete(id);
-        fn();
-      }, ms);
-      timers.add(id);
-    };
-    const summary = (item: HTMLDetailsElement) => item.querySelector("summary");
-    const inner = (item: HTMLDetailsElement) => item.querySelector<HTMLElement>(".faq-answer");
-    const gap = () => Number.parseFloat(getComputedStyle(root).rowGap) || 0;
-    const current = () => items.find((item) => item.open && item.dataset.state !== "closing");
-
-    /** Where `target` will sit once it is the only open row. */
-    const settled = (target: HTMLDetailsElement) => {
-      let top = 0;
-      for (const item of items) {
-        if (item === target) break;
-        top += (summary(item)?.offsetHeight ?? 0) + gap();
-      }
-      const height = (summary(target)?.offsetHeight ?? 0) + (inner(target)?.scrollHeight ?? 0);
-      return { top, height };
-    };
-
-    const place = (
-      target: HTMLDetailsElement | undefined,
-      from?: { top: number; height: number },
-    ) => {
-      if (!target) {
-        shade.style.opacity = "0";
-        return;
-      }
-      const to = settled(target);
-      const showing = shade.style.opacity === "1";
-      shade.style.top = `${to.top}px`;
-      shade.style.height = `${to.height}px`;
-      shade.style.opacity = "1";
-      if (from && showing && !reduced && to.height > 0) {
-        shade.animate(
-          [
-            {
-              transform: `translateY(${from.top - to.top}px) scaleY(${from.height / to.height})`,
-            },
-            { transform: "none" },
-          ],
-          { duration: SLIDE, easing: QUINT },
-        );
-      }
-    };
 
     const open = (item: HTMLDetailsElement) => {
       item.dataset.state = "opening";
@@ -118,66 +65,45 @@ export function Faq() {
     };
     const close = (item: HTMLDetailsElement) => {
       item.dataset.state = "closing";
-      later(
-        () => {
-          if (item.dataset.state !== "closing") return;
-          item.open = false;
-          delete item.dataset.state;
-        },
-        reduced ? 0 : OPEN,
-      );
-    };
-
-    const toggle = (item: HTMLDetailsElement) => {
-      const was = current();
-      const from = was ? { top: was.offsetTop, height: was.offsetHeight } : undefined;
-      if (was === item) {
-        close(item);
-        place(undefined);
-        return;
-      }
-      if (was) close(was);
-      open(item);
-      place(item, from);
+      const finish = () => {
+        if (item.dataset.state !== "closing") return;
+        item.open = false;
+        delete item.dataset.state;
+      };
+      if (reduced) return finish();
+      const id = window.setTimeout(() => {
+        timers.delete(id);
+        finish();
+      }, CLOSE);
+      timers.add(id);
     };
 
     const handlers = items.map((item) => {
+      const summary = item.querySelector("summary");
       const onClick = (event: Event) => {
         event.preventDefault();
-        toggle(item);
+        const showing = item.open && item.dataset.state !== "closing";
+        for (const other of items) if (other !== item && other.open) close(other);
+        if (showing) close(item);
+        else open(item);
       };
-      // Find in page can open a row natively; keep one open and the well on it.
+      // Find in page can open a row natively; keep one open.
       const onToggle = () => {
         if (!item.open || item.dataset.state) return;
         for (const other of items) if (other !== item && other.open) close(other);
         item.dataset.state = "open";
-        place(item);
       };
-      summary(item)?.addEventListener("click", onClick);
+      summary?.addEventListener("click", onClick);
       item.addEventListener("toggle", onToggle);
       return () => {
-        summary(item)?.removeEventListener("click", onClick);
+        summary?.removeEventListener("click", onClick);
         item.removeEventListener("toggle", onToggle);
       };
     });
 
-    for (const item of items) if (item.open) item.dataset.state = "open";
-    place(current());
-    root.dataset.well = "";
-    const resize =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(() => {
-            const shown = current();
-            if (shown && shown.dataset.state === "open") place(shown);
-          });
-    resize?.observe(root);
-
     return () => {
       for (const off of handlers) off();
       for (const id of timers) window.clearTimeout(id);
-      resize?.disconnect();
-      delete root.dataset.well;
     };
   }, [reduced]);
 
@@ -188,14 +114,13 @@ export function Faq() {
           <h2 id="faq-title" className="title">
             Questions, answered. <span>Before you install.</span>
           </h2>
-          <a className="g-button g-button-outline g-button-36" href="/privacy">
-            Privacy notice
+          <a className="text-link faq-link" href="/privacy">
+            Privacy notice <Arrow />
           </a>
         </div>
-        <div className="faq-list" ref={list}>
-          <span className="faq-well" ref={well} aria-hidden="true" />
-          {QUESTIONS.map((item, i) => (
-            <details className="faq-item" key={item.question} open={i === 0}>
+        <div className="faq-list" ref={list} data-reveal="">
+          {QUESTIONS.map((item) => (
+            <details className="faq-item" key={item.question}>
               <summary>
                 <span className="faq-question">{item.question}</span>
                 <span className="faq-icon" aria-hidden="true">

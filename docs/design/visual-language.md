@@ -2,10 +2,12 @@
 
 Status: **Graphite replaces Orbit on 2026-10-26 (owner decision).** The product is **dark only**
 (desktop, onboarding and website): no light theme, no system switching, no appearance setting. One
-accent, **volt** `#CCFF33`, means look here. The signature is a **live ordered-dither field**.
-The foundation ships in `@auracode/ui/graphite` (tokens, stylesheet, `DitherField`, `AgentMark`,
-`Logo`, `Wordmark`, `StatusDot`, `PixelLoader`, `Keycap`, `CopyButton`); the website and the
-desktop app adopt it next. Every number here is meant to be built as written. Motion values are
+accent, **volt** `#CCFF33`, means look here. **Shallows replaces the dither field as the brand
+surface on 2026-10-28 (owner decision):** lit water seen from below, with seals and turtles passing
+as dark silhouettes (4.16). The foundation ships in `@auracode/ui/graphite` (tokens, stylesheet,
+`Shallows`, `Swimmers`, `Creature`, `AgentMark`, `Logo`, `Wordmark`, `StatusDot`,
+`PixelLoader`, `Keycap`, `CopyButton`, and `DitherField` until the app no longer uses it). The
+website is built in Shallows; the desktop app moves next. Every number here is meant to be built as written. Motion values are
 measured on the reference sites (`target/design-research/motion.md`, captured 2026-10-26); the
 few that are not are marked *provisional*.
 
@@ -19,6 +21,12 @@ sentences with real numbers, tool-row grammar, receipts, cards that take the com
 keyboard everywhere), restated in section 6. `@auracode/ui/orbit` stays only for the Design Lab
 and for screens not yet moved.
 
+**Dither history.** From 2026-10-26 to 2026-10-28 the signature was a live ordered-dither field
+with pixel-art seals and turtles swimming through it. The owner rejected it as a messy background,
+and the creatures glitched as they eased away from the pointer. Shallows keeps the animals and the
+calm and drops the texture: one grey fade, flat silhouettes, transform-only motion. The website no
+longer uses or ships the dither engine (4.15 documents the component while the app still uses it).
+
 ---
 
 ## 1. Direction and thesis
@@ -26,27 +34,27 @@ and for screens not yet moved.
 **Name:** Graphite. **Id:** `graphite`.
 
 **Thesis:** a black instrument with one living surface. Type and hairlines do the work, a grey
-ladder carries every hierarchy, the only living thing is a field of ordered-dither pixels, and the
-only colour is the thing that needs you.
+ladder carries every hierarchy, the only living thing is the water, lit from the top with seals
+and turtles passing through it, and the only colour is the thing that needs you.
 
 1. **Type does the work.** Geist at integer weights (400, 500, 600), solid colours, two-tone
    headlines at one size. Geist Mono only for what a machine made.
-2. **Pixels are the ornament.** Everything decorative is square pixels on whole CSS pixels: the
-   dither field, the 2x3 loader, the pixel check. No curves for decoration, no glow, no gradient,
-   no glass, no blur. The logo (4.14) is one curved shape and status dots are the other: a flat
-   circle on whole pixels says a state, never decorates.
+2. **Shallows is the ornament.** The one decorative surface is the lit water (4.16): a single
+   grey fade with the logo's seal and turtle drawn as flat silhouettes. Machine state keeps its
+   small pixel marks (the 2x3 loader, the pixel check). No glow, no glass, no texture, no noise;
+   the one blur softens a far swimmer, painted once.
 
 **Status dots are circles (owner decision, 2026-10-28).** Wherever this document says a volt, red,
 green, white or grey square marks a state (needs you, failed, running, found, not installed, a
 project, an attention mark on a control), read a dot: the same size, a flat circle centred on whole
 pixels, no ring or glow (an empty "not installed" mark is a 1px ring). Pixels, loader cells, the
 pixel check, diffstat squares, list bullets, plan nodes and the Stop square stay square.
-3. **One accent, one meaning.** Volt marks needs-you, live and new, the glint and rare lit pixels
-   in the field. It is never a fill larger than a chip and never a button.
+3. **One accent, one meaning.** Volt marks needs-you, live and new, and the glint. It is never a
+   fill larger than a chip and never a button.
 4. **Structure from hairlines and value steps** (Vercel, X Money, Aside), not from cards and
    shadows. One soft shadow exists, for things that float.
-5. **Motion only on events.** The dither field is the single ambient motion, and it stops for
-   reduced motion, for hidden pages and offscreen.
+5. **Motion only on events.** The swimmers and the water's shimmer are the single ambient
+   motion, and they stop for reduced motion, for hidden pages and offscreen.
 6. **Crisp everywhere.** Solid text colours, integer weights, no positive tracking on small text,
    whole-pixel geometry, 14px minimum for UI text.
 
@@ -63,13 +71,13 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
-| Centred two-line hero; one word rotates every 3000ms, letters leave up 14px and arrive from 14px below 25ms apart (250ms, `cubic-bezier(0.16, 1, 0.3, 1)`); a 3px underline 4px below draws in over 800ms; a glint sweeps it in 3000ms linear, 400ms after each swap (measured; recoloured to one volt band) | Hero headline with the agent name rotating (5.3) | Empty state agent switch (6.13) |
+| Centred two-line hero; one word rotates every 3000ms, letters leave up 14px and arrive from 14px below 25ms apart (250ms, `cubic-bezier(0.16, 1, 0.3, 1)`); a 3px underline 4px below draws in over 800ms; a glint sweeps it in 3000ms linear, 400ms after each swap (measured; recoloured to one volt band) | Hero headline with the agent name rotating (5.3); the underline and its glint were dropped on 2026-10-28 | Empty state agent switch (6.13) |
 | Load choreography: pill 320ms at 320, words from 100 plus 55 per word, lead 380ms at 580, CTAs 380ms at 700, tiles 1250ms at 760, all `cubic-bezier(0.22, 1, 0.36, 1)` (measured) | Hero entrance (5.3) | None |
 | Announcement pill: chip, sentence, arrow coin | **Not taken** until a release is published (5.3) | None |
 | White primary pill beside a dark secondary pill; colour 150ms `cubic-bezier(0.4, 0, 0.2, 1)`, no scale on press (measured) | One primary pill per section: hero, closing (5.3, 5.9) | Primary and outline buttons (4.1) |
-| Film card: a centred one-line heading, a large rounded card, "Play" and a caption line in large type | Film card replaying one turn (5.6) | None |
+| Film card: a centred one-line heading, a large rounded card, "Play" and a caption line in large type | **Removed** on 2026-10-28: the capabilities panel shows the product (5.4) | None |
 | Terminal card: mono, line numbers, "Thought for 4.1s"; 2x3 dot loader on a 660ms cycle (measured) | Product fragments in the film card and tiles (5.6, 5.7) | Code wells, the thinking line, `PixelLoader` (4.5, 6.4) |
-| Sparse footer: the brand at left, link columns at right | Footer, the brand drawn as the giant logo (5.10) | None |
+| Sparse footer: the brand at left, link columns at right | Footer (5.7); its giant logo was removed on 2026-10-28 | None |
 
 ### 2.2 X Money (money.x.com): two tones, tiles, FAQ, shimmer
 
@@ -77,9 +85,9 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 |---|---|---|
 | Two-tone stacked heading, same size and weight, second line grey | Every section heading (5) | Empty state, settings titles, onboarding (6) |
 | Per-word flip-up: from `translateY(45%) rotateX(-40deg)` in a 1200px perspective, 650ms `cubic-bezier(0.23, 1, 0.32, 1)`, 100ms then 55ms per word (measured, identical at x.ai) | `.g-rise` on the hero and section headings (4.12) | Onboarding headings (6.17) |
-| Recessed square tiles holding miniature real UI, the text set against each tile's bottom edge, one wide tile with a two-way toggle; hovering one dims the others to 0.5 over 500ms `cubic-bezier(0.32, 0.72, 0, 1)` (measured) | Staggered tiles with the checkpoint toggle (5.7) | Settings usage tiles (6.16) |
+| Recessed square tiles holding miniature real UI, the text set against each tile's bottom edge, one wide tile with a two-way toggle; hovering one dims the others to 0.5 over 500ms `cubic-bezier(0.32, 0.72, 0, 1)` (measured) | **Removed** on 2026-10-28 for the capabilities panel (5.4) | Settings usage tiles (6.16) |
 | Hairlines across the full column between sections | **Not taken**: sections are separated by space (5.1) | Settings groups (6.16) |
-| FAQ accordion: 300ms ease-out-quint, the open row's tinted well slides between rows in about 270ms, the icon turns 90 degrees in 200ms (measured) | FAQ (5.8) | Advanced settings, expanded tool rows (6.4) |
+| FAQ accordion: 300ms ease-out-quint, the open row's tinted well slides between rows in about 270ms, the icon turns 90 degrees in 200ms (measured) | FAQ, now on Vercel's hairlines (5.5) | Advanced settings, expanded tool rows (6.4) |
 | Grey-on-grey text shimmer: 100deg band, 250% wide, 1400ms linear (measured) | None | Thinking, running, live verbs (4.12) |
 | Success check drawn in 250ms (measured) | None | `AgentMark` done check (4.13) |
 
@@ -87,10 +95,10 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
-| Timer-driven vertical word wheel: one row step every 1100ms (600ms move on `cubic-bezier(0.7, 0, 0.7, 0.7)`, 500ms hold), 7 visible rows, opacity by distance 1, 0.6, 0.3, 0.1 (measured from the archived source) | **Not taken** since the landing study (5.12): the hero rotates the agent name | None |
-| "Top performers" triptych: three tall textured tiles, a sentence-case title and grey paragraph under each | **Not taken** since the landing study (5.12): its captions live in the tiles (5.7) | None |
+| Timer-driven vertical word wheel: one row step every 1100ms (600ms move on `cubic-bezier(0.7, 0, 0.7, 0.7)`, 500ms hold), 7 visible rows, opacity by distance 1, 0.6, 0.3, 0.1 (measured from the archived source) | **Not taken** since the landing study (5.10): the hero rotates the agent name | None |
+| "Top performers" triptych: three tall textured tiles, a sentence-case title and grey paragraph under each | **Not taken** since the landing study (5.10): its captions became the capability rows (5.4) | None |
 | Stats with a rule above each number (Harvey's is 2px with 32px above the numeral) | **Not taken** | Usage settings (6.16) |
-| Capability list whose active item's 2px rule fills as a timer: 7500ms linear by `translateX(-100%)` to 0, paused on hover, switch 300ms `cubic-bezier(0.7, 0, 0.3, 1)` (measured) | **Not taken** on the website: the film card tells the turn (5.6) | Plan strip progress (6.5) |
+| Capability list whose active item's 2px rule fills as a timer: 7500ms linear by `translateX(-100%)` to 0, paused on hover, switch 300ms `cubic-bezier(0.7, 0, 0.3, 1)` (measured) | Capabilities panel: the active row's 2px timer runs 6.5s, held while hovered or focused (5.4) | Plan strip progress (6.5) |
 | Nav hover dims the siblings over 300ms `cubic-bezier(0.3, 0.3, 0.3, 1)` (measured) | Nav (5.2) | None |
 | Slow-settling button hover: 300ms `cubic-bezier(0, 0.7, 0.3, 1)`, 90% by 120ms, settled near 240ms (measured) | All buttons (4.1) | All buttons (4.1) |
 | Harvey's serif | **Not taken.** Graphite is one grotesk | Not taken |
@@ -102,8 +110,8 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 | Content column framed by full-height 1px side rules (1248px column, measured) | **Not taken**: no column rules (5.1) | None |
 | Bold lead sentence, grey continuation, one paragraph | Feature copy, intro paragraphs (4.12) | Settings descriptions, onboarding (6) |
 | Rows entering: 8px rise, 340ms `cubic-bezier(0.22, 1, 0.36, 1)`, 70ms apart (measured) | `.g-enter` on rows (4.12) | Ledger and roster rows (6.13, 6.17) |
-| Rows on hairlines with a segmented control | Spec rows on the download cards, account lists (5.11) | Settings, right panel tabs (6.14, 6.16) |
-| Closing panel: a centred two-line statement and one download pill in one rounded panel | Closing panel (5.9) | None |
+| Rows on hairlines with a segmented control | Spec rows on the download cards, account lists (5.9) | Settings, right panel tabs (6.14, 6.16) |
+| Closing panel: a centred two-line statement and one download pill in one rounded panel | Closing panel, as lit water (5.6) | None |
 | Composer control row of quiet text controls | None | Composer (6.9) |
 
 ### 2.5 Vercel: grid frames, cells, real fragments
@@ -111,8 +119,8 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
 | Hairline grid frames with "+" crosshairs on the corners: 21px crosses with 10px arms in `#878787`, guides at white 9% (measured) | **Not taken**: no guides or crosshairs (5.1) | None |
-| One frame of joined panels divided by its own rule | **Not taken** since the landing study (5.12) | Settings agent roster (6.16) |
-| Mocks built from real UI fragments: timelines, agent tables, status dots | The sessions tile (5.7) | The same components, live (6) |
+| One frame of joined panels divided by its own rule | **Not taken** since the landing study (5.10) | Settings agent roster (6.16) |
+| Mocks built from real UI fragments: timelines, agent tables, status dots | The capabilities views (5.4) | The same components, live (6) |
 | Geist everywhere; command pill with copy | Geist everywhere (5.1) | Code blocks (4.8) |
 | Dark buttons `#0A0A0A` to `#1F1F1F` in 150ms; footer links in 100ms (measured) | `--g-dur-fast`, `--g-dur-micro` (3.8) | Rows and icon buttons |
 
@@ -120,9 +128,8 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 
 The report sets the bar for distinctiveness: giant edge-to-edge type, dithered and pixel imagery,
 big numerals split by rules, numerals counting up in about 950ms (measured). We copy none of its
-artwork or layout; its dither is a baked video, ours is drawn live. Our answers to the bar are the
-dither field (4.15) with its seals and turtles (5.4) and the giant logo the field forms in the
-footer (5.10).
+artwork or layout. Our answer to the bar is Shallows (4.16): the sea seen from below, with the
+logo's own seal and turtle swimming through it, calm enough to sit behind a headline.
 
 ### 2.7 What we leave behind
 
@@ -237,7 +244,7 @@ cap-aligned), because Geist has no `sups`.
 
 **Website scale**
 
-Measured against the reference landing pages (5.12) and stepped rather than fluid, so every size
+Measured against the reference landing pages (5.10) and stepped rather than fluid, so every size
 and line height sits on the 4px grid at phone (under 640px), tablet and desktop (1024px and up)
 widths. The site sets these in `apps/web/app/site.css`; the shared `--g-web-*` tokens stay as they
 are for other consumers.
@@ -359,11 +366,12 @@ Staggers: `--g-stagger` 55ms per headline word (after a 100ms lead), `--g-stagge
 rotating letter, `--g-stagger-row` 70ms per entering row. Press never scales (none of the five
 reference sites does).
 
-No springs, no overshoot, no bounce. Nothing idles, breathes, pulses, floats or parallaxes; the
-dither field (4.15) is the one ambient motion. Only `opacity`, `transform`, colour and
-`background-position` (shimmer, glint) animate; never `height`, `top`, `left`, margins, blur or
-`transition: all`. One exception: the hero's rotating word slot morphs its `width` over 300ms
-`--g-ease-out` (x.ai), because re-centring the line by transform would distort the type.
+No springs, no overshoot, no bounce. Nothing idles, breathes, pulses or parallaxes; the swimmers
+and the shimmer of Shallows (4.16) are the one ambient motion, and they glide rather than loop.
+Only `opacity`, `transform`, colour and `background-position` (shimmer, glint) animate; never
+`height`, `top`, `left`, margins, blur or `transition: all`. Since 2026-10-28 the hero's rotating
+word no longer morphs its slot's `width`: the slot takes the new width at once and the line glides
+to its new centre by a FLIP transform.
 
 **Reduced motion** is the OS setting or the app's own (`setMotionPreference` in `motion.ts` writes
 `html[data-motion="reduced"|"off"]`; "full" never overrides the OS). Both are honoured in CSS and
@@ -373,8 +381,9 @@ in components. Movement durations (`letter`, `panel`, `row`, `step`, `headline`,
 transform; the rotating word stops on its first word with a static grey rule and no glint; the word
 wheel and tab timers stop advancing (the active tab shows a full rule); counters show their final
 values; the shimmer becomes static fg-2; rows render in place; the pixel check appears whole;
-loaders hold their static pattern; every DitherField renders one still frame and owns no animation
-frame, and a field that reveals content shows the content at once. Content is never hidden waiting
+loaders hold their static pattern; swimmers hold where they are and the shimmer stops; every
+DitherField renders one still frame and owns no animation frame, and a field that reveals content
+shows the content at once. Content is never hidden waiting
 for motion.
 
 ### 3.9 Layout tokens
@@ -630,10 +639,14 @@ The website builds:
 - `favicon.svg`;
 - `favicon.png` (32px);
 - `apple-touch-icon.png` (180px);
-- `og.png`, a 1200 x 630 social card with the logo at half height in a still dither field that
-  thins to black around it.
+- `og.png`, a 1200 x 630 social card: the lit water of Shallows with a turtle and a seal, and the
+  logo in fg-1 at the centre.
 
 ### 4.15 `DitherField`
+
+No longer the brand surface (2026-10-28): Shallows (4.16) replaced it. The website does not use or
+ship it; the app keeps it on its first-launch intro and onboarding until its Shallows branch lands,
+and the component stays in `@auracode/ui` until nothing uses it.
 
 The signature: a live ordered dither of an evolving field, on a 2D canvas (no WebGL).
 
@@ -713,179 +726,211 @@ build step can write the fallback PNG at one pixel per cell and the hand-off is 
 `children` and no scripting, the field steps aside (`@media (scripting: none)`). Give the field a
 size; it fills its box.
 
+### 4.16 Shallows, `Swimmers` and `Creature`
+
+The brand surface since 2026-10-28 (owner decision, direction B of three concepts): the sea seen
+from below. One rounded panel lit from the top like the water's surface, and seals and turtles
+passing above as dark silhouettes. It replaced the dither field (4.15), which the owner found
+messy, and the pixel sprites that glitched under the pointer.
+
+**`Shallows`** (`as`, `shimmer`, `depth`, and any HTML attributes). One panel, radius
+`--g-shallows-radius` 28px (`--g-shallows-radius-compact` 20px on phones), `overflow: hidden`,
+and a single vertical falloff over `--g-shallows-depth` (default the panel's height):
+`--g-water-surface` #1E1E1E, `--g-water-shallow` #161616 at 24%, `--g-water-mid` #0D0D0D at 50%,
+`--g-water-low` #080808 at 76%, `--g-water-deep` #050505. A soft light at the top centre
+(`--g-water-light`, white at 4.5%) and a 1px rim (`--g-water-rim`, white at 5%). No texture, no
+noise, no lines. `shimmer` adds one layer of caustic light near the surface (`--g-water-caustic`,
+white at 2.8%) that drifts 3% and scales 1.06 over 26s, alternate, transform only; it stops under
+reduced motion. Direct children sit above the light and the swimmers (`z-index: 1`, overridable).
+A quieter panel overrides the water tokens locally, as the website's capabilities panel does.
+
+**`Creature`** (`kind` "seal" or "turtle", `size`, `small`, `facing`, `label`). Flat silhouettes in
+the logo's language: a body with its flippers, head and tail set off by an even gap, and one eye
+hole on the seal. A harbour seal from the side (`SEAL_VIEWBOX` 320 by 130: round head, short
+muzzle, a slight neck, a plump body, one fore flipper, the hind flippers fanned into a V with
+dented ends) and a sea turtle from below (`TURTLE_VIEWBOX` 240 by 220: a teardrop shell, a round
+head, long sickle front flippers swept back, short paddle rear flippers, a stub of a tail). Each is
+one even-odd path of absolute M, C and Z commands, generated from splines through hand-placed
+points (`creatureGeometry.ts`, `scripts/creature-paths.ts`), so the gap is exact at any size. At
+64px and below the small variants (gaps of 9 and 10 units instead of 4 and 5, a larger eye) keep
+the shapes open. `currentColor`, decorative unless labelled.
+
+**`Swimmers`** (`swimmers`, `still`, `giveWay`, `className`). Fills its parent under the content and
+takes no pointer events. Each `SwimmerSpec` anchors a creature by fractions of the layer (`x`, `y`)
+with a CSS width (`size`), `depth` 0 to 1, `heading`, `speed`, `phase` and `tilt`.
+- **Path.** Cruising at an eased speed: a turtle surges 42% on each 5.6s stroke and glides between
+  strokes (9px a second), a seal swims more evenly (18% over 3.4s, 15px a second). Two slow sines
+  sway it 7 to 9px and drift it 5 to 6px; it pitches 30% of its path's slope (under 7 degrees). It
+  swims fully off one side, plus 32px, before it reappears on the other.
+- **Depth.** Near creatures are `--g-shade-near` #080808; far ones mix toward `--g-shade-far`
+  #121212 and soften by up to 2.4px of blur, painted once at raster time. The one blur in Graphite.
+- **Performance.** Transform only (`translate3d` and `rotate`) on a `will-change` layer, from the
+  shared frame clock, so the compositor moves raster that never repaints. The clock runs only while
+  the layer is on screen (64px margin) and the page is visible; a step is capped at 50ms so nothing
+  jumps after a hitch or a hidden tab. The server renders each creature at its anchor, and the first
+  live frame is the same frame. Measured on the website (Chromium, 1440 by 900): 0 frames over 25ms
+  while idle, sweeping the pointer across the creatures, scrolling and switching capabilities.
+- **The pointer.** Hover never flickers and never changes layout. With `giveWay` (default, fine
+  pointers only) a creature eases out of the pointer's way through a smooth field, read from the
+  layer's parent: zero under the pointer and far from it, at most 22px, eased over a 0.9s time
+  constant, so it can never snap or flip sides.
+- **Reduced motion and `still`.** No clock at all: creatures hold where they are.
+
 ---
 
 ## 5. Website composition (auracode.si)
 
-The home page follows the anatomy of the five reference landing pages (5.12): few sections, one
-idea each, big type, a lot of black. It has five sections, and each copies a named section of a
-reference page, with seals and turtles as our own addition:
+Since 2026-10-28 the home page is built in Shallows (4.16). It follows the anatomy of the reference
+landing pages (5.10): few sections, one idea each, big type, a lot of black, every section as clean
+as Vercel's. Four sections and a footer:
 
-| Section | Copies |
+| Section | Built from |
 |---|---|
-| Hero and product (5.3, 5.5) | x.ai's hero: centred two-line headline, one lead, the product right under it |
-| Film card (5.6) | x.ai's "The SpaceXAI team runs on Grok Bot" film card |
-| Staggered tiles (5.7) | X Money's "One app / Everything money can do" tiles |
-| FAQ (5.8) | X Money's "Your questions, answered" |
-| Closing panel (5.9) | Aside's "Crafted for both human and agent. Start using today." |
-| Footer (5.10) | x.ai's footer, with the brand drawn as a giant dithered logo |
+| Hero and product (5.3) | x.ai's centred hero and Aside's hero panel, as lit water |
+| Capabilities (5.4) | Harvey's timer tabs, in a Shallows panel |
+| FAQ (5.5) | Vercel's FAQ |
+| Closing panel (5.6) | Aside's closing panel, as lit water |
+| Footer (5.7) | Vercel's footer, minimal |
+
+The film card, its Play and Pause button, X Money's staggered tiles and the giant dithered footer
+logo were removed on 2026-10-28 at the owner's request.
 
 ### 5.1 Page, type and rhythm
 
 Black page, `.g-root` on `<html>`, body 16/24. One content column: 1200px with a 40px inset, so
-1120px of content from 1024px up, the width X Money's content uses; gutters of 16, 24 and 40px
-(3.9). The nav, every section and the footer share the column's edges. Sections are separated by
-space alone: 160px between sections on desktops, 128px on tablets and 96px on phones (3.3), never
-by rules: no column guides, no section or footer hairlines, no crosshairs. Headings sit 56px above
-their content on desktops (48 and 40 below). Prerendered; works without JavaScript: fields fall
-back to their images or step aside for their content, and the entrances are CSS gated on `.js`.
+1120px of content from 1024px up; gutters of 16, 24 and 40px (3.9). The hero panel spans the page,
+inset 12px from the viewport (8px on phones, `--edge`) with 28px of inner padding (20 on tablets,
+12 on phones, `--panel-pad`); the capabilities and closing panels sit on the column. Sections are
+separated by space: 160px on desktops, 128 on tablets and 96 on phones. Only the FAQ draws
+hairlines. Headings sit 56px above their content on desktops (48 and 40 below). Prerendered and
+whole without JavaScript: swimmers render at their anchors and stay still, the capabilities panel
+shows its first row, the FAQ opens natively, and the entrances are CSS gated on `.js`.
 
-Type uses the website scale (3.2): the display size for the hero, one heading size for every
-section and inner page title, two-tone (the statement in fg-1, its continuation in fg-3 on its own
-line; the film card's one-line heading keeps both on one line), one lead, and captions as a 14/20
-500 fg-1 title over 14/20 fg-3 text, as X Money sets its tile captions.
-
-Every padded box lands on the 4px grid at 1440: the tiles are 268px columns 16px apart, the product
-frame's height rounds up to the grid (`round(up, 62.5cqw, 4px)`), and pills whose label would leave
-them between pixels take a whole-pixel minimum width (120px for the 44px CTAs, 96px in the nav).
-Centred boxes on a 390px phone sit on whole pixels; the 4px grid cannot hold there, because the
-viewport's centre is 195px.
+Type uses the website scale: the display at 72px on desktops, 56 on tablets and 36 to 40px on
+phones (`clamp(36px, 11.25vw, 40px)`, so "One window for" fits at 320px); one heading size, 40px,
+two-tone (the statement in fg-1, its continuation in fg-3 on its own line); one lead, 18/28 fg-2.
+Status dots on the site are circles.
 
 ### 5.2 Nav
 
-64px, sticky; transparent over the stage, black once scrolled, with no rule under it. Left:
-`Wordmark` 16 linking home. Right, as on Aside and x.ai: Changelog and Sign in as 14/20 500 fg-2
-links (hover fg-1; the sibling dims to fg-3 over 300ms `--g-ease-soft`, Harvey), then the one
-primary "Download" pill. Under 768px the links fold into a menu button opening a full-width sheet
-(Changelog, Sign in, Account); Download stays in the bar, as X Money keeps Sign In.
+64px, sticky, edge to edge like Vercel's, its content on the hero panel's inner edges (40px from
+the viewport on desktops, 32 on tablets, 20 on phones). It rests transparent on the hero's water at
+the top of the home page and turns black once the page scrolls, over 300ms, with no rule under it.
+Left: `Wordmark` 16 linking home. Right: Changelog and Sign in as 14/20 500 fg-2 links (hover fg-1;
+the sibling dims, Harvey), then the one primary "Download" pill, magnetic (5.8). Under 768px the
+links fold into a menu built on `<details>`; Download stays in the bar.
 
 ### 5.3 Hero
 
-The stage DitherField fills the hero and continues behind the product frame: `standard`, density
-0.4, `edges` 0.5, `ceiling` 0.78, `interactive`, its own seed. Three clearings: one measured around
-the headline, lead and button (1.55 times their half-width across and 1.7 times their half-height
-down; 3 and 1.8 on phones, where the copy fills the width), one along the product frame's top edge,
-and one fading the field out toward the stage's bottom edge. Seals and turtles swim through it
-(5.4). Centred over it, 120px under the nav (88 on phones):
+One `Shallows` panel with `shimmer`, pulled up under the nav so its top sits `--edge` below the
+viewport's top, its light falling off over 760px. Its water layer is 640px tall (380 on phones):
 
-- **Headline** (display, 72px on desktops): "One window for" / "Claude Code." The agent name
-  rotates every 3000ms through every designed agent (x.ai, measured): the old letters leave
-  last-first, 15ms apart, each fading and rising 0.23em in 250ms `--g-ease-out`; the new letters
-  arrive from 0.23em below, 25ms apart; the slot's width morphs to the new name in 300ms and the
-  underline follows it, its volt glint sweeping 400ms after each swap. The headline never reflows.
-  Reduced motion: no rotation.
-- **Lead** (18/28 fg-2, max 560, 32px under): "The coding agents you already use, together in one
+- a turtle at 16% across and 40% down, `clamp(112px, 17vw, 252px)`, tilted -10 degrees;
+- a seal swimming left at 80% and 28%, `clamp(150px, 23vw, 336px)`;
+- a far turtle (depth 0.7, 6px a second) at 72% and 66%, hidden on phones.
+
+Centred over the water, 172px below the panel's top (140 on phones):
+
+- **Headline**: "One window for" / "Claude Code." The agent name rotates every 3000ms through every
+  designed agent: the old letters rise 0.23em and fade, last first, 15ms apart over 250ms; the new
+  name arrives 25ms apart; the slot takes the new width at once and the line glides to its new
+  centre by a FLIP transform over 450ms `--g-ease-out`. No underline and no glint. The heading's
+  accessible name is "One window for your coding agents". Reduced motion: no rotation.
+- **Lead** (18/28 fg-2, max 540, 28px under): "The coding agents you already use, together in one
   chat on your machine. Free, with nothing to sign up for."
-- **One button** (40px under): primary 44 "Download". Sign in lives in the nav.
-- **Load choreography** (x.ai, measured): the headline words flip up (`.g-rise`) from 100ms, 55ms
-  apart; the underline draws over 800ms at 800ms; the lead fades in over 380ms at 580ms and the
-  button at 700ms; the product frame fades in over 1250ms at 760ms. Reduced motion: everything
-  present at first paint, words by the 150ms fade.
+- **One button** (36px under): the magnetic primary 44 "Download".
+- **Product** (88px under, 56 on phones): the real app (a captured screenshot, WebP sources, real
+  alt text), up to 1120px wide at 16:10, radius 16 (12 on phones), a white 8% ring and one long soft
+  shadow, with 96px of deep water below it (40 on phones).
 
-### 5.4 Seals and turtles
+**Entrance** (gated on `.js`): the light fades in over 1400ms; the headline's words rise
+(`.g-rise`, 650ms, 55ms apart from 120ms); the lead and the button rise 12px and fade in (700ms, at
+480 and 600ms); the swimmers fade in over 2400ms from 240ms; the product rises 40px from 0.985 over
+1200ms at 720ms. Where scroll-driven animation runs, the screenshot settles from 1.05 to 1 as it
+scrolls in. Reduced motion: everything present at first paint, the words by a 150ms fade.
 
-Sprites (4.15) drawn as pixel art in the field's greys: a sea turtle seen from above (31 by 34
-cells, four frames in which the front and rear flippers stroke in turn, 2.5 frames a second) and a
-harbour seal from the side (49 by 15 cells, four frames of body undulation and a fanning tail, 4
-frames a second, now and then a lazy roll). Turtles glide at 8 to 10px a second, seals at 16 to
-24px. The hero carries a seal in the open water above the headline and a turtle and a seal in the
-side wings; on a phone, two seals keep above the headline. The closing panel carries a turtle and
-a seal, and on a phone two seals above and below the statement. They fade into the clearings, leave
-one side before returning on the other, ease away from the pointer lens, freeze where they are
-under reduced motion and appear in the fallback images' first frame.
+### 5.4 Capabilities (Harvey's timer tabs)
 
-### 5.5 Product frame
+Two-tone heading, centred: "Built for long turns." / "And for changing your mind." Then one
+`Shallows` panel on the column, quieter than the hero's (radius 24, its water from surface-3), at
+least 600px tall, with one seal drifting low at left.
 
-Under the hero, 96px below the button, the real app (a captured screenshot, WebP sources, real
-alt text) on the content column (1120px), radius 12, one 1px line-strong ring and nothing around
-it, as x.ai's product tiles span its container. Its own field dissolves into the screenshot (`order
-"down"`, `reveal`): `progress` is already about 0.35 when the page opens, and reaches 1 when the
-frame's top is at 55% of the viewport. Phones, reduced motion and no JavaScript show the screenshot
-at once.
+- **Rows** (left, 380px): six one-line rows, 16/24 500, fg-3 (hover fg-2, active fg-1): "Your
+  agents, as they are", "Switch agents mid-chat", "A checkpoint every turn", "Full auto by
+  default", "Queue and steer", "Several chats at once". Under the active row a 2px timer fills over
+  6.5s, and the next row takes over when it is full. Under the rows, the active row's one sentence
+  cross-fades (14/22 fg-2).
+- **View** (right): one inset window of the app (#050505, radius 16) built from tokens at the app's
+  own sizes: the agent picker; a chat handed from Claude Code to Codex; a turn with its diff and a
+  checkpoint to restore; the autonomy menu over the composer; a running turn with a message queued;
+  five chats with circular status dots, the one that needs you in volt.
+- **Motion**: the old view clears in 200ms; the new one rises 14px from 0.985 and fades in from
+  120ms (460ms opacity, 820ms transform `--g-ease-out`). Hovering, focusing or clicking a row shows
+  its view at once and holds the cycle, the active row's rule full, while the pointer or focus stays
+  in the panel. The cycle also holds off screen, in a hidden tab and under reduced motion.
+- **Access**: the rows are a tab list with automatic activation (arrow keys, Home, End); each tab's
+  panel is its sentence; the views illustrate it and are hidden from assistive technology.
 
-### 5.6 Film card (x.ai)
+Tablets and phones stack the rows, the sentence and the view (520px tall, 460 on phones).
 
-Centred one-line heading: "One turn, start to finish." A 1120 by 560 card (surface-1, radius 24,
-padding 56) over a dimmed, transparent field (`quiet`, density 0.62, `ceiling` 0.5, calm behind the
-copy). Left: a Play or Pause text button with a pixel icon and the caption line, both 32/40. Right:
-a 520px window replaying one turn from Graphite fragments over 10.4s: the empty state, the prompt
-typing into the composer, the agent working, Read and Edited tool rows, an approval card for `cargo
-test` that resolves to "Ran cargo test, 14 passed", the diff, and the receipt (48s, 2 files, +59
-−12). The caption changes with each step. It plays once when 35% in view and then holds the
-finished turn; Play replays it and Pause holds it. The server render, reduced motion and no
-JavaScript show the finished turn without the button.
+### 5.5 FAQ (Vercel)
 
-### 5.7 Staggered tiles (X Money)
+The two-tone heading "Questions, answered." / "Before you install." and a quiet "Privacy notice"
+link at left, over 4 of 11 columns; six questions at right on hairlines (`--g-line`), 68px rows,
+summary 16/24 500 fg-1, a 12px plus whose upright turns flat as its answer opens (300ms, fg-3 to
+fg-1). Answers 16/26 fg-2. All closed on load and one open at a time, built on `<details>`, so every
+answer opens without JavaScript. An answer opens by `grid-template-rows` over 300ms
+`--g-ease-quint` while it fades in, the site's one layout animation. "Nothing to sign up for" is
+answered here and in the hero lead; the invitation-only accounts are answered here.
 
-Two-tone heading: "Every agent, one window." / "Full auto, with every control in reach." Then
-X Money's grid, measured: four 268px columns 16px apart, rows 48px apart, 268 by 240 recessed
-tiles (surface-1, radius 12), each caption set against its tile's bottom edge in the next column.
-Rows: a pair, a wide tile (552 by 240) starting in the second column, a pair, a wide tile starting
-in the first. No numbers. At rest every tile is still; hovering one plays its loop and dims the
-others to 0.5 over 500ms `--g-ease-smooth`, as X Money's do. The six:
+### 5.6 Closing panel
 
-1. "Your agents, as they are": the agent picker (Claude Code, Codex, Pi, Cursor, OpenCode), the
-   selection walking down it on hover.
-2. "Switch agents mid-chat": a chat handed to Codex, the handoff in plain view.
-3. "A checkpoint every turn" (wide): "This turn" and "Before it" toggle buttons show the file as the
-   turn left it and as the checkpoint kept it; on hover it alternates until someone picks a side.
-   The only interactive tile, so the only one exposed to assistive technology.
-4. "Full auto, by default": the autonomy menu, its selection walking the three levels on hover.
-5. "Queue and steer": a running turn with a message queued behind it.
-6. "Several chats at once" (wide): four chats with agent and status, one "Needs you" in volt; on
-   hover the running ones show their loaders.
+One `Shallows` panel with `shimmer` on the column, a turtle and a seal crossing it slowly: the
+two-tone "Your agents." / "Your machine.", one line "Free for Windows and macOS. No account needed."
+and the magnetic primary 44 "Download". 148px above the words and 140 below (112 and 104 on
+phones).
 
-Tablets set two tiles to a row with each caption under its tile; phones stack each tile over its
-caption, 40px apart.
+### 5.7 Footer
 
-### 5.8 FAQ (X Money)
+The wordmark at left and three link columns at right (Product, Account, Legal; headings 14/20 500
+fg-1, links 14/20 fg-3, hover fg-1), 160px wide; no rules and no giant art. Legal ends with
+Notices, the generated third-party notices. Phones put the columns under the wordmark, three equal
+columns.
 
-On the tiles' four columns: the two-tone heading "Questions, answered." / "Before you install."
-and an outline 36 "Privacy notice" over the first two, six disclosure rows over the last two, 4px
-apart (52px closed rows), summary 16/24 500, body 16/24 fg-2, one open at a time, the first open on
-load, no rules between them. Opening: 300ms `--g-ease-quint`, the surface-2 well sliding from the
-previously open row in about 270ms (4.11). "Nothing to sign up for" is answered here and in the
-hero lead.
+### 5.8 Motion on the site
 
-### 5.9 Closing panel (Aside)
+- **Reveals**: blocks rise 16px and fade in once, at 12% visible (700ms opacity, 900ms transform,
+  `--g-ease-reveal`, 80ms apart via `--i`).
+- **Magnetic pills**: the nav, hero and closing Download lean up to 6px across and 4px down toward
+  the pointer, their label 60% further, following with a 0.12s time constant and settling back over
+  0.34s. Transform only, so layout never moves; fine pointers only; off under reduced motion.
+- **Hover**: links, rows and icons change colour over 150 to 300ms; buttons settle over 300ms.
+- **Budget**: only transform and opacity animate, plus the FAQ's disclosure. Measured in Chromium
+  at 1440 by 900 on the built site: 0 frames over 25ms while idle, sweeping the pointer over the
+  swimmers, hovering the magnetic button, scrolling the page and switching capabilities; no long
+  tasks; 14ms of layout and 52ms of paint over the whole run.
 
-One 1120 by 476 panel on the column (surface-1, radius 24, 152px above and below the copy; radius
-16 and 120px on phones): the two-tone heading "Your agents." / "Your machine." centred, 40px above
-the primary 44 "Download".
-Behind it a dark, transparent field (`standard` capped by a `ceiling` of 0.55, calm behind the
-words and thinning toward the panel's top and bottom edges) with a turtle and a seal (5.4).
-
-### 5.10 Footer with the giant dithered logo
-
-x.ai's footer on the tiles' columns, no rules: the brand over the first two columns and three link
-columns (Product, Account, Legal; heading 14/20 500 fg-1, links 14/20 fg-3, hover fg-1) over the
-last two, 160px below the closing panel. The brand is the logo at 400 by 408 (316 by 320 on
-phones, under the links), formed by a DitherField with a `path` target (`LOGO_PATH`, `bright`,
-`order "up"`): progress is scroll-linked from 0 as it enters to 1 when its bottom reaches the
-viewport's bottom, and `still` once formed. Before it forms, clearings thin its noise toward the
-box's edges so it never reads as a square. Reduced motion: the formed still frame. No JavaScript:
-the plain logo in fg-1.
-
-### 5.11 Inner pages
+### 5.9 Inner pages
 
 - **Download** (x.ai's "Choose how to get started"): two-tone title "Download auracode." / "Free,
   local, no account.", one lead line, two recessed cards (surface-1, radius 16, 16px apart), one
-  per platform: name, architectures, spec rows on hairlines (the page's one line system), and the
-  action. "Before you install" keeps the two safety paragraphs. Linux is not offered.
+  per platform: name, architectures, spec rows on hairlines, and the action. "Before you install"
+  keeps the two safety paragraphs. Linux is not offered.
 - **Sign in, sign up**: a centred 480px column; the two-tone title ("Sign in." / "With a one-time
   code.", and "Invited sign-in." / "Your invitation starts here."), one line about access and the
-  form in one recessed panel (surface-1, radius 16, no border). One action per step.
+  form in one recessed panel. One action per step.
 - **Verify device**: framed by the desktop app at 190px, with no nav, footer or skip link.
 - **Account**: settings groups separated by space in a narrow column; device and security lists
-  keep their row rules.
-- **Legal** (privacy, terms): 680px column, prose headings separated by space, body 16/24 fg-2
-  with fg-1 emphasis. Third-party notices is generated plain text from the build.
+  keep their row rules; device status dots are circles.
+- **Legal** (privacy, terms): 680px column, prose headings separated by space, body 16/24 fg-2.
+  Third-party notices is generated plain text from the build.
 - **Changelog**: one entry per release: the date and status at left, notes as prose.
-- **404**: a DitherField with a text target "404" (`bright`, `still` under reduced motion) and
-  under it the two-tone "This page does not exist." / "It may have moved." with a primary 44 "Go
-  home".
+- **404**: one `Shallows` panel with a turtle crossing it, the numerals "404" at up to 200px, the
+  two-tone "This page does not exist." / "It may have moved." and a primary 44 "Go home".
+- **Social card** (`og.png`, 1200 by 630): the lit water with a turtle and a seal and the logo in
+  fg-1 at the centre, rendered at build time from the paths.
 
-### 5.12 The landing-page study
+### 5.10 The landing-page study
 
 Captured 2026-10-27 at 1440 and 390 (`target/design-research/landing/`; x.ai from the 2026-10-26
 scroll frames and Mobbin, since it blocked automation). What the five pages share, and what we
@@ -1488,16 +1533,18 @@ another chat is open; closing a tab, reloading or quitting stops them. Nothing a
 - Text sits on opaque surfaces so WebView2 can use its best antialiasing; never put body text on
   a transparent layer over an animated canvas.
 - `font-synthesis: none`; tabular numerals on anything that updates.
-- No blur, `backdrop-filter`, glow or `text-shadow` anywhere; one box shadow, for floating things.
+- No blur, `backdrop-filter`, glow or `text-shadow` anywhere, except a far swimmer's depth (4.16),
+  painted once; one box shadow, for floating things.
 - Never `transition: all`; never animate `width`, `height`, `top`, `left`, margins or padding; fold
-  with opacity and clipped transforms. Two measured website exceptions, both short and one element
-  at a time: the rotating word slot's width (300ms) and an accordion panel opening by
-  `grid-template-rows` (300ms).
-- One live indicator animates at a time per row or card (a shimmer or a loader, not both); the
-  dither field is the only ambient motion on a screen, and the app shows it only during the first
-  launch intro and behind the onboarding column, never behind the transcript.
+  with opacity and clipped transforms. One website exception, short and one element at a time: an
+  accordion panel opening by `grid-template-rows` (300ms).
+- One live indicator animates at a time per row or card (a shimmer or a loader, not both). Shallows
+  is the only ambient motion on a screen: on the website the hero, the capabilities panel, the
+  closing panel and the 404. Until its Shallows branch, the app shows the dither field only during
+  the first launch intro and behind the onboarding column, never behind the transcript.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
-  reduced-motion elements own no frame; DitherField caps at 30fps.
+  reduced-motion elements own no frame; swimmers move by transform only; DitherField caps at
+  30fps.
 - Long lists virtualise; rows use `contain: layout style`.
 - Pixel geometry lands on whole CSS pixels and uses `shape-rendering: crispEdges`.
 
@@ -1511,17 +1558,18 @@ Every screen ships only when all of these hold.
       numbered "01" or "02" tags, no filler captions. A label exists only where the UI is ambiguous
       without it, and then it is sentence case in Geist, not mono.
 - [ ] Mono only for machine data: paths, commands, code, durations, versions, keycaps, ids.
-- [ ] Volt only for look here (needs you, live, new, the glint, lit dither pixels); never a button,
+- [ ] Volt only for look here (needs you, live, new, the glint); never a button,
       a border, a background larger than a chip, or decoration.
 - [ ] Green only for passed and added, red only for failed, removed and the one destructive pill;
       done is a white check. No orange, no agent hues, no project colours in chrome.
 - [ ] No space imagery: no globe, orbit, satellite, starfield, orb or halo.
-- [ ] No gradients (except the shimmer and glint primitives), no glass, no blur, no glow, no
-      sparkle icons, no 3D.
+- [ ] No gradients except the lit water of Shallows and the shimmer and glint primitives; no
+      glass, no texture, no noise, no glow, no sparkle icons, no 3D; blur only for a far swimmer.
 - [ ] Two-tone headings at one size and weight; no serif, no italic, no gradient text.
 - [ ] Structure from hairlines and value steps; cards only for things that float or dock.
 - [ ] Pixels are square and crisp; status is a flat circle, never a glow.
-- [ ] Nothing idles, breathes, pulses or parallaxes; motion starts with an event and ends with it;
+- [ ] Nothing idles, breathes, pulses or parallaxes besides the swimmers' slow glide; motion
+      starts with an event and ends with it;
       reduced motion is honoured from the OS and from `data-motion`, and content is never hidden.
 - [ ] Concrete copy: verbs, objects and numbers ("Ran pnpm test · 19 passed · 4.2s"); no hype words,
       no emoji, no em dashes; risk said in words.

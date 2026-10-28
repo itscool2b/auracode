@@ -2,10 +2,11 @@ import { Wordmark } from "@auracode/ui/graphite";
 import { useEffect, useRef } from "react";
 
 /**
- * Aside's and x.ai's 64px sticky nav: the wordmark at left; Changelog, Sign in and the one primary
- * Download at right. Transparent at the top of the page, solid black once the page scrolls.
- * Hovering one link dims its sibling (Harvey). Under 768px the links fold into a menu built on
- * <details>, so it opens without JavaScript too; Download stays in the bar.
+ * The 64px sticky nav, edge to edge like Vercel's: the wordmark at left; Changelog, Sign in and the
+ * one primary Download at right. On the home page it rests over the hero's lit water, transparent;
+ * once the page scrolls it turns solid black. Hovering one link dims its sibling (Harvey). Under
+ * 768px the links fold into a menu built on <details>, so it opens without JavaScript too; Download
+ * stays in the bar.
  */
 export function SiteHeader() {
   const header = useRef<HTMLElement>(null);
@@ -64,8 +65,8 @@ export function SiteHeader() {
             <a href="/changelog">Changelog</a>
             <a href="/signin">Sign in</a>
           </nav>
-          <a className="g-button g-button-primary" href="/download">
-            Download
+          <a className="g-button g-button-primary" href="/download" data-magnetic="">
+            <span className="magnetic-label">Download</span>
           </a>
           <details className="nav-menu" ref={menu}>
             <summary className="nav-menu-button">
