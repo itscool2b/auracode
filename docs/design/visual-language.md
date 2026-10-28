@@ -1238,10 +1238,8 @@ pane's lit top edge) and two `Swimmers` (`PANE_SWIMMERS` in `components/Water.ts
 the left (152 to 232px wide, 6px/s) and a far turtle at the right (88 to 116px, depth 0.45,
 4px/s), slower than setup's because the person works here. They never yield to the pointer (the
 hand lives on the card) and the layer takes no pointer events, so nothing behind the composer ever
-moves because of the hand; reduced motion holds them still. No texture, no dither, no space. In
-the app the swimmers take the dither field's place in section 7's rule: they are the only ambient
-motion on a screen, shown in the first-launch intro, behind setup's card and behind New chat and an
-empty chat, never behind a transcript with messages in it.
+moves because of the hand; reduced motion holds them still. No texture, no dither, no space. They
+are the screen's only ambient motion (section 7) and never swim behind a transcript with messages.
 
 **New chat** (before a chat exists) follows Grok's start screen: the 40px logo centred, one two-tone
 display line ("What are we working on?", then "**Claude Code** is ready in **auracode**.",
@@ -1540,8 +1538,8 @@ another chat is open; closing a tab, reloading or quitting stops them. Nothing a
   accordion panel opening by `grid-template-rows` (300ms).
 - One live indicator animates at a time per row or card (a shimmer or a loader, not both). Shallows
   is the only ambient motion on a screen: on the website the hero, the capabilities panel, the
-  closing panel and the 404. Until its Shallows branch, the app shows the dither field only during
-  the first launch intro and behind the onboarding column, never behind the transcript.
+  closing panel and the 404; in the app the first launch intro, setup's window, New chat and an
+  empty chat (6.13, 6.17), never behind a transcript with messages in it. The app draws no dither.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
   reduced-motion elements own no frame; swimmers move by transform only; DitherField caps at
   30fps.

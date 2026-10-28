@@ -3672,3 +3672,55 @@ long tasks); the trace shows 14ms of layout and 52ms of paint in total. Comparis
 Not done here: the desktop app still uses the dither field on its first-launch intro and
 onboarding until its Shallows branch; `StatusDot` itself becomes a circle with the `native-fixes`
 branch (the site styles its own dots). The hand walkthrough before merge and real Safari remain.
+
+### App in Shallows (2026-10-28, branch `app-shallows`)
+
+The owner picked direction B, Shallows, and asked for elite styling and motion everywhere,
+including the small spaces. The app now draws no dither: it no longer imports the dither engine
+(`packages/ui` keeps it for now). Built on the shared primitives from `site-shallows` (#22).
+
+- **Intro**: a short Shallows moment inside setup's unchanged 1800ms hold. The window lights up like
+  water seen from below, a seal and a turtle glide in on diagonals as black silhouettes, nose up and
+  shrink into the places the logo's animals take, and fade as the logo forms out of them; then
+  "auracode" rises. CSS keyframes on transform and opacity only. Warm launches and reduced motion
+  show the formed mark still; Escape, Enter, Skip intro and sign-in links behave as before. The
+  intro shares setup's water, so the hand-off only lifts the mark away before the card rises.
+- **Setup**: window-wide lit water with a turtle, a seal and a far turtle that ease out of a fine
+  pointer's way, behind one opaque card (radius 20, water-low, a lit rim and one long shadow) that
+  holds every step. Progress is four soft bars whose fill sweeps in.
+- **Shell**: the main pane is the rounded inset panel (radius 16) with a calm rim drawn outside it,
+  its top edge lit and a faint light under the content; Settings and Diagnostics draw the same
+  pane, and the chat and the right panel keep it when they split. The sidebar stays on black.
+- **New chat and empty chats**: the pane fills with lit water, a seal and a far turtle that never
+  yield to the pointer; the card and the composer float on it (radius 20, soft lit rim, one long
+  shadow). New chat arrives in three soft steps; disclosures turn a quiet chevron.
+- **Detection** (setup, Agents, New chat): one soft circular pulse while an agent is looked for,
+  its mark dimmed; an eased check in a green-tinted circle once found, with the word and version
+  settling; a calm red dot that only fades in on failure. One 16px slot holds every state.
+- **Small spaces** (`motion.css`): sidebar rows take a layered fill that fades in and grows from
+  96%, the open chat's fill settles under the row it moves to, and a chat that appears drops in;
+  popovers grow from their anchor; dialogs lift out of a fading scrim; tooltips rise 2px; banners
+  and notices drift in once; the send disc's arrow lifts into place. Every button settles to 97%
+  while pressed; the primary pill and the send disc lean up to 3px toward a fine pointer through
+  an inline `translate` (`lib/magnetic.ts`). Only transform, translate and opacity move; all of it
+  stands still under reduced motion.
+- **Docs**: `visual-language.md` 6.1, 6.2, 6.9, 6.13, 6.17, 6.17a, 6.19 and section 7's app clause.
+
+Checks on this branch (merged with `origin/main` at 8207546): `pnpm lint` (28 warnings, all
+existing descending-specificity notes in desktop CSS; the style guard passes), `pnpm typecheck`
+and `pnpm test` pass: scripts 22, ui 296, desktop 5 node and 460 (19 skipped, 4 new magnetic
+tests), design lab 352, web 4. In Chromium and WebKit, against this branch's own preview server:
+`check-layout` (all 276 views clean), `check-chat` (16 axe scans), `check-new-chat-worktree`
+(8), `check-terminal-panel` (7), `check-settings` with the fourteen checks it runs, and
+`check-setup`, which now asserts the water covers the window with its three swimmers and no dither
+or canvas remains. Also passing: `check-sidebar-footer`, `check-library`,
+`check-setup-actions`, `check-agent-installations`, `check-chat-auth`,
+`check-config-recovery`, `check-folder-resolution`, `check-repository-publication`,
+`check-workspace-removal`, `check-account-reset` and `check-account-vault`; every axe audit
+these run reports zero violations. Sheets next to the concept frames, at 1440x900 and 1024x700, are the ignored
+`target/design-research/sheets/app-shallows-{intro,onboarding,detection,motion-detection,newchat,chat,settings-dialog}.png`.
+
+Not done: the hand walkthrough of the built app; the minimized and idle CPU with New chat's
+swimmers running was not measured natively; Agents and the Library stay full-window pages on
+black (the Library belongs to `plugin-library`); the dither engine stays in `packages/ui`, unused by
+the website and the app, for a follow-up to delete. CI was not run.
