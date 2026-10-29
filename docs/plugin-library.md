@@ -79,8 +79,8 @@ The renderer ignores callbacks and replies after a newer request or unmount, inc
 StrictMode remounts. These lifetime checks do not move listing or inventory decisions out of Rust.
 
 A controlled Windows run using temporary homes and fake CLIs measured cold first usable sections
-at 607.5004 ms, the fast provider at 1.0036115 s while Claude remained blocked, and all finished at
-1.0958032 s. Warm first usable sections took 2.5181 ms and all finished took 2.9446 ms. The fixture
+at 648.9763 ms, the fast provider at 1.1081209 s while Claude remained blocked, and all finished at
+1.2424665 s. Warm first usable sections took 2.5796 ms and all finished took 3.0168 ms. The fixture
 adds a 100 ms delay to Codex and releases Claude only after Codex publishes. These are fixture
 measurements of the core stream, not timings promised for installed vendor CLIs.
 
