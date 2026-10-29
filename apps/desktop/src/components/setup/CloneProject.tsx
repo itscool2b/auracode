@@ -391,7 +391,7 @@ function CloneRecoveryNotices({
                   <button
                     type="button"
                     className="g-button"
-                    disabled={view.recoveryBusy !== null}
+                    disabled={!controller.canRecover}
                     onClick={() => void controller.recover(record.id, "open")}
                   >
                     Open folder
@@ -401,7 +401,7 @@ function CloneRecoveryNotices({
                   <button
                     type="button"
                     className="g-button"
-                    disabled={view.recoveryBusy !== null}
+                    disabled={!controller.canRecover}
                     onClick={() => void controller.recover(record.id, "add")}
                   >
                     Add existing project
@@ -411,7 +411,7 @@ function CloneRecoveryNotices({
                   <button
                     type="button"
                     className="g-button"
-                    disabled={view.recoveryBusy !== null}
+                    disabled={!controller.canRecover}
                     onClick={() => controller.retryElsewhere(record)}
                   >
                     Retry in another folder
@@ -420,7 +420,7 @@ function CloneRecoveryNotices({
                 <button
                   type="button"
                   className="g-button"
-                  disabled={view.recoveryBusy !== null}
+                  disabled={!controller.canRecover}
                   onClick={() => void controller.recover(record.id, "dismiss")}
                 >
                   Dismiss notice

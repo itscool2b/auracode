@@ -193,6 +193,81 @@ describe("CloneController", () => {
     clone.close();
   });
 
+  it("blocks clone Start and Retry elsewhere while completed recovery is being checked", async () => {
+    const { api } = fakeApi();
+    const previous: CloneRecovery = {
+      id: "completed",
+      state: "ready",
+      repository: "owner/repo",
+      remote: "https://github.com/owner/repo",
+      destination: "C:\\old\\repo",
+      detail: "Git finished.",
+      can_add: true,
+      can_open: true,
+    };
+    let ready!: (value: CloneRecovery) => void;
+    vi.mocked(api.recoveryReady).mockReturnValueOnce(
+      new Promise((resolve) => {
+        ready = resolve;
+      }),
+    );
+    const clone = new CloneController(api, { remote: previous.remote ?? "", parent: "C:\\new" });
+    clone.open();
+    await vi.advanceTimersByTimeAsync(0);
+    const pending = clone.recover(previous.id, "add");
+    expect(clone.canStart).toBe(false);
+    await clone.start();
+    clone.retryElsewhere(previous);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(clone.getSnapshot().parent).toBe("C:\\new");
+    ready(previous);
+    await pending;
+    expect(clone.getSnapshot()).toMatchObject({ phase: "done", record: { id: previous.id } });
+    clone.close();
+  });
+
+  it("blocks recovery actions during clone admission and preserves cancellation ownership", async () => {
+    const { api } = fakeApi();
+    let started!: (value: CloneRecord) => void;
+    vi.mocked(api.start).mockReturnValueOnce(
+      new Promise((resolve) => {
+        started = resolve;
+      }),
+    );
+    vi.mocked(api.status).mockReturnValue(new Promise(() => {}));
+    const clone = new CloneController(api, {
+      remote: "https://github.com/owner/repo",
+      parent: "C:\\new",
+    });
+    clone.open();
+    await vi.advanceTimersByTimeAsync(0);
+    const pending = clone.start();
+    const previous: CloneRecovery = {
+      id: "completed",
+      state: "ready",
+      remote: "https://github.com/owner/old",
+      repository: "owner/old",
+      destination: "C:\\old\\repo",
+      detail: "Git finished.",
+      can_add: true,
+      can_open: true,
+    };
+    for (const action of ["add", "open", "dismiss"] as const)
+      await clone.recover(previous.id, action);
+    clone.retryElsewhere(previous);
+    expect(api.recoveryReady).not.toHaveBeenCalled();
+    expect(api.recoveryOpen).not.toHaveBeenCalled();
+    expect(api.recoveryDismiss).not.toHaveBeenCalled();
+    expect(clone.getSnapshot().parent).toBe("C:\\new");
+    started(record("new-job"));
+    await pending;
+    await clone.recover(previous.id, "add");
+    clone.retryElsewhere(previous);
+    expect(clone.getSnapshot()).toMatchObject({ phase: "running", record: { id: "new-job" } });
+    clone.close();
+    expect(api.cancel).toHaveBeenCalledWith("new-job");
+  });
+
   it("asks Rust once typing pauses and shows the repository's own folder name", async () => {
     const { api, inputs } = fakeApi();
     const clone = new CloneController(api, { parent: "C:\\code" });
