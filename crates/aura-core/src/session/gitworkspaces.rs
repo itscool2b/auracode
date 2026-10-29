@@ -362,14 +362,12 @@ impl SessionManager {
             folders: Vec::new(),
             actors: Vec::new(),
         };
-        for folder in folders {
-            if !self.shared().live.reserve_folder(&folder) {
-                return Err(invalid(
-                    "Stop all chats and close project terminals using these folders before Git actions. Wait for their process cleanup to finish.",
-                ));
-            }
-            reservations.folders.push(folder);
+        if !self.shared().live.reserve_folders(&folders) {
+            return Err(invalid(
+                "Stop all chats and close project terminals using these folders before Git actions. Wait for their process cleanup to finish.",
+            ));
         }
+        reservations.folders = folders;
         for chat in chats {
             if Some(chat.as_str()) == except {
                 continue;

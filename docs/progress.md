@@ -1,5 +1,23 @@
 # Auracode implementation progress
 
+## 2026-10-29: Native clone folder admission
+
+The native onboarding clone path reserved the selected parent and then rejected its own child
+destination as an overlapping mutation. Shared Git admission now checks and reserves the complete
+folder batch under one lock. Existing chat, terminal and mutation owners still block overlapping
+paths. Both parent and child retain their actor reservations and release with the operation guard.
+
+The regression failed through `SessionManager::clone_check` and `clone_start` before the fix.
+Seven focused session tests now pass using a temporary home, isolated Git settings and a real
+local repository reached through the normal HTTPS form. They cover clone success and restart
+recovery, external owners, real Git failure and cancellation, both requested chat actors, actor
+refusal and cancellation during actor admission. A separate batch test checks atomic failure and
+independent retention of nested requested paths. The broad core run passed 640 unit tests and
+failed the unchanged folder-list timing test; its isolated rerun passed. All 102 integration
+tests passed separately. Core account-sync Clippy with warnings denied, changed-file rustfmt,
+instruction parity and diff checks pass. Independent review and rebuilt native acceptance remain
+pending.
+
 ## 2026-10-29: Canonical Sending messages and the prompt header
 
 Local branch `codex/chat-sending` preserves held-message FIFO. A new message waits behind
