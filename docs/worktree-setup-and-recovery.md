@@ -30,6 +30,12 @@ it does not copy setup files again. An old command token or completion cannot co
 generation. On restart, unfinished attempts become interrupted and messages remain held. Setup
 never reruns automatically.
 
+Queued lifecycle events carry the Rust-owned hold for that prompt, including new messages typed
+while setup has failed or was interrupted and updates when existing queued messages become held.
+The interface uses that row's hold directly, so a second
+held message keeps its Send action even when another held message already exists. Setup status
+changes do not require resetting loaded conversation history to discover those new holds.
+
 Migration 15 adds the device-local attempt table using the existing pre-migration database backup
 path. Attempt state, terminal input and terminal output are not synchronized. Setup recipes remain
 device-local and no file contents are stored in recipes.

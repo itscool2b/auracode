@@ -4506,3 +4506,30 @@ the other hold and that releasing the head sends the following unheld message in
 Biome, JavaScript syntax and instruction parity checks passed. No production backend or UI changed.
 The coordinator's failed settings log is the red evidence; both-engine settings reruns remain the
 coordinator's gate after merging this fixture change. No Cargo or browser process ran for this fix.
+
+### 2026-10-29: Exact live queue holds across setup retries
+
+The browser rerun exposed a production visibility gap: a second message typed during interrupted
+setup was held in Rust but appeared unheld because another held row already existed. A separate
+red browser assertion reproduced the same problem for a message queued during a retry when that
+retry failed. Rust now includes the exact hold on queued lifecycle events and emits an update when
+an existing queued row becomes held. Other lifecycle states leave that optional field empty, and
+older producers without it remain readable.
+
+The chat store uses this row truth without duplicating setup admission rules or reattaching. A
+same-ID queue update preserves its position and creation time, so hold updates do not reorder the
+queue or reset loaded conversation history. The setup fixture mirrors these authoritative events.
+Focused store tests passed 49/49 after red regressions, including duplicate/old frames,
+setup boundaries, mixed held/unheld rows, preserved history and exact reattach snapshots. A stopped
+Sending row returns ahead of its followers with its original timestamp. Final
+setup/recovery browser checks passed in Chromium (3.96 seconds) and WebKit (8.61 seconds), including
+the later-held-row action, held-head FIFO and retry-failure updates. A full settings run passed both
+engines in 174.83 seconds before the final mixed-hold extension; the final extension received the
+focused both-engine rerun. Browser ownership was released with engines and server closed.
+
+Rust setup and queue filters passed 18/18 each; protocol tests passed 24/24, including legacy
+missing-field compatibility. Branch-local Clippy encountered the already-reviewed mock-driver
+enum-size issue fixed on the coordinator's newer ancestor. The normal locked desktop exporter
+compiled the native library and passed 1/1; its actual generated bindings are retained. Desktop
+typecheck passed, followed by store/transcript tests 72/72. Broad integrated Clippy remains a
+coordinator gate. Generated bindings were not edited by hand.

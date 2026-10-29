@@ -180,6 +180,19 @@ mod tests {
             db.conn(),
             "dev",
             &super::super::QueuedRow {
+                id: "held-before-restart".into(),
+                chat_id: chat.clone(),
+                text: "already held".into(),
+                parts: vec![],
+                held: true,
+                created_at: 0,
+            },
+        )
+        .unwrap();
+        super::super::rows::queue_put(
+            db.conn(),
+            "dev",
+            &super::super::QueuedRow {
                 id: "queued-before-restart".into(),
                 chat_id: chat.clone(),
                 text: "keep queued".into(),
@@ -213,6 +226,16 @@ mod tests {
             WorktreeSetupState::Awaiting
         );
         assert!(read(db.conn(), "dev", &legacy).unwrap().is_none());
-        assert!(super::super::rows::queued(db.conn(), &chat).unwrap()[0].held);
+        assert_eq!(
+            super::super::rows::queued(db.conn(), &chat)
+                .unwrap()
+                .iter()
+                .map(|row| (row.id.as_str(), row.held))
+                .collect::<Vec<_>>(),
+            [
+                ("held-before-restart", true),
+                ("queued-before-restart", true)
+            ]
+        );
     }
 }

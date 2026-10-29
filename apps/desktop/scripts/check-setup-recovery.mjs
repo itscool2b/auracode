@@ -178,6 +178,35 @@ export async function checkSetupRecovery(browser, url) {
         "prompt:new behind held head",
       ],
     );
+
+    // Another setup failure holds new retry messages even when an older held head already exists.
+    await page.reload();
+    await page.getByRole("region", { name: "Review setup command" }).waitFor();
+    await compose.fill("held before retry");
+    await compose.press("Enter");
+    await page.getByRole("button", { name: "Run reviewed setup" }).click();
+    await page.waitForFunction(() => window.setupRecoveryFixture.calls().includes("setup-start"));
+    await page.evaluate(() => window.setupRecoveryFixture.complete(2));
+    await setupStatus.getByRole("button", { name: "Retry setup" }).click();
+    await page.getByRole("button", { name: "Run reviewed setup" }).click();
+    await page.waitForFunction(
+      () =>
+        window.setupRecoveryFixture.calls().filter((call) => call === "setup-start").length === 2,
+    );
+    await compose.fill("unheld during retry");
+    await compose.press("Enter");
+    assert.equal(await rows.nth(1).getAttribute("data-test-held"), "false");
+    await page.evaluate(() => window.setupRecoveryFixture.complete(2));
+    await setupStatus.getByText("Setup exited with code 2. Retry setup.").waitFor();
+    assert.equal(await rows.nth(0).getAttribute("data-test-held"), "true");
+    assert.equal(await rows.nth(1).getAttribute("data-test-held"), "true");
+    await rows.nth(1).getByTestId("queued-send").waitFor();
+    assert.deepEqual(
+      (await page.evaluate(() => window.setupRecoveryFixture.calls())).filter((call) =>
+        call.startsWith("prompt:"),
+      ),
+      [],
+    );
     assert.deepEqual(errors, []);
   } finally {
     await context.close();

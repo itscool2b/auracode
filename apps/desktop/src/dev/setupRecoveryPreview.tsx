@@ -72,6 +72,15 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
       publish([ev.lifecycle(row.prompt_id, "started")]);
     }
   };
+  const holdQueue = () => {
+    const events: AuraEvent[] = [];
+    queue = queue.map((row) => {
+      if (row.held) return row;
+      events.push(ev.lifecycle(row.prompt_id, "queued", row.preview, true));
+      return { ...row, held: true };
+    });
+    return events;
+  };
   const ownerComplete = (code: number, generation = attempt.generation) => {
     if (generation !== attempt.generation || attempt.state !== "running") return;
     attempt = {
@@ -82,8 +91,8 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
     if (code === 0) {
       status = "ready";
       release();
-    } else queue = queue.map((row) => ({ ...row, held: true }));
-    publish();
+    }
+    publish(code === 0 ? [] : holdQueue());
     terminalRead?.({ bytes: [], done: true, exit_code: code, truncated: false });
     terminalRead = null;
   };
@@ -145,13 +154,14 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
       },
       send: async (_chat, text) => {
         const prompt_id = `queued-${++promptSequence}`;
-        queue.push({
+        const row = {
           prompt_id,
           preview: text,
           held: attempt.state === "failed" || attempt.state === "interrupted",
           created_at: Date.now(),
-        });
-        publish([ev.lifecycle(prompt_id, "queued", text)]);
+        };
+        queue.push(row);
+        publish([ev.lifecycle(prompt_id, "queued", text, row.held)]);
         release();
         return { prompt_id, queued: true };
       },
@@ -255,8 +265,7 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
           state: "interrupted",
           detail: "Setup was interrupted by a restart.",
         };
-        queue = queue.map((row) => ({ ...row, held: true }));
-        publish();
+        publish(holdQueue());
       },
       queue: () => [...queue],
     },

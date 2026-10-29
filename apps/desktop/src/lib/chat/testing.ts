@@ -279,7 +279,8 @@ export const ev = {
     promptId: string,
     state: Extract<AuraEvent, { type: "prompt_lifecycle" }>["state"],
     preview: string | null = null,
-  ): AuraEvent => ({ type: "prompt_lifecycle", prompt_id: promptId, state, preview }),
+    held: boolean | null = null,
+  ): AuraEvent => ({ type: "prompt_lifecycle", prompt_id: promptId, state, preview, held }),
   notice: (message: string): AuraEvent => ({ type: "notice", level: "info", message }),
   error: (
     kind: Extract<AuraEvent, { type: "error" }>["kind"],
