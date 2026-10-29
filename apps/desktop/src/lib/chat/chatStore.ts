@@ -39,11 +39,10 @@ import type { Transport } from "./transport";
  * whenever the session's `revision` changes; Esc interrupts, then force-stops; "Load full output"
  * pages through a blob; "Still working" shows after a minute without frames during a turn.
  *
- * **Held prompts.** "Send queued" follows `SessionInfo.queue_held`. Which prompts are held, the
- * frames never say: the marks come from the snapshot, and a hold holds every prompt queued until
- * then. When the frames cannot place a hold against the prompts listed (one queued as the hold
- * ran, or a hold while some were already held), the view joins again: the snapshot's queue is
- * exact.
+ * **Held prompts.** "Send queued" follows `SessionInfo.queue_held`. The snapshot and each queued
+ * lifecycle event identify each row's hold; a later hold catches every prompt queued until then.
+ * When frames cannot place a later hold against the prompts listed (one queued as the hold ran,
+ * or a hold while some were already held), the view joins again for the snapshot's exact queue.
  */
 
 export type ChatPhase = "attaching" | "live" | "failed";
@@ -542,19 +541,27 @@ export class ChatStore {
             queue: state.queue.filter((row) => row.prompt_id !== event.prompt_id),
           };
         }
-        if (state.sending?.prompt_id === event.prompt_id) state = { ...state, sending: null };
+        const returned = state.sending?.prompt_id === event.prompt_id ? state.sending : null;
+        if (returned !== null) state = { ...state, sending: null };
         if (event.state === "queued") {
-          // A prompt is queued unheld; a hold later catches it.
+          // The core owns each row's hold. Older producers omit it and retain the old behavior.
+          const index = state.queue.findIndex((row) => row.prompt_id === event.prompt_id);
+          const previous = index < 0 ? undefined : state.queue[index];
           const queued: QueuedPrompt = {
             prompt_id: event.prompt_id,
-            preview: event.preview ?? "",
-            held: false,
-            created_at: this.#now(),
+            preview: event.preview ?? previous?.preview ?? "",
+            held: event.held ?? false,
+            created_at: previous?.created_at ?? returned?.created_at ?? this.#now(),
           };
           this.#queuedSinceUpdate.add(event.prompt_id);
+          const queue = [...state.queue];
+          // A capture that was stopped returns the Sending head before its waiting followers.
+          if (index < 0 && returned !== null) queue.unshift(queued);
+          else if (index < 0) queue.push(queued);
+          else queue[index] = queued;
           return {
             ...state,
-            queue: [...state.queue.filter((row) => row.prompt_id !== event.prompt_id), queued],
+            queue,
           };
         }
         this.#queuedSinceUpdate.delete(event.prompt_id);

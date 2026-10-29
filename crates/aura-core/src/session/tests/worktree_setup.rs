@@ -25,6 +25,138 @@ async fn pending_chat(rig: &Rig) -> String {
 }
 
 #[tokio::test]
+async fn queued_setup_events_report_exact_holds_when_other_messages_are_already_held() {
+    for state in [WorktreeSetupState::Failed, WorktreeSetupState::Interrupted] {
+        let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+        let chat = pending_chat(&rig).await;
+        let sink = Arc::new(Sink::default());
+        rig.manager.attach(&chat, sink.clone()).await.unwrap();
+        let first = rig
+            .manager
+            .send(&chat, "before failure".into())
+            .await
+            .unwrap();
+        rig.manager
+            .set_setup_attempt(&chat, Some(1), WorktreeSetupState::Running, None)
+            .await
+            .unwrap()
+            .unwrap();
+        rig.manager
+            .set_setup_attempt(&chat, Some(1), state, Some("Retry setup.".into()))
+            .await
+            .unwrap()
+            .unwrap();
+        let second = rig
+            .manager
+            .send(&chat, "after failure".into())
+            .await
+            .unwrap();
+        eventually("new held prompt is reported authoritatively", || {
+            lock(&sink.frames)
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .any(|event| {
+                    matches!(event, AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: aura_protocol::PromptState::Queued,
+                    held: Some(true),
+                    ..
+                } if prompt_id == &second.prompt_id)
+                })
+        })
+        .await;
+        assert!(
+            lock(&sink.frames)
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .any(|event| {
+                    matches!(event, AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: aura_protocol::PromptState::Queued,
+                    held: Some(false),
+                    ..
+                } if prompt_id == &first.prompt_id)
+                }),
+            "the earlier unheld event is not rewritten by the later setup failure"
+        );
+        let retry = rig
+            .manager
+            .set_setup_attempt(&chat, None, WorktreeSetupState::Awaiting, None)
+            .await
+            .unwrap()
+            .unwrap();
+        let third = rig
+            .manager
+            .send(&chat, "during retry".into())
+            .await
+            .unwrap();
+        rig.manager
+            .set_setup_attempt(
+                &chat,
+                Some(retry.generation),
+                WorktreeSetupState::Running,
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        rig.manager
+            .set_setup_attempt(
+                &chat,
+                Some(retry.generation),
+                state,
+                Some("Retry failed.".into()),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        eventually(
+            "retry failure reports its preexisting unheld follower",
+            || {
+                lock(&sink.frames)
+                    .iter()
+                    .flat_map(|batch| &batch.events)
+                    .any(|event| {
+                        matches!(event, AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: aura_protocol::PromptState::Queued,
+                    held: Some(true),
+                    ..
+                } if prompt_id == &third.prompt_id)
+                    })
+            },
+        )
+        .await;
+        let attached = rig
+            .manager
+            .attach(&chat, Arc::new(Sink::default()))
+            .await
+            .unwrap();
+        assert_eq!(attached.snapshot.queue.len(), 3);
+        assert_eq!(
+            attached
+                .snapshot
+                .queue
+                .iter()
+                .map(|row| &row.prompt_id)
+                .collect::<Vec<_>>(),
+            [&first.prompt_id, &second.prompt_id, &third.prompt_id]
+        );
+        assert!(attached.snapshot.queue.iter().all(|row| row.held));
+        let sequences = lock(&sink.frames)
+            .iter()
+            .flat_map(|batch| {
+                (0..batch.events.len()).map(move |index| batch.seq_start + index as u32)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            sequences.windows(2).all(|pair| pair[0] < pair[1]),
+            "hold updates retain monotonic live event identities"
+        );
+    }
+}
+
+#[tokio::test]
 async fn delayed_setup_allows_durable_compose_edit_reorder_and_releases_fifo_once() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("setup-queue"),

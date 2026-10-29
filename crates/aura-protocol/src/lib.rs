@@ -123,6 +123,10 @@ pub enum AuraEvent {
         state: PromptState,
         /// The prompt's first 256 characters, sent with `Queued`.
         preview: Option<String>,
+        /// Exact hold when queued or when a queued row's hold changes; absent for other states
+        /// and older producers.
+        #[serde(default)]
+        held: Option<bool>,
     },
     Notice {
         level: NoticeLevel,
@@ -807,6 +811,32 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn queued_lifecycle_retains_exact_hold_and_accepts_legacy_missing_hold() {
+        let event: AuraEvent = serde_json::from_value(json!({
+            "type": "prompt_lifecycle", "prompt_id": "held", "state": "queued",
+            "preview": "new held message", "held": true
+        }))
+        .unwrap();
+        assert!(matches!(
+            event,
+            AuraEvent::PromptLifecycle {
+                held: Some(true),
+                ..
+            }
+        ));
+        assert_eq!(round_trip(&event), event);
+        let legacy: AuraEvent = serde_json::from_value(json!({
+            "type": "prompt_lifecycle", "prompt_id": "legacy", "state": "queued",
+            "preview": "older producer"
+        }))
+        .unwrap();
+        assert!(matches!(
+            legacy,
+            AuraEvent::PromptLifecycle { held: None, .. }
+        ));
+    }
+
     fn round_trip(event: &AuraEvent) -> AuraEvent {
         let text = serde_json::to_string(event).expect("serialize");
         serde_json::from_str(&text).expect("deserialize")
@@ -1056,6 +1086,7 @@ mod tests {
                 prompt_id: "p".into(),
                 state: PromptState::Queued,
                 preview: Some("Fix the build".into()),
+                held: Some(false),
             },
             AuraEvent::Notice {
                 level: NoticeLevel::Error,

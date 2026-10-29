@@ -1698,6 +1698,7 @@ impl ChatActor {
             created_at: now,
         };
         let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
+        let held = row.held;
         self.queue.push(row.clone());
         self.queue_op(Op::QueuePut(row));
         self.push(
@@ -1705,6 +1706,7 @@ impl ChatActor {
                 prompt_id: prompt_id.clone(),
                 state: PromptState::Queued,
                 preview: Some(preview),
+                held: Some(held),
             },
             None,
         );
@@ -1767,6 +1769,7 @@ impl ChatActor {
                 prompt_id: prompt_id.to_owned(),
                 state: PromptState::Cancelled,
                 preview: None,
+                held: None,
             },
             None,
         );
@@ -2034,12 +2037,28 @@ impl ChatActor {
             return;
         }
         self.hold_cause = cause;
-        for row in &mut self.queue {
-            row.held = true;
-        }
+        let changed: Vec<_> = self
+            .queue
+            .iter_mut()
+            .filter_map(|row| {
+                if row.held {
+                    return None;
+                }
+                row.held = true;
+                Some(AuraEvent::PromptLifecycle {
+                    prompt_id: row.id.clone(),
+                    state: PromptState::Queued,
+                    preview: Some(cap_chars(row.text.clone(), PREVIEW_CHARS)),
+                    held: Some(true),
+                })
+            })
+            .collect();
         self.queue_op(Op::QueueHoldAll {
             chat_id: self.chat_id.clone(),
         });
+        for event in changed {
+            self.push(event, None);
+        }
         self.info_dirty = true;
         self.schedule_flush();
     }
@@ -2093,6 +2112,7 @@ impl ChatActor {
                     prompt_id,
                     state: PromptState::Queued,
                     preview: Some(preview),
+                    held: Some(true),
                 },
                 None,
             );
@@ -2126,6 +2146,7 @@ impl ChatActor {
                 prompt_id: prompt.id.clone(),
                 state: PromptState::Sending,
                 preview: Some(cap_chars(prompt.text.clone(), PREVIEW_CHARS)),
+                held: None,
             },
             None,
         );
@@ -2250,6 +2271,7 @@ impl ChatActor {
                 prompt_id: prompt.id,
                 state: PromptState::Started,
                 preview: None,
+                held: None,
             },
             tagged,
         );
@@ -2449,6 +2471,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id.clone(),
                     state: PromptState::Cancelled,
                     preview: None,
+                    held: None,
                 },
                 tag.clone(),
             );
@@ -4038,6 +4061,7 @@ impl ChatActor {
                 prompt_id: turn.prompt_id.clone(),
                 state,
                 preview: None,
+                held: None,
             },
             tag,
         );
@@ -4353,6 +4377,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Cancelled,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );
@@ -4425,6 +4450,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Failed,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );
@@ -4472,6 +4498,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Failed,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );

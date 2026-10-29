@@ -635,6 +635,34 @@ describe("the session's live state", () => {
     ]);
   });
 
+  it("returns an authoritatively held Sending row to the queue head without losing followers", async () => {
+    const fake = new FakeTransport();
+    const sending = { prompt_id: "p1", text: "capturing", parts: [], created_at: 1 };
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "ready", sending }),
+      queue: [{ prompt_id: "p2", preview: "follows", held: false, created_at: 2 }],
+    });
+    fake
+      .lastAttach()
+      .onFrame(
+        frame(CHAT, 0, [
+          ev.lifecycle("p1", "queued", "capturing", true),
+          ev.lifecycle("p2", "queued", "follows", true),
+          ev.session({ status: "ready", queue_held: true, sending: null }),
+        ]),
+      );
+    await settled();
+    expect(
+      store.getSnapshot().queue.map((row) => [row.prompt_id, row.held, row.created_at]),
+    ).toEqual([
+      ["p1", true, 1],
+      ["p2", true, 2],
+    ]);
+    expect(store.getSnapshot().sending).toBeNull();
+    expect(fake.callsOf("attach")).toHaveLength(1);
+    store.close();
+  });
+
   it("shows a message already on its way when the window joins", async () => {
     const fake = new FakeTransport();
     const sending = { prompt_id: "p1", text: "fix the tests", parts: [], created_at: 1 };
@@ -675,6 +703,127 @@ describe("the session's live state", () => {
     await settled();
     expect(store.getSnapshot().queue).toEqual([queued]);
     expect(store.getSnapshot().sending).toBeNull();
+    store.close();
+  });
+
+  it.each(["failed", "interrupted"] as const)(
+    "keeps authoritative queued holds during %s setup without rejoining or duplicating IDs",
+    async (setupState) => {
+      const fake = new FakeTransport();
+      const setup = {
+        worktree_id: "tree",
+        generation: 1,
+        state: setupState,
+        detail: "Retry setup.",
+      };
+      const session = sessionInfo({
+        status: "stopped",
+        queue_held: true,
+        worktree_setup: setup,
+      });
+      const store = await opened(
+        fake,
+        historyPage(CHAT, [], { has_more: true, before_seq: 17 }),
+        0,
+        {
+          session,
+          queue: [{ prompt_id: "a", preview: "older", held: true, created_at: 1 }],
+        },
+      );
+      const channel = fake.lastAttach();
+      channel.onFrame(
+        frame(CHAT, 0, [ev.lifecycle("b", "queued", "new held", true), ev.session(session)]),
+      );
+      expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+        ["a", true],
+        ["b", true],
+      ]);
+      // A duplicate old frame cannot replace a newer row's authoritative hold or preview.
+      channel.onFrame(frame(CHAT, 0, [ev.lifecycle("b", "queued", "stale", false)]));
+      channel.onFrame(
+        frame(CHAT, 2, [ev.lifecycle("b", "queued", "same identity", true), ev.session(session)]),
+      );
+      const succeeded = sessionInfo({
+        status: "ready",
+        queue_held: true,
+        worktree_setup: { ...setup, generation: 2, state: "succeeded" },
+      });
+      // Queue truth wins at a setup boundary, independent of either session's setup policy.
+      channel.onFrame(
+        frame(CHAT, 4, [ev.lifecycle("c", "queued", "after setup", false), ev.session(succeeded)]),
+      );
+      channel.onFrame(
+        frame(CHAT, 6, [
+          ev.lifecycle("d", "queued", "before setup finished", true),
+          ev.session(succeeded),
+        ]),
+      );
+      await settled();
+      expect(
+        store.getSnapshot().queue.map((row) => [row.prompt_id, row.preview, row.held]),
+      ).toEqual([
+        ["a", "older", true],
+        ["b", "same identity", true],
+        ["c", "after setup", false],
+        ["d", "before setup finished", true],
+      ]);
+      expect(store.getSnapshot().hasMore).toBe(true);
+      expect(store.getSnapshot().historyRevision).toBe(0);
+      expect(fake.callsOf("attach")).toHaveLength(1);
+      store.close();
+    },
+  );
+
+  it("updates existing mixed queue holds by stable ID when a setup retry fails", async () => {
+    const fake = new FakeTransport();
+    const setup = { worktree_id: "tree", generation: 2, state: "running" as const, detail: null };
+    const session = sessionInfo({ status: "stopped", queue_held: true, worktree_setup: setup });
+    const queue = [
+      { prompt_id: "a", preview: "held from first failure", held: true, created_at: 1 },
+      { prompt_id: "b", preview: "during retry", held: false, created_at: 2 },
+      { prompt_id: "c", preview: "also during retry", held: false, created_at: 3 },
+    ];
+    const store = await opened(fake, historyPage(CHAT, [], { has_more: true, before_seq: 17 }), 0, {
+      session,
+      queue,
+    });
+    const failed = { ...session, worktree_setup: { ...setup, state: "failed" as const } };
+    const channel = fake.lastAttach();
+    channel.onFrame(
+      frame(CHAT, 0, [ev.lifecycle("b", "queued", "during retry", true), ev.session(failed)]),
+    );
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["b", true],
+      ["c", false],
+    ]);
+    channel.onFrame(
+      frame(CHAT, 2, [ev.lifecycle("c", "queued", "also during retry", true), ev.session(failed)]),
+    );
+    await settled();
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["b", true],
+      ["c", true],
+    ]);
+    expect(fake.callsOf("attach")).toHaveLength(1);
+    expect(store.getSnapshot().hasMore).toBe(true);
+    expect(store.getSnapshot().queue.map((row) => row.created_at)).toEqual([1, 2, 3]);
+    // A later attach restores the same holds and order from the authoritative snapshot.
+    const rejoin = store.reattach();
+    await settled();
+    fake.lastAttach().resolve(
+      attachResult(CHAT, 4, historyPage(CHAT, []), {
+        session: failed,
+        queue: queue.map((row) => ({ ...row, held: true })),
+      }),
+    );
+    await rejoin;
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["b", true],
+      ["c", true],
+    ]);
     store.close();
   });
 
