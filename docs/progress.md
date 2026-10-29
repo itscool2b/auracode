@@ -4493,3 +4493,18 @@ All account-sync setup tests passed 17/17, including earlier prelaunch failure a
 regressions. Core Clippy library/tests with warnings denied, rustfmt and instruction parity passed.
 Root also reported the integrated setup/recovery layout checks clean in sixteen
 focused views across both browser engines. Native bindings remain an integration-owner gate.
+
+
+### 2026-10-29: Scoped cleanup acceptance fixtures
+
+The delete-data browser checker still expected the old blanket key-deletion wording. It now
+checks complete scoped decisions: deleted-root index, exclusive accounts and eligible orphan
+bundles removed; foreign indexes and shared accounts retained, with their exact reasons and
+unique opaque targets. A synthetic unknown-payload case retains every key and retry index and
+shows the uncertainty warning on both Windows and macOS previews. Sharing alone has no such
+warning. The narrow view also checks the populated key rows.
+
+The preview and dialog unit tests share typed synthetic key data. No production cleanup behavior
+changed and no native cleanup, Cargo or browser run was performed for this follow-up. Targeted
+Vitest passes 9/9; touched-file Biome, checker syntax, diff and instruction parity checks pass.
+Chromium/WebKit runtime verification remains with the integration coordinator.
