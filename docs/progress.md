@@ -4233,3 +4233,18 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+
+## 2026-10-29: Instructions interruption recovery
+
+Implemented version 2 journals with explicit backup, file publication, managed metadata and settlement
+boundaries. Opening Instructions and applying later changes recover under the existing configuration
+gate. Recovery rolls back only exact before/after/staged states, finishes committed metadata with an
+entry comparison, preserves external edits, and blocks overlapping unresolved writes. Startup and
+Instructions expose retained journal paths. Only settled journals count toward the newest-40 retention
+limit; malformed and unresolved evidence stays. Legacy complete journals retain their evidence because
+they did not record metadata intent. All verification fixtures use temporary or synthetic homes.
+
+Verification so far: focused frontend tests 9/9, desktop TypeScript check, and Chromium Instructions
+flows with 10 axe scans and zero violations. The recovery screenshot was inspected. Rust interruption
+tests and Clippy are queued for the shared Cargo lane; no claim of a verified Rust build yet.

@@ -88,8 +88,8 @@ then expire.
 
 Apply checks every reviewed file (and every instruction file the plan did not touch) against the
 exact bytes reviewed and refuses before the first write if anything changed; the person reviews
-again. It writes the replaced bytes to `<data>/instructions/backups/<id>/` (the newest 40 changes are
-kept), stages new bytes next to each file, moves the original aside and publishes with a
+again. It writes the replaced bytes to `<data>/instructions/backups/<id>/` (the newest 40 settled changes are
+kept; unresolved journals are never pruned), stages new bytes next to each file, moves the original aside and publishes with a
 no-overwrite hard link (a file created meanwhile is never overwritten; file systems without hard
 links fall back to a checked rename). If any file fails, every file already changed is put back; if
 one cannot be put back, its backup is kept and the result says so. Writes share the configuration
@@ -178,4 +178,14 @@ Each case has defined behaviour and a test (`aura-config` unless named otherwise
 | Agents not installed | Listed apart; no files are created for them | `global_universal_imports_for_claude_and_copies_for_agents_without_imports` |
 | Chats already running | Every review and the page say changes apply to new sessions | review notes (`plan.rs`); browser checks |
 | User-level files are real configuration | Read on opening the page, written only by a reviewed Apply; nothing else lands in agent folders | `global_universal_imports_for_claude_and_copies_for_agents_without_imports` |
-| The app stops part way through an apply | The replaced bytes are already in the backup folder with a journal; staged `.NAME.auracode-*.tmp` and `.old` files may remain next to the file. There is no automatic recovery yet (deferred) | Backups before writes: `apply::tests::a_reviewed_change_replaces_creates_and_backs_up_atomically` |
+| The app stops part way through an apply | The replaced bytes are already in the backup folder with a journal; staged `.NAME.auracode-*.tmp` and `.old` files may remain next to the file. Opening Instructions or applying a later change automatically recovers exact known states under the configuration gate. Before file commit it rolls back; after file commit it completes managed metadata only if the expected record still matches. External changes stay untouched, and unresolved overlapping writes are blocked. Startup and Instructions show the retained path | `apply::recovery::tests::*` (temporary homes only) |
+
+
+Recovery journal version 2 records root resolution, file hashes, link text, rename spelling, and the
+managed-record entry before and after the change. Durable markers distinguish backups ready, files
+committed, managed metadata committed, and settled. Restart cleanup only removes the named staged
+siblings when their bytes or link target still match. Missing roots, changed paths, damaged backups,
+and malformed journals retain their evidence. Legacy version 1 journals roll back only when the
+remaining evidence is exact; a legacy complete marker cannot prove managed metadata was saved and
+therefore requires attention. Unrelated file writes remain available. A completely unreadable journal
+has no trustworthy target map, so it is reported and retained without guessing which paths to block.

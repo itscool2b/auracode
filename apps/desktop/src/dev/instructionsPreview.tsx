@@ -32,6 +32,7 @@ const SCENARIOS: Readonly<Record<string, InstructionsScenario>> = {
   "instructions-drift": "drift",
   "instructions-large": "large",
   "instructions-review": "review",
+  "instructions-recovery": "recovery",
 };
 
 declare global {

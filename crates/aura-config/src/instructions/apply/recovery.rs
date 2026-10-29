@@ -166,7 +166,15 @@ pub(crate) fn recover(state: &Path) -> Vec<Pending> {
 
 pub(crate) fn overlaps(left: &Path, right: &Path) -> bool {
     // Conservative on case-sensitive volumes too: a case-only rename owns both spellings.
-    let key = |path: &Path| path.to_string_lossy().replace('\\', "/").to_lowercase();
+    let key = |path: &Path| {
+        let resolved = path
+            .parent()
+            .and_then(|parent| std::fs::canonicalize(parent).ok())
+            .zip(path.file_name())
+            .map(|(parent, name)| parent.join(name))
+            .unwrap_or_else(|| path.to_path_buf());
+        resolved.to_string_lossy().replace('\\', "/").to_lowercase()
+    };
     key(left) == key(right)
 }
 
@@ -287,6 +295,13 @@ pub(super) fn resolve(path: &Path, journal: &Journal) -> Result<()> {
             }
             // A missing original without its staged sibling is ambiguous. Preserve it.
             if (file.link.is_some() || file.before.is_some()) && old == Expect::Missing {
+                return Err(Error::Stale);
+            }
+            if journal.version == 1
+                && file.before.is_none()
+                && file.link.is_none()
+                && temp == Expect::Missing
+            {
                 return Err(Error::Stale);
             }
             let bytes = if let Some(hash) = &file.before {

@@ -568,6 +568,29 @@ mod tests {
 
     /// The sweep's notice arrives after startup and shows with the others from then on.
     #[tokio::test]
+    async fn initial_notice_lists_retained_instructions_journal_without_touching_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        let state = state(boot(Ok(DataRoot::at(data.clone()))));
+        let journal = data
+            .join("instructions/backups")
+            .join(uuid::Uuid::now_v7().to_string());
+        std::fs::create_dir_all(&journal).unwrap();
+        std::fs::write(journal.join("journal.json"), b"{broken").unwrap();
+        let info = state.app_info();
+        assert!(info.notices.iter().any(|notice| {
+            notice.contains("Instructions change needs recovery")
+                && notice.contains(&journal.to_string_lossy().to_string())
+        }));
+        assert_eq!(
+            std::fs::read(journal.join("journal.json")).unwrap(),
+            b"{broken"
+        );
+        state.at_exit();
+    }
+
+    /// The sweep's notice arrives after startup and shows with the others from then on.
+    #[tokio::test]
     async fn notices_that_arrive_after_startup_are_listed() {
         let dir = tempfile::tempdir().expect("tempdir");
         let state = state(boot(Ok(DataRoot::at(dir.path().join("data")))));

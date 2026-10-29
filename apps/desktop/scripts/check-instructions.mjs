@@ -118,6 +118,12 @@ try {
       };
       const dialog = (name) => page.getByRole("dialog", { name });
 
+      await open("instructions-recovery");
+      await page.getByText(/An interrupted Instructions change needs recovery/).waitFor();
+      await page.getByText(/Its backup is kept at C:\/fixture\/auracode\/instructions\/backups\/recovered/).waitFor();
+      assert.ok((await calls()).every((call) => call === "snapshot"));
+      await audit("recovery");
+
       // One file: an edit is reviewed with its diff, Escape discards the review, Apply saves it.
       await open("instructions");
       // Opening the page only reads (StrictMode reads twice in development).

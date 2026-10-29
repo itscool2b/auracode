@@ -303,7 +303,7 @@ fn unresolved_target_blocks_overlap_but_allows_a_separate_reviewed_write() {
     let review = crate::instructions::prepare(
         &context,
         &Change::Save {
-            file: "AGENTS.md".into(),
+            file: "project:AGENTS.md".into(),
             text: "wanted".into(),
         },
     )
@@ -314,7 +314,7 @@ fn unresolved_target_blocks_overlap_but_allows_a_separate_reviewed_write() {
     let review = crate::instructions::prepare(
         &context,
         &Change::Save {
-            file: "CLAUDE.md".into(),
+            file: "project:CLAUDE.md".into(),
             text: "separate".into(),
         },
     )
