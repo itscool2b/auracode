@@ -50,7 +50,7 @@ fn config_error(error: aura_config::Error) -> AppError {
 fn task_error() -> AppError {
     AppError::new(
         AppErrorCode::Internal,
-        "The instructions task stopped unexpectedly. No file was changed by it.",
+        "The instructions task stopped unexpectedly. Its journal and backups were kept. Open Instructions again to check recovery.",
     )
 }
 
@@ -71,13 +71,18 @@ fn state_dir(state: &AppState) -> Result<PathBuf, AppError> {
 #[specta::specta]
 pub async fn instructions_snapshot(
     state: State<'_, AppState>,
+    library: State<'_, Arc<LibraryService>>,
     target: Target,
 ) -> Result<Snapshot, AppError> {
     let manager = state.sessions()?;
     let context = manager
         .instructions_context(&target, state_dir(&state)?)
         .await?;
+    let gate = Arc::clone(&library.mutation);
+    let _serial = gate.lock_owned().await;
     tauri::async_runtime::spawn_blocking(move || {
+        let _serial = _serial;
+        instructions::recover(&context.state_dir);
         instructions::snapshot(&context).map_err(config_error)
     })
     .await
@@ -89,6 +94,7 @@ pub async fn instructions_snapshot(
 pub async fn instructions_review(
     state: State<'_, AppState>,
     service: State<'_, Arc<InstructionsService>>,
+    library: State<'_, Arc<LibraryService>>,
     target: Target,
     change: Change,
 ) -> Result<Review, AppError> {
@@ -97,7 +103,11 @@ pub async fn instructions_review(
     let context = manager
         .instructions_context(&target, state_dir(&state)?)
         .await?;
+    let gate = Arc::clone(&library.mutation);
+    let _serial = gate.lock_owned().await;
     let prepared = tauri::async_runtime::spawn_blocking(move || {
+        let _serial = _serial;
+        instructions::recover(&context.state_dir);
         instructions::prepare(&context, &change).map_err(config_error)
     })
     .await

@@ -230,6 +230,12 @@ impl AppState {
     pub fn app_info(&self) -> AppInfo {
         let runtime = lock(&self.runtime);
         let mut info = runtime.info.clone();
+        if let Some(root) = &self.data_dir {
+            info.notices
+                .extend(aura_config::instructions::recovery_notices(
+                    &root.join("instructions"),
+                ));
+        }
         info.config_profile_recovery = self.data_dir.as_ref().and_then(|root| {
             crate::profile_config::status(
                 root,
