@@ -38,6 +38,108 @@ fn invalid(message: impl Into<String>) -> SessionError {
 }
 
 impl SessionManager {
+    pub async fn profile_worktrees(
+        &self,
+        project_id: Option<&str>,
+    ) -> Result<Vec<ManagedWorktree>, SessionError> {
+        let records = self
+            .worktrees()?
+            .profile_records()
+            .await
+            .map_err(|error| invalid(error.to_string()))?;
+        let Some(project_id) = project_id else {
+            return Ok(records);
+        };
+        let organization = self
+            .deps()
+            .store
+            .organize(
+                crate::chatstore::organization::OrganizationCommand::Snapshot(
+                    aura_protocol::workspace::WorkspaceFilter {
+                        include_archived: true,
+                        project_id: Some(project_id.into()),
+                    },
+                ),
+            )
+            .await
+            .map_err(|error| storage_error(&error))?;
+        let sources = organization
+            .projects
+            .into_iter()
+            .flat_map(|project| project.folders)
+            .filter_map(|folder| folder.path)
+            .collect::<Vec<_>>();
+        let plain = |text: &str| {
+            crate::fsutil::plain_windows_path(text)
+                .unwrap_or_else(|| text.into())
+                .replace('\\', "/")
+        };
+        Ok(records
+            .into_iter()
+            .filter(|record| {
+                sources
+                    .iter()
+                    .any(|path| plain(path) == plain(&record.source))
+            })
+            .collect())
+    }
+
+    pub async fn profile_worktree_folder(&self, id: &str) -> Result<PathBuf, SessionError> {
+        self.worktrees()?
+            .profile_record_folder(id)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    pub async fn profile_worktree_recovery_preview(
+        &self,
+        id: &str,
+        action: WorktreeRecoveryAction,
+    ) -> Result<WorktreeRecoveryPreview, SessionError> {
+        let service = self.worktrees()?;
+        let record = service
+            .profile_record(id)
+            .await
+            .map_err(|error| invalid(error.to_string()))?;
+        service
+            .recovery_preview(&record.chat_id, id, action)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    pub async fn profile_worktree_recreate_preview(
+        &self,
+        id: &str,
+    ) -> Result<aura_protocol::git::WorktreeRecreatePreview, SessionError> {
+        let service = self.worktrees()?;
+        let record = service
+            .profile_record(id)
+            .await
+            .map_err(|error| invalid(error.to_string()))?;
+        service
+            .recreate_preview(&record.chat_id, id)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    pub async fn profile_worktree_recovery_apply(
+        &self,
+        id: &str,
+        token: &str,
+        recreate: bool,
+    ) -> Result<WorktreeActionResult, SessionError> {
+        let manager = self.clone();
+        let id = id.to_owned();
+        let token = token.to_owned();
+        self.deps().rt.spawn(async move {
+            let _organization=manager.shared().organization.lock().await;
+            let service=manager.worktrees()?;
+            let record=service.profile_record(&id).await.map_err(|error|invalid(error.to_string()))?;
+            let folders=if recreate {service.recreate_folders(&record.chat_id,&id).await}else{service.recovery_folders(&record.chat_id,&id).await}.map_err(|error|invalid(error.to_string()))?;
+            let _reservations=manager.reserve_git_folders(folders).await?;
+            if recreate {service.recreate_apply(&record.chat_id,&id,&token).await}else{service.recovery_apply(&record.chat_id,&id,&token).await}.map_err(|error|invalid(error.to_string()))
+        }).await.map_err(|_|invalid("Recovery stopped unexpectedly. The saved record and retained files remain available for review."))?
+    }
     pub async fn worktree_pr_preview(
         &self,
         chat_id: &str,
@@ -195,13 +297,31 @@ impl SessionManager {
         &self,
         folders: Vec<PathBuf>,
     ) -> Result<Reservations, SessionError> {
-        self.reserve_git_folders_except(folders, None).await
+        self.reserve_git_folders_with(folders, None, None).await
     }
 
     async fn reserve_git_folders_except(
         &self,
         folders: Vec<PathBuf>,
         except: Option<&str>,
+    ) -> Result<Reservations, SessionError> {
+        self.reserve_git_folders_with(folders, except, None).await
+    }
+
+    pub(super) async fn reserve_setup_folders(
+        &self,
+        folders: Vec<PathBuf>,
+        chat_id: &str,
+    ) -> Result<Reservations, SessionError> {
+        self.reserve_git_folders_with(folders, None, Some(chat_id))
+            .await
+    }
+
+    async fn reserve_git_folders_with(
+        &self,
+        folders: Vec<PathBuf>,
+        except: Option<&str>,
+        setup_chat: Option<&str>,
     ) -> Result<Reservations, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
@@ -256,12 +376,18 @@ impl SessionManager {
             let id = crate::ids::new_id();
             let mailbox = self.actor(&chat);
             let (reply, answer) = oneshot::channel();
-            mailbox
-                .send(ChatMsg::ReserveGit {
+            let message = if setup_chat == Some(chat.as_str()) {
+                ChatMsg::ReserveSetup {
                     id: id.clone(),
                     reply,
-                })
-                .map_err(|_| stopped())?;
+                }
+            } else {
+                ChatMsg::ReserveGit {
+                    id: id.clone(),
+                    reply,
+                }
+            };
+            mailbox.send(message).map_err(|_| stopped())?;
             // Register the release before awaiting, so cancellation cannot leave an actor locked.
             reservations.actors.push((mailbox, id));
             answer.await.map_err(|_| stopped())??;

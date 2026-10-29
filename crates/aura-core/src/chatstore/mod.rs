@@ -40,6 +40,7 @@ mod preservation;
 pub(crate) mod recover;
 pub(crate) mod rows;
 pub(crate) mod search;
+pub(crate) mod setup_attempt;
 pub(crate) mod steering;
 #[cfg(feature = "account-sync")]
 mod sync;
@@ -102,6 +103,38 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn setup_attempt(
+        &self,
+        command: setup_attempt::Command,
+    ) -> Result<Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>, StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let (reply, answer) = oneshot::channel();
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(2048))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::SetupAttempt { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn read_setup_attempt(
+        &self,
+        chat_id: &str,
+    ) -> Result<Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        self.request(
+            Request::ReadSetupAttempt {
+                chat_id: chat_id.into(),
+                reply,
+            },
+            answer,
+        )
+        .await?
+    }
     pub(crate) async fn folder_resolution(
         &self,
         command: folder_resolution::Command,
@@ -878,6 +911,7 @@ pub struct ChatRecord {
 /// Everything a chat actor starts from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatLoad {
+    pub worktree_setup: Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>,
     pub(crate) remote_history: bool,
     pub(crate) continuation: Option<conversation::PendingContinuation>,
     /// A project default for a chat that has never established an agent session.

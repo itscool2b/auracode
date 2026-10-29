@@ -351,6 +351,10 @@ impl SessionManager {
     }
 
     pub(super) async fn workspace_view(&self, mut organization: Organization) -> WorkspaceSnapshot {
+        let worktrees = match self.worktrees() {
+            Ok(service) => service.profile_records().await.unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
         let paths = organization
             .projects
             .iter()
@@ -361,6 +365,16 @@ impl SessionManager {
         for project in &mut organization.projects {
             for folder in &mut project.folders {
                 if let Some(path) = &folder.path {
+                    if let Some(record) = worktrees.iter().find(|record| {
+                        crate::fsutil::plain_path(Path::new(&record.path))
+                            == crate::fsutil::plain_path(Path::new(path))
+                    }) {
+                        folder.display_name = format!(
+                            "{} (worktree from {})",
+                            record.branch,
+                            crate::fsutil::plain_path(Path::new(&record.source)).display()
+                        );
+                    }
                     folder.folder_state = checked
                         .get(&PathBuf::from(path))
                         .copied()

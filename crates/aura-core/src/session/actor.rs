@@ -94,6 +94,7 @@ pub(crate) type FolderContextReply = (
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    SetupChanged(aura_protocol::worktree_setup::WorktreeSetupAttempt),
     FolderContext {
         reply: oneshot::Sender<Result<FolderContextReply, SessionError>>,
     },
@@ -107,6 +108,10 @@ pub(crate) enum ChatMsg {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     ReserveGit {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReserveSetup {
         id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -269,6 +274,7 @@ impl ChatMsg {
             ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Revert { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::ReserveSetup { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
@@ -296,7 +302,7 @@ impl ChatMsg {
             ChatMsg::Shutdown { reply, .. } => {
                 let _ = reply.send(());
             }
-            ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } => {}
+            ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } | ChatMsg::SetupChanged(_) => {}
             #[cfg(test)]
             ChatMsg::Panic => {}
         }
@@ -566,6 +572,8 @@ struct Prompt {
 
 /// One chat's actor.
 pub(crate) struct ChatActor {
+    setup_reservation: bool,
+    worktree_setup: Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>,
     chat_id: String,
     shared: Arc<Shared>,
     store: Arc<ChatStore>,
@@ -663,6 +671,7 @@ impl ChatActor {
         load: ChatLoad,
     ) -> ChatActor {
         let ChatLoad {
+            worktree_setup,
             initial_model,
             remote_history,
             continuation,
@@ -756,6 +765,8 @@ impl ChatActor {
             // Every queued row of a loaded chat comes back held: auracode restarted with it.
             hold_cause: HoldCause::Restart,
             queue_wait: None,
+            worktree_setup,
+            setup_reservation: false,
             last_activity: Instant::now(),
             quitting: false,
             shutdown_reply: None,
@@ -929,9 +940,38 @@ impl ChatActor {
             }
         }
         match msg {
+            ChatMsg::SetupChanged(attempt) => {
+                if self.worktree_setup.as_ref().is_some_and(|current| {
+                    current.generation > attempt.generation
+                        || (current.generation == attempt.generation
+                            && (matches!(current.state,aura_protocol::worktree_setup::WorktreeSetupState::Succeeded | aura_protocol::worktree_setup::WorktreeSetupState::Failed | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted)
+                            || (current.state == aura_protocol::worktree_setup::WorktreeSetupState::Running && attempt.state == aura_protocol::worktree_setup::WorktreeSetupState::Awaiting)))
+                }) {
+                    return;
+                }
+                let succeeded = !attempt.blocks_agent();
+                let failed = matches!(
+                    attempt.state,
+                    aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                        | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+                );
+                self.worktree_setup = Some(attempt);
+                if failed {
+                    self.hold_queue(HoldCause::Error);
+                }
+                self.info_dirty = true;
+                self.schedule_flush();
+                if succeeded {
+                    let _ = self.start(false, false);
+                }
+            }
             #[cfg(feature = "account-sync")]
             ChatMsg::ImportSync { reply } => self.import_sync(reply),
             ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
+            ChatMsg::ReserveSetup { id, reply } => {
+                self.reserve_workspace(id.clone(), true, reply);
+                self.setup_reservation = self.git_reservation.as_deref() == Some(&id);
+            }
             ChatMsg::ReserveWorkspace {
                 id,
                 restoring,
@@ -939,10 +979,21 @@ impl ChatActor {
             } => self.reserve_workspace(id, restoring, reply),
             ChatMsg::ReleaseGit { id } => {
                 if self.git_reservation.as_deref() == Some(&id) {
+                    let setup = self.setup_reservation;
+                    self.setup_reservation = false;
                     self.git_reservation = None;
                     self.organizing = false;
                     // A prompt queued meanwhile (a restore keeps the queue) goes once it may.
                     self.dispatch_next();
+                    if setup
+                        && self
+                            .worktree_setup
+                            .as_ref()
+                            .is_some_and(|attempt| !attempt.blocks_agent())
+                        && self.status == SessionStatus::Stopped
+                    {
+                        let _ = self.start(false, false);
+                    }
                 }
             }
             ChatMsg::FolderLocated {
@@ -1575,7 +1626,7 @@ impl ChatActor {
     fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
         self.require_workspace()?;
         self.require_remote_handoff()?;
-        if self.organizing {
+        if self.organizing && !self.setup_reservation {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
             ));
@@ -1636,7 +1687,13 @@ impl ChatActor {
             parts,
             chat_id: self.chat_id.clone(),
             text,
-            held: false,
+            held: self.worktree_setup.as_ref().is_some_and(|attempt| {
+                matches!(
+                    attempt.state,
+                    aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                        | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+                )
+            }),
             created_at: now,
         };
         let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
@@ -1666,7 +1723,11 @@ impl ChatActor {
 
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
-        !self.organizing
+        !self
+            .worktree_setup
+            .as_ref()
+            .is_some_and(|attempt| attempt.blocks_agent())
+            && !self.organizing
             && !self.steering_pending
             && self.checkpointing.is_none()
             && self.status == SessionStatus::Ready
@@ -2451,6 +2512,17 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            return Err(SessionError::Organization(
+                attempt.detail.clone().unwrap_or_else(|| {
+                    "Setup is running. Your messages stay queued until it succeeds.".into()
+                }),
+            ));
+        }
         self.require_workspace()?;
         if self.shared.deps.store.config_recovery_pending() {
             return Err(SessionError::Organization(
@@ -4830,6 +4902,16 @@ impl ChatActor {
         if !self.store.workspace_available(&self.chat_id) {
             return Some(QueueWait::WorkspaceRemoved);
         }
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            return Some(QueueWait::Setup {
+                state: attempt.state,
+                detail: attempt.detail.clone(),
+            });
+        }
         if self.queue.iter().all(|row| row.held) {
             return Some(QueueWait::Held {
                 after: self.hold_cause,
@@ -4946,6 +5028,7 @@ impl ChatActor {
 
     fn session_info(&self) -> SessionInfo {
         SessionInfo {
+            worktree_setup: self.worktree_setup.clone(),
             status: self.status,
             detail: self.detail.clone(),
             native_session_id: self.native_session_id.clone(),

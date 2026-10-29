@@ -290,6 +290,17 @@ async fn saved_setup_runs_after_creation_and_holds_the_agent_for_the_command() {
     assert_eq!(setup.copied, vec![".env"]);
     assert!(setup.command_token.is_some());
     assert!(!result.started, "the agent waits for the setup command");
+    let attempt = rig
+        .store
+        .read_setup_attempt(&result.chat.chat.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        attempt.state,
+        aura_protocol::worktree_setup::WorktreeSetupState::Awaiting
+    );
+    assert_eq!(attempt.generation, 1);
     assert!(
         !rig.manager.shared().live.contains(&result.chat.chat.id),
         "no agent process was started"
@@ -297,6 +308,212 @@ async fn saved_setup_runs_after_creation_and_holds_the_agent_for_the_command() {
     assert_eq!(
         std::fs::read(Path::new(&result.worktree.path).join(".env")).expect("copied"),
         b"FIXTURE=one"
+    );
+    std::fs::write(rig.folder.join(".env"), "FIXTURE=changed-source").unwrap();
+    let retry = rig
+        .manager
+        .worktree_setup_command_preview(&result.chat.chat.id, &result.worktree.id)
+        .await
+        .unwrap();
+    assert!(retry.files.is_empty(), "retry never recopies setup files");
+    let retried = rig
+        .manager
+        .worktree_setup_apply(&result.chat.chat.id, &retry.token)
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(Path::new(&result.worktree.path).join(".env")).unwrap(),
+        b"FIXTURE=one"
+    );
+    let error = rig
+        .manager
+        .prepare_worktree_setup_terminal(
+            &result.chat.chat.id,
+            setup.command_token.as_deref().unwrap(),
+        )
+        .await
+        .err()
+        .expect("old generation refused");
+    assert!(error.to_string().contains("older setup attempt"), "{error}");
+    let launch = rig
+        .manager
+        .prepare_worktree_setup_terminal(
+            &result.chat.chat.id,
+            retried.command_token.as_deref().unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        rig.store
+            .read_setup_attempt(&result.chat.chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        aura_protocol::worktree_setup::WorktreeSetupState::Running
+    );
+    drop(launch);
+}
+
+#[tokio::test]
+async fn a_chatless_rollback_record_is_profile_scoped_discoverable_after_reopen_and_recoverable() {
+    use aura_protocol::git::WorktreeRecoveryAction;
+    let mut rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut rig).await;
+    let project = project(&rig, &rig.folder).await;
+    let service = rig.manager.worktrees().unwrap();
+    let outcome = service
+        .new_chat_preview(crate::gitworkspaces::NewChatRequest {
+            chat_id: "chat-that-could-not-be-saved",
+            folder: &rig.folder,
+            start_branch: None,
+            branch: None,
+            title: None,
+            bring_changes: false,
+        })
+        .await
+        .unwrap();
+    let crate::gitworkspaces::NewChatPlan::Worktree(plan) = outcome else {
+        panic!("Git fixture")
+    };
+    let worktree = service
+        .new_chat_apply("chat-that-could-not-be-saved", &plan.token)
+        .await
+        .unwrap();
+    std::fs::write(
+        Path::new(&worktree.path).join("retained.txt"),
+        "retained user work",
+    )
+    .unwrap();
+    assert!(
+        service
+            .new_chat_rollback("chat-that-could-not-be-saved", &worktree.id, false)
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.manager
+            .managed_worktrees("chat-that-could-not-be-saved")
+            .await
+            .is_err(),
+        "the original route still requires a saved chat"
+    );
+    let reopened = crate::gitworkspaces::GitWorkspaces::new(
+        &rig.profile,
+        rig.manager.deps().env.clone(),
+        aura_process::LeftoverRegistry::disabled(),
+    );
+    let records = reopened.profile_records().await.unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].state, WorktreeState::RecoveryRequired);
+    assert!(
+        records[0]
+            .detail
+            .as_ref()
+            .unwrap()
+            .contains("could not be saved")
+    );
+    assert_eq!(
+        rig.manager
+            .profile_worktrees(Some(&project.id))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        rig.manager
+            .profile_worktrees(Some("another-project"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let review = rig
+        .manager
+        .profile_worktree_recovery_preview(&worktree.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .unwrap();
+    std::fs::write(
+        Path::new(&worktree.path).join("changed-after-review.txt"),
+        "new change",
+    )
+    .unwrap();
+    assert!(
+        rig.manager
+            .profile_worktree_recovery_apply(&worktree.id, &review.token, false)
+            .await
+            .is_err()
+    );
+    let review = rig
+        .manager
+        .profile_worktree_recovery_preview(&worktree.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .unwrap();
+    let recovered = rig
+        .manager
+        .profile_worktree_recovery_apply(&worktree.id, &review.token, false)
+        .await
+        .unwrap();
+    assert_eq!(recovered.worktree.state, WorktreeState::Ready);
+    assert_eq!(
+        rig.manager.profile_worktrees(None).await.unwrap().len(),
+        1,
+        "a reconciled chatless record remains discoverable"
+    );
+    assert_eq!(
+        std::fs::read(Path::new(&worktree.path).join("retained.txt")).unwrap(),
+        b"retained user work"
+    );
+    assert!(
+        rig.manager
+            .profile_worktree_folder(&worktree.id)
+            .await
+            .unwrap()
+            .is_dir()
+    );
+    let mut other = super::rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut other).await;
+    assert!(
+        other
+            .manager
+            .profile_worktrees(None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        other
+            .manager
+            .profile_worktree_recovery_preview(&worktree.id, WorktreeRecoveryAction::Reconcile)
+            .await
+            .is_err()
+    );
+    assert!(
+        other
+            .manager
+            .profile_worktree_folder(&worktree.id)
+            .await
+            .is_err()
+    );
+    // Discovery survives a missing source repository, and review refuses to invent its state.
+    std::fs::rename(
+        rig.folder.join(".git"),
+        rig.folder.join(".git-unavailable-fixture"),
+    )
+    .unwrap();
+    assert_eq!(
+        rig.manager
+            .profile_worktrees(Some(&project.id))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        rig.manager
+            .profile_worktree_recreate_preview(&worktree.id)
+            .await
+            .is_err()
     );
 }
 

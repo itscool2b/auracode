@@ -142,6 +142,18 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    ReadSetupAttempt {
+        chat_id: String,
+        reply: oneshot::Sender<
+            Result<Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>, StoreError>,
+        >,
+    },
+    SetupAttempt {
+        command: super::setup_attempt::Command,
+        reply: oneshot::Sender<
+            Result<Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>, StoreError>,
+        >,
+    },
     WorkspaceRemoval {
         command: super::workspace_removal::Command,
         reply: oneshot::Sender<Result<super::workspace_removal::Reply, StoreError>>,
@@ -501,6 +513,8 @@ fn work_bytes(work: &Work) -> usize {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
+        Work::Request(Request::SetupAttempt { .. }) => 2048,
+        Work::Request(Request::ReadSetupAttempt { .. }) => 1024,
         Work::Request(Request::FolderResolution { command, .. }) => command.bytes(),
         Work::Request(Request::WorkspaceRemoval { command, .. }) => command.bytes(),
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
@@ -703,6 +717,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
+        Work::Request(Request::SetupAttempt { .. }) => "worktree setup attempt",
+        Work::Request(Request::ReadSetupAttempt { .. }) => "read worktree setup attempt",
         Work::Request(Request::FolderResolution { .. }) => "folder resolution",
         Work::Request(Request::WorkspaceRemoval { .. }) => "workspace removal",
         Work::Request(Request::Steering { .. }) => "steering",
@@ -1387,6 +1403,17 @@ impl Writer {
                         super::worktree_setup::execute(conn, &device, now, command)
                     })
                 };
+                let _ = reply.send(result);
+            }
+            Request::SetupAttempt { command, reply } => {
+                let device = self.device_id.clone();
+                let result =
+                    self.write_tx(|conn| super::setup_attempt::execute(conn, &device, command));
+                let _ = reply.send(result);
+            }
+            Request::ReadSetupAttempt { chat_id, reply } => {
+                let device = self.device_id.clone();
+                let result = self.read(|conn| super::setup_attempt::read(conn, &device, &chat_id));
                 let _ = reply.send(result);
             }
             Request::WorkspaceRemoval { command, reply } => {

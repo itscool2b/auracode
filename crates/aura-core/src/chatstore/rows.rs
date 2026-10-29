@@ -209,6 +209,7 @@ pub(crate) fn load_chat(
         None => None,
     };
     Ok(Some(ChatLoad {
+        worktree_setup: super::setup_attempt::read(conn, device_id, chat_id)?,
         initial_model,
         remote_history: remote_history(conn, chat_id)?,
         continuation: super::conversation::pending(conn, chat_id)?,

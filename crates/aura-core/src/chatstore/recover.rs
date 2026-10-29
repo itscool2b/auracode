@@ -72,6 +72,7 @@ pub(crate) fn recover_with(
         }
     }
     if let Scope::All = scope {
+        conn.execute("UPDATE worktree_setup_attempts SET state='interrupted',detail='Setup was interrupted by a restart. Review and retry the command.' WHERE device_id=?1 AND state IN ('awaiting','running')",[device_id])?;
         rows::queue_hold(conn, None, true)?;
     }
     Ok(report)

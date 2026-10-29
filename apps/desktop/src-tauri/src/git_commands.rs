@@ -11,6 +11,84 @@ use crate::{error::AppError, state::AppState};
 
 #[tauri::command]
 #[specta::specta]
+pub async fn profile_worktrees(
+    state: State<'_, AppState>,
+    project_id: Option<String>,
+) -> Result<Vec<ManagedWorktree>, AppError> {
+    Ok(state
+        .sessions()?
+        .profile_worktrees(project_id.as_deref())
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn profile_worktree_recovery_preview(
+    state: State<'_, AppState>,
+    worktree_id: String,
+    action: WorktreeRecoveryAction,
+) -> Result<WorktreeRecoveryPreview, AppError> {
+    Ok(state
+        .sessions()?
+        .profile_worktree_recovery_preview(&worktree_id, action)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn profile_worktree_recreate_preview(
+    state: State<'_, AppState>,
+    worktree_id: String,
+) -> Result<aura_protocol::git::WorktreeRecreatePreview, AppError> {
+    Ok(state
+        .sessions()?
+        .profile_worktree_recreate_preview(&worktree_id)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn profile_worktree_recovery_apply(
+    state: State<'_, AppState>,
+    worktree_id: String,
+    token: String,
+    recreate: bool,
+) -> Result<WorktreeActionResult, AppError> {
+    Ok(state
+        .sessions()?
+        .profile_worktree_recovery_apply(&worktree_id, &token, recreate)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn profile_worktree_open_folder(
+    state: State<'_, AppState>,
+    worktree_id: String,
+) -> Result<(), AppError> {
+    let folder = state
+        .sessions()?
+        .profile_worktree_folder(&worktree_id)
+        .await?;
+    tauri::async_runtime::spawn_blocking(move || tauri_plugin_opener::reveal_item_in_dir(folder))
+        .await
+        .map_err(|_| {
+            AppError::new(
+                crate::error::AppErrorCode::Internal,
+                "The folder could not be opened.",
+            )
+        })?
+        .map_err(|_| {
+            AppError::new(
+                crate::error::AppErrorCode::Internal,
+                "The folder could not be opened.",
+            )
+        })?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn git_workspace(
     state: State<'_, AppState>,
     chat_id: String,
