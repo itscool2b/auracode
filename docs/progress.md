@@ -4660,3 +4660,50 @@ Combined verification passed all 224 desktop library tests and all three Demo in
 with no failures or ignores. Workspace formatting and desktop all-targets Clippy with warnings denied
 passed. Both changes received independent source review with no findings. No production code,
 generated bindings, owner configuration, credential access or visible application interaction changed.
+
+### 2026-10-29: Integrated functionality and isolated Windows acceptance
+
+All seven functionality changes and their independent review fixes are integrated locally:
+canonical Sending and held FIFO, scoped cleanup, durable revert backups, compose during setup,
+retained-worktree recovery, progressive Plugin inventory, interrupted Instructions recovery,
+and interrupted clones. Native testing also found and fixed clone admission and worktree labels.
+Backend decisions remain in Rust. The excluded styling, fade-mask, Demo-mark and site-flair work
+was not imported.
+
+The core account-sync suite passed 743 tests, including 102 integration tests. Workspace Clippy
+and formatting passed. The ordinary full workspace run executed 2164 passing tests, two failing
+desktop assertions and one intentionally ignored Worker-harness test. The two assertions were
+corrected as documented above; the complete affected desktop library and Demo suites then passed
+224 and three tests, with scoped all-targets Clippy and formatting. Three workspace targets were
+unavailable under Windows Application Control: agents install, config sync_review and core
+doctests. They are not passing results. The doctest block was confirmed through Code Integrity
+events. No operating-system security settings or blocked artifacts were changed.
+
+Pinned pnpm 12.15.0 frozen installation passes after the final manifest change. Frontend checks
+pass with 534 desktop tests, 19 existing skips and ten Node tests; UI 261, design lab 352, web/static
+four and root scripts 29 pass. Lint retains 26 existing CSS warnings. Actual native binding export,
+414 runtime notice records, both Worker release builds and 28 isolated Worker runtime tests pass.
+Both browser engines pass synthetic release validation and the affected acceptance suites. The
+complete layout probe passed 412 views; the final normal chat checker passes 88 accessibility
+scans, including long backend header labels at the minimum native size. The first WebKit history
+wait timed out and passed unchanged on rerun; its cause remains unproven.
+
+Windows hands-on acceptance used fresh isolated data, synthetic agent homes and scratch repositories
+with Demo. It verified offline onboarding, conversations, held FIFO, prompt navigation, Changes and
+reviewed revert, terminals, Instructions, Plugin rendering/menu stability, settings and shortcuts.
+Setup failure and restart held all messages with reasons; reviewed retry succeeded and explicit
+release delivered them once in order. Native Git checks covered visible handoffs, dirty-target
+refusal, conflict preview, a reviewed two-parent merge, retained uncommitted files through retirement
+and restoration, and committed-file recreation with a separate uncommitted backup preserved.
+A real public clone succeeded and was added normally. Search and ordinary quit/restart/quit preserved
+projects, history and preferences; both quits exited successfully.
+
+The final embedded Demo smoke launch is held while gaming because Windows smoke shows and focuses
+a window. Tray-icon reopen/quit could not be targeted by the installed input tool, and notification
+clicks remain unobserved. Minimal real Claude/Codex pipelines were exercised through Rust APIs;
+the Codex exact-text helper's punctuation deviation remains recorded. No further paid turn was used.
+Windows shell fixtures retain six documented POSIX/executable-bit assumptions and PowerShell 5 is
+policy-blocked; PowerShell 7 checks pass. Real account sign-in/email, macOS, hosted CI billing and
+dispatch, signing/key backup and release/domain decisions remain owner/platform gates. Real cleanup,
+uninstall, owner agent credentials/configuration and the product's real PR-creation flow were not
+used. Publication and post-merge asset verification remain pending at this checkpoint.
