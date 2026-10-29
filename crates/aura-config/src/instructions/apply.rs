@@ -13,6 +13,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, safe_fs};
 
+pub(crate) mod recovery;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct MetadataIntent {
+    pub identity: String,
+    pub before: Option<super::manifest::Entry>,
+    pub after: Option<super::manifest::Entry>,
+}
+
 /// What a file must be right now for the reviewed change to still apply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expect {
@@ -60,7 +69,11 @@ struct Journal {
     version: u32,
     id: String,
     roots: Vec<String>,
+    #[serde(default)]
+    canonical_roots: Vec<Option<String>>,
     files: Vec<JournalFile>,
+    #[serde(default)]
+    metadata: Option<MetadataIntent>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,6 +93,7 @@ pub(crate) struct Transaction<'a> {
     pub dependencies: Vec<Dependency>,
     /// The app-owned folder for journals and replaced content. Never inside an agent folder.
     pub backups: &'a Path,
+    pub metadata: Option<MetadataIntent>,
     /// Test hook: fail before publishing the mutation at this index.
     #[cfg(test)]
     pub fail_at: Option<usize>,
@@ -165,13 +179,6 @@ fn explain(error: &std::io::Error, path: &str) -> String {
     }
 }
 
-/// One published file, kept so a later failure can put it back.
-struct Published {
-    index: usize,
-    old: Option<String>,
-    temp: Option<String>,
-}
-
 impl Transaction<'_> {
     pub(crate) fn run(self) -> Result<ApplyResult> {
         let mut dirs = Vec::with_capacity(self.roots.len());
@@ -203,7 +210,7 @@ impl Transaction<'_> {
                 return Err(Error::Stale);
             }
         }
-        if self.mutations.is_empty() {
+        if self.mutations.is_empty() && self.metadata.is_none() {
             return Ok(ApplyResult {
                 id: self.id,
                 changed: Vec::new(),
@@ -225,12 +232,21 @@ impl Transaction<'_> {
         let backup = self.backups.join(&self.id);
         std::fs::create_dir_all(&backup)?;
         let journal = Journal {
-            version: 1,
+            version: 2,
             id: self.id.clone(),
             roots: self
                 .roots
                 .iter()
                 .map(|root| root.to_string_lossy().into_owned())
+                .collect(),
+            canonical_roots: self
+                .roots
+                .iter()
+                .map(|root| {
+                    std::fs::canonicalize(root)
+                        .ok()
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
                 .collect(),
             files: self
                 .mutations
@@ -250,6 +266,7 @@ impl Transaction<'_> {
                     rename_from: item.rename_from.clone(),
                 })
                 .collect(),
+            metadata: self.metadata,
         };
         write_backup(
             &backup,
@@ -261,12 +278,14 @@ impl Transaction<'_> {
                 write_backup(&backup, &format!("before-{index}"), bytes)?;
             }
         }
+        recovery::mark(&backup, "backups-ready")?;
         prune(self.backups, &self.id);
-        let mut published: Vec<Published> = Vec::new();
         let mut failure = None;
-        for (index, mutation) in self.mutations.iter().enumerate() {
+        // The index is only used by the deterministic failure hook in test builds.
+        #[cfg_attr(not(test), allow(clippy::unused_enumerate_index))]
+        for (_index, mutation) in self.mutations.iter().enumerate() {
             #[cfg(test)]
-            if self.fail_at == Some(index) {
+            if self.fail_at == Some(_index) {
                 failure = Some(format!(
                     "{} could not be changed. Check the folder's permissions.",
                     mutation.path
@@ -277,7 +296,7 @@ impl Transaction<'_> {
                 .map_err(Failure::from)
                 .and_then(|root| publish(root, mutation, &self.id))
             {
-                Ok(done) => published.push(Published { index, ..done }),
+                Ok(()) => {}
                 Err(Failure::Stale) => {
                     failure = Some(format!(
                         "{} changed while the review was applied. Nothing was overwritten.",
@@ -293,20 +312,10 @@ impl Transaction<'_> {
         }
         let backup_label = backup.to_string_lossy().into_owned();
         if let Some(message) = failure {
-            let mut restored = true;
-            for done in published.iter().rev() {
-                if dir(self.mutations[done.index].root)
-                    .and_then(|root| undo(root, &self.mutations[done.index], done))
-                    .is_err()
-                {
-                    restored = false;
-                    break;
-                }
+            let restored = recovery::resolve(&backup, &journal).is_ok();
+            if restored {
+                prune(self.backups, &self.id);
             }
-            let _ = std::fs::write(
-                backup.join(if restored { "rolled-back" } else { "recovery" }),
-                b"1",
-            );
             return Ok(ApplyResult {
                 id: self.id,
                 changed: Vec::new(),
@@ -322,17 +331,12 @@ impl Transaction<'_> {
                 backup: Some(backup_label),
             });
         }
-        for done in &published {
-            let mutation = &self.mutations[done.index];
-            if let Ok((parent, _)) =
-                dir(mutation.root).and_then(|root| parent(root, &mutation.path, false))
-            {
-                for name in [&done.old, &done.temp].into_iter().flatten() {
-                    let _ = parent.remove_file(name);
-                }
-            }
+        // This durable boundary precedes cleanup and the managed-copy record.
+        let finished = recovery::mark(&backup, "files-committed")
+            .and_then(|()| recovery::resolve(&backup, &journal));
+        if finished.is_ok() {
+            prune(self.backups, &self.id);
         }
-        let _ = std::fs::write(backup.join("complete"), b"1");
         Ok(ApplyResult {
             id: self.id,
             changed: self
@@ -341,8 +345,8 @@ impl Transaction<'_> {
                 .map(|mutation| mutation.path.clone())
                 .collect(),
             rolled_back: false,
-            recovery_required: false,
-            message: None,
+            recovery_required: finished.is_err(),
+            message: finished.err().map(|_| "The files were saved, but recovery still needs attention. The journal and earlier content were kept.".into()),
             backup: Some(backup_label),
         })
     }
@@ -368,21 +372,24 @@ impl From<Error> for Failure {
     }
 }
 
-fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<Published, Failure> {
+fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<(), Failure> {
     let (parent, name) = parent(root, &mutation.path, mutation.after.is_some())?;
     if let Some(from) = &mutation.rename_from {
         // A case-only rename keeps the same file; nothing else may have taken its place.
         let (from_parent, from_name) = self::parent(root, from, false)?;
+        if safe_fs::children(&parent, "")?
+            .iter()
+            .any(|entry| entry == &name)
+            || current(&from_parent, &from_name)? != mutation.expect
+        {
+            return Err(Failure::Stale);
+        }
         from_parent.rename(&from_name, &parent, &name)?;
         if current(&parent, &name).ok().as_ref() != Some(&mutation.expect) {
             let _ = parent.rename(&name, &from_parent, &from_name);
             return Err(Failure::Stale);
         }
-        return Ok(Published {
-            index: 0,
-            old: None,
-            temp: None,
-        });
+        return Ok(());
     }
     let temp = match &mutation.after {
         Some(bytes) => {
@@ -396,6 +403,12 @@ fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<Pub
         Expect::Missing => None,
         expect => {
             let old = temp_name(&name, id, "old");
+            if current(&parent, &old)? != Expect::Missing {
+                if let Some(temp) = &temp {
+                    let _ = parent.remove_file(temp);
+                }
+                return Err(Failure::Stale);
+            }
             if let Err(error) = parent.rename(&name, &parent, &old) {
                 if let Some(temp) = &temp {
                     let _ = parent.remove_file(temp);
@@ -422,11 +435,7 @@ fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<Pub
         let _ = parent.remove_file(temp);
         return Err(error.into());
     }
-    Ok(Published {
-        index: 0,
-        old,
-        temp,
-    })
+    Ok(())
 }
 
 /// Publishes without overwriting: a file created at `name` meanwhile makes this fail.
@@ -447,42 +456,16 @@ fn link_into_place(parent: &Dir, temp: &str, name: &str) -> std::io::Result<()> 
 }
 
 fn restore(parent: &Dir, old: &str, name: &str, expect: &Expect) -> std::io::Result<()> {
+    match parent.symlink_metadata(name) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+        Ok(_) => return Err(std::io::ErrorKind::AlreadyExists.into()),
+    }
     match expect {
         // A link is moved back as itself; a file is linked back so nothing new is overwritten.
         Expect::Link(_) => parent.rename(old, parent, name),
         _ => link_into_place(parent, old, name),
     }
-}
-
-fn undo(root: &Dir, mutation: &Mutation, done: &Published) -> Result<()> {
-    let (parent, name) = parent(root, &mutation.path, false)?;
-    if let Some(from) = &mutation.rename_from {
-        let (from_parent, from_name) = self::parent(root, from, false)?;
-        from_parent
-            .rename(&name, &from_parent, &from_name)
-            .map_err(|_| Error::Io)?;
-        return Ok(());
-    }
-    let now = current(&parent, &name)?;
-    let expected_now = match &mutation.after {
-        Some(bytes) => Expect::File(bytes.clone()),
-        None => Expect::Missing,
-    };
-    if now != expected_now {
-        // Someone edited the new file already. Keep their bytes; the backup has the old ones.
-        return Err(Error::Stale);
-    }
-    if mutation.after.is_some() {
-        parent.remove_file(&name)?;
-    }
-    if let Some(old) = &done.old {
-        restore(&parent, old, &name, &mutation.expect)?;
-        let _ = parent.remove_file(old);
-    }
-    if let Some(temp) = &done.temp {
-        let _ = parent.remove_file(temp);
-    }
-    Ok(())
 }
 
 /// Keeps the newest backups. Ids are time-ordered UUIDs, so names sort by age.
@@ -492,6 +475,8 @@ fn prune(backups: &Path, keep: &str) {
     };
     let mut ids = entries
         .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter(|entry| recovery::prunable(&entry.path()))
         .filter_map(|entry| entry.file_name().into_string().ok())
         .filter(|name| uuid::Uuid::parse_str(name).is_ok())
         .collect::<Vec<_>>();
@@ -527,6 +512,7 @@ mod tests {
             mutations,
             dependencies: Vec::new(),
             backups,
+            metadata: None,
             fail_at,
         }
         .run()
@@ -691,6 +677,7 @@ mod tests {
             mutations: vec![write("AGENTS.md", Expect::Missing, b"global")],
             dependencies: Vec::new(),
             backups: backups.path(),
+            metadata: None,
             fail_at: None,
         }
         .run()
@@ -712,6 +699,7 @@ mod tests {
                 expect: Expect::File(b"source".to_vec()),
             }],
             backups: backups.path(),
+            metadata: None,
             fail_at: None,
         }
         .run()
@@ -724,7 +712,25 @@ mod tests {
     fn old_backups_are_pruned_to_a_bounded_count() {
         let backups = tempfile::tempdir().unwrap();
         for _ in 0..(KEEP_BACKUPS + 5) {
-            std::fs::create_dir(backups.path().join(uuid::Uuid::now_v7().to_string())).unwrap();
+            let id = uuid::Uuid::now_v7().to_string();
+            let path = backups.path().join(&id);
+            std::fs::create_dir(&path).unwrap();
+            let journal = Journal {
+                version: 2,
+                id,
+                roots: vec![],
+                canonical_roots: vec![],
+                files: vec![],
+                metadata: None,
+            };
+            write_backup(
+                &path,
+                "journal.json",
+                &serde_json::to_vec(&journal).unwrap(),
+            )
+            .unwrap();
+            recovery::mark(&path, "rolled-back").unwrap();
+            recovery::mark(&path, "settled").unwrap();
         }
         prune(backups.path(), "none");
         assert_eq!(

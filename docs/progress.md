@@ -4407,3 +4407,23 @@ fixtures, not owner CLI performance. Generated-binding typecheck remains an inte
 the coordinator. Standalone desktop checking stopped before app code with missing third-party
 crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
 were cleaned. No owner configuration, paid agent runs, hosted CI, deployments or releases were used.
+
+## 2026-10-29: Instructions interruption recovery
+
+Implemented version 2 journals with explicit backup, file publication, managed metadata and settlement
+boundaries. Opening Instructions and applying later changes recover under the existing configuration
+gate. Recovery rolls back only exact before/after/staged states, finishes committed metadata with an
+entry comparison, preserves external edits, and blocks overlapping unresolved writes. Startup and
+Instructions expose retained journal paths. Only settled journals count toward the newest-40 retention
+limit; malformed and unresolved evidence stays. Legacy complete journals retain their evidence because
+they did not record metadata intent. All verification fixtures use temporary or synthetic homes.
+
+Verification: aura-config 170/170 tests (75 unit, 95 integration), all-target Clippy with warnings
+denied, focused frontend tests 9/9, desktop TypeScript, touched frontend Biome checks, rustfmt and
+instruction parity. Chromium and WebKit Instructions flows each pass 11 axe scans with zero
+violations, including pending/recovered notices and the immediate overlap error with its backup
+path; screenshots were inspected. The first Rust run caught a case-only rename recovery regression,
+fixed by checking original content because rename mutations have no replacement bytes. The native
+desktop startup-notice test and native binding export remain unrun because the shared desktop graph
+has blocked dependencies; exported DTO shapes did not change. The dedicated Unix symlink interruption
+test requires macOS verification.

@@ -352,7 +352,7 @@ pub struct Prepared {
     roots: Vec<PathBuf>,
     mutations: Vec<apply::Mutation>,
     dependencies: Vec<apply::Dependency>,
-    manifest: Option<(String, Option<manifest::Entry>)>,
+    manifest: Option<apply::MetadataIntent>,
     state_dir: PathBuf,
     expires: Instant,
 }
@@ -443,7 +443,11 @@ pub fn display_path(path: &Path, home: Option<&Path>) -> String {
 
 /// Read every instruction file for the scope. Explicit action only; nothing is written.
 pub fn snapshot(context: &Context) -> crate::Result<Snapshot> {
-    Ok(model::Model::scan(context)?.snapshot())
+    let mut snapshot = model::Model::scan(context)?.snapshot();
+    snapshot
+        .notices
+        .extend(recovery_notices(&context.state_dir));
+    Ok(snapshot)
 }
 
 /// Build the review for a change. Nothing is written.
@@ -460,35 +464,57 @@ pub fn apply(prepared: Prepared) -> crate::Result<ApplyResult> {
     if prepared.is_expired() {
         return Err(crate::Error::Stale);
     }
-    let result = apply::Transaction {
+    let unresolved = apply::recovery::recover(&prepared.state_dir);
+    let blocked = unresolved.iter().find(|pending| {
+        prepared.mutations.iter().any(|mutation| {
+            let root = &prepared.roots[mutation.root];
+            pending.targets.iter().any(|target| {
+                apply::recovery::overlaps(target, &root.join(&mutation.path))
+                    || mutation
+                        .rename_from
+                        .as_ref()
+                        .is_some_and(|from| apply::recovery::overlaps(target, &root.join(from)))
+            })
+        }) || prepared
+            .manifest
+            .as_ref()
+            .is_some_and(|intent| pending.identity.as_ref() == Some(&intent.identity))
+    });
+    if let Some(pending) = blocked {
+        return Ok(ApplyResult {
+            id: prepared.review.id,
+            changed: Vec::new(), rolled_back: false, recovery_required: true,
+            message: Some("This change overlaps an interrupted Instructions change that still needs attention. External edits were preserved.".into()),
+            backup: Some(pending.path.to_string_lossy().into_owned()),
+        });
+    }
+    if let Some(intent) = &prepared.manifest {
+        let record = manifest::Manifest::load_checked(&prepared.state_dir)?;
+        if record.roots.get(&intent.identity) != intent.before.as_ref() {
+            return Err(crate::Error::Stale);
+        }
+    }
+    apply::Transaction {
         id: prepared.review.id.clone(),
         roots: &prepared.roots,
         mutations: prepared.mutations,
         dependencies: prepared.dependencies,
         backups: &prepared.state_dir.join("backups"),
+        metadata: prepared.manifest,
         #[cfg(test)]
         fail_at: None,
     }
-    .run()?;
-    let mut result = result;
-    if !result.rolled_back
-        && !result.recovery_required
-        && let Some((identity, entry)) = prepared.manifest
-    {
-        let mut record = manifest::Manifest::load(&prepared.state_dir);
-        match entry {
-            Some(entry) => {
-                record.roots.insert(identity, entry);
-            }
-            None => {
-                record.roots.remove(&identity);
-            }
-        }
-        if record.save(&prepared.state_dir).is_err() {
-            result.message = Some("The files were saved, but auracode could not record its managed copies. A later hand edit to a copy shows as a separate file.".into());
-        }
-    }
-    Ok(result)
+    .run()
+}
+
+/// Attempt exact-state recovery. The host must hold its configuration mutation gate.
+pub fn recover(state_dir: &Path) {
+    apply::recovery::recover(state_dir);
+}
+
+/// Read-only startup and Instructions notices, including retained recovery paths.
+pub fn recovery_notices(state_dir: &Path) -> Vec<String> {
+    apply::recovery::notices(state_dir)
 }
 
 #[cfg(test)]
@@ -499,6 +525,7 @@ pub(crate) fn apply_failing_at(prepared: Prepared, index: usize) -> crate::Resul
         mutations: prepared.mutations,
         dependencies: prepared.dependencies,
         backups: &prepared.state_dir.join("backups"),
+        metadata: prepared.manifest,
         fail_at: Some(index),
     }
     .run()

@@ -118,6 +118,26 @@ try {
       };
       const dialog = (name) => page.getByRole("dialog", { name });
 
+      await open("instructions-recovery");
+      await page.getByText(/An interrupted Instructions change needs recovery/).waitFor();
+      await page
+        .getByText(/Its backup is kept at C:\/fixture\/auracode\/instructions\/backups\/recovered/)
+        .waitFor();
+      assert.ok((await calls()).every((call) => call === "snapshot"));
+      await audit("recovery");
+      await page.getByLabel("Text of AGENTS.md").fill("A new edit.");
+      await page.getByRole("button", { name: "Review changes", exact: true }).click();
+      await dialog("Save AGENTS.md").waitFor();
+      await page.getByRole("button", { name: "Apply", exact: true }).click();
+      await page
+        .getByRole("dialog")
+        .getByText(
+          /External edits were preserved.*Backups and recovery details are kept at C:\/fixture/,
+        )
+        .waitFor();
+      await audit("recovery-blocked");
+      await page.keyboard.press("Escape");
+
       // One file: an edit is reviewed with its diff, Escape discards the review, Apply saves it.
       await open("instructions");
       // Opening the page only reads (StrictMode reads twice in development).

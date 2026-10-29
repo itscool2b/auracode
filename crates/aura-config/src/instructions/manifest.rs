@@ -28,6 +28,24 @@ pub(crate) struct Entry {
 }
 
 impl Manifest {
+    /// Recovery must distinguish an absent record from a damaged one.
+    pub fn load_checked(dir: &Path) -> Result<Manifest> {
+        let root = match cap_std::fs::Dir::open_ambient_dir(dir, cap_std::ambient_authority()) {
+            Ok(root) => root,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self::default());
+            }
+            Err(_) => return Err(Error::Io),
+        };
+        let Some(bytes) = crate::safe_fs::read(&root, NAME)? else {
+            return Ok(Self::default());
+        };
+        let record: Self = serde_json::from_slice(&bytes).map_err(|_| Error::Format)?;
+        if record.version != 1 || record.roots.len() > ROOT_LIMIT {
+            return Err(Error::Format);
+        }
+        Ok(record)
+    }
     pub fn load(dir: &Path) -> Manifest {
         // A missing or unreadable record only loses drift detection; identical copies still read
         // as copies, so nothing is ever overwritten because of it.
