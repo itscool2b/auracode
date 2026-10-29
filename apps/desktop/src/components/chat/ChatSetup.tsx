@@ -3,6 +3,7 @@ import type { WorktreeSetupAttempt, WorktreeSetupPreview } from "../../bindings"
 import { errorMessage } from "../../lib/errors";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
+import "./git-dialog.css";
 
 /** Setup admission is durable in Rust. Closing or hiding this view never releases the queue. */
 export function ChatSetup({
@@ -55,7 +56,7 @@ export function ChatSetup({
   const failed = attempt.state === "failed" || attempt.state === "interrupted";
   return (
     <section
-      className="chat-banner"
+      className="git-section"
       aria-label="Worktree setup"
       data-level={failed ? "error" : "info"}
     >
@@ -67,12 +68,12 @@ export function ChatSetup({
       </p>
       {error ? <p role="alert">{error}</p> : null}
       {review ? (
-        <section aria-label="Review setup command">
-          <p>
+        <section className="git-review" aria-label="Review setup command">
+          <p className="git-path">
             <code>{review.destination}</code>
           </p>
           {review.command ? (
-            <p>
+            <p className="git-path">
               <code>{[review.command.program, ...review.command.args].join(" ")}</code>
             </p>
           ) : (

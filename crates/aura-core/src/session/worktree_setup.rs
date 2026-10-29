@@ -10,6 +10,29 @@ pub struct WorktreeSetupLaunch {
 }
 
 impl SessionManager {
+    pub async fn reserve_worktree_setup_terminal(
+        &self,
+        terminals: &crate::terminal::Terminals,
+        owner: &str,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<String, SessionError> {
+        let plan = self.prepare_worktree_setup_terminal(chat_id, token).await?;
+        let ticket = match terminals.reserve(owner) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                if let Some(completion) = plan.completion {
+                    let _ = completion.send(Err(format!(
+                        "Setup terminal could not be reserved: {error}. Retry setup."
+                    )));
+                }
+                return Err(SessionError::Organization(error.to_string()));
+            }
+        };
+        ticket
+            .pending_setup(chat_id.into(), token.into(), plan)
+            .map_err(|error| SessionError::Organization(error.to_string()))
+    }
     pub(super) async fn set_setup_attempt(
         &self,
         chat_id: &str,
@@ -69,6 +92,12 @@ impl SessionManager {
         copy_files: bool,
     ) -> Result<aura_protocol::worktree_setup::WorktreeSetupPreview, SessionError> {
         let mut settings = self.worktree_setup(chat_id).await?;
+        let attempt = self
+            .deps()
+            .store
+            .read_setup_attempt(chat_id)
+            .await
+            .map_err(|error| storage_error(&error))?;
         if !copy_files {
             settings.input.files.clear();
         }
@@ -83,6 +112,11 @@ impl SessionManager {
             return Err(SessionError::Organization(
                 "This worktree uses another setup source. Review its original folder first.".into(),
             ));
+        }
+        if let Some(attempt) = attempt {
+            self.worktrees()?
+                .bind_setup_review_generation(chat_id, &preview.token, attempt.generation)
+                .map_err(|error| SessionError::Organization(error.to_string()))?;
         }
         Ok(preview)
     }
@@ -106,19 +140,23 @@ impl SessionManager {
         token: &str,
     ) -> Result<aura_protocol::worktree_setup::WorktreeSetupResult, SessionError> {
         let _organization = self.shared().organization.lock().await;
-        self.git_chat(chat_id).await?;
         let service = self.worktrees()?;
-        let folders = service
-            .setup_folders(chat_id, token)
-            .map_err(|error| SessionError::Organization(error.to_string()))?;
-        let _reservations = self.reserve_setup_folders(folders, chat_id).await?;
         let current = self
             .deps()
             .store
             .read_setup_attempt(chat_id)
             .await
             .map_err(|error| storage_error(&error))?;
-        let attempt = if current.is_some() {
+        let attempt = if let Some(current) = current {
+            if service
+                .setup_review_generation(chat_id, token)
+                .map_err(|error| SessionError::Organization(error.to_string()))?
+                != Some(current.generation)
+            {
+                return Err(SessionError::Organization(
+                    "This review belongs to an older setup attempt. Review setup again.".into(),
+                ));
+            }
             Some(
                 self.set_setup_attempt(chat_id, None, WorktreeSetupState::Awaiting, None)
                     .await?
@@ -131,10 +169,23 @@ impl SessionManager {
         } else {
             None
         };
-        let result = service
-            .setup_apply(chat_id, token)
-            .await
-            .map_err(|error| SessionError::Organization(error.to_string()));
+        let prepared = async {
+            self.git_chat(chat_id).await?;
+            let folders = service
+                .setup_folders(chat_id, token)
+                .map_err(|error| SessionError::Organization(error.to_string()))?;
+            let reservations = self.reserve_setup_folders(folders, chat_id).await?;
+            let value = service
+                .setup_apply(chat_id, token)
+                .await
+                .map_err(|error| SessionError::Organization(error.to_string()))?;
+            Ok::<_, SessionError>((value, reservations))
+        }
+        .await;
+        let (result, _reservations) = match prepared {
+            Ok((value, reservations)) => (Ok(value), Some(reservations)),
+            Err(error) => (Err(error), None),
+        };
         if let Some(attempt) = attempt {
             if let Ok(value) = &result
                 && let Some(token) = &value.command_token
@@ -179,12 +230,7 @@ impl SessionManager {
         token: &str,
     ) -> Result<WorktreeSetupLaunch, SessionError> {
         let _organization = self.shared().organization.lock().await;
-        self.git_chat(chat_id).await?;
         let service = self.worktrees()?;
-        let folders = service
-            .setup_folders(chat_id, token)
-            .map_err(|error| SessionError::Organization(error.to_string()))?;
-        let reservations = self.reserve_setup_folders(folders, chat_id).await?;
         let attempt = self
             .deps()
             .store
@@ -230,16 +276,35 @@ impl SessionManager {
         } else {
             None
         };
-        let spec = service
-            .setup_command(chat_id, token)
-            .await
-            .map_err(|error| SessionError::Organization(error.to_string()))?;
-        Ok(WorktreeSetupLaunch {
-            spec,
-            guard: Box::new(reservations),
-            completion,
-        })
+        let prepared = async {
+            self.git_chat(chat_id).await?;
+            let folders = service
+                .setup_folders(chat_id, token)
+                .map_err(|error| SessionError::Organization(error.to_string()))?;
+            let reservations = self.reserve_setup_folders(folders, chat_id).await?;
+            let spec = service
+                .setup_command(chat_id, token)
+                .await
+                .map_err(|error| SessionError::Organization(error.to_string()))?;
+            Ok::<_, SessionError>((spec, reservations))
+        }
+        .await;
+        match prepared {
+            Ok((spec, reservations)) => Ok(WorktreeSetupLaunch {
+                spec,
+                guard: Box::new(reservations),
+                completion,
+            }),
+            Err(error) => {
+                if let Some(completion) = completion {
+                    let _ = completion
+                        .send(Err(format!("Setup could not start: {error}. Retry setup.")));
+                }
+                Err(error)
+            }
+        }
     }
+
     pub async fn worktree_setup(&self, chat_id: &str) -> Result<WorktreeSetup, SessionError> {
         self.setup_settings(chat_id, None).await
     }
