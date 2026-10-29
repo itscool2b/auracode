@@ -201,6 +201,15 @@ pub struct QueuedPrompt {
     pub created_at: Millis,
 }
 
+/// The complete persisted prompt currently saving its checkpoint before dispatch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SendingPrompt {
+    pub prompt_id: String,
+    pub text: String,
+    pub parts: Vec<crate::PromptPart>,
+    pub created_at: Millis,
+}
+
 /// The error a chat last showed, for the snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ErrorInfo {

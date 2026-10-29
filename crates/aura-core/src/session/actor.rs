@@ -35,7 +35,7 @@ use aura_process::{
 use aura_protocol::session::{
     AuthPrompt, Availability, ChatAttach, ChatSnapshot, ChatSummary, ConfigCategory, ConfigKind,
     ConfigOption, ConfigValue, ErrorInfo, FolderState, HistoryPage, PromptAck, QueuedPrompt,
-    SessionLists,
+    SendingPrompt, SessionLists,
 };
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, HoldCause,
@@ -1924,9 +1924,17 @@ impl ChatActor {
             .then_some(id.as_str())
     }
 
-    fn sending(&self) -> Option<QueuedPrompt> {
+    fn sending(&self) -> Option<SendingPrompt> {
         let id = self.sending_id()?;
-        self.queue.iter().find(|row| row.id == id).map(shown)
+        self.queue
+            .iter()
+            .find(|row| row.id == id)
+            .map(|row| SendingPrompt {
+                prompt_id: row.id.clone(),
+                text: row.text.clone(),
+                parts: row.parts.clone(),
+                created_at: row.created_at,
+            })
     }
 
     fn require_workspace(&self) -> Result<(), SessionError> {

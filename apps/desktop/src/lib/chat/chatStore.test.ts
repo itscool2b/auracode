@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatSnapshot, HistoryPage, SessionLists } from "../../bindings";
+import type {
+  AuraEvent,
+  ChatSnapshot,
+  HistoryPage,
+  PromptAck,
+  SendingPrompt,
+  SessionLists,
+} from "../../bindings";
 import { CommandError } from "../ipc";
 import {
   BLOB_PAGE,
@@ -437,6 +444,84 @@ describe("history pages", () => {
 });
 
 describe("the session's live state", () => {
+  it.each(["before", "after"])(
+    "keeps canonical prompt identity when acknowledgments arrive %s frames",
+    async (ackOrder) => {
+      const answers: ((ack: PromptAck) => void)[] = [];
+      const fake = new FakeTransport({
+        send: () => new Promise((resolve) => answers.push(resolve)),
+      });
+      const store = await opened(fake);
+      const channel = fake.lastAttach();
+      const prefix = "🐢 identical prefix ".repeat(30);
+      const texts = Array.from({ length: 12 }, (_, index) => `${prefix} message ${index}`);
+      const pending = texts.map((text) => store.send(text));
+      const acknowledge = async () => {
+        answers.forEach((resolve, index) => resolve({ prompt_id: `p${index}`, queued: true }));
+        expect(await Promise.all(pending)).toEqual(texts.map(() => true));
+      };
+      if (ackOrder === "before") await acknowledge();
+      let seq = 0;
+      const emit = (events: AuraEvent[]) => {
+        channel.onFrame(frame(CHAT, seq, events));
+        seq += events.length;
+      };
+      emit(texts.map((text, index) => ev.lifecycle(`p${index}`, "queued", text.slice(0, 256))));
+      for (const index of [10, 0, 11, 3]) {
+        const sending: SendingPrompt = {
+          prompt_id: `p${index}`,
+          text: texts[index] ?? "",
+          parts: [],
+          created_at: index + 1,
+        };
+        emit([
+          ev.lifecycle(sending.prompt_id, "sending", prefix.slice(0, 256)),
+          ev.session({ status: "running", sending }),
+        ]);
+        expect(store.getSnapshot().sending).toEqual(sending);
+        expect(store.getSnapshot().queue.some((row) => row.prompt_id === sending.prompt_id)).toBe(
+          false,
+        );
+        // The canonical turn ID clears only its own pending message before the lifecycle acknowledgment.
+        emit([{ type: "turn_started", turn_id: `t${index}`, prompt_id: sending.prompt_id }]);
+        expect(store.getSnapshot().sending).toBeNull();
+        emit([ev.lifecycle(sending.prompt_id, "started"), ev.session({ status: "running" })]);
+      }
+      if (ackOrder === "after") await acknowledge();
+      expect(store.getSnapshot().sending).toBeNull();
+      store.close();
+    },
+  );
+
+  it("reattaches with exact attachments and text without a local send cache", async () => {
+    const sending: SendingPrompt = {
+      prompt_id: "attachment-only",
+      text: "",
+      created_at: 123,
+      parts: [
+        { type: "image", blob: "a".repeat(64), mime: "image/png" },
+        { type: "mention", path: "src/main.rs" },
+      ],
+    };
+    const fake = new FakeTransport();
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "running", sending }),
+    });
+    expect(store.getSnapshot().sending).toEqual(sending);
+    const changed = { ...sending, text: `${"long body 🐢 ".repeat(100)}end` };
+    fake
+      .lastAttach()
+      .onFrame(frame(CHAT, 0, [ev.session({ status: "running", sending: changed })]));
+    expect(store.getSnapshot().sending).toEqual(changed);
+    fake
+      .lastAttach()
+      .onFrame(
+        frame(CHAT, 1, [{ type: "turn_started", turn_id: "other", prompt_id: "another-prompt" }]),
+      );
+    expect(store.getSnapshot().sending).toEqual(changed);
+    store.close();
+  });
+
   it("follows the queue through the prompt lifecycle and marks the prompts a stop holds", async () => {
     const fake = new FakeTransport();
     const store = await opened(fake);
@@ -486,11 +571,11 @@ describe("the session's live state", () => {
     const channel = fake.lastAttach();
     const long = `${"word ".repeat(80)}end`;
     const sent = store.send(long);
-    // The frame can come before the send's answer: the window knows the words it sent.
+    // The frame can come before the send's answer: the session carries the exact persisted body.
     const sending = {
       prompt_id: "p1",
-      preview: long.slice(0, 256),
-      held: false,
+      text: long,
+      parts: [],
       created_at: 1,
     };
     channel.onFrame(
@@ -501,7 +586,7 @@ describe("the session's live state", () => {
     );
     expect(await sent).toBe(true);
     expect(store.getSnapshot().queue).toEqual([]);
-    expect(store.getSnapshot().sending).toEqual({ promptId: "p1", text: long });
+    expect(store.getSnapshot().sending).toEqual(sending);
     // The turn starts: the message is the turn's now.
     channel.onFrame(
       frame(CHAT, 2, [ev.lifecycle("p1", "started"), ev.session({ status: "running" })]),
@@ -516,7 +601,7 @@ describe("the session's live state", () => {
     const fake = new FakeTransport();
     const store = await opened(fake);
     const channel = fake.lastAttach();
-    const sending = { prompt_id: "p1", preview: "hello", held: false, created_at: 1 };
+    const sending = { prompt_id: "p1", text: "hello", parts: [], created_at: 1 };
     channel.onFrame(
       frame(CHAT, 0, [
         ev.lifecycle("p1", "sending", "hello"),
@@ -526,7 +611,11 @@ describe("the session's live state", () => {
     expect(store.getSnapshot().sending?.text).toBe("hello");
     channel.onFrame(
       frame(CHAT, 2, [
-        ev.session({ status: "ready", queue_held: true, queue_wait: { reason: "held", after: "stop" } }),
+        ev.session({
+          status: "ready",
+          queue_held: true,
+          queue_wait: { reason: "held", after: "stop" },
+        }),
       ]),
     );
     expect(store.getSnapshot().sending).toBeNull();
@@ -535,7 +624,7 @@ describe("the session's live state", () => {
     fake.lastAttach().resolve(
       attachResult(CHAT, 3, historyPage(CHAT, []), {
         session: sessionInfo({ status: "ready", queue_held: true }),
-        queue: [{ ...sending, held: true }],
+        queue: [{ prompt_id: sending.prompt_id, preview: sending.text, held: true, created_at: 1 }],
       }),
     );
     await settled();
@@ -546,11 +635,11 @@ describe("the session's live state", () => {
 
   it("shows a message already on its way when the window joins", async () => {
     const fake = new FakeTransport();
-    const sending = { prompt_id: "p1", preview: "fix the tests", held: false, created_at: 1 };
+    const sending = { prompt_id: "p1", text: "fix the tests", parts: [], created_at: 1 };
     const store = await opened(fake, historyPage(CHAT, []), 0, {
       session: sessionInfo({ status: "running", sending }),
     });
-    expect(store.getSnapshot().sending).toEqual({ promptId: "p1", text: "fix the tests" });
+    expect(store.getSnapshot().sending).toEqual(sending);
     expect(store.getSnapshot().queue).toEqual([]);
   });
 

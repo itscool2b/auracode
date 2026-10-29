@@ -67,16 +67,16 @@ export function Transcript({
     sending !== null
       ? "Sending"
       : activity === "waiting"
-      ? "Waiting on you"
-      : status === "starting"
-        ? "Starting session"
-        : status === "cancelling" || status === "stopping"
-          ? "Stopping"
-          : status === "running" && !hasLiveLine(last)
-            ? last?.end === null
-              ? "Thinking"
-              : "Working"
-            : null;
+        ? "Waiting on you"
+        : status === "starting"
+          ? "Starting session"
+          : status === "cancelling" || status === "stopping"
+            ? "Stopping"
+            : status === "running" && !hasLiveLine(last)
+              ? last?.end === null
+                ? "Thinking"
+                : "Working"
+              : null;
   const rows: TranscriptRow[] = [];
   let focusedGroupKey: string | null = null;
   let focusedGroupPhase = "";
@@ -233,15 +233,30 @@ export function Transcript({
   }
   if (sending !== null)
     rows.push({
-      key: `sending:${sending.promptId}`,
+      key: `sending:${sending.prompt_id}`,
       estimate: 72,
       content: (
         <div
           className="chat-segment chat-sending"
           data-testid="sending-message"
-          data-test-prompt-id={sending.promptId}
+          data-test-prompt-id={sending.prompt_id}
         >
-          <UserMessage item={{ kind: "user", key: `sending:${sending.promptId}`, text: sending.text }} />
+          <UserMessage
+            item={{ kind: "user", key: `sending:${sending.prompt_id}`, text: sending.text }}
+          />
+          {sending.parts.some((part) => part.type !== "text") ? (
+            <ul aria-label="Message attachments">
+              {sending.parts.flatMap((part, index) =>
+                part.type === "image" ? (
+                  <li key={`image:${index}`}>Attached image ({part.mime})</li>
+                ) : part.type === "mention" ? (
+                  <li key={`mention:${index}`}>Mentioned file: {part.path}</li>
+                ) : (
+                  []
+                ),
+              )}
+            </ul>
+          ) : null}
         </div>
       ),
     });
