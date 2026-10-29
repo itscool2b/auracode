@@ -57,22 +57,57 @@ pub(super) fn mark(path: &Path, name: &str) -> Result<()> {
 }
 
 pub(super) fn prunable(path: &Path) -> bool {
-    read_journal(path).is_ok_and(|journal| {
-        if journal.version == 2 {
-            marked(path, "settled")
-                && ((marked(path, "complete")
-                    && marked(path, "backups-ready")
-                    && marked(path, "files-committed")
-                    && marked(path, "metadata-committed")
-                    && !marked(path, "rolled-back"))
-                    || (marked(path, "rolled-back")
-                        && !marked(path, "files-committed")
-                        && !marked(path, "complete")
-                        && !marked(path, "metadata-committed")))
-        } else {
-            // A legacy complete marker says nothing about managed metadata.
-            marked(path, "rolled-back") && !marked(path, "recovery") && !marked(path, "complete")
+    read_journal(path)
+        .and_then(|journal| phase(path, &journal))
+        .is_ok_and(|phase| phase.terminal)
+}
+
+struct Phase {
+    ready: bool,
+    committed: bool,
+    terminal: bool,
+}
+
+/// Recovery and retention must agree about valid and terminal evidence. A malformed marker is
+/// not an absent marker, and rollback and commit evidence can never coexist in version 2.
+fn phase(path: &Path, journal: &Journal) -> Result<Phase> {
+    let dir = Dir::open_ambient_dir(path, cap_std::ambient_authority())?;
+    let marker = |name| match safe_fs::read(&dir, name)? {
+        None => Ok(false),
+        Some(bytes) if bytes == b"1" => Ok(true),
+        Some(_) => Err(Error::Format),
+    };
+    let ready = marker("backups-ready")?;
+    let committed = marker("files-committed")?;
+    let metadata = marker("metadata-committed")?;
+    let complete = marker("complete")?;
+    let rolled_back = marker("rolled-back")?;
+    let settled = marker("settled")?;
+    if journal.version == 1 {
+        // v1 complete did not record metadata intent. A recovery marker is cleared logically
+        // only by verified rollback and the new settlement marker, never by guessing.
+        if complete || committed || metadata {
+            return Err(Error::Format);
         }
+        return Ok(Phase {
+            ready,
+            committed: false,
+            terminal: rolled_back && (!marker("recovery")? || settled),
+        });
+    }
+    if journal.version != 2
+        || (rolled_back && (committed || metadata || complete))
+        || (committed && !ready)
+        || (metadata && !committed)
+        || (complete && !metadata)
+        || (settled && !complete && !rolled_back)
+    {
+        return Err(Error::Format);
+    }
+    Ok(Phase {
+        ready,
+        committed,
+        terminal: settled && (complete || rolled_back),
     })
 }
 
@@ -122,6 +157,18 @@ fn target_hints(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+fn identity_hint(path: &Path) -> Option<String> {
+    let dir = Dir::open_ambient_dir(path, cap_std::ambient_authority()).ok()?;
+    let bytes = safe_fs::read(&dir, "journal.json").ok()??;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let identity = value["metadata"]["identity"].as_str()?;
+    // This is only an exact map-key hint for refusing overlap, never filesystem authority.
+    (identity.len() <= 32_768
+        && !identity.contains('\0')
+        && (identity == "user" || Path::new(identity).is_absolute()))
+    .then(|| identity.to_owned())
+}
+
 /// Read-only startup/UI notice. This never opens an agent root or changes a file.
 pub(crate) fn notices(state: &Path) -> Vec<String> {
     folders(state).into_iter().filter_map(|path| {
@@ -143,7 +190,11 @@ pub(crate) fn recover(state: &Path) -> Vec<Pending> {
             let journal = read_journal(&path);
             if let Ok(journal) = &journal {
                 // Mark before resolving, so a crash after settlement still leaves the outcome notice.
-                if mark(&path, "recovered").is_ok() && resolve(&path, journal).is_ok() {
+                if phase(&path, journal).is_ok()
+                    && mark(&path, "recovered").is_ok()
+                    && resolve(&path, journal).is_ok()
+                    && prunable(&path)
+                {
                     return None;
                 }
             }
@@ -163,7 +214,8 @@ pub(crate) fn recover(state: &Path) -> Vec<Pending> {
                 .unwrap_or_else(|_| target_hints(&path));
             let identity = journal
                 .ok()
-                .and_then(|journal| journal.metadata.map(|intent| intent.identity));
+                .and_then(|journal| journal.metadata.map(|intent| intent.identity))
+                .or_else(|| identity_hint(&path));
             Some(Pending {
                 path,
                 targets,
@@ -212,19 +264,9 @@ fn cleanup(dir: &Dir, name: &str, hash: Option<&String>, link: Option<&String>) 
 }
 
 pub(super) fn resolve(path: &Path, journal: &Journal) -> Result<()> {
-    if journal.version == 1 && marked(path, "complete") {
-        // v1 did not persist metadata intent. Never guess that copies were recorded.
-        return Err(Error::Format);
-    }
-    let committed = journal.version == 2 && marked(path, "files-committed");
-    let ready = marked(path, "backups-ready");
-    if journal.version == 2
-        && ((committed && !ready)
-            || (marked(path, "metadata-committed") && !committed)
-            || (marked(path, "complete") && !marked(path, "metadata-committed")))
-    {
-        return Err(Error::Format);
-    }
+    let phase = phase(path, journal)?;
+    let committed = phase.committed;
+    let ready = phase.ready;
     let backup_dir = Dir::open_ambient_dir(path, cap_std::ambient_authority())?;
     for (index, file) in journal.files.iter().enumerate().rev() {
         if journal.version == 2 {
@@ -364,5 +406,10 @@ pub(super) fn resolve(path: &Path, journal: &Journal) -> Result<()> {
     } else {
         mark(path, "rolled-back")?;
     }
-    mark(path, "settled")
+    mark(path, "settled")?;
+    if self::phase(path, journal)?.terminal {
+        Ok(())
+    } else {
+        Err(Error::Format)
+    }
 }

@@ -4459,3 +4459,14 @@ integration 6/6 each, core progressive integration 5/5 and core assembly 4/4. Al
 aura-agents and aura-core with account-sync passed with warnings denied. The two native profile
 lease tests are written but remain unrun because the desktop dependency graph is blocked before
 app code. They remain an explicit integration gate.
+## Task 6 review correction, verified
+
+The independent round-1 review found two malformed-evidence gaps. Source now preserves validated
+metadata identity hints even when journal schema validation fails, and uses one phase validator for
+recovery and retention. Contradictory rollback/commit evidence is rejected before recovery writes,
+and successful recovery must reach a valid terminal state. Added deterministic temporary-home
+regressions for same-entry blocking versus unrelated writes, invalid identity hints, contradictory
+markers with byte-preserved file/journal evidence, and malformed marker bytes. Verification passed:
+aura-config 174/174 tests (79 unit, 95 integration), all-target Clippy with warnings denied, rustfmt,
+instruction parity, and diff checks. The native startup-notice test remains unrun because the desktop
+dependency graph is blocked; these fixes change no frontend or exported DTO shape.

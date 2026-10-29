@@ -284,6 +284,162 @@ fn malformed_journal_with_target_hints_still_blocks_only_its_target() {
     );
 }
 
+fn metadata_review(state: &Path, identity: &str) -> crate::instructions::Prepared {
+    crate::instructions::Prepared {
+        review: crate::instructions::Review {
+            id: uuid::Uuid::now_v7().to_string(),
+            title: "Metadata fixture".into(),
+            summary: String::new(),
+            files: vec![],
+            notes: vec![],
+            optional_removals: vec![],
+        },
+        roots: vec![],
+        mutations: vec![],
+        dependencies: vec![],
+        manifest: Some(MetadataIntent {
+            identity: identity.into(),
+            before: None,
+            after: Some(entry("new")),
+        }),
+        state_dir: state.to_path_buf(),
+        expires: std::time::Instant::now() + std::time::Duration::from_secs(600),
+    }
+}
+
+#[test]
+fn malformed_metadata_only_journal_blocks_same_entry_but_allows_unrelated_entry() {
+    for bad_version in [false, true] {
+        let mut f = Fixture::new();
+        f.journal.metadata = Some(MetadataIntent {
+            identity: "user".into(),
+            before: None,
+            after: Some(entry("pending")),
+        });
+        if bad_version {
+            f.journal.version = 99;
+        } else {
+            f.journal.canonical_roots.clear();
+        }
+        f.save(true);
+        mark(&f.backup, "files-committed").unwrap();
+        let journal_before = std::fs::read(f.backup.join("journal.json")).unwrap();
+        let pending = f.recover();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].targets.is_empty());
+        assert_eq!(pending[0].identity.as_deref(), Some("user"));
+        let blocked = crate::instructions::apply(metadata_review(&f.state, "user")).unwrap();
+        assert!(blocked.recovery_required);
+        assert!(!f.state.join("managed.json").exists());
+        let unrelated = std::fs::canonicalize(&f.root)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let result = crate::instructions::apply(metadata_review(&f.state, &unrelated)).unwrap();
+        assert!(!result.recovery_required);
+        let manifest = crate::instructions::manifest::Manifest::load_checked(&f.state).unwrap();
+        assert_eq!(manifest.roots[&unrelated], entry("new"));
+        assert!(!manifest.roots.contains_key("user"));
+        assert_eq!(
+            std::fs::read(f.backup.join("journal.json")).unwrap(),
+            journal_before
+        );
+        assert_eq!(f.recover().len(), 1);
+        assert!(!prunable(&f.backup));
+    }
+}
+
+#[test]
+fn invalid_metadata_identity_hints_are_not_accepted() {
+    let f = Fixture::new();
+    for identity in [
+        serde_json::json!(5),
+        serde_json::json!("../relative"),
+        serde_json::json!("user\0"),
+    ] {
+        let value = serde_json::json!({ "metadata": { "identity": identity } });
+        std::fs::write(
+            f.backup.join("journal.json"),
+            serde_json::to_vec(&value).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(identity_hint(&f.backup), None);
+    }
+}
+
+#[test]
+fn contradictory_commit_and_rollback_markers_preserve_evidence_and_block_overlap() {
+    for settled in [false, true] {
+        let mut f = Fixture::new();
+        let mutation = f.add("AGENTS.md", Some(b"before"), Some(b"after"));
+        f.journal.metadata = Some(MetadataIntent {
+            identity: "user".into(),
+            before: None,
+            after: Some(entry("pending")),
+        });
+        f.save(true);
+        f.publish(&mutation);
+        mark(&f.backup, "files-committed").unwrap();
+        mark(&f.backup, "rolled-back").unwrap();
+        if settled {
+            mark(&f.backup, "settled").unwrap();
+        }
+        let evidence = |path: &Path| {
+            let mut entries: Vec<_> = std::fs::read_dir(path)
+                .unwrap()
+                .map(|entry| {
+                    let entry = entry.unwrap();
+                    (entry.file_name(), std::fs::read(entry.path()).unwrap())
+                })
+                .collect();
+            entries.sort();
+            entries
+        };
+        let journal_before = evidence(&f.backup);
+        let files_before = evidence(&f.root);
+        assert!(resolve(&f.backup, &f.journal).is_err());
+        for _ in 0..2 {
+            assert_eq!(f.recover().len(), 1);
+            let blocked = crate::instructions::apply(metadata_review(&f.state, "user")).unwrap();
+            assert!(blocked.recovery_required);
+            let mut file_review = metadata_review(&f.state, "user");
+            file_review.manifest = None;
+            file_review.roots = vec![f.root.clone()];
+            file_review.mutations = vec![Mutation {
+                root: 0,
+                path: "AGENTS.md".into(),
+                expect: Expect::File(b"after".to_vec()),
+                after: Some(b"later".to_vec()),
+                rename_from: None,
+            }];
+            assert!(
+                crate::instructions::apply(file_review)
+                    .unwrap()
+                    .recovery_required
+            );
+            assert!(!f.state.join("managed.json").exists());
+            assert_eq!(evidence(&f.backup), journal_before);
+            assert_eq!(evidence(&f.root), files_before);
+            assert!(!prunable(&f.backup));
+        }
+    }
+}
+
+#[test]
+fn malformed_phase_marker_is_retained_without_recovery_writes() {
+    let f = Fixture::new();
+    f.save(true);
+    std::fs::write(f.backup.join("files-committed"), b"truncated").unwrap();
+    assert!(resolve(&f.backup, &f.journal).is_err());
+    assert_eq!(f.recover().len(), 1);
+    assert!(!f.backup.join("recovered").exists());
+    assert!(!prunable(&f.backup));
+    assert_eq!(
+        std::fs::read(f.backup.join("files-committed")).unwrap(),
+        b"truncated"
+    );
+}
+
 #[test]
 fn unresolved_target_blocks_overlap_but_allows_a_separate_reviewed_write() {
     use crate::instructions::{Change, Context, GitFacts, ScopeKind};
