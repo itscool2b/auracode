@@ -20,6 +20,9 @@ folders and folder-admission refusals record failure and hold messages. Setup us
 terminal reservation: the prepared launch and completion owner remain in the terminal slot until
 a matching chat/token claim starts it. A full terminal pool or closing a pending slot also fails
 that generation. Invalid or stale reviews and claims cannot fail a newer or unrelated attempt.
+The review cache admits at most 64 chats, each retaining its current command receipt and one
+replacement review. Reviewing again reclaims the chat's obsolete review before checking capacity,
+so expired receipts cannot prevent an admitted chat from retrying.
 
 After success, unheld messages leave in their saved order once. Messages held by a failure, a
 restart or the person stay held until explicitly sent. Retrying reviews the saved command only;
