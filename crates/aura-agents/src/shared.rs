@@ -67,6 +67,11 @@ impl<T: Clone + Send + Sync + 'static> SharedTask<T> {
         self.inner.result.borrow().is_none() && !self.inner.abort.is_finished()
     }
 
+    /// Cancels superseded work, including every helper owned by its future.
+    pub(crate) fn cancel(&self) {
+        self.inner.abort.abort();
+    }
+
     /// Counts as a waiter until the returned guard drops, without waiting yet.
     pub(crate) fn hold(&self) -> Hold<T> {
         *lock(&self.inner.waiting) += 1;

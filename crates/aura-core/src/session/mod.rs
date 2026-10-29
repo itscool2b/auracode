@@ -308,6 +308,7 @@ pub(crate) struct Shared {
     /// Subscription id -> (chat, owner).
     subscriptions: Mutex<HashMap<String, (String, String)>>,
     shutting_down: AtomicBool,
+    plugin_refresh: tokio::sync::watch::Sender<u64>,
     /// Writes an actor still held after the store closed, so they were never saved. A quit
     /// drains every actor before the store closes, so this stays 0 unless a deadline ran out.
     pub(crate) lost_writes: AtomicU64,
@@ -439,6 +440,7 @@ impl SessionManager {
                     chat_states: Mutex::new(HashMap::new()),
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
+                    plugin_refresh: tokio::sync::watch::channel(0).0,
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
@@ -1257,6 +1259,9 @@ impl SessionManager {
     pub async fn shutdown_all(&self, deadline: Duration) -> ShutdownSummary {
         let started = Instant::now();
         self.shared().shutting_down.store(true, Ordering::Release);
+        self.shared()
+            .plugin_refresh
+            .send_modify(|generation| *generation += 1);
         let mailboxes: Vec<mpsc::UnboundedSender<ChatMsg>> = lock(&self.inner.actors)
             .values()
             .map(|entry| entry.mailbox.clone())

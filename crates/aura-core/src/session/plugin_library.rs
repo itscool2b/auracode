@@ -134,17 +134,24 @@ fn live_or_files(
         return files(feature, not_run, fallback);
     };
     let mut listing = listing.clone();
-    if matches!(listing.state, ListingState::Failed { .. }) && listing.entries.is_empty() {
-        listing.entries = fallback;
-    } else {
-        // Link live rows to their file items so they can open their preview and copy review.
-        for entry in &mut listing.entries {
-            if entry.library.is_none() {
-                entry.library = fallback
-                    .iter()
-                    .find(|item| item.key == entry.key)
-                    .and_then(|item| item.library.clone());
+    if matches!(listing.state, ListingState::Failed { .. }) {
+        for entry in &fallback {
+            if !listing
+                .entries
+                .iter()
+                .any(|retained| retained.key == entry.key)
+            {
+                listing.entries.push(entry.clone());
             }
+        }
+    }
+    // Link live rows to their file items so they can open their preview and copy review.
+    for entry in &mut listing.entries {
+        if entry.library.is_none() {
+            entry.library = fallback
+                .iter()
+                .find(|item| item.key == entry.key)
+                .and_then(|item| item.library.clone());
         }
     }
     listing
@@ -193,11 +200,14 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
             });
         let listings = facts.listings.get(id);
         let extensions = ext(id);
-        let not_run = if installed {
-            "The agent's listing did not run. These come from its folder."
-        } else {
-            "Not installed on this device. These come from its folder, if any."
-        };
+        let not_run =
+            if agent.is_some_and(|agent| matches!(agent.availability, Availability::Checking)) {
+                "Detection is still running. These come from its folder."
+            } else if installed {
+                "The agent's listing did not run. These come from its folder."
+            } else {
+                "Not installed on this device. These come from its folder, if any."
+            };
         let (system, summary, features, supported) = match id {
             "claude" => (
                 PluginSystem::Marketplace,
@@ -430,17 +440,61 @@ impl SessionManager {
         sync_available: bool,
         paused: Vec<String>,
     ) -> Result<PluginLibrary, SessionError> {
+        self.plugin_library_progressive(refresh, sync_available, paused, |_| true)
+            .await
+    }
+
+    /// Cancels the current read so profile switches can drain their admitted commands.
+    pub fn cancel_plugin_refresh(&self) {
+        self.shared()
+            .plugin_refresh
+            .send_modify(|generation| *generation += 1);
+    }
+
+    /// Publishes all cached/file sections first, then each completed provider independently.
+    /// A newer request or shutdown drops this request's pending helper waiters.
+    pub async fn plugin_library_progressive(
+        &self,
+        refresh: bool,
+        sync_available: bool,
+        paused: Vec<String>,
+        mut publish: impl FnMut(PluginLibrary) -> bool + Send,
+    ) -> Result<PluginLibrary, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
-        let agents = self.agents(refresh).await;
-        let now = crate::time::now_millis();
-        let mut listings = BTreeMap::new();
-        for id in ["claude", "codex", "pi"] {
-            if let Some(listing) = self.deps().detector.plugin_listings(id, refresh, now).await {
-                listings.insert(id.to_owned(), listing);
-            }
+        let updates = &self.shared().plugin_refresh;
+        let mut cancelled = updates.subscribe();
+        let mut generation = 0;
+        updates.send_modify(|value| {
+            *value += 1;
+            generation = *value;
+        });
+        let mut publish_current = |library| {
+            let current = updates.borrow();
+            *current == generation && !self.shared().is_shutting_down() && publish(library)
+        };
+        if *cancelled.borrow_and_update() != generation {
+            return Err(SessionError::Internal(
+                "The Plugin library refresh was replaced.".into(),
+            ));
         }
+        tokio::select! {
+            biased;
+            _ = cancelled.changed() => Err(SessionError::Internal("The Plugin library refresh was replaced.".into())),
+            result = self.plugin_library_read(refresh, sync_available, paused, &mut publish_current) => result,
+        }
+    }
+
+    async fn plugin_library_read(
+        &self,
+        refresh: bool,
+        sync_available: bool,
+        paused: Vec<String>,
+        publish: &mut (impl FnMut(PluginLibrary) -> bool + Send),
+    ) -> Result<PluginLibrary, SessionError> {
+        let agents = self.deps().detector.cached();
+        let listings = self.deps().detector.cached_plugin_listings();
         let roots = self.config_library_roots(None).await?;
         let env = self.deps().env.get().await;
         let opencode = opencode_root(&env.vars);
@@ -477,14 +531,51 @@ impl SessionManager {
             })
             .await
             .map_err(|_| SessionError::Internal("The Plugin library could not be read.".into()))?;
-        Ok(assemble(&PluginFacts {
+        let mut facts = PluginFacts {
             agents,
             listings,
             inventory,
             extensions,
             sync_available,
             paused,
-        }))
+        };
+        let mut library = assemble(&facts);
+        if !publish(library.clone()) {
+            return Ok(library);
+        }
+        if refresh {
+            self.deps().detector.prepare_plugin_refresh().await;
+        }
+        use futures::{StreamExt, stream};
+        let jobs = stream::iter(["claude", "codex", "pi", "opencode"])
+            .map(|id| async move {
+                if refresh {
+                    self.deps().detector.refresh_plugin_provider(id).await;
+                }
+                if id == "opencode" {
+                    return (id, None);
+                }
+                (
+                    id,
+                    self.deps()
+                        .detector
+                        .plugin_listings(id, refresh, crate::time::now_millis())
+                        .await,
+                )
+            })
+            .buffer_unordered(2);
+        tokio::pin!(jobs);
+        while let Some((id, listing)) = jobs.next().await {
+            if let Some(listing) = listing {
+                facts.listings.insert(id.into(), listing);
+            }
+            facts.agents = self.deps().detector.cached();
+            library = assemble(&facts);
+            if !publish(library.clone()) {
+                break;
+            }
+        }
+        Ok(library)
     }
 }
 
@@ -537,6 +628,73 @@ mod tests {
             available: Vec::new(),
             available_total: 0,
         }
+    }
+
+    #[test]
+    fn a_failed_refresh_keeps_cached_rows_and_file_only_rows_with_their_links() {
+        let cached = AgentListings {
+            version: "1".into(),
+            updated_at: 1,
+            version_change: None,
+            listings: vec![listing(
+                PluginFeature::Plugins,
+                ListingState::Failed {
+                    reason: "fixture failure".into(),
+                },
+                &["cached@team"],
+            )],
+        };
+        let mut fallback = named("file-only@team");
+        fallback.library = Some(PluginLibraryRef {
+            source_id: "user:claude".into(),
+            kind: "plugin".into(),
+            key: fallback.key.clone(),
+            revision: "1".into(),
+        });
+        let result = live_or_files(
+            Some(&cached),
+            PluginFeature::Plugins,
+            vec![fallback],
+            "not run",
+        );
+        assert!(matches!(result.state, ListingState::Failed { .. }));
+        assert_eq!(
+            result
+                .entries
+                .iter()
+                .map(|entry| entry.key.as_str())
+                .collect::<Vec<_>>(),
+            ["cached@team", "file-only@team"]
+        );
+        assert!(result.entries[1].library.is_some());
+    }
+
+    #[test]
+    fn initial_detection_is_checking_and_unsupported_inventory_is_explicit() {
+        let facts = PluginFacts {
+            agents: vec![AgentEntry {
+                availability: Availability::Checking,
+                ..agent("claude", None, None)
+            }],
+            sync_available: true,
+            ..Default::default()
+        };
+        let initial = assemble(&facts);
+        assert_eq!(initial.agents.len(), 4);
+        assert_eq!(initial.agents[0].harness, HarnessStatus::Checking);
+        assert!(!initial.agents[0].installed);
+        assert!(matches!(&initial.agents[0].features[0].state,
+            ListingState::Files { reason } if reason.contains("Detection is still running")));
+        assert!(matches!(
+            initial.agents[3].sync,
+            AgentSync::Unsupported { .. }
+        ));
+        assert!(
+            initial
+                .notices
+                .iter()
+                .any(|notice| notice.contains("no reviewed way"))
+        );
     }
 
     /// One section per agent, from the same one-entry-per-agent list New chat reads: Claude Code

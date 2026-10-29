@@ -21,6 +21,7 @@ import type {
 } from "../../lib/library/bindings";
 import { pluginsApi as nativePluginsApi, type PluginsApi } from "../../lib/plugins/api";
 import { ago, featureLabel, harnessText, harnessTone, sourceText } from "../../lib/plugins/format";
+import { PluginLibraryLoader } from "../../lib/plugins/loading";
 import { Modal } from "../chat/Modal";
 import { HistoryView, ItemDetail } from "./LibraryItems";
 import { VendorDialog, type VendorPreset } from "./VendorDialog";
@@ -201,26 +202,29 @@ export function PluginLibraryScreen({
     sources: LibrarySourceStatus[];
   } | null>(null);
   const alive = useRef(true);
+  const loader = useRef(new PluginLibraryLoader());
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      loader.current.cancel();
     };
   }, []);
   const load = async (refresh: boolean) => {
+    if (!alive.current) return;
     if (refresh) setBusy("refresh");
     setError(null);
-    try {
-      const value = await api.snapshot(refresh);
-      if (alive.current) setLibrary(value);
-    } catch (reason) {
-      if (alive.current) setError(errorMessage(reason));
-    } finally {
-      if (alive.current) {
+    await loader.current.load(api, refresh, {
+      value: (value) => {
+        setLibrary(value);
+        setLoading(false);
+      },
+      error: (reason) => setError(errorMessage(reason)),
+      done: () => {
         setLoading(false);
         if (refresh) setBusy(null);
-      }
-    }
+      },
+    });
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: the first read only; Refresh reruns it.
   useEffect(() => {
@@ -475,9 +479,11 @@ export function AgentSection({
             {agent.version ? " · " : null}
             {agent.updated_at !== null
               ? `Updated ${ago(agent.updated_at, now())}`
-              : agent.installed
-                ? "Read from its files"
-                : "Not installed here"}
+              : !agent.installed && agent.harness.state === "checking"
+                ? "Checking installation…"
+                : agent.installed
+                  ? "Read from its files"
+                  : "Not installed here"}
           </p>
         </div>
         <div className="plugins-agent-actions">

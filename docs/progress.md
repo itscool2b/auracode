@@ -4233,3 +4233,24 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+
+## Plugin library progressive loading (2026-10-29)
+
+The library publishes cached detection, cached listing rows and file inventory for all four supported
+agents before starting listings, then publishes each completed provider independently through a typed
+Tauri channel. At most two providers refresh at once; commands within a provider remain sequential
+and overlapping listing requests share their work. Failed refreshes retain cached and file rows.
+Generations reject superseded installation/configuration jobs, new reads cancel older requests, and
+profile draining and shutdown cancel owned refresh futures. Renderer request lifetimes ignore stale
+callbacks and replies after unmount, including StrictMode remounts. Initial detection is explicitly
+checking. Cursor, Grok Build, Antigravity and Hermes remain unavailable, and OpenCode sync remains
+unsupported. The Plugin library row-menu regression from d8bd025 is retained; its layout probe waits
+for that menu's actual first focused item.
+
+The controlled progressive browser fixture and the existing Plugin library/sync checks passed in
+Chromium and WebKit with clean axe audits. The menu and item layout probes passed all eight
+engine/viewport views. Focused Vitest covered progressive requests, stale replies/errors/completion,
+unmount/remount and existing section wording. Rust compilation/integration, latency measurements
+and generated-binding typecheck are pending the shared build lane. No owner configuration, paid
+agent runs, hosted CI, deployments or releases were used.

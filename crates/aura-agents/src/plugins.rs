@@ -42,6 +42,27 @@ enum Parser {
     PiPackages,
 }
 
+/// Failed refreshes keep the prior public rows while reporting the new failure.
+pub(crate) fn retain_failed_entries(
+    listings: &mut [FeatureListing],
+    cached: Option<&AgentListings>,
+) {
+    for listing in listings {
+        if matches!(listing.state, ListingState::Failed { .. })
+            && let Some(previous) = cached.and_then(|cached| {
+                cached
+                    .listings
+                    .iter()
+                    .find(|previous| previous.feature == listing.feature)
+            })
+        {
+            listing.entries = previous.entries.clone();
+            listing.available = previous.available.clone();
+            listing.available_total = previous.available_total;
+        }
+    }
+}
+
 /// One reviewed read-only listing command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListingRecipe {

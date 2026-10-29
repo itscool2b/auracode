@@ -181,6 +181,10 @@ fn replace_selections(
     state.selections = choices;
     state.preference_error = error;
     state.configuration_revision += 1;
+    state.listings.clear();
+    for job in state.listing_jobs.values() {
+        job.task.cancel();
+    }
     state.generation += 1;
     let floor = state.generation;
     for spec in &live.specs {

@@ -19,7 +19,12 @@ import { syntheticVendor } from "./configSyncPreview";
 
 declare global {
   interface Window {
-    pluginsFixture: { calls: string[] };
+    pluginsFixture: {
+      calls: string[];
+      finishProvider?: (agentId: string) => void;
+      finish?: () => void;
+      unmount?: () => void;
+    };
   }
 }
 
@@ -259,10 +264,55 @@ export function pluginFixture(mode: string): PluginLibrary {
 export function mountPluginLibraryPreview(container: HTMLElement, mode: string) {
   window.pluginsFixture = { calls: [] };
   const calls = window.pluginsFixture.calls;
-  let library = pluginFixture(mode);
+  const complete = pluginFixture(mode);
+  let library = complete;
+  const pending: {
+    update: (value: PluginLibrary) => void;
+    resolve: (value: PluginLibrary) => void;
+  }[] = [];
+  if (mode === "plugins-progressive") {
+    library = {
+      ...complete,
+      agents: complete.agents.map((agent) => ({
+        ...agent,
+        harness: { state: "checking" },
+        updated_at: null,
+        features: agent.features.map((feature) =>
+          feature.command
+            ? {
+                ...feature,
+                command: null,
+                state: {
+                  state: "files",
+                  reason: "Reading the agent listing. Cached and file entries are available.",
+                },
+              }
+            : feature,
+        ),
+      })),
+    };
+    window.pluginsFixture.finishProvider = (agentId) => {
+      library = {
+        ...library,
+        agents: library.agents.map((agent) =>
+          agent.agent_id === agentId
+            ? (complete.agents.find((entry) => entry.agent_id === agentId) ?? agent)
+            : agent,
+        ),
+      };
+      for (const request of pending) request.update(library);
+    };
+    window.pluginsFixture.finish = () => {
+      for (const request of pending) request.resolve(library);
+    };
+  }
   const api: PluginsApi = {
-    snapshot: async (refresh) => {
+    snapshot: async (refresh, onUpdate = () => {}) => {
       calls.push(`snapshot:${refresh}`);
+      if (mode === "plugins-progressive") {
+        onUpdate(library);
+        return new Promise((resolve) => pending.push({ update: onUpdate, resolve }));
+      }
       return library;
     },
     setSync: async (agentId, enabled) => {
@@ -335,7 +385,9 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
     },
   };
   const initial = mode === "plugins-pi" ? "pi" : mode === "plugins-failed" ? "codex" : "claude";
-  createRoot(container).render(
+  const root = createRoot(container);
+  window.pluginsFixture.unmount = () => root.unmount();
+  root.render(
     <StrictMode>
       <div className="pane-shell g-root">
         <PluginLibraryScreen

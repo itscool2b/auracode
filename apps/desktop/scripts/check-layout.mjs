@@ -215,7 +215,12 @@ async function openRowMenu(page, name) {
   await trigger.click();
   await page.getByRole("button", { name, exact: true, expanded: true }).waitFor();
   await page.getByRole("menu", { name }).waitFor();
-  await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "menuitem");
+  const first = await page
+    .getByRole("menu", { name })
+    .getByRole("menuitem")
+    .first()
+    .elementHandle();
+  await page.waitForFunction((item) => document.activeElement === item, first);
 }
 
 /** How each "<mode>#<view>" opens its layer before the probes run. */
