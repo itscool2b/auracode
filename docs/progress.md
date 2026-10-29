@@ -4470,3 +4470,17 @@ markers with byte-preserved file/journal evidence, and malformed marker bytes. V
 aura-config 174/174 tests (79 unit, 95 integration), all-target Clippy with warnings denied, rustfmt,
 instruction parity, and diff checks. The native startup-notice test remains unrun because the desktop
 dependency graph is blocked; these fixes change no frontend or exported DTO shape.
+
+### 2026-10-29: Preserve setup retry capacity after receipt expiry
+
+Setup review admission now reclaims this chat's obsolete review before checking capacity. The
+cache bounds 64 chats, each with its current generation command receipt and one replacement
+review, so expired bound receipts preserve failure attribution without locking out retries.
+The old command identity remains valid until retry apply replaces its generation; unrelated
+chat receipts retain their generation identity.
+
+The full-cache regression first reproduced the review refusal, then passed with the change.
+All account-sync setup tests passed 17/17, including earlier prelaunch failure and queue-hold
+regressions. Core Clippy library/tests with warnings denied, rustfmt and instruction parity passed.
+Root also reported the integrated setup/recovery layout checks clean in sixteen
+focused views across both browser engines. Native bindings remain an integration-owner gate.
