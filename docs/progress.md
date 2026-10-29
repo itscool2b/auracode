@@ -4527,3 +4527,17 @@ library integration 6/6, assembly 5/5, agents unit 68/68, provider 7/7, selectio
 with warnings denied, along with rustfmt, instruction parity and diff checks. This fix wave ran
 no browser, server, owner store/configuration access, real cleanup, paid agent prompt or hosted CI.
 Native compilation, bindings and the final integrated acceptance gates remain with the coordinator.
+
+### 2026-10-29: Scoped cleanup acceptance fixtures
+
+The delete-data browser checker still expected the old blanket key-deletion wording. It now
+checks complete scoped decisions: deleted-root index, exclusive accounts and eligible orphan
+bundles removed; foreign indexes and shared accounts retained, with their exact reasons and
+unique opaque targets. A synthetic unknown-payload case retains every key and retry index and
+shows the uncertainty warning on both Windows and macOS previews. Sharing alone has no such
+warning. The narrow view also checks the populated key rows.
+
+The preview and dialog unit tests share typed synthetic key data. No production cleanup behavior
+changed and no native cleanup, Cargo or browser run was performed for this follow-up. Targeted
+Vitest passes 9/9; touched-file Biome, checker syntax, diff and instruction parity checks pass.
+Chromium/WebKit runtime verification remains with the integration coordinator.
