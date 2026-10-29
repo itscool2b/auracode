@@ -4617,3 +4617,26 @@ presentation fix. All desktop tests passed: 534 frontend tests with 19 existing 
 script tests. Desktop typecheck, changed-file Biome checks, stylesheet policy and instruction parity
 checks passed. This change adds no Rust logic, generated binding edits or styling. Native and browser
 acceptance remain with the integration coordinator.
+
+### 2026-10-29: Exercise header labels through the normal chat acceptance gate
+
+A development-only preview now mounts the real chat screen and its workspace/chat stores with
+synthetic metadata. Sidebar selection exercises the stored project and folder IDs for a managed
+worktree, a custom source project, a second Local folder in the same project, and equal Local
+project/folder names. The worktree label uses Rust's full source-path format with a long Windows
+path, rather than the shorter label used in the earlier markup test.
+
+The new checker verifies all four selections in Chromium and WebKit at 1440x900, 1024x700 and the
+native minimum of 960x640. All 24 views and accessibility scans passed. It checks the complete
+accessible label and path tooltip, readable project/branch prefix, existing path ellipsis, clear
+header controls and absence of horizontal overflow. Minimum and wide screenshots were inspected.
+The normal check-chat command now invokes this checker on its existing server and forwards its
+engine selection. The fresh integrated command passed both engines with 88 accessibility scans,
+plus its queue, history, anchor, control, motion and minimum-window assertions.
+
+An initial broad WebKit run timed out locating history-250 after scrolling to the first loaded turn.
+The fresh integrated run passed that unchanged assertion without a product or synchronization fix;
+the original failure log is retained and its cause remains unproven. Desktop tests passed 534 with
+19 existing skips, plus 10 Node script tests; focused header tests, typecheck, Biome, instruction
+parity, stylesheet policy and diff checks passed. No production CSS, Rust or generated bindings
+changed. Owned browsers and the single preview server were stopped after verification.
