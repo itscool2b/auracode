@@ -27,9 +27,17 @@ pub use audit::audit_profile;
 use index::Index;
 
 /// The secure-store entry that holds `root`'s account and profile index for `origin`, for the
-/// data cleanup (crate::uninstall). `None` when the folder cannot be resolved.
+/// data cleanup (crate::uninstall). A folder already deleted is named by its parent's real path,
+/// so a cleanup that could not reach the secure store the first time still finds the index on a
+/// later run. `None` when neither can be resolved.
 pub(crate) fn profile_index_entry(origin: &str, root: &std::path::Path) -> Option<VaultEntry> {
-    index::entry(origin, root).ok()
+    match std::fs::symlink_metadata(root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = std::fs::canonicalize(root.parent()?).ok()?;
+            index::entry_at(origin, &parent.join(root.file_name()?)).ok()
+        }
+        _ => index::entry(origin, root).ok(),
+    }
 }
 pub type Result<T> = std::result::Result<T, AccountFailure>;
 

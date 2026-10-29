@@ -8,8 +8,13 @@ use zeroize::Zeroizing;
 const LIMIT: usize = 8;
 
 pub(super) fn entry(origin: &str, root: &std::path::Path) -> Result<VaultEntry> {
-    use sha2::{Digest, Sha256};
     let canonical = std::fs::canonicalize(root).map_err(|_| error::storage())?;
+    entry_at(origin, &canonical)
+}
+
+/// The index entry for a data folder whose real (canonical) path is `canonical`.
+pub(super) fn entry_at(origin: &str, canonical: &std::path::Path) -> Result<VaultEntry> {
+    use sha2::{Digest, Sha256};
     let scope = format!(
         "{:x}",
         Sha256::digest(canonical.as_os_str().as_encoded_bytes())

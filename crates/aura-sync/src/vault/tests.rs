@@ -169,7 +169,7 @@ fn passphrase_wrong_key_tamper_and_account_substitution_preserve_the_saved_file(
 }
 
 #[test]
-fn the_sweep_removes_only_auracode_entries_from_a_keychain_store() {
+fn the_listing_names_only_auracode_entries_of_a_keychain_store_and_removes_nothing() {
     // keyring-core's process-memory mock only; it matches services by substring, as a loose store
     // might, so the lookalike service proves the exact second check.
     let mock = keyring_core::mock::Store::new().unwrap();
@@ -184,18 +184,29 @@ fn the_sweep_removes_only_auracode_entries_from_a_keychain_store() {
     let lookalike = make("x-auracode.sync.v1", "x-auracode.sync.v1:third");
     let foreign_user = make(SERVICE, "not-ours");
     let store: Arc<keyring_core::CredentialStore> = mock.clone();
-    assert_eq!(sweep_by_service(store.as_ref()).unwrap(), 2);
-    assert!(matches!(
-        first.get_secret(),
-        Err(keyring_core::Error::NoEntry)
-    ));
-    assert!(matches!(
-        second.get_secret(),
-        Err(keyring_core::Error::NoEntry)
-    ));
-    assert_eq!(vendor.get_secret().unwrap(), b"synthetic");
-    assert_eq!(lookalike.get_secret().unwrap(), b"synthetic");
-    assert_eq!(foreign_user.get_secret().unwrap(), b"synthetic");
-    // A second sweep is a no-op.
-    assert_eq!(sweep_by_service(store.as_ref()).unwrap(), 0);
+    let mut listed = list_by_service(store.as_ref()).unwrap();
+    listed.sort();
+    assert_eq!(
+        listed,
+        [format!("{SERVICE}:first"), format!("{SERVICE}:second")]
+    );
+    for entry in [first, second, vendor, lookalike, foreign_user] {
+        assert_eq!(entry.get_secret().unwrap(), b"synthetic");
+    }
+    // The names become entries the store can load and remove, and nothing else does.
+    listed.push(format!("{SERVICE}:first"));
+    listed.push(format!("{SERVICE}:"));
+    listed.push("x-auracode.sync.v1:third".into());
+    let entries = app_entries(&listed);
+    assert_eq!(
+        entries.iter().map(VaultEntry::target).collect::<Vec<_>>(),
+        [format!("{SERVICE}:first"), format!("{SERVICE}:second")]
+    );
+    let account = entry();
+    assert_eq!(
+        VaultEntry::from_target(&account.target()),
+        Some(account.clone())
+    );
+    assert!(account.target().starts_with("auracode.sync.v1:"));
+    assert_eq!(VaultEntry::from_target("auracode.sync.v1"), None);
 }
