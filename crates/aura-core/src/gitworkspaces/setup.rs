@@ -26,6 +26,7 @@ pub(super) struct Prepared {
     fingerprint: String,
     expires: Instant,
     command_ready: bool,
+    generation: Option<u32>,
 }
 
 fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -141,6 +142,7 @@ impl GitWorkspaces {
                 fingerprint: view.fingerprint,
                 expires: Instant::now() + Duration::from_secs(600),
                 command_ready: false,
+                generation: None,
             },
         );
         Ok(preview)
@@ -154,10 +156,38 @@ impl GitWorkspaces {
             .ok_or_else(|| {
                 invalid("Setup review expired or was already used. Review setup again.")
             })?;
-        Ok(vec![
-            PathBuf::from(&plan.record.source),
-            PathBuf::from(&plan.record.path),
-        ])
+        let mut folders = vec![PathBuf::from(&plan.record.path)];
+        if !plan.command_ready && !plan.input.files.is_empty() {
+            folders.push(PathBuf::from(&plan.record.source));
+        }
+        Ok(folders)
+    }
+
+    pub(crate) fn setup_generation(&self, chat_id: &str, token: &str) -> Result<Option<u32>> {
+        lock(&self.setups)
+            .get(token)
+            .filter(|plan| {
+                plan.record.chat_id == chat_id
+                    && plan.command_ready
+                    && plan.expires > Instant::now()
+            })
+            .map(|plan| plan.generation)
+            .ok_or_else(|| invalid("Review setup again before starting this command."))
+    }
+
+    pub(crate) fn bind_setup_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+        generation: u32,
+    ) -> Result<()> {
+        let mut plans = lock(&self.setups);
+        let plan = plans
+            .get_mut(token)
+            .filter(|plan| plan.record.chat_id == chat_id && plan.command_ready)
+            .ok_or_else(|| invalid("The setup command review is unavailable."))?;
+        plan.generation = Some(generation);
+        Ok(())
     }
 
     fn take_setup(&self, chat_id: &str, token: &str, command_ready: bool) -> Result<Prepared> {

@@ -98,6 +98,6 @@ pub async fn worktree_setup_start(
         tauri::async_runtime::handle().inner().clone(),
     );
     Ok(ticket
-        .start_guarded(spawner, plan.spec, size, plan.guard)
+        .start_setup(spawner, plan.spec, size, plan.guard, plan.completion)
         .await?)
 }

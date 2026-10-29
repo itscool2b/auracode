@@ -555,6 +555,8 @@ pub struct LimitWindow {
 /// Live header state of a chat. Never stored; coalesced to at most one per frame.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SessionInfo {
+    #[serde(default)]
+    pub worktree_setup: Option<worktree_setup::WorktreeSetupAttempt>,
     pub status: SessionStatus,
     /// What is happening now: "Starting Hermes", "Stopping the turn; press Esc again to force stop".
     pub detail: Option<String>,
@@ -587,6 +589,10 @@ pub struct SessionInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum QueueWait {
+    Setup {
+        state: worktree_setup::WorktreeSetupState,
+        detail: Option<String>,
+    },
     /// The agent is starting or resuming its session.
     Starting,
     /// The agent is working on a turn.

@@ -59,6 +59,7 @@ import {
 } from "../ipc";
 import { type ProjectToolsApi, projectToolsApi } from "../projectTools";
 import { type SearchTransport, searchApi } from "../search";
+import { type WorktreeSetupApi, worktreeSetupApi } from "../worktreeSetup";
 
 /**
  * Everything the chat screens ask of the shell. The stores take this interface, so Vitest drives
@@ -66,6 +67,7 @@ import { type SearchTransport, searchApi } from "../search";
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  readonly setup?: WorktreeSetupApi;
   readonly git?: GitWorkspaceApi;
   readonly conversation?: ConversationTransport;
   readonly search?: SearchTransport;
@@ -131,6 +133,7 @@ export const tauriTransport: Transport = {
   changes: changesApi,
   composer: composerApi,
   projectTools: projectToolsApi,
+  setup: worktreeSetupApi,
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,

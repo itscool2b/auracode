@@ -15,6 +15,7 @@ mod workspace;
 mod workspace_removal;
 mod worktree_chat;
 mod worktree_guards;
+mod worktree_setup;
 
 use std::sync::Mutex;
 use std::time::Duration;

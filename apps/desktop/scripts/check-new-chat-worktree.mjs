@@ -248,26 +248,19 @@ async function inspect(engine, launcher) {
     await openPopover(page);
     await page.getByText("Copies 2 files, then runs pnpm install --frozen-lockfile.").waitFor();
     await page.keyboard.press("Escape");
+    await audit(page, "setup-review", engine, scans);
     await page.getByTestId("new-chat-create").click();
-    const sheet = page.getByRole("dialog", { name: "Setup aura/7f3a9c2e" });
-    await sheet.waitFor();
-    await page.getByTestId("new-chat-setup").waitFor();
-    assert.equal((await calls(page)).includes("setup-start"), false, "Start is explicit");
+    await page.locator('[data-test-phase="live"]').waitFor();
+    assert.equal(
+      (await calls(page)).includes("setup-start"),
+      false,
+      "New chat does not launch setup from a renderer callback",
+    );
     assert.equal(
       (await calls(page)).some((call) => call.startsWith("start:")),
       false,
     );
-    await sheet.getByText("pnpm install --frozen-lockfile", { exact: true }).waitFor();
-    await sheet.getByRole("button", { name: "Start setup", exact: true }).click();
-    await page.locator('.terminal-sheet[data-state="running"]').waitFor();
-    await audit(page, "setup-running", engine, scans);
-    await sheet.getByRole("button", { name: "Close setup terminal" }).click();
-    await page.getByTestId("new-chat-created").waitFor();
-    assert.equal((await calls(page)).at(-1), "start:worktree-chat");
-    await page.getByText("did not run to the end", { exact: false }).waitFor();
-    await audit(page, "setup-notes", engine, scans);
-    await page.getByRole("button", { name: "Open chat", exact: true }).click();
-    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.getByTestId("composer-input").waitFor();
 
     assert.deepEqual(errors, [], "browser errors");
     console.log(

@@ -113,6 +113,51 @@ pub(super) enum Backend {
 }
 
 impl GitWorkspaces {
+    /// The registry is scoped to this profile, including entries whose chat save rolled back.
+    /// Listing does not require a live repository, so missing sources remain discoverable.
+    pub async fn profile_records(&self) -> Result<Vec<ManagedWorktree>> {
+        let _guard = self.gate.lock().await;
+        let mut records = self.read_records()?;
+        for record in &mut records {
+            if record.state == WorktreeState::Ready {
+                match Path::new(&record.path).try_exists() {
+                    Ok(false) => {
+                        record.state = WorktreeState::Missing;
+                        record.detail=Some("The retained folder is missing. Its branch and saved ownership remain available for review.".into());
+                    }
+                    Err(error) => {
+                        record.detail = Some(format!(
+                            "The retained folder could not be inspected: {error}"
+                        ))
+                    }
+                    Ok(true) => {}
+                }
+            }
+        }
+        Ok(records)
+    }
+    pub async fn profile_record(&self, id: &str) -> Result<ManagedWorktree> {
+        let _guard = self.gate.lock().await;
+        self.read_records()?
+            .into_iter()
+            .find(|record| record.id == id)
+            .ok_or_else(|| GitError::Message("This profile does not own that worktree.".into()))
+    }
+    pub async fn profile_record_folder(&self, id: &str) -> Result<PathBuf> {
+        let record = self.profile_record(id).await?;
+        self.recovery_paths(&record)?;
+        // Canonicalize and check the owned parent before opening any renderer-selected ID.
+        let path = Path::new(&record.path).canonicalize()?;
+        let root = self.root.canonicalize()?;
+        if !path.starts_with(root) || !path.is_dir() {
+            return Err(GitError::Message(
+                "This retained folder is outside the profile's owned worktrees.".into(),
+            ));
+        }
+        Ok(crate::fsutil::plain_windows_path(&path.to_string_lossy())
+            .map(PathBuf::from)
+            .unwrap_or(path))
+    }
     pub(super) fn read_records(&self) -> Result<Vec<ManagedWorktree>> {
         let bytes = match &self.records {
             Backend::Locked => {

@@ -52,6 +52,7 @@ export function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
     revision: 1,
     queue_wait: null,
     sending: null,
+    worktree_setup: null,
     ...overrides,
   };
 }

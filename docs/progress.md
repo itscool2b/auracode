@@ -4330,3 +4330,27 @@ parent/file sync failure and directory/journal substitution fixtures. The amende
 session-checkpoint suite passes 33 tests. Aura-core Clippy passes with Account sync enabled and
 with no default features, including test targets and warnings denied. Formatting, instruction parity
 and diff checks pass. No native app walkthrough or cleanup of real data was performed.
+
+## 2026-10-29: Durable setup admission and retained worktree discovery (in verification)
+
+Worktree chats now persist setup state and generation before becoming visible. Their normal
+conversation opens immediately, with setup review/output in the docked terminal panel and the
+composer using the saved queue throughout. Rust gates explicit starts and dispatch, records
+terminal-owner success only after confirmed cleanup, holds messages on failure and interrupts
+unfinished attempts at restart. Retries review only the command, preserve copied files and reject
+older generation tokens/completions.
+
+A profile-scoped worktree registry route exposes retained folders whose chat could not be saved.
+New chat and Project settings show their branch, source, retained path and detail, reviewed recovery
+and Open folder. Recovery retains reconciled chatless records. Managed worktree folder labels name
+the branch and source, New chat omits them as source folders, and Move chat keeps its destinations.
+See `docs/worktree-setup-and-recovery.md` for execution and recovery behavior.
+
+Verification: all desktop Vitest tests passed (504 passed, 19 skipped). Chromium passed the new
+setup/recovery flow with Axe and the New chat checker with seven Axe scans; the running setup
+screenshot was inspected. Core worktree tests passed 18/18 and terminal tests 16/16. With
+account-sync, setup regressions passed 14/14 and migration/backup tests 12/12; core Clippy for the
+library and tests passed with warnings denied. Biome, rustfmt and instruction parity passed.
+Desktop binding export remains blocked by dependency E0463 errors for serde, specta, process_wrap
+and windows. Generated bindings were left untouched; TypeScript checking is blocked on those new
+types/commands. Native app and macOS verification remain integration gates.

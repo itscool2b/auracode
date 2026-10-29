@@ -1,16 +1,23 @@
 import { FolderOpen, Plus } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ProjectSummary, WorkspaceRemovalTarget } from "../../bindings";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import type {
+  AgentEntry,
+  ManagedWorktree,
+  ProjectSummary,
+  WorkspaceRemovalTarget,
+} from "../../bindings";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { inTauri } from "../../lib/ipc";
 import type { CloneApi } from "../../lib/setup-actions/api";
 import type { WorkspaceStore } from "../../lib/workspace";
+import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { CloneProject } from "../setup/CloneProject";
 import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
 import { WorkspaceRemovalDialog } from "./WorkspaceRemovalDialog";
+import { WorktreeRecoveryList } from "./WorktreeRecoveryList";
 
 /**
  * The colours a project can carry, as stored with the project, each drawn by its Graphite tone
@@ -32,9 +39,11 @@ export function ProjectDialog({
   onLocated,
   onInstructions,
   cloneApi,
+  recoveryApi = worktreeRecoveryApi,
 }: {
   /** The clone's commands; previews pass a synthetic service. */
   readonly cloneApi?: CloneApi;
+  readonly recoveryApi?: WorktreeRecoveryApi;
   readonly project: ProjectSummary | null;
   readonly store: WorkspaceStore;
   readonly transport: Transport;
@@ -56,6 +65,28 @@ export function ProjectDialog({
   const [localError, setLocalError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
+  const [recoveryRevision, setRecoveryRevision] = useState(0);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  useEffect(() => {
+    void recoveryRevision;
+    if (!project) return;
+    let current = true;
+    void recoveryApi.list(project.id).then(
+      (records) => {
+        if (current) {
+          setWorktrees(records);
+          setRecoveryError(null);
+        }
+      },
+      (error) => {
+        if (current) setRecoveryError(errorMessage(error));
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [project, recoveryApi, recoveryRevision]);
   const chooseFolder = async () => {
     setPicking(true);
     setLocalError(null);
@@ -258,6 +289,20 @@ export function ProjectDialog({
           </p>
         ) : null}
         <section aria-label="Workspace removal">
+          {recoveryError ? (
+            <p role="alert" className="ui-error">
+              Could not load retained worktrees: {recoveryError}
+            </p>
+          ) : null}
+          <WorktreeRecoveryList
+            records={worktrees.filter(
+              (record) =>
+                !state.data?.chats.some((chat) => chat.chat.id === record.chat_id) ||
+                !["ready", "retired"].includes(record.state),
+            )}
+            api={recoveryApi}
+            onChanged={() => setRecoveryRevision((value) => value + 1)}
+          />
           {project ? (
             <button
               className="g-button"

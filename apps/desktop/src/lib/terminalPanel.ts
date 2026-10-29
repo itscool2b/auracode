@@ -16,6 +16,7 @@ const TITLE_LIMIT = 40;
 export type TabStatus = { readonly state: "reviewing" } | TerminalState;
 
 export interface PanelTab {
+  readonly purpose?: "setup";
   readonly id: string;
   readonly chatId: string;
   /** The shell's name ("PowerShell 2") or the name the user gave the tab. */
@@ -128,6 +129,47 @@ export class TerminalPanels {
     return this.#runtimes.get(tabId);
   }
 
+  /** The reviewed setup uses the normal docked panel, keeping the chat composer available.
+   * Process completion belongs to Rust; this tab only renders its output and closes its process. */
+  setupTab(chatId: string, transport: TerminalTransport, folder: string): void {
+    const id = `setup-${++this.#sequence}`;
+    const panel = this.panel(chatId);
+    this.#tabs.set(id, {
+      id,
+      chatId,
+      purpose: "setup",
+      title: "Setup",
+      named: false,
+      shell: null,
+      folder,
+      status: { state: "starting" },
+    });
+    this.#runtimes.set(
+      id,
+      this.factory({
+        transport,
+        label: "Worktree setup terminal",
+        onStatus: (status) => {
+          if (this.#tabs.has(id)) this.#setTab(id, { status });
+        },
+      }),
+    );
+    this.#setPanel(chatId, {
+      ...panel,
+      tabs: [...panel.tabs, id],
+      active: id,
+      open: true,
+      notice: null,
+      focus: panel.focus + 1,
+    });
+  }
+
+  /** Opens setup review without starting a shell. Existing terminal output remains in its tab. */
+  showReview(chatId: string): void {
+    const panel = this.panel(chatId);
+    this.#setPanel(chatId, { ...panel, active: null, open: true, focus: panel.focus + 1 });
+  }
+
   /** Ctrl+`: hides an open panel, or shows it, opening the first terminal when it has none. */
   toggle(chatId: string): void {
     if (this.panel(chatId).open) this.hide(chatId);
@@ -136,7 +178,12 @@ export class TerminalPanels {
 
   show(chatId: string): void {
     const panel = this.panel(chatId);
-    this.#setPanel(chatId, { ...panel, open: true, focus: panel.focus + 1 });
+    this.#setPanel(chatId, {
+      ...panel,
+      active: panel.active ?? panel.tabs.at(-1) ?? null,
+      open: true,
+      focus: panel.focus + 1,
+    });
     if (panel.tabs.length === 0) void this.newTab(chatId);
   }
 
@@ -256,7 +303,11 @@ export class TerminalPanels {
       .tabs.filter((other) => other !== tabId)
       .map((other) => this.#tabs.get(other)?.title ?? "");
     this.#setTab(tabId, {
-      title: tab.shell ? nextTitle(tab.shell.label, taken) : "Terminal",
+      title: tab.shell
+        ? nextTitle(tab.shell.label, taken)
+        : tab.purpose === "setup"
+          ? "Setup"
+          : "Terminal",
       named: false,
     });
   }

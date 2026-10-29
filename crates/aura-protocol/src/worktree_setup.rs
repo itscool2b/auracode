@@ -2,6 +2,30 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeSetupState {
+    Awaiting,
+    Running,
+    Failed,
+    Interrupted,
+    Succeeded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeSetupAttempt {
+    pub worktree_id: String,
+    pub generation: u32,
+    pub state: WorktreeSetupState,
+    pub detail: Option<String>,
+}
+
+impl WorktreeSetupAttempt {
+    pub fn blocks_agent(&self) -> bool {
+        self.state != WorktreeSetupState::Succeeded
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct WorktreeSetupInput {
     pub files: Vec<String>,

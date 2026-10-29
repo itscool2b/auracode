@@ -61,6 +61,18 @@ impl SessionManager {
         let preview = self.chat_create_preview(&input.folder_id).await?;
         let path = usable(&preview.folder)?.to_owned();
         let source = checked_folder(&path).await?;
+        if self
+            .worktrees()?
+            .profile_records()
+            .await
+            .map_err(|error| invalid(error.to_string()))?
+            .iter()
+            .any(|record| crate::fsutil::plain_path(Path::new(&record.path)) == source)
+        {
+            return Err(invalid(
+                "Choose the original project folder as the source of a new worktree.",
+            ));
+        }
         let chat_id = crate::ids::new_id();
         let outcome = self
             .worktrees()?
@@ -238,20 +250,49 @@ impl SessionManager {
                 .await
             {
                 Ok(result) => {
+                    if let Some(token) = &result.command_token {
+                        service
+                            .bind_setup_generation(&prepared.chat_id, token, 1)
+                            .map_err(|error| invalid(error.to_string()))?;
+                    }
+                    if result.warning.is_some() || result.command_token.is_none() {
+                        self.set_setup_attempt(
+                            &prepared.chat_id,
+                            Some(1),
+                            if result.warning.is_some() {
+                                aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                            } else {
+                                aura_protocol::worktree_setup::WorktreeSetupState::Succeeded
+                            },
+                            result.warning.clone(),
+                        )
+                        .await?;
+                    }
                     warnings.extend(result.warning.clone());
                     setup = Some(result);
                 }
                 // The error is a sentence of its own; its full stop ends this one too.
-                Err(error) => warnings.push(format!(
-                    "The chat and worktree are ready, but setup did not run: {}. Review setup from the chat's Git panel.",
-                    error.to_string().trim_end_matches('.')
-                )),
+                Err(error) => {
+                    let detail = format!(
+                        "Setup failed: {}. Review and retry setup.",
+                        error.to_string().trim_end_matches('.')
+                    );
+                    self.set_setup_attempt(
+                        &prepared.chat_id,
+                        Some(1),
+                        aura_protocol::worktree_setup::WorktreeSetupState::Failed,
+                        Some(detail.clone()),
+                    )
+                    .await?;
+                    warnings.push(detail);
+                }
             }
         }
         // A pending setup command runs first in its owned terminal; the agent then starts explicitly.
-        let started = setup
-            .as_ref()
-            .is_none_or(|result| result.command_token.is_none());
+        let started = prepared.setup.is_none()
+            || setup
+                .as_ref()
+                .is_some_and(|result| result.warning.is_none() && result.command_token.is_none());
         if started {
             let _ = self
                 .ask(&prepared.chat_id, |reply| ChatMsg::Start {
@@ -293,6 +334,7 @@ impl SessionManager {
             ));
         }
         self.organization(OrganizationCommand::CreateWorktreeChat {
+            setup_worktree_id: prepared.setup.as_ref().map(|_| worktree.id.clone()),
             id: prepared.chat_id.clone(),
             source_folder_id: prepared.folder_id.clone(),
             path: PathBuf::from(&worktree.path),

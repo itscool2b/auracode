@@ -1,6 +1,7 @@
 import { ChevronDown, Plus, Trash2, X } from "lucide-react";
 import {
   type CSSProperties,
+  type ReactNode,
   useEffect,
   useId,
   useRef,
@@ -50,11 +51,13 @@ export function TerminalPanel({
   chatId,
   panels,
   onHidden,
+  review,
 }: {
   readonly chatId: string;
   readonly panels: TerminalPanels;
   /** Focus goes back to the conversation when the panel hides from inside. */
   readonly onHidden?: () => void;
+  readonly review?: ReactNode;
 }) {
   const snapshot = useSyncExternalStore(panels.subscribe, panels.getSnapshot, panels.getSnapshot);
   const panel = snapshot.chats.get(chatId) ?? CLOSED_PANEL;
@@ -328,6 +331,9 @@ export function TerminalPanel({
         aria-labelledby={active ? `${base}-${active.id}` : undefined}
         aria-label={active ? undefined : "Terminal"}
       >
+        {!active && review ? (
+          <div style={{ overflowY: "auto", minHeight: 0, flex: 1 }}>{review}</div>
+        ) : null}
         {panel.notice ? (
           <p className="terminal-panel-status" role="alert" data-outcome="failed">
             {panel.notice}
@@ -345,17 +351,26 @@ export function TerminalPanel({
                 type="button"
                 className="g-button g-button-24"
                 onClick={() => {
+                  if (active.purpose === "setup") {
+                    panels.showReview(chatId);
+                    return;
+                  }
                   const shell = active.shell?.id;
                   void panels.closeTab(active.id);
                   void panels.newTab(chatId, shell);
                 }}
               >
-                Try again
+                {active.purpose === "setup" ? "Retry setup" : "Try again"}
               </button>
             ) : null}
           </div>
         ) : null}
-        <div ref={viewport} className="terminal-panel-viewport" data-testid="terminal-panel-view" />
+        <div
+          ref={viewport}
+          className="terminal-panel-viewport"
+          data-testid="terminal-panel-view"
+          hidden={!active && Boolean(review)}
+        />
       </div>
     </section>
   );

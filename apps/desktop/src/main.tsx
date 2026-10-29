@@ -37,6 +37,10 @@ if (container) {
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
         mountConfigSyncPreview(container, mode),
       );
+    else if (mode === "setup-recovery")
+      void import("./dev/setupRecoveryPreview").then(({ mountSetupRecoveryPreview }) =>
+        mountSetupRecoveryPreview(container),
+      );
     else if (
       mode === "plugins" ||
       mode === "plugins-pi" ||

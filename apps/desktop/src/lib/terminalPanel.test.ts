@@ -67,6 +67,22 @@ function rig(options: { reviews?: (() => Promise<ProjectToolsReview>)[]; limit?:
 }
 
 describe("the docked terminal panels", () => {
+  it("shows setup output in a docked tab and leaves completion to the Rust owner", async () => {
+    const { panels, runtimes, api, tab } = rig();
+    const transport = {} as TerminalTransport;
+    panels.setupTab("chat", transport, "C:/worktrees/setup");
+    expect(tab(panels.panel("chat").active)).toMatchObject({
+      title: "Setup",
+      folder: "C:/worktrees/setup",
+      shell: null,
+    });
+    expect(api.review).not.toHaveBeenCalled();
+    expect(runtimes[0]?.transport).toBe(transport);
+    panels.hide("chat");
+    expect(runtimes[0]?.disposed).toBe(false);
+    await panels.closeTab(panels.panel("chat").active as string);
+    expect(runtimes[0]?.disposed).toBe(true);
+  });
   it("shows a reviewed shell in the chat's folder on the first toggle, and only then", async () => {
     const { api, panels, runtimes, tab } = rig();
     expect(panels.panel("chat").open).toBe(false);
