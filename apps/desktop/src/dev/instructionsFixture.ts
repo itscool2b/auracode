@@ -619,6 +619,17 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
           "The item changed after it was displayed. Refresh the Library and try again.",
         );
       reviews.delete(id);
+      if (scenario === "recovery") {
+        return {
+          id,
+          changed: [],
+          rolled_back: false,
+          recovery_required: true,
+          message:
+            "This change overlaps an interrupted Instructions change that still needs attention. External edits were preserved.",
+          backup: "C:/fixture/auracode/instructions/backups/pending",
+        };
+      }
       Object.assign(state, pending.next);
       return {
         id,

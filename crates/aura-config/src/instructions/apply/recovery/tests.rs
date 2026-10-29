@@ -215,8 +215,10 @@ fn external_or_malformed_metadata_is_not_overwritten() {
         let bytes = if malformed {
             b"{broken".to_vec()
         } else {
-            let mut manifest = crate::instructions::manifest::Manifest::default();
-            manifest.version = 1;
+            let mut manifest = crate::instructions::manifest::Manifest {
+                version: 1,
+                ..Default::default()
+            };
             manifest.roots.insert("user".into(), entry("external"));
             serde_json::to_vec(&manifest).unwrap()
         };
@@ -234,6 +236,8 @@ fn missing_root_and_damaged_backup_keep_evidence() {
         f.save(true);
         f.publish(&mutation);
         if missing_root {
+            // Windows cannot move a directory while this fixture holds its capability open.
+            f.dir = open_root(&f.state).unwrap().unwrap();
             std::fs::rename(&f.root, f.root.with_file_name("moved")).unwrap();
         } else {
             std::fs::write(f.backup.join("before-0"), b"damaged").unwrap();
@@ -412,6 +416,17 @@ fn case_only_rename_restores_original_spelling() {
     let names = safe_fs::children(&f.dir, "").unwrap();
     assert!(names.contains(&"agents.md".into()));
     assert!(!names.contains(&"AGENTS.md".into()));
+}
+
+#[test]
+fn publication_never_overwrites_an_existing_original_sibling() {
+    let mut f = Fixture::new();
+    let mutation = f.add("AGENTS.md", Some(b"before"), Some(b"after"));
+    let old = temp_name("AGENTS.md", &f.journal.id, "old");
+    f.dir.write(&old, b"external").unwrap();
+    assert!(publish(&f.dir, &mutation, &f.journal.id).is_err());
+    assert_eq!(f.dir.read(&old).unwrap(), b"external");
+    assert_eq!(f.dir.read("AGENTS.md").unwrap(), b"before");
 }
 
 #[cfg(unix)]

@@ -281,6 +281,8 @@ impl Transaction<'_> {
         recovery::mark(&backup, "backups-ready")?;
         prune(self.backups, &self.id);
         let mut failure = None;
+        // The index is only used by the deterministic failure hook in test builds.
+        #[cfg_attr(not(test), allow(clippy::unused_enumerate_index))]
         for (_index, mutation) in self.mutations.iter().enumerate() {
             #[cfg(test)]
             if self.fail_at == Some(_index) {
@@ -311,6 +313,9 @@ impl Transaction<'_> {
         let backup_label = backup.to_string_lossy().into_owned();
         if let Some(message) = failure {
             let restored = recovery::resolve(&backup, &journal).is_ok();
+            if restored {
+                prune(self.backups, &self.id);
+            }
             return Ok(ApplyResult {
                 id: self.id,
                 changed: Vec::new(),
@@ -329,6 +334,9 @@ impl Transaction<'_> {
         // This durable boundary precedes cleanup and the managed-copy record.
         let finished = recovery::mark(&backup, "files-committed")
             .and_then(|()| recovery::resolve(&backup, &journal));
+        if finished.is_ok() {
+            prune(self.backups, &self.id);
+        }
         Ok(ApplyResult {
             id: self.id,
             changed: self
@@ -369,6 +377,13 @@ fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<(),
     if let Some(from) = &mutation.rename_from {
         // A case-only rename keeps the same file; nothing else may have taken its place.
         let (from_parent, from_name) = self::parent(root, from, false)?;
+        if safe_fs::children(&parent, "")?
+            .iter()
+            .any(|entry| entry == &name)
+            || current(&from_parent, &from_name)? != mutation.expect
+        {
+            return Err(Failure::Stale);
+        }
         from_parent.rename(&from_name, &parent, &name)?;
         if current(&parent, &name).ok().as_ref() != Some(&mutation.expect) {
             let _ = parent.rename(&name, &from_parent, &from_name);
@@ -388,6 +403,12 @@ fn publish(root: &Dir, mutation: &Mutation, id: &str) -> std::result::Result<(),
         Expect::Missing => None,
         expect => {
             let old = temp_name(&name, id, "old");
+            if current(&parent, &old)? != Expect::Missing {
+                if let Some(temp) = &temp {
+                    let _ = parent.remove_file(temp);
+                }
+                return Err(Failure::Stale);
+            }
             if let Err(error) = parent.rename(&name, &parent, &old) {
                 if let Some(temp) = &temp {
                     let _ = parent.remove_file(temp);

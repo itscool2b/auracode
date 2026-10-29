@@ -4245,6 +4245,12 @@ Instructions expose retained journal paths. Only settled journals count toward t
 limit; malformed and unresolved evidence stays. Legacy complete journals retain their evidence because
 they did not record metadata intent. All verification fixtures use temporary or synthetic homes.
 
-Verification so far: focused frontend tests 9/9, desktop TypeScript check, and Chromium Instructions
-flows with 10 axe scans and zero violations. The recovery screenshot was inspected. Rust interruption
-tests and Clippy are queued for the shared Cargo lane; no claim of a verified Rust build yet.
+Verification: aura-config 170/170 tests (75 unit, 95 integration), all-target Clippy with warnings
+denied, focused frontend tests 9/9, desktop TypeScript, touched frontend Biome checks, rustfmt and
+instruction parity. Chromium and WebKit Instructions flows each pass 11 axe scans with zero
+violations, including pending/recovered notices and the immediate overlap error with its backup
+path; screenshots were inspected. The first Rust run caught a case-only rename recovery regression,
+fixed by checking original content because rename mutations have no replacement bytes. The native
+desktop startup-notice test and native binding export remain unrun because the shared desktop graph
+has blocked dependencies; exported DTO shapes did not change. The dedicated Unix symlink interruption
+test requires macOS verification.

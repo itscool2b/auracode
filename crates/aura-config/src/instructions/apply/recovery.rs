@@ -59,10 +59,19 @@ pub(super) fn mark(path: &Path, name: &str) -> Result<()> {
 pub(super) fn prunable(path: &Path) -> bool {
     read_journal(path).is_ok_and(|journal| {
         if journal.version == 2 {
-            marked(path, "settled") && (marked(path, "complete") || marked(path, "rolled-back"))
+            marked(path, "settled")
+                && ((marked(path, "complete")
+                    && marked(path, "backups-ready")
+                    && marked(path, "files-committed")
+                    && marked(path, "metadata-committed")
+                    && !marked(path, "rolled-back"))
+                    || (marked(path, "rolled-back")
+                        && !marked(path, "files-committed")
+                        && !marked(path, "complete")
+                        && !marked(path, "metadata-committed")))
         } else {
             // A legacy complete marker says nothing about managed metadata.
-            marked(path, "rolled-back") && !marked(path, "recovery")
+            marked(path, "rolled-back") && !marked(path, "recovery") && !marked(path, "complete")
         }
     })
 }
@@ -258,7 +267,8 @@ pub(super) fn resolve(path: &Path, journal: &Journal) -> Result<()> {
                 return Err(Error::Stale);
             }
             if committed {
-                if !target_spelling || source_spelling || !after(&now) {
+                // Rename mutations carry no replacement bytes; the original content stays.
+                if !target_spelling || source_spelling || !before(&now) {
                     return Err(Error::Stale);
                 }
             } else if target_spelling && !source_spelling && before(&now) {
