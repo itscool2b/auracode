@@ -124,11 +124,12 @@ pub async fn config_profile_recover(app: tauri::AppHandle) -> Result<AppInfo, Ap
             state: &state,
             _serial: Some(serial),
         };
-        tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
-            .await
-            .map_err(|_| {
-                unavailable("Wait for current profile commands to finish before recovery.")
-            })?;
+        let _plugin_refresh =
+            tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
+                .await
+                .map_err(|_| {
+                    unavailable("Wait for current profile commands to finish before recovery.")
+                })?;
         let _sessions = chats.manager.try_quiesce_when_idle().ok_or_else(|| {
             unavailable("Stop agents and wait for folder operations before configuration recovery.")
         })?;
@@ -380,11 +381,12 @@ async fn activate_serial(
         state,
         _serial: serial,
     };
-    tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
-        .await
-        .map_err(|_| {
-            unavailable("Wait for current profile commands to finish, then retry switching.")
-        })?;
+    let _plugin_refresh =
+        tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
+            .await
+            .map_err(|_| {
+                unavailable("Wait for current profile commands to finish, then retry switching.")
+            })?;
     let _mutation = mutation.lock_owned().await;
     let _terminals = state
         .terminals

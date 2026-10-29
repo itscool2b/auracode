@@ -249,6 +249,40 @@ async fn newer_refresh_and_profile_drain_cancel_old_updates_and_shutdown_cancels
 }
 
 #[tokio::test]
+async fn profile_drain_rejects_late_registration_and_abandoned_drain_reopens_admission() {
+    let fixture = Fixture::new();
+    // This manager reference represents a profile command admitted before draining, but whose
+    // library request has not registered yet. It resumes only after the drain closes admission.
+    let admitted = fixture.manager.clone();
+    let pause = fixture.manager.pause_plugin_refresh();
+    let nested = fixture.manager.pause_plugin_refresh();
+    let read = || {
+        admitted.plugin_library_progressive(true, true, Vec::new(), |_| {
+            panic!("a paused request must not publish or start helper work")
+        })
+    };
+    assert!(read().await.is_err());
+    drop(nested);
+    assert!(
+        read().await.is_err(),
+        "one remaining drain still closes admission"
+    );
+    assert!(!fixture.machine.fake.join("claude.listing.log").exists());
+    drop(pause);
+    let reopened = admitted
+        .plugin_library_progressive(false, true, Vec::new(), |_| false)
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened.agents.len(),
+        4,
+        "an abandoned switch leaves its current profile usable"
+    );
+    assert!(!fixture.machine.fake.join("claude.listing.log").exists());
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn refresh_reprobes_providers_progressively_without_waiting_for_slow_detection() {
     let fixture = Fixture::new();
     std::fs::write(fixture.claude.join("release"), "ready").unwrap();

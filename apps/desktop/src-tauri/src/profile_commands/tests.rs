@@ -242,6 +242,107 @@ async fn admitted_command_drains_before_switch_and_new_commands_are_refused() {
 }
 
 #[tokio::test]
+async fn a_library_command_paused_after_lease_acquisition_cannot_register_during_profile_drain() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    let next = Profiles::new(root)
+        .create(ProfileKind::Local, "Next")
+        .unwrap();
+    let lease = state.sessions().unwrap();
+    let generation = lease.generation();
+    let mut switching = Box::pin(activate(&state, local(next), sessions::testing::outside));
+    // Poll exactly to the held command lease. No timer or scheduling guess releases the command.
+    std::future::poll_fn(|cx| {
+        assert!(std::future::Future::poll(switching.as_mut(), cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    assert!(state.sessions().is_err());
+    assert!(
+        generation.is_current(),
+        "the old profile token remains current until publication"
+    );
+    assert!(
+        lease
+            .plugin_library_progressive(true, true, Vec::new(), |_| {
+                panic!("late registration must be rejected before inventory or helper work")
+            })
+            .await
+            .is_err()
+    );
+    drop(lease);
+    switching.await.unwrap();
+    assert!(!generation.is_current());
+    assert!(
+        state
+            .sessions()
+            .unwrap()
+            .plugin_library_progressive(false, true, Vec::new(), |_| false)
+            .await
+            .is_ok()
+    );
+    close(&state).await;
+}
+
+#[tokio::test]
+async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_current_profile() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    let next = Profiles::new(root)
+        .create(ProfileKind::Local, "Next")
+        .unwrap();
+    let lease = state.sessions().unwrap();
+    let generation = lease.generation();
+    let mut switching = Box::pin(activate(
+        &state,
+        local(next.clone()),
+        sessions::testing::outside,
+    ));
+    std::future::poll_fn(|cx| {
+        assert!(std::future::Future::poll(switching.as_mut(), cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    assert!(
+        lease
+            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .await
+            .is_err()
+    );
+    drop(switching);
+    assert!(generation.is_current());
+    assert!(!state.app_info().profile_switching);
+    assert!(
+        lease
+            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .await
+            .is_ok(),
+        "dropping the switch future reopens the same admitted manager"
+    );
+    drop(lease);
+    let terminal = state.terminals.reserve("main").unwrap();
+    assert!(
+        activate(&state, local(next), sessions::testing::outside)
+            .await
+            .is_err()
+    );
+    assert!(generation.is_current());
+    assert!(
+        state
+            .sessions()
+            .unwrap()
+            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .await
+            .is_ok(),
+        "a failed switch reopens the selected profile"
+    );
+    drop(terminal);
+    close(&state).await;
+}
+
+#[tokio::test]
 async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));

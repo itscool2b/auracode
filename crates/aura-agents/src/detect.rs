@@ -77,6 +77,8 @@ struct Live {
     selection_gate: tokio::sync::Mutex<()>,
     /// At most two providers run listings, each provider runs its commands in turn.
     listing_slots: tokio::sync::Semaphore,
+    #[cfg(test)]
+    listing_admission_gate: Mutex<Option<Gate>>,
 }
 
 #[derive(Default)]
@@ -812,13 +814,35 @@ impl Detector {
         if crate::plugins::recipes(&provider).is_empty() {
             return None;
         }
-        let spec = self.connection_for(id)?;
-        let installation = live.detect(&spec).await.installation?;
         for _ in 0..ATTEMPTS {
+            let (revision, minimum) = {
+                let state = lock(&live.state);
+                (
+                    state.configuration_revision,
+                    state.minimum_generation.get(&provider).copied(),
+                )
+            };
+            let installation = match self.connection_for(id) {
+                Some(spec) => live.detect(&spec).await.installation,
+                None => None,
+            };
+            #[cfg(test)]
+            {
+                let gate = lock(&live.listing_admission_gate).take();
+                if let Some(gate) = gate {
+                    gate.pass().await;
+                }
+            }
             let (job, job_generation) = {
                 let mut state = lock(&live.state);
-                let revision = state.configuration_revision;
-                let minimum = state.minimum_generation.get(&provider).copied();
+                // Resolution can await a probe. Never label an old executable with a selection
+                // revision published while that resolution was in progress.
+                if state.configuration_revision != revision
+                    || state.minimum_generation.get(&provider).copied() != minimum
+                {
+                    continue;
+                }
+                let installation = installation?;
                 if let Some(job) = state.listing_jobs.get(&provider)
                     && job.version == installation.version
                     && job.revision == revision
@@ -1096,6 +1120,8 @@ impl Detector {
             preferences,
             selection_gate: tokio::sync::Mutex::new(()),
             listing_slots: tokio::sync::Semaphore::new(2),
+            #[cfg(test)]
+            listing_admission_gate: Mutex::new(None),
         });
         let background = Arc::clone(&live);
         rt.spawn(async move { background.detect_every(false).await });
@@ -1319,6 +1345,74 @@ mod tests {
             PathBuf::from("/data/adapters"),
             Handle::current(),
         )
+    }
+
+    #[tokio::test]
+    async fn listing_admission_retries_an_installation_resolved_before_selection_changed() {
+        let detector = live();
+        detector.detect_all(true).await;
+        let Mode::Live(live) = &detector.mode else {
+            panic!("live detector");
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let old_path = temp.path().join("old-claude");
+        let new_path = temp.path().join("new-claude");
+        let old =
+            crate::installation::native("claude", "2.1.310", old_path.to_str().unwrap()).unwrap();
+        let mut new =
+            crate::installation::native("claude", "2.1.312", new_path.to_str().unwrap()).unwrap();
+        // An unsupported host gives the new result a distinct, deterministic listing failure
+        // before any helper starts. These synthetic installations never execute a real CLI.
+        new.host = aura_protocol::agents::AgentHost::Unsupported;
+        let detection = |installation: aura_protocol::agents::AgentInstallation| Detection {
+            availability: Availability::Ready {
+                version: Some(installation.version.clone()),
+                path: installation.launch_path.clone(),
+            },
+            installation: Some(installation),
+            needs_download: false,
+            located: None,
+        };
+        {
+            let mut state = lock(&live.state);
+            let generation = state.generation;
+            state
+                .results
+                .insert("claude".into(), (generation, detection(old)));
+        }
+        let gate = Gate::new();
+        *lock(&live.listing_admission_gate) = Some(gate.clone());
+        let listing = tokio::spawn({
+            let detector = detector.clone();
+            async move { detector.plugin_listings("claude", true, 1).await.unwrap() }
+        });
+        gate.until_waiting(1).await;
+        assert!(selections::replace_selections(
+            live,
+            Ok([("claude".into(), new_path)].into())
+        ));
+        {
+            let mut state = lock(&live.state);
+            let generation = state.generation;
+            state
+                .results
+                .insert("claude".into(), (generation, detection(new)));
+        }
+        gate.open();
+        let result = listing.await.unwrap();
+        assert_eq!(
+            result.version, "2.1.312",
+            "the old installation cannot be admitted under the new revision"
+        );
+        assert!(
+            result
+                .listings
+                .iter()
+                .all(|listing| matches!(&listing.state,
+            aura_protocol::plugins::ListingState::Failed { reason }
+                if reason == "auracode lists plugins only for agents installed on this computer."))
+        );
+        assert_eq!(detector.cached_plugin_listings()["claude"], result);
     }
 
     fn progress() -> mpsc::UnboundedSender<String> {

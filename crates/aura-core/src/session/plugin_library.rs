@@ -17,6 +17,27 @@ use aura_protocol::session::{AgentEntry, Availability};
 
 use super::{SessionError, SessionManager};
 
+#[derive(Clone, Copy, Default)]
+pub(super) struct RefreshState {
+    pub(super) generation: u64,
+    pauses: usize,
+}
+
+/// Holds library admission closed while a profile transition drains its command leases.
+/// Dropping an abandoned transition reopens the current manager; shutdown remains permanent.
+pub struct PluginRefreshPause {
+    shared: Arc<super::Shared>,
+}
+
+impl Drop for PluginRefreshPause {
+    fn drop(&mut self) {
+        self.shared.plugin_refresh.send_modify(|state| {
+            state.pauses -= 1;
+            state.generation += 1;
+        });
+    }
+}
+
 /// Everything one Plugin library answer is built from.
 #[derive(Default)]
 pub struct PluginFacts {
@@ -449,7 +470,18 @@ impl SessionManager {
     pub fn cancel_plugin_refresh(&self) {
         self.shared()
             .plugin_refresh
-            .send_modify(|generation| *generation += 1);
+            .send_modify(|state| state.generation += 1);
+    }
+
+    /// Cancels current reads and rejects later registrations until the returned guard drops.
+    pub fn pause_plugin_refresh(&self) -> PluginRefreshPause {
+        self.shared().plugin_refresh.send_modify(|state| {
+            state.pauses += 1;
+            state.generation += 1;
+        });
+        PluginRefreshPause {
+            shared: self.shared().clone(),
+        }
     }
 
     /// Publishes all cached/file sections first, then each completed provider independently.
@@ -466,16 +498,24 @@ impl SessionManager {
         }
         let updates = &self.shared().plugin_refresh;
         let mut cancelled = updates.subscribe();
-        let mut generation = 0;
-        updates.send_modify(|value| {
-            *value += 1;
-            generation = *value;
+        let mut generation = None;
+        updates.send_modify(|state| {
+            if state.pauses == 0 && !self.shared().is_shutting_down() {
+                state.generation += 1;
+                generation = Some(state.generation);
+            }
         });
+        let generation = generation.ok_or_else(|| {
+            SessionError::Internal("The Plugin library is paused during a profile change.".into())
+        })?;
         let mut publish_current = |library| {
             let current = updates.borrow();
-            *current == generation && !self.shared().is_shutting_down() && publish(library)
+            current.generation == generation
+                && current.pauses == 0
+                && !self.shared().is_shutting_down()
+                && publish(library)
         };
-        if *cancelled.borrow_and_update() != generation {
+        if cancelled.borrow_and_update().generation != generation {
             return Err(SessionError::Internal(
                 "The Plugin library refresh was replaced.".into(),
             ));

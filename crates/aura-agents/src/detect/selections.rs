@@ -166,7 +166,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
     crate::candidates::key(a, cfg!(windows)) == crate::candidates::key(b, cfg!(windows))
 }
 
-fn replace_selections(
+pub(super) fn replace_selections(
     live: &Live,
     choices: Result<crate::preferences::Selections, String>,
 ) -> bool {

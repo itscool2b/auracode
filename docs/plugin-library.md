@@ -69,8 +69,12 @@ reruns their listings. A slow provider's detection or listings do not hold up an
 completed section. The section shows "Updated <time>".
 
 A newer refresh generation cancels the previous request. An installation or configuration selection
-change prevents older provider jobs from replacing the current cache. Profile switches cancel the
-old profile's refresh before draining its command leases, and shutdown cancels owned refresh work.
+change prevents older provider jobs from replacing the current cache. Listing admission validates
+the configuration revision captured before resolving the connection and installation; a selection
+change in that gap retries resolution. Profile switches pause library admission before draining
+their command leases, so even an already admitted command cannot register late helper work. The
+pause lasts through the switch or recovery attempt and reopens the current profile if the attempt
+fails or is abandoned. Successfully retired managers remain shut down. Shutdown cancels owned work.
 The renderer ignores callbacks and replies after a newer request or unmount, including development
 StrictMode remounts. These lifetime checks do not move listing or inventory decisions out of Rust.
 

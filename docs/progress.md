@@ -4264,3 +4264,11 @@ fixtures, not owner CLI performance. Generated-binding typecheck remains an inte
 the coordinator. Standalone desktop checking stopped before app code with missing third-party
 crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
 were cleaned. No owner configuration, paid agent runs, hosted CI, deployments or releases were used.
+
+Independent review found two admission races in this piece. Profile drain cancellation now holds a
+scoped pause that rejects library requests registered after drain began, including a command that
+already acquired its profile lease. Failed or abandoned transitions drop that pause and deliberately
+reopen the current manager; successful retired managers remain shut down. Listing resolution now
+captures the configuration revision before resolving the connection and installation, validates it
+under the listing admission lock, and retries if the selection changed in that gap. Deterministic
+boundary tests are written; their verification is pending the shared Cargo lane.
