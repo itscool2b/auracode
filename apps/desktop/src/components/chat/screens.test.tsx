@@ -354,6 +354,55 @@ describe("the sidebar footer", () => {
 });
 
 describe("the header", () => {
+  it.each([
+    {
+      name: "keeps a Local folder beside its custom project name",
+      project: "Personal notes",
+      folder: "C:/work/notes",
+      folderLabel: "notes",
+      expected: "Personal notes · notes",
+    },
+    {
+      name: "does not repeat equal Local project and folder names",
+      project: "repo",
+      folder: "C:/work/repo",
+      folderLabel: "repo",
+      expected: "repo",
+    },
+    {
+      name: "names the managed branch and its custom source project",
+      project: "Client portal",
+      folder: "C:/profile/worktrees/9d6cd062e86e",
+      folderLabel: "aura/9d6cd062 (worktree from C:/work/repo)",
+      expected: "Client portal · aura/9d6cd062 (worktree from C:/work/repo)",
+    },
+    {
+      name: "uses the folder name while workspace metadata is unavailable",
+      project: null,
+      folder: "C:/work/notes",
+      folderLabel: null,
+      expected: "notes",
+    },
+  ])("$name", async ({ project, folder, folderLabel, expected }) => {
+    const state = await stateWith(historyPage("c1", []), {
+      chat: chatSummary("c1", { folder }),
+    });
+    const html = renderToStaticMarkup(
+      <Header
+        state={state}
+        project={project}
+        folderLabel={folderLabel}
+        agent={null}
+        resumable={false}
+        onStart={noop}
+        onStop={noop}
+        onShowLog={noop}
+      />,
+    );
+    const location = html.match(/<span class="chat-header-folder"[^>]*>(.*?)<\/span>/)?.[1];
+    expect(location).toBe(expected);
+  });
+
   it("offers Start or Resume, and Start fresh, while nothing runs; Stop session while it runs", async () => {
     const stopped = await stateWith(historyPage("c1", []), {
       session: sessionInfo({ status: "stopped" }),

@@ -4585,3 +4585,17 @@ enum-size issue fixed on the coordinator's newer ancestor. The normal locked des
 compiled the native library and passed 1/1; its actual generated bindings are retained. Desktop
 typecheck passed, followed by store/transcript tests 72/72. Broad integrated Clippy remains a
 coordinator gate. Generated bindings were not edited by hand.
+
+### 2026-10-29: Keep worktree branches visible in the chat header
+
+The native walkthrough found that a managed-worktree chat's header showed only its source project.
+The chat screen now follows the selected chat's project and folder IDs and passes Rust's existing
+folder display label to the header. A worktree shows its branch and source beside the actual project
+name, including custom project names. Local folders keep their display names without repeating an
+equal project name. Missing workspace metadata retains the existing folder-name fallback.
+
+The regression first failed for custom Local and managed-worktree labels, then passed after the
+presentation fix. All desktop tests passed: 534 frontend tests with 19 existing skips, plus 10 Node
+script tests. Desktop typecheck, changed-file Biome checks, stylesheet policy and instruction parity
+checks passed. This change adds no Rust logic, generated binding edits or styling. Native and browser
+acceptance remain with the integration coordinator.
