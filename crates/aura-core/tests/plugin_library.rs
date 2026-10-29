@@ -20,6 +20,7 @@ struct Fixture {
     machine: Machine,
     harness: support::Harness,
     manager: SessionManager,
+    detector: Arc<aura_agents::Detector>,
     claude: PathBuf,
 }
 
@@ -79,7 +80,7 @@ impl Fixture {
             store: harness.store.clone(),
             env: EnvResolver::fixed(env),
             spawner: harness.spawner.clone(),
-            detector,
+            detector: detector.clone(),
             drivers: harness.factory.clone(),
             logs: LogFactory::new(
                 harness.profile.logs_dir().join("plugins"),
@@ -97,6 +98,7 @@ impl Fixture {
             machine,
             harness,
             manager,
+            detector,
             claude,
         }
     }
@@ -323,6 +325,82 @@ async fn refresh_reprobes_providers_progressively_without_waiting_for_slow_detec
     );
     std::fs::write(fixture.machine.fake.join("verification-release"), "ready").unwrap();
     assert!(refresh.await.unwrap().is_ok());
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn a_warm_live_provider_becoming_missing_clears_final_and_reopened_live_facts() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.claude.join("release"), "ready").unwrap();
+    let warm = fixture
+        .manager
+        .plugin_library(false, true, Vec::new())
+        .await
+        .unwrap();
+    let claude = warm
+        .agents
+        .iter()
+        .find(|agent| agent.agent_id == "claude")
+        .unwrap();
+    assert!(
+        claude
+            .features
+            .iter()
+            .any(|feature| matches!(feature.state, ListingState::Live))
+    );
+    assert!(has(&warm, "claude", "slow@team"));
+    assert!(
+        fixture
+            .detector
+            .cached_plugin_listings()
+            .contains_key("claude")
+    );
+    std::fs::rename(
+        fixture
+            .machine
+            .home
+            .join(".local/share/claude/versions/fixture"),
+        fixture.machine.root.path().join("removed-claude"),
+    )
+    .unwrap();
+    let missing = fixture
+        .manager
+        .plugin_library(true, true, Vec::new())
+        .await
+        .unwrap();
+    let assert_missing = |library: &PluginLibrary| {
+        let claude = library
+            .agents
+            .iter()
+            .find(|agent| agent.agent_id == "claude")
+            .unwrap();
+        assert!(!claude.installed);
+        assert!(
+            claude.updated_at.is_none(),
+            "a missing installation cannot keep the old live timestamp"
+        );
+        assert!(
+            claude
+                .features
+                .iter()
+                .all(|feature| !matches!(feature.state, ListingState::Live))
+        );
+        assert!(!has(library, "claude", "slow@team"));
+        assert!(
+            has(library, "claude", "local-skill"),
+            "the real file inventory remains available"
+        );
+    };
+    assert_missing(&missing);
+    assert!(
+        !fixture
+            .detector
+            .cached_plugin_listings()
+            .contains_key("claude")
+    );
+    let (reopen, mut updates) = fixture.start(false);
+    assert_missing(&next(&mut updates).await.1);
+    assert_missing(&reopen.await.unwrap().unwrap());
     fixture.finish().await;
 }
 

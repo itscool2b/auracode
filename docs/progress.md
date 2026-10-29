@@ -4506,3 +4506,24 @@ the other hold and that releasing the head sends the following unheld message in
 Biome, JavaScript syntax and instruction parity checks passed. No production backend or UI changed.
 The coordinator's failed settings log is the red evidence; both-engine settings reruns remain the
 coordinator's gate after merging this fixture change. No Cargo or browser process ran for this fix.
+
+### 2026-10-29: Close integrated journal cleanup and provider availability gaps
+
+Custom data-root cleanup now includes app-owned clone lifecycle journals. A temporary-root test
+creates real lifecycle records and two local Git clones, then verifies journal removal, unchanged
+repository commits and untracked work, preserved unrelated custom-root files and a successful
+repeat cleanup. Secure storage stays in the in-memory fake store throughout the test.
+
+A provider whose installation disappears now loses its cached CLI listings and live timestamp;
+the library falls back to the current file inventory. Refresh completion and subsequent opening
+cannot retain stale Live rows. Admission validates provider detection generations so an older
+missing result cannot erase a newer reinstall result. Actual listing-command failures still keep
+cached rows with their failure warning. The integrated SessionInfo growth also required boxing
+the mock driver's private event message; public protocol serialization is unchanged.
+
+Both source findings reproduced before their fixes. Green checks passed: cleanup 27/27, core
+library integration 6/6, assembly 5/5, agents unit 68/68, provider 7/7, selection 6/6 and mock-driver
+20/20. Broad all-target Clippy for agents, core with account-sync and drivers with replay passed
+with warnings denied, along with rustfmt, instruction parity and diff checks. This fix wave ran
+no browser, server, owner store/configuration access, real cleanup, paid agent prompt or hosted CI.
+Native compilation, bindings and the final integrated acceptance gates remain with the coordinator.

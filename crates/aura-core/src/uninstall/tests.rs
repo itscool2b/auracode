@@ -454,6 +454,127 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     assert!(!lone.exists());
 }
 
+#[tokio::test]
+async fn custom_root_cleanup_removes_clone_journals_and_preserves_destination_repositories() {
+    let m = machine();
+    let folder = m.home.join("chosen");
+    data_folder(&folder);
+    write(&folder.join("my-notes.txt"), "unrelated custom-root file");
+    let source = repository(&m.home.join("source"));
+    let bin = m.home.join("synthetic-bin");
+    let synthetic = bin.join(if cfg!(windows) { "git.exe" } else { "git" });
+    write(&synthetic, "synthetic executable, never run");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&synthetic, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let env = std::sync::Arc::new(aura_process::ResolvedEnv {
+        vars: [("PATH".into(), bin.into_os_string())].into(),
+        source: aura_process::EnvSource::Fallback {
+            reason: "fixture".into(),
+        },
+        warnings: Vec::new(),
+        resolved_at_ms: 0,
+    });
+    let clones = crate::cloning::Clones::new(Some(folder.clone()));
+    let mut destinations = Vec::new();
+    for (parent, name) in [
+        (&folder, "cloned-in-root"),
+        (&m.home, "cloned-outside-root"),
+    ] {
+        let review = clones
+            .check(
+                "fixture",
+                aura_protocol::setup_actions::CloneInput {
+                    remote: "https://github.com/fixture/repository".into(),
+                    parent: Some(parent.to_string_lossy().into_owned()),
+                    name: Some(name.into()),
+                },
+                env.clone(),
+            )
+            .await
+            .unwrap()
+            .review
+            .unwrap();
+        // This creates the real app-owned lifecycle record without executing the synthetic Git.
+        let (prepared, job) = clones.take("fixture", &review.id).unwrap();
+        drop(prepared);
+        drop(job);
+        let destination = parent.join(name);
+        fixture_git(
+            &m.home,
+            &[
+                "clone",
+                "-q",
+                source.to_str().unwrap(),
+                destination.to_str().unwrap(),
+            ],
+        );
+        write(&destination.join("untracked-note.txt"), "keep user work");
+        let head = fixture_git(&destination, &["rev-parse", "HEAD"]);
+        destinations.push((destination, head));
+    }
+    drop(clones);
+    assert_eq!(std::fs::read_dir(folder.join("clones")).unwrap().count(), 2);
+    let vault = FakeVault::default();
+    let index = crate::accounts::profile_index_entry(ORIGINS[0], &folder).unwrap();
+    vault.put(index.clone(), br#"{"version":2,"accounts":{}}"#);
+    let mut targets = Targets::data_folder(folder.clone());
+    targets.default_root = Some(m.home.join("unused-default-root"));
+    let git = GitTool::from_path();
+    let mut reviewed = plan(&targets, &git);
+    reviewed.vault = review_vault(
+        &vault,
+        &reviewed.data_roots,
+        reviewed.default_root.as_deref(),
+    );
+    let report = execute(
+        &reviewed,
+        &WorktreeChoice::KeepUnsaved,
+        Some(&vault),
+        &git,
+        &FAST,
+    );
+    assert!(report.complete(), "{report:?}");
+    assert!(
+        !folder.join("clones").exists(),
+        "app-owned clone recovery journals must be removed"
+    );
+    assert!(!vault.has(&index));
+    assert_eq!(
+        std::fs::read_to_string(folder.join("my-notes.txt")).unwrap(),
+        "unrelated custom-root file"
+    );
+    for (destination, head) in &destinations {
+        assert_eq!(fixture_git(destination, &["rev-parse", "HEAD"]), *head);
+        assert_eq!(
+            std::fs::read_to_string(destination.join("README.md")).unwrap(),
+            "project\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(destination.join("untracked-note.txt")).unwrap(),
+            "keep user work"
+        );
+        assert!(destination.join(".git").is_dir());
+    }
+    let mut again = plan(&targets, &git);
+    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
+    assert!(again.is_empty());
+    let second = execute(
+        &again,
+        &WorktreeChoice::KeepUnsaved,
+        Some(&vault),
+        &git,
+        &FAST,
+    );
+    assert!(second.complete() && second.removed.is_empty());
+    for (destination, head) in &destinations {
+        assert_eq!(fixture_git(destination, &["rev-parse", "HEAD"]), *head);
+        assert!(destination.join("untracked-note.txt").exists());
+    }
+}
+
 #[test]
 fn the_macos_layout_covers_webkit_caches_and_preferences() {
     let m = machine();

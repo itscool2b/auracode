@@ -68,6 +68,12 @@ read again". Refresh keeps the current rows visible while it reprobes the suppor
 reruns their listings. A slow provider's detection or listings do not hold up another provider's
 completed section. The section shows "Updated <time>".
 
+If the refreshed provider no longer has an installation, its old CLI listings and timestamp are
+invalidated and the section uses the current file inventory. Reopening keeps that unavailable
+installation state. A failed listing command on an installed provider still retains cached rows
+with its failure warning. An older missing-installation result cannot erase a newer reinstalled
+provider result: admission also validates the provider's detection generations.
+
 A newer refresh generation cancels the previous request. An installation or configuration selection
 change prevents older provider jobs from replacing the current cache. Listing admission validates
 the configuration revision captured before resolving the connection and installation; a selection

@@ -150,6 +150,7 @@ pub const DATA_ENTRIES: &[&str] = &[
     "agent-executables.json",
     "agent-executables.lock",
     "catalog-releases.json",
+    "clones",
     "instructions",
     "accounts.lock",
     "account-passphrase-vault",

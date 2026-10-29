@@ -174,6 +174,46 @@ async fn pi_lists_offline_and_an_agent_without_a_home_variable_fails_plainly() {
     assert!(bare.plugin_listings("hermes", false, 3).await.is_none());
 }
 
+#[tokio::test]
+async fn a_missing_installation_invalidates_its_warm_listing_cache() {
+    let machine = Machine::with_tools(&[]);
+    let bin = machine.home.join(".local/share/claude/versions/fixture");
+    machine.install_tool(&bin, "claude");
+    let claude = home(&machine, "claude", claude_answers("warm"));
+    let detector =
+        machine.detector(machine.env_with_path(&[&bin], &[("CLAUDE_CONFIG_DIR", &text(&claude))]));
+    assert_eq!(
+        detector
+            .plugin_listings("claude", false, 1)
+            .await
+            .unwrap()
+            .listings[0]
+            .state,
+        ListingState::Live
+    );
+    assert!(detector.cached_plugin_listings().contains_key("claude"));
+    // Move only this fixture's executable out of its isolated PATH. The separate listing-failure
+    // test keeps an installed provider and proves cached rows survive with a Failed warning.
+    std::fs::rename(&bin, machine.root.path().join("removed-claude")).unwrap();
+    detector.prepare_plugin_refresh().await;
+    detector.refresh_plugin_provider("claude").await;
+    assert!(matches!(
+        detector
+            .cached()
+            .into_iter()
+            .find(|agent| agent.id == "claude")
+            .unwrap()
+            .availability,
+        aura_protocol::session::Availability::Missing { .. }
+    ));
+    assert!(detector.plugin_listings("claude", true, 2).await.is_none());
+    assert!(
+        !detector.cached_plugin_listings().contains_key("claude"),
+        "a missing installation must not retain live cache data"
+    );
+    assert!(detector.plugin_listings("claude", false, 3).await.is_none());
+}
+
 async fn wait_for_listing(machine: &Machine, provider: &str) {
     tokio::time::timeout(std::time::Duration::from_secs(15), async {
         while !machine

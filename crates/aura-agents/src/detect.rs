@@ -111,6 +111,18 @@ struct ListingJob {
     gate: Arc<tokio::sync::Mutex<()>>,
 }
 
+fn provider_detection_generations(
+    state: &LiveState,
+    provider: &str,
+) -> std::collections::BTreeMap<String, u64> {
+    state
+        .results
+        .iter()
+        .filter(|(id, _)| crate::installation::provider_namespace(id) == provider)
+        .map(|(id, (generation, _))| (id.clone(), *generation))
+        .collect()
+}
+
 struct MaintenanceGuard {
     live: Arc<Live>,
     provider: String,
@@ -815,11 +827,12 @@ impl Detector {
             return None;
         }
         for _ in 0..ATTEMPTS {
-            let (revision, minimum) = {
+            let (revision, minimum, detections) = {
                 let state = lock(&live.state);
                 (
                     state.configuration_revision,
                     state.minimum_generation.get(&provider).copied(),
+                    provider_detection_generations(&state, &provider),
                 )
             };
             let installation = match self.connection_for(id) {
@@ -839,10 +852,23 @@ impl Detector {
                 // revision published while that resolution was in progress.
                 if state.configuration_revision != revision
                     || state.minimum_generation.get(&provider).copied() != minimum
+                    || provider_detection_generations(&state, &provider) != detections
                 {
                     continue;
                 }
-                let installation = installation?;
+                let Some(installation) = installation else {
+                    state.listings.remove(&provider);
+                    state.listing_generation += 1;
+                    let generation = state.listing_generation;
+                    if let Some(job) = state.listing_jobs.get_mut(&provider) {
+                        job.task.cancel();
+                        // Retain its sequencing gate for a later reinstall, while making both
+                        // admission and publication of this obsolete job impossible.
+                        job.version.clear();
+                        job.generation = generation;
+                    }
+                    return None;
+                };
                 if let Some(job) = state.listing_jobs.get(&provider)
                     && job.version == installation.version
                     && job.revision == revision
@@ -1413,6 +1439,58 @@ mod tests {
                 if reason == "auracode lists plugins only for agents installed on this computer."))
         );
         assert_eq!(detector.cached_plugin_listings()["claude"], result);
+    }
+
+    #[tokio::test]
+    async fn an_older_missing_resolution_cannot_erase_a_reinstalled_provider_cache() {
+        let detector = live();
+        detector.detect_all(true).await;
+        let Mode::Live(live) = &detector.mode else {
+            panic!("live detector");
+        };
+        let gate = Gate::new();
+        *lock(&live.listing_admission_gate) = Some(gate.clone());
+        let older = tokio::spawn({
+            let detector = detector.clone();
+            async move { detector.plugin_listings("claude", false, 1).await }
+        });
+        gate.until_waiting(1).await;
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("new-claude");
+        let mut installation =
+            crate::installation::native("claude", "2.1.312", path.to_str().unwrap()).unwrap();
+        installation.host = aura_protocol::agents::AgentHost::Unsupported;
+        {
+            let mut state = lock(&live.state);
+            state.generation += 1;
+            let generation = state.generation;
+            state.results.insert(
+                "claude".into(),
+                (
+                    generation,
+                    Detection {
+                        availability: Availability::Ready {
+                            version: Some(installation.version.clone()),
+                            path: installation.launch_path.clone(),
+                        },
+                        installation: Some(installation),
+                        needs_download: false,
+                        located: None,
+                    },
+                ),
+            );
+        }
+        // A newer reprobe and listing complete while the older missing result is paused. The
+        // synthetic unsupported host finishes without launching any CLI or reading agent files.
+        let fresh = detector.plugin_listings("claude", true, 2).await.unwrap();
+        assert_eq!(fresh.version, "2.1.312");
+        gate.open();
+        assert_eq!(
+            older.await.unwrap(),
+            Some(fresh.clone()),
+            "the stale None must retry current facts instead of clearing the newer result"
+        );
+        assert_eq!(detector.cached_plugin_listings()["claude"], fresh);
     }
 
     fn progress() -> mpsc::UnboundedSender<String> {
