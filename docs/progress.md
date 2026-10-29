@@ -1,5 +1,15 @@
 # Auracode implementation progress
 
+## 2026-10-29: Clone recovery admission review
+
+Recovery actions and normal clone admission are now mutually exclusive. A delayed completed-clone
+check cannot replace a newly running clone's ownership record or prevent cancellation on close.
+Both deferred-response regressions failed before the fix. All 21 focused frontend tests,
+TypeScript checks and Chromium/WebKit setup-action checks pass. The Rust lifecycle test also
+replaces only `.git`, verifies project addition is refused, and preserves both directories when
+the notice is dismissed. All 14 clone tests pass on the integrated sources. Independent re-review,
+native command compilation and main desktop binding generation remain publication gates.
+
 ## 2026-10-29: Interrupted clone recovery
 
 Local branch `codex/clone-recovery` records clone lifecycle phases in app data before destination
