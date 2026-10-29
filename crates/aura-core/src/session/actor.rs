@@ -1775,12 +1775,21 @@ impl ChatActor {
         prompt_id: &str,
         index: usize,
     ) -> Result<Vec<QueuedPrompt>, SessionError> {
+        self.waiting(prompt_id)?;
+        // `index` counts the rows the person sees; the prompt on its way keeps its own place.
+        let sending = self.sending_id().map(str::to_owned).and_then(|id| {
+            let at = self.queue.iter().position(|row| row.id == id)?;
+            Some((at, self.queue.remove(at)))
+        });
         let from = self.waiting(prompt_id)?;
         let to = index.min(self.queue.len().saturating_sub(1));
         if from != to {
             let row = self.queue.remove(from);
             self.queue.insert(to, row);
             self.save_order(None);
+        }
+        if let Some((at, row)) = sending {
+            self.queue.insert(at.min(self.queue.len()), row);
         }
         Ok(self.queued_prompts())
     }
@@ -1892,16 +1901,32 @@ impl ChatActor {
         self.refresh_attention();
     }
 
+    /// The prompts that wait, as the queue shows them: the one on its way (see [`Self::sending`])
+    /// is not waiting, and shows in the transcript instead.
     fn queued_prompts(&self) -> Vec<QueuedPrompt> {
+        let sending = self.sending_id();
         self.queue
             .iter()
-            .map(|row| QueuedPrompt {
-                prompt_id: row.id.clone(),
-                preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
-                held: row.held,
-                created_at: row.created_at,
-            })
+            .filter(|row| Some(row.id.as_str()) != sending)
+            .map(shown)
             .collect()
+    }
+
+    /// The prompt on its way to the agent: its folder checkpoint is being saved, and it goes the
+    /// moment that ends. It stays a stored queued row meanwhile (a crash brings it back held), but
+    /// it does not wait behind anything, so it is not part of the queue the person sees. A Stop
+    /// during the save holds it, and then it waits like any held prompt.
+    fn sending_id(&self) -> Option<&str> {
+        let (id, _) = self.checkpointing.as_ref()?;
+        self.queue
+            .iter()
+            .any(|row| row.id == *id && !row.held)
+            .then_some(id.as_str())
+    }
+
+    fn sending(&self) -> Option<QueuedPrompt> {
+        let id = self.sending_id()?;
+        self.queue.iter().find(|row| row.id == id).map(shown)
     }
 
     fn require_workspace(&self) -> Result<(), SessionError> {
@@ -1991,7 +2016,8 @@ impl ChatActor {
             };
             let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
             let prompt_id = row.id.clone();
-            self.queue.push(row.clone());
+            // It was next, so it keeps the head.
+            self.queue.insert(0, row.clone());
             self.queue_op(Op::QueuePut(row));
             self.push(
                 AuraEvent::PromptLifecycle {
@@ -2013,6 +2039,9 @@ impl ChatActor {
             self.dispatch_prepared(prompt, turn_id, None);
             return false;
         };
+        // Stored as a queued row while its checkpoint saves, so a crash brings it back (held). It
+        // is the next to go, so it stands at the head; it is sending, not waiting
+        // ([`Self::sending_id`]).
         let row = QueuedRow {
             id: prompt.id.clone(),
             chat_id: self.chat_id.clone(),
@@ -2021,16 +2050,17 @@ impl ChatActor {
             held: false,
             created_at: prompt.created_at,
         };
-        self.queue.push(row.clone());
+        self.queue.insert(0, row.clone());
         self.queue_op(Op::QueuePut(row));
         self.push(
             AuraEvent::PromptLifecycle {
                 prompt_id: prompt.id.clone(),
-                state: PromptState::Queued,
+                state: PromptState::Sending,
                 preview: Some(cap_chars(prompt.text.clone(), PREVIEW_CHARS)),
             },
             None,
         );
+        self.info_dirty = true;
         let chat_id = self.chat_id.clone();
         let folder = self.chat.folder.clone();
         let folder_id = self.chat.folder_id.clone();
@@ -3161,6 +3191,9 @@ impl ChatActor {
                     return;
                 }
                 self.checkpointing = None;
+                // The prompt is no longer on its way: it went, or it waits in the queue (held).
+                self.info_dirty = true;
+                self.schedule_flush();
                 if generation != self.generation {
                     return;
                 }
@@ -4844,13 +4877,16 @@ impl ChatActor {
     /// Why the queued prompts wait, while any are queued (see [`QueueWait`]). The first match in
     /// the order a person would have to clear them wins.
     fn compute_queue_wait(&self) -> Option<QueueWait> {
-        if self.queue.is_empty() {
-            return None;
-        }
+        // The prompt on its way does not wait: only the ones after it do.
+        let sending = self.sending_id();
+        let next = self
+            .queue
+            .iter()
+            .find(|row| Some(row.id.as_str()) != sending)?;
         if !self.store.workspace_available(&self.chat_id) {
             return Some(QueueWait::WorkspaceRemoved);
         }
-        if self.queue.first().is_some_and(|row| row.held) {
+        if next.held {
             return Some(QueueWait::Held {
                 after: self.hold_cause,
             });
@@ -4979,6 +5015,7 @@ impl ChatActor {
             queue_held: self.queue.iter().any(|row| row.held),
             revision: self.revision,
             queue_wait: self.compute_queue_wait(),
+            sending: self.sending(),
         }
     }
 
@@ -5017,6 +5054,16 @@ impl ChatActor {
 impl Drop for ChatActor {
     fn drop(&mut self) {
         self.cancel_checkpoint();
+    }
+}
+
+/// A queued row as the queue and the header show it.
+fn shown(row: &QueuedRow) -> QueuedPrompt {
+    QueuedPrompt {
+        prompt_id: row.id.clone(),
+        preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
+        held: row.held,
+        created_at: row.created_at,
     }
 }
 

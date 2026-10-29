@@ -2153,7 +2153,9 @@ export type PromptAck = {
 };
 
 /**  What happened to a queued prompt. */
-export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
+export type PromptState = "queued" | 
+/**  On its way: its folder checkpoint is being saved, and it goes to the agent right after. */
+"sending" | "started" | "completed" | "cancelled" | "failed";
 
 export type PullRequestInput = {
 	title: string,
@@ -2363,6 +2365,12 @@ export type SessionInfo = {
 	 *  prompts queued means the next one is on its way.
 	 */
 	queue_wait: QueueWait | null,
+	/**
+	 *  The prompt on its way to the agent while its folder checkpoint saves: shown as sending in
+	 *  the transcript, not in the queue. `None` once it went, or when a stop or a failed
+	 *  checkpoint put it back in the queue, held.
+	 */
+	sending: QueuedPrompt | null,
 };
 
 /**

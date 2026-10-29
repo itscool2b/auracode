@@ -75,6 +75,12 @@ export interface ChatState {
   readonly openTurnId: string | null;
   readonly steeringPending: boolean;
   readonly queue: readonly QueuedPrompt[];
+  /**
+   * The message on its way to the agent while its folder checkpoint saves: it shows in the
+   * transcript as sending, not in the queue. `text` is the words as typed when this window sent
+   * them, else the session's preview.
+   */
+  readonly sending: { readonly promptId: string; readonly text: string } | null;
   readonly usage: UsageInfo | null;
   readonly limits: readonly LimitWindow[] | null;
   readonly lastError: ErrorInfo | null;
@@ -154,6 +160,7 @@ function initialState(chatId: string): ChatState {
     openTurnId: null,
     steeringPending: false,
     queue: [],
+    sending: null,
     usage: null,
     limits: null,
     lastError: null,
@@ -276,6 +283,11 @@ export class ChatStore {
    * prompt listed before it was queued before any hold the next one reports.
    */
   #queuedSinceUpdate = new Set<string>();
+  /**
+   * The words of the last few messages this window sent, so a message on its way shows in full
+   * rather than as the session's 256-character preview.
+   */
+  #sentTexts: string[] = [];
   /** A join for state the frames do not carry is due once the current frame is applied. */
   #rejoinDue = false;
   /** The channel ended while its attach call ran: the attach's answer decides what follows. */
@@ -441,6 +453,7 @@ export class ChatStore {
       session: snapshot.session,
       openTurnId: snapshot.open_turn_id,
       queue: snapshot.queue,
+      sending: this.#sendingFrom(snapshot.session.sending ?? null),
       usage: snapshot.usage,
       limits: snapshot.limits,
       lastError: snapshot.last_error,
@@ -525,6 +538,19 @@ export class ChatStore {
         return this.#sessionChanged(state, session);
       }
       case "prompt_lifecycle": {
+        if (event.state === "sending") {
+          // On its way: the transcript shows it as sending; it waits behind nothing.
+          this.#queuedSinceUpdate.delete(event.prompt_id);
+          return {
+            ...state,
+            queue: state.queue.filter((row) => row.prompt_id !== event.prompt_id),
+            sending: {
+              promptId: event.prompt_id,
+              text: this.#fullText(event.preview ?? ""),
+            },
+          };
+        }
+        if (state.sending?.promptId === event.prompt_id) state = { ...state, sending: null };
         if (event.state === "queued") {
           // A prompt is queued unheld; a hold later catches it.
           const queued: QueuedPrompt = {
@@ -555,6 +581,23 @@ export class ChatStore {
       default:
         return state;
     }
+  }
+
+  /** The session's message on its way, in full when this window sent it. */
+  #sendingFrom(prompt: QueuedPrompt | null): ChatState["sending"] {
+    if (prompt === null) return null;
+    if (this.#state.sending?.promptId === prompt.prompt_id) return this.#state.sending;
+    return { promptId: prompt.prompt_id, text: this.#fullText(prompt.preview) };
+  }
+
+  /** The words this window sent that `preview` (their first 256 characters) starts. */
+  #fullText(preview: string): string {
+    const index = this.#sentTexts.findIndex(
+      (text) => text === preview || (preview !== "" && text.startsWith(preview)),
+    );
+    if (index < 0) return preview;
+    const [text] = this.#sentTexts.splice(index, 1);
+    return text ?? preview;
   }
 
   #sessionChanged(state: ChatState, session: SessionInfo): ChatState {
@@ -591,11 +634,21 @@ export class ChatStore {
     } else if (session.status !== "auth_required") {
       this.#authRefreshed = false;
     }
+    // The session says which message is on its way. One that stopped being on its way without
+    // starting (a Stop during its checkpoint, a failed checkpoint) went back into the queue, held:
+    // only a snapshot lists it there.
+    let sending = state.sending;
+    const said = session.sending ?? null;
+    if (said?.prompt_id !== sending?.promptId) {
+      if (sending !== null && said === null && session.queue_held) rejoin = true;
+      sending = this.#sendingFrom(said);
+    }
     if (rejoin) this.#rejoinSoon();
     return {
       ...state,
       session,
       queue,
+      sending,
       auth: session.status === "auth_required" ? state.auth : null,
     };
   }
@@ -726,6 +779,8 @@ export class ChatStore {
   async send(text: string, context?: import("../composer").ComposerContext): Promise<boolean> {
     if (text.trim() === "" && !context?.attachments.length && !context?.mentions.length)
       return false;
+    // Its frames may come before the answer: remember the words for the sending row.
+    this.#sentTexts = [...this.#sentTexts.slice(-7), text];
     try {
       if (context && (context.attachments.length || context.mentions.length)) {
         if (!this.#transport.composer)

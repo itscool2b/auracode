@@ -16,6 +16,7 @@ import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
 import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
+import { UserMessage } from "./UserMessage";
 import { type TranscriptRow, VirtualRows } from "./VirtualRows";
 
 /**
@@ -60,8 +61,12 @@ export function Transcript({
   const activity = chatActivity(state);
   const chatAgentId = state.chat?.agent_id ?? "generic";
   const chatAgentName = state.session?.agent_name ?? state.chat?.agent_name ?? "Agent";
+  // A message on its way (its folder checkpoint saving) shows as sent, with "Sending" under it.
+  const sending = state.sending;
   const pendingLabel =
-    activity === "waiting"
+    sending !== null
+      ? "Sending"
+      : activity === "waiting"
       ? "Waiting on you"
       : status === "starting"
         ? "Starting session"
@@ -226,6 +231,20 @@ export function Transcript({
         ),
       });
   }
+  if (sending !== null)
+    rows.push({
+      key: `sending:${sending.promptId}`,
+      estimate: 72,
+      content: (
+        <div
+          className="chat-segment chat-sending"
+          data-testid="sending-message"
+          data-test-prompt-id={sending.promptId}
+        >
+          <UserMessage item={{ kind: "user", key: `sending:${sending.promptId}`, text: sending.text }} />
+        </div>
+      ),
+    });
   if (pendingLabel)
     rows.push({
       key: `now:${last?.key ?? "new"}:${pendingLabel}`,

@@ -480,6 +480,80 @@ describe("the session's live state", () => {
     ]);
   });
 
+  it("shows a message whose checkpoint saves as sending, in full, never as queued", async () => {
+    const fake = new FakeTransport();
+    const store = await opened(fake);
+    const channel = fake.lastAttach();
+    const long = `${"word ".repeat(80)}end`;
+    const sent = store.send(long);
+    // The frame can come before the send's answer: the window knows the words it sent.
+    const sending = {
+      prompt_id: "p1",
+      preview: long.slice(0, 256),
+      held: false,
+      created_at: 1,
+    };
+    channel.onFrame(
+      frame(CHAT, 0, [
+        ev.lifecycle("p1", "sending", long.slice(0, 256)),
+        ev.session({ status: "running", sending }),
+      ]),
+    );
+    expect(await sent).toBe(true);
+    expect(store.getSnapshot().queue).toEqual([]);
+    expect(store.getSnapshot().sending).toEqual({ promptId: "p1", text: long });
+    // The turn starts: the message is the turn's now.
+    channel.onFrame(
+      frame(CHAT, 2, [ev.lifecycle("p1", "started"), ev.session({ status: "running" })]),
+    );
+    expect(store.getSnapshot().sending).toBeNull();
+    expect(store.getSnapshot().queue).toEqual([]);
+    await settled();
+    expect(fake.methods()).not.toContain("detach");
+  });
+
+  it("joins again when a Stop during the checkpoint puts the sending message back, held", async () => {
+    const fake = new FakeTransport();
+    const store = await opened(fake);
+    const channel = fake.lastAttach();
+    const sending = { prompt_id: "p1", preview: "hello", held: false, created_at: 1 };
+    channel.onFrame(
+      frame(CHAT, 0, [
+        ev.lifecycle("p1", "sending", "hello"),
+        ev.session({ status: "running", sending }),
+      ]),
+    );
+    expect(store.getSnapshot().sending?.text).toBe("hello");
+    channel.onFrame(
+      frame(CHAT, 2, [
+        ev.session({ status: "ready", queue_held: true, queue_wait: { reason: "held", after: "stop" } }),
+      ]),
+    );
+    expect(store.getSnapshot().sending).toBeNull();
+    await settled();
+    expect(fake.methods().slice(-2)).toEqual(["detach", "attach"]);
+    fake.lastAttach().resolve(
+      attachResult(CHAT, 3, historyPage(CHAT, []), {
+        session: sessionInfo({ status: "ready", queue_held: true }),
+        queue: [{ ...sending, held: true }],
+      }),
+    );
+    await settled();
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["p1", true],
+    ]);
+  });
+
+  it("shows a message already on its way when the window joins", async () => {
+    const fake = new FakeTransport();
+    const sending = { prompt_id: "p1", preview: "fix the tests", held: false, created_at: 1 };
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "running", sending }),
+    });
+    expect(store.getSnapshot().sending).toEqual({ promptId: "p1", text: "fix the tests" });
+    expect(store.getSnapshot().queue).toEqual([]);
+  });
+
   it("joins again for the exact queue when an error holds prompts while others were held", async () => {
     const fake = new FakeTransport();
     const store = await opened(fake, historyPage(CHAT, []), 0, {

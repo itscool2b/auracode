@@ -51,6 +51,7 @@ export function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
     queue_held: false,
     revision: 1,
     queue_wait: null,
+    sending: null,
     ...overrides,
   };
 }

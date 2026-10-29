@@ -575,6 +575,10 @@ pub struct SessionInfo {
     /// Why the queued prompts are not going to the agent yet, while any are queued. `None` with
     /// prompts queued means the next one is on its way.
     pub queue_wait: Option<QueueWait>,
+    /// The prompt on its way to the agent while its folder checkpoint saves: shown as sending in
+    /// the transcript, not in the queue. `None` once it went, or when a stop or a failed
+    /// checkpoint put it back in the queue, held.
+    pub sending: Option<session::QueuedPrompt>,
 }
 
 /// Why queued prompts wait. Prompts go in order: a held prompt waits for the person to send or
@@ -657,6 +661,8 @@ pub enum SessionStatus {
 #[serde(rename_all = "snake_case")]
 pub enum PromptState {
     Queued,
+    /// On its way: its folder checkpoint is being saved, and it goes to the agent right after.
+    Sending,
     Started,
     Completed,
     Cancelled,
