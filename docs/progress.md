@@ -4652,5 +4652,11 @@ the original assertion pass. No product notice or journal-recovery behavior chan
 The fixture now checks journals retained before boot and after startup, preserving the complete
 notice/path assertion in both cases. It also verifies unchanged malformed journal bytes, no new
 journal marker files and an untouched temporary instruction target. The focused regression passes.
-Combined desktop library and Demo integration verification follows the separate catalog-fixture
-review on this local branch before integration.
+The separately reviewed Demo catalog fixture now expects one visible entry per agent and verifies
+all five alternate-connection groups, Automatic selection and their unavailable state on an empty
+test PATH. Its real startup, transcript, shutdown and restart assertions remain intact.
+
+Combined verification passed all 224 desktop library tests and all three Demo integration tests,
+with no failures or ignores. Workspace formatting and desktop all-targets Clippy with warnings denied
+passed. Both changes received independent source review with no findings. No production code,
+generated bindings, owner configuration, credential access or visible application interaction changed.
