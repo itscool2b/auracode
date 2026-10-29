@@ -211,12 +211,22 @@ the account handoff summary reports byte sizes instead of pretending to be a Git
 The ordinary checkpoint constructor refuses Account capture; callers must supply the unlocked file
 key to `new_account`. Existing plaintext checkpoint directories require explicit import.
 
-Explicit revert still mutates the user's chosen working files. While it runs, it moves each replaced
-file aside under `.auracode-revert-<token>` in that working folder, which preserves newer external
-edits if a file changes during rename and is disclosed by the existing revert preview. A complete
-revert then removes that folder (a Local profile moves it into its own data folder instead); one that
-stopped partway keeps it there and names it in the result. No plaintext copy goes into the account
-profile, and account profile snapshots remain encrypted.
+Explicit revert first saves selected originals and a version 2 recovery manifest in app-owned
+storage before mutating working files. Local uses private `checkpoints/reverts/<token>` directories.
+Account uses `EncryptedFiles.child(token, true)` with the checkpoint purpose and object identities
+`revert-<token>-<SHA256(name)>`, including `original-<index>` and `recovery.json`. The manifest binds the
+checkpoint, canonical root, token, paths and fingerprints. No plaintext durable Account backup is
+created. Recovery browsing/export remains a separate UI integration.
+
+The same-volume `.auracode-revert-<token>` swap verifies actual renamed originals before atomic,
+no-clobber replacement publication. Finalization copies, reads back and syncs surviving swap
+objects even after partial failure; destination storage can be on another volume. Saved object IDs
+include their source name and SHA-256, and an encrypted `saved-recovery.json` catalog records them.
+Interrupted cleanup can add up to 31 numbered catalog generations, preserving prior catalogs.
+Legacy migration validates a bounded recovery manifest against an existing checkpoint for this
+chat, folder and canonical root, refuses unexpected entries and never follows links or junctions.
+Storage and cleanup failures surface through the revert result. If saving and no-clobber restoration
+both fail, surviving source files stay in the swap and its recovery location is explicitly reported.
 
 Small mutable metadata uses the same codec with the separate `metadata` purpose, in the private
 `metadata/` directory. Worktree ownership/recovery uses object `worktree-registry` (8 MiB maximum),

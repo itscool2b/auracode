@@ -62,7 +62,7 @@ pub struct RevertResult {
     pub applied: Vec<String>,
     /// A partial failure is explicit; the caller must not report full success.
     pub error: Option<String>,
-    /// Where the replaced or removed originals are kept: the profile's data folder (Local), nothing
-    /// after an Account profile's complete revert, or the working folder until they can move.
+    /// Durable recovery groups in the profile's data folder, encrypted for Account profiles.
+    /// A failed finalization also names any transient working-folder copy that was preserved.
     pub recovery_paths: Vec<String>,
 }

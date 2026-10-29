@@ -4233,3 +4233,25 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+## 2026-10-29: durable revert recovery
+
+Reverts save every selected original and its recovery manifest before the first working-file
+mutation. Local profiles use private `checkpoints/reverts/<token>` groups. Account profiles keep
+token-bound encrypted checkpoint child groups, including after a partial revert. The same-volume
+swap still checks the actual renamed file before publishing replacement bytes and refuses to
+replace a concurrent writer's path. Complete and partial reverts copy, verify and sync surviving
+swap objects before unlinking their sources, so the durable store can be on another volume.
+
+Legacy cleanup now requires bounded recovery metadata for an existing checkpoint in the same chat,
+folder and canonical root, with expected regular-file entries. Invalid manifests, arbitrary UUID
+directories, links, junctions and unexpected contents stay untouched. Interrupted cleanup retains
+its earlier content catalogs and can resume. Storage or cleanup failure is an explicit revert error;
+if saving and no-clobber restoration both fail, the only surviving copy stays available at the
+reported recovery path. Recovery browsing/export still needs its separate UI integration.
+
+Focused checkpoint and session-checkpoint tests pass with Account encryption enabled. They cover
+Local/Account success and partial failure, backup failure before mutation, concurrent writes,
+copy-path recovery, interrupted cleanup, invalid manifests, Windows junction preservation and
+ciphertext-only Account recovery. Formatting and instruction parity were checked. Full integrated
+checks, binding regeneration and macOS qualification remain integration gates.

@@ -210,12 +210,23 @@ mod tests {
         assert!(stat.contains("byte sizes") && stat.contains("private-name.txt"));
         private_files(
             &profile.dir,
-            &[before, b"private-name.txt", chat.as_bytes()],
+            &[
+                before,
+                b"private-name.txt",
+                b"synthetic legacy only copy",
+                b"later external edit",
+                chat.as_bytes(),
+            ],
         )
         .unwrap();
         drop(service);
         let service =
             Checkpoints::new_account(&profile, env, LeftoverRegistry::disabled(), key).unwrap();
+        let legacy_token = crate::ids::new_id();
+        let legacy = work.join(format!(".auracode-revert-{legacy_token}"));
+        std::fs::create_dir(&legacy).unwrap();
+        std::fs::write(legacy.join("original-0"), b"synthetic legacy only copy").unwrap();
+        std::fs::write(legacy.join("recovery.json"), serde_json::to_vec(&serde_json::json!({"version":1,"checkpoint_id":checkpoint.id,"files":[{"path":"private-name.txt","backup":"original-0"}]})).unwrap()).unwrap();
         assert_eq!(
             service
                 .changes(&chat, &folder, &work, &checkpoint.id)
@@ -251,7 +262,8 @@ mod tests {
             before
         );
         // No plaintext copy stays in the profile or in the working folder after a complete revert.
-        assert!(result.recovery_paths.is_empty());
+        assert_eq!(result.recovery_paths.len(), 1);
+        assert!(!legacy.exists());
         assert!(std::fs::read_dir(&work).unwrap().all(|entry| {
             !entry
                 .unwrap()
@@ -269,13 +281,21 @@ mod tests {
         );
         private_files(
             &profile.dir,
-            &[before, b"private-name.txt", chat.as_bytes()],
+            &[
+                before,
+                b"private-name.txt",
+                b"synthetic legacy only copy",
+                b"later external edit",
+                chat.as_bytes(),
+            ],
         )
         .unwrap();
         assert!(
             std::fs::read_dir(profile.checkpoints_dir())
                 .unwrap()
-                .all(|e| !e.unwrap().file_type().unwrap().is_dir())
+                .filter(|e| e.as_ref().unwrap().file_type().unwrap().is_dir())
+                .count()
+                == 2
         );
     }
 
