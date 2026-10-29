@@ -68,6 +68,11 @@ async function checkLibrary(page, engine) {
   await checkProgressive(page, engine);
   await page.goto(`${url}/?preview=plugins`);
   await page.getByRole("heading", { name: "Plugin library", exact: true }).waitFor();
+  await page
+    .getByText(
+      "Cursor, Grok Build, Antigravity and Hermes are not listed: auracode has no reviewed way to read their extensions yet.",
+    )
+    .waitFor();
   const agents = page.getByRole("navigation", { name: "Agents" });
   for (const name of ["Claude Code", "Codex", "Pi", "OpenCode"])
     await agents.getByRole("button", { name, exact: true }).waitFor();
@@ -113,6 +118,7 @@ async function checkLibrary(page, engine) {
   await agents.getByRole("button", { name: "Pi", exact: true }).click();
   await page.getByText("Pi has no plugin marketplace.", { exact: false }).waitFor();
   await agents.getByRole("button", { name: "OpenCode", exact: true }).click();
+  await page.getByText("Configuration sync covers Claude Code, Codex and Pi.").waitFor();
   assert.equal(await page.getByRole("switch").count(), 0);
   await page.getByRole("button", { name: "Refresh Plugin library" }).click();
   await page.waitForFunction(() => window.pluginsFixture.calls.includes("snapshot:true"));

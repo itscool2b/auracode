@@ -4541,3 +4541,20 @@ The preview and dialog unit tests share typed synthetic key data. No production 
 changed and no native cleanup, Cargo or browser run was performed for this follow-up. Targeted
 Vitest passes 9/9; touched-file Biome, checker syntax, diff and instruction parity checks pass.
 Chromium/WebKit runtime verification remains with the integration coordinator.
+
+### 2026-10-29: Verify scoped cleanup and unsupported Plugin explanations
+
+The updated cleanup reviews pass in Chromium and WebKit, including shared and unknown entry
+retention, failed-start retry, macOS Trash wording and narrow-window rendering. All 16 accessibility
+audits and 12 focused layout views passed. The Plugin checker now explicitly verifies the explanation
+for unsupported extension readers and OpenCode configuration sync; both browser engines passed.
+
+The pinned pnpm 12.15.0 executable is now available. Frozen install passed across all seven workspace
+projects without lockfile resolution changes. Pinned lint passes with 26 existing CSS specificity
+warnings; UI typecheck and 261 tests, design-lab typecheck and 352 tests, web typecheck/build and four
+static tests, and 29 root script tests pass. No dependency or production styling change was needed.
+
+The refreshed core account-sync unit and integration suite passed 734 tests after the final backend
+review fixes. A later setup hold-event visibility regression is being corrected separately. Native
+compilation, binding export, integrated desktop typecheck and Windows hands-on acceptance remain
+open under the host's application-control restriction. Nothing has been published from this train.
