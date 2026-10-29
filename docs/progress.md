@@ -1,5 +1,30 @@
 # Auracode implementation progress
 
+## 2026-10-29: Canonical Sending messages and the prompt header
+
+Local branch `codex/chat-sending` preserves held-message FIFO. A new message waits behind
+older held messages until they are released. While Rust saves the checkpoint, `SessionInfo.sending`
+carries the persisted prompt ID, complete text, attachment parts and creation time. React uses
+that ID to reconcile queue removal and the canonical user turn, including when the command
+acknowledgment arrives after the event. No truncated-prefix matching or eight-message cache
+remains. Attachment-only prompts remain visible while sending and after reattachment.
+
+The prompt header has its own reserved space above the transcript scrollport. Changing its
+height preserves the reading position, and clicking it returns to the actual prompt. The chat
+browser check now asserts that the header does not cover transcript content.
+
+Focused verification: desktop chat-store and screen tests 77 passed; Rust checkpoint tests
+6 passed, queue-wait tests 13 passed and session-turn tests 29 passed. Chromium and WebKit
+`check-chat.mjs` passed, each with 32 accessibility scans, queue reasons, reading anchors,
+prompt navigation and bounded history/tool rendering. Changed frontend sources pass Biome;
+style and local instruction checks pass.
+
+Pending before publication: independent review, native walkthrough and integrated gates.
+Windows Application Control blocks the pinned pnpm executable, so frozen install has not run.
+The desktop and workspace binding exporters stop in dependencies with E0463; regenerated
+bindings and the resulting TypeScript check remain pending. Installed-dependency tests above
+do not establish those unavailable gates.
+
 ## 2026-10-28: Instruction files, one file for every agent or a file per agent
 
 Branch `instructions` (from `origin/main`, with `origin/main` 6c383b5 merged in). Details,
