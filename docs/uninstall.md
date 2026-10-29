@@ -19,6 +19,7 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - auracode's worktrees (see [Worktrees](#worktrees));
   - the ACP adapters auracode downloaded for itself;
   - Instructions backups and the passphrase vault;
+  - clone recovery journals, including those in a custom data root;
   - the WebView2 profile (`EBWebView`).
 - `%APPDATA%\si.auracode.desktop`: the window position.
 - In `%TEMP%`: the updater's downloads (`auracode-<version>-updater-*`) and the CLI's probe

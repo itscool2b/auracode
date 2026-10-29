@@ -220,7 +220,10 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
             } else {
                 HarnessStatus::NotInstalled
             });
-        let listings = facts.listings.get(id);
+        let listings = facts.listings.get(id).filter(|_| {
+            installed
+                || agent.is_some_and(|agent| matches!(agent.availability, Availability::Checking))
+        });
         let extensions = ext(id);
         let not_run =
             if agent.is_some_and(|agent| matches!(agent.availability, Availability::Checking)) {
@@ -597,6 +600,8 @@ impl SessionManager {
         while let Some((id, listing)) = jobs.next().await {
             if let Some(listing) = listing {
                 facts.listings.insert(id.into(), listing);
+            } else {
+                facts.listings.remove(id);
             }
             facts.agents = self.deps().detector.cached();
             library = assemble(&facts);
@@ -744,6 +749,44 @@ mod tests {
                 .notices
                 .iter()
                 .any(|notice| notice.contains("no reviewed way"))
+        );
+    }
+
+    #[test]
+    fn a_known_missing_provider_never_assembles_cached_live_rows_or_timestamp() {
+        let facts = PluginFacts {
+            agents: vec![agent("claude", None, Some(HarnessStatus::NotInstalled))],
+            listings: [(
+                "claude".into(),
+                AgentListings {
+                    version: "2.1.310".into(),
+                    updated_at: 42,
+                    version_change: None,
+                    listings: vec![listing(
+                        PluginFeature::Plugins,
+                        ListingState::Live,
+                        &["old@team"],
+                    )],
+                },
+            )]
+            .into(),
+            ..Default::default()
+        };
+        let result = assemble(&facts);
+        let claude = &result.agents[0];
+        assert!(!claude.installed);
+        assert!(claude.updated_at.is_none());
+        assert!(
+            claude
+                .features
+                .iter()
+                .all(|listing| !matches!(listing.state, ListingState::Live))
+        );
+        assert!(
+            claude
+                .features
+                .iter()
+                .all(|listing| listing.entries.is_empty())
         );
     }
 
