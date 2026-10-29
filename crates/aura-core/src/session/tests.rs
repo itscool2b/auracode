@@ -2,6 +2,7 @@
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
 mod checkpoints;
+mod cloning;
 mod conversation;
 mod folder_context;
 mod folder_resolution;
