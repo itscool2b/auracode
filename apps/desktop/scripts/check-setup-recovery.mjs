@@ -108,7 +108,7 @@ export async function checkSetupRecovery(browser, url) {
       ),
       false,
     );
-    await page.getByTestId("send-queued").click();
+    await page.getByTestId("queue-send-held").click();
     await page.waitForFunction(() =>
       window.setupRecoveryFixture.calls().includes("prompt:held through retries"),
     );
@@ -128,6 +128,56 @@ export async function checkSetupRecovery(browser, url) {
       false,
     );
     assert.equal((await page.evaluate(() => window.setupRecoveryFixture.queue()))[0].held, true);
+
+    // Sending one held row preserves other holds; new messages wait behind the held head.
+    await compose.fill("selected held after restart");
+    await compose.press("Enter");
+    await setupStatus.getByRole("button", { name: "Retry setup" }).click();
+    await page.getByRole("button", { name: "Run reviewed setup" }).click();
+    await page.waitForFunction(() => window.setupRecoveryFixture.calls().includes("setup-start"));
+    await page.evaluate(() => window.setupRecoveryFixture.complete(0));
+    await compose.fill("new behind held head");
+    await compose.press("Enter");
+    assert.equal(
+      (await page.evaluate(() => window.setupRecoveryFixture.calls())).some((call) =>
+        call.startsWith("prompt:"),
+      ),
+      false,
+    );
+    await rows.nth(1).getByTestId("queued-send").click();
+    await page.waitForFunction(() =>
+      window.setupRecoveryFixture.calls().includes("prompt:selected held after restart"),
+    );
+    assert.deepEqual(
+      (await page.evaluate(() => window.setupRecoveryFixture.calls())).filter((call) =>
+        call.startsWith("prompt:"),
+      ),
+      ["prompt:selected held after restart"],
+    );
+    assert.deepEqual(
+      (await page.evaluate(() => window.setupRecoveryFixture.queue())).map((row) => ({
+        preview: row.preview,
+        held: row.held,
+      })),
+      [
+        { preview: "held after restart", held: true },
+        { preview: "new behind held head", held: false },
+      ],
+    );
+    await page.getByTestId("queue-send-held").click();
+    await page.waitForFunction(() =>
+      window.setupRecoveryFixture.calls().includes("prompt:new behind held head"),
+    );
+    assert.deepEqual(
+      (await page.evaluate(() => window.setupRecoveryFixture.calls())).filter((call) =>
+        call.startsWith("prompt:"),
+      ),
+      [
+        "prompt:selected held after restart",
+        "prompt:held after restart",
+        "prompt:new behind held head",
+      ],
+    );
     assert.deepEqual(errors, []);
   } finally {
     await context.close();

@@ -64,9 +64,10 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
     sequence += all.length;
   };
   const release = () => {
-    const ready = queue.filter((row) => !row.held);
-    queue = queue.filter((row) => row.held);
-    for (const row of ready) {
+    if (attempt.state !== "succeeded") return;
+    while (queue[0] && !queue[0].held) {
+      const row = queue.shift();
+      if (!row) break;
       calls.push(`prompt:${row.preview}`);
       publish([ev.lifecycle(row.prompt_id, "started")]);
     }
@@ -144,10 +145,6 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
       },
       send: async (_chat, text) => {
         const prompt_id = `queued-${++promptSequence}`;
-        if (attempt.state === "succeeded") {
-          calls.push(`prompt:${text}`);
-          return { prompt_id, queued: false };
-        }
         queue.push({
           prompt_id,
           preview: text,
@@ -155,6 +152,7 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
           created_at: Date.now(),
         });
         publish([ev.lifecycle(prompt_id, "queued", text)]);
+        release();
         return { prompt_id, queued: true };
       },
       queuedText: async (_chat, id) => queue.find((row) => row.prompt_id === id)?.preview ?? "",
@@ -174,8 +172,17 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
       },
       resumeQueue: async () => {
         queue = queue.map((row) => ({ ...row, held: false }));
-        if (attempt.state === "succeeded") release();
+        release();
         publish();
+      },
+      sendNow: async (_chat, id) => {
+        const from = queue.findIndex((row) => row.prompt_id === id);
+        const row = from < 0 ? undefined : queue.splice(from, 1)[0];
+        if (!row) throw new Error("This queued message is no longer available.");
+        queue.unshift({ ...row, held: false });
+        release();
+        publish();
+        return [...queue];
       },
     }),
     { setup },

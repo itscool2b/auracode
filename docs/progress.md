@@ -4493,3 +4493,16 @@ All account-sync setup tests passed 17/17, including earlier prelaunch failure a
 regressions. Core Clippy library/tests with warnings denied, rustfmt and instruction parity passed.
 Root also reported the integrated setup/recovery layout checks clean in sixteen
 focused views across both browser engines. Native bindings remain an integration-owner gate.
+
+### 2026-10-29: Setup acceptance fixture follows the integrated queue
+
+The settings acceptance sweep exposed a fixture mismatch after FIFO held-row controls were
+integrated: one held message offers Send it now, while Send all appears for multiple held rows.
+The setup/recovery checker now uses that single-row action. Its native-free transport implements
+selected-row sending, releases only the unheld prefix and queues new messages behind a held head,
+matching the production actor contracts. The checker also verifies sending a later held row keeps
+the other hold and that releasing the head sends the following unheld message in order.
+
+Biome, JavaScript syntax and instruction parity checks passed. No production backend or UI changed.
+The coordinator's failed settings log is the red evidence; both-engine settings reruns remain the
+coordinator's gate after merging this fixture change. No Cargo or browser process ran for this fix.
