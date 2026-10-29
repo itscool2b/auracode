@@ -283,10 +283,6 @@ export class ChatStore {
    * prompt listed before it was queued before any hold the next one reports.
    */
   #queuedSinceUpdate = new Set<string>();
-  /**
-   * The words of the last few messages this window sent, so a message on its way shows in full
-   * rather than as the session's 256-character preview.
-   */
   /** A join for state the frames do not carry is due once the current frame is applied. */
   #rejoinDue = false;
   /** The channel ended while its attach call ran: the attach's answer decides what follows. */
@@ -613,12 +609,12 @@ export class ChatStore {
     } else if (session.status !== "auth_required") {
       this.#authRefreshed = false;
     }
-    // The session says which message is on its way. One that stopped being on its way without
-    // starting (a Stop during its checkpoint, a failed checkpoint) went back into the queue, held:
-    // only a snapshot lists it there.
+    // A lifecycle or canonical start clears its own Sending identity before this update. If
+    // Sending disappears otherwise, rejoin for the queue: capture can finish while background
+    // work still blocks dispatch, or Stop/failure can return the prompt held.
     const sending = session.sending ?? null;
     if (sending !== null) queue = queue.filter((row) => row.prompt_id !== sending.prompt_id);
-    if (state.sending !== null && sending === null && session.queue_held) rejoin = true;
+    if (state.sending !== null && sending === null) rejoin = true;
     if (rejoin) this.#rejoinSoon();
     return {
       ...state,

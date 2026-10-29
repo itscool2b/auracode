@@ -645,6 +645,39 @@ describe("the session's live state", () => {
     expect(store.getSnapshot().queue).toEqual([]);
   });
 
+  it("restores the unheld queue when background work delays dispatch after capture", async () => {
+    const fake = new FakeTransport();
+    const sending: SendingPrompt = {
+      prompt_id: "attachment-only",
+      text: "",
+      parts: [{ type: "image", blob: "a".repeat(64), mime: "image/png" }],
+      created_at: 123,
+    };
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "ready", sending }),
+    });
+    fake.lastAttach().onFrame(frame(CHAT, 0, [ev.session({ status: "ready", queue_held: false })]));
+    expect(store.getSnapshot().sending).toBeNull();
+    await settled();
+    expect(fake.methods().slice(-2)).toEqual(["detach", "attach"]);
+    const queued = {
+      prompt_id: sending.prompt_id,
+      preview: "[image]",
+      held: false,
+      created_at: sending.created_at,
+    };
+    fake.lastAttach().resolve(
+      attachResult(CHAT, 1, historyPage(CHAT, []), {
+        session: sessionInfo({ status: "ready", queue_held: false }),
+        queue: [queued],
+      }),
+    );
+    await settled();
+    expect(store.getSnapshot().queue).toEqual([queued]);
+    expect(store.getSnapshot().sending).toBeNull();
+    store.close();
+  });
+
   it("joins again for the exact queue when an error holds prompts while others were held", async () => {
     const fake = new FakeTransport();
     const store = await opened(fake, historyPage(CHAT, []), 0, {
