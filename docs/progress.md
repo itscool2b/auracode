@@ -4377,3 +4377,33 @@ library and tests passed with warnings denied. Biome, rustfmt and instruction pa
 Desktop binding export remains blocked by dependency E0463 errors for serde, specta, process_wrap
 and windows. Generated bindings were left untouched; TypeScript checking is blocked on those new
 types/commands. Native app and macOS verification remain integration gates.
+
+## Plugin library progressive loading (2026-10-29)
+
+The library publishes cached detection, cached listing rows and file inventory for all four supported
+agents before starting listings, then publishes each completed provider independently through a typed
+Tauri channel. At most two providers refresh at once; commands within a provider remain sequential
+and overlapping listing requests share their work. Failed refreshes retain cached and file rows.
+Generations reject superseded installation/configuration jobs, new reads cancel older requests, and
+profile draining and shutdown cancel owned refresh futures. Renderer request lifetimes ignore stale
+callbacks and replies after unmount, including StrictMode remounts. Initial detection is explicitly
+checking. Cursor, Grok Build, Antigravity and Hermes remain unavailable, and OpenCode sync remains
+unsupported. The Plugin library row-menu regression from d8bd025 is retained; its layout probe waits
+for that menu's actual first focused item.
+
+The controlled progressive browser fixture and the existing Plugin library/sync checks passed in
+Chromium and WebKit with clean axe audits. The menu and item layout probes passed all eight
+engine/viewport views. Focused Vitest passed 13 tests for progressive requests, stale replies/errors/completion,
+unmount/remount, checking detection and existing section wording. aura-agents passed all 109 unit
+and integration tests, including the shared fixture environment changes. The core Plugin library
+assembly and account-sync integration suites passed four tests each.
+The two General preferences tests also passed, including rejection of an OpenCode sync action.
+All-target Clippy on aura-agents and aura-core with account-sync passed with warnings denied.
+
+Controlled Windows measurements with temporary homes and delayed fake CLIs: cold first usable
+607.5004 ms, fast provider 1.0036115 s while Claude remained blocked, all finished 1.0958032 s;
+warm first usable 2.5181 ms and all finished 2.9446 ms. These measure the actual core stream with
+fixtures, not owner CLI performance. Generated-binding typecheck remains an integration gate for
+the coordinator. Standalone desktop checking stopped before app code with missing third-party
+crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
+were cleaned. No owner configuration, paid agent runs, hosted CI, deployments or releases were used.

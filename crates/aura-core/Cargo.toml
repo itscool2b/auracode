@@ -71,5 +71,12 @@ tempfile.workspace = true
 # Paused time makes idle eviction, flush timers and stop deadlines deterministic.
 tokio = { workspace = true, features = ["test-util"] }
 
+[[bin]]
+# The same fake CLI source runs the full core Plugin library path in temporary homes.
+name = "aura-plugin-testbin"
+path = "../aura-agents/src/bin/aura-agents-testbin.rs"
+test = false
+bench = false
+
 [lints]
 workspace = true

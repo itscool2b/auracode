@@ -45,7 +45,8 @@ if (container) {
       mode === "plugins" ||
       mode === "plugins-pi" ||
       mode === "plugins-update" ||
-      mode === "plugins-failed"
+      mode === "plugins-failed" ||
+      mode === "plugins-progressive"
     )
       void import("./dev/pluginLibraryPreview").then(({ mountPluginLibraryPreview }) =>
         mountPluginLibraryPreview(container, mode),

@@ -1,7 +1,7 @@
 //! Thin Plugin library commands. Rust owns which CLI commands run, the cache, the harness status
 //! and the per-device sync switch; the renderer only asks for a snapshot or a refresh.
 use aura_protocol::plugins::PluginLibrary;
-use tauri::State;
+use tauri::{State, ipc::Channel};
 
 use crate::{error::AppError, state::AppState};
 
@@ -22,12 +22,16 @@ pub(crate) fn paused_agents(state: &AppState) -> Vec<String> {
 pub async fn plugin_library_snapshot(
     state: State<'_, AppState>,
     refresh: bool,
+    channel: Channel<PluginLibrary>,
 ) -> Result<PluginLibrary, AppError> {
     let sessions = state.sessions()?;
+    let generation = sessions.generation();
     let sync_available = state.account_config().is_ok();
     let paused = paused_agents(&state);
     Ok(sessions
-        .plugin_library(refresh, sync_available, paused)
+        .plugin_library_progressive(refresh, sync_available, paused, |library| {
+            generation.is_current() && channel.send(library).is_ok()
+        })
         .await?)
 }
 

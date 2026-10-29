@@ -32,7 +32,40 @@ async function audit(page, what) {
 const calls = (page) => page.evaluate(() => window.pluginsFixture.calls);
 const syncCalls = (page) => page.evaluate(() => window.configSyncCalls);
 
+async function checkProgressive(page, engine) {
+  await page.goto(`${url}/?preview=plugins-progressive`);
+  const agents = page.getByRole("navigation", { name: "Agents" });
+  for (const name of ["Claude Code", "Codex", "Pi", "OpenCode"])
+    await agents.getByRole("button", { name, exact: true }).waitFor();
+  await page
+    .getByText("Reading the agent listing. Cached and file entries are available.")
+    .first()
+    .waitFor();
+  await page.getByRole("button", { name: "review-changes actions" }).waitFor();
+  assert.equal(await page.getByText("Reading what your agents use…").count(), 0);
+  await agents.getByRole("button", { name: "Pi", exact: true }).click();
+  await page.getByText("Checking installation…", { exact: false }).waitFor();
+  await page.evaluate(() => window.pluginsFixture.finishProvider("codex"));
+  await agents.getByRole("button", { name: "Codex", exact: true }).click();
+  await page.getByText("From codex mcp list --json").waitFor();
+  await agents.getByRole("button", { name: "Claude Code", exact: true }).click();
+  await page
+    .getByText("Reading the agent listing. Cached and file entries are available.")
+    .first()
+    .waitFor();
+  await audit(page, `${engine} progressively loaded Plugin library`);
+  await page.evaluate(() => window.pluginsFixture.finishProvider("claude"));
+  await page.getByText("From claude plugin list --json --available").waitFor();
+  await page.evaluate(() => window.pluginsFixture.unmount());
+  await page.evaluate(() => {
+    window.pluginsFixture.finishProvider("pi");
+    window.pluginsFixture.finish();
+  });
+  assert.equal(await page.getByRole("heading", { name: "Plugin library", exact: true }).count(), 0);
+}
+
 async function checkLibrary(page, engine) {
+  await checkProgressive(page, engine);
   await page.goto(`${url}/?preview=plugins`);
   await page.getByRole("heading", { name: "Plugin library", exact: true }).waitFor();
   const agents = page.getByRole("navigation", { name: "Agents" });
@@ -53,6 +86,17 @@ async function checkLibrary(page, engine) {
   await audit(page, `${engine} vendor dialog from a row`);
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached" });
+  // A row below the fold: the click first scrolls it into view, and that scroll's event, which
+  // arrives after the menu opened, leaves the menu open. A scroll that moves the row closes it.
+  await page.getByRole("button", { name: "review-changes actions" }).click();
+  const rowMenu = page.getByRole("menu", { name: "review-changes actions" });
+  await rowMenu.waitFor();
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+  assert.equal(await rowMenu.count(), 1, `${engine}: the menu closed on the click's own scroll`);
+  await page.locator(".plugins-main").evaluate((node) => node.scrollBy(0, -120));
+  await rowMenu.waitFor({ state: "detached" });
   // Available plugins are searched, then installed through the same review.
   await page.getByLabel("Find an available Claude Code plugin").fill("security");
   await page.getByRole("button", { name: "Install security-review" }).click();

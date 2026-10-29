@@ -54,7 +54,7 @@ export function sourceText(state: ListingState, command: string | null): string 
     case "live":
       return command ? `From ${command}` : "From the agent";
     case "failed":
-      return `${state.reason} Showing what its files declare.`;
+      return `${state.reason} Showing the last available entries.`;
     case "files":
     case "unavailable":
       return state.reason;

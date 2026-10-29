@@ -347,6 +347,9 @@ impl AppState {
         }
     }
     pub(crate) async fn wait_profile_commands(&self) {
+        if let Some(chats) = &lock(&self.runtime).chats {
+            chats.manager.cancel_plugin_refresh();
+        }
         loop {
             let changed = self.access.changed.notified();
             if self.access.active.load(Ordering::Acquire) == 0 {

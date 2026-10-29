@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import type { AgentPlugins } from "../../bindings";
 import { pluginFixture } from "../../dev/pluginLibraryPreview";
 import type { ConfigSyncItem } from "../../lib/config-sync/bindings";
 import { AgentGroup, groups } from "../settings/ConfigSyncPanel";
@@ -8,12 +9,12 @@ import { AgentSection } from "./PluginLibraryScreen";
 const NOW = Date.UTC(2026, 9, 28, 12, 0);
 const noop = () => {};
 
-function section(mode: string, agentId: string) {
+function section(mode: string, agentId: string, override: Partial<AgentPlugins> = {}) {
   const agent = pluginFixture(mode).agents.find((entry) => entry.agent_id === agentId);
   if (!agent) throw new Error(agentId);
   return renderToStaticMarkup(
     <AgentSection
-      agent={agent}
+      agent={{ ...agent, ...override }}
       busy={null}
       now={() => NOW}
       onUpdate={noop}
@@ -27,6 +28,16 @@ function section(mode: string, agentId: string) {
 }
 
 describe("Plugin library", () => {
+  it("keeps an initial checking section distinct from an uninstalled agent", () => {
+    const html = section("plugins", "claude", {
+      installed: false,
+      updated_at: null,
+      harness: { state: "checking" },
+    });
+    expect(html).toContain("Checking installation…");
+    expect(html).not.toContain("Not installed here");
+  });
+
   it("shows one agent's own features, where they came from and when", () => {
     const html = section("plugins", "claude");
     for (const text of [
@@ -58,7 +69,7 @@ describe("Plugin library", () => {
 
   it("says plainly when the CLI listing failed and shows what the files declare", () => {
     const html = section("plugins-failed", "codex");
-    expect(html).toContain("marketplace cache is corrupt. Showing what its files declare.");
+    expect(html).toContain("marketplace cache is corrupt. Showing the last available entries.");
     expect(html).toContain("data-failed");
     expect(html).toContain("tools");
     expect(html).toContain("Keeps 1 field on this device");
