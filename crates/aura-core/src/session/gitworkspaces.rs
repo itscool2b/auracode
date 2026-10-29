@@ -66,6 +66,7 @@ impl SessionManager {
         let sources = organization
             .projects
             .into_iter()
+            .filter(|project| project.id == project_id)
             .flat_map(|project| project.folders)
             .filter_map(|folder| folder.path)
             .collect::<Vec<_>>();

@@ -70,20 +70,22 @@ pub async fn profile_worktree_open_folder(
         .sessions()?
         .profile_worktree_folder(&worktree_id)
         .await?;
-    tauri::async_runtime::spawn_blocking(move || tauri_plugin_opener::reveal_item_in_dir(folder))
-        .await
-        .map_err(|_| {
-            AppError::new(
-                crate::error::AppErrorCode::Internal,
-                "The folder could not be opened.",
-            )
-        })?
-        .map_err(|_| {
-            AppError::new(
-                crate::error::AppErrorCode::Internal,
-                "The folder could not be opened.",
-            )
-        })?;
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri_plugin_opener::open_path(folder, None::<&str>)
+    })
+    .await
+    .map_err(|_| {
+        AppError::new(
+            crate::error::AppErrorCode::Internal,
+            "The folder could not be opened.",
+        )
+    })?
+    .map_err(|_| {
+        AppError::new(
+            crate::error::AppErrorCode::Internal,
+            "The folder could not be opened.",
+        )
+    })?;
     Ok(())
 }
 

@@ -1407,8 +1407,11 @@ impl Writer {
             }
             Request::SetupAttempt { command, reply } => {
                 let device = self.device_id.clone();
-                let result =
-                    self.write_tx(|conn| super::setup_attempt::execute(conn, &device, command));
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::setup_attempt::execute(conn, &device, command))
+                };
                 let _ = reply.send(result);
             }
             Request::ReadSetupAttempt { chat_id, reply } => {

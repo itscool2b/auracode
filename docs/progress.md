@@ -4233,3 +4233,27 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+## 2026-10-29: Durable setup admission and retained worktree discovery (in verification)
+
+Worktree chats now persist setup state and generation before becoming visible. Their normal
+conversation opens immediately, with setup review/output in the docked terminal panel and the
+composer using the saved queue throughout. Rust gates explicit starts and dispatch, records
+terminal-owner success only after confirmed cleanup, holds messages on failure and interrupts
+unfinished attempts at restart. Retries review only the command, preserve copied files and reject
+older generation tokens/completions.
+
+A profile-scoped worktree registry route exposes retained folders whose chat could not be saved.
+New chat and Project settings show their branch, source, retained path and detail, reviewed recovery
+and Open folder. Recovery retains reconciled chatless records. Managed worktree folder labels name
+the branch and source, New chat omits them as source folders, and Move chat keeps its destinations.
+See `docs/worktree-setup-and-recovery.md` for execution and recovery behavior.
+
+Verification: all desktop Vitest tests passed (504 passed, 19 skipped). Chromium passed the new
+setup/recovery flow with Axe and the New chat checker with seven Axe scans; the running setup
+screenshot was inspected. Core worktree tests passed 18/18 and terminal tests 16/16. With
+account-sync, setup regressions passed 14/14 and migration/backup tests 12/12; core Clippy for the
+library and tests passed with warnings denied. Biome, rustfmt and instruction parity passed.
+Desktop binding export remains blocked by dependency E0463 errors for serde, specta, process_wrap
+and windows. Generated bindings were left untouched; TypeScript checking is blocked on those new
+types/commands. Native app and macOS verification remain integration gates.

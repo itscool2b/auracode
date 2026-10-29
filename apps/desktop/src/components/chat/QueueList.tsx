@@ -29,6 +29,7 @@ export function QueueList({
   onSendNow,
   onStart,
   onRecreate,
+  onSetup,
   onLoadText,
   onEdit,
   onMove,
@@ -46,6 +47,7 @@ export function QueueList({
   readonly onStart?: () => void;
   /** Reviews recreating this chat's missing worktree folder. */
   readonly onRecreate?: () => void;
+  readonly onSetup?: () => void;
   /** The prompt's words as typed; `null` when it is gone or could not be read. */
   readonly onLoadText?: (promptId: string) => Promise<string | null>;
   /** Saves new words; answers why they were not saved, or `null`. */
@@ -138,6 +140,11 @@ export function QueueList({
               onClick={onRecreate}
             >
               Recreate folder
+            </button>
+          ) : null}
+          {action === "setup" && onSetup ? (
+            <button type="button" className="g-button g-button-24" onClick={onSetup}>
+              Retry setup
             </button>
           ) : null}
           {held ? (

@@ -119,9 +119,19 @@ impl GitWorkspaces {
         let _guard = self.gate.lock().await;
         let mut records = self.read_records()?;
         for record in &mut records {
-            if record.state == WorktreeState::Ready && !Path::new(&record.path).exists() {
-                record.state = WorktreeState::Missing;
-                record.detail=Some("The retained folder is missing. Its branch and saved ownership remain available for review.".into());
+            if record.state == WorktreeState::Ready {
+                match Path::new(&record.path).try_exists() {
+                    Ok(false) => {
+                        record.state = WorktreeState::Missing;
+                        record.detail=Some("The retained folder is missing. Its branch and saved ownership remain available for review.".into());
+                    }
+                    Err(error) => {
+                        record.detail = Some(format!(
+                            "The retained folder could not be inspected: {error}"
+                        ))
+                    }
+                    Ok(true) => {}
+                }
             }
         }
         Ok(records)

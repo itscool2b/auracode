@@ -2388,12 +2388,12 @@ mod tests {
         let (store, info) = open_with(&p.db, &p.backups, migrations()).expect("current");
         let OpenOutcome::Migrated {
             from: 13,
-            to: 14,
+            to: SCHEMA_VERSION,
             backup: Some(backup),
         } = &info.outcome
         else {
             panic!(
-                "expected Migrated from 13 to 14 with a backup, got {:?}",
+                "expected Migrated from 13 to the current schema with a backup, got {:?}",
                 info.outcome
             );
         };

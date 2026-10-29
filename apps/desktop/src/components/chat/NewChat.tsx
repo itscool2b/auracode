@@ -15,6 +15,7 @@ import type {
   AgentInstallation,
   ChatCreatePreview,
   ChatSummary,
+  ManagedWorktree,
   WorktreeChatPlan,
   WorktreeChatResult,
 } from "../../bindings";
@@ -23,11 +24,13 @@ import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { errorMessage } from "../../lib/errors";
 import { agentVersion, builtInPath } from "../../lib/format";
+import { sameFolder } from "../../lib/gitWorkspace";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
-import { TerminalSheet } from "../TerminalSheet";
+import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { projectName } from "./ChatList";
 import { WorktreeChip } from "./WorktreeChip";
+import { WorktreeRecoveryList } from "./WorktreeRecoveryList";
 import "./new-chat.css";
 
 const noSubscribe = () => () => {};
@@ -119,31 +122,6 @@ const STATE_LABEL: Record<ChoiceState, string> = {
 };
 
 /**
- * After Create made a worktree chat: its saved setup command waits in the owned terminal before
- * the agent starts, or the chat is ready with notes worth reading before it opens.
- */
-type Created =
-  | { readonly type: "idle" }
-  | {
-      readonly type: "setup";
-      readonly result: WorktreeChatResult;
-      readonly plan: WorktreeChatPlan;
-      readonly token: string;
-    }
-  | { readonly type: "starting"; readonly result: WorktreeChatResult }
-  | { readonly type: "done"; readonly result: WorktreeChatResult; readonly notes: string[] };
-
-/** One sentence for a setup command that did not finish cleanly. */
-export function setupNote(exit: number | null | "closed"): string | null {
-  if (exit === 0) return null;
-  if (exit === "closed")
-    return "The setup command did not run to the end. Run it again from the chat's Git panel.";
-  if (exit === null)
-    return "The setup terminal closed without an exit status. Review setup from the chat's Git panel.";
-  return `The setup command exited with code ${exit}. Review setup from the chat's Git panel.`;
-}
-
-/**
  * New chat, after Grok's start screen: the logo, one sentence, and one composer card holding the
  * agents that can run here (each showing whether it is still being looked for, ready, or waiting
  * on a sign-in), the folder, and Create. Agents that cannot run here wait under "Other agents"
@@ -161,6 +139,7 @@ export function NewChat({
   onCreated,
   workspace,
   worktreeApi = worktreeChatApi,
+  recoveryApi = worktreeRecoveryApi,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly refreshing: boolean;
@@ -169,6 +148,7 @@ export function NewChat({
   readonly onCreated: (chat: ChatSummary) => void;
   readonly workspace?: WorkspaceStore;
   readonly worktreeApi?: WorktreeChatApi;
+  readonly recoveryApi?: WorktreeRecoveryApi;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
   const organization = useSyncExternalStore(
@@ -178,6 +158,31 @@ export function NewChat({
   );
   const group = useId();
   const [folderId, setFolderId] = useState("");
+  const [retained, setRetained] = useState<ManagedWorktree[]>([]);
+  const [retainedLoaded, setRetainedLoaded] = useState(!workspace);
+  const [recoveryRevision, setRecoveryRevision] = useState(0);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  useEffect(() => {
+    void recoveryRevision;
+    if (!workspace) return;
+    setRetainedLoaded(false);
+    let current = true;
+    void recoveryApi.list(null).then(
+      (records) => {
+        if (current) {
+          setRetained(records);
+          setRetainedLoaded(true);
+          setRecoveryError(null);
+        }
+      },
+      (error) => {
+        if (current) setRecoveryError(errorMessage(error));
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [workspace, recoveryApi, recoveryRevision]);
   const [preview, setPreview] = useState<ChatCreatePreview | null>(null);
   const [allowBusy, setAllowBusy] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -187,14 +192,7 @@ export function NewChat({
     folderChoice.getSnapshot,
     folderChoice.getSnapshot,
   );
-  const [created, setCreated] = useState<Created>({ type: "idle" });
-  // A fresh New chat (the sidebar's, the palette's) starts over once a created chat has been shown.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Each new draft is a new New chat.
-  useEffect(() => {
-    setCreated((current) => (current.type === "done" ? { type: "idle" } : current));
-  }, [draft]);
   const openChip = useRef<(() => void) | null>(null);
-  const setupExit = useRef<number | null | "closed">("closed");
   const adding = useRef<string | null>(null);
   // Agents whose detection finished while this screen was open settle in once; first paint does not.
   const seen = useRef<ReadonlyMap<string, string> | "waiting" | null>(null);
@@ -216,9 +214,17 @@ export function NewChat({
     if (settled.length > 0) setFound((current) => new Set([...current, ...settled]));
   }, [agents]);
   // The project folder this chat would use: chosen under Projects, or the picked folder's own.
-  const folders = organization.data?.projects.flatMap((project) => project.folders) ?? [];
+  const sourceFolder = (folder: { path: string | null }) =>
+    !folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string));
+  const folders =
+    organization.data?.projects.flatMap((project) => project.folders).filter(sourceFolder) ?? [];
   const picked = state.folder ? folders.find((folder) => folder.path === state.folder) : undefined;
-  const knownFolder = folderId || picked?.id || "";
+  const knownFolder =
+    (folders.some((folder) => folder.id === folderId) ? folderId : "") || picked?.id || "";
+  const managedPicked =
+    !knownFolder && state.folder
+      ? retained.find((record) => sameFolder(record.path, state.folder as string))
+      : undefined;
   useEffect(() => {
     let current = true;
     setAllowBusy(false);
@@ -242,7 +248,17 @@ export function NewChat({
   const loaded = organization.data !== null;
   useEffect(() => {
     const path = state.folder;
-    if (!workspace || !path || folderId || !loaded || picked || adding.current === path) return;
+    if (
+      !workspace ||
+      !path ||
+      folderId ||
+      !loaded ||
+      !retainedLoaded ||
+      managedPicked ||
+      picked ||
+      adding.current === path
+    )
+      return;
     adding.current = path;
     void workspace
       .perform(() =>
@@ -260,7 +276,7 @@ export function NewChat({
         const id = project?.folders[0]?.id;
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
-  }, [workspace, state.folder, folderId, loaded, picked, draft]);
+  }, [workspace, state.folder, folderId, loaded, retainedLoaded, managedPicked, picked, draft]);
   // The one lineup every agent list reads, so "Other agents" counts the same everywhere.
   const { usable: available, others: unavailable } = agentLineup(agents ?? []);
   const selected = available.find((agent) => agent.id === state.agentId) ?? null;
@@ -272,38 +288,9 @@ export function NewChat({
   // Leaving New chat drops every review on its way.
   useEffect(() => () => folderChoice.target(null, null), [folderChoice]);
   const worktreeMode = worktree.kind === "git" && worktree.options.mode === "worktree";
-  const setupTransport = useMemo(
-    () =>
-      created.type === "setup"
-        ? worktreeApi.setupTerminal(created.result.chat.chat.id, created.token)
-        : null,
-    [created, worktreeApi],
-  );
-  const finishing = useRef(false);
-  /** Starts the agent after its setup had its turn, then opens the chat (or shows what to read). */
-  const finishSetup = async (result: WorktreeChatResult) => {
-    if (finishing.current) return;
-    finishing.current = true;
-    setCreated({ type: "starting", result });
-    const notes = [...result.warnings];
-    const note = setupNote(setupExit.current);
-    if (note) notes.push(note);
-    try {
-      await worktreeApi.start(result.chat.chat.id);
-    } catch (error) {
-      notes.push(`The agent did not start: ${errorMessage(error)} Start it from the chat.`);
-    }
-    if (notes.length) setCreated({ type: "done", result, notes });
-    else onCreated(result.chat.chat);
-  };
-  const madeWorktree = (result: WorktreeChatResult, plan: WorktreeChatPlan) => {
-    const token = result.setup?.command_token;
-    if (token && !result.started) {
-      setupExit.current = "closed";
-      finishing.current = false;
-      setCreated({ type: "setup", result, plan, token });
-    } else if (result.warnings.length) setCreated({ type: "done", result, notes: result.warnings });
-    else onCreated(result.chat.chat);
+  // Rust persisted setup admission before exposing the chat. Its normal composer remains usable.
+  const madeWorktree = (result: WorktreeChatResult, _plan: WorktreeChatPlan) => {
+    onCreated(result.chat.chat);
   };
   const choiceState = (agent: AgentEntry): ChoiceState =>
     agent.availability.state === "checking"
@@ -315,18 +302,33 @@ export function NewChat({
   const ready = selected ? readyLine(selected) : null;
   // A worktree chat never shares the project folder, so only Local waits on its running chats.
   const busy = !worktreeMode && preview !== null && preview.busy_chats.length > 0;
-  const finished = created.type === "done";
   const canCreate =
-    finished ||
-    (created.type === "idle" &&
-      selected !== null &&
-      (state.folder !== null || folderId !== "") &&
-      !organization.busy &&
-      !worktree.creating &&
-      !state.creating &&
-      state.maintenanceBusy !== "update");
+    selected !== null &&
+    (!workspace || retainedLoaded) &&
+    !managedPicked &&
+    (state.folder !== null || folderId !== "") &&
+    !organization.busy &&
+    !worktree.creating &&
+    !state.creating &&
+    state.maintenanceBusy !== "update";
   const chosenFolder = preview?.folder.path ?? state.folder;
-  const projects = workspace ? (organization.data?.projects ?? []) : [];
+  const projects = workspace
+    ? (organization.data?.projects ?? [])
+        .map((project) => ({ ...project, folders: project.folders.filter(sourceFolder) }))
+        .filter((project) => project.folders.length > 0)
+    : [];
+  const selectedProject = projects.find((project) =>
+    project.folders.some((folder) => folder.id === knownFolder),
+  );
+  const recoveries = retained.filter(
+    (record) =>
+      (!selectedProject ||
+        selectedProject.folders.some(
+          (folder) => folder.path && sameFolder(folder.path, record.source),
+        )) &&
+      (!organization.data?.chats.some((chat) => chat.chat.id === record.chat_id) ||
+        !["ready", "retired"].includes(record.state)),
+  );
   const selectedState = selected ? choiceState(selected) : null;
   return (
     <form
@@ -335,11 +337,7 @@ export function NewChat({
       data-testid="new-chat"
       onSubmit={(event) => {
         event.preventDefault();
-        if (created.type === "done") {
-          onCreated(created.result.chat.chat);
-          return;
-        }
-        if (created.type !== "idle") return;
+        if (!canCreate || (busy && !allowBusy)) return;
         if (!workspace) {
           void draft.create().then((chat) => {
             if (chat) onCreated(chat);
@@ -557,33 +555,37 @@ export function NewChat({
             type="submit"
             className="g-button g-button-primary"
             data-testid="new-chat-create"
-            disabled={!canCreate || (busy && !allowBusy && !finished)}
+            disabled={!canCreate || (busy && !allowBusy)}
           >
-            {finished
-              ? "Open chat"
-              : created.type === "setup"
-                ? "Setting up…"
-                : created.type === "starting"
-                  ? "Starting…"
-                  : state.creating || worktree.creating
-                    ? "Creating…"
-                    : "Create"}
+            {state.creating || worktree.creating ? "Creating…" : "Create"}
           </button>
         </div>
       </div>
       {/* Under the card: where it works, then the agent's facts, consent, warnings and errors. */}
       <div className="new-chat-below">
-        {created.type === "idle" ? (
-          <WorktreeChip
-            view={worktree}
-            busyChats={preview?.busy_chats.length ?? 0}
-            openRef={openChip}
-            onPropose={(change, field) => folderChoice.propose(change, field)}
-            onClearError={() => folderChoice.clearError()}
-          />
-        ) : (
-          <SetupStatus created={created} agentName={selected?.name ?? "The agent"} />
-        )}
+        {managedPicked ? (
+          <p className="ui-error" role="alert">
+            This folder is a managed worktree on {managedPicked.branch}. Choose its original project
+            folder: {managedPicked.source}.
+          </p>
+        ) : null}
+        {recoveryError ? (
+          <p role="alert" className="ui-error">
+            Could not load retained worktrees: {recoveryError}
+          </p>
+        ) : null}
+        <WorktreeRecoveryList
+          records={recoveries}
+          api={recoveryApi}
+          onChanged={() => setRecoveryRevision((value) => value + 1)}
+        />
+        <WorktreeChip
+          view={worktree}
+          busyChats={preview?.busy_chats.length ?? 0}
+          openRef={openChip}
+          onPropose={(change, field) => folderChoice.propose(change, field)}
+          onClearError={() => folderChoice.clearError()}
+        />
         {preview && busy ? (
           <div className="new-chat-busy">
             <strong>This folder has active work</strong>
@@ -709,110 +711,6 @@ export function NewChat({
           </details>
         ) : null}
       </div>
-      {created.type === "setup" && setupTransport ? (
-        <TerminalSheet
-          agentId="worktree-setup"
-          agentName={created.result.worktree.branch}
-          purpose="setup"
-          transport={setupTransport}
-          review={<SetupReview result={created.result} plan={created.plan} />}
-          onFinished={(exit) => {
-            setupExit.current = exit;
-            // A clean setup goes straight on to the agent; a failed one stays open to be read.
-            if (exit === 0) void finishSetup(created.result);
-          }}
-          onClose={() => void finishSetup(created.result)}
-        />
-      ) : null}
     </form>
-  );
-}
-
-/**
- * Where a worktree chat stands after Create: its setup command waiting in the owned terminal, the
- * agent starting, or the chat ready with what is worth reading before it opens.
- */
-export function SetupStatus({
-  created,
-  agentName,
-}: {
-  readonly created: Exclude<Created, { type: "idle" }>;
-  readonly agentName: string;
-}) {
-  const { result } = created;
-  const branch = <code className="new-chat-branch">{result.worktree.branch}</code>;
-  const copied = result.setup?.copied.length ?? 0;
-  if (created.type === "done")
-    return (
-      <div className="new-chat-created" data-testid="new-chat-created">
-        <strong className="new-chat-created-title">{branch} is ready in its own folder</strong>
-        {created.notes.map((note) => (
-          <p key={note}>{note}</p>
-        ))}
-      </div>
-    );
-  return (
-    <div className="new-chat-worktree" data-testid="new-chat-setup" data-test-phase={created.type}>
-      <p className="new-chat-worktree-status" role="status">
-        <PixelLoader size={12} tempo="tool" />
-        <span className="new-chat-worktree-status-text">
-          {created.type === "setup" ? (
-            <>Setting up {branch}</>
-          ) : (
-            <>
-              Starting {agentName} in {branch}
-            </>
-          )}
-        </span>
-      </p>
-      {created.type === "setup" ? (
-        <p className="new-chat-worktree-note">
-          {copied ? `Copied ${copied} setup ${copied === 1 ? "file" : "files"}. ` : ""}
-          {agentName} starts once the setup command has run.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** The reviewed setup command, as the terminal sheet's rows: where it runs, what it runs. */
-export function SetupReview({
-  result,
-  plan,
-}: {
-  readonly result: WorktreeChatResult;
-  readonly plan: WorktreeChatPlan;
-}) {
-  const command = plan.setup?.command ?? null;
-  const copied = result.setup?.copied ?? [];
-  return (
-    <dl className="new-chat-setup-review" aria-label="Setup command review">
-      <dt>Folder</dt>
-      <dd>
-        <code className="new-chat-setup-value">{result.worktree.path}</code>
-      </dd>
-      {copied.length ? (
-        <>
-          <dt>Copied</dt>
-          <dd>
-            {copied.map((path) => (
-              <code key={path} className="new-chat-setup-value">
-                {path}
-              </code>
-            ))}
-          </dd>
-        </>
-      ) : null}
-      {command ? (
-        <>
-          <dt>Command</dt>
-          <dd>
-            <code className="new-chat-setup-value">
-              {[command.program, ...command.args].join(" ")}
-            </code>
-          </dd>
-        </>
-      ) : null}
-    </dl>
   );
 }

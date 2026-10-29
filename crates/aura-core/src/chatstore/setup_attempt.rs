@@ -176,6 +176,19 @@ mod tests {
         let mut db = super::super::test_support::TestDb::new();
         let chat = db.chat("/workspace");
         let legacy = db.chat("/legacy");
+        super::super::rows::queue_put(
+            db.conn(),
+            "dev",
+            &super::super::QueuedRow {
+                id: "queued-before-restart".into(),
+                chat_id: chat.clone(),
+                text: "keep queued".into(),
+                parts: vec![],
+                held: false,
+                created_at: 1,
+            },
+        )
+        .unwrap();
         db.conn()
             .execute(
                 "INSERT INTO worktree_setup_attempts VALUES (?1,'dev','tree',1,'running',NULL)",
@@ -200,5 +213,6 @@ mod tests {
             WorktreeSetupState::Awaiting
         );
         assert!(read(db.conn(), "dev", &legacy).unwrap().is_none());
+        assert!(super::super::rows::queued(db.conn(), &chat).unwrap()[0].held);
     }
 }

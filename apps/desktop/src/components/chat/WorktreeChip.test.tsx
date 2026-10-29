@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { WorktreeChatPlan } from "../../bindings";
 import { DEFAULT_WORKTREE_OPTIONS, type WorktreeChoiceView } from "../../lib/chat/worktreeChoice";
-import { SetupStatus, setupNote } from "./NewChat";
 import { recreateLead } from "./RecreateWorktreeDialog";
 import { chipText, setupLine, WorktreeChip } from "./WorktreeChip";
 
@@ -168,80 +167,6 @@ describe("the worktree chip", () => {
         view({ plan: { ...PLAN, setup: { files: [], command: { program: "make", args: [] } } } }),
       ),
     ).toBe("Runs make.");
-  });
-});
-
-describe("after Create", () => {
-  const result = {
-    chat: {
-      chat: {
-        id: "c1",
-        title: null,
-        agent_id: "claude",
-        agent_name: "Claude Code",
-        folder: "/worktrees/app-7f3a",
-        folder_state: "ok" as const,
-        status: "stopped" as const,
-        needs_attention: false,
-        created_at: 1,
-        updated_at: 1,
-      },
-      project_id: "p",
-      folder_id: "f",
-      pinned: false,
-      archived: false,
-    },
-    worktree: {
-      id: "w",
-      chat_id: "c1",
-      source: "/code/app",
-      path: "/worktrees/app-7f3a",
-      branch: "aura/7f3a9c2e",
-      base_commit: "abc",
-      state: "ready",
-      detail: null,
-      created_at: 1,
-    },
-    setup: { copied: [".env.local", "config/dev.json"], command_token: "cmd", warning: null },
-    started: false,
-    warnings: [],
-  };
-
-  it("says the setup command runs first, then the agent", () => {
-    const html = renderToStaticMarkup(
-      <SetupStatus
-        created={{ type: "setup", result, plan: PLAN, token: "cmd" }}
-        agentName="Claude Code"
-      />,
-    );
-    expect(html).toContain('data-test-phase="setup"');
-    expect(html).toContain('Setting up <code class="new-chat-branch">aura/7f3a9c2e</code>');
-    expect(html).toContain(
-      "Copied 2 setup files. Claude Code starts once the setup command has run.",
-    );
-  });
-
-  it("lists what is worth reading before the chat opens", () => {
-    const html = renderToStaticMarkup(
-      <SetupStatus
-        created={{ type: "done", result, notes: ["The setup command exited with code 1."] }}
-        agentName="Claude Code"
-      />,
-    );
-    expect(html).toContain('data-testid="new-chat-created"');
-    expect(html).toContain(
-      '<code class="new-chat-branch">aura/7f3a9c2e</code> is ready in its own folder',
-    );
-    expect(html).toContain("The setup command exited with code 1.");
-  });
-
-  it("puts a setup that did not finish cleanly into words", () => {
-    expect(setupNote(0)).toBeNull();
-    expect(setupNote(2)).toBe(
-      "The setup command exited with code 2. Review setup from the chat's Git panel.",
-    );
-    expect(setupNote("closed")).toContain("did not run to the end");
-    expect(setupNote(null)).toContain("without an exit status");
   });
 });
 

@@ -353,6 +353,22 @@ async fn saved_setup_runs_after_creation_and_holds_the_agent_for_the_command() {
         aura_protocol::worktree_setup::WorktreeSetupState::Running
     );
     drop(launch);
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let attempt = rig
+                .store
+                .read_setup_attempt(&result.chat.chat.id)
+                .await
+                .unwrap()
+                .unwrap();
+            if attempt.state == aura_protocol::worktree_setup::WorktreeSetupState::Failed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("launch failure is persisted by its Rust owner");
 }
 
 #[tokio::test]

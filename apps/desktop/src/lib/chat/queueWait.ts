@@ -9,7 +9,8 @@ export type QueueAction =
   /** Starts the agent again after a failed start, or starts a stopped one. */
   | "start"
   /** Recreates this chat's missing worktree folder. */
-  | "recreate";
+  | "recreate"
+  | "setup";
 
 export interface QueueWaitView {
   readonly reason: QueueWait["reason"];
@@ -61,6 +62,19 @@ export function queueWaitView(
     failed = false,
   ): QueueWaitView => ({ reason: wait.reason, text, detail, action, failed });
   switch (wait.reason) {
+    case "setup": {
+      const failed = wait.state === "failed" || wait.state === "interrupted";
+      return view(
+        failed
+          ? (wait.detail ?? "Setup failed. Retry setup above.")
+          : wait.state === "running"
+            ? "Setup is running"
+            : "Waiting for setup review",
+        failed ? "setup" : null,
+        "Your messages stay queued until setup succeeds.",
+        failed,
+      );
+    }
     case "starting":
       return view(`Starting ${agent}`, null, "Your message goes as soon as it is ready.");
     case "working":
