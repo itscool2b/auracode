@@ -4407,8 +4407,8 @@ The two General preferences tests also passed, including rejection of an OpenCod
 All-target Clippy on aura-agents and aura-core with account-sync passed with warnings denied.
 
 Controlled Windows measurements with temporary homes and delayed fake CLIs: cold first usable
-607.5004 ms, fast provider 1.0036115 s while Claude remained blocked, all finished 1.0958032 s;
-warm first usable 2.5181 ms and all finished 2.9446 ms. These measure the actual core stream with
+648.9763 ms, fast provider 1.1081209 s while Claude remained blocked, all finished 1.2424665 s;
+warm first usable 2.5796 ms and all finished 3.0168 ms. These measure the actual core stream with
 fixtures, not owner CLI performance. Generated-binding typecheck remains an integration gate for
 the coordinator. Standalone desktop checking stopped before app code with missing third-party
 crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
@@ -4448,3 +4448,14 @@ with warnings denied, and frontend API/terminal/setup tests 15/15. Existing work
 review containers replace compact file rows and the single-row chat banner for rich recovery/setup
 content; no CSS was changed. Root's integrated browser/layout recheck remains pending for those
 container changes. Native bindings remain generated only by the integration owner.
+Independent review found two admission races in this piece. Profile drain cancellation now holds a
+scoped pause that rejects library requests registered after drain began, including a command that
+already acquired its profile lease. Failed or abandoned transitions drop that pause and deliberately
+reopen the current manager; successful retired managers remain shut down. Listing resolution now
+captures the configuration revision before resolving the connection and installation, validates it
+under the listing admission lock, and retries if the selection changed in that gap. Deterministic
+boundary tests passed: detector admission 1/1, all agent unit tests 67/67, provider and selection
+integration 6/6 each, core progressive integration 5/5 and core assembly 4/4. All-target Clippy for
+aura-agents and aura-core with account-sync passed with warnings denied. The two native profile
+lease tests are written but remain unrun because the desktop dependency graph is blocked before
+app code. They remain an explicit integration gate.

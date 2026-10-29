@@ -352,14 +352,17 @@ impl AppState {
             generation: self.access.generation.load(Ordering::Acquire),
         }
     }
-    pub(crate) async fn wait_profile_commands(&self) {
-        if let Some(chats) = &lock(&self.runtime).chats {
-            chats.manager.cancel_plugin_refresh();
-        }
+    pub(crate) async fn wait_profile_commands(
+        &self,
+    ) -> Option<aura_core::session::PluginRefreshPause> {
+        let library_pause = lock(&self.runtime)
+            .chats
+            .as_ref()
+            .map(|chats| chats.manager.pause_plugin_refresh());
         loop {
             let changed = self.access.changed.notified();
             if self.access.active.load(Ordering::Acquire) == 0 {
-                return;
+                return library_pause;
             }
             changed.await;
         }
