@@ -74,6 +74,12 @@ old profile's refresh before draining its command leases, and shutdown cancels o
 The renderer ignores callbacks and replies after a newer request or unmount, including development
 StrictMode remounts. These lifetime checks do not move listing or inventory decisions out of Rust.
 
+A controlled Windows run using temporary homes and fake CLIs measured cold first usable sections
+at 607.5004 ms, the fast provider at 1.0036115 s while Claude remained blocked, and all finished at
+1.0958032 s. Warm first usable sections took 2.5181 ms and all finished took 2.9446 ms. The fixture
+adds a 100 ms delay to Codex and releases Claude only after Codex publishes. These are fixture
+measurements of the core stream, not timings promised for installed vendor CLIs.
+
 ## Harness status
 
 Detection computes one status per agent (`aura-agents::harness`) from the version probe and the
@@ -107,7 +113,7 @@ is its own transaction) on the group's heading. Every held item names its reason
 
 ## Checks
 
-- Rust: `cargo test -p aura-agents --lib plugins harness`, `cargo test -p aura-agents --test plugins`
+- Rust: `cargo test -p aura-agents --lib`, `cargo test -p aura-agents --test plugins`
   (fake CLIs that answer only from `fake-listing.json` in the temporary home named by
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`), `cargo test -p aura-config --test
   sync_agents --test extensions`, `cargo test -p aura-core --features account-sync --lib

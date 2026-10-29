@@ -275,6 +275,7 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
       ...complete,
       agents: complete.agents.map((agent) => ({
         ...agent,
+        installed: agent.agent_id === "pi" ? false : agent.installed,
         harness: { state: "checking" },
         updated_at: null,
         features: agent.features.map((feature) =>

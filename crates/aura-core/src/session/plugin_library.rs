@@ -4,6 +4,7 @@
 //! Assembly is pure; [`SessionManager::plugin_library`] gathers the facts.
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use aura_agents::plugins::AgentListings;
 use aura_config::{Inventory, Item, Kind, Provider, extensions::Extensions};
@@ -546,25 +547,13 @@ impl SessionManager {
         if refresh {
             self.deps().detector.prepare_plugin_refresh().await;
         }
-        use futures::{StreamExt, stream};
-        let jobs = stream::iter(["claude", "codex", "pi", "opencode"])
-            .map(|id| async move {
-                if refresh {
-                    self.deps().detector.refresh_plugin_provider(id).await;
-                }
-                if id == "opencode" {
-                    return (id, None);
-                }
-                (
-                    id,
-                    self.deps()
-                        .detector
-                        .plugin_listings(id, refresh, crate::time::now_millis())
-                        .await,
-                )
-            })
-            .buffer_unordered(2);
-        tokio::pin!(jobs);
+        use futures::{StreamExt, stream::FuturesUnordered};
+        let detector = self.deps().detector.clone();
+        let mut pending = ["claude", "codex", "pi", "opencode"].into_iter();
+        let mut jobs = FuturesUnordered::new();
+        for id in pending.by_ref().take(2) {
+            jobs.push(refresh_provider(detector.clone(), id, refresh));
+        }
         while let Some((id, listing)) = jobs.next().await {
             if let Some(listing) = listing {
                 facts.listings.insert(id.into(), listing);
@@ -574,9 +563,30 @@ impl SessionManager {
             if !publish(library.clone()) {
                 break;
             }
+            if let Some(id) = pending.next() {
+                jobs.push(refresh_provider(detector.clone(), id, refresh));
+            }
         }
         Ok(library)
     }
+}
+
+async fn refresh_provider(
+    detector: Arc<aura_agents::Detector>,
+    id: &'static str,
+    refresh: bool,
+) -> (&'static str, Option<AgentListings>) {
+    if refresh {
+        detector.refresh_plugin_provider(id).await;
+    }
+    let listing = if id == "opencode" {
+        None
+    } else {
+        detector
+            .plugin_listings(id, refresh, crate::time::now_millis())
+            .await
+    };
+    (id, listing)
 }
 
 #[cfg(test)]

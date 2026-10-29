@@ -4250,7 +4250,17 @@ for that menu's actual first focused item.
 
 The controlled progressive browser fixture and the existing Plugin library/sync checks passed in
 Chromium and WebKit with clean axe audits. The menu and item layout probes passed all eight
-engine/viewport views. Focused Vitest covered progressive requests, stale replies/errors/completion,
-unmount/remount and existing section wording. Rust compilation/integration, latency measurements
-and generated-binding typecheck are pending the shared build lane. No owner configuration, paid
-agent runs, hosted CI, deployments or releases were used.
+engine/viewport views. Focused Vitest passed 13 tests for progressive requests, stale replies/errors/completion,
+unmount/remount, checking detection and existing section wording. aura-agents passed all 109 unit
+and integration tests, including the shared fixture environment changes. The core Plugin library
+assembly and account-sync integration suites passed four tests each.
+The two General preferences tests also passed, including rejection of an OpenCode sync action.
+All-target Clippy on aura-agents and aura-core with account-sync passed with warnings denied.
+
+Controlled Windows measurements with temporary homes and delayed fake CLIs: cold first usable
+607.5004 ms, fast provider 1.0036115 s while Claude remained blocked, all finished 1.0958032 s;
+warm first usable 2.5181 ms and all finished 2.9446 ms. These measure the actual core stream with
+fixtures, not owner CLI performance. Generated-binding typecheck remains an integration gate for
+the coordinator. Standalone desktop checking stopped before app code with missing third-party
+crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
+were cleaned. No owner configuration, paid agent runs, hosted CI, deployments or releases were used.

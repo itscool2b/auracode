@@ -43,6 +43,8 @@ async function checkProgressive(page, engine) {
     .waitFor();
   await page.getByRole("button", { name: "review-changes actions" }).waitFor();
   assert.equal(await page.getByText("Reading what your agents use…").count(), 0);
+  await agents.getByRole("button", { name: "Pi", exact: true }).click();
+  await page.getByText("Checking installation…", { exact: false }).waitFor();
   await page.evaluate(() => window.pluginsFixture.finishProvider("codex"));
   await agents.getByRole("button", { name: "Codex", exact: true }).click();
   await page.getByText("From codex mcp list --json").waitFor();

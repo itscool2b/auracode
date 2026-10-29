@@ -1,4 +1,6 @@
 //! Controlled fake CLIs and temporary homes only. Measure the actual core streaming path.
+#![cfg(test)]
+
 #[path = "../../aura-agents/tests/common/mod.rs"]
 mod machine;
 mod support;
@@ -10,6 +12,9 @@ use aura_process::{EnvResolver, LogFactory};
 use aura_protocol::plugins::{ListingState, PluginFeature, PluginLibrary};
 use machine::Machine;
 use tokio::{runtime::Handle, sync::mpsc, time::Instant};
+
+type Refresh = tokio::task::JoinHandle<Result<PluginLibrary, aura_core::session::SessionError>>;
+type Updates = mpsc::UnboundedReceiver<(Duration, PluginLibrary)>;
 
 struct Fixture {
     machine: Machine,
@@ -96,13 +101,7 @@ impl Fixture {
         }
     }
 
-    fn start(
-        &self,
-        refresh: bool,
-    ) -> (
-        tokio::task::JoinHandle<Result<PluginLibrary, aura_core::session::SessionError>>,
-        mpsc::UnboundedReceiver<(Duration, PluginLibrary)>,
-    ) {
+    fn start(&self, refresh: bool) -> (Refresh, Updates) {
         let manager = self.manager.clone();
         let (tx, rx) = mpsc::unbounded_channel();
         let started = Instant::now();
