@@ -828,6 +828,24 @@ try {
     assert.ok(launcher, `Unsupported engine: ${engine}`);
     await inspect(engine, launcher);
   }
+  // Keep real workspace-to-header routing in the normal chat acceptance gate, on its owned server.
+  await new Promise((complete, reject) => {
+    const header = spawn(
+      process.execPath,
+      [
+        resolve(app, "scripts/check-header-labels.mjs"),
+        "--server",
+        url,
+        "--engines",
+        values.engines,
+      ],
+      { cwd: app, windowsHide: true, stdio: "inherit" },
+    );
+    header.once("error", reject);
+    header.once("exit", (code, signal) =>
+      code === 0 ? complete() : reject(new Error(`Header acceptance failed (${code ?? signal})`)),
+    );
+  });
 } finally {
   server?.kill();
 }
