@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use zeroize::{Zeroize, Zeroizing};
 
+mod lease;
 mod passphrase;
 pub use passphrase::PassphraseStore;
 mod directory;
@@ -93,10 +94,24 @@ pub trait SecretStore: Send + Sync {
 
 pub struct NativeStore {
     store: Arc<keyring_core::CredentialStore>,
+    _lease: aura_process::locked_file::LockedFile,
 }
 impl NativeStore {
     /// This constructs a provider, without reading or writing any credential.
     pub fn new() -> Result<Self> {
+        Self::open(false, true)
+    }
+    /// Exclusively owns the native service until dropped. Acquire after target apps exit.
+    pub fn for_cleanup() -> Result<Self> {
+        Self::open(true, true)
+    }
+    /// Read-only review: never creates even the empty lease file.
+    pub fn for_review() -> Result<Self> {
+        Self::open(false, false)
+    }
+    fn open(exclusive: bool, create: bool) -> Result<Self> {
+        let parent = dirs::data_local_dir().ok_or(VaultError::Busy)?;
+        let _lease = lease::acquire(&parent.join("si.auracode.sync.v1.lock"), exclusive, create)?;
         #[cfg(windows)]
         let store = windows_native_keyring_store::Store::new().map_err(platform)?;
         #[cfg(target_os = "macos")]
@@ -104,7 +119,7 @@ impl NativeStore {
         #[cfg(not(any(windows, target_os = "macos")))]
         return Err(VaultError::Unavailable);
         #[cfg(any(windows, target_os = "macos"))]
-        Ok(Self { store })
+        Ok(Self { store, _lease })
     }
     /// Every entry in auracode's own service, by name only. The data cleanup reads the data-folder
     /// indexes among them to tell which account keys another data folder still uses, so it never

@@ -13,6 +13,8 @@ publish.workspace = true
 sqlcipher = ["dep:rusqlite"]
 
 [dependencies]
+aura-process.workspace = true
+dirs.workspace = true
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "zeroize"] }
 base64 = "0.22.1"
 cap-std = "4.0.3"
@@ -34,7 +36,7 @@ zeroize = { version = "1.9.1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1.0", default-features = false }
-# The data cleanup's sweep of auracode's own Credential Manager targets (vault.rs). Raw bindings,
+# The data cleanup's listing of auracode's own Credential Manager targets (vault.rs). Raw bindings,
 # already in the tree; the keyring store's own search would read every credential's metadata.
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher-vendored-openssl"] }

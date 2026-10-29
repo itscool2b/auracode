@@ -69,6 +69,33 @@ impl Default for Index {
     }
 }
 impl Index {
+    pub(super) fn decode(bytes: &[u8], origin: &str) -> Result<Self> {
+        let index: Self = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+        if !(1..=2).contains(&index.version)
+            || index.accounts.len() > LIMIT
+            || (index.version == 1 && index.removal.is_some())
+        {
+            return Err(invalid());
+        }
+        let mut profiles = std::collections::HashSet::new();
+        for (account, profile) in &index.accounts {
+            VaultEntry::new(origin, account).map_err(|_| invalid())?;
+            if let Some(profile) = profile {
+                let parsed = uuid::Uuid::parse_str(profile).map_err(|_| invalid())?;
+                if parsed.hyphenated().to_string() != *profile || !profiles.insert(profile) {
+                    return Err(invalid());
+                }
+            }
+        }
+        if index
+            .removal
+            .as_ref()
+            .is_some_and(|receipt| !receipt.valid(&index))
+        {
+            return Err(invalid());
+        }
+        Ok(index)
+    }
     pub fn ensure(&mut self, account: &str) -> Result<()> {
         if !self.accounts.contains_key(account) && self.accounts.len() >= LIMIT {
             return Err(error::failure(
@@ -88,31 +115,7 @@ impl Index {
             let Some(bytes) = store.load(&entry).map_err(error::vault)? else {
                 return Ok(Self::default());
             };
-            let index: Self = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-            if !(1..=2).contains(&index.version)
-                || index.accounts.len() > LIMIT
-                || (index.version == 1 && index.removal.is_some())
-            {
-                return Err(invalid());
-            }
-            let mut profiles = std::collections::HashSet::new();
-            for (account, profile) in &index.accounts {
-                VaultEntry::new(&origin, account).map_err(|_| invalid())?;
-                if let Some(profile) = profile {
-                    let parsed = uuid::Uuid::parse_str(profile).map_err(|_| invalid())?;
-                    if parsed.hyphenated().to_string() != *profile || !profiles.insert(profile) {
-                        return Err(invalid());
-                    }
-                }
-            }
-            if index
-                .removal
-                .as_ref()
-                .is_some_and(|receipt| !receipt.valid(&index))
-            {
-                return Err(invalid());
-            }
-            Ok(index)
+            Self::decode(&bytes, &origin)
         })
         .await
         .map_err(|_| invalid())?

@@ -49,7 +49,9 @@ fn vault_path(directory: &std::path::Path, entry: &VaultEntry) -> std::path::Pat
 #[test]
 fn named_native_operations_use_only_app_scope_and_local_persistence() {
     // This adapter only touches keyring-core's process-memory mock, never the OS credential store.
+    let temp = tempfile::tempdir().unwrap();
     let store = NativeStore {
+        _lease: super::lease::acquire(&temp.path().join("lease"), false, true).unwrap(),
         store: Arc::new(CheckedMock {
             inner: keyring_core::mock::Store::new().unwrap(),
         }),
