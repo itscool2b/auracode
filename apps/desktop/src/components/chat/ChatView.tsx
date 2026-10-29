@@ -54,6 +54,7 @@ export function ChatView({
   transport,
   listed,
   project = null,
+  folderLabel = null,
   storage,
   agents,
   onOpenChat,
@@ -68,6 +69,8 @@ export function ChatView({
   readonly listed: ChatSummary | null;
   /** The name of the project the chat belongs to, when the workspace knows it. */
   readonly project?: string | null;
+  /** Rust's display label for the chat's selected project folder, including managed branches. */
+  readonly folderLabel?: string | null;
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
@@ -516,6 +519,7 @@ export function ChatView({
         state={state}
         listed={listed}
         project={project}
+        folderLabel={folderLabel}
         agent={agent}
         resumable={resumable}
         onStart={startSession}
