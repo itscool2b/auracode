@@ -563,6 +563,14 @@ async function inspect(engine, launcher) {
     });
     const stickyPrompt = page.getByTestId("sticky-prompt");
     await stickyPrompt.waitFor();
+    const stickyBounds = await stickyPrompt.boundingBox();
+    const visibleTranscript = await page.getByTestId("transcript").boundingBox();
+    assert.ok(
+      stickyBounds &&
+        visibleTranscript &&
+        stickyBounds.y + stickyBounds.height <= visibleTranscript.y + 0.5,
+      "the sticky prompt covers transcript text instead of reserving space",
+    );
     await stickyPrompt.focus();
     await page.keyboard.press("Enter");
     await stickyPrompt.waitFor({ state: "detached" });

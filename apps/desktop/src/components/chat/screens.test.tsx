@@ -900,6 +900,31 @@ describe("turns and the transcript", () => {
     expect(html.indexOf("Load earlier")).toBeLessThan(html.indexOf("Earlier part of this turn"));
   });
 
+  it("shows an attachment-only sending message without inventing a text preview", async () => {
+    const state = await stateWith(historyPage("c1", []), {
+      session: sessionInfo({
+        status: "running",
+        sending: {
+          prompt_id: "image-prompt",
+          text: "",
+          parts: [
+            { type: "image", blob: "a".repeat(64), mime: "image/png" },
+            { type: "mention", path: "src/main.rs" },
+          ],
+          created_at: 123,
+        },
+      }),
+    });
+    const html = renderToStaticMarkup(
+      <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(html).toContain('data-test-prompt-id="image-prompt"');
+    expect(html).toContain("Attached image (image/png)");
+    expect(html).toContain("Mentioned file: src/main.rs");
+    expect(html).toContain("Sending");
+    expect(html.match(/data-test-kind="user"/g)).toHaveLength(1);
+  });
+
   it("labels each turn with the agent that ran it after the chat switched agents", async () => {
     const page = historyPage(
       "c1",

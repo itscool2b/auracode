@@ -457,7 +457,9 @@ describe("the session's live state", () => {
       const texts = Array.from({ length: 12 }, (_, index) => `${prefix} message ${index}`);
       const pending = texts.map((text) => store.send(text));
       const acknowledge = async () => {
-        answers.forEach((resolve, index) => resolve({ prompt_id: `p${index}`, queued: true }));
+        answers.forEach((resolve, index) => {
+          resolve({ prompt_id: `p${index}`, queued: true });
+        });
         expect(await Promise.all(pending)).toEqual(texts.map(() => true));
       };
       if (ackOrder === "before") await acknowledge();

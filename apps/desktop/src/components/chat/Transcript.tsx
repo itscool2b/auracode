@@ -246,11 +246,11 @@ export function Transcript({
           />
           {sending.parts.some((part) => part.type !== "text") ? (
             <ul aria-label="Message attachments">
-              {sending.parts.flatMap((part, index) =>
+              {sending.parts.flatMap((part) =>
                 part.type === "image" ? (
-                  <li key={`image:${index}`}>Attached image ({part.mime})</li>
+                  <li key={`image:${part.blob}`}>Attached image ({part.mime})</li>
                 ) : part.type === "mention" ? (
-                  <li key={`mention:${index}`}>Mentioned file: {part.path}</li>
+                  <li key={`mention:${part.path}`}>Mentioned file: {part.path}</li>
                 ) : (
                   []
                 ),
@@ -295,8 +295,10 @@ export function Transcript({
         : new Map(current).set(key, { phase: focusedGroupPhase, open: true }),
     );
   }, [focusedGroupKey, focusedGroupPhase]);
+  const [promptHost, setPromptHost] = useState<HTMLDivElement | null>(null);
   return (
     <div className="chat-transcript-shell">
+      <div ref={setPromptHost} />
       <div
         ref={scrollRef}
         className="chat-transcript"
@@ -308,6 +310,7 @@ export function Transcript({
       >
         <DisclosureMemory.Provider value={disclosures}>
           <VirtualRows
+            promptHost={promptHost}
             rows={rows}
             leading={leading}
             scroller={scroller}

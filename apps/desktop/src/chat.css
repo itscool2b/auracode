@@ -1540,24 +1540,20 @@
 /* ---------- Sticky prompt and jump to latest (6.4) ---------- */
 
 .chat-sticky-prompt {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  z-index: 2;
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
   box-sizing: border-box;
   width: min(var(--g-app-column), calc(100% - 32px));
   height: 32px;
+  margin: 0 auto;
   padding: 0 var(--g-space-16);
   border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
   background-color: var(--g-surface-3);
   box-shadow: 0 0 0 1px var(--g-line);
   color: var(--g-fg-1);
   text-align: left;
-  translate: -50% 0;
-  animation: chat-prompt-peek var(--g-dur-base) var(--g-ease-out);
 }
 
 .chat-sticky-prompt > span:first-child {
