@@ -4294,3 +4294,39 @@ existing serde/specta/process_wrap/windows dependency graph. Its new dry-run dis
 argument tests remain unexecuted. Generated bindings and integrated typechecking remain with the
 coordinator. Native secure-store cleanup has not been run, including dry-run; no real credentials,
 application data or agent homes were accessed. Native macOS integration remains unverified.
+
+## 2026-10-29: durable revert recovery
+
+Reverts save every selected original and its recovery manifest before the first working-file
+mutation. Local profiles use private `checkpoints/reverts/<token>` groups. Account profiles keep
+token-bound encrypted checkpoint child groups, including after a partial revert. The same-volume
+swap still checks the actual renamed file before publishing replacement bytes and refuses to
+replace a concurrent writer's path. Complete and partial reverts copy, verify and sync surviving
+swap objects before unlinking their sources, so the durable store can be on another volume.
+
+Legacy cleanup now requires bounded recovery metadata for an existing checkpoint in the same chat,
+folder and canonical root, with expected regular-file entries. Invalid manifests, arbitrary UUID
+directories, links, junctions and unexpected contents stay untouched. Interrupted cleanup retains
+its earlier content catalogs and can resume. Storage or cleanup failure is an explicit revert error;
+if saving and no-clobber restoration both fail, the only surviving copy stays available at the
+reported recovery path. Recovery browsing/export still needs its separate UI integration.
+
+Focused checkpoint and session-checkpoint tests pass with Account encryption enabled. They cover
+Local/Account success and partial failure, backup failure before mutation, concurrent writes,
+copy-path recovery, interrupted cleanup, invalid manifests, Windows junction preservation and
+ciphertext-only Account recovery. Formatting and instruction parity were checked. Full integrated
+checks, binding regeneration and macOS qualification remain integration gates.
+
+
+### Revert recovery review follow-up
+
+Independent review found missing sync of the first Local recovery root's parent, missing file and
+parent sync before removing an emergency-restored original's staging link, and a legacy validation
+handle dropped before cleanup. Recovery now retains that capability and exact journal, rejects
+directory or journal substitution, syncs Local recovery parents on creation and retry, and keeps a
+staged original if either emergency restoration sync fails. Windows directory-entry crash durability
+is explicitly unverified because the existing directory sync helper is Unix-only. Added deterministic
+parent/file sync failure and directory/journal substitution fixtures. The amended checkpoint and
+session-checkpoint suite passes 33 tests. Aura-core Clippy passes with Account sync enabled and
+with no default features, including test targets and warnings denied. Formatting, instruction parity
+and diff checks pass. No native app walkthrough or cleanup of real data was performed.

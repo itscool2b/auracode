@@ -23,9 +23,17 @@ profile ID and a generic Account label rather than persisting sign-in email addr
 manifest. The leftover-process journal records PID/start time, fixed agent labels and reviewed
 daemon matching rules; it does not store prompts, cwd or chat paths.
 
-Explicit worktree checkouts and `.auracode-revert-*` recovery copies are user workspace files. They
-remain ordinary files, under the same visible create/revert controls that protect the user's index
-and preserve newer edits. They are not encrypted account-profile copies.
+Explicit worktree checkouts are user workspace files. They remain ordinary files, under the same
+visible create/revert controls that protect the user's index and preserve newer edits. A revert
+first saves selected originals and their manifest durably in app-owned storage. Local recovery
+uses private `checkpoints/reverts/<token>` directories; Account recovery uses encrypted checkpoint
+child groups and token-bound objects. The same-volume `.auracode-revert-*` swap verifies the file
+actually renamed before publishing a replacement. Complete and partial reverts copy, verify and
+sync surviving swap objects into recovery storage before removing the swap. Storage and cleanup
+failures are explicit result errors. If durable storage and no-clobber restoration both fail, the
+only surviving source copy is preserved and named for recovery. No plaintext durable backup goes
+into an Account profile. Legacy swaps migrate only after bounded recovery metadata identifies a
+known checkpoint for the current chat, folder and root and all entries are expected regular files.
 
 Before Account activation, a bounded no-follow inventory refuses known plaintext database/setup
 paths, nonempty protocol-log trees and old plaintext dead-letter journals. It preserves all refused

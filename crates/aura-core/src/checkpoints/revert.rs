@@ -1,4 +1,8 @@
 //! Reverts use a one-use content-bound preview and retain original files for recovery.
+//!
+//! Selected originals and a recovery manifest reach private durable storage before mutation.
+//! The transient same-volume swap verifies the actual renamed file before publishing replacement
+//! bytes. Finalization copies and verifies any surviving swap objects before removing them.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -12,6 +16,9 @@ use sha2::{Digest, Sha256};
 
 use super::{CheckpointError, Checkpoints, Manifest, Result, changes, scan};
 use scan::Fingerprint;
+
+/// The name a revert's working folder takes at the root of the folder it reverts.
+pub(super) const STAGING_PREFIX: &str = ".auracode-revert-";
 
 pub(super) struct Prepared {
     manifest: Manifest,
@@ -42,6 +49,8 @@ impl Checkpoints {
         let _guard = self.gate.lock().await;
         let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
         let operation = self.operation(folder_id, &manifest.root, false).await?;
+        self.sweep_reverts(&manifest.root, chat_id, folder_id)
+            .await?;
         let current = self.current(&operation, &manifest).await?;
         let changed = changes(&manifest.files, &current.files);
         let mut files = Vec::new();
@@ -151,9 +160,10 @@ impl Checkpoints {
             replacements.insert(path.clone(), bytes);
         }
         let token = token.to_owned();
+        let keep = self.recovery_store()?;
         tokio::task::spawn_blocking(move || {
             let _guard = guard;
-            apply(&prepared, &token, replacements)
+            apply(&prepared, &token, replacements, &keep)
         })
         .await
         .map_err(|_| {
@@ -171,57 +181,84 @@ fn apply(
     prepared: &Prepared,
     token: &str,
     replacements: BTreeMap<String, Replacement>,
+    keep: &super::recovery::Store,
+) -> Result<RevertResult> {
+    apply_with(prepared, token, replacements, keep, || {})
+}
+
+fn apply_with(
+    prepared: &Prepared,
+    token: &str,
+    replacements: BTreeMap<String, Replacement>,
+    keep: &super::recovery::Store,
+    before_swap: impl FnOnce(),
 ) -> Result<RevertResult> {
     let root = &prepared.manifest.root;
-    // Validate the entire selection before the first mutation. A changed byte, mode, type or
-    // missing file invalidates the preview instead of silently replacing newer work.
+    // Validate and save every selected original before the first working-folder mutation.
+    let mut originals = BTreeMap::new();
     for (path, expected) in &prepared.current {
-        let current = scan::read(root, path)?.map(|(fingerprint, _)| fingerprint);
-        if &current != expected {
+        let current = scan::read(root, path)?;
+        if &current.as_ref().map(|(fingerprint, _)| fingerprint.clone()) != expected {
             return Err(stale(path));
         }
+        originals.insert(path.clone(), current);
     }
-    let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
-    let backup_name = format!(".auracode-revert-{token}");
-    directory.create_dir(&backup_name)?;
-    let backup = directory.open_dir_nofollow(&backup_name)?;
-    let manifest = serde_json::json!({ "version": 1, "checkpoint_id": prepared.manifest.summary.id,
-        "files": prepared.current.keys().enumerate().map(|(index, path)| serde_json::json!({"path": path, "backup": format!("original-{index}")})).collect::<Vec<_>>() });
-    let mut journal = backup.open_with(
-        "recovery.json",
-        OpenOptions::new().write(true).create_new(true),
-    )?;
-    journal.write_all(
-        serde_json::to_string_pretty(&manifest)
-            .map_err(|_| {
-                CheckpointError::Message("Writing revert recovery metadata failed.".into())
-            })?
-            .as_bytes(),
-    )?;
-    journal.sync_all()?;
-    let recovery_path = root.join(&backup_name).to_string_lossy().into_owned();
     let mut result = RevertResult {
         applied: Vec::new(),
         error: None,
-        recovery_paths: vec![recovery_path],
+        recovery_paths: Vec::new(),
     };
-    for (index, (path, expected)) in prepared.current.iter().enumerate() {
-        let replacement = replacements.get(path).and_then(Option::as_ref);
-        match apply_file(
-            &directory,
-            &backup,
-            root,
-            path,
-            index,
-            expected.as_ref(),
-            replacement,
-        ) {
-            Ok(()) => result.applied.push(path.clone()),
-            Err(error) => {
-                result.error = Some(error.to_string());
-                break;
+    let operation = (|| -> Result<()> {
+        let group = keep.group(token)?;
+        result
+            .recovery_paths
+            .push(keep.path(token).to_string_lossy().into_owned());
+        let journal = super::recovery::Journal::new(&prepared.manifest, token, &prepared.current);
+        for (index, (_, original)) in originals.iter().enumerate() {
+            if let Some((_, bytes)) = original {
+                group.write(&format!("original-{index}"), bytes)?;
             }
         }
+        let encoded = serde_json::to_vec(&journal).map_err(std::io::Error::other)?;
+        group.write("recovery.json", &encoded)?;
+        before_swap();
+        let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
+        let backup_name = format!("{STAGING_PREFIX}{token}");
+        let builder = cap_std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        let builder = {
+            use cap_std::fs::DirBuilderExt;
+            let mut builder = builder;
+            builder.mode(0o700);
+            builder
+        };
+        directory.create_dir_with(&backup_name, &builder)?;
+        // Every error after creation, including journal writes and opening the swap, is finalized.
+        let mutation = (|| -> Result<()> {
+            let backup = directory.open_dir_nofollow(&backup_name)?;
+            super::recovery::write_new(&backup, "recovery.json", &encoded)?;
+            for (index, (path, expected)) in prepared.current.iter().enumerate() {
+                apply_file(
+                    &directory,
+                    &backup,
+                    root,
+                    path,
+                    index,
+                    expected.as_ref(),
+                    replacements.get(path).and_then(Option::as_ref),
+                )?;
+                result.applied.push(path.clone());
+            }
+            Ok(())
+        })();
+        if let Err(error) = mutation {
+            super::recovery::error(&mut result, error);
+        }
+        super::recovery::settle(&directory, &backup_name, &journal, &group, &mut result);
+        Ok(())
+    })();
+    if let Err(error) = operation {
+        super::recovery::error(&mut result, error);
     }
     Ok(result)
 }
@@ -318,31 +355,197 @@ fn stale(path: &str) -> CheckpointError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::recovery::Store;
     use super::*;
+    use aura_protocol::changes::CheckpointSummary;
+
+    fn prepared(root: &Path) -> Prepared {
+        let current = ["a", "b"]
+            .into_iter()
+            .map(|path| {
+                (
+                    path.into(),
+                    scan::read(root, path).unwrap().map(|(fp, _)| fp),
+                )
+            })
+            .collect();
+        Prepared {
+            manifest: Manifest {
+                version: 1,
+                chat_id: crate::ids::new_id(),
+                folder_id: crate::ids::new_id(),
+                root: root.canonicalize().unwrap(),
+                commit: String::new(),
+                files: BTreeMap::new(),
+                summary: CheckpointSummary {
+                    id: crate::ids::new_id(),
+                    turn_id: crate::ids::new_id(),
+                    created_at: 0,
+                    file_count: 0,
+                    total_bytes: 0,
+                    warnings: vec![],
+                },
+            },
+            current,
+            expires: Instant::now() + Duration::from_secs(60),
+        }
+    }
+    fn encrypted_variants() -> Vec<bool> {
+        #[cfg(feature = "account-sync")]
+        {
+            vec![false, true]
+        }
+        #[cfg(not(feature = "account-sync"))]
+        {
+            vec![false]
+        }
+    }
+    fn no_plaintext(root: &Path, needle: &[u8]) {
+        for entry in std::fs::read_dir(root).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                no_plaintext(&entry.path(), needle)
+            } else {
+                assert!(
+                    !std::fs::read(entry.path())
+                        .unwrap()
+                        .windows(needle.len())
+                        .any(|bytes| bytes == needle)
+                );
+            }
+        }
+    }
 
     #[test]
-    fn an_edit_between_validation_and_rename_is_retained_and_restored() {
-        let temp = tempfile::tempdir().expect("owned fixture");
+    fn durable_originals_precede_mutation_for_local_and_account_success_and_partial_failure() {
+        for encrypted in encrypted_variants() {
+            for partial in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let root = temp.path().join("work");
+                std::fs::create_dir(&root).unwrap();
+                std::fs::write(root.join("a"), "private original a").unwrap();
+                std::fs::write(root.join("b"), "private original b").unwrap();
+                let prepared = prepared(&root);
+                let token = crate::ids::new_id();
+                let store = Store::fixture(temp.path().join("durable"), encrypted);
+                // Removal uses the same verified swap as replacement publication.
+                let result = apply_with(&prepared, &token, BTreeMap::new(), &store, || {
+                    let group = store.group(&token).unwrap();
+                    assert_eq!(group.read("original-0"), b"private original a");
+                    assert_eq!(group.read("original-1"), b"private original b");
+                    assert!(!group.read("recovery.json").is_empty());
+                    assert!(root.join("a").exists());
+                    if partial {
+                        std::fs::write(root.join("b"), "private newer b").unwrap();
+                    }
+                })
+                .unwrap();
+                assert_eq!(result.error.is_some(), partial, "{:?}", result.error);
+                assert_eq!(result.applied.len(), if partial { 1 } else { 2 });
+                assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
+                if partial {
+                    assert_eq!(std::fs::read(root.join("b")).unwrap(), b"private newer b");
+                }
+                assert_eq!(
+                    result.recovery_paths,
+                    vec![store.path(&token).to_string_lossy().into_owned()]
+                );
+                let group = store.group(&token).unwrap();
+                let catalog: serde_json::Value =
+                    serde_json::from_slice(&group.read("saved-recovery.json")).unwrap();
+                let original = catalog
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|item| item["source"] == "original-1")
+                    .unwrap();
+                assert_eq!(
+                    group.read(original["object"].as_str().unwrap()),
+                    if partial {
+                        b"private newer b".as_slice()
+                    } else {
+                        b"private original b".as_slice()
+                    }
+                );
+                if encrypted {
+                    no_plaintext(&store.path(&token), b"private");
+                    no_plaintext(&store.path(&token), b"checkpoint_id");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn failed_durable_write_stops_before_any_working_file_mutation() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("a"), "original a").unwrap();
+        std::fs::write(temp.path().join("b"), "original b").unwrap();
+        let prepared = prepared(temp.path());
+        let token = crate::ids::new_id();
+        let blocked = temp.path().join("blocked");
+        std::fs::write(&blocked, "not a storage folder").unwrap();
+        let store = Store::fixture(blocked, false);
+        let result = apply(&prepared, &token, BTreeMap::new(), &store).unwrap();
+        assert!(result.error.is_some());
+        assert!(result.applied.is_empty());
+        assert_eq!(std::fs::read(temp.path().join("a")).unwrap(), b"original a");
+        assert_eq!(std::fs::read(temp.path().join("b")).unwrap(), b"original b");
+        assert!(
+            !temp
+                .path()
+                .join(format!("{STAGING_PREFIX}{token}"))
+                .exists()
+        );
+    }
+
+    #[test]
+    fn existing_recovery_object_write_failure_never_mutates_local_or_account_work() {
+        for encrypted in encrypted_variants() {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("work");
+            std::fs::create_dir(&root).unwrap();
+            std::fs::write(root.join("a"), "original a").unwrap();
+            std::fs::write(root.join("b"), "original b").unwrap();
+            let prepared = prepared(&root);
+            let token = crate::ids::new_id();
+            let store = Store::fixture(temp.path().join("durable"), encrypted);
+            let group = store.group(&token).unwrap();
+            group
+                .write("original-0", b"immutable different original")
+                .unwrap();
+            let outcome = apply(&prepared, &token, BTreeMap::new(), &store).unwrap();
+            assert!(outcome.error.is_some());
+            assert!(outcome.applied.is_empty());
+            assert_eq!(group.read("original-0"), b"immutable different original");
+            assert_eq!(std::fs::read(root.join("a")).unwrap(), b"original a");
+            assert_eq!(std::fs::read(root.join("b")).unwrap(), b"original b");
+            assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
+        }
+    }
+
+    #[test]
+    fn concurrent_new_path_prevents_replacement_publication() {
+        let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        std::fs::write(root.join("file"), "previewed").expect("initial");
-        let expected = scan::read(root, "file")
-            .expect("fingerprint")
-            .expect("file")
-            .0;
-        std::fs::write(root.join("file"), "new external work").expect("external edit");
-        let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority()).expect("root");
-        directory.create_dir("backup").expect("backup");
-        let backup = directory.open_dir("backup").expect("backup handle");
-        assert!(apply_file(&directory, &backup, root, "file", 0, Some(&expected), None).is_err());
-        assert_eq!(
-            std::fs::read_to_string(root.join("file")).expect("restored"),
-            "new external work"
-        );
-        assert_eq!(
-            backup
-                .read_to_string("original-0")
-                .expect("backup retained"),
-            "new external work"
-        );
+        std::fs::write(root.join("a"), "original").unwrap();
+        std::fs::write(root.join("b"), "replacement").unwrap();
+        let replacement = scan::read(root, "b").unwrap().unwrap();
+        std::fs::remove_file(root.join("b")).unwrap();
+        let prepared = prepared(root);
+        let token = crate::ids::new_id();
+        let store = Store::fixture(root.join("durable"), false);
+        let result = apply_with(
+            &prepared,
+            &token,
+            BTreeMap::from([("b".into(), Some(replacement))]),
+            &store,
+            || {
+                std::fs::write(root.join("b"), "concurrent writer").unwrap();
+            },
+        )
+        .unwrap();
+        assert!(result.error.is_some());
+        assert_eq!(std::fs::read(root.join("b")).unwrap(), b"concurrent writer");
+        assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
     }
 }

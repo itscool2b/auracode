@@ -319,7 +319,25 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
         "restore directory"
     );
     assert!(!rig.work.join("added.txt").exists());
+    // The originals live in the profile's data folder; nothing of the revert stays in the folder.
+    assert_eq!(result.recovery_paths.len(), 1);
     let backup = PathBuf::from(&result.recovery_paths[0]);
+    assert!(
+        backup.starts_with(rig.profile.checkpoints_dir().join("reverts")),
+        "{}",
+        backup.display()
+    );
+    assert_eq!(
+        std::fs::read_dir(&rig.work)
+            .expect("folder")
+            .flatten()
+            .filter(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".auracode-revert-"))
+            .count(),
+        0
+    );
     assert_eq!(
         std::fs::read_to_string(backup.join("original-0")).expect("new work retained"),
         "new work"
@@ -328,6 +346,17 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
         std::fs::read_to_string(backup.join("original-1")).expect("edit retained"),
         "external edit"
     );
+    assert!(backup.join("recovery.json").is_file());
+    // The replacements were published and the checkpoint keeps their bytes.
+    assert!(
+        std::fs::read_dir(&backup)
+            .expect("backup")
+            .flatten()
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("replacement-"))
+    );
     assert!(
         rig.service
             .changes(&rig.chat, &rig.folder, &rig.work, &checkpoint.id)
@@ -335,6 +364,105 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
             .expect("changes")
             .files
             .is_empty()
+    );
+}
+
+/// Revert folders an earlier build (or an interrupted revert) left in the working folder move into
+/// the profile's data folder at the next checkpoint, intact. Other names and links stay.
+#[tokio::test]
+async fn leftover_revert_folders_move_into_the_data_folder() {
+    let rig = rig();
+    std::fs::write(rig.work.join("file.txt"), "work").expect("file");
+    let checkpoint = rig
+        .service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect("checkpoint");
+    let token = crate::ids::new_id();
+    let leftover = rig.work.join(format!(".auracode-revert-{token}"));
+    std::fs::create_dir(&leftover).expect("leftover");
+    std::fs::write(leftover.join("original-0"), "only copy of newer work").expect("original");
+    std::fs::write(leftover.join("recovery.json"), serde_json::to_vec(&serde_json::json!({"version":1,"checkpoint_id":checkpoint.id,"files":[{"path":"file.txt","backup":"original-0"}]})).unwrap()).expect("journal");
+    let invalid = rig
+        .work
+        .join(format!(".auracode-revert-{}", crate::ids::new_id()));
+    std::fs::create_dir(&invalid).unwrap();
+    std::fs::write(invalid.join("recovery.json"), "{}").unwrap();
+    let mut skipped = Vec::new();
+    for (id, path, backup, extra) in [
+        (crate::ids::new_id(), "file.txt", "original-0", false),
+        (checkpoint.id.clone(), "../escape", "original-0", false),
+        (checkpoint.id.clone(), "file.txt", "../escape", false),
+        (checkpoint.id.clone(), "file.txt", "original-0", true),
+    ] {
+        let candidate = rig
+            .work
+            .join(format!(".auracode-revert-{}", crate::ids::new_id()));
+        std::fs::create_dir(&candidate).unwrap();
+        std::fs::write(candidate.join("original-0"), "unrelated original").unwrap();
+        std::fs::write(candidate.join("recovery.json"), serde_json::to_vec(&serde_json::json!({"version":1,"checkpoint_id":id,"files":[{"path":path,"backup":backup}]})).unwrap()).unwrap();
+        if extra {
+            std::fs::write(candidate.join("unrelated"), "preserve").unwrap();
+        }
+        skipped.push(candidate);
+    }
+    let unrelated = rig.work.join(".auracode-revert-notes");
+    std::fs::create_dir(&unrelated).expect("unrelated");
+    let link = {
+        let elsewhere = rig._dir.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).expect("elsewhere");
+        let link = rig
+            .work
+            .join(format!(".auracode-revert-{}", crate::ids::new_id()));
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&elsewhere, &link).expect("link");
+        #[cfg(windows)]
+        {
+            let output = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(&link)
+                .arg(&elsewhere)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+        }
+        link
+    };
+    rig.service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect("checkpoint");
+    assert!(!leftover.exists());
+    let moved = rig.profile.checkpoints_dir().join("reverts").join(&token);
+    assert_eq!(
+        std::fs::read_to_string(
+            std::fs::read_dir(&moved)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|path| path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("saved-original-0-"))
+                .unwrap()
+        )
+        .expect("moved intact"),
+        "only copy of newer work"
+    );
+    assert!(moved.join("recovery.json").is_file());
+    assert!(skipped.iter().all(|path| path.join("original-0").is_file()));
+    assert!(invalid.is_dir(), "an arbitrary UUID directory stays");
+    assert!(unrelated.is_dir(), "a name that is not a revert's stays");
+    assert!(
+        std::fs::symlink_metadata(&link)
+            .expect("link")
+            .file_type()
+            .is_symlink(),
+        "a link is never followed or moved"
+    );
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("file.txt")).expect("file"),
+        "work"
     );
 }
 
