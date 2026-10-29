@@ -4640,3 +4640,17 @@ the original failure log is retained and its cause remains unproven. Desktop tes
 19 existing skips, plus 10 Node script tests; focused header tests, typecheck, Biome, instruction
 parity, stylesheet policy and diff checks passed. No production CSS, Rust or generated bindings
 changed. Owned browsers and the single preview server were stopped after verification.
+
+### 2026-10-29: Keep Instructions recovery notice fixtures portable
+
+The newly executable desktop library suite exposed a Windows test-path mismatch. The startup
+notice was present and named the retained journal, but the fixture built its expected path with
+mixed separators while directory enumeration returned normal Windows separators. A diagnostic
+red run captured the existing notice; changing only the path construction to component joins made
+the original assertion pass. No product notice or journal-recovery behavior changed.
+
+The fixture now checks journals retained before boot and after startup, preserving the complete
+notice/path assertion in both cases. It also verifies unchanged malformed journal bytes, no new
+journal marker files and an untouched temporary instruction target. The focused regression passes.
+Combined desktop library and Demo integration verification follows the separate catalog-fixture
+review on this local branch before integration.

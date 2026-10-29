@@ -572,27 +572,51 @@ mod tests {
         state.at_exit();
     }
 
-    /// The sweep's notice arrives after startup and shows with the others from then on.
+    /// Retained journals are reported both at startup and when a later write leaves one behind.
     #[tokio::test]
     async fn initial_notice_lists_retained_instructions_journal_without_touching_targets() {
-        let dir = tempfile::tempdir().unwrap();
-        let data = dir.path().join("data");
-        let state = state(boot(Ok(DataRoot::at(data.clone()))));
-        let journal = data
-            .join("instructions/backups")
-            .join(uuid::Uuid::now_v7().to_string());
-        std::fs::create_dir_all(&journal).unwrap();
-        std::fs::write(journal.join("journal.json"), b"{broken").unwrap();
-        let info = state.app_info();
-        assert!(info.notices.iter().any(|notice| {
-            notice.contains("Instructions change needs recovery")
-                && notice.contains(&journal.to_string_lossy().to_string())
-        }));
-        assert_eq!(
-            std::fs::read(journal.join("journal.json")).unwrap(),
-            b"{broken"
-        );
-        state.at_exit();
+        for before_startup in [true, false] {
+            let dir = tempfile::tempdir().unwrap();
+            let data = dir.path().join("data");
+            let target = dir.path().join("project").join("AGENTS.md");
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(&target, b"Keep the user's instructions.").unwrap();
+            let journal = data
+                .join("instructions")
+                .join("backups")
+                .join(uuid::Uuid::now_v7().to_string());
+            let retain_journal = || {
+                std::fs::create_dir_all(&journal).unwrap();
+                std::fs::write(journal.join("journal.json"), b"{broken").unwrap();
+            };
+            if before_startup {
+                retain_journal();
+            }
+            let state = state(boot(Ok(DataRoot::at(data))));
+            if !before_startup {
+                retain_journal();
+            }
+            let info = state.app_info();
+            assert!(
+                info.notices.iter().any(|notice| {
+                    notice.contains("Instructions change needs recovery")
+                        && notice.contains(&journal.to_string_lossy().to_string())
+                }),
+                "before_startup={before_startup}, journal={}, notices={:?}",
+                journal.display(),
+                info.notices
+            );
+            assert_eq!(
+                std::fs::read(journal.join("journal.json")).unwrap(),
+                b"{broken"
+            );
+            assert_eq!(std::fs::read_dir(&journal).unwrap().count(), 1);
+            assert_eq!(
+                std::fs::read(&target).unwrap(),
+                b"Keep the user's instructions."
+            );
+            state.at_exit();
+        }
     }
 
     /// The sweep's notice arrives after startup and shows with the others from then on.
