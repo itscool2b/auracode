@@ -115,7 +115,22 @@ last eight lines (never logged) under a plain reason: sign-in, not found, untrus
 unreachable server, full disk, path too long or unwritable folder. A finished clone is checked
 to hold `.git` and becomes the project: at once in setup, through Create project in New project.
 A clone still running after two hours is stopped. If auracode itself ends mid-clone, the
-unfinished folder stays; the next clone with that name says the folder already exists.
+unfinished folder stays. The clone form in onboarding and New project lists previous attempts
+after restart, with the destination, Open folder when its identity is known, Retry in another
+folder, and Dismiss notice. Dismiss removes only the recovery record. A missing, replaced,
+linked or unavailable destination is never removed or reused by recovery. A completed clone
+with its recorded directory identity and Git directory can enter normal project addition;
+the destination is checked again when that action is selected. The notice stays until dismissed,
+so a failed project-add step does not lose the existing clone.
+
+Rust saves a versioned lifecycle record in `<data>/clones` before creating a destination, after
+creation, after Git exits successfully, and on settlement. The record contains the validated
+address, destination, directory identities and phase. Raw Git output, progress and environment
+variables are never persisted there. Files are published atomically with synced contents and
+read-back verification; Unix also syncs publication directories. Windows power-loss durability
+has not been established. If journal publication fails, Git does not start or the completed
+folder is retained with an explicit recovery error. Malformed records and unknown files stay
+untouched until an explicit record-only dismissal.
 
 The Git behavior follows the official [clone documentation](https://git-scm.com/docs/git-clone)
 and [environment variables](https://git-scm.com/docs/git#_environment_variables). Rust tests

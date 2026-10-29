@@ -78,6 +78,23 @@ pub enum CloneState {
     Failed,
     /// Git is being stopped; the unfinished folder waits until the stop is confirmed.
     CleanupPending,
+    /// A prior process stopped before the clone's lifecycle was settled. Its folder is preserved.
+    Interrupted,
+}
+
+/// A durable clone notice. Invalid journals have no usable destination or remote.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CloneRecovery {
+    pub id: String,
+    pub state: CloneState,
+    pub repository: Option<String>,
+    pub remote: Option<String>,
+    pub destination: Option<String>,
+    pub detail: String,
+    /// A completed clone still has its recorded directory identity and a regular Git directory.
+    /// Adding it uses the normal project validation flow, never automatic project creation.
+    pub can_add: bool,
+    pub can_open: bool,
 }
 
 /// Git's own progress report, parsed from `git clone --progress`.

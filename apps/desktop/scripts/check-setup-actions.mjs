@@ -195,8 +195,44 @@ try {
       );
       assert.equal(await started(), 0);
       assert.deepEqual(errors, []);
+      // Recovery is record-only: no clone starts, reuse revalidates, retry needs a new folder.
+      await page.goto(`${url}?recovery`);
+      await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+      await page.getByRole("region", { name: "Interrupted clones" }).waitFor();
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} clone recovery accessibility`,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-clone-recovery.png`) });
+      await page.getByRole("button", { name: "Open folder", exact: true }).click();
+      await page.waitForFunction(() =>
+        window.setupActionsFixture.calls().includes("clone-recovery-open"),
+      );
+      await page.getByRole("button", { name: "Retry in another folder" }).click();
+      await page.getByRole("button", { name: "Choose a folder", exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole("button", { name: "Clone", exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(await started(), 0);
+      await page.getByRole("button", { name: "Dismiss notice" }).click();
+      await page.getByRole("region", { name: "Interrupted clones" }).waitFor({ state: "detached" });
+      assert.ok((await calls()).includes("clone-recovery-dismiss"));
+      assert.equal(await started(), 0);
+      assert.ok(!(await calls()).includes("clone-cancel"));
+      await page.goto(`${url}?recovery`);
+      await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+      await page.getByRole("button", { name: "Add existing project" }).click();
+      await page.waitForFunction(() =>
+        window.setupActionsFixture.calls().includes("clone-use-folder"),
+      );
+      assert.ok((await calls()).includes("clone-recovery-validate"));
+      assert.equal(await started(), 0);
+      assert.deepEqual(errors, []);
       console.log(
-        `${engine}: passive install review, explicit start, close cancellation, stale review rejection, clone command before start, refused address, cancel, finish, failure, retry, taken name and accessibility passed`,
+        `${engine}: install review/cancel, clone command before start, refused address, cancel, finish, failure, retry, taken name, interrupted clone actions and accessibility passed`,
       );
     } finally {
       await browser.close();

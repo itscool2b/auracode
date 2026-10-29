@@ -42,6 +42,11 @@ offers the same clone in a dialog beside Choose folder. The rules (addresses acc
 the person's own Git and credential helpers, the one folder auracode owns and removes) are in
 docs/setup-actions.md.
 
+Reopening the clone form after a restart lists its saved prior attempts. It shows each retained
+destination and offers Open folder, Retry in another folder, and Dismiss notice. A validated
+completed clone can be added through the normal project flow. Dismissing a notice removes
+only its journal record; recovery never deletes the cloned folder or changes the person's files.
+
 Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
 performs the write. A project created before a setup-save failure is reused on retry. Existing
 projects are available after reload. The no-agent path opens the existing local demo screen.

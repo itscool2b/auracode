@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CloneApi } from "./api";
-import type { CloneCheck, CloneInput, CloneRecord, CloneReview } from "./bindings";
+import type { CloneCheck, CloneInput, CloneRecord, CloneRecovery, CloneReview } from "./bindings";
 import { CloneController, folderName, progressLine, TYPING_MS } from "./clone";
 
 function review(id: string, input: CloneInput): CloneReview {
@@ -63,6 +63,12 @@ function fakeApi() {
   const statuses: CloneRecord[] = [];
   let next = 0;
   const api: CloneApi = {
+    recoveryList: vi.fn(async () => []),
+    recoveryReady: vi.fn(async () => {
+      throw new Error("unused");
+    }),
+    recoveryOpen: vi.fn(async () => {}),
+    recoveryDismiss: vi.fn(async () => {}),
     check: vi.fn(async (input: CloneInput) => {
       inputs.push(input);
       return answer(`review-${++next}`, input);
@@ -93,6 +99,99 @@ const flush = async () => {
 describe("CloneController", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it("lists interrupted clones, retries only through a fresh form, and dismisses only records", async () => {
+    const { api, calls, inputs } = fakeApi();
+    const previous: CloneRecovery = {
+      id: "interrupted",
+      state: "interrupted",
+      repository: "owner/repo",
+      remote: "https://github.com/owner/repo",
+      destination: "C:\\old\\repo",
+      detail: "Folder preserved.",
+      can_add: false,
+      can_open: true,
+    };
+    vi.mocked(api.recoveryList).mockResolvedValue([previous]);
+    const clone = new CloneController(api);
+    clone.open();
+    await flush();
+    expect(clone.getSnapshot().recoveries).toEqual([previous]);
+    expect(calls).toEqual([]);
+    await clone.recover(previous.id, "open");
+    expect(api.recoveryOpen).toHaveBeenCalledWith(previous.id);
+    clone.retryElsewhere(previous);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(inputs.at(-1)).toEqual({ remote: previous.remote, parent: null, name: null });
+    expect(clone.canStart).toBe(false);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(clone.getSnapshot().notice).toContain("C:\\old\\repo");
+    await clone.recover(previous.id, "dismiss");
+    expect(api.recoveryDismiss).toHaveBeenCalledWith(previous.id);
+    expect(api.cancel).not.toHaveBeenCalled();
+    expect(clone.getSnapshot().recoveries).toEqual([]);
+    clone.close();
+  });
+
+  it("revalidates before project addition and preserves a changed-folder error", async () => {
+    const { api } = fakeApi();
+    const previous: CloneRecovery = {
+      id: "completed",
+      state: "ready",
+      repository: "owner/repo",
+      remote: "https://github.com/owner/repo",
+      destination: "C:\\old\\repo",
+      detail: "Git finished.",
+      can_add: true,
+      can_open: true,
+    };
+    vi.mocked(api.recoveryList).mockResolvedValue([previous]);
+    vi.mocked(api.recoveryReady).mockRejectedValueOnce(new Error("The folder changed."));
+    const clone = new CloneController(api);
+    clone.open();
+    await flush();
+    await clone.recover(previous.id, "add");
+    expect(clone.getSnapshot().phase).toBe("form");
+    expect(clone.getSnapshot().recoveryError).toBe("The folder changed.");
+    expect(clone.getSnapshot().recoveries).toHaveLength(1);
+    vi.mocked(api.recoveryReady).mockResolvedValue(previous);
+    await clone.recover(previous.id, "add");
+    expect(clone.getSnapshot().phase).toBe("done");
+    expect(clone.getSnapshot().record?.destination).toBe(previous.destination);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.recoveryDismiss).not.toHaveBeenCalled();
+    clone.close();
+  });
+
+  it("ignores a recovery reply from an obsolete mount", async () => {
+    const { api } = fakeApi();
+    let reply!: (records: CloneRecovery[]) => void;
+    vi.mocked(api.recoveryList).mockReturnValueOnce(
+      new Promise((resolve) => {
+        reply = resolve;
+      }),
+    );
+    const clone = new CloneController(api);
+    clone.open();
+    clone.close();
+    clone.open();
+    await flush();
+    reply([
+      {
+        id: "stale",
+        state: "interrupted",
+        remote: null,
+        repository: null,
+        destination: null,
+        detail: "Stale",
+        can_add: false,
+        can_open: false,
+      },
+    ]);
+    await flush();
+    expect(clone.getSnapshot().recoveries).toEqual([]);
+    clone.close();
+  });
 
   it("asks Rust once typing pauses and shows the repository's own folder name", async () => {
     const { api, inputs } = fakeApi();

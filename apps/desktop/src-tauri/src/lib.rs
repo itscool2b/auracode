@@ -234,6 +234,8 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
     let quit = Arc::clone(&state.quit);
+    let clones =
+        aura_core::cloning::Clones::new(state.data_dir().map(std::path::Path::to_path_buf));
     app.manage(state);
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
@@ -243,7 +245,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     ));
     app.manage(Arc::new(config_vendor::VendorService::default()));
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
-    app.manage(Arc::new(aura_core::cloning::Clones::default()));
+    app.manage(Arc::new(clones));
     native_shell::setup(app.handle());
     general_preferences::refresh(app.handle());
     if accept_sign_in_links {
