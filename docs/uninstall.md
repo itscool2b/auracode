@@ -1,7 +1,7 @@
 # Uninstalling auracode and deleting its data
 
-Uninstalling auracode deletes everything auracode keeps for itself, so a later install starts as
-if it had never been installed. Your coding agents, their settings and your repositories are not
+Uninstalling auracode deletes its local files and reviewed, exclusively owned account keys.
+Shared keys and entries that cannot be verified are retained and reported. Your coding agents, their settings and your repositories are not
 touched. Settings has the same deletion without uninstalling, on Windows and macOS (macOS has no
 uninstaller).
 
@@ -23,10 +23,9 @@ uninstaller, Settings and a person in a terminal all run that mode.
 - `%APPDATA%\si.auracode.desktop`: the window position.
 - In `%TEMP%`: the updater's downloads (`auracode-<version>-updater-*`) and the CLI's probe
   folders (`aura-cli-*`).
-- In Windows Credential Manager, every generic credential whose target starts with
-  `auracode.sync.v1:`. These are the sign-in session, the device and account keys, and the
-  account index of each data folder. Credential Manager is asked for that prefix only, so no other
-  app's credential is read.
+- In Windows Credential Manager, the reviewed entries under `auracode.sync.v1:` that belong
+  exclusively to deleted data roots. Credential Manager lists names for that prefix only; other
+  apps' credentials are never read. See [Secure-store scope](#secure-store-scope).
 - The uninstaller's own records:
   - the shortcuts, the jump list and the uninstall entry;
   - the `auracode://` link registration, when it points at this install;
@@ -48,8 +47,8 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - `~/Library/Preferences/si.auracode.desktop.plist`;
   - a leftover single-instance socket, `/tmp/si_auracode_desktop_si.sock`.
 - In `$TMPDIR`: the updater's downloads and the CLI's probe folders.
-- Keychain items with the service `auracode.sync.v1`. The keychain is searched for that service
-  only.
+- Reviewed, exclusively owned keychain items with the service `auracode.sync.v1`. The keychain
+  is searched for that service only, using the same scope rules as Windows.
 - With "Also move auracode to the Trash": the app bundle. Launch Services then forgets the
   `auracode://` link.
 
@@ -83,6 +82,38 @@ auracode adds no login item, Run key or launch agent, so there is none to remove
   fresh install, sign in and use your recovery key.
 - **Shared system components.** The WebView2 runtime, Git, Node.js and npm stay, because other
   apps use them.
+
+## Secure-store scope
+
+Cleanup reads complete, validated account indexes and account bundles. An opaque target hash
+cannot identify a payload's kind or service origin. Indexes for other data roots stay, including
+empty indexes. Their account references, including pending removal receipts, protect keys for
+both production and preview. Unknown, malformed, unsupported or unreadable values retain all
+account keys and the deleted roots' indexes for retry.
+
+Only canonical indexes of deleted roots and their exclusive account keys are removed. Shared
+account retention alone does not retain the deleted root's index. Orphan account bundles can be
+removed only when the canonical default root is among the deleted targets, never during a
+custom-only cleanup. Account keys are deleted before their indexes. If an account deletion fails,
+its owning index stays so a later cleanup can retry, even when the root is already missing.
+Missing roots are resolved from the nearest canonical existing ancestor; ambiguous paths retain
+keys instead of guessing.
+
+Settings and `--dry-run` list opaque targets, kind, remove/retain decisions and reasons, with no
+account IDs or secrets. Execution immediately replans and can only narrow the approved set.
+New references, changed payloads and newly discovered unknown entries retain affected keys.
+
+Every native store holds a shared lifetime lease. Cleanup takes an exclusive lease after target
+apps exit, before reading or deleting keys, and never waits for a root lock while holding it.
+Another running copy, a locked store or any lease failure preserves keys with a busy explanation.
+Close all older auracode binaries before the first cleanup with this version: older binaries do
+not participate in this lease.
+
+The permanent empty file `si.auracode.sync.v1.lock` in the platform's local application data
+folder is kept after uninstall. It contains no credentials or user data. Do not delete or replace
+it: keeping one inode prevents another process from bypassing an existing lock. The file is
+opened without following links or truncating it, checked as a regular file, and created with
+mode 0600 on Unix. Ownership locks are nonblocking and explicitly unlocked when their owner ends.
 
 ## Worktrees
 
@@ -142,7 +173,8 @@ The bundle builds the NSIS installer only. An MSI would uninstall without the cl
 In Settings, open About, then Delete all auracode data under This device. The review lists:
 
 - every folder and file that would go, with its size;
-- where the keys are;
+- each reviewed secure-store entry, whether it goes or stays, and why;
+- warnings when references or secure storage cannot be verified;
 - the worktrees with unsaved work, which are kept unless you tick to delete them too;
 - what stays.
 
@@ -169,7 +201,7 @@ The same cleanup runs from a terminal:
 
 | Option | Effect |
 |---|---|
-| `--dry-run` | Prints what would go and changes nothing |
+| `--dry-run` | Prints decisions and warnings; never requests quit, waits for exit, deletes files or keys, creates a lock file, or moves the app to Trash |
 | `--interactive` | Asks about worktrees with unsaved work, and says what could not be deleted |
 | `--report-failures` | Only says what could not be deleted |
 | `--remove-unsaved-worktrees` | Deletes worktrees with unsaved work too |
@@ -204,12 +236,11 @@ Use these steps when the app is already gone.
      rm -rf ~/Library/Application\ Support/si.auracode.desktop ~/Library/Caches/si.auracode.desktop ~/Library/WebKit/si.auracode.desktop ~/Library/HTTPStorages/si.auracode.desktop* ~/Library/Saved\ Application\ State/si.auracode.desktop.savedState ~/Library/Logs/si.auracode.desktop
      defaults delete si.auracode.desktop
      ```
-3. **Delete the keys.**
-   - **Windows:** `cmdkey /list` shows auracode's entries as `auracode.sync.v1:...`. Delete each
-     one with `cmdkey /delete:<target>`, or delete them in Credential Manager, under Windows
-     Credentials.
-   - **macOS:** run `security delete-generic-password -s auracode.sync.v1` until it reports that
-     no item was found, or delete the items in Keychain Access.
+3. **Review the keys with a current auracode binary.** Run the scoped cleanup even if its data
+   folder was already removed. Do not blanket-delete every `auracode.sync.v1` credential or
+   repeatedly run `security delete-generic-password -s auracode.sync.v1`: another custom data
+   root or preview install may still depend on those account keys. If cleanup cannot establish
+   their ownership, leave them in place until the affected roots can be reviewed.
 
 ## Edge cases
 
@@ -221,8 +252,8 @@ Use these steps when the app is already gone.
 | Git is missing, or a repository is gone | Its worktrees count as unsaved and stay unless chosen. A registration Git could not prune is reported, with the command to run. |
 | A link or junction inside the data folder | Removed as a link; what it points to is never touched. |
 | Read-only files (Git objects in checkpoints) | The read-only attribute is cleared, then the file is removed. |
-| A data folder from `AURACODE_DATA_DIR` | Only what auracode made there goes, and the folder goes only if it ends up empty. Account keys stay, since the installed app may use them; that folder's own index entry goes. |
-| A second run | Finds nothing and changes nothing. |
+| A data folder from `AURACODE_DATA_DIR` | Only what auracode made there goes, and the folder goes only if it ends up empty. Its canonical index and exclusive accounts go; shared accounts, orphans and uncertain entries stay. |
+| A second run | Retries retained keys using missing-root identity; a completed cleanup removes nothing further. |
 | An upgrade through the installer | Keeps everything (see the Windows uninstaller). |
 | macOS app run from a disk image or a translocated copy | "Move to the Trash" is not offered; drag the app to the Trash yourself. |
 | The cleanup cannot start (in Settings) | auracode stays open, says why, and asks for a fresh review. |
@@ -239,4 +270,4 @@ Covered by tests:
 - `apps/desktop/scripts/check-delete-data.mjs`, in Chromium and WebKit.
 
 Covered only by hand, on real machines: the uninstaller itself, the macOS Trash move and the
-keychain sweep.
+native secure-store integration. Automated cleanup tests use only fake stores and temporary lock files.

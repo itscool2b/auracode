@@ -56,6 +56,7 @@ impl PlatformDirs {
 /// What a cleanup looks at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Targets {
+    pub default_root: Option<PathBuf>,
     pub scope: Scope,
     /// Folders named after auracode, removed whole (around kept worktrees). In machine scope the
     /// first is the default data folder.
@@ -135,6 +136,7 @@ impl Targets {
             data_roots.push(root);
         }
         Targets {
+            default_root,
             scope: Scope::Machine,
             owned_dirs,
             owned_files,
@@ -148,6 +150,7 @@ impl Targets {
     /// of the installed app's.
     pub fn data_folder(root: PathBuf) -> Targets {
         Targets {
+            default_root: dirs::data_local_dir().map(|dir| dir.join(APP_IDENTIFIER)),
             scope: Scope::DataFolder,
             owned_dirs: Vec::new(),
             owned_files: Vec::new(),

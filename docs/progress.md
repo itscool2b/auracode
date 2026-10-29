@@ -4233,3 +4233,32 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+
+## 2026-10-29: Scoped secure-store cleanup
+
+Replaced the cleanup's blanket service sweep with names-only discovery and one pure decision
+routine shared by Settings review, CLI dry-run and execution. Only validated v1/v2 account
+indexes and whole supported account bundles are classified. Foreign indexes protect references
+under both production and preview, including removal receipts. Unknown or unreadable entries
+retain all account keys and retry indexes. Custom-only cleanup preserves orphan bundles.
+
+The review carries opaque target/value fingerprints to the child cleanup. Immediate replanning
+can only narrow that set; changed or newly retained indexes protect their references. Account
+deletion precedes owning-index deletion, and failures preserve retry indexes. Missing roots use
+the nearest canonical existing ancestor and a validated suffix; ambiguous paths preserve keys.
+Settings and CLI now show each opaque target's kind, decision and reason, plus warnings.
+
+Native stores hold shared lifetime leases and cleanup holds an exclusive lease after target apps
+exit. The permanent empty local-data `si.auracode.sync.v1.lock` file has no user data and is never
+removed. No-follow opens, regular-file validation, nonblocking locks and explicit unlocks avoid
+unlocked fallbacks. Dry-run branches before process waits, quit requests, deletions and Trash,
+and opens an existing lease only. The uninstall guide removes blanket credential-deletion steps
+and explains retained keys, retries, older binaries and the permanent lock.
+
+Verification so far: focused dialog Vitest 8/8, uninstaller hook tests 5/5, touched frontend Biome
+and rustfmt pass; instruction parity passes (no local instruction copies in this worktree).
+Fake-store regression and temporary-file/subprocess lease tests are implemented. Cargo testing
+is waiting for the coordinator's shared build lane. Native secure-store cleanup has not been
+run, including dry-run; no real credentials, application data or agent homes were accessed.
+Generated bindings and integrated typechecking remain with the coordinator.

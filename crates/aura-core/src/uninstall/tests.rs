@@ -17,11 +17,10 @@ const FAST: Retry = Retry {
     step: Duration::from_millis(10),
 };
 
-/// A secure store in memory. `sweep` removes what is left, as auracode's own service would.
+/// A secure store in memory. No platform credentials are accessed.
 #[derive(Default)]
 struct FakeVault {
     entries: Mutex<HashMap<VaultEntry, Vec<u8>>>,
-    sweeps: Mutex<u32>,
 }
 
 impl FakeVault {
@@ -50,12 +49,8 @@ impl AppVault for FakeVault {
         self.entries.lock().unwrap().remove(entry);
         Ok(())
     }
-    fn sweep(&self) -> Result<usize, VaultError> {
-        *self.sweeps.lock().unwrap() += 1;
-        let mut entries = self.entries.lock().unwrap();
-        let count = entries.len();
-        entries.clear();
-        Ok(count)
+    fn entries(&self) -> Result<Vec<VaultEntry>, VaultError> {
+        Ok(self.entries.lock().unwrap().keys().cloned().collect())
     }
 }
 
@@ -234,13 +229,14 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
         br#"{"version":2,"accounts":{"acct-one":null,"acct-two":"7f2c1e9a-1111-4222-8333-944455556666"}}"#,
     );
     let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), b"bundle");
-    vault.put(VaultEntry::new(ORIGINS[0], "acct-two").unwrap(), b"bundle");
-    // An entry whose data folder is already gone: only the sweep finds it.
-    vault.put(VaultEntry::new(ORIGINS[1], "orphan").unwrap(), b"bundle");
+    vault.put(account.clone(), &bundle());
+    vault.put(VaultEntry::new(ORIGINS[0], "acct-two").unwrap(), &bundle());
+    // A valid orphan account is removable when the default root is included.
+    vault.put(VaultEntry::new(ORIGINS[1], "orphan").unwrap(), &bundle());
 
     let git = GitTool::from_path();
-    let plan = plan(&targets, &git);
+    let mut plan = plan(&targets, &git);
+    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
     assert_eq!(plan.worktrees.len(), 1);
     assert!(!plan.worktrees[0].unsaved(), "{:?}", plan.worktrees[0]);
     let kinds: Vec<_> = plan.items.iter().map(|item| item.kind).collect();
@@ -302,7 +298,8 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
     assert_eq!(report.vault.swept, 1);
 
     // A second run finds nothing and changes nothing.
-    let again = super::plan(&targets, &git);
+    let mut again = super::plan(&targets, &git);
+    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
     assert!(again.is_empty(), "{:?}", again.items);
     let second = execute(
         &again,
@@ -411,11 +408,12 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
         br#"{"version":2,"accounts":{"acct-one":null}}"#,
     );
     let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), b"bundle");
+    vault.put(account.clone(), &bundle());
 
     let targets = Targets::data_folder(folder.clone());
     let git = GitTool::from_path();
-    let plan = plan(&targets, &git);
+    let mut plan = plan(&targets, &git);
+    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
     assert!(plan.items.iter().all(|item| item.kind == ItemKind::Entry));
     let report = execute(
         &plan,
@@ -437,10 +435,9 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     assert!(!folder.join("device.json.corrupt-1792840000000").exists());
     assert!(!folder.join(".state.json.tmp-1a2b").exists());
     assert!(folder.join("my-notes.txt").exists() && folder.join("project/README.md").exists());
-    // Only this folder's index goes: the account key can belong to the installed app too.
+    // This folder's index and exclusive account go after checking every other index.
     assert!(!vault.has(&index));
-    assert!(vault.has(&account));
-    assert_eq!(*vault.sweeps.lock().unwrap(), 0);
+    assert!(!vault.has(&account));
 
     // An emptied data folder of its own goes as well.
     let lone = m.home.join("lone");
@@ -674,4 +671,12 @@ fn a_running_profile_is_detected_without_creating_locks() {
     assert_eq!(busy, [root.join("profiles").join("local")]);
     drop(lock);
     assert!(in_use(std::slice::from_ref(&root)).is_empty());
+}
+
+fn bundle() -> Vec<u8> {
+    let mut bytes = b"AURA-ACCOUNT".to_vec();
+    bytes.push(1);
+    bytes.extend([7; 32]);
+    bytes.extend([0, 0, 0]);
+    bytes
 }

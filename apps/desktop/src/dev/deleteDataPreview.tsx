@@ -87,6 +87,8 @@ function review(mode: Mode): DataCleanupReview {
         unsaved: false,
       },
     ],
+    keys: [],
+    warnings: [],
     secure_store: mac ? "the macOS keychain" : "Windows Credential Manager",
     app_bundle: mac ? "/Applications/auracode.app" : null,
   };
