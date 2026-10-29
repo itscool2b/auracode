@@ -228,6 +228,19 @@ chat, folder and canonical root, refuses unexpected entries and never follows li
 Storage and cleanup failures surface through the revert result. If saving and no-clobber restoration
 both fail, surviving source files stay in the swap and its recovery location is explicitly reported.
 
+Local recovery creates the `reverts` directory relative to the checkpoint directory and syncs that
+parent before creating a token group. Failed parent syncs remain a gate on retries. Emergency
+restoration flushes the restored file and then its destination parent before unlinking the staged
+source; either failure preserves the staged copy and returns an explicit error. Legacy cleanup
+retains the directory capability it validated and compares both its identity and the exact journal
+bytes before work and source removal.
+
+Directory sync currently calls `sync_all` on Unix directory handles. On Windows, file handles are
+flushed, including a writable handle for emergency restoration, but the directory sync helper is
+currently a no-op, as in the existing encrypted object store. Directory-entry durability across a
+Windows power loss has not been established. The deterministic sync-failure tests verify ordering
+and preservation; they do not simulate a filesystem crash.
+
 Small mutable metadata uses the same codec with the separate `metadata` purpose, in the private
 `metadata/` directory. Worktree ownership/recovery uses object `worktree-registry` (8 MiB maximum),
 and setup preferences use `onboarding` (16 KiB). Every replacement authenticates the existing record,

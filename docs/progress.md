@@ -4255,3 +4255,15 @@ Local/Account success and partial failure, backup failure before mutation, concu
 copy-path recovery, interrupted cleanup, invalid manifests, Windows junction preservation and
 ciphertext-only Account recovery. Formatting and instruction parity were checked. Full integrated
 checks, binding regeneration and macOS qualification remain integration gates.
+
+
+### Revert recovery review follow-up
+
+Independent review found missing sync of the first Local recovery root's parent, missing file and
+parent sync before removing an emergency-restored original's staging link, and a legacy validation
+handle dropped before cleanup. Recovery now retains that capability and exact journal, rejects
+directory or journal substitution, syncs Local recovery parents on creation and retry, and keeps a
+staged original if either emergency restoration sync fails. Windows directory-entry crash durability
+is explicitly unverified because the existing directory sync helper is Unix-only. Added deterministic
+parent/file sync failure and directory/journal substitution fixtures. Verification is pending the
+shared Cargo lane; no native or real-data cleanup was performed.

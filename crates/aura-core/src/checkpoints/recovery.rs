@@ -183,7 +183,10 @@ impl Checkpoints {
             }) {
                 continue;
             }
-            drop(stage);
+            let held = HeldStage {
+                directory: stage,
+                validated_journal: Some(bytes.clone()),
+            };
             let store = self.recovery_store()?;
             let token = token.to_owned();
             let name = name
@@ -191,6 +194,7 @@ impl Checkpoints {
                 .map_err(|_| invalid("Invalid recovery name."))?;
             let directory = directory.try_clone()?;
             tokio::task::spawn_blocking(move || -> Result<()> {
+                held.verify(&directory, &name)?;
                 let group = store.group(&token)?;
                 // Preserve the exact validated legacy journal and the copy's content catalog.
                 group.write("recovery.json", &bytes)?;
@@ -199,7 +203,15 @@ impl Checkpoints {
                     error: None,
                     recovery_paths: vec![],
                 };
-                settle(&directory, &name, &journal, &group, &mut result);
+                settle_held(
+                    &directory,
+                    &name,
+                    &journal,
+                    &group,
+                    &mut result,
+                    held,
+                    &RestorationSync::native(),
+                );
                 match result.error {
                     Some(error) => Err(CheckpointError::Message(error)),
                     None => Ok(()),
@@ -219,6 +231,13 @@ impl Store {
         self.root.join(token)
     }
     pub(super) fn group(&self, token: &str) -> Result<Group> {
+        self.group_with_sync(token, &sync)
+    }
+    fn group_with_sync(
+        &self,
+        token: &str,
+        sync_directory: &impl Fn(&Dir) -> io::Result<()>,
+    ) -> Result<Group> {
         super::valid_id(token)?;
         #[cfg(feature = "account-sync")]
         if let Some(files) = &self.encrypted {
@@ -235,22 +254,23 @@ impl Store {
                 encrypted: Some(child),
             });
         }
-        crate::fsutil::create_private_dir_all(&self.root)
-            .map_err(|error| io::Error::other(error.to_string()))?;
-        let parent = Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())?;
-        let builder = cap_std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        let builder = {
-            use cap_std::fs::DirBuilderExt;
-            let mut builder = builder;
-            builder.mode(0o700);
-            builder
-        };
-        match parent.create_dir_with(token, &builder) {
-            Ok(()) => sync(&parent)?,
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error.into()),
-        }
+        // The checkpoint directory already exists before a revert. Create its recovery child
+        // relative to that capability and persist the new name before creating any token group.
+        let checkpoint = self
+            .root
+            .parent()
+            .ok_or_else(|| invalid("Recovery storage has no parent."))?;
+        let name = self
+            .root
+            .file_name()
+            .ok_or_else(|| invalid("Invalid recovery storage root."))?;
+        let checkpoint = Dir::open_ambient_dir(checkpoint, cap_std::ambient_authority())?;
+        private_child(&checkpoint, name)?;
+        // Also sync an existing name: an earlier failed sync must not make a retry skip this gate.
+        sync_directory(&checkpoint)?;
+        let parent = checkpoint.open_dir_nofollow(name)?;
+        private_child(&parent, std::ffi::OsStr::new(token))?;
+        sync_directory(&parent)?;
         Ok(Group {
             #[cfg(feature = "account-sync")]
             token: token.into(),
@@ -258,6 +278,21 @@ impl Store {
             #[cfg(feature = "account-sync")]
             encrypted: None,
         })
+    }
+}
+fn private_child(parent: &Dir, name: &std::ffi::OsStr) -> io::Result<()> {
+    let builder = cap_std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    let builder = {
+        use cap_std::fs::DirBuilderExt;
+        let mut builder = builder;
+        builder.mode(0o700);
+        builder
+    };
+    match parent.create_dir_with(name, &builder) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
     }
 }
 impl Group {
@@ -368,6 +403,8 @@ pub(super) fn write_new(dir: &Dir, name: &str, bytes: &[u8]) -> io::Result<()> {
     file.sync_all()?;
     sync(dir)
 }
+// Unix fsyncs directory entries. Windows currently flushes file handles only; directory-entry
+// crash durability is not established by this helper or the existing encrypted object store.
 fn sync(dir: &Dir) -> io::Result<()> {
     #[cfg(unix)]
     dir.try_clone()?.into_std_file().sync_all()?;
@@ -451,6 +488,36 @@ fn inspect(stage: &Dir, journal: &Journal) -> Result<BTreeMap<String, Vec<u8>>> 
     Ok(files)
 }
 
+struct HeldStage {
+    directory: Dir,
+    validated_journal: Option<Vec<u8>>,
+}
+impl HeldStage {
+    fn verify(&self, root: &Dir, name: &str) -> Result<()> {
+        same_directory(root, name, &self.directory)?;
+        if let Some(expected) = &self.validated_journal
+            && read_regular(&self.directory, "recovery.json", JOURNAL_LIMIT)? != *expected
+        {
+            return Err(invalid(
+                "The validated recovery journal changed; source files were preserved.",
+            ));
+        }
+        Ok(())
+    }
+}
+struct RestorationSync<'a> {
+    file: &'a dyn Fn(&cap_std::fs::File) -> io::Result<()>,
+    directory: &'a dyn Fn(&Dir) -> io::Result<()>,
+}
+impl RestorationSync<'static> {
+    fn native() -> Self {
+        Self {
+            file: &cap_std::fs::File::sync_all,
+            directory: &sync,
+        }
+    }
+}
+
 /// The destination may be on another volume. Copy, verify and sync every object and the content
 /// catalog before unlinking any source. All source operations stay relative to open capabilities.
 pub(super) fn settle(
@@ -460,10 +527,49 @@ pub(super) fn settle(
     group: &Group,
     result: &mut RevertResult,
 ) {
+    match root.open_dir_nofollow(name) {
+        Ok(directory) => settle_held(
+            root,
+            name,
+            journal,
+            group,
+            result,
+            HeldStage {
+                directory,
+                validated_journal: None,
+            },
+            &RestorationSync::native(),
+        ),
+        Err(cause) => {
+            if let Ok(path) = root.canonicalize(name) {
+                result
+                    .recovery_paths
+                    .push(path.to_string_lossy().into_owned());
+            }
+            error(
+                result,
+                format!(
+                    "Revert recovery could not be opened: {cause}. Inspect {name} before retrying."
+                ),
+            );
+        }
+    }
+}
+fn settle_held(
+    root: &Dir,
+    name: &str,
+    journal: &Journal,
+    group: &Group,
+    result: &mut RevertResult,
+    held: HeldStage,
+    restoration_sync: &RestorationSync<'_>,
+) {
     let mut durable = false;
     let finalized = (|| -> Result<()> {
-        let stage = root.open_dir_nofollow(name)?;
-        let files = inspect(&stage, journal)?;
+        held.verify(root, name)?;
+        let stage = &held.directory;
+        let files = inspect(stage, journal)?;
+        held.verify(root, name)?;
         let mut saved = Vec::new();
         for (source, bytes) in &files {
             let hash = crate::chatstore::rows::hex(&Sha256::digest(bytes));
@@ -479,7 +585,7 @@ pub(super) fn settle(
         group.catalog(&saved)?;
         durable = true;
         // Recheck the entire set before removal. No remove_dir_all, including on errors.
-        if inspect(&stage, journal)? != files {
+        if inspect(stage, journal)? != files {
             return Err(invalid(
                 "Recovery files changed during finalization; source copies were preserved.",
             ));
@@ -489,62 +595,109 @@ pub(super) fn settle(
             .filter(|(name, _)| name.as_str() != "recovery.json")
             .chain(files.get_key_value("recovery.json"))
         {
-            if read_regular(&stage, source, bytes.len())? != *bytes {
+            if read_regular(stage, source, bytes.len())? != *bytes {
                 return Err(invalid("Recovery file changed before cleanup."));
             }
-            same_directory(root, name, &stage)?;
+            held.verify(root, name)?;
             stage.remove_file(source)?;
         }
-        sync(&stage)?;
-        same_directory(root, name, &stage)?;
-        drop(stage);
-        root.remove_dir(name)?;
-        sync(root)?;
+        sync(stage)?;
+        same_directory(root, name, stage)?;
         Ok(())
     })();
+    if finalized.is_ok() {
+        // cap-std intentionally denies directory deletion while its handle is open on Windows.
+        // Close only after source cleanup and the final identity check have completed.
+        drop(held);
+        if let Err(cause) = root.remove_dir(name).and_then(|()| sync(root)) {
+            if let Ok(path) = root.canonicalize(name) {
+                result
+                    .recovery_paths
+                    .push(path.to_string_lossy().into_owned());
+            }
+            error(
+                result,
+                format!(
+                    "Revert recovery directory cleanup failed: {cause}. Inspect {name} before retrying."
+                ),
+            );
+        }
+        return;
+    }
     if let Err(cause) = finalized {
+        let mut removable = false;
         // If storage failed, attempt no-clobber restoration of any only surviving originals.
         // Preserve the stage when another writer owns the path or its content cannot be saved.
-        if !durable && let Ok(stage) = root.open_dir_nofollow(name) {
+        if !durable && held.verify(root, name).is_ok() {
+            let stage = &held.directory;
             for (index, entry) in journal.files.iter().enumerate() {
-                if read_regular(&stage, &entry.backup, scan::FILE_LIMIT).is_ok()
+                if read_regular(stage, &entry.backup, scan::FILE_LIMIT).is_ok()
                     && let Ok(parent) = parent(root, &entry.path)
                     && let Some(file) = Path::new(&entry.path).file_name()
-                    && restore_original(&stage, &entry.backup, &parent, file).unwrap_or(false)
+                    && match restore_original(stage, &entry.backup, &parent, file, restoration_sync)
+                    {
+                        Ok(restored) => restored,
+                        Err(cause) => {
+                            error(
+                                result,
+                                format!(
+                                    "Restoring {} was not synced: {cause}. Its staged copy was preserved.",
+                                    entry.path
+                                ),
+                            );
+                            false
+                        }
+                    }
                 {
                     result.applied.retain(|path| path != &entry.path);
-                    let _ = stage.remove_file(&entry.backup);
+                    if held.verify(root, name).is_ok() {
+                        let _ = stage.remove_file(&entry.backup);
+                    }
                 }
                 // Replacement bytes matching the checkpoint already have a durable source.
                 let replacement = format!("replacement-{index}");
                 if let Some(expected) = &entry.replacement
-                    && let Ok(bytes) = read_regular(&stage, &replacement, scan::FILE_LIMIT)
+                    && let Ok(bytes) = read_regular(stage, &replacement, scan::FILE_LIMIT)
                     && bytes.len() == expected.bytes as usize
                     && crate::chatstore::rows::hex(&Sha256::digest(&bytes)) == expected.sha256
+                    && held.verify(root, name).is_ok()
                 {
                     let _ = stage.remove_file(&replacement);
                 }
             }
-            if stage.entries().is_ok_and(|entries| {
-                entries
-                    .into_iter()
-                    .all(|entry| entry.is_ok_and(|entry| entry.file_name() == "recovery.json"))
-            }) {
+            if held.verify(root, name).is_ok()
+                && stage.entries().is_ok_and(|entries| {
+                    entries
+                        .into_iter()
+                        .all(|entry| entry.is_ok_and(|entry| entry.file_name() == "recovery.json"))
+                })
+            {
                 let _ = stage.remove_file("recovery.json");
-                drop(stage);
-                let _ = root.remove_dir(name);
+                removable = same_directory(root, name, stage).is_ok();
             }
         }
-        let recovery = match root.canonicalize(name) {
-            Ok(path) => {
+        let mut recovery_path = held.directory.canonicalize(".").ok();
+        if removable {
+            drop(held);
+            match root.remove_dir(name).and_then(|()| sync(root)) {
+                Ok(()) => recovery_path = None,
+                Err(cause) => error(
+                    result,
+                    format!("Restored recovery directory cleanup failed: {cause}."),
+                ),
+            }
+        }
+        let recovery = match recovery_path {
+            Some(path) => {
                 result
                     .recovery_paths
                     .push(path.to_string_lossy().into_owned());
                 format!(
-                    "Surviving recovery data was preserved in {name}; inspect it before retrying."
+                    "Surviving recovery data was preserved in {}; inspect it before retrying.",
+                    path.display()
                 )
             }
-            Err(_) => {
+            None => {
                 "Surviving originals were retained or restored without replacing newer work.".into()
             }
         };
@@ -559,20 +712,32 @@ fn restore_original(
     backup: &str,
     parent: &Dir,
     name: &std::ffi::OsStr,
+    durability: &RestorationSync<'_>,
 ) -> io::Result<bool> {
+    let mut options = OpenOptions::new();
+    // FlushFileBuffers requires a writable handle on Windows. If the file cannot be opened for
+    // syncing, the caller preserves its staged link and reports the failed restoration gate.
+    options.read(true).write(true).follow(FollowSymlinks::No);
     match stage.hard_link(backup, parent, name) {
-        Ok(()) => Ok(true),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            let mut options = OpenOptions::new();
-            options.read(true).follow(FollowSymlinks::No);
-            let saved =
-                same_file::Handle::from_file(stage.open_with(backup, &options)?.into_std())?;
-            let current =
-                same_file::Handle::from_file(parent.open_with(name, &options)?.into_std())?;
-            Ok(saved == current)
-        }
-        Err(error) => Err(error),
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
     }
+    let restored = parent.open_with(name, &options)?;
+    if !restored.metadata()?.is_file() {
+        return Ok(false);
+    }
+    let saved = same_file::Handle::from_file(stage.open_with(backup, &options)?.into_std())?;
+    let current = same_file::Handle::from_file(restored.try_clone()?.into_std())?;
+    if saved != current {
+        return Ok(false);
+    }
+    // Keep the source link until both the newer file bytes and its restored destination entry
+    // have passed their sync gates. Directory syncing is currently Unix-only; see sync().
+    (durability.file)(&restored)?;
+    (durability.directory)(parent)?;
+    let published = same_file::Handle::from_file(parent.open_with(name, &options)?.into_std())?;
+    Ok(current == published)
 }
 fn same_directory(root: &Dir, name: &str, held: &Dir) -> Result<()> {
     let retained = same_file::Handle::from_file(held.try_clone()?.into_std_file())?;
@@ -829,5 +994,318 @@ mod tests {
             .unwrap();
             assert!(inspect(&stage, &journal).is_err());
         }
+    }
+    #[test]
+    fn local_recovery_root_parent_sync_gates_new_groups_and_retries() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkpoint = Dir::open_ambient_dir(temp.path(), cap_std::ambient_authority()).unwrap();
+        let expected =
+            same_file::Handle::from_file(checkpoint.try_clone().unwrap().into_std_file()).unwrap();
+        let store = Store::fixture(temp.path().join("reverts"), false);
+        let token = crate::ids::new_id();
+        std::fs::write(temp.path().join("work"), "unmodified working bytes").unwrap();
+        let calls = std::cell::Cell::new(0);
+        let failed_sync = |dir: &Dir| {
+            calls.set(calls.get() + 1);
+            assert_eq!(
+                same_file::Handle::from_file(dir.try_clone()?.into_std_file())?,
+                expected
+            );
+            Err(io::Error::other("injected checkpoint parent sync failure"))
+        };
+        // The first attempt creates reverts. A retry must sync its parent even though it exists.
+        for _ in 0..2 {
+            assert!(store.group_with_sync(&token, &failed_sync).is_err());
+            assert!(!store.path(&token).exists());
+        }
+        assert_eq!(calls.get(), 2);
+        let synchronized = std::cell::RefCell::new(Vec::new());
+        store
+            .group_with_sync(&token, &|dir| {
+                synchronized.borrow_mut().push(same_file::Handle::from_file(
+                    dir.try_clone()?.into_std_file(),
+                )?);
+                sync(dir)
+            })
+            .unwrap();
+        let expected_reverts = same_file::Handle::from_file(
+            checkpoint
+                .open_dir_nofollow("reverts")
+                .unwrap()
+                .into_std_file(),
+        )
+        .unwrap();
+        assert_eq!(*synchronized.borrow(), vec![expected, expected_reverts]);
+        assert_eq!(
+            std::fs::read(temp.path().join("work")).unwrap(),
+            b"unmodified working bytes"
+        );
+    }
+
+    fn conflicting_newer_backup(group: &Group) {
+        group
+            .write("original-0", b"older bytes saved before a concurrent edit")
+            .unwrap();
+        let hash = crate::chatstore::rows::hex(&Sha256::digest(b"only surviving original"));
+        group
+            .write(
+                &format!("saved-original-0-{hash}"),
+                b"immutable conflicting object",
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn failed_restored_file_or_parent_sync_preserves_newer_staged_original() {
+        for fail_file in [true, false] {
+            let source = tempfile::tempdir().unwrap();
+            let destination = tempfile::tempdir().unwrap();
+            let token = crate::ids::new_id();
+            let (root, journal, name) = fixture(source.path(), &token);
+            let stage = root.open_dir_nofollow(&name).unwrap();
+            let expected_journal = read_regular(&stage, "recovery.json", JOURNAL_LIMIT).unwrap();
+            let group = Store::fixture(destination.path().join("reverts"), false)
+                .group(&token)
+                .unwrap();
+            conflicting_newer_backup(&group);
+            let calls = std::cell::RefCell::new(Vec::new());
+            let file_sync = |file: &cap_std::fs::File| {
+                calls.borrow_mut().push("file");
+                assert!(source.path().join(&name).join("original-0").exists());
+                if fail_file {
+                    Err(io::Error::other("injected restored file sync failure"))
+                } else {
+                    file.sync_all()
+                }
+            };
+            let parent_sync = |_parent: &Dir| {
+                calls.borrow_mut().push("parent");
+                assert!(source.path().join(&name).join("original-0").exists());
+                Err(io::Error::other("injected restored parent sync failure"))
+            };
+            let mut outcome = result();
+            settle_held(
+                &root,
+                &name,
+                &journal,
+                &group,
+                &mut outcome,
+                HeldStage {
+                    directory: stage,
+                    validated_journal: Some(expected_journal),
+                },
+                &RestorationSync {
+                    file: &file_sync,
+                    directory: &parent_sync,
+                },
+            );
+            assert_eq!(
+                *calls.borrow(),
+                if fail_file {
+                    vec!["file"]
+                } else {
+                    vec!["file", "parent"]
+                }
+            );
+            assert!(outcome.error.as_deref().unwrap().contains(if fail_file {
+                "injected restored file sync failure"
+            } else {
+                "injected restored parent sync failure"
+            }));
+            assert_eq!(
+                std::fs::read(source.path().join(&name).join("original-0")).unwrap(),
+                b"only surviving original"
+            );
+            assert_eq!(
+                std::fs::read(source.path().join("file")).unwrap(),
+                b"only surviving original"
+            );
+            assert_eq!(
+                group.read("original-0"),
+                b"older bytes saved before a concurrent edit"
+            );
+            assert_eq!(outcome.recovery_paths.len(), 1);
+        }
+    }
+
+    #[test]
+    fn restored_file_and_parent_sync_finish_before_staged_link_removal() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let token = crate::ids::new_id();
+        let (root, journal, name) = fixture(source.path(), &token);
+        let stage = root.open_dir_nofollow(&name).unwrap();
+        let group = Store::fixture(destination.path().join("reverts"), false)
+            .group(&token)
+            .unwrap();
+        conflicting_newer_backup(&group);
+        let calls = std::cell::RefCell::new(Vec::new());
+        let file_sync = |file: &cap_std::fs::File| {
+            calls.borrow_mut().push("file");
+            assert!(source.path().join(&name).join("original-0").exists());
+            file.sync_all()
+        };
+        let parent_sync = |parent: &Dir| {
+            calls.borrow_mut().push("parent");
+            assert!(source.path().join(&name).join("original-0").exists());
+            sync(parent)
+        };
+        let mut outcome = result();
+        settle_held(
+            &root,
+            &name,
+            &journal,
+            &group,
+            &mut outcome,
+            HeldStage {
+                directory: stage,
+                validated_journal: None,
+            },
+            &RestorationSync {
+                file: &file_sync,
+                directory: &parent_sync,
+            },
+        );
+        assert_eq!(*calls.borrow(), vec!["file", "parent"]);
+        assert!(outcome.error.is_some());
+        assert_eq!(
+            std::fs::read(source.path().join("file")).unwrap(),
+            b"only surviving original"
+        );
+        assert!(!source.path().join(&name).exists());
+    }
+
+    #[test]
+    fn legacy_directory_substitution_never_cleans_or_restores_the_replacement() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let token = crate::ids::new_id();
+        let (root, journal, name) = fixture(source.path(), &token);
+        #[cfg(not(windows))]
+        let stage = root.open_dir_nofollow(&name).unwrap();
+        #[cfg(windows)]
+        let stage = {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE,
+                FILE_SHARE_READ, FILE_SHARE_WRITE,
+            };
+            // Native cap-std handles already prevent this rename on Windows. Permit it only in
+            // this fixture so the retained-identity guard is exercised on every test platform.
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .share_mode(FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE)
+                .open(source.path().join(&name))
+                .unwrap();
+            Dir::from_std_file(file)
+        };
+        let expected = read_regular(&stage, "recovery.json", JOURNAL_LIMIT).unwrap();
+        root.rename(&name, &root, "retained-original-stage")
+            .unwrap();
+        root.create_dir(&name).unwrap();
+        let replacement = root.open_dir_nofollow(&name).unwrap();
+        write_new(&replacement, "recovery.json", b"{}").unwrap();
+        write_new(
+            &replacement,
+            "original-0",
+            b"unrelated replacement directory bytes",
+        )
+        .unwrap();
+        let group = Store::fixture(destination.path().join("reverts"), false)
+            .group(&token)
+            .unwrap();
+        let mut outcome = result();
+        settle_held(
+            &root,
+            &name,
+            &journal,
+            &group,
+            &mut outcome,
+            HeldStage {
+                directory: stage,
+                validated_journal: Some(expected.clone()),
+            },
+            &RestorationSync::native(),
+        );
+        assert!(
+            outcome
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("recovery directory moved")
+        );
+        assert_eq!(
+            read_regular(&replacement, "recovery.json", JOURNAL_LIMIT).unwrap(),
+            b"{}"
+        );
+        assert_eq!(
+            read_regular(&replacement, "original-0", scan::FILE_LIMIT).unwrap(),
+            b"unrelated replacement directory bytes"
+        );
+        assert_eq!(
+            std::fs::read(source.path().join("retained-original-stage/original-0")).unwrap(),
+            b"only surviving original"
+        );
+        assert_eq!(
+            std::fs::read(source.path().join("retained-original-stage/recovery.json")).unwrap(),
+            expected
+        );
+        assert!(!source.path().join("file").exists());
+        assert!(
+            group
+                .read_optional("saved-recovery.json")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn legacy_journal_substitution_in_the_same_directory_preserves_all_source_files() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let token = crate::ids::new_id();
+        let (root, journal, name) = fixture(source.path(), &token);
+        let stage = root.open_dir_nofollow(&name).unwrap();
+        let expected = read_regular(&stage, "recovery.json", JOURNAL_LIMIT).unwrap();
+        std::fs::write(source.path().join(&name).join("recovery.json"), b"{}").unwrap();
+        let group = Store::fixture(destination.path().join("reverts"), false)
+            .group(&token)
+            .unwrap();
+        let mut outcome = result();
+        settle_held(
+            &root,
+            &name,
+            &journal,
+            &group,
+            &mut outcome,
+            HeldStage {
+                directory: stage,
+                validated_journal: Some(expected),
+            },
+            &RestorationSync::native(),
+        );
+        assert!(
+            outcome
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("validated recovery journal changed")
+        );
+        assert_eq!(
+            std::fs::read(source.path().join(&name).join("original-0")).unwrap(),
+            b"only surviving original"
+        );
+        assert_eq!(
+            std::fs::read(source.path().join(&name).join("recovery.json")).unwrap(),
+            b"{}"
+        );
+        assert!(!source.path().join("file").exists());
+        assert!(
+            group
+                .read_optional("saved-recovery.json")
+                .unwrap()
+                .is_none()
+        );
     }
 }
