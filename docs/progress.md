@@ -4254,3 +4254,14 @@ fixed by checking original content because rename mutations have no replacement 
 desktop startup-notice test and native binding export remain unrun because the shared desktop graph
 has blocked dependencies; exported DTO shapes did not change. The dedicated Unix symlink interruption
 test requires macOS verification.
+## Task 6 review correction, verified
+
+The independent round-1 review found two malformed-evidence gaps. Source now preserves validated
+metadata identity hints even when journal schema validation fails, and uses one phase validator for
+recovery and retention. Contradictory rollback/commit evidence is rejected before recovery writes,
+and successful recovery must reach a valid terminal state. Added deterministic temporary-home
+regressions for same-entry blocking versus unrelated writes, invalid identity hints, contradictory
+markers with byte-preserved file/journal evidence, and malformed marker bytes. Verification passed:
+aura-config 174/174 tests (79 unit, 95 integration), all-target Clippy with warnings denied, rustfmt,
+instruction parity, and diff checks. The native startup-notice test remains unrun because the desktop
+dependency graph is blocked; these fixes change no frontend or exported DTO shape.
