@@ -25,6 +25,29 @@ The desktop and workspace binding exporters stop in dependencies with E0463; reg
 bindings and the resulting TypeScript check remain pending. Installed-dependency tests above
 do not establish those unavailable gates.
 
+## 2026-10-29: Interrupted clone recovery
+
+Local branch `codex/clone-recovery` records clone lifecycle phases in app data before destination
+creation, after creation, after a successful Git exit, and on settlement. Records contain the
+validated address, path and directory identities, with no command output or environment. Recovery
+preserves destination files, including missing, replaced or linked paths and malformed records.
+The onboarding clone form and New project dialog list previous clones with Open folder, Retry in
+another folder, Add existing project for a completed clone, and record-only Dismiss notice. Adding
+an existing clone revalidates its directory and Git identities before the normal project form.
+
+Verified on Windows with temporary folders and isolated Git configuration: core cloning tests
+14 passed, including a real clone from a local bare repository; core account-sync Clippy passed
+with warnings denied; setup-action bindings regenerated from Rust; desktop typecheck passed;
+focused clone frontend tests 19 passed. Chromium and WebKit setup-action checks passed with
+recovery actions, accessibility and a dialog overflow assertion. Formatting and local instruction
+checks passed. The initial Rust compile found a Drop-constructor move and the narrow Windows
+identity wrapper needed an explicit unsafe-code allowance; both were fixed before passing checks.
+
+Native command compilation, the full desktop bindings exporter, native walkthrough and independent
+review remain pending. Windows directory-entry power-loss durability and Unix execution have not
+been verified. Test linking retains the existing OpenSSL missing-PDB warning. The pinned package
+manager remains blocked, so frontend results used installed dependencies.
+
 ## 2026-10-28: Instruction files, one file for every agent or a file per agent
 
 Branch `instructions` (from `origin/main`, with `origin/main` 6c383b5 merged in). Details,

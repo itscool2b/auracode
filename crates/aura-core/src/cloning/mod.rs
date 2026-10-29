@@ -6,13 +6,15 @@
 //! that folder. Git runs with the person's own configuration, credential helpers and SSH setup:
 //! auracode never reads, stores or passes credentials.
 mod files;
+mod journal;
 mod process;
 mod progress;
 mod validate;
 
 use aura_process::{EnvKey, ResolvedEnv, find_exe};
 use aura_protocol::setup_actions::{
-    CloneCheck, CloneField, CloneInput, CloneProblem, CloneRecord, CloneReview, CloneState,
+    CloneCheck, CloneField, CloneInput, CloneProblem, CloneRecord, CloneRecovery, CloneReview,
+    CloneState,
 };
 use cap_std::fs::Dir;
 use std::{
@@ -28,7 +30,7 @@ type Result<T> = std::result::Result<T, CloneError>;
 pub enum CloneError {
     #[error("{0}")]
     Message(String),
-    #[error("The folder could not be read. Nothing was changed.")]
+    #[error("The folder could not be read.")]
     Io(#[from] std::io::Error),
 }
 impl CloneError {
@@ -76,6 +78,7 @@ pub(crate) struct Job {
     record: Mutex<CloneRecord>,
     canceled: watch::Sender<bool>,
     changed: watch::Sender<u32>,
+    journal: Option<Arc<journal::Journal>>,
 }
 impl Job {
     pub(crate) fn snapshot(&self) -> CloneRecord {
@@ -92,9 +95,20 @@ impl Job {
         self.changed.send_replace(revision);
     }
     pub(crate) fn finish(&self, state: CloneState, detail: &str) {
-        self.update(|record| {
-            record.state = state;
-            record.detail = detail.into();
+        let saved = self
+            .journal
+            .as_ref()
+            .map(|journal| journal.finish(state))
+            .transpose();
+        self.update(|record| match saved {
+            Ok(_) => {
+                record.state = state;
+                record.detail = detail.into();
+            }
+            Err(error) => {
+                record.state = CloneState::Interrupted;
+                record.detail = format!("{detail} {error}");
+            }
         });
     }
 }
@@ -109,6 +123,7 @@ struct Pending {
 pub struct Clones {
     pending: Mutex<HashMap<String, Pending>>,
     jobs: Mutex<HashMap<String, Arc<Job>>>,
+    root: Option<PathBuf>,
 }
 impl Drop for Clones {
     fn drop(&mut self) {
@@ -116,6 +131,57 @@ impl Drop for Clones {
     }
 }
 impl Clones {
+    /// The installation's durable data root. Production clones require this journal location.
+    pub fn new(root: Option<PathBuf>) -> Self {
+        Self {
+            root,
+            pending: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn recovery_list(&self) -> Result<Vec<CloneRecovery>> {
+        let Some(root) = &self.root else {
+            return Ok(Vec::new());
+        };
+        let active: Vec<_> = lock(&self.jobs)
+            .values()
+            .filter(|job| {
+                matches!(
+                    job.snapshot().state,
+                    CloneState::Running | CloneState::CleanupPending
+                )
+            })
+            .map(|job| job.snapshot().id)
+            .collect();
+        journal::list(root, &active)
+    }
+
+    pub fn recovery_get(&self, id: &str) -> Result<CloneRecovery> {
+        let root = self
+            .root
+            .as_deref()
+            .ok_or_else(|| CloneError::message("Clone recovery storage is unavailable."))?;
+        journal::get(root, id)
+    }
+
+    pub fn recovery_dismiss(&self, id: &str) -> Result<()> {
+        if lock(&self.jobs).get(id).is_some_and(|job| {
+            matches!(
+                job.snapshot().state,
+                CloneState::Running | CloneState::CleanupPending
+            )
+        }) {
+            return Err(CloneError::message(
+                "Wait for the running clone to stop before dismissing its record.",
+            ));
+        }
+        let root = self
+            .root
+            .as_deref()
+            .ok_or_else(|| CloneError::message("Clone recovery storage is unavailable."))?;
+        journal::dismiss(root, id)
+    }
     /// Reads the form and, when it is complete, keeps a startable review for ten minutes. Typing
     /// asks again on every change, so only the newest reviews per window are kept.
     pub async fn check(
@@ -208,11 +274,22 @@ impl Clones {
             output: Vec::new(),
             removed: false,
         };
+        let journal = match &self.root {
+            Some(root) => Some(journal::Journal::begin(root, &prepared)?),
+            // Unit fixtures may use an ephemeral service. Production never starts without a journal.
+            None if cfg!(test) => None,
+            None => {
+                return Err(CloneError::message(
+                    "Clone recovery storage is unavailable. No folder was created.",
+                ));
+            }
+        };
         let job = Arc::new(Job {
             owner: owner.into(),
             record: Mutex::new(record),
             canceled: watch::channel(false).0,
             changed: watch::channel(0).0,
+            journal,
         });
         jobs.insert(id.into(), Arc::clone(&job));
         Ok((prepared, job))

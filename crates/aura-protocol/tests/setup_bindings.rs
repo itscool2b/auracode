@@ -7,7 +7,8 @@ fn export_setup_action_bindings() {
         .register::<aura_protocol::setup_actions::CloneInput>()
         .register::<aura_protocol::setup_actions::CloneCheck>()
         .register::<aura_protocol::setup_actions::CloneReview>()
-        .register::<aura_protocol::setup_actions::CloneRecord>();
+        .register::<aura_protocol::setup_actions::CloneRecord>()
+        .register::<aura_protocol::setup_actions::CloneRecovery>();
     let generated = specta_typescript::Typescript::default()
         .header("// Generated from aura-protocol. Run cargo test -p aura-protocol export_setup_action_bindings. Do not edit.")
         .export(&types, specta_serde::Format).expect("setup action DTOs export");
