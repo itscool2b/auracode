@@ -107,12 +107,14 @@ export const MODES = [
   // The quit question, in the window's own dialog over the chat.
   "settled&quit#quit",
   "thinking#typed",
-  // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
-  // Create, and the recreate dialog for a deleted worktree folder.
+  // The worktree chip, the new-chat setup choice, and the normal chat's setup review/terminal.
   "new-worktree#worktree",
   "new-worktree#local",
   "new-worktree#branch-error",
-  "new-setup#setup",
+  "new-setup",
+  "setup-recovery",
+  "setup-recovery#setup",
+  "setup-actions.html?recovery#clone-recovery",
   "git-missing#recreate",
   // The docked terminal panel: two tabs open, opened with Ctrl+`, its shell menu, and resized.
   "terminal-panel",
@@ -301,9 +303,13 @@ const OPENERS = {
     await page.locator(".new-chat-worktree-error").waitFor();
   },
   setup: async (page) => {
-    await page.getByTestId("new-chat-create").click();
-    await page.getByRole("button", { name: "Start setup", exact: true }).click();
-    await page.locator('.terminal-sheet[data-state="running"]').waitFor();
+    await page.getByRole("region", { name: "Review setup command" }).waitFor();
+    await page.getByRole("button", { name: "Run reviewed setup", exact: true }).click();
+    await page.locator('.terminal-panel [role="tab"][data-state="running"]').waitFor();
+  },
+  "clone-recovery": async (page) => {
+    await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+    await page.getByRole("region", { name: "Interrupted clones" }).waitFor();
   },
   recreate: async (page) => {
     await page.getByRole("button", { name: "Recreate folder", exact: true }).click();
@@ -785,7 +791,9 @@ try {
           const [preview, view] = mode.split("#");
           // A fixture with its own page (an .html file) is opened by name.
           await page.goto(
-            preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
+            preview.split("?")[0].endsWith(".html")
+              ? `${url}/${preview}`
+              : `${url}/?preview=${preview}`,
           );
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);
