@@ -15,6 +15,12 @@ Closing the terminal, timing out, launch failure or another exit code leaves set
 holds its messages. Hiding the docked panel keeps the owned terminal running. A renderer callback
 cannot mark setup successful or start the agent.
 
+Review tokens are bound to the generation they observed. Expired current reviews, unavailable
+folders and folder-admission refusals record failure and hold messages. Setup uses its own native
+terminal reservation: the prepared launch and completion owner remain in the terminal slot until
+a matching chat/token claim starts it. A full terminal pool or closing a pending slot also fails
+that generation. Invalid or stale reviews and claims cannot fail a newer or unrelated attempt.
+
 After success, unheld messages leave in their saved order once. Messages held by a failure, a
 restart or the person stay held until explicitly sent. Retrying reviews the saved command only;
 it does not copy setup files again. An old command token or completion cannot complete a newer

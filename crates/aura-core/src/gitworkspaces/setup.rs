@@ -123,10 +123,12 @@ impl GitWorkspaces {
         let token = crate::ids::new_id();
         let preview=WorktreeSetupPreview {token:token.clone(),worktree_id:record.id.clone(),source:record.source.clone(),destination:record.path.clone(),files:files.iter().map(|(path,(fingerprint,_))|SetupFile {path:path.clone(),bytes:fingerprint.bytes}).collect(),command,warnings:vec!["Only the listed files will be copied. Existing destination files are never overwritten.".into(),"Environment files may contain application secrets. Their contents are not shown, logged, or stored in setup settings.".into(),"The command runs only after a separate explicit Start action in the owned terminal. It can modify this worktree and access your normal command environment. Setup stops after ten minutes.".into()],expires_at:crate::time::now_millis()+600_000};
         let mut prepared = lock(&self.setups);
-        prepared.retain(|_, value| value.expires > Instant::now());
+        // Keep bound command receipts until their generation is replaced, so even expiry can
+        // fail its exact pending attempt rather than losing its admission identity.
+        prepared.retain(|_, value| value.expires > Instant::now() || value.generation.is_some());
         if prepared.len() >= 64 {
             return Err(invalid(
-                "Too many pending setup reviews. Wait for one to expire.",
+                "Too many pending setup reviews. Finish or retry setup in another chat before reviewing more.",
             ));
         }
         prepared.insert(
@@ -166,13 +168,39 @@ impl GitWorkspaces {
     pub(crate) fn setup_generation(&self, chat_id: &str, token: &str) -> Result<Option<u32>> {
         lock(&self.setups)
             .get(token)
-            .filter(|plan| {
-                plan.record.chat_id == chat_id
-                    && plan.command_ready
-                    && plan.expires > Instant::now()
-            })
+            .filter(|plan| plan.record.chat_id == chat_id && plan.command_ready)
             .map(|plan| plan.generation)
             .ok_or_else(|| invalid("Review setup again before starting this command."))
+    }
+
+    pub(crate) fn setup_review_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<Option<u32>> {
+        lock(&self.setups)
+            .get(token)
+            .filter(|plan| plan.record.chat_id == chat_id && !plan.command_ready)
+            .map(|plan| plan.generation)
+            .ok_or_else(|| invalid("Review setup again before preparing this command."))
+    }
+
+    pub(crate) fn bind_setup_review_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+        generation: u32,
+    ) -> Result<()> {
+        let mut plans = lock(&self.setups);
+        plans.retain(|key, plan| {
+            key == token || plan.record.chat_id != chat_id || plan.command_ready
+        });
+        let plan = plans
+            .get_mut(token)
+            .filter(|plan| plan.record.chat_id == chat_id && !plan.command_ready)
+            .ok_or_else(|| invalid("The setup review is unavailable."))?;
+        plan.generation = Some(generation);
+        Ok(())
     }
 
     pub(crate) fn bind_setup_generation(
@@ -182,12 +210,21 @@ impl GitWorkspaces {
         generation: u32,
     ) -> Result<()> {
         let mut plans = lock(&self.setups);
+        plans.retain(|key, plan| {
+            key == token || plan.record.chat_id != chat_id || plan.generation.is_none()
+        });
         let plan = plans
             .get_mut(token)
             .filter(|plan| plan.record.chat_id == chat_id && plan.command_ready)
             .ok_or_else(|| invalid("The setup command review is unavailable."))?;
         plan.generation = Some(generation);
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expire_setup_for_test(&self, token: &str) {
+        lock(&self.setups).get_mut(token).unwrap().expires =
+            Instant::now() - Duration::from_secs(1);
     }
 
     fn take_setup(&self, chat_id: &str, token: &str, command_ready: bool) -> Result<Prepared> {

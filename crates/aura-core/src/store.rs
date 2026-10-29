@@ -1422,7 +1422,7 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 19,
+            checked, 20,
             "every foreign key in the listed tables was checked"
         );
     }

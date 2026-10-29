@@ -4257,3 +4257,19 @@ library and tests passed with warnings denied. Biome, rustfmt and instruction pa
 Desktop binding export remains blocked by dependency E0463 errors for serde, specta, process_wrap
 and windows. Generated bindings were left untouched; TypeScript checking is blocked on those new
 types/commands. Native app and macOS verification remain integration gates.
+
+### 2026-10-29: Setup admission review follow-up
+
+Prelaunch setup failures now hold messages even when no process starts. Review tokens bind their
+observed generation before apply admission. The Rust completion owner starts before expiry,
+folder and reservation checks; a setup-specific native terminal reservation owns the prepared
+launch across reserve/start IPC, and only its matching chat/token can claim it. Busy windows,
+closed pending slots, expired reviews/commands and unavailable folders record failure. Stale or
+unrelated tokens cannot fail replacement attempts. A successful retry keeps failed messages held.
+
+Focused verification passed: account-sync setup regressions 16/16, all terminal tests 16/16, the
+foreign-key index check 1/1 after updating its expected count to twenty, core Clippy library/tests
+with warnings denied, and frontend API/terminal/setup tests 15/15. Existing worktree card and Git
+review containers replace compact file rows and the single-row chat banner for rich recovery/setup
+content; no CSS was changed. Root's integrated browser/layout recheck remains pending for those
+container changes. Native bindings remain generated only by the integration owner.

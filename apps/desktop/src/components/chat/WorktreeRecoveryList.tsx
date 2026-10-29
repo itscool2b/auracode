@@ -7,6 +7,7 @@ import type {
 import { errorMessage } from "../../lib/errors";
 import { withoutVerbatimPrefix } from "../../lib/gitWorkspace";
 import type { WorktreeRecoveryApi } from "../../lib/worktreeRecovery";
+import "./git-dialog.css";
 
 export function WorktreeRecoveryList({
   records,
@@ -46,23 +47,23 @@ export function WorktreeRecoveryList({
           {error}
         </p>
       ) : null}
-      <ul className="git-files">
+      <ul className="git-worktrees">
         {records.map((record) => (
           <li key={record.id}>
-            <div>
-              <strong>{record.branch}</strong>
-              <p>
-                Source: <code>{withoutVerbatimPrefix(record.source)}</code>
-              </p>
-              <p>
-                Retained folder: <code>{withoutVerbatimPrefix(record.path)}</code>
-              </p>
-              <p>
-                {record.detail ??
-                  (record.state === "ready"
-                    ? "The worktree is reconciled and retained without a saved chat."
-                    : `State: ${record.state.replaceAll("_", " ")}`)}
-              </p>
+            <strong>{record.branch}</strong>
+            <p className="git-path">
+              Source: <code>{withoutVerbatimPrefix(record.source)}</code>
+            </p>
+            <p className="git-path">
+              Retained folder: <code>{withoutVerbatimPrefix(record.path)}</code>
+            </p>
+            <p>
+              {record.detail ??
+                (record.state === "ready"
+                  ? "The worktree is reconciled and retained without a saved chat."
+                  : `State: ${record.state.replaceAll("_", " ")}`)}
+            </p>
+            <div className="git-actions">
               {record.state !== "ready" ? (
                 <button
                   type="button"

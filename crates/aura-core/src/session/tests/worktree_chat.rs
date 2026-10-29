@@ -334,7 +334,11 @@ async fn saved_setup_runs_after_creation_and_holds_the_agent_for_the_command() {
         .await
         .err()
         .expect("old generation refused");
-    assert!(error.to_string().contains("older setup attempt"), "{error}");
+    assert!(
+        error.to_string().contains("older setup attempt")
+            || error.to_string().contains("Review setup"),
+        "{error}"
+    );
     let launch = rig
         .manager
         .prepare_worktree_setup_terminal(
@@ -586,4 +590,324 @@ async fn a_deleted_worktree_folder_is_recreated_for_its_stopped_chat() {
         rig.manager.managed_worktrees(&chat_id).await.expect("list")[0].state,
         WorktreeState::Ready
     );
+}
+
+async fn setup_source(rig: &Rig, project: &ProjectSummary) {
+    let source = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .unwrap();
+    rig.manager
+        .worktree_setup_save(
+            &source.chat.id,
+            WorktreeSetupInput {
+                files: vec![],
+                command: Some(SetupCommand {
+                    program: std::env::current_exe().unwrap().to_string_lossy().into(),
+                    args: vec!["--never-run".into()],
+                }),
+            },
+        )
+        .await
+        .unwrap();
+}
+
+async fn failed_setup(
+    rig: &Rig,
+    chat: &str,
+) -> aura_protocol::worktree_setup::WorktreeSetupAttempt {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let attempt = rig.store.read_setup_attempt(chat).await.unwrap().unwrap();
+            if attempt.state == aura_protocol::worktree_setup::WorktreeSetupState::Failed {
+                let snapshot = rig
+                    .manager
+                    .attach(chat, Arc::new(Sink::default()))
+                    .await
+                    .unwrap();
+                let failed = snapshot
+                    .snapshot
+                    .session
+                    .worktree_setup
+                    .as_ref()
+                    .is_some_and(|value| {
+                        value.state == aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                    });
+                rig.manager.detach(&snapshot.subscription_id);
+                if failed {
+                    return attempt;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("native prelaunch failure persisted")
+}
+
+#[tokio::test]
+async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_hold_on_failure() {
+    use aura_protocol::worktree_setup::WorktreeSetupState;
+    let mut rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut rig).await;
+    let project = project(&rig, &rig.folder).await;
+    setup_source(&rig, &project).await;
+    let reviewed = plan(&rig, input(&project)).await;
+    let created = rig
+        .manager
+        .worktree_chat_apply(&reviewed.token)
+        .await
+        .unwrap();
+    let chat = &created.chat.chat.id;
+    let token = created.setup.unwrap().command_token.unwrap();
+    rig.manager
+        .send(chat, "before reservation refusal".into())
+        .await
+        .unwrap();
+    let terminals = crate::terminal::Terminals::default();
+    let busy = terminals.reserve("window").unwrap().pending();
+    assert!(
+        rig.manager
+            .reserve_worktree_setup_terminal(&terminals, "window", chat, &token)
+            .await
+            .is_err()
+    );
+    assert!(
+        failed_setup(&rig, chat)
+            .await
+            .detail
+            .unwrap()
+            .contains("could not be reserved")
+    );
+    rig.manager
+        .send(chat, "after reservation refusal".into())
+        .await
+        .unwrap();
+    let held = rig
+        .manager
+        .attach(chat, Arc::new(Sink::default()))
+        .await
+        .unwrap();
+    assert!(held.snapshot.queue.iter().all(|row| row.held));
+    terminals.close("window", &busy).unwrap();
+    let retry = rig
+        .manager
+        .worktree_setup_command_preview(chat, &created.worktree.id)
+        .await
+        .unwrap();
+    let result = rig
+        .manager
+        .worktree_setup_apply(chat, &retry.token)
+        .await
+        .unwrap();
+    let fresh = result.command_token.unwrap();
+    assert!(
+        rig.manager
+            .worktree_setup_apply(chat, &retry.token)
+            .await
+            .is_err(),
+        "a consumed review cannot fail its replacement generation"
+    );
+    assert!(
+        rig.manager
+            .prepare_worktree_setup_terminal(chat, &token)
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.manager
+            .prepare_worktree_setup_terminal(chat, "unrelated-token")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        rig.store
+            .read_setup_attempt(chat)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        WorktreeSetupState::Awaiting
+    );
+    let id = rig
+        .manager
+        .reserve_worktree_setup_terminal(&terminals, "window", chat, &fresh)
+        .await
+        .unwrap();
+    assert!(
+        terminals
+            .claim_setup("other-window", &id, chat, &fresh)
+            .is_err()
+    );
+    assert!(
+        terminals
+            .claim_setup("window", &id, "another-chat", &fresh)
+            .is_err()
+    );
+    assert!(terminals.claim_setup("window", &id, chat, &token).is_err());
+    assert!(
+        terminals.claim("window", &id).is_err(),
+        "generic claims cannot steal setup admission"
+    );
+    assert_eq!(
+        rig.store
+            .read_setup_attempt(chat)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        WorktreeSetupState::Running
+    );
+    terminals.close("window", &id).unwrap();
+    assert!(terminals.claim_setup("window", &id, chat, &fresh).is_err());
+    assert_eq!(failed_setup(&rig, chat).await.generation, 2);
+    let retry = rig
+        .manager
+        .worktree_setup_command_preview(chat, &created.worktree.id)
+        .await
+        .unwrap();
+    let result = rig
+        .manager
+        .worktree_setup_apply(chat, &retry.token)
+        .await
+        .unwrap();
+    let token = result.command_token.unwrap();
+    let id = rig
+        .manager
+        .reserve_worktree_setup_terminal(&terminals, "window", chat, &token)
+        .await
+        .unwrap();
+    let (ticket, launch) = terminals.claim_setup("window", &id, chat, &token).unwrap();
+    let completion = launch.completion.unwrap();
+    drop(launch.guard);
+    drop(ticket);
+    completion.send(Ok(())).unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if rig
+                .store
+                .read_setup_attempt(chat)
+                .await
+                .unwrap()
+                .unwrap()
+                .state
+                == WorktreeSetupState::Succeeded
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let held = rig
+        .manager
+        .attach(chat, Arc::new(Sink::default()))
+        .await
+        .unwrap();
+    assert!(
+        held.snapshot.queue.iter().all(|row| row.held),
+        "successfully retrying does not auto-send failed messages"
+    );
+}
+
+#[tokio::test]
+async fn expired_setup_receipts_and_folder_admission_fail_only_their_current_generation() {
+    use aura_protocol::worktree_setup::WorktreeSetupState;
+    let mut rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut rig).await;
+    let project = project(&rig, &rig.folder).await;
+    setup_source(&rig, &project).await;
+    for kind in [
+        "expired",
+        "reserved-folder",
+        "missing-folder",
+        "review-expired",
+        "review-reserved-folder",
+    ] {
+        let reviewed = plan(&rig, input(&project)).await;
+        let created = rig
+            .manager
+            .worktree_chat_apply(&reviewed.token)
+            .await
+            .unwrap();
+        let chat = &created.chat.chat.id;
+        let token = created.setup.unwrap().command_token.unwrap();
+        rig.manager
+            .send(chat, format!("held for {kind}"))
+            .await
+            .unwrap();
+        let folder = PathBuf::from(&created.worktree.path);
+        let reserved_folder = crate::session::live::normalize_path(folder.clone());
+        let apply_review = if kind.starts_with("review-") {
+            Some(
+                rig.manager
+                    .worktree_setup_command_preview(chat, &created.worktree.id)
+                    .await
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+        match kind {
+            "expired" => {
+                rig.manager
+                    .worktrees()
+                    .unwrap()
+                    .expire_setup_for_test(&token);
+                rig.manager
+                    .worktree_setup_command_preview(chat, &created.worktree.id)
+                    .await
+                    .unwrap();
+            }
+            "reserved-folder" | "review-reserved-folder" => {
+                assert!(rig.manager.shared().live.reserve_folder(&reserved_folder))
+            }
+            "review-expired" => rig
+                .manager
+                .worktrees()
+                .unwrap()
+                .expire_setup_for_test(&apply_review.as_ref().unwrap().token),
+            _ => std::fs::rename(&folder, folder.with_extension("retained-fixture")).unwrap(),
+        }
+        if let Some(review) = apply_review {
+            assert!(
+                rig.manager
+                    .worktree_setup_apply(chat, &review.token)
+                    .await
+                    .is_err()
+            );
+        } else {
+            assert!(
+                rig.manager
+                    .prepare_worktree_setup_terminal(chat, &token)
+                    .await
+                    .is_err()
+            );
+        }
+        let failed = failed_setup(&rig, chat).await;
+        assert_eq!(failed.state, WorktreeSetupState::Failed);
+        assert!(!failed.detail.unwrap().is_empty());
+        rig.manager
+            .send(chat, "new after admission failure".into())
+            .await
+            .unwrap();
+        let held = rig
+            .manager
+            .attach(chat, Arc::new(Sink::default()))
+            .await
+            .unwrap();
+        assert!(held.snapshot.queue.iter().all(|row| row.held));
+        if kind == "reserved-folder" || kind == "review-reserved-folder" {
+            rig.manager.shared().live.release_folder(&reserved_folder);
+        }
+        if kind == "missing-folder" {
+            std::fs::rename(folder.with_extension("retained-fixture"), &folder).unwrap();
+        }
+    }
 }

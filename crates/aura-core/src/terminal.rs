@@ -75,6 +75,7 @@ struct Running {
     control: PtyControl,
 }
 struct Slot {
+    pending_setup: Mutex<Option<PendingSetup>>,
     owner: String,
     claimed: AtomicBool,
     timed_out: AtomicBool,
@@ -95,10 +96,17 @@ impl Slot {
     }
     fn cancel(&self) {
         self.canceled.send_replace(true);
+        lock(&self.pending_setup).take();
         if let Some(running) = lock(&self.running).as_ref() {
             running.control.kill();
         }
     }
+}
+
+struct PendingSetup {
+    chat_id: String,
+    token: String,
+    launch: crate::session::WorktreeSetupLaunch,
 }
 impl Drop for Slot {
     fn drop(&mut self) {
@@ -150,6 +158,27 @@ impl Drop for TerminalTicket {
     }
 }
 impl TerminalTicket {
+    /// A prepared setup remains owned while reserve/start cross IPC. Closing the pending slot
+    /// drops its Rust completion owner and holds the generation even if Start never arrives.
+    pub fn pending_setup(
+        self,
+        chat_id: String,
+        token: String,
+        launch: crate::session::WorktreeSetupLaunch,
+    ) -> Result<String, TerminalError> {
+        {
+            let mut pending = lock(&self.slot.pending_setup);
+            if *self.slot.canceled.borrow() {
+                return Err(TerminalError::Closed);
+            }
+            *pending = Some(PendingSetup {
+                chat_id,
+                token,
+                launch,
+            });
+        }
+        Ok(self.pending())
+    }
     /// A setup launch owns the caller's folder reservations through process cleanup. Startup
     /// continues in an owned task if the IPC future disappears; its ticket still responds to Close.
     pub async fn start_guarded(
@@ -404,6 +433,7 @@ impl Terminals {
         let (canceled, _) = watch::channel(false);
         let (cleanup, _) = watch::channel(Some(true));
         let slot = Arc::new(Slot {
+            pending_setup: Mutex::new(None),
             owner: owner.into(),
             claimed: AtomicBool::new(true),
             timed_out: AtomicBool::new(false),
@@ -425,6 +455,9 @@ impl Terminals {
 
     pub fn claim(&self, owner: &str, id: &str) -> Result<TerminalTicket, TerminalError> {
         let slot = self.slot(owner, id)?;
+        if lock(&slot.pending_setup).is_some() {
+            return Err(TerminalError::AlreadyOpen);
+        }
         if slot.claimed.swap(true, Ordering::AcqRel) {
             return Err(TerminalError::AlreadyOpen);
         }
@@ -434,6 +467,39 @@ impl Terminals {
             slot,
             committed: false,
         })
+    }
+
+    pub fn claim_setup(
+        &self,
+        owner: &str,
+        id: &str,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<(TerminalTicket, crate::session::WorktreeSetupLaunch), TerminalError> {
+        let slot = self.slot(owner, id)?;
+        let launch = {
+            let mut pending = lock(&slot.pending_setup);
+            if *slot.canceled.borrow()
+                || pending
+                    .as_ref()
+                    .is_none_or(|entry| entry.chat_id != chat_id || entry.token != token)
+            {
+                return Err(TerminalError::Closed);
+            }
+            if slot.claimed.swap(true, Ordering::AcqRel) {
+                return Err(TerminalError::AlreadyOpen);
+            }
+            pending.take().ok_or(TerminalError::Closed)?.launch
+        };
+        Ok((
+            TerminalTicket {
+                terminals: self.clone(),
+                id: id.into(),
+                slot,
+                committed: false,
+            },
+            launch,
+        ))
     }
 
     fn slot(&self, owner: &str, id: &str) -> Result<Arc<Slot>, TerminalError> {
