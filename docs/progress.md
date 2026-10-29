@@ -4265,5 +4265,7 @@ handle dropped before cleanup. Recovery now retains that capability and exact jo
 directory or journal substitution, syncs Local recovery parents on creation and retry, and keeps a
 staged original if either emergency restoration sync fails. Windows directory-entry crash durability
 is explicitly unverified because the existing directory sync helper is Unix-only. Added deterministic
-parent/file sync failure and directory/journal substitution fixtures. Verification is pending the
-shared Cargo lane; no native or real-data cleanup was performed.
+parent/file sync failure and directory/journal substitution fixtures. The amended checkpoint and
+session-checkpoint suite passes 33 tests. Aura-core Clippy passes with Account sync enabled and
+with no default features, including test targets and warnings denied. Formatting, instruction parity
+and diff checks pass. No native app walkthrough or cleanup of real data was performed.
