@@ -361,3 +361,36 @@ fn changed_own_index_and_new_own_indexes_protect_previously_approved_accounts() 
         assert!(vault.has(if changed { &own } else { &second }));
     }
 }
+
+#[test]
+fn complete_bundle_validation_rejects_truncation_trailing_bytes_and_future_version() {
+    let valid = bundle();
+    assert!(aura_sync::account::valid_stored_bundle(&valid));
+    let mut trailing = valid.clone();
+    trailing.push(0);
+    let mut future = valid.clone();
+    future[11] = 99;
+    for malformed in [valid[..valid.len() - 1].to_vec(), trailing, future] {
+        assert!(!aura_sync::account::valid_stored_bundle(&malformed));
+        let temp = tempfile::tempdir().unwrap();
+        let vault = Fake::default();
+        vault.put(&entry("malformed"), &malformed);
+        vault.put(&entry("valid"), &valid);
+        let report = run(&vault, temp.path(), Some(temp.path()));
+        assert_eq!((report.accounts, report.swept), (0, 0));
+        assert!(report.error.is_some());
+    }
+}
+
+#[test]
+fn account_payload_at_an_index_target_does_not_establish_account_ownership() {
+    let temp = tempfile::tempdir().unwrap();
+    let vault = Fake::default();
+    let own = root_index(temp.path(), ORIGINS[0]);
+    vault.put(&own, &bundle());
+    vault.put(&entry("orphan"), &bundle());
+    let report = run(&vault, temp.path(), Some(temp.path()));
+    assert!(vault.has(&own));
+    assert_eq!((report.accounts, report.swept), (0, 0));
+    assert!(report.error.is_some());
+}

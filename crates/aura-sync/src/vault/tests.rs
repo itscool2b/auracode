@@ -202,7 +202,11 @@ fn the_listing_names_only_auracode_entries_of_a_keychain_store_and_removes_nothi
     let entries = app_entries(&listed);
     assert_eq!(
         entries.iter().map(VaultEntry::target).collect::<Vec<_>>(),
-        [format!("{SERVICE}:first"), format!("{SERVICE}:second")]
+        [
+            format!("{SERVICE}:"),
+            format!("{SERVICE}:first"),
+            format!("{SERVICE}:second")
+        ]
     );
     let account = entry();
     assert_eq!(
@@ -211,4 +215,16 @@ fn the_listing_names_only_auracode_entries_of_a_keychain_store_and_removes_nothi
     );
     assert!(account.target().starts_with("auracode.sync.v1:"));
     assert_eq!(VaultEntry::from_target("auracode.sync.v1"), None);
+}
+
+#[test]
+fn review_labels_never_expose_non_digest_entry_names() {
+    let legacy = VaultEntry::from_target("auracode.sync.v1:private-account-id").unwrap();
+    assert!(!legacy.opaque_target().contains("private-account-id"));
+    assert!(
+        legacy
+            .opaque_target()
+            .starts_with("auracode.sync.v1:unrecognized-")
+    );
+    assert_eq!(entry().opaque_target(), entry().target());
 }

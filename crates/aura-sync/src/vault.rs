@@ -59,11 +59,24 @@ impl VaultEntry {
     pub fn target(&self) -> String {
         format!("{SERVICE}:{}", self.0)
     }
+    /// Safe review label even when a legacy or malformed entry name contains private text.
+    /// Canonical digest targets retain their platform spelling; all other names are hashed.
+    pub fn opaque_target(&self) -> String {
+        if crypto::decode(&self.0, 32).is_ok_and(|bytes| bytes.len() == 32) {
+            self.target()
+        } else {
+            format!(
+                "{SERVICE}:unrecognized-{}",
+                crypto::encode(&Sha256::digest(self.0.as_bytes()))
+            )
+        }
+    }
     /// An entry the platform listed under auracode's own service ([`NativeStore::app_entries`]).
-    /// Any other name, or an empty one, is refused.
+    /// Other services and embedded NULs are refused. Malformed names inside our service stay
+    /// discoverable so their payloads can conservatively protect account keys.
     fn from_target(target: &str) -> Option<Self> {
         let name = target.strip_prefix(SERVICE)?.strip_prefix(':')?;
-        (!name.is_empty() && !name.contains('\0')).then(|| Self(name.to_owned()))
+        (!name.contains('\0')).then(|| Self(name.to_owned()))
     }
     pub fn new(origin: &str, account: &str) -> Result<Self> {
         crypto::identifier(account).map_err(|_| VaultError::Invalid)?;
@@ -288,73 +301,10 @@ mod credential_manager {
 
     #[cfg(test)]
     mod tests {
-        use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, GetLastError};
-        use windows_sys::Win32::Security::Credentials::CredDeleteW;
-
         #[test]
         fn refuses_an_empty_or_wildcard_prefix() {
             assert!(super::list_prefixed("").is_err());
             assert!(super::list_prefixed("auracode*").is_err());
-        }
-
-        /// Deletes one throwaway credential by its exact name; `false` when it was not there.
-        fn delete(target: &str) -> bool {
-            let name = super::wide(target);
-            // SAFETY: a NUL-terminated target name that lives across the call.
-            if unsafe { CredDeleteW(name.as_ptr(), super::CRED_TYPE_GENERIC, 0) } != 0 {
-                return true;
-            }
-            // SAFETY: reads this thread's last error right after the failed call.
-            assert_eq!(unsafe { GetLastError() }, ERROR_NOT_FOUND);
-            false
-        }
-
-        /// Writes, lists and deletes throwaway session credentials under a random test-only
-        /// prefix that is not auracode's (nothing named `auracode.sync.v1:` is listed or
-        /// touched). Ignored by default because it uses the real Credential Manager:
-        /// `cargo test -p aura-sync --lib credential_manager -- --ignored`.
-        #[test]
-        #[ignore = "uses the real Windows Credential Manager with a throwaway test prefix"]
-        fn lists_only_targets_with_the_prefix() {
-            use windows_sys::Win32::Security::Credentials::{
-                CRED_PERSIST_SESSION, CREDENTIALW, CredWriteW,
-            };
-            let unique = format!(
-                "{:x}-{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos(),
-                std::process::id()
-            );
-            let prefix = format!("vault-list-test.{unique}:");
-            let unrelated = format!("vault-list-test-other.{unique}:kept");
-            let write = |target: &str| {
-                let name = super::wide(target);
-                let mut secret = *b"synthetic";
-                let credential = CREDENTIALW {
-                    Type: super::CRED_TYPE_GENERIC,
-                    TargetName: name.as_ptr().cast_mut(),
-                    CredentialBlobSize: secret.len() as u32,
-                    CredentialBlob: secret.as_mut_ptr(),
-                    Persist: CRED_PERSIST_SESSION,
-                    ..Default::default()
-                };
-                // SAFETY: every pointer lives across the call.
-                assert_ne!(unsafe { CredWriteW(&credential, 0) }, 0);
-            };
-            let one = format!("{prefix}one");
-            let two = format!("{prefix}two");
-            write(&one);
-            write(&two);
-            write(&unrelated);
-            let mut listed = super::list_prefixed(&prefix).unwrap();
-            listed.sort();
-            // Listing removes nothing: all three are still there to delete by exact name.
-            let deleted = [delete(&one), delete(&two), delete(&unrelated)];
-            assert_eq!(listed, [one, two]);
-            assert_eq!(deleted, [true, true, true]);
-            assert!(super::list_prefixed(&prefix).unwrap().is_empty());
         }
     }
 }

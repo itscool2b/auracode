@@ -100,7 +100,7 @@ fn discover(
         for origin in ORIGINS {
             match crate::accounts::profile_index_entry(origin, root) {
                 Some(entry) => {
-                    owned.insert(entry.target(), origin);
+                    owned.insert(entry.opaque_target(), origin);
                 }
                 None => uncertain = true,
             }
@@ -120,14 +120,14 @@ fn discover(
             }
         }
     }
-    entries.sort_by_key(VaultEntry::target);
+    entries.sort_by_key(VaultEntry::opaque_target);
     entries.dedup();
     let mut records = Vec::new();
     for entry in entries {
         let (kind, fingerprint, references) = match vault.load(&entry) {
             Ok(None) => continue,
             Ok(Some(bytes)) => {
-                let fingerprint = format!("{:x}", Sha256::digest(&bytes));
+                let fingerprint = format!("{:x}", Sha256::digest(bytes.as_slice()));
                 if let Some(ids) = crate::accounts::cleanup_references(&bytes) {
                     (VaultKind::Index, fingerprint, ids)
                 } else if aura_sync::account::valid_stored_bundle(&bytes) {
@@ -140,7 +140,7 @@ fn discover(
         };
         uncertain |= kind == VaultKind::Unknown;
         // An account payload at an expected index name is not proof of any account identity.
-        uncertain |= owned.contains_key(&entry.target()) && kind != VaultKind::Index;
+        uncertain |= owned.contains_key(&entry.opaque_target()) && kind != VaultKind::Index;
         records.push(Record {
             entry,
             kind,
@@ -161,9 +161,9 @@ fn references(record: &Record, origins: &[&str]) -> HashSet<String> {
         .references
         .iter()
         .flat_map(|id| {
-            origins
-                .iter()
-                .filter_map(move |origin| VaultEntry::new(origin, id).ok().map(|e| e.target()))
+            origins.iter().filter_map(move |origin| {
+                VaultEntry::new(origin, id).ok().map(|e| e.opaque_target())
+            })
         })
         .collect()
 }
@@ -177,7 +177,7 @@ fn decide(snapshot: &Snapshot, approved: Option<&[VaultApproval]>) -> VaultPlan 
         if record.kind != VaultKind::Index {
             continue;
         }
-        let target = record.entry.target();
+        let target = record.entry.opaque_target();
         let approved_index = approved.is_none_or(|items| {
             items
                 .iter()
@@ -198,7 +198,7 @@ fn decide(snapshot: &Snapshot, approved: Option<&[VaultApproval]>) -> VaultPlan 
         plan.warnings.push("Some secure-store entries or root identities could not be verified. All account keys and retry indexes are retained.".into());
     }
     for record in &snapshot.records {
-        let target = record.entry.target();
+        let target = record.entry.opaque_target();
         let (mut remove, mut reason) = match record.kind {
             VaultKind::Unknown => (false, "Unreadable, malformed or unsupported payload"),
             VaultKind::Index if !snapshot.owned.contains_key(&target) => {
@@ -250,7 +250,7 @@ fn decide(snapshot: &Snapshot, approved: Option<&[VaultApproval]>) -> VaultPlan 
     // If an owned account cannot safely go, retain its retry index. Shared accounts alone do
     // not retain an owning index, since the surviving foreign index owns their references.
     for record in &snapshot.records {
-        let target = record.entry.target();
+        let target = record.entry.opaque_target();
         if record.kind != VaultKind::Index {
             continue;
         }
@@ -308,7 +308,7 @@ pub(super) fn clean(
         .filter_map(|record| {
             snapshot
                 .owned
-                .get(&record.entry.target())
+                .get(&record.entry.opaque_target())
                 .map(|origin| references(record, &[*origin]))
         })
         .flatten()
@@ -317,7 +317,7 @@ pub(super) fn clean(
     // Accounts first. A failed removal must leave every owning index available for retry.
     for kind in [VaultKind::Account, VaultKind::Index] {
         for record in snapshot.records.iter().filter(|record| record.kind == kind) {
-            let target = record.entry.target();
+            let target = record.entry.opaque_target();
             let Some(row) = report
                 .rows
                 .iter_mut()

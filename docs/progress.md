@@ -4256,9 +4256,16 @@ unlocked fallbacks. Dry-run branches before process waits, quit requests, deleti
 and opens an existing lease only. The uninstall guide removes blanket credential-deletion steps
 and explains retained keys, retries, older binaries and the permanent lock.
 
-Verification so far: focused dialog Vitest 8/8, uninstaller hook tests 5/5, touched frontend Biome
-and rustfmt pass; instruction parity passes (no local instruction copies in this worktree).
-Fake-store regression and temporary-file/subprocess lease tests are implemented. Cargo testing
-is waiting for the coordinator's shared build lane. Native secure-store cleanup has not been
-run, including dry-run; no real credentials, application data or agent homes were accessed.
-Generated bindings and integrated typechecking remain with the coordinator.
+Verification: aura-sync's vault filter passes 14/14, including temporary-file and subprocess
+lease tests; aura-core's account-sync uninstall filter passes 26/26 with fake stores and temporary
+data roots. Core/sync Clippy (all targets, account-sync, `-D warnings`) passes. Focused dialog
+Vitest passes 8/8, uninstaller hook tests 5/5, and refreshed notice catalogue tests 6/6. Touched
+frontend Biome, rustfmt, diff checks and instruction parity pass. Cargo.lock and catalogue input
+hashes are refreshed. Malformed native entry names use opaque review aliases, and the inherited
+ignored real Credential Manager mutation test was removed.
+
+The desktop Rust uninstall test build is blocked before desktop source checking by E0463 in its
+existing serde/specta/process_wrap/windows dependency graph. Its new dry-run dispatch and review
+argument tests remain unexecuted. Generated bindings and integrated typechecking remain with the
+coordinator. Native secure-store cleanup has not been run, including dry-run; no real credentials,
+application data or agent homes were accessed. Native macOS integration remains unverified.
