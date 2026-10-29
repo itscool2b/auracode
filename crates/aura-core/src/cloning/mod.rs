@@ -30,7 +30,7 @@ type Result<T> = std::result::Result<T, CloneError>;
 pub enum CloneError {
     #[error("{0}")]
     Message(String),
-    #[error("The folder could not be read. Nothing was changed.")]
+    #[error("The folder could not be read.")]
     Io(#[from] std::io::Error),
 }
 impl CloneError {

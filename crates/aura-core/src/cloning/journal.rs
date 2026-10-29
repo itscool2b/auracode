@@ -85,7 +85,7 @@ pub(super) struct Journal {
 
 fn fail(path: &Path, reason: impl std::fmt::Display) -> CloneError {
     CloneError::Message(format!(
-        "Clone recovery could not be saved at {}: {reason}. The folder is preserved.",
+        "Clone recovery could not be saved at {}: {reason}. Check the record and destination before retrying.",
         path.display()
     ))
 }
