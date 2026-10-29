@@ -49,7 +49,7 @@ pub(super) async fn execute_within(
     let (state, mut detail, keep) = match outcome {
         Outcome::Cloned => {
             if let Some(journal) = &job.journal
-                && let Err(error) = journal.git_finished()
+                && let Err(error) = journal.git_finished(&destination)
             {
                 job.update(|record| {
                     record.state = CloneState::Interrupted;

@@ -74,6 +74,7 @@ struct Record {
     name: String,
     parent_identity: Identity,
     destination_identity: Option<Identity>,
+    git_identity: Option<Identity>,
     phase: Phase,
 }
 
@@ -173,6 +174,7 @@ impl Journal {
             name: prepared.name.clone(),
             parent_identity: Identity::read(&prepared.parent_handle)?,
             destination_identity: None,
+            git_identity: None,
             phase: Phase::Planned,
         };
         let journal = Arc::new(Self {
@@ -241,8 +243,14 @@ impl Journal {
         })
     }
 
-    pub(super) fn git_finished(&self) -> Result<()> {
-        self.change(|record| record.phase = Phase::GitFinished)
+    pub(super) fn git_finished(&self, destination: &files::Destination) -> Result<()> {
+        files::verify(destination).map_err(|error| fail(&self.path, error))?;
+        let git = destination.directory.open_dir_nofollow(".git")?;
+        let identity = Identity::read(&git)?;
+        self.change(|record| {
+            record.phase = Phase::GitFinished;
+            record.git_identity = Some(identity);
+        })
     }
 
     pub(super) fn finish(&self, state: CloneState) -> Result<()> {
@@ -273,6 +281,8 @@ fn load(dir: &Dir, id: &str) -> Result<Record> {
             record.phase,
             Phase::Created | Phase::GitFinished | Phase::Ready
         ) && record.destination_identity.is_none())
+        || (matches!(record.phase, Phase::GitFinished | Phase::Ready)
+            && record.git_identity.is_none())
     {
         return Err(CloneError::message(
             "The clone recovery record is inconsistent.",
@@ -323,7 +333,12 @@ fn inspect(record: &Record) -> CloneRecovery {
         Ok(Some(folder)) => {
             view.can_open = true;
             if matches!(record.phase, Phase::Ready | Phase::GitFinished)
-                && folder.open_dir_nofollow(".git").is_ok()
+                && folder
+                    .open_dir_nofollow(".git")
+                    .ok()
+                    .and_then(|git| Identity::read(&git).ok())
+                    .as_ref()
+                    == record.git_identity.as_ref()
             {
                 view.state = CloneState::Ready;
                 view.can_add = true;

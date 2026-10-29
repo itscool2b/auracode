@@ -78,7 +78,11 @@ async fn lifecycle_survives_restart_without_output_and_dismissal_keeps_the_clone
         "active attempt is not an interrupted notice"
     );
     std::fs::create_dir(parent.join("repo/.git")).unwrap();
-    job.journal.as_ref().unwrap().git_finished().unwrap();
+    job.journal
+        .as_ref()
+        .unwrap()
+        .git_finished(&destination)
+        .unwrap();
     // Git exited but the app stopped before project addition or its final Ready update.
     let completed = restarted.recovery_get(&review.id).unwrap();
     assert!(completed.can_add && completed.can_open);
@@ -124,7 +128,12 @@ async fn replaced_and_linked_destinations_are_preserved_and_never_offered_as_com
     let (prepared, job) = service.take("window", &review.id).unwrap();
     let destination = files::begin(prepared).unwrap();
     job.journal.as_ref().unwrap().created(&destination).unwrap();
-    job.journal.as_ref().unwrap().git_finished().unwrap();
+    std::fs::create_dir(parent.join("repo/.git")).unwrap();
+    job.journal
+        .as_ref()
+        .unwrap()
+        .git_finished(&destination)
+        .unwrap();
     drop(destination);
     std::fs::rename(parent.join("repo"), parent.join("moved")).unwrap();
     std::fs::create_dir_all(parent.join("repo/.git")).unwrap();
