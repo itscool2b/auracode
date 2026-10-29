@@ -98,9 +98,17 @@ async fn lifecycle_survives_restart_without_output_and_dismissal_keeps_the_clone
     drop(service);
     drop(job);
     assert_eq!(restarted.recovery_get(&review.id).unwrap(), completed);
+    // Keeping the destination identity does not authorize a substituted Git directory.
+    std::fs::rename(parent.join("repo/.git"), parent.join("repo/.git-original")).unwrap();
+    std::fs::create_dir(parent.join("repo/.git")).unwrap();
+    let changed_git = restarted.recovery_get(&review.id).unwrap();
+    assert!(changed_git.can_open && !changed_git.can_add);
+    assert_eq!(changed_git.state, CloneState::Interrupted);
     restarted.recovery_dismiss(&review.id).unwrap();
     restarted.recovery_dismiss(&review.id).unwrap();
     assert!(restarted.recovery_list().unwrap().is_empty());
+    assert!(parent.join("repo/.git").is_dir());
+    assert!(parent.join("repo/.git-original").is_dir());
     assert_eq!(
         std::fs::read_to_string(parent.join("repo/user-work")).unwrap(),
         "keep my changes"

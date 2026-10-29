@@ -149,8 +149,14 @@ export class CloneController {
   }
 
   get canStart(): boolean {
-    const { phase, check, checking, starting } = this.view;
-    return phase === "form" && !checking && !starting && Boolean(check?.review);
+    const { check, checking } = this.view;
+    return this.canRecover && !checking && Boolean(check?.review);
+  }
+
+  /** Recovery and normal clone admission share the form's single operation slot. */
+  get canRecover(): boolean {
+    const { phase, starting, recoveryBusy } = this.view;
+    return phase === "form" && !starting && recoveryBusy === null;
   }
 
   /** `delay` < 0 clears the answer without asking (an empty address). */
@@ -277,7 +283,7 @@ export class CloneController {
 
   /** Recovery never resumes into an uncertain destination. The normal form checks a new folder. */
   retryElsewhere(record: CloneRecovery) {
-    if (!record.remote) return;
+    if (!this.live || !this.canRecover || !record.remote) return;
     this.autoStart = false;
     this.set({
       phase: "form",
@@ -293,7 +299,7 @@ export class CloneController {
   }
 
   async recover(id: string, action: "open" | "dismiss" | "add") {
-    if (this.view.recoveryBusy) return;
+    if (!this.live || !this.canRecover) return;
     const generation = this.recoveryGeneration;
     this.set({ recoveryBusy: id, recoveryError: null });
     try {
