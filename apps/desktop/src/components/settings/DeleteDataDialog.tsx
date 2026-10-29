@@ -192,9 +192,7 @@ export function DeleteDataBody({
           <div>
             <dt>Keys</dt>
             <dd>
-              {folder
-                ? `This folder's account index in ${review.secure_store}. Account keys stay for other data folders.`
-                : `auracode's sign-in, device and account keys in ${review.secure_store}`}
+              {`Reviewed entries in ${review.secure_store}. Shared and unverifiable keys are retained.`}
             </dd>
           </div>
         ) : null}
@@ -205,6 +203,23 @@ export function DeleteDataBody({
           </div>
         ) : null}
       </dl>
+      {review.keys.length > 0 ? (
+        <ul className="delete-data-note" aria-label="Secure-store entries">
+          {review.keys.map((key) => (
+            <li key={key.target}>
+              <span>
+                {key.remove ? "Remove" : "Retain"} {key.kind}: {key.reason}
+              </span>
+              <span className="delete-data-path">{key.target}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {review.warnings.map((warning) => (
+        <p key={warning} className="settings-alert" role="status">
+          {warning}
+        </p>
+      ))}
       {unsaved.length > 0 ? (
         <section
           className="delete-data-worktrees"

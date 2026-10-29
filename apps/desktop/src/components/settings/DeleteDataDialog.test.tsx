@@ -38,6 +38,8 @@ const REVIEW: DataCleanupReview = {
       unsaved: false,
     },
   ],
+  keys: [],
+  warnings: [],
   secure_store: "Windows Credential Manager",
   app_bundle: null,
 };
@@ -78,9 +80,34 @@ describe("Delete all auracode data", () => {
     expect(html).toContain("1.2 GB");
     expect(html).toContain("<dt>Window and web data</dt>");
     expect(html).toContain(
-      "auracode&#x27;s sign-in, device and account keys in Windows Credential Manager",
+      "Reviewed entries in Windows Credential Manager. Shared and unverifiable keys are retained.",
     );
     expect(html).toContain("Your agents, their settings and your repositories are not touched.");
+  });
+
+  it("shows opaque secure-store decisions and uncertainty warnings", () => {
+    const html = render({
+      ...REVIEW,
+      keys: [
+        {
+          target: "auracode.sync.v1:opaque1",
+          kind: "Account",
+          remove: true,
+          reason: "Exclusive account",
+        },
+        {
+          target: "auracode.sync.v1:opaque2",
+          kind: "Index",
+          remove: false,
+          reason: "Another data root",
+        },
+      ],
+      warnings: ["Some entries could not be verified. All account keys are retained."],
+    });
+    expect(html).toContain("Remove Account: Exclusive account");
+    expect(html).toContain("Retain Index: Another data root");
+    expect(html).toContain("auracode.sync.v1:opaque1");
+    expect(html).toContain("Some entries could not be verified. All account keys are retained.");
   });
 
   it("warns about worktrees with unsaved work and keeps them by default", () => {
@@ -118,6 +145,8 @@ describe("Delete all auracode data", () => {
     const mac = {
       ...REVIEW,
       app_bundle: "/Applications/auracode.app",
+      keys: [],
+      warnings: [],
       secure_store: "the macOS keychain",
     };
     const html = render(mac, { trash: true, typed: "DELETE" });
@@ -127,10 +156,10 @@ describe("Delete all auracode data", () => {
     expect(cleanupChoice(REVIEW, false, true).move_app_to_trash).toBe(false);
   });
 
-  it("says a data folder of its own keeps account keys and the installed app's data", () => {
+  it("says a data folder of its own preserves shared keys and the installed app's data", () => {
     const html = render({ ...REVIEW, scope: "data_folder", worktrees: [] });
     expect(html).toContain("the installed app&#x27;s data");
-    expect(html).toContain("Account keys stay for other data folders.");
+    expect(html).toContain("Shared and unverifiable keys are retained.");
     expect(html).not.toContain("worktree has work");
   });
 

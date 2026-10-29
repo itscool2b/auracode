@@ -21,6 +21,11 @@ mod reset;
 use reset::PendingReset;
 pub use reset::ResetSetup;
 
+/// Classifies only a complete, supported account bundle. No secret material leaves the decoder.
+pub fn valid_stored_bundle(bytes: &[u8]) -> bool {
+    Bundle::decode(bytes).is_ok()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Access {
     VerificationRequired,

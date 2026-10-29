@@ -63,6 +63,15 @@ pub struct DataCleanupWorktree {
     pub unsaved: bool,
 }
 
+/// Only opaque secure-store targets and decisions are exposed to the renderer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct DataCleanupKey {
+    pub target: String,
+    pub kind: String,
+    pub remove: bool,
+    pub reason: String,
+}
+
 /// What "Delete all auracode data" would remove, for the review.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct DataCleanupReview {
@@ -73,6 +82,8 @@ pub struct DataCleanupReview {
     pub worktrees: Vec<DataCleanupWorktree>,
     /// Where auracode's keys are: "Windows Credential Manager" or "the macOS keychain".
     pub secure_store: Option<String>,
+    pub keys: Vec<DataCleanupKey>,
+    pub warnings: Vec<String>,
     /// macOS: the app bundle "move auracode to the Trash" would move; `None` where it cannot.
     pub app_bundle: Option<String>,
 }
@@ -93,6 +104,7 @@ struct Pending {
     root: Option<PathBuf>,
     unsaved: Vec<String>,
     app_bundle: Option<PathBuf>,
+    vault_review: Vec<uninstall::VaultApproval>,
 }
 
 static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
@@ -134,7 +146,14 @@ pub async fn data_cleanup_review(
     let (scope, targets) = targets(&state)?;
     let root = targets.shared_roots.first().cloned();
     let plan = tauri::async_runtime::spawn_blocking(move || {
-        uninstall::plan(&targets, &GitTool::from_path())
+        let mut plan = uninstall::plan(&targets, &GitTool::from_path());
+        plan.vault = match aura_sync::vault::NativeStore::for_review() {
+            Ok(store) => {
+                uninstall::review_vault(&store, &plan.data_roots, plan.default_root.as_deref())
+            }
+            Err(_) => uninstall::VaultPlan::unavailable(),
+        };
+        plan
     })
     .await
     .map_err(|error| failed(format!("The review could not finish: {error}")))?;
@@ -168,6 +187,23 @@ pub async fn data_cleanup_review(
                 bytes: item.bytes,
             })
             .collect(),
+        keys: plan
+            .vault
+            .rows
+            .iter()
+            .map(|row| DataCleanupKey {
+                target: row.target.clone(),
+                kind: match row.kind {
+                    uninstall::VaultKind::Index => "Index",
+                    uninstall::VaultKind::Account => "Account",
+                    uninstall::VaultKind::Unknown => "Unknown",
+                }
+                .into(),
+                remove: row.remove,
+                reason: row.reason.clone(),
+            })
+            .collect(),
+        warnings: plan.vault.warnings.clone(),
         secure_store: if cfg!(windows) {
             Some("Windows Credential Manager".into())
         } else if cfg!(target_os = "macos") {
@@ -184,6 +220,7 @@ pub async fn data_cleanup_review(
     *PENDING
         .lock()
         .map_err(|_| failed("The review is unavailable."))? = Some(Pending {
+        vault_review: plan.vault.approvals,
         token: review.token.clone(),
         at: Instant::now(),
         scope,
@@ -266,6 +303,12 @@ fn cleanup_arguments(
         })?;
         arguments.extend(["--trash-app".into(), bundle.clone().into_os_string()]);
     }
+    arguments.extend([
+        "--vault-review".into(),
+        serde_json::to_string(&pending.vault_review)
+            .map_err(|_| failed("The secure-store review could not be passed to cleanup."))?
+            .into(),
+    ]);
     Ok(arguments)
 }
 
@@ -311,6 +354,7 @@ mod tests {
 
     fn pending(scope: DataCleanupScope) -> Pending {
         Pending {
+            vault_review: Vec::new(),
             token: "t".into(),
             at: Instant::now(),
             scope,
@@ -340,7 +384,9 @@ mod tests {
                 "--report-failures",
                 "--after-pid",
                 "7",
-                "--keep-unsaved-worktrees"
+                "--keep-unsaved-worktrees",
+                "--vault-review",
+                "[]"
             ]
         );
         let remove = DataCleanupChoice {
@@ -355,7 +401,9 @@ mod tests {
                 "--data-dir",
                 "/data",
                 "--remove-worktree",
-                "/data/profiles/local/worktrees/a"
+                "/data/profiles/local/worktrees/a",
+                "--vault-review",
+                "[]"
             ]
         );
         // The arguments always parse back.
