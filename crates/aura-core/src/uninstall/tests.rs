@@ -410,7 +410,13 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
     vault.put(account.clone(), &bundle());
 
-    let targets = Targets::data_folder(folder.clone());
+    let mut targets = Targets::data_folder(folder.clone());
+    // Keep even default-root canonicalization inside this fixture's temporary home.
+    targets.default_root = m
+        .dirs
+        .local_data
+        .as_ref()
+        .map(|dir| dir.join(crate::paths::APP_IDENTIFIER));
     let git = GitTool::from_path();
     let mut plan = plan(&targets, &git);
     plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
