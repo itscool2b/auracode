@@ -19,6 +19,12 @@ Focused verification: desktop chat-store and screen tests 77 passed; Rust checkp
 prompt navigation and bounded history/tool rendering. Changed frontend sources pass Biome;
 style and local instruction checks pass.
 
+Independent review found a prompt could leave Sending while background work still delayed
+dispatch. The chat now refreshes the durable queue whenever Sending clears without its matching
+start or lifecycle event, including unheld returns. The attachment-only regression failed before
+the fix; chat-store, transcript and queue-wait tests now pass 73 tests. Scoped review remains
+pending alongside the publication gates below.
+
 Pending before publication: independent review, native walkthrough and integrated gates.
 Windows Application Control blocks the pinned pnpm executable, so frozen install has not run.
 The desktop and workspace binding exporters stop in dependencies with E0463; regenerated
