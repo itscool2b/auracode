@@ -16,6 +16,9 @@ struct Identity {
 }
 
 impl Identity {
+    // Stable Windows directory identities require the handle API. The two unsafe operations
+    // below only initialize a plain output struct and borrow this function's owned handle.
+    #[cfg_attr(windows, allow(unsafe_code))]
     fn read(dir: &Dir) -> std::io::Result<Self> {
         let file = dir.try_clone()?.into_std_file();
         #[cfg(unix)]
@@ -33,6 +36,7 @@ impl Identity {
             use windows_sys::Win32::Storage::FileSystem::{
                 BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
             };
+            // SAFETY: BY_HANDLE_FILE_INFORMATION consists entirely of integer fields and FILETIMEs.
             let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
             // The retained directory handle is valid for the duration of this call.
             if unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut info) } == 0 {

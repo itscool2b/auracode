@@ -135,7 +135,8 @@ impl Clones {
     pub fn new(root: Option<PathBuf>) -> Self {
         Self {
             root,
-            ..Self::default()
+            pending: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(HashMap::new()),
         }
     }
 

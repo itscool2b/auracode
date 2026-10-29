@@ -59,7 +59,7 @@ function remember(parent: string) {
 function message(reason: unknown): string {
   return reason instanceof Error && reason.message
     ? reason.message
-    : "The clone could not continue. Nothing was changed.";
+    : "The clone could not continue. Reopen the form to check its saved status.";
 }
 
 export class CloneController {
@@ -110,6 +110,7 @@ export class CloneController {
   /** Mounted: a prefilled form is checked at once. */
   open() {
     this.live = true;
+    this.set({ recoveryBusy: null });
     void this.loadRecoveries();
     if (this.view.remote.trim()) this.schedule(0);
   }
