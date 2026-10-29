@@ -386,7 +386,7 @@ function CloneRecoveryNotices({
             <div key={record.id} className="setup-field">
               <p>{record.detail}</p>
               {record.destination ? <p className="setup-path">{record.destination}</p> : null}
-              <div className="setup-actions">
+              <div className="g-dialog-actions">
                 {record.can_open ? (
                   <button
                     type="button"

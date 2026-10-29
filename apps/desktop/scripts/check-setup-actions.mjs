@@ -200,6 +200,11 @@ try {
       await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
       await page.getByRole("region", { name: "Interrupted clones" }).waitFor();
       await settled(page);
+      assert.equal(
+        await page.locator("dialog").evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth),
+        true,
+        `${engine} recovery actions fit the dialog`,
+      );
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],
