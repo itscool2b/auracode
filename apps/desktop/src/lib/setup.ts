@@ -6,11 +6,19 @@ import {
   type GeneralPreferences,
   type SetupAction,
 } from "../bindings";
+import { applySetupAppearance } from "./appearance";
 import { agentsList, settle } from "./ipc";
 
+async function withAppearance(result: ReturnType<typeof commands.setupSnapshot>) {
+  const snapshot = await settle(result);
+  applySetupAppearance(snapshot.preferences);
+  return snapshot;
+}
+
 export const setupApi = {
-  snapshot: () => settle(commands.setupSnapshot()),
-  apply: (revision: number, action: SetupAction) => settle(commands.setupApply(revision, action)),
+  snapshot: () => withAppearance(commands.setupSnapshot()),
+  apply: (revision: number, action: SetupAction) =>
+    withAppearance(commands.setupApply(revision, action)),
 };
 export type SetupApi = typeof setupApi;
 export { setMotionPreference };

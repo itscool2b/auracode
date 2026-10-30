@@ -217,11 +217,7 @@ function Preview() {
     };
   });
   return (
-    <main
-      className="chat-app"
-      data-theme="dark"
-      style={{ display: "flex", flexDirection: "column" }}
-    >
+    <main className="chat-app" style={{ display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Steering verification</h1>
       <nav
         aria-label="Fixture outcomes"

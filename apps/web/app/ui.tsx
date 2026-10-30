@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * An inner page: a two-tone title (the first clause in ink, the rest in grey, X Money) inside the
+ * An inner page: a two-tone title (the first clause in ink, the rest in grey) inside the
  * framed content column. No eyebrow above it.
  */
 export function Page({

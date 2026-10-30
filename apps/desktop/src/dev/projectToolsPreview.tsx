@@ -68,7 +68,7 @@ Object.assign(window, { projectToolsFixture: { calls: () => [...calls] } });
 function Fixture() {
   const [open, setOpen] = useState(true);
   return (
-    <main className="g-root settings-content" data-theme="dark">
+    <main className="g-root settings-content">
       <h1>Project tools fixture</h1>
       <button type="button" className="g-button" onClick={() => setOpen(true)}>
         Open project tools

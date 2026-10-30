@@ -84,6 +84,12 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
+      for (const theme of ["light", "dark"]) {
+        await page.emulateMedia({ colorScheme: theme });
+        await page.goto(`${url}/?preview=settings&theme=system`);
+        await page.getByRole("radio", { name: "System", exact: true }).waitFor();
+        assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
+      }
       await checkSettingsNavigation(page, url);
       await page.goto(`${url}/?preview=settings`);
       await page.getByRole("radio", { name: "Reduced", exact: true }).check();
@@ -126,6 +132,9 @@ try {
       for (const name of ["Notifications", "Keep awake", "Keep running in the tray"])
         await page.getByRole("switch", { name }).check();
       await page.waitForFunction(() => window.settingsFixture.general().close_to_tray);
+      await page.locator(".settings-main").evaluate((element) => {
+        element.scrollTop = 0;
+      });
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-general.png`) });

@@ -1,7 +1,7 @@
 /**
- * Graphite: auracode's visual language (docs/design/visual-language.md). Black, a grey ladder, one
- * volt accent, and Shallows: lit water with seals and turtles swimming through it. Import the
- * stylesheet once at the app root; it brings Geist and Geist Mono with it:
+ * Aura's shared foundation retains the Graphite import path for compatibility. Production
+ * styling follows docs/design/visual-language.md; legacy Creature and Shallows exports are for
+ * historical Design Lab studies. Import the stylesheet once at the app root:
  *   import "@auracode/ui/graphite.css"; // or graphite-tokens.css for the variables alone
  */
 
@@ -62,7 +62,9 @@ export {
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,
+  GRAPHITE_LIGHT_COLORS,
   GRAPHITE_STAGGERS,
+  GRAPHITE_THEMES,
   type GraphiteColor,
   relativeLuminance,
 } from "./tokens";

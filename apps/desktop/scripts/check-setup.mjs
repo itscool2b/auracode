@@ -58,12 +58,18 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
+      for (const theme of ["light", "dark"]) {
+        await page.emulateMedia({ colorScheme: theme });
+        await page.goto(`${url}/?preview=setup&theme=system`);
+        await page.getByRole("button", { name: "Get started" }).waitFor();
+        assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
+        assert.equal(await page.locator(".g-swimmer, .g-creature, .g-shallows").count(), 0);
+      }
       await page.goto(`${url}/?preview=setup`);
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await page.screenshot({ path: resolve(out, `${engine}-welcome.png`) });
-      // Setup is one centred card over the window-wide lit water; the water covers the
-      // window, and the column, the wordmark and Skip setup stay inside it and clear of each other.
+      // The setup column, wordmark and Skip setup stay clear of each other at both sizes.
       const checkLayout = async () => {
         const layout = await page.evaluate(() => {
           const box = (node) => {
@@ -76,14 +82,13 @@ try {
             heading: box(document.querySelector(".setup-heading")),
             top: box(document.querySelector(".setup-top")),
             skip: box(document.querySelector(".setup-skip")),
-            water: box(document.querySelector(".setup-water")),
-            swimmers: document.querySelectorAll(".setup-water .g-swimmer").length,
+            creatures: document.querySelectorAll(".g-swimmer, .g-creature, .g-shallows").length,
             dither: document.querySelectorAll(".g-dither, canvas").length,
             overflow: document.documentElement.scrollWidth > innerWidth,
           };
         });
-        const { window, column, heading, top, skip, water, swimmers, dither, overflow } = layout;
-        assert.equal(swimmers, 3, `${engine}: the water has its seal and two turtles`);
+        const { window, column, heading, top, skip, creatures, dither, overflow } = layout;
+        assert.equal(creatures, 0, `${engine}: setup must not render aquatic decoration`);
         assert.equal(dither, 0, `${engine}: setup still draws the dither field`);
         assert.ok(
           Math.abs(column.left + column.right - window.width) <= 1,
@@ -95,20 +100,11 @@ try {
         );
         assert.ok(heading.top >= top.bottom, `${engine}: heading runs under the top bar`);
         assert.ok(skip.right <= window.width && skip.left >= 0, `${engine}: Skip setup clipped`);
-        assert.ok(
-          water.left <= 0 &&
-            water.top <= 0 &&
-            water.right >= window.width &&
-            water.bottom >= window.height,
-          `${engine}: water does not cover the window`,
-        );
         assert.equal(overflow, false, `${engine}: setup scrolls sideways`);
       };
       await checkLayout();
       await page.setViewportSize({ width: 1024, height: 768 });
-      await page.waitForFunction(
-        () => document.querySelector(".setup-water")?.getBoundingClientRect().width >= 1024,
-      );
+      await page.waitForFunction(() => innerWidth === 1024);
       await checkLayout();
       await page.screenshot({ path: resolve(out, `${engine}-compact.png`) });
       await page.setViewportSize({ width: 1440, height: 900 });

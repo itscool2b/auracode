@@ -13,6 +13,7 @@ import {
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,
+  GRAPHITE_LIGHT_COLORS,
   GRAPHITE_STAGGERS,
   relativeLuminance,
 } from "./tokens";
@@ -30,7 +31,8 @@ function declarations(css: string): Map<string, string> {
   return found;
 }
 
-const root = declarations(rootPart);
+const root = declarations(rootPart.split(':root[data-theme="light"]')[0] ?? "");
+const light = declarations(tokensCss.match(/:root\[data-theme="light"\] \{([^}]+)\}/)?.[1] ?? "");
 
 function token(name: string): string {
   const value = root.get(`--g-${name}`);
@@ -44,6 +46,40 @@ describe("Graphite colour tokens", () => {
   it("declares every colour the TypeScript mirror knows, with the same value", () => {
     for (const [name, hex] of Object.entries(GRAPHITE_COLORS)) {
       expect(token(name).toLowerCase(), name).toBe(hex);
+    }
+    for (const [name, hex] of Object.entries(GRAPHITE_LIGHT_COLORS)) {
+      expect(light.get(`--g-${name}`)?.toLowerCase(), `light ${name}`).toBe(hex);
+    }
+  });
+
+  it("keeps light text, meaningful boundaries and focus readable", () => {
+    const colors = GRAPHITE_LIGHT_COLORS;
+    for (const surface of [...SURFACES, "surface-4"] as const) {
+      for (const fg of ["fg-1", "fg-2", "fg-3", "volt", "green", "red", "warning"] as const) {
+        expect(
+          contrastRatio(colors[fg], colors[surface]),
+          `${fg} on light ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const palette of [GRAPHITE_COLORS, GRAPHITE_LIGHT_COLORS]) {
+      for (const surface of ["surface-1", "surface-2"] as const) {
+        for (const role of ["outline", "focus"] as const) {
+          expect(
+            contrastRatio(palette[role], palette[surface]),
+            `${role} on ${surface}`,
+          ).toBeGreaterThanOrEqual(3);
+        }
+      }
+      for (const fill of ["primary", "primary-hover", "primary-active"] as const) {
+        expect(contrastRatio(palette["on-light"], palette[fill]), fill).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const status of ["green", "red", "warning"] as const) {
+        expect(
+          contrastRatio(palette[status], palette[`${status}-tint`]),
+          status,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
@@ -78,7 +114,7 @@ describe("Graphite colour tokens", () => {
       }
     }
     for (const name of [...root.keys()].filter((n) => /^--g-(code|ansi)-/.test(n))) {
-      if (name === "--g-ansi-black") continue;
+      if (name === "--g-ansi-black" || name === "--g-code-bg") continue;
       const hex = root.get(name) ?? "";
       expect(contrastRatio(hex, GRAPHITE_COLORS["surface-1"]), name).toBeGreaterThanOrEqual(4.5);
     }
@@ -131,14 +167,12 @@ describe("Graphite motion tokens", () => {
     }
   });
 
-  it("uses the values measured on the reference sites", () => {
-    expect(GRAPHITE_EASINGS.ease).toEqual([0.4, 0, 0.2, 1]);
-    expect(GRAPHITE_EASINGS.quint).toEqual([0.23, 1, 0.32, 1]);
-    expect(GRAPHITE_DURATIONS.headline).toBe(650);
-    expect(GRAPHITE_STAGGERS.word).toBe(55);
-    expect(GRAPHITE_DURATIONS.shimmer).toBe(1400);
-    expect(GRAPHITE_DURATIONS.tick).toBe(1100);
-    expect(GRAPHITE_DURATIONS.timer).toBe(7500);
+  it("keeps interface feedback brief and separates it from content cycling", () => {
+    for (const key of ["micro", "fast", "base", "panel", "settle", "row", "headline"] as const) {
+      expect(GRAPHITE_DURATIONS[key]).toBeGreaterThan(0);
+      expect(GRAPHITE_DURATIONS[key]).toBeLessThanOrEqual(250);
+    }
+    expect(GRAPHITE_DURATIONS.timer).toBeGreaterThan(GRAPHITE_DURATIONS.panel);
   });
 
   it("stops movement under the OS setting and under the app's own setting alike", () => {
@@ -154,10 +188,10 @@ describe("Graphite motion tokens", () => {
       expect(media.get(`--g-${name}`), `media ${name}`).toBe("0ms");
       expect(app.get(`--g-${name}`), `app ${name}`).toBe("0ms");
     }
-    // Colour and opacity are not motion: hover fades, the button settle and sibling dims survive.
+    // Reduced motion makes even small feedback transitions immediate.
     for (const name of ["micro", "fast", "base", "settle", "dim", "shimmer"]) {
-      expect(media.has(`--g-dur-${name}`), name).toBe(false);
-      expect(app.has(`--g-dur-${name}`), name).toBe(false);
+      expect(media.get(`--g-dur-${name}`), name).toBe("0ms");
+      expect(app.get(`--g-dur-${name}`), name).toBe("0ms");
     }
     expect(graphiteCss).toContain(REDUCED);
     expect(graphiteCss).toContain('[data-motion="off"]');

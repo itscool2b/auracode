@@ -48,10 +48,16 @@ test("every desktop acceptance script runs directly or through a checked aggrega
 
 test("browser gates have explicit deadlines and retain standalone evidence", () => {
   for (const step of ci.split(/\n {6}- name:/u).slice(1)) {
+    // Match individual command lines: a step can include the next job's metadata,
+    // which makes a nested multiline wildcard backtrack on unrelated run blocks.
     if (
-      !/run:.*(?:\n[ \t]+.*)*?pnpm --filter @auracode\/(?:desktop|web) (?:check:|exec node scripts\/check-|test:browser)/u.test(
-        step,
-      )
+      !step
+        .split(/\r?\n/u)
+        .some((line) =>
+          /^[ \t]*(?:run:[ \t]*)?pnpm --filter @auracode\/(?:desktop|web) (?:check:|exec node scripts\/check-|test:browser)/u.test(
+            line,
+          ),
+        )
     )
       continue;
     const deadline = Number(/timeout-minutes: (\d+)\b/u.exec(step)?.[1]);

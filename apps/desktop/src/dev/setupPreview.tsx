@@ -5,6 +5,7 @@ import type { AgentEntry, ProjectSummary, SetupSnapshot } from "../bindings";
 import { ProjectDialog } from "../components/chat/ProjectDialog";
 import { AgentsScreen } from "../components/setup/AgentsScreen";
 import { Onboarding } from "../components/setup/Onboarding";
+import { getAppearancePreference } from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
@@ -199,6 +200,7 @@ const initial: SetupSnapshot = {
     revision: 0,
     step: cloneMode ? "project" : "welcome",
     motion: "full",
+    appearance: getAppearancePreference(),
     completed: false,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },
@@ -209,6 +211,7 @@ const storageKey = cloneMode ? `setup-fixture-${mode}` : "setup-fixture";
 let stored: SetupSnapshot = JSON.parse(
   sessionStorage.getItem(storageKey) ?? JSON.stringify(initial),
 );
+stored.preferences.appearance = getAppearancePreference();
 const persist = () => sessionStorage.setItem(storageKey, JSON.stringify(stored));
 const api: SetupApi = {
   snapshot: async () => {
@@ -224,6 +227,7 @@ const api: SetupApi = {
     const next = structuredClone(stored);
     if (action.type === "visit") next.preferences.step = action.step;
     if (action.type === "motion") next.preferences.motion = action.value;
+    if (action.type === "appearance") next.preferences.appearance = action.value;
     if (action.type === "finish") next.preferences.completed = true;
     if (action.type === "project") next.preferences.first_project_id = action.project_id;
     if (action.type === "restart") {

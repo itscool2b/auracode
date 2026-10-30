@@ -322,11 +322,7 @@ function Preview() {
     return null;
   };
   return (
-    <main
-      className="g-root"
-      data-theme="dark"
-      style={{ height: "100%", background: "var(--g-bg)" }}
-    >
+    <main className="g-root" style={{ height: "100%", background: "var(--g-bg)" }}>
       <h1 className="sr-only">Git fixture workspace</h1>
       {open ? (
         <GitDialog

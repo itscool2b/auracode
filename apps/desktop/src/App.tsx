@@ -17,7 +17,6 @@ import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
-import { STRESS_SWIMMERS, Water } from "./components/Water";
 import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
@@ -28,7 +27,7 @@ import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { installProfileEvents, switchProfile } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
-import { isRunning, type StreamStore } from "./lib/session";
+import type { StreamStore } from "./lib/session";
 import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
@@ -351,11 +350,8 @@ export function App({
     );
   };
 
-  const running = isRunning(snapshot);
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
-  // The stress view's ambient water: every swimmer at once, moving only while something streams.
-  const showField = view === "stress" && stressConfig.aura;
 
   if (view === "setup")
     return (
@@ -469,7 +465,7 @@ export function App({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="app diagnostics-shell" data-theme="dark">
+      <div className="app diagnostics-shell">
         <Sidebar
           brandId={brandId}
           onBrandChange={setBrandId}
@@ -481,9 +477,6 @@ export function App({
           }}
         />
         <main className="main">
-          {showField ? (
-            <Water className="stress-water" swimmers={STRESS_SWIMMERS} still={!running} />
-          ) : null}
           <div className="drag-strip" data-tauri-drag-region="" />
           <div className="main-scroll">
             {view === "diagnostics" ? (

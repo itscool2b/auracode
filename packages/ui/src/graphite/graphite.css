@@ -16,7 +16,7 @@
 /* ------------------------------------------------------------------ base layer (opt in, 3.2) */
 
 .g-root {
-  color-scheme: dark;
+  color-scheme: var(--g-color-scheme);
   background-color: var(--g-bg);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -186,7 +186,7 @@
   height: var(--g-button-h);
   padding: 0 14px;
   border: 1px solid transparent;
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -210,7 +210,7 @@
 
 .g-button:where(:active) {
   background-color: var(--g-surface-4);
-  transition-duration: 0ms;
+  transition-duration: var(--g-dur-micro);
 }
 
 .g-button-primary {
@@ -234,7 +234,7 @@
 
 .g-button-danger {
   background-color: var(--g-red);
-  color: var(--g-on-light);
+  color: var(--g-on-danger);
 }
 
 @media (hover: hover) {
@@ -321,7 +321,7 @@
   margin: 0;
   padding: 0 12px;
   border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-6);
   background-color: var(--g-surface-1);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -641,6 +641,19 @@
   outline-offset: -1px;
   /* The code is still text, so it takes fg-3 (AA on every surface); the dashed tile says absent. */
   color: var(--g-fg-3);
+}
+
+/* Vendor-supplied white marks keep their original artwork on a contrasting plate in both themes. */
+.g-agent-mark:where(
+  [data-logo][data-agent="codex"],
+  [data-logo][data-agent="pi"],
+  [data-logo][data-agent="opencode"],
+  [data-logo][data-agent="antigravity"],
+  [data-logo][data-agent="cursor"],
+  [data-logo][data-agent="hermes"],
+  [data-logo][data-agent="oh-my-pi"]
+):where([data-state="idle"], [data-ghost]) {
+  background-color: var(--g-brand-plate);
 }
 
 .g-agent-mark-glyph {
@@ -1162,8 +1175,8 @@
   min-width: 200px;
   padding: 4px;
   border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-overlay);
   box-shadow: var(--g-shadow);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -1238,8 +1251,8 @@
   width: min(440px, calc(100vw - 32px));
   padding: 24px;
   border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-2);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-overlay);
   box-shadow: var(--g-shadow);
   color: var(--g-fg-1);
 }

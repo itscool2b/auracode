@@ -4,7 +4,7 @@ One beautiful home for all your coding agents.
 
 auracode is a desktop app for macOS and Windows that drives the coding agents you already use
 (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes, and any ACP-compatible agent)
-through their real harnesses, rendered in one dark-only Graphite chat interface. Projects on the left, chats
+through their real harnesses, rendered in one desktop chat interface. Projects on the left, chats
 inside projects, switch agents and models mid-chat, run several at once.
 
 - No login needed for the app. Agents are detected automatically, with their versions, sign-in status, and
@@ -18,18 +18,23 @@ The integrated product is in development and final acceptance is pending. The fu
 live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) records implementation and
 verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
 
+Visual work follows the [Aura visual system](docs/design/visual-language.md): a light-only website and a desktop with System, Light and Dark appearances.
+The [styling review record](docs/design/checkpoint-2026-10-30.md) tracks the full pass and its
+review gallery. Owner visual approval and final verification remain pending. Historical Design Lab studies are not
+the design authority for new product screens.
+
 Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
 and Cloudflare Email Service. The website is published at [auracode.si](https://auracode.si) and its
 isolated preview;
-the Rust API is available only in preview. Production API resources are prepared, but public API
-routing remains closed and accounts and downloads are not enabled. Real email/device acceptance
+the Rust API is routed on both hosts. Its current public configuration reports `private_preview=true`;
+public accounts are not enabled and downloads are not published. Real email/device acceptance
 remains pending. Production account storage remains empty.
 React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
 Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
 Public installer signing is deferred at the owner's request. The repository remains private while
 the open-source license and publication audit are being discussed. No license change is implied.
 
-Current source includes native agent drivers, the dark Graphite workspace, onboarding, project and Git
+Current source includes native agent drivers, the desktop workspace, onboarding, project and Git
 controls, a per-agent Plugin library, encrypted account sync, local import and readable export. Account
 recovery, explicit passphrase storage, reset sync, device removal and portable folder resolution are
 implemented with focused verification. Final integrated and native acceptance remain pending. The
@@ -79,8 +84,8 @@ environment, the session manager and its store, the ACP driver, the chat command
 chat UI styled through tokens, and `aura-cli`. Verified against real agents on this Mac (spec 10.6):
 Hermes, Claude Code through claude-agent-acp and Codex through codex-acp each pass the free probes, the
 six paid scenarios and a chat through the UI, with recorded fixtures replayed in CI. That M1a
-milestone prototyped the Orbit language in the Design Lab; the current language is
-[Graphite](docs/design/visual-language.md), which replaced Orbit on 2026-10-26.
+milestone prototyped the Orbit language in the Design Lab; the proposed current direction is documented in
+[the visual language](docs/design/visual-language.md); the visual checkpoint awaits owner review.
 
 ## Layout
 
@@ -93,7 +98,7 @@ crates/aura-drivers/    the driver contract, frame batching, the scripted mock a
 crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 apps/design-lab/        M1a Design Lab: visual directions rendered from a recorded chat (see its README)
-packages/ui/            shared design system: Graphite tokens, components and marks (Orbit kept for the lab)
+packages/ui/            shared design system: Aura tokens, components and marks (historical studies kept for the lab)
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
                         and docs/spikes/doc-check/ tests the write-ups against the code they cite
 .github/workflows/      CI checks and unsigned desktop bundles

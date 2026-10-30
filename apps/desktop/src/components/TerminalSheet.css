@@ -51,13 +51,16 @@
   border-radius: var(--g-radius-pill);
 }
 
-/* A clean exit: Graphite's white pixel check, five square cells at 2px. */
+/* A clean exit uses the current foreground in both appearances. */
 .terminal-sheet[data-outcome="passed"] .terminal-sheet__status::before {
   content: "";
   flex: none;
   width: 10px;
   height: 8px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' shape-rendering='crispEdges' fill='%23ededed'%3E%3Cpath d='M8 0h2v2H8zM6 2h2v2H6zM0 4h2v2H0zM4 4h2v2H4zM2 6h2v2H2z'/%3E%3C/svg%3E");
+  background-color: var(--g-fg-1);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' shape-rendering='crispEdges'%3E%3Cpath d='M8 0h2v2H8zM6 2h2v2H6zM0 4h2v2H0zM4 4h2v2H4zM2 6h2v2H2z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
 .terminal-sheet__note {

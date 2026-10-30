@@ -147,9 +147,9 @@ async function inspect(engine, launcher) {
           `${mode}: horizontal page overflow`,
         );
         assert.equal(
-          await page.locator(".chat-app").getAttribute("data-theme"),
-          "dark",
-          "the product must stay dark regardless of system appearance",
+          await page.locator("html").getAttribute("data-theme"),
+          theme,
+          "system appearance must reach the chat and its portals",
         );
         await settled(page);
         const scan = await new AxeBuilder({ page })
@@ -255,6 +255,9 @@ async function inspect(engine, launcher) {
         node.scrollTop += node.clientHeight * 0.7;
         await paint();
       }
+      // Expanded tool content can exceed two viewport steps with either theme's font metrics.
+      node.scrollTop = node.scrollHeight;
+      await paint();
       const frames = [];
       for (let frame = 0; frame < 60; frame++) {
         await new Promise(requestAnimationFrame);
@@ -304,11 +307,45 @@ async function inspect(engine, launcher) {
         prompt && Math.abs(prompt.getBoundingClientRect().top - log.getBoundingClientRect().top) < 3
       );
     });
-    await page.mouse.wheel(0, 2000);
-    await page.waitForFunction(() => {
-      const node = document.querySelector('[data-testid="transcript"]');
-      return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+    // The dismissed prompt's coordinates can become its header again during the scroll.
+    // Keep this real wheel gesture over the stable middle of the transcript instead.
+    await scrollSurface.hover();
+    const returnPointer = await scrollSurface.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     });
+    await page.mouse.wheel(0, 2000);
+    try {
+      await page.waitForFunction(() => {
+        const node = document.querySelector('[data-testid="transcript"]');
+        return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+      });
+    } catch (cause) {
+      const geometry = await page.evaluate((pointer) => {
+        const node = document.querySelector('[data-testid="transcript"]');
+        const hit = document.elementFromPoint(pointer.x, pointer.y);
+        return {
+          scrollTop: node.scrollTop,
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+          pointer,
+          hit: hit && {
+            tag: hit.tagName,
+            class: hit.getAttribute("class"),
+            testId: hit.getAttribute("data-testid"),
+            inTranscript: node.contains(hit),
+          },
+        };
+      }, returnPointer);
+      await writeFile(
+        resolve(out, `${engine}-smoke-return-scroll.json`),
+        JSON.stringify(geometry, null, 2),
+      );
+      throw new Error(
+        `${engine}: return wheel did not reach the transcript bottom: ${JSON.stringify(geometry)}`,
+        { cause },
+      );
+    }
     const complete = await page.evaluate(async () => {
       const { readFullTranscript } = await import("/src/lib/smokePage.ts");
       return (await readFullTranscript()).map((turn) => ({
@@ -648,6 +685,12 @@ async function inspect(engine, launcher) {
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
     const thought = page.locator(".chat-thought");
     await thought.locator("summary").click();
+    // Opening the disclosure can change virtual row heights and restore the tail position.
+    // Scroll away again so the jump control is offered before testing the return to the tool.
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+      node.scrollTop = 0;
+    });
     await page.getByTestId("jump-latest").click();
     await lastTool.waitFor();
     assert.notEqual(

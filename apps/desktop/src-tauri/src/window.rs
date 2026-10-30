@@ -100,7 +100,7 @@ pub const MAIN_WINDOW: &str = "main";
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
 /// Graphite's `--g-bg` (pure black), behind opaque windows (and the webview before it paints).
-pub const BASE_COLOR: Color = Color(0, 0, 0, 255);
+pub const BASE_COLOR: Color = Color(250, 250, 250, 255);
 
 /// What the window-state plugin restores: size, position, maximized, fullscreen. Never visibility
 /// (that would show the window before first paint) and never decorations (code owns the chrome).
@@ -162,7 +162,7 @@ pub fn create_main(
     let handle = app.handle().clone();
 
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
-        .theme(Some(tauri::Theme::Dark))
+        .theme(None)
         .visible(false)
         .transparent(plan.transparent)
         .on_navigation(move |url| {
@@ -218,20 +218,41 @@ pub fn create_main(
     }
 
     let window = builder.build()?;
-    #[cfg(windows)]
-    if let Ok(hwnd) = window.hwnd() {
-        caption::paint(hwnd.0);
+    if let Ok(theme) = window.theme() {
+        paint_appearance(&window, theme, !plan.transparent);
     }
     Ok(window)
 }
 
-/// Graphite's black (`--g-bg`) and fg-3 (#858585) as Windows COLORREFs (0x00BBGGRR).
+/// Window background and secondary text as Windows COLORREFs (0x00BBGGRR).
 #[cfg(any(windows, test))]
-const CAPTION_COLORS: [u32; 2] = [0x0000_0000, 0x0085_8585];
+fn caption_colors(theme: tauri::Theme) -> [u32; 2] {
+    match theme {
+        tauri::Theme::Dark => [0x0012_1110, 0x00aa_a1a1],
+        _ => [0x00fa_fafa, 0x005b_5252],
+    }
+}
 
-/// Windows keeps its native title bar (its caption buttons keep Snap Layouts, plan.md), which
-/// Windows 11 paints in the system's dark grey or the Mica material: a lighter band above the black
-/// window (6.1). DWM paints the caption Graphite's black and its title fg-3 instead. Windows 10
+/// Repaint native chrome and opaque fallback windows without altering glass or window geometry.
+pub fn paint_appearance(window: &WebviewWindow, theme: tauri::Theme, opaque: bool) {
+    if opaque {
+        let color = if theme == tauri::Theme::Dark {
+            Color(16, 17, 18, 255)
+        } else {
+            BASE_COLOR
+        };
+        if let Err(error) = window.set_background_color(Some(color)) {
+            tracing::debug!(%error, "the window background could not follow appearance");
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        caption::paint(hwnd.0, theme);
+    }
+}
+
+/// Windows keeps its native title bar and caption buttons, including Snap Layouts. DWM paints
+/// the caption to match the resolved app appearance. Windows 10
 /// ignores both attributes and keeps its own caption.
 #[cfg(windows)]
 #[allow(unsafe_code)]
@@ -240,8 +261,8 @@ mod caption {
         DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DwmSetWindowAttribute,
     };
 
-    pub fn paint(hwnd: *mut core::ffi::c_void) {
-        let [caption, text] = super::CAPTION_COLORS;
+    pub fn paint(hwnd: *mut core::ffi::c_void, theme: tauri::Theme) {
+        let [caption, text] = super::caption_colors(theme);
         for (attribute, color) in [(DWMWA_CAPTION_COLOR, caption), (DWMWA_TEXT_COLOR, text)] {
             // SAFETY: `hwnd` is this process's live main window, and DWM copies the 4-byte value
             // before returning; an older Windows answers with an error and nothing changes.
@@ -454,13 +475,12 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
-    /// The caption's colours are Graphite's own tokens, so the title bar and the page meet without
-    /// a seam: `--g-bg` behind the caption and `--g-fg-3` for its title.
+    /// Native chrome must track both CSS palettes so switching appearance leaves no dark band.
     #[test]
-    fn the_caption_takes_graphites_black_and_fg_3() {
+    fn the_caption_matches_both_appearance_palettes() {
         let tokens = include_str!("../../../../packages/ui/src/graphite/tokens.css");
-        let colorref = |name: &str| {
-            let line = tokens
+        let colorref = |palette: &str, name: &str| {
+            let line = palette
                 .lines()
                 .find(|line| line.trim_start().starts_with(&format!("{name}:")))
                 .unwrap_or_else(|| panic!("{name} is a Graphite token"));
@@ -474,10 +494,16 @@ mod tests {
             // 0x00RRGGBB to Windows' 0x00BBGGRR.
             ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF)
         };
-        assert_eq!(
-            super::CAPTION_COLORS,
-            [colorref("--g-bg"), colorref("--g-fg-3")]
-        );
+        let light = tokens
+            .split("[data-theme=\"light\"]")
+            .nth(1)
+            .expect("light palette");
+        for (theme, palette) in [(tauri::Theme::Dark, tokens), (tauri::Theme::Light, light)] {
+            assert_eq!(
+                super::caption_colors(theme),
+                [colorref(palette, "--g-bg"), colorref(palette, "--g-fg-2")]
+            );
+        }
     }
 
     #[cfg(all(windows, debug_assertions))]

@@ -1,0 +1,6 @@
+/* Desktop chrome follows the inspected Devin reference; code shares Aura's mono family. */
+@import "@fontsource-variable/inter";
+
+:root {
+  --g-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}

@@ -12,10 +12,7 @@ export const meta = () => [
   },
 ];
 
-/**
- * Shallows (docs/design/visual-language.md 5): the hero in lit water with the real app below it,
- * one capabilities panel, the FAQ and a closing panel. Few sections, one idea each, a lot of black.
- */
+/** The product, its capabilities, answers and a final download action. */
 export default function Home() {
   return (
     <main id="main" className="home">

@@ -162,7 +162,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: var(--g-color-scheme);
     font-family: var(--g-sans);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);

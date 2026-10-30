@@ -83,65 +83,71 @@ async function inspect(engine, launcher) {
     );
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
-    for (const size of sizes) {
-      await page.setViewportSize(size);
-      await page.goto(`${url}/?preview=header-labels`);
-      await page.locator('[data-testid="chat-view"][data-test-phase="live"]').waitFor();
-      await page.evaluate(() => document.fonts.ready);
-      for (const item of cases) {
-        const key = `${engine}-${size.width}x${size.height}-${item.id}`;
-        const row = page.locator(`[data-testid="chat-row"][data-test-chat-id="${item.id}"]`);
-        await row.click();
-        await page
-          .locator(
-            `[data-testid="chat-view"][data-test-chat-id="${item.id}"][data-test-phase="live"]`,
-          )
-          .waitFor();
-        const label = page.locator(".chat-header-folder");
-        await page.waitForFunction(
-          (expected) => document.querySelector(".chat-header-folder")?.textContent === expected,
-          item.label,
-        );
-        assert.equal(await row.getAttribute("aria-current"), "true", key);
-        assert.equal(await page.locator(".chat-header-title").textContent(), item.title, key);
-        assert.equal(await label.textContent(), item.label, key);
-        assert.equal(await label.getAttribute("title"), item.path, key);
-        assert.equal(
-          await page.getByRole("button", { name: "Changes", exact: true }).isVisible(),
-          true,
-          key,
-        );
-        const menu = page.locator(".chat-header-menu summary");
-        assert.equal(await menu.isVisible(), true, key);
-        assert.equal(await menu.getAttribute("aria-label"), "Chat details and controls", key);
-        const geometry = await label.evaluate((element, prefix) => {
-          const box = element.getBoundingClientRect();
-          const controls = document.querySelector(".chat-header-controls").getBoundingClientRect();
-          const range = document.createRange();
-          range.setStart(element.firstChild, 0);
-          range.setEnd(element.firstChild, prefix.length);
-          const visible = range.getBoundingClientRect();
-          return {
-            pageOverflow: document.documentElement.scrollWidth > innerWidth,
-            width: box.width,
-            controlsClear: box.right <= controls.left + 1,
-            prefixVisible: visible.right <= box.right + 1,
-            clipped: element.scrollWidth > element.clientWidth,
-            textOverflow: getComputedStyle(element).textOverflow,
-          };
-        }, item.visible);
-        assert.equal(geometry.pageOverflow, false, `${key}: page overflow`);
-        assert.ok(geometry.width > 0, `${key}: hidden header label`);
-        assert.equal(geometry.controlsClear, true, `${key}: header controls overlap`);
-        assert.equal(geometry.prefixVisible, true, `${key}: project/branch name clipped`);
-        assert.equal(geometry.textOverflow, "ellipsis", `${key}: path truncation`);
-        if (item.id === "header-tree") assert.equal(geometry.clipped, true, `${key}: long fixture`);
-        const scan = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-          .analyze();
-        assert.deepEqual(scan.violations, [], `${key}: accessibility violations`);
-        await page.screenshot({ path: resolve(out, `${key}.png`) });
-        results.push({ size, chat: item.id, label: item.label, geometry, violations: [] });
+    for (const theme of ["light", "dark"]) {
+      await page.emulateMedia({ colorScheme: theme });
+      for (const size of sizes) {
+        await page.setViewportSize(size);
+        await page.goto(`${url}/?preview=header-labels`);
+        await page.locator('[data-testid="chat-view"][data-test-phase="live"]').waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        for (const item of cases) {
+          const key = `${engine}-${theme}-${size.width}x${size.height}-${item.id}`;
+          const row = page.locator(`[data-testid="chat-row"][data-test-chat-id="${item.id}"]`);
+          await row.click();
+          await page
+            .locator(
+              `[data-testid="chat-view"][data-test-chat-id="${item.id}"][data-test-phase="live"]`,
+            )
+            .waitFor();
+          const label = page.locator(".chat-header-folder");
+          await page.waitForFunction(
+            (expected) => document.querySelector(".chat-header-folder")?.textContent === expected,
+            item.label,
+          );
+          assert.equal(await row.getAttribute("aria-current"), "true", key);
+          assert.equal(await page.locator(".chat-header-title").textContent(), item.title, key);
+          assert.equal(await label.textContent(), item.label, key);
+          assert.equal(await label.getAttribute("title"), item.path, key);
+          assert.equal(
+            await page.getByRole("button", { name: "Changes", exact: true }).isVisible(),
+            true,
+            key,
+          );
+          const menu = page.locator(".chat-header-menu summary");
+          assert.equal(await menu.isVisible(), true, key);
+          assert.equal(await menu.getAttribute("aria-label"), "Chat details and controls", key);
+          const geometry = await label.evaluate((element, prefix) => {
+            const box = element.getBoundingClientRect();
+            const controls = document
+              .querySelector(".chat-header-controls")
+              .getBoundingClientRect();
+            const range = document.createRange();
+            range.setStart(element.firstChild, 0);
+            range.setEnd(element.firstChild, prefix.length);
+            const visible = range.getBoundingClientRect();
+            return {
+              pageOverflow: document.documentElement.scrollWidth > innerWidth,
+              width: box.width,
+              controlsClear: box.right <= controls.left + 1,
+              prefixVisible: visible.right <= box.right + 1,
+              clipped: element.scrollWidth > element.clientWidth,
+              textOverflow: getComputedStyle(element).textOverflow,
+            };
+          }, item.visible);
+          assert.equal(geometry.pageOverflow, false, `${key}: page overflow`);
+          assert.ok(geometry.width > 0, `${key}: hidden header label`);
+          assert.equal(geometry.controlsClear, true, `${key}: header controls overlap`);
+          assert.equal(geometry.prefixVisible, true, `${key}: project/branch name clipped`);
+          assert.equal(geometry.textOverflow, "ellipsis", `${key}: path truncation`);
+          if (item.id === "header-tree")
+            assert.equal(geometry.clipped, true, `${key}: long fixture`);
+          const scan = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+            .analyze();
+          assert.deepEqual(scan.violations, [], `${key}: accessibility violations`);
+          await page.screenshot({ path: resolve(out, `${key}.png`) });
+          results.push({ size, chat: item.id, label: item.label, geometry, violations: [] });
+        }
       }
     }
     assert.deepEqual(errors, [], `${engine}: browser errors`);

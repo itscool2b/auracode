@@ -1,13 +1,19 @@
 import { Wordmark } from "@auracode/ui/graphite";
 
-/** Vercel's footer, minimal: the wordmark at left, three link columns at right, nothing else. */
 export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="wrap footer-grid">
-        <a className="footer-home" href="/" aria-label="auracode home">
-          <Wordmark size={16} />
-        </a>
+        <div className="footer-home">
+          <a href="/" aria-label="auracode home">
+            <Wordmark size={16} />
+          </a>
+          <span className="footer-statement">
+            Your agents.
+            <br />
+            Your machine.
+          </span>
+        </div>
         <nav className="footer-links" aria-label="Footer">
           <div className="footer-col">
             <p className="footer-heading">Product</p>

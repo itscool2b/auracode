@@ -1,10 +1,6 @@
 /*
- * Settings in Graphite (docs/design/visual-language.md, 6.16), after Grok's settings and X Money's
- * grouped rows: the sidebar becomes the settings nav (icon and label, the open page on a filled
- * pill), and each page is a title over groups. A group is an optional heading and one short line,
- * then a surface-2 well of rows on inset hairlines. A row is a label with an optional one-line
- * description and at most one small control at the right; anything more opens under it, across
- * the row. Only --g-* tokens.
+ * Devin-informed Aura settings: navigation and grouped rows use shared semantic tokens.
+ * Each row keeps its label, description and control clear in both appearances.
  */
 
 .settings-shell {
@@ -25,27 +21,47 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
+  margin: 0;
   overflow: auto;
-  /* The chat's pane (6.1): rounded, a calm rim outside it and its top edge lit. */
+  /* The settings surface aligns with the app frame and separates from navigation. */
   border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow:
-    0 0 0 1px var(--ui-pane-rim),
-    inset 0 1px 0 var(--ui-pane-rim-top);
+  border-left: 1px solid var(--g-line);
+  box-shadow: none;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.settings-main > .settings-drag {
-  height: 32px;
+.settings-breadcrumb {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: calc(var(--ui-titlebar-height) + 44px);
+  padding: var(--ui-titlebar-height) var(--g-space-32) 0;
+  border-bottom: 1px solid var(--g-line);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+}
+
+.settings-breadcrumb-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--ui-titlebar-height);
+}
+
+.settings-breadcrumb > :last-child {
+  color: var(--g-fg-1);
 }
 
 .settings-content {
   box-sizing: border-box;
-  width: min(100%, 760px);
+  width: min(100%, 780px);
   margin-inline: auto;
-  padding: var(--g-space-48) var(--g-space-40) var(--g-space-64);
+  padding: var(--g-space-32) var(--g-space-40) var(--g-space-64);
 }
 
 .settings-content h1 {
@@ -109,6 +125,14 @@
   font-weight: 500;
 }
 
+.settings-section > h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin-left: var(--g-space-8);
+  background-color: var(--g-line);
+}
+
 .settings-heading > :is(h2, h3) {
   flex: 1;
   margin: 0;
@@ -130,8 +154,13 @@
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border-radius: var(--g-radius-12);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
   background-color: var(--g-surface-2);
+}
+
+:root[data-theme="light"] .settings-group {
+  background-color: var(--g-surface-1);
 }
 
 .settings-group:empty {
@@ -455,6 +484,12 @@ h1 + .settings-group {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
+:root[data-theme="light"]
+  :is(.settings-shell, .locked-profile)
+  input[type="checkbox"]:not([role="switch"]):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='white' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
+}
+
 :is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -732,7 +767,7 @@ h1 + .settings-group {
 .settings-sidebar {
   position: relative;
   display: flex;
-  flex: 0 0 var(--g-app-sidebar);
+  flex: 0 0 var(--ui-sidebar-width);
   flex-direction: column;
   min-width: 0;
   padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
@@ -785,9 +820,9 @@ h1 + .settings-group {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background-color: var(--g-surface-2);
+  background-color: var(--g-hover);
   opacity: 0;
-  transform: scale(0.96);
+  transform: none;
   pointer-events: none;
   transition:
     opacity var(--g-dur-fast) var(--g-ease),
@@ -863,9 +898,19 @@ h1 + .settings-group {
 }
 
 .settings-sidebar nav button[aria-current]::before {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   opacity: 1;
   transform: none;
+}
+
+.settings-sidebar nav button[aria-current]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 2px;
+  height: 12px;
+  background-color: var(--g-volt);
 }
 
 .settings-sidebar nav button[aria-current] svg {

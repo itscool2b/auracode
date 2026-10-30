@@ -1,6 +1,6 @@
 /**
  * Regenerates the home page's product images from the desktop app itself: its chat preview
- * (?preview=settled, development fixtures only, no agent or prompt) at 1440 by 900 and 2x, encoded
+ * (?preview=settled, development fixtures only, no agent or prompt) at 1440 by 760 and 2x, encoded
  * through Chromium's canvas into WebP at 480, 960, 1440 and 2240 wide and a 1440 PNG fallback in
  * public/images. Run it whenever the app changes visibly.
  *
@@ -22,12 +22,12 @@ const images = resolve(web, "public/images");
 const url = values.server ?? "http://127.0.0.1:1426";
 
 /** Every encoded file: its name, width, type and quality. */
-const OUTPUTS = [
-  ["desktop-dark-480.webp", 480, "image/webp", 0.9],
-  ["desktop-dark-960.webp", 960, "image/webp", 0.9],
-  ["desktop-dark-1440.webp", 1440, "image/webp", 0.9],
-  ["desktop-dark-2240.webp", 2240, "image/webp", 0.88],
-  ["desktop-dark.png", 1440, "image/png", undefined],
+const outputsFor = (theme) => [
+  [`desktop-${theme}-480.webp`, 480, "image/webp", 0.9],
+  [`desktop-${theme}-960.webp`, 960, "image/webp", 0.9],
+  [`desktop-${theme}-1440.webp`, 1440, "image/webp", 0.9],
+  [`desktop-${theme}-2240.webp`, 2240, "image/webp", 0.88],
+  [`desktop-${theme}.png`, 1440, "image/png", undefined],
 ];
 
 let server = null;
@@ -59,18 +59,22 @@ try {
     if (ok) break;
     await new Promise((done) => setTimeout(done, 100));
   }
+  const theme = "light";
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1440, height: 760 },
     deviceScaleFactor: 2,
     reducedMotion: "reduce",
+    colorScheme: theme,
   });
   const page = await context.newPage();
-  await page.goto(`${url}/?preview=settled`);
+  await page.goto(`${url}/?preview=settled&theme=${theme}&agents=lineup`);
   await page.getByTestId("composer-input").waitFor();
   await page.evaluate(() => document.fonts.ready);
   // Nothing under the hand: no hover fill, no tooltip.
-  await page.mouse.move(1439, 899);
+  await page.mouse.move(1439, 759);
   await page.waitForTimeout(1500);
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.getByRole("table", { name: "File line changes" }).waitFor();
   const capture = await page.screenshot();
   const encoder = await context.newPage();
   const encoded = await encoder.evaluate(
@@ -89,13 +93,14 @@ try {
         return [name, canvas.toDataURL(type, quality)];
       });
     },
-    { source: `data:image/png;base64,${capture.toString("base64")}`, outputs: OUTPUTS },
+    { source: `data:image/png;base64,${capture.toString("base64")}`, outputs: outputsFor(theme) },
   );
   for (const [name, dataUrl] of encoded) {
     const bytes = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
     await writeFile(resolve(images, name), bytes);
     console.log(`${name}: ${bytes.length} bytes`);
   }
+  await context.close();
 } finally {
   await browser.close();
   server?.kill();

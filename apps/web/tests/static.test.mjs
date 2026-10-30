@@ -4,29 +4,28 @@ import { access, readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../build/client/", import.meta.url);
-test("public pages are prerendered, dark and usable without JavaScript", async () => {
+test("public pages are prerendered in light appearance without JavaScript", async () => {
   for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
-    assert.match(html, /<html[^>]*data-theme="dark"/);
+    assert.match(html, /<html[^>]*data-theme="light"/);
     assert.match(html, /<main/);
     assert.match(html, /<h1/);
-    assert.doesNotMatch(html, /data-theme="light"/);
   }
   const downloads = await readFile(new URL("download/index.html", root), "utf8");
   assert.match(downloads, /macOS/);
   assert.match(downloads, /Windows/);
   assert.match(downloads, /Not published/);
   assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
-  await access(new URL("images/desktop-dark.png", root));
+  await access(new URL("images/desktop-light.png", root));
   for (const width of [480, 960, 1440, 2240])
-    await access(new URL(`images/desktop-dark-${width}.webp`, root));
+    await access(new URL(`images/desktop-light-${width}.webp`, root));
   const home = await readFile(new URL("index.html", root), "utf8");
-  assert.match(home, /<picture><source[^>]*type="image\/webp"/);
+  assert.match(home, /<picture[^>]*><source[^>]*type="image\/webp"/);
   assert.match(
     home,
-    /desktop-dark-480.webp 480w, \/images\/desktop-dark-960.webp 960w, \/images\/desktop-dark-1440.webp 1440w/,
+    /desktop-light-480.webp 480w, \/images\/desktop-light-960.webp 960w, \/images\/desktop-light-1440.webp 1440w/,
   );
-  assert.match(home, /sizes="\(max-width: 620px\) calc\(100vw - 60px\)/);
+  assert.match(home, /sizes="\(max-width: 1240px\) calc\(100vw - 40px\)/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");
@@ -73,7 +72,9 @@ test("third-party notices are emitted and linked from every page footer", async 
   assert.match(text, /react-router/);
   assert.doesNotMatch(text, /SQLCipher|openssl-src/);
   const page = await readFile(new URL("third-party-notices/index.html", root), "utf8");
-  assert.match(page, /color-scheme:dark/);
+  assert.match(page, /color-scheme:light/);
+  assert.match(page, /--notice-bg:#fafafa/);
+  assert.doesNotMatch(page, /prefers-color-scheme:dark/);
   assert.doesNotMatch(page, /<script/);
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /<a href="\/third-party-notices">Notices<\/a>/);

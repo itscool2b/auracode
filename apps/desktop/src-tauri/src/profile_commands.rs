@@ -283,6 +283,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
                 if current.profile != before.profile
                     || current.config_profile_recovery != before.config_profile_recovery
                 {
+                    crate::appearance::refresh(&app);
                     let _ = app.emit(PROFILE_CHANGED, current);
                 }
                 return Err(error);
@@ -308,6 +309,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
         }
         crate::native_shell::profile_changed(&app);
         crate::general_preferences::refresh(&app);
+        crate::appearance::refresh(&app);
         let _ = app.emit(PROFILE_CHANGED, &result);
         Ok(result)
     })

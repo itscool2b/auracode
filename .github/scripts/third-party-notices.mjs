@@ -276,12 +276,19 @@ export function renderText(catalogue, distribution) {
   return lines.join("\n");
 }
 
-export function renderHtml(text) {
+export function renderHtml(text, distribution = "desktop") {
   const safe = text.replace(
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
   );
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Third-party notices | auracode</title><style>html{color-scheme:dark;background:#000;color:#a3a3a3;font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}body{max-width:76rem;margin:4rem auto;padding:0 1rem}h1{margin:0 0 2rem;color:#ededed;font-size:2rem;line-height:1.1;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid #1f1f1f;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:#333;color:#ededed}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
+  // The website is always light. The separate desktop document follows System; both remain
+  // script-free and leave the notice text unchanged.
+  const scheme = distribution === "web" ? "light" : "light dark";
+  const dark =
+    distribution === "web"
+      ? ""
+      : "@media(prefers-color-scheme:dark){html{--notice-bg:#101112;--notice-fg:#a1a1aa;--notice-title:#fafafa;--notice-line:#303236;--notice-selection:#333}}";
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${scheme}"><title>Third-party notices | auracode</title><style>html{color-scheme:${scheme};--notice-bg:#fafafa;--notice-fg:#52525b;--notice-title:#18181b;--notice-line:#e4e4e7;--notice-selection:#dde2ea;background:var(--notice-bg);color:var(--notice-fg);font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}${dark}body{max-width:72rem;margin:clamp(2rem,6vw,6rem) auto;padding:0 1.25rem}h1{margin:0 0 2rem;color:var(--notice-title);font-size:2rem;line-height:1.2;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid var(--notice-line);white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:var(--notice-selection);color:var(--notice-title)}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
 }
 
 const virtualNotices = "virtual:third-party-notices";
@@ -306,7 +313,7 @@ export function noticesPlugin(distribution) {
         // A directory index gives the website Worker a clean route. It serves HTML only as
         // prerendered index pages.
         fileName: "third-party-notices/index.html",
-        source: renderHtml(text),
+        source: renderHtml(text, distribution),
       });
     },
   };

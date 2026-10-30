@@ -91,10 +91,12 @@ test("packaging emits readable plain text and escaped script-free HTML", () => {
     ["third-party-notices.txt", "third-party-notices/index.html"],
   );
   assert.match(assets[0].source, /SQLCipher/);
+  assert.match(assets[1].source, /color-scheme:light dark/);
   const html = renderHtml('<script>alert("bad")</script>&');
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /color-scheme:dark/);
+  assert.match(html, /color-scheme:light dark/);
+  assert.match(html, /@media\(prefers-color-scheme:dark\)/);
 });
 
 test("desktop imports the notice text as a virtual module without fetching", () => {
@@ -105,4 +107,14 @@ test("desktop imports the notice text as a virtual module without fetching", () 
   const source = plugin.load(id);
   assert.match(source, /^export default "Third-party software notices/);
   assert.match(source, /SQLCipher/);
+});
+
+test("website notices stay light while desktop notices follow System", () => {
+  const assets = [];
+  noticesPlugin("web").generateBundle.call({ emitFile: (asset) => assets.push(asset) });
+  const html = assets.find((asset) => asset.fileName.endsWith("index.html")).source;
+  assert.match(html, /color-scheme:light;/);
+  assert.match(html, /--notice-bg:#fafafa/);
+  assert.doesNotMatch(html, /prefers-color-scheme|<script/);
+  assert.match(renderHtml("Desktop"), /prefers-color-scheme:dark/);
 });

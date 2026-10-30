@@ -1800,7 +1800,7 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--ui-card-radius);
-  background-color: var(--g-surface-2);
+  background-color: var(--g-surface-1);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
@@ -2181,19 +2181,15 @@
   border-radius: var(--g-radius-pill);
 }
 
-/*
- * Grok's voice popover: one panel over the chip, its parts stacked and split by hairlines: the
- * agent rows, the model rows, then effort and autonomy as compact fields with the note under them.
- */
+/* Agent, model, effort and autonomy choices share a compact menu. */
 .chat-model-popover > .chat-popover-panel {
   bottom: calc(100% + 8px);
   left: 0;
   width: min(400px, calc(100vw - 48px));
   max-height: min(560px, 72vh);
-  /* Nested radius (3.4): 16 outside, 4 of padding, 12 on the rows inside. */
   padding: var(--g-space-4);
   gap: 0;
-  border-radius: var(--g-radius-16);
+  border-radius: var(--g-radius-8);
 }
 
 .chat-model-columns {
@@ -2264,7 +2260,7 @@
   min-width: 0;
   min-height: 36px;
   padding: var(--g-space-4) var(--g-space-8);
-  border-radius: var(--g-radius-12);
+  border-radius: var(--g-radius-6);
   color: var(--g-fg-2);
   text-align: left;
   transition:

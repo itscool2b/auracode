@@ -69,7 +69,7 @@
   scrollbar-width: none;
 }
 
-/* Grok's quiet pills, as the right panel's tabs: words in fg-2, the open one on a surface-3 fill. */
+/* Quiet tabs share the workspace panel's selected state. */
 .terminal-panel-tab {
   display: inline-flex;
   flex: none;
@@ -79,7 +79,7 @@
   height: 28px;
   padding: 0 var(--g-space-6) 0 var(--g-space-12);
   border: 0;
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
   background-color: transparent;
   color: var(--g-fg-2);
   font: inherit;
@@ -98,7 +98,7 @@
 }
 
 .terminal-panel-tab[aria-selected="true"] {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   color: var(--g-fg-1);
 }
 

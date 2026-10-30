@@ -88,6 +88,9 @@ describe("Settings' General defaults", () => {
       />,
     );
     expect(html).toContain('aria-label="Default agent"');
+    expect(html).toContain('name="settings-appearance"');
+    for (const appearance of ["System", "Light", "Dark"])
+      expect(html).toContain(`>${appearance}</span>`);
     expect(html).toContain(">Choose each time</option>");
     // No default agent yet: no model row.
     expect(html).not.toContain('aria-label="Default model"');

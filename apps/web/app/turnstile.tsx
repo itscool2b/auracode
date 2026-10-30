@@ -6,7 +6,7 @@ interface TurnstileApi {
     element: HTMLElement,
     options: {
       sitekey: string;
-      theme: "dark";
+      theme: "light" | "dark";
       action: "signin";
       callback: (token: string) => void;
       "expired-callback": () => void;
@@ -67,7 +67,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
         if (active && container.current && window.turnstile)
           id = window.turnstile.render(container.current, {
             sitekey: config.turnstile_site_key,
-            theme: "dark",
+            theme: "light",
             action: "signin",
             callback: (token) => callback.current(token),
             "expired-callback": () => callback.current(""),

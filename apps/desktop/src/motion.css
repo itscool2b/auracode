@@ -1,6 +1,5 @@
 /*
- * The app's micro-motion (docs/design/visual-language.md, 3.8 and 6.1 to 6.20, Shallows): the small
- * places a hand or an eye lands on settle the way the water moves, softly and once. Only transform
+ * The app's interaction motion follows docs/design/visual-language.md. Only transform
  * (and `translate`) and opacity ever move; colour may cross-fade, nothing changes layout, nothing
  * idles, and every rule here stands still under reduced motion (the OS setting or the app's own).
  *
@@ -26,7 +25,7 @@
 }
 
 .g-button:active:not(:disabled, [aria-disabled="true"]) {
-  transform: scale(0.97);
+  transform: translateY(1px);
 }
 
 /* ------------------------------------------------------------- popovers and dialogs */
@@ -53,7 +52,7 @@
 @keyframes ui-dialog-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
@@ -95,7 +94,7 @@
 @keyframes ui-notice-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;
@@ -119,7 +118,7 @@
   height: 6px;
   border-radius: 50%;
   background-color: var(--g-fg-3);
-  animation: ui-breathe var(--ui-pulse) var(--g-ease-in-out) infinite;
+  animation: none;
 }
 
 .ui-pulse::after {
@@ -129,7 +128,7 @@
   border-radius: 50%;
   box-shadow: 0 0 0 1px var(--g-fg-3);
   opacity: 0;
-  animation: ui-ripple var(--ui-pulse) var(--g-ease-out) infinite;
+  animation: none;
 }
 
 @keyframes ui-breathe {
@@ -176,7 +175,7 @@
   box-shadow: 0 0 0 1px var(--g-fg-2);
   opacity: 0.5;
   pointer-events: none;
-  animation: ui-ring var(--ui-pulse) var(--g-ease-out) infinite;
+  animation: none;
 }
 
 @keyframes ui-ring {
@@ -214,7 +213,7 @@
 @keyframes ui-row-arrive {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;
@@ -236,7 +235,7 @@
 }
 
 :is(.new-chat-agent, .chat-popover > summary):active {
-  transform: scale(0.97);
+  transform: translateY(1px);
 }
 
 /* ----------------------------------------------------------------------- send disc */
@@ -249,7 +248,7 @@
 @keyframes ui-send-ready {
   from {
     opacity: 0.4;
-    transform: translateY(3px);
+    transform: translateY(2px);
   }
   to {
     opacity: 1;

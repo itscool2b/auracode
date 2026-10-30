@@ -6,6 +6,7 @@ import { SettingsScreen } from "../components/settings/SettingsScreen";
 import { accountApi } from "../lib/account/api";
 import type { AccountStatus } from "../lib/account/bindings";
 import { accountResetApi } from "../lib/account/reset";
+import { getAppearancePreference } from "../lib/appearance";
 import { profileApi } from "../lib/profiles";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
@@ -114,6 +115,7 @@ const preferences: SetupSnapshot = {
     revision: 0,
     step: "motion",
     motion: "full",
+    appearance: getAppearancePreference(),
     completed: true,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },
@@ -129,6 +131,7 @@ const setup: SetupApi = {
       throw new Error("Preferences changed. Reload and retry.");
     const general = preferences.preferences.general;
     if (action.type === "motion") preferences.preferences.motion = action.value;
+    if (action.type === "appearance") preferences.preferences.appearance = action.value;
     if (action.type === "default_agent") {
       if (general.default_agent !== action.agent_id) general.default_model = null;
       general.default_agent = action.agent_id;

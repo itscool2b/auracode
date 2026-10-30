@@ -46,7 +46,6 @@ export function Modal({
     <dialog
       ref={dialog}
       className={dialogClassName(size, className)}
-      data-theme="dark"
       aria-labelledby={label}
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();

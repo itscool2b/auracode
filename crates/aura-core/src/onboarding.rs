@@ -36,11 +36,22 @@ pub enum MotionPreference {
     Off,
 }
 
+/// Appearance belongs to the active profile on this device, just like motion preferences.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum AppearancePreference {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct SetupPreferences {
     pub revision: u32,
     pub step: SetupStep,
     pub motion: MotionPreference,
+    pub appearance: AppearancePreference,
     pub completed: bool,
     pub first_project_id: Option<String>,
     /// Files written before these settings existed read their defaults ([`fill_defaults`]).
@@ -97,6 +108,9 @@ pub enum SetupAction {
     Motion {
         value: MotionPreference,
     },
+    Appearance {
+        value: AppearancePreference,
+    },
     Project {
         project_id: String,
     },
@@ -144,6 +158,7 @@ impl Default for Record {
                 revision: 0,
                 step: SetupStep::Welcome,
                 motion: MotionPreference::Full,
+                appearance: AppearancePreference::System,
                 completed: false,
                 first_project_id: None,
                 general: GeneralPreferences::default(),
@@ -340,6 +355,7 @@ impl OnboardingStore {
         match action {
             SetupAction::Visit { step } => next.preferences.step = step,
             SetupAction::Motion { value } => next.preferences.motion = value,
+            SetupAction::Appearance { value } => next.preferences.appearance = value,
             SetupAction::Project { project_id } => {
                 if project_id.is_empty()
                     || project_id.len() > 128
@@ -417,7 +433,7 @@ impl OnboardingStore {
     }
 }
 
-/// Supplies every General preference a saved file lacks (files from before those settings
+/// Supplies every appearance and General preference a saved file lacks (files from before those settings
 /// existed, or from before one was added) with its default, so the file still reads. The types
 /// keep every field required, which keeps the TypeScript bindings exact.
 fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
@@ -427,6 +443,9 @@ fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
     else {
         return value;
     };
+    preferences
+        .entry("appearance")
+        .or_insert_with(|| serde_json::Value::String("system".into()));
     let Ok(serde_json::Value::Object(defaults)) =
         serde_json::to_value(GeneralPreferences::default())
     else {
@@ -497,6 +516,59 @@ fn read(path: &Path) -> Result<Option<serde_json::Value>, SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn appearance_defaults_migrate_and_changes_survive_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":3,"step":"project","motion":"reduced","completed":true,"first_project_id":"existing"}}"#,
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let migrated = store.snapshot().unwrap();
+        assert!(migrated.notice.is_none());
+        assert_eq!(
+            migrated.preferences.appearance,
+            AppearancePreference::System
+        );
+        assert_eq!(migrated.preferences.revision, 3);
+        assert_eq!(migrated.preferences.motion, MotionPreference::Reduced);
+        for (revision, value) in [
+            (3, AppearancePreference::Light),
+            (4, AppearancePreference::Dark),
+            (5, AppearancePreference::System),
+        ] {
+            let next = store
+                .apply(revision, SetupAction::Appearance { value })
+                .unwrap();
+            assert_eq!(next.preferences.revision, revision + 1);
+            assert_eq!(next.preferences.appearance, value);
+            assert_eq!(
+                next.preferences.first_project_id.as_deref(),
+                Some("existing")
+            );
+            assert!(matches!(
+                store.apply(revision, SetupAction::Appearance { value }),
+                Err(SetupError::Stale)
+            ));
+            assert_eq!(
+                OnboardingStore::open(dir.path())
+                    .unwrap()
+                    .preferences()
+                    .appearance,
+                value
+            );
+        }
+        let separate = tempfile::tempdir().unwrap();
+        assert_eq!(
+            OnboardingStore::open(separate.path())
+                .unwrap()
+                .preferences()
+                .appearance,
+            AppearancePreference::System
+        );
+    }
 
     #[test]
     fn progress_resumes_and_boot_is_stable_across_reads() {

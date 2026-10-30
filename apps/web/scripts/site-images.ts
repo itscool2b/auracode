@@ -1,14 +1,6 @@
-// Build glue for the site's generated images: the favicons and the home-screen icon as small
-// palette PNGs, and the social card in Shallows, all rasterised here from the logo's and the
-// creatures' own paths (visual language 4.14, 4.16).
+// Build glue for the site's generated favicons, home-screen icon, and monochrome social card.
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
-import {
-  SEAL_PATH,
-  SEAL_VIEWBOX,
-  TURTLE_PATH,
-  TURTLE_VIEWBOX,
-} from "../../../packages/ui/src/graphite/creaturePaths.ts";
 import {
   LOGO_PATH,
   LOGO_SMALL_MAX,
@@ -211,69 +203,15 @@ export function rgbPng(width: number, height: number, pixels: Uint8Array): Buffe
   ]);
 }
 
-/** Mirrors flattened polygons across a viewBox's width, for a creature facing left. */
-const mirror = (polygons: readonly number[][], width: number) =>
-  polygons.map((polygon) => polygon.map((value, i) => (i % 2 === 0 ? width - value : value)));
-
-/** The water's grey at depth `t` (0 at the surface, 1 deep), a smooth step through the tokens. */
-function water(t: number): number[] {
-  const stops = [
-    GRAPHITE_COLORS["water-surface"],
-    GRAPHITE_COLORS["water-shallow"],
-    GRAPHITE_COLORS["water-mid"],
-    GRAPHITE_COLORS["water-low"],
-    GRAPHITE_COLORS["water-deep"],
-  ].map(rgb);
-  const at = Math.min(0.9999, Math.max(0, t)) * (stops.length - 1);
-  const i = Math.floor(at);
-  const k = at - i;
-  const from = stops[i] as number[];
-  const to = stops[i + 1] as number[];
-  return from.map((value, c) => value + ((to[c] ?? 0) - value) * k);
-}
-
-/**
- * The social card, 1200x630, in Shallows: the lit water falling off from the surface, a turtle and
- * a seal passing as dark silhouettes, and the logo in fg-1 at the centre. A half-step ordered
- * dither keeps the dark gradient from banding; it is below one grey level, so it reads as smooth.
- */
+/** A quiet monochrome social card centered on the Aura mark. */
 export function socialPng(): Buffer {
   const width = 1200;
   const height = 630;
-  const shade = rgb(GRAPHITE_COLORS["shade-near"]);
-  const ink = rgb(GRAPHITE_COLORS["fg-1"]);
-  const turtleScale = 250 / TURTLE_VIEWBOX[0];
-  const turtle = coverage(flatten(TURTLE_PATH), width, height, {
-    x: 150,
-    y: 300 - (TURTLE_VIEWBOX[1] * turtleScale) / 2,
-    scale: turtleScale,
-  });
-  const sealScale = 320 / SEAL_VIEWBOX[0];
-  const seal = coverage(mirror(flatten(SEAL_PATH), SEAL_VIEWBOX[0]), width, height, {
-    x: 760,
-    y: 150,
-    scale: sealScale,
-  });
   const logo = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.36, width, height));
   const pixels = new Uint8Array(width * height * 3);
-  for (let y = 0; y < height; y++) {
-    const base = water(y / (height * 0.86));
-    for (let x = 0; x < width; x++) {
-      const at = y * width + x;
-      const dx = (x - width / 2) / (width * 0.62);
-      const dy = y / (height * 0.5);
-      const light = Math.max(0, 1 - dx * dx - dy * dy) * 0.045 * 255;
-      const dither = ((((x * 7 + y * 13) % 16) + 0.5) / 16 - 0.5) * 0.9;
-      const creature = Math.min(1, (turtle[at] ?? 0) + (seal[at] ?? 0));
-      const mark = Math.min(1, logo[at] ?? 0);
-      for (let c = 0; c < 3; c++) {
-        const lit = (base[c] ?? 0) + light * (1 - (base[c] ?? 0) / 255);
-        const under = lit + ((shade[c] ?? 0) - lit) * creature;
-        pixels[at * 3 + c] = Math.round(
-          Math.min(255, Math.max(0, under + ((ink[c] ?? 0) - under) * mark + dither)),
-        );
-      }
-    }
+  for (let i = 0; i < width * height; i++) {
+    const mark = Math.min(1, logo[i] ?? 0);
+    for (let c = 0; c < 3; c++) pixels[i * 3 + c] = Math.round(16 + 234 * mark);
   }
   return rgbPng(width, height, pixels);
 }

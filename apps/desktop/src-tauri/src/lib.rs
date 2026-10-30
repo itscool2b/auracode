@@ -23,6 +23,7 @@ mod account_removal;
 pub mod account_sync;
 pub mod accounts;
 pub mod agent_installation_commands;
+pub mod appearance;
 pub mod bindings;
 pub mod boot;
 pub mod catalog_refresh;
@@ -189,8 +190,8 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
         app.handle().exit(0);
         return;
     }
-    // Product appearance is always dark, including native menus and macOS materials.
-    app.set_theme(Some(tauri::Theme::Dark));
+    // Follow the OS until the active profile is available, before the hidden window is revealed.
+    app.set_theme(None);
     if let Some(Err(error)) = &launch.smoke {
         // Automation is waiting for a result: say why no scenario runs, and with
         // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
@@ -248,6 +249,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(Arc::new(clones));
     native_shell::setup(app.handle());
     general_preferences::refresh(app.handle());
+    appearance::refresh(app.handle());
     if accept_sign_in_links {
         deep_links::setup(app.handle());
     }
@@ -352,6 +354,15 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
 
 fn on_event(app: &tauri::AppHandle, event: RunEvent) {
     match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::ThemeChanged(theme),
+            ..
+        } => {
+            if let Some(window) = app.get_webview_window(&label) {
+                appearance::repaint(app, &window, theme);
+            }
+        }
         #[cfg(target_os = "macos")]
         RunEvent::Reopen {
             has_visible_windows: false,

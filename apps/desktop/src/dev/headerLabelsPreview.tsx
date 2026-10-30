@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppInfo, ProjectFolder, ProjectSummary, WorkspaceSnapshot } from "../bindings";
 import { ChatsScreen } from "../components/chat/ChatsScreen";
+import { getAppearancePreference } from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
 import {
   attachResult,
@@ -108,6 +109,7 @@ const setup: SetupApi = {
       revision: 1,
       step: "project",
       motion: "off",
+      appearance: getAppearancePreference(),
       completed: true,
       first_project_id: "client",
       general: { ...DEFAULT_GENERAL },

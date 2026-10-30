@@ -4,72 +4,43 @@
  * directly. The few values below are the app window's own layout, which Graphite does not define.
  */
 @import "@auracode/ui/graphite.css";
+@import "@auracode/ui/desktop-fonts.css";
 
 :root {
-  /* Geist with its default glyphs, exactly as the website sets it. */
+  /* Use the desktop font's default glyphs. */
   font-feature-settings: normal;
 
   /* The window frame (6.1, 6.2). The sidebar narrows to the rail when collapsed. */
-  --ui-sidebar-width: var(--g-app-sidebar);
-  --ui-rail-width: 72px;
+  --ui-sidebar-width: 256px;
+  --ui-rail-width: 56px;
   /* The band that clears the native window controls and drags the window. */
   --ui-titlebar-height: 52px;
   /* The gap between the window edge and its panes, and between two panes. */
-  --ui-pane-inset: var(--g-space-8);
+  --ui-pane-inset: 0px;
   /* The transcript's lead column: marks and chevrons centre on x 12, words start at x 24 (6.4). */
   --ui-gutter: 24px;
 
   /* Over the OS window material (macOS vibrancy, Windows Mica) where a screen leaves it showing. */
   --ui-window-tint: rgb(7 7 10 / 0.42);
 
-  /*
-   * Shallows in the app (6.1): the main pane is a rounded inset panel on the black window. Its rim
-   * is lit from the top like the water's, brightest along the upper edge and settling to a calm
-   * hairline down the sides; the pane's fill stays surface-1 so every well keeps its step.
-   */
-  --ui-pane-radius: var(--g-radius-16);
+  /* Flat workspace panes share quiet dividers. */
+  --ui-pane-radius: 0px;
   --ui-pane-rim: var(--g-line-faint);
   --ui-pane-rim-top: var(--g-line);
-  --ui-pane-light: rgb(255 255 255 / 0.02);
 
-  /*
-   * A card over the water (New chat's card, 6.13): a soft rim brightest along its top edge and one
-   * long shadow, so it floats over the swimmers without a hard ring. Focus within brightens it.
-   */
-  --ui-composer-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.06),
-    0 24px 56px -24px rgb(0 0 0 / 0.8), 0 4px 16px -8px rgb(0 0 0 / 0.5);
-  --ui-composer-shadow-focus:
-    inset 0 0 0 1px rgb(255 255 255 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.08),
-    0 24px 56px -24px rgb(0 0 0 / 0.8), 0 4px 16px -8px rgb(0 0 0 / 0.5);
-  --ui-composer-shadow-keyboard:
-    inset 0 0 0 1px var(--g-fg-3), 0 24px 56px -24px rgb(0 0 0 / 0.8),
-    0 4px 16px -8px rgb(0 0 0 / 0.5);
+  /* Composer boundaries strengthen for keyboard focus. */
+  --ui-composer-shadow: inset 0 0 0 1px var(--g-line);
+  --ui-composer-shadow-focus: inset 0 0 0 1px var(--g-line-strong);
+  --ui-composer-shadow-keyboard: inset 0 0 0 2px var(--g-focus);
 
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
 
-  /* Setup's card over the water (6.17): opaque, a step under the water's deepest grey. */
-  --ui-card-radius: var(--g-shallows-radius-compact);
-  --ui-card-fill: var(--g-water-low);
-  --ui-card-shadow:
-    inset 0 0 0 1px var(--g-water-rim), inset 0 1px 0 rgb(255 255 255 / 0.04),
-    0 24px 64px -24px rgb(0 0 0 / 0.72), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  /* Setup's contained work area. */
+  --ui-card-radius: 12px;
+  --ui-card-fill: var(--g-surface-1);
+  --ui-card-shadow: inset 0 0 0 1px var(--g-line);
 
-  /*
-   * The first-launch intro's choreography (6.17), inside setup's 1800ms hold. A swimmer arrives
-   * already moving and slows evenly, so the glide is an ease-out with no hard front.
-   */
-  --ui-intro-light: 900ms;
-  --ui-intro-glide: 1200ms;
-  --ui-intro-glide-at: 100ms;
-  --ui-intro-form: 520ms;
-  --ui-intro-form-at: 900ms;
-  --ui-intro-word-at: 1220ms;
-  --ui-ease-glide: cubic-bezier(0.25, 0.5, 0.3, 1);
-  /* The card waits for the intro's mark to clear before it rises. */
+  /* The card waits for the intro's mark to clear. */
   --ui-card-in-at: 180ms;
-
-  /* Detection's circular pulse (6.17a): one slow breath, so looking never reads as alarm. */
-  --ui-pulse: 1600ms;
 }

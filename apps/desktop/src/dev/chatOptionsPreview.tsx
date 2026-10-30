@@ -97,7 +97,7 @@ function Preview() {
   });
   const [open, setOpen] = useState(true);
   return (
-    <main className="chat-app" data-theme="dark">
+    <main className="chat-app">
       <h1 className="sr-only">Chat options</h1>
       {open ? (
         <ChatActionsDialog
