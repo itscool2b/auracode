@@ -4711,3 +4711,19 @@ policy-blocked; PowerShell 7 checks pass. Real account sign-in/email, native mac
 signing/key backup and release/domain decisions remain owner/platform gates. Real cleanup, uninstall
 and the product's real PR-creation flow were not used. GitHub billing availability, CI results,
 publication and post-merge asset verification remain pending at this checkpoint.
+
+### 2026-10-29: Correct the final CI acceptance inventory and layout deadline
+
+After the owner resolved the Actions billing gate, the final hosted run executed the browser
+checks. Chat acceptance passed, including the header-label checker launched by check-chat.
+The CI inventory meta-test only followed static imports, so it incorrectly reported that child
+checker as uncovered. It now also follows explicit Node child-checker invocations; removing a
+checker from the invoked script graph still leaves it uncovered.
+
+The complete layout probe reached 410 of 412 clean views with no findings before its 15-minute
+step deadline. The final two views were not verified by that run. Only the complete layout step
+now has a 20-minute limit; the meta-test keeps other browser steps bounded to 15 minutes.
+Both meta-test failures were reproduced locally before correction. All 14 acceptance-inventory
+and WebDriver script tests, changed-file Biome, workflow policy and instruction parity checks
+pass. Full hosted layout completion remains pending, alongside the separately diagnosed Rust
+workspace and native chat-smoke failures. No passing result is inferred from the timeout.
