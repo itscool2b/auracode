@@ -59,7 +59,7 @@ impl EditorLaunch {
             // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: no console, and no shared Ctrl+C.
             command.creation_flags(0x0000_0008 | 0x0000_0200);
         }
-        let mut child = command.spawn()?;
+        let mut child = aura_process::spawn_command(&mut command)?;
         if cfg!(target_os = "macos") {
             let status = child.wait()?;
             if !status.success() {

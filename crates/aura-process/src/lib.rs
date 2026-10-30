@@ -60,7 +60,7 @@ pub use registry::{
 pub use shutdown::{ShutdownPlan, ShutdownReport, ShutdownStep};
 pub use spawn::{
     DaemonMatch, HelperEnv, HelperOutput, HelperSpec, LaunchSpec, ProcessCwd, ProcessSpawner,
-    SpawnError, SpawnSpec, SpawnedProcess, Spawner, run_helper, run_helper_input,
+    SpawnError, SpawnSpec, SpawnedProcess, Spawner, run_helper, run_helper_input, spawn_command,
 };
 
 /// The longest stdout line an agent may write (Hermes' own limit is 50 MiB). A longer line is

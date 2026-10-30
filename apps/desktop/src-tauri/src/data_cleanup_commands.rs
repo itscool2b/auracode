@@ -333,18 +333,16 @@ fn spawn_detached(exe: &Path, arguments: &[std::ffi::OsString]) -> std::io::Resu
         const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
         let flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
         // A job that forbids breaking away refuses the flag; then start inside it.
-        match build()
-            .creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB)
-            .spawn()
+        match aura_process::spawn_command(build().creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB))
         {
             Ok(_) => Ok(()),
-            Err(_) => build().creation_flags(flags).spawn().map(drop),
+            Err(_) => aura_process::spawn_command(build().creation_flags(flags)).map(drop),
         }
     }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        build().process_group(0).spawn().map(drop)
+        aura_process::spawn_command(build().process_group(0)).map(drop)
     }
 }
 

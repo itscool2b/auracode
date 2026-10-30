@@ -241,8 +241,7 @@ impl GitTool {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             command.creation_flags(CREATE_NO_WINDOW);
         }
-        let mut child = command
-            .spawn()
+        let mut child = aura_process::spawn_command(&mut command)
             .map_err(|error| format!("Git did not start: {error}"))?;
         // Both pipes drain on their own threads, so neither can fill up and stall Git.
         let drain = |pipe: Option<Box<dyn Read + Send>>| {
