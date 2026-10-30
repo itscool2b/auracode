@@ -238,6 +238,113 @@ async function inspect(engine, launcher) {
       }
     }
 
+    // A short native-smoke history can release the sticky prompt at the bottom. Observe idle
+    // frames too: reaching the end once must not leave an alternating header/scroll correction.
+    await page.goto(`${url}/?preview=smoke-scroll&os=macos`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const boundary = await page.getByTestId("transcript").evaluate(async (node) => {
+      const paint = () =>
+        new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+      node.scrollTop = 0;
+      await paint();
+      for (const group of node.querySelectorAll('[data-testid="tool-group"]')) group.click();
+      await paint();
+      for (let step = 0; step < 2; step++) {
+        node.scrollTop += node.clientHeight * 0.7;
+        await paint();
+      }
+      const frames = [];
+      for (let frame = 0; frame < 60; frame++) {
+        await new Promise(requestAnimationFrame);
+        frames.push({
+          top: node.scrollTop,
+          height: node.clientHeight,
+          total: node.scrollHeight,
+          virtual: node.querySelector('[data-testid="virtual-transcript"]').style.height,
+          prompt: document.querySelector('[data-testid="sticky-prompt"]')?.textContent ?? null,
+        });
+      }
+      return frames;
+    });
+    await writeFile(resolve(out, `${engine}-smoke-scroll.json`), JSON.stringify(boundary, null, 2));
+    const spread = (field) =>
+      Math.max(...boundary.map((frame) => frame[field])) -
+      Math.min(...boundary.map((frame) => frame[field]));
+    assert.ok(spread("top") < 2, `${engine}: idle prompt boundary moved the scroll position`);
+    assert.equal(
+      spread("height"),
+      0,
+      `${engine}: idle sticky prompt kept reserving/releasing space`,
+    );
+    assert.ok(
+      boundary.every((frame) => Math.abs(frame.total - frame.height - frame.top) < 2),
+      `${engine}: prompt boundary did not remain at the bottom`,
+    );
+    const scrollSurface = page.getByTestId("transcript");
+    await scrollSurface.hover();
+    await page.mouse.wheel(0, -250);
+    await page.waitForFunction(
+      (bottom) => document.querySelector('[data-testid="transcript"]').scrollTop < bottom - 100,
+      boundary[0].top,
+    );
+    const boundaryPrompt = page.getByTestId("sticky-prompt");
+    await boundaryPrompt.waitFor();
+    assert.equal(
+      await boundaryPrompt.getAttribute("title"),
+      "Make the project list easier to scan, and keep the active chat visible.",
+    );
+    await boundaryPrompt.click();
+    await boundaryPrompt.waitFor({ state: "detached" });
+    await page.waitForFunction(() => {
+      const prompt = document.querySelector('[data-test-turn-id="first"][data-part="0"]');
+      const log = document.querySelector('[data-testid="transcript"]');
+      return (
+        prompt && Math.abs(prompt.getBoundingClientRect().top - log.getBoundingClientRect().top) < 3
+      );
+    });
+    await page.mouse.wheel(0, 2000);
+    await page.waitForFunction(() => {
+      const node = document.querySelector('[data-testid="transcript"]');
+      return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+    });
+    const complete = await page.evaluate(async () => {
+      const { readFullTranscript } = await import("/src/lib/smokePage.ts");
+      return (await readFullTranscript()).map((turn) => ({
+        prompt: turn.prompt,
+        items: turn.items,
+      }));
+    });
+    assert.deepEqual(
+      complete,
+      [
+        { prompt: "/echo Hello from the smoke run", items: ["message"] },
+        {
+          prompt: "Make the project list easier to scan, and keep the active chat visible.",
+          items: ["thought", "tool:read:completed", "tool:execute:completed", "message"],
+        },
+        {
+          prompt: "/permission auto",
+          items: ["tool:execute:completed", "permission:auto:allow", "message"],
+        },
+        {
+          prompt: "/permission allow",
+          items: ["tool:execute:completed", "permission:user:allow", "message"],
+        },
+      ],
+      `${engine}: native smoke reader lost short-history rows`,
+    );
+    await page.getByTestId("composer-input").fill("Stay pinned after the prompt boundary");
+    await page.getByTestId("composer-input").press("Enter");
+    await page
+      .getByText("This is a local UI preview. No prompt was sent to an agent.", { exact: true })
+      .waitFor();
+    await page.waitForFunction(() => {
+      const node = document.querySelector('[data-testid="transcript"]');
+      return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+    });
+
     // The queue says why the next message waits, with the one action that helps.
     for (const queue of QUEUE_CASES) {
       await page.goto(`${url}/?preview=${queue.mode}`);
@@ -802,7 +909,7 @@ async function inspect(engine, launcher) {
     const failures = results.filter((result) => result.violations.length > 0);
     assert.deepEqual(failures, [], `${engine} accessibility violations`);
     console.log(
-      `${engine}: ${results.length} accessibility scans, ${QUEUE_CASES.length} queue waits with their actions, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, clipboard/folding/diff controls, motion and minimum window passed`,
+      `${engine}: ${results.length} accessibility scans, ${QUEUE_CASES.length} queue waits with their actions, recorded transcripts, idle prompt boundary and native smoke traversal, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, clipboard/folding/diff controls, motion and minimum window passed`,
     );
   } finally {
     await browser.close();
