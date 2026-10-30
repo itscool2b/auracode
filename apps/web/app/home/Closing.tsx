@@ -3,6 +3,7 @@ export function Closing() {
     <section className="section closing" aria-labelledby="closing-title">
       <div className="wrap">
         <div className="closing-panel" data-reveal="">
+          <p className="closing-kicker">AURACODE / LOCAL FIRST</p>
           <h2 id="closing-title" className="title title-stack">
             Your agents. <span>Your machine.</span>
           </h2>

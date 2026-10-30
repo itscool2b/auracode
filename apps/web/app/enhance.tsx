@@ -9,19 +9,16 @@ export const BOOT_SCRIPT =
   '(function(){var d=document.documentElement;try{var p=localStorage.getItem("auracode-appearance");if(p==="light"||p==="dark")d.dataset.theme=p}catch(e){}if(!("IntersectionObserver"in window))return;d.classList.add("js");setTimeout(function(){if(!d.hasAttribute("data-ready"))d.classList.remove("js")},4000)})();';
 
 /**
- * Marks the page hydrated, reveals [data-reveal] blocks as they enter (a 16px rise and a fade,
- * staggered by --i) and makes the primary pills magnetic. Reduced motion renders blocks in place
- * through CSS.
+ * Marks the page hydrated and reveals blocks as they enter. Reduced motion renders them in place.
  */
 export function Enhancements() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-ready", "");
-    const stopMagnetic = () => {};
     const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
     if (typeof IntersectionObserver === "undefined") {
       for (const target of targets) target.setAttribute("data-revealed", "");
-      return stopMagnetic;
+      return;
     }
     const observer = new IntersectionObserver(
       (entries) => {
@@ -36,7 +33,6 @@ export function Enhancements() {
     for (const target of targets) observer.observe(target);
     return () => {
       observer.disconnect();
-      stopMagnetic();
     };
   }, []);
   return null;

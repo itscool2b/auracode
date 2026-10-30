@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * The 64px sticky nav, edge to edge like Vercel's: the wordmark at left; Changelog, Sign in and the
- * one primary Download at right. On the home page it rests over the hero's lit water, transparent;
- * once the page scrolls it turns solid black. Hovering one link dims its sibling (Harvey). Under
+ * one primary Download at right. Hovering one link dims its sibling. Under
  * 768px the links fold into a menu built on <details>, so it opens without JavaScript too; Download
  * stays in the bar.
  */

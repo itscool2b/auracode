@@ -78,7 +78,9 @@ test("third-party notices are emitted and linked from every page footer", async 
   assert.match(text, /react-router/);
   assert.doesNotMatch(text, /SQLCipher|openssl-src/);
   const page = await readFile(new URL("third-party-notices/index.html", root), "utf8");
-  assert.match(page, /color-scheme:dark/);
+  assert.match(page, /color-scheme:light dark/);
+  assert.match(page, /--notice-bg:#fafafa/);
+  assert.match(page, /prefers-color-scheme:dark\).*--notice-bg:#101112/);
   assert.doesNotMatch(page, /<script/);
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /<a href="\/third-party-notices">Notices<\/a>/);

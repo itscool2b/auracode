@@ -1,8 +1,7 @@
 /**
  * Small, dependency-free motion helpers for the website. Every moving thing here pauses while it is
  * offscreen or the tab is hidden, and stops for prefers-reduced-motion. Measured timings live in
- * docs/design/visual-language.md (3.8) and the Graphite tokens; the swimmers have their own clock
- * in @auracode/ui (Swimmers).
+ * docs/design/visual-language.md and the shared motion tokens.
  */
 import { type RefObject, useEffect, useState, useSyncExternalStore } from "react";
 

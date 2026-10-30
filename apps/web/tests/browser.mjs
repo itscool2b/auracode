@@ -73,9 +73,13 @@ try {
         return route.continue();
       });
       await page.goto(base);
+      const heroStage = page.locator(".hero-detail .handoff-stage");
+      assert.equal(await heroStage.locator(".handoff-prior").isVisible(), true);
+      assert.equal(await heroStage.locator(".handoff-next").isVisible(), true);
+      assert.equal(await heroStage.locator(".handoff-link").count(), 1);
       assert.equal(
         await page
-          .getByRole("tab", { name: "Switch agents mid-chat" })
+          .getByRole("tab", { name: "A checkpoint every turn" })
           .getAttribute("aria-selected"),
         "true",
       );
@@ -96,7 +100,7 @@ try {
       await page.screenshot({ path: join(artifacts, `${name}-home-light.png`), fullPage: true });
       await page.getByRole("tab", { name: "Switch agents mid-chat" }).click();
       await page
-        .locator(".handoff-stage")
+        .locator(".caps .handoff-stage")
         .screenshot({ path: join(artifacts, `${name}-handoff-light.png`) });
       await page.reload();
       await page.waitForFunction(
@@ -124,6 +128,7 @@ try {
           .evaluate((image) => image.currentSrc),
         /desktop-dark-\d+\.webp$/,
       );
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: join(artifacts, `${name}-home.png`), fullPage: true });
       assert.equal(await page.locator("html").getAttribute("data-theme"), null);
       await settled(page);
@@ -170,7 +175,7 @@ try {
       await page.keyboard.press("ArrowDown");
       assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
       assert.equal(await page.evaluate(() => document.activeElement?.id), "caps-tab-handoff");
-      const handoff = page.locator(".handoff-stage");
+      const handoff = page.locator(".caps .handoff-stage");
       assert.equal(await handoff.isVisible(), true);
       assert.equal(await handoff.locator(".handoff-prior").isVisible(), true);
       assert.equal(await handoff.locator(".handoff-next").isVisible(), true);

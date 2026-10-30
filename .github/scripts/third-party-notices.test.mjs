@@ -94,7 +94,8 @@ test("packaging emits readable plain text and escaped script-free HTML", () => {
   const html = renderHtml('<script>alert("bad")</script>&');
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /color-scheme:dark/);
+  assert.match(html, /color-scheme:light dark/);
+  assert.match(html, /@media\(prefers-color-scheme:dark\)/);
 });
 
 test("desktop imports the notice text as a virtual module without fetching", () => {

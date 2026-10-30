@@ -1,19 +1,5 @@
-/*
- * auracode.si in Graphite and Shallows (docs/design/visual-language.md, section 5). Loaded after
- * @auracode/ui/graphite.css, so its tokens, primitives and keyframes are available here. Dark only:
- * there is no light theme and no system switching. Text colours are solid tokens, weights are 400,
- * 500 or 600, and only opacity, transform and colour animate (plus one documented exception:
- * grid-template-rows for the FAQ's disclosures).
- */
-
 /* --------------------------------------------------------------------------------- base */
 
-/*
- * One type scale and one rhythm, taken from the reference landing pages (x.ai, X Money, Aside):
- * a display size for the hero, one heading size, one lead and the 16, 14 and 12px text sizes.
- * Every size and every gap sits on the 4px grid. Sections are separated by space, never by rules:
- * 160px between sections on desktops, 128 on tablets and 96 on phones.
- */
 :root {
   --g-web-gutter: 16px;
   --inset: 0px;
@@ -25,16 +11,12 @@
   --site-lead: 16px;
   --site-lead-leading: 24px;
   --site-tracking: -0.035em;
-  /* A Shallows panel's distance from the viewport's edge, and its own inner padding. */
+
   --edge: 8px;
   --panel-pad: 12px;
   /* The nav's content sits on the hero panel's inner edges. */
   --nav-pad: 20px;
   --site-display: clamp(36px, 11.25vw, 40px);
-  /* The app's own water, for its New chat inside the capabilities panel's quieter water. */
-  --app-water-surface: var(--g-water-surface);
-  --app-water-shallow: var(--g-water-shallow);
-  --app-water-low: var(--g-water-low);
 }
 
 @media (min-width: 640px) {
@@ -162,7 +144,6 @@ canvas {
   text-decoration: none;
 }
 
-/* A magnetic pill's label leans a little further than the pill (enhance.tsx); transform only. */
 .magnetic-label {
   display: inline-block;
 }
@@ -443,24 +424,10 @@ canvas {
   }
 }
 
-/* ---------------------------------------------------------------- the hero (Shallows) */
-
-/*
- * One lit panel inset from the viewport's edges and pulled up under the nav, so the nav rests on its
- * surface (visual language 5.3). The light falls off over the open water and is deep by the time
- * the product frame begins.
- */
 .hero {
-  --g-shallows-depth: 760px;
   margin: calc(var(--edge) - 64px) var(--edge) 0;
   padding: 172px var(--panel-pad) 96px;
   text-align: center;
-}
-
-/* The swimmers keep to the open water above the product frame. */
-.hero-swimmers {
-  inset: 0 0 auto;
-  height: 640px;
 }
 
 .hero-copy {
@@ -539,14 +506,13 @@ canvas {
   min-width: 128px;
 }
 
-/* The real app, floating in the deep water: one ring and one long, soft shadow. */
 .product-frame {
   width: min(100%, 1120px);
   margin: 88px auto 0;
   aspect-ratio: 36 / 19;
   overflow: hidden;
   border-radius: var(--g-radius-16);
-  background-color: var(--g-water-deep);
+  background-color: var(--g-surface-1);
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 0.08),
     0 48px 120px -24px rgb(0 0 0 / 0.8);
@@ -563,13 +529,6 @@ canvas {
   object-fit: cover;
   object-position: top;
 }
-
-/*
- * The hero's entrance, gated on .js so the page is whole without it: the light comes up, the
- * headline's words rise one after another, the lead and the button follow, the swimmers fade in and
- * the product rises out of the deep last. Transform and opacity only.
- */
-/* --------------------------------------------- capabilities (Harvey's timer tabs, Shallows) */
 
 .title-stack {
   max-width: none;
@@ -590,7 +549,6 @@ canvas {
   text-align: left;
 }
 
-/* A quieter water than the hero's: the panel is a stage for the view, not a second hero. */
 .caps-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
@@ -1295,6 +1253,14 @@ canvas {
   font-size: 13px;
   line-height: 20px;
 }
+.handoff-agent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--g-fg-2);
+  font-size: 12px;
+  line-height: 20px;
+}
 
 .handoff-next {
   position: absolute;
@@ -1749,37 +1715,12 @@ canvas {
   align-items: center;
 }
 
-/* The app's own water: the capabilities panel quiets its tokens, the view restores them. */
-.m-water {
-  --g-water-surface: var(--app-water-surface);
-  --g-water-shallow: var(--app-water-shallow);
-  --g-water-low: var(--app-water-low);
+.m-stage-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   border-radius: 0;
   box-shadow: inset 0 1px 0 var(--g-line);
-}
-
-.m-water > .m-swimmer {
-  position: absolute;
-  z-index: 0;
-  height: auto;
-  color: var(--g-shade-near);
-}
-
-.m-swimmer-seal {
-  top: 7%;
-  left: 5%;
-  width: 30%;
-}
-
-.m-swimmer-far {
-  top: 7%;
-  right: 7%;
-  width: 13%;
-  color: color-mix(in srgb, var(--g-shade-far) 45%, var(--g-shade-near));
-  filter: blur(1px);
 }
 
 .m-new-column {
@@ -2228,8 +2169,6 @@ canvas {
   padding: 0 40px 28px 0;
 }
 
-/* ----------------------------------------------------------- the closing panel (Shallows) */
-
 .closing-panel {
   display: grid;
   justify-items: center;
@@ -2405,7 +2344,6 @@ canvas {
   margin-top: 80px;
 }
 
-/* Download: x.ai's "Choose how to get started", two cards, one per platform. */
 .download-status {
   margin: -24px 0 48px;
 }
@@ -2929,7 +2867,7 @@ canvas {
   gap: 12px 16px;
 }
 
-/* The confirm sheet (X Money): detached, one decisive pill, red only for deletion. */
+/* The confirm sheet: detached, one decisive pill, red only for deletion. */
 .confirm-dialog {
   max-width: calc(100vw - 24px);
   margin: auto;
@@ -3025,7 +2963,6 @@ canvas {
   font-weight: 500;
 }
 
-/* 404 and load errors: one lit panel, a turtle crossing it, the numerals and one way home. */
 .error-panel {
   display: grid;
   justify-items: center;
@@ -3118,10 +3055,6 @@ canvas {
     padding-bottom: 40px;
   }
 
-  .hero-swimmers {
-    height: 380px;
-  }
-
   .hero-far {
     display: none;
   }
@@ -3163,13 +3096,6 @@ canvas {
 }
 
 @media (max-width: 639px) {
-  .hero,
-  .closing-panel,
-  .caps-panel,
-  .error-panel {
-    --g-shallows-radius: var(--g-shallows-radius-compact);
-  }
-
   .caps-side {
     padding: 20px 20px 4px;
   }
@@ -3221,10 +3147,6 @@ canvas {
 
 /* --------------------------------------------------------------- reduced motion */
 
-/*
- * Everything is present at first paint; cross-fades stay (they are not motion), rises and
- * slides do not. The swimmers and the shimmer hold still in their own styles.
- */
 @media (prefers-reduced-motion: reduce) {
   .js [data-reveal] {
     opacity: 1;
@@ -3235,11 +3157,8 @@ canvas {
   .js .hero-word {
     animation: g-fade var(--g-dur-fast) linear both;
   }
-
-  .js .hero > .g-shallows-light,
   .js .hero-lead,
   .js .hero-actions,
-  .js .hero-swimmers,
   .js .product-frame,
   .js .product-frame picture,
   .m-caret {
@@ -3417,16 +3336,8 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
   background: var(--g-surface-1);
   box-shadow: none;
 }
-.js .hero-word,
-.js .hero-lead,
-.js .hero-actions,
-.js .product-frame,
-.js .product-frame picture {
-  animation: none;
-  opacity: 1;
-  transform: none;
-}
-.m-water {
+
+.m-stage-bg {
   background: var(--g-surface-2);
 }
 .m-scene,
@@ -3580,5 +3491,332 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
   }
   .product-frame img {
     object-position: 62% top;
+  }
+}
+
+/* Product-led editorial stages, shared by the landing and utility pages. */
+:root {
+  --site-field: #e8b9b2;
+  --site-field-ink: #3c2321;
+  --site-grid: rgba(60, 35, 33, 0.14);
+}
+:root[data-theme="dark"] {
+  --site-field: #4b3334;
+  --site-field-ink: #fae3df;
+  --site-grid: rgba(250, 227, 223, 0.17);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --site-field: #4b3334;
+    --site-field-ink: #fae3df;
+    --site-grid: rgba(250, 227, 223, 0.17);
+  }
+}
+.hero {
+  padding-top: 72px;
+}
+.hero-layout {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(110px, 1.5fr);
+  gap: 28px;
+  min-height: 420px;
+}
+.hero-detail {
+  position: relative;
+  height: 500px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--site-field);
+  background-image: radial-gradient(var(--site-grid) 0.75px, transparent 0.75px);
+  background-size: 5px 5px;
+}
+.hero-detail::before,
+.hero-detail::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.hero-detail::before {
+  inset: 12px auto auto 12px;
+  border-top: 1px solid var(--site-field-ink);
+  border-left: 1px solid var(--site-field-ink);
+}
+.hero-detail::after {
+  inset: auto 12px 12px auto;
+  border-right: 1px solid var(--site-field-ink);
+  border-bottom: 1px solid var(--site-field-ink);
+}
+.stage-label,
+.section-kicker,
+.closing-kicker,
+.product-stage-heading {
+  font: 500 11px / 16px var(--g-mono);
+  letter-spacing: 0.04em;
+}
+.stage-label {
+  position: absolute;
+  z-index: 4;
+  top: 15px;
+  left: 34px;
+  color: var(--site-field-ink);
+}
+:where(.hero-detail) .handoff-stage {
+  position: absolute;
+  inset: 36px 12px 12px;
+  background: transparent;
+}
+.hero-detail .handoff-prior {
+  top: 10px;
+  left: 10px;
+  width: 80%;
+  height: 56%;
+}
+.hero-detail .handoff-prior .m-body {
+  padding: 4px 12px 0;
+  gap: 6px;
+}
+.hero-detail .handoff-prior .m-user,
+.hero-detail .handoff-prior .m-prose {
+  font-size: 12px;
+  line-height: 17px;
+}
+.hero-detail .handoff-next {
+  right: 8px;
+  bottom: 8px;
+  width: 78%;
+}
+.hero-detail .handoff-next .m-handoff {
+  font-size: 11px;
+  gap: 4px;
+}
+.hero-detail .handoff-next .m-handoff > .m-strong {
+  display: none;
+}
+.hero-detail .handoff-next .m-input {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 10px 12px 4px;
+}
+.hero-detail .handoff-next .m-controls {
+  padding-bottom: 4px;
+}
+.product-stage {
+  margin-top: 40px;
+  padding: 24px;
+  border: 1px solid var(--g-line);
+  background-color: var(--g-surface-2);
+  background-image:
+    linear-gradient(var(--g-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--g-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.product-stage-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--g-fg-2);
+}
+.product-frame {
+  margin: 24px auto 0;
+  box-shadow: 0 16px 48px -32px rgba(0, 0, 0, 0.35);
+}
+.section-kicker {
+  color: var(--g-fg-2);
+  margin-bottom: 20px;
+}
+.caps-panel {
+  background: transparent;
+  border: 0;
+  gap: 32px;
+}
+.caps-side {
+  padding: 0;
+}
+.caps-tab {
+  border-top: 1px solid var(--g-line);
+  border-bottom: 0;
+  padding: 15px 0;
+}
+.caps-tab[aria-selected="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 10px 2px 0;
+  background: var(--g-focus);
+}
+.caps-view {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--site-field);
+}
+.handoff-stage {
+  background-color: var(--site-field);
+  background-image: radial-gradient(var(--site-grid) 0.75px, transparent 0.75px);
+  background-size: 5px 5px;
+}
+.faq-grid {
+  border-top: 1px solid var(--g-line);
+  padding-top: 48px;
+}
+.closing-panel {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 20px 32px;
+  padding: 52px;
+  text-align: left;
+  border: 0;
+  background: var(--g-fg-1);
+  color: var(--g-bg);
+}
+.closing-panel .title,
+.closing-panel .title > span,
+.closing-note {
+  color: inherit;
+  text-align: left;
+}
+.closing-panel .title {
+  margin: 0;
+}
+.closing-kicker {
+  grid-column: 1 / -1;
+  opacity: 0.7;
+}
+.closing-note {
+  grid-column: 1;
+  margin: 0;
+  opacity: 0.75;
+}
+.closing-actions {
+  grid-column: 2;
+  grid-row: 2 / 4;
+}
+.closing-actions .g-button {
+  background: var(--g-bg);
+  color: var(--g-fg-1);
+}
+.site-footer {
+  border-top: 1px solid var(--g-line);
+}
+.footer-grid {
+  padding-top: 64px;
+  padding-bottom: 72px;
+}
+.footer-home {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 24px;
+  min-height: 156px;
+  padding: 0;
+}
+.footer-statement {
+  display: block;
+  color: var(--g-fg-2);
+  font-size: 24px;
+  line-height: 30px;
+  letter-spacing: -0.03em;
+}
+.footer-links {
+  border-left: 1px solid var(--g-line);
+  padding-left: 40px;
+}
+.page-head,
+.auth-head {
+  border-top: 1px solid var(--g-line);
+  padding-top: 32px;
+}
+.page-head::before,
+.auth-head::before {
+  content: "AURACODE / INFORMATION";
+  display: block;
+  margin-bottom: 24px;
+  color: var(--g-fg-2);
+  font: 500 11px / 16px var(--g-mono);
+  letter-spacing: 0.04em;
+}
+.download-grid,
+.auth-panel,
+.account-block,
+.error-panel {
+  border: 1px solid var(--g-line);
+  background: var(--g-surface-1);
+}
+.account-block {
+  padding: 28px;
+}
+.account-block:first-child {
+  padding-top: 28px;
+}
+.error-panel {
+  background-color: var(--g-surface-2);
+  background-image:
+    linear-gradient(var(--g-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--g-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+@media (max-width: 1023px) {
+  .hero-layout {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hero-aside {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 767px) {
+  .hero-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .hero-detail {
+    max-width: none;
+    height: 560px;
+  }
+  .hero-aside {
+    grid-column: auto;
+  }
+  .product-stage {
+    padding: 12px;
+    margin-top: 24px;
+  }
+  .product-stage-heading {
+    font-size: 9px;
+  }
+  .product-frame {
+    margin-top: 12px;
+  }
+  .caps-panel {
+    gap: 24px;
+  }
+  .caps-view {
+    margin: 0;
+  }
+  .closing-panel {
+    grid-template-columns: 1fr;
+    padding: 32px 24px;
+  }
+  .closing-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+  .footer-links {
+    border-left: 0;
+    border-top: 1px solid var(--g-line);
+    padding: 32px 0 0;
+  }
+  .account-block {
+    padding: 20px;
+  }
+  .account-block:first-child {
+    padding-top: 20px;
   }
 }
