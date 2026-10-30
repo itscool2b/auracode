@@ -4727,3 +4727,18 @@ Both meta-test failures were reproduced locally before correction. All 14 accept
 and WebDriver script tests, changed-file Biome, workflow policy and instruction parity checks
 pass. Full hosted layout completion remains pending, alongside the separately diagnosed Rust
 workspace and native chat-smoke failures. No passing result is inferred from the timeout.
+
+### 2026-10-29: Exercise the current native agent radio control in WebDriver
+
+The external Windows test reached the embedded native window with matching WebView and driver
+versions, but waited for a removed select option. Its retained DOM shows Demo ready in the current
+radio group. The test now clicks Demo's visible label through WebDriver, then checks the associated
+radio's checked state before creating the chat. The hidden radio input is not used as a visible
+click target. Folder setup remains the only setup IPC; chat input, stop and reload still use the
+external driver.
+
+The scenario double now models the radio selection and rejects the stale option control, producing
+three failing scenario tests before the harness correction. A negative case verifies that an
+unchecked radio preserves the native-window result and prevents chat creation. All 15 acceptance
+inventory/WebDriver script tests, changed-file Biome, instruction parity and diff checks pass.
+The actual hosted Windows WebDriver rerun is still required; this entry records no native pass.
