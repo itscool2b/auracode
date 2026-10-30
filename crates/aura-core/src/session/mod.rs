@@ -365,12 +365,13 @@ impl Shared {
     /// result.
     fn check_folder(&self, folder: PathBuf) {
         #[cfg(test)]
-        if let Some((_, delay, checks)) = lock(&self.slow_folder)
-            .clone()
-            .filter(|(slow, _, _)| *slow == folder)
         {
-            checks.fetch_add(1, Ordering::SeqCst);
-            std::thread::sleep(delay);
+            // Release the hook lock before delaying one folder, so unrelated probes stay free.
+            let slow = lock(&self.slow_folder).clone();
+            if let Some((_, delay, checks)) = slow.filter(|(slow, _, _)| *slow == folder) {
+                checks.fetch_add(1, Ordering::SeqCst);
+                std::thread::sleep(delay);
+            }
         }
         let state = folder_state(&folder, false);
         let mut checks = lock(&self.folders);
