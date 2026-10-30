@@ -596,6 +596,13 @@ pub(crate) fn inheritable_marked() -> std::sync::RwLockWriteGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// Starts a standard command without racing another owned spawn's descriptor setup.
+/// The caller owns the returned child. No guard is held while it runs or while the caller waits.
+pub fn spawn_command(command: &mut std::process::Command) -> io::Result<std::process::Child> {
+    let _marked = inheritable_marked();
+    command.spawn()
+}
+
 /// Held while creating descriptors that are not yet close-on-exec.
 #[cfg(unix)]
 pub(crate) fn creating_inheritable() -> std::sync::RwLockWriteGuard<'static, ()> {
@@ -1094,6 +1101,49 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standard_command_spawn_joins_owned_spawn_exclusion() {
+        use std::sync::mpsc;
+
+        let missing = tempfile::tempdir().expect("scratch command folder");
+        let program = missing.path().join("missing-program");
+        let (held, holding) = mpsc::sync_channel(0);
+        let (release, released) = mpsc::sync_channel(0);
+        let first = std::thread::spawn(move || {
+            let _guard = inheritable_marked();
+            held.send(()).expect("report owned spawn setup");
+            released.recv().expect("release owned spawn setup");
+        });
+        holding
+            .recv_timeout(Duration::from_secs(5))
+            .expect("owned spawn setup entered");
+        let (attempt, attempting) = mpsc::sync_channel(0);
+        let (entered, entering) = mpsc::sync_channel(0);
+        let second = std::thread::spawn(move || {
+            attempt.send(()).expect("report standard command attempt");
+            let error = spawn_command(&mut std::process::Command::new(program))
+                .expect_err("scratch command is absent");
+            entered.send(error.kind()).expect("report command result");
+        });
+        attempting
+            .recv_timeout(Duration::from_secs(5))
+            .expect("standard command attempted");
+        let early = entering.recv_timeout(Duration::from_millis(100)).ok();
+        release.send(()).expect("release owned spawn setup");
+        first.join().expect("owned spawn thread");
+        let result = early.unwrap_or_else(|| {
+            entering
+                .recv_timeout(Duration::from_secs(5))
+                .expect("standard command proceeds after owned setup")
+        });
+        second.join().expect("standard command thread");
+        assert_eq!(result, io::ErrorKind::NotFound);
+        assert!(
+            early.is_none(),
+            "standard command bypassed owned spawn setup"
+        );
+    }
 
     #[test]
     fn child_spawn_setup_excludes_other_child_spawns() {
