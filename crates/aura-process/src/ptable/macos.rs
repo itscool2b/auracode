@@ -112,13 +112,18 @@ fn parse_parents(text: &str) -> Vec<(u32, u32, u32)> {
 /// requested pids exist; that is an empty answer, not an error.
 #[cfg(all(unix, not(target_os = "linux")))]
 fn ps(args: &[&str]) -> io::Result<String> {
-    let output = std::process::Command::new("/bin/ps")
-        .args(args)
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC0")
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()?;
+    let child = {
+        let _marked = crate::spawn::inheritable_marked();
+        std::process::Command::new("/bin/ps")
+            .args(args)
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()?
+    };
+    let output = child.wait_with_output()?;
     if !output.status.success() && !(output.status.code() == Some(1) && args.contains(&"-p")) {
         return Err(io::Error::other("ps could not inspect the process table"));
     }
@@ -304,12 +309,17 @@ pub(super) fn running_starts(pids: &[u32]) -> std::collections::HashMap<u32, Sta
 pub(super) fn boot_marker() -> Option<String> {
     static BOOT: OnceLock<Option<String>> = OnceLock::new();
     BOOT.get_or_init(|| {
-        let output = std::process::Command::new("/usr/sbin/sysctl")
-            .args(["-n", "kern.boottime"])
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()?;
+        let child = {
+            let _marked = crate::spawn::inheritable_marked();
+            std::process::Command::new("/usr/sbin/sysctl")
+                .args(["-n", "kern.boottime"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .ok()?
+        };
+        let output = child.wait_with_output().ok()?;
         parse_boottime(&String::from_utf8_lossy(&output.stdout))
     })
     .clone()

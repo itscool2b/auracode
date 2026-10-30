@@ -584,15 +584,15 @@ fn command(
 /// own (a session of its own for helpers that ask for one); Windows adds `CREATE_NO_WINDOW` and a
 /// kill-on-close job object, for every agent and helper.
 /// Some descriptors cannot be created close-on-exec atomically, such as a PTY pair from `openpty`.
-/// Creating and marking them happens under the write side, and every spawn holds the read side,
-/// so no child forked by another thread inherits one in between. An inherited PTY slave would
-/// keep that terminal's output open for the child's whole life and stall its cleanup.
+/// Creating and marking them and every spawn are mutually exclusive. On macOS, std also creates
+/// subprocess pipes before setting close-on-exec, including the fork/exec status pipe. Another
+/// concurrent spawn must not inherit those writers and delay startup until its child exits.
 static INHERITANCE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
-/// Held while spawning a child.
-pub(crate) fn inheritable_marked() -> std::sync::RwLockReadGuard<'static, ()> {
+/// Held only while spawning a child, never while waiting for its exit or output.
+pub(crate) fn inheritable_marked() -> std::sync::RwLockWriteGuard<'static, ()> {
     INHERITANCE
-        .read()
+        .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
@@ -1094,6 +1094,45 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn child_spawn_setup_excludes_other_child_spawns() {
+        use std::sync::mpsc;
+
+        let (held, holding) = mpsc::sync_channel(0);
+        let (release, released) = mpsc::sync_channel(0);
+        let first = std::thread::spawn(move || {
+            let _guard = inheritable_marked();
+            held.send(()).expect("report first spawn setup");
+            released.recv().expect("release first spawn setup");
+        });
+        holding
+            .recv_timeout(Duration::from_secs(5))
+            .expect("first spawn setup entered");
+        let (attempt, attempting) = mpsc::sync_channel(0);
+        let (entered, entering) = mpsc::sync_channel(0);
+        let second = std::thread::spawn(move || {
+            attempt.send(()).expect("report second spawn attempt");
+            let _guard = inheritable_marked();
+            entered.send(()).expect("report second spawn setup");
+        });
+        attempting
+            .recv_timeout(Duration::from_secs(5))
+            .expect("second spawn attempted");
+        let overlapped = entering.recv_timeout(Duration::from_millis(100)).is_ok();
+        release.send(()).expect("release first spawn setup");
+        first.join().expect("first spawn thread");
+        if !overlapped {
+            entering
+                .recv_timeout(Duration::from_secs(5))
+                .expect("second spawn enters after first finishes");
+        }
+        second.join().expect("second spawn thread");
+        assert!(
+            !overlapped,
+            "child spawn setup must not overlap another fork"
+        );
+    }
 
     #[test]
     fn launch_spec_debug_shows_variable_names_but_never_values() {
