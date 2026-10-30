@@ -6,7 +6,7 @@ interface TurnstileApi {
     element: HTMLElement,
     options: {
       sitekey: string;
-      theme: "dark";
+      theme: "light" | "dark";
       action: "signin";
       callback: (token: string) => void;
       "expired-callback": () => void;
@@ -51,6 +51,27 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
   callback.current = onToken;
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => {
+      const explicit = document.documentElement.dataset.theme;
+      setTheme(
+        explicit === "light" || explicit === "dark" ? explicit : media.matches ? "dark" : "light",
+      );
+    };
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    media.addEventListener("change", update);
+    update();
+    return () => {
+      observer.disconnect();
+      media.removeEventListener("change", update);
+    };
+  }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry deliberately remounts the remote widget.
   useEffect(() => {
     let active = true;
@@ -67,7 +88,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
         if (active && container.current && window.turnstile)
           id = window.turnstile.render(container.current, {
             sitekey: config.turnstile_site_key,
-            theme: "dark",
+            theme,
             action: "signin",
             callback: (token) => callback.current(token),
             "expired-callback": () => callback.current(""),
@@ -84,7 +105,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
       active = false;
       if (id) window.turnstile?.remove(id);
     };
-  }, [attempt]);
+  }, [attempt, theme]);
   return (
     <div className="verification">
       <div ref={container} />

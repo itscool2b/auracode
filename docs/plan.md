@@ -3,15 +3,11 @@
 ## Current authority
 The owner revised the architecture on 2026-10-26: Rust owns backend logic, all application cloud
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
-Graphite (2026-10-26) supersedes Orbit, which superseded the original Aura visuals.
+The proposed Aura visual checkpoint supersedes the older Graphite, Orbit and Shallows directions. See [visual-language.md](design/visual-language.md) for current authority and review status.
 `docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
 The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
-fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
-and official-site references, including SpaceXAI/Grok Bot, X Money, Harvey and Aside.
-The product is dark only, as explicitly directed on 2026-10-26. No light mode, system theme
-switching or appearance selector ships in the app, onboarding or website. Retained historical design
-studies do not change these product requirements.
+fixes rerun as needed. Visual work follows the proposed light and dark Aura system and the audited references in [visual-language.md](design/visual-language.md). The owner must review the visual checkpoint before its styling is considered approved; full rollout and native release verification remain pending.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
@@ -73,16 +69,8 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 5. Every animation means something: agent marks and live labels show real state, not decoration.
 
 ## UX spec: app
-The **Graphite** specification in [visual-language.md](design/visual-language.md) defines every
-surface, token, type size, state, animation, and accessibility requirement. Its references are the
-owner's Mobbin and live-site set (SpaceXAI, X Money, Harvey, Aside, Vercel, and the AI in Design
-Report 2026 as the bar for uniqueness), adapted to the live protocol.
+The proposed [visual language](design/visual-language.md) governs the desktop and website. Use system appearance by default with persisted light and dark overrides; preserve the logo and remove standalone animal and water decoration. The following functional requirements remain in force.
 
-- Dark-only, pure black canvas, Geist and Geist Mono at integer weights, solid panes, hairline
-  divisions. Volt lime means look here, green success/addition, red failure/deletion; white and
-  greys carry other states. No space imagery, gradients, glow, glass, serif, italic, agent colors,
-  accent picker, or eyebrow labels.
-- Panes paint opaque; no native material shows through the interface.
 - Collapsible project/chat sidebar, Needs you inbox, agent dock, account menu, main transcript,
   composer, and a right panel for Changes, Files, Plan, and Session information.
 - Agent marks (monochrome tiles with a pixel loader, needs-you square, done check) show state.
@@ -98,8 +86,7 @@ Report 2026 as the bar for uniqueness), adapted to the live protocol.
   inability to ask is explicit. Never turn a generic automatic approval into a persistent rule.
 - Titles come from the agent or first user line, never a hidden title-generation prompt.
 
-**Boot and onboarding.** A skippable 1.6 to 2 second Shallows intro that forms the mark, shortened on warm launch and
-skipped for links, notifications, and reduced motion. Show the hidden window after first paint;
+**Boot and onboarding.** Use the proposed visual language for setup and show the hidden window after first paint;
 use cached detection and reconcile without blocking startup. Onboarding is keyboard-driven,
 resumable, re-runnable, and entirely skippable: welcome, discovery, account, motion preference,
 first project by folder/drop/gh clone. No agents means installation suggestions and a demo chat.
@@ -107,11 +94,10 @@ The account step stays disabled until M6; encrypted device approval/recovery and
 with M7. No screen promises sync before it works.
 
 ## UX spec: website (auracode.si)
-Share Graphite tokens, components and typography with the app. React/TypeScript renders interfaces;
+Share semantic tokens and components with the app; use Geist on the website and Inter in desktop chrome. React/TypeScript renders interfaces;
 prerender public pages and serve static assets through Cloudflare. Rust owns API behavior.
 
-- /: Shallows hero (lit water, seals and turtles), rotating agent name in "One window for [Claude Code].", OS-aware Download and
-  invited sign-in. Hosted accounts stay invite-only, so the site never offers account creation.
+- /: proposed Vercel-inspired hero, real desktop imagery and staged capability proof, followed by FAQ and closing. Preserve existing account availability and actions.
 - /download: every OS/architecture, version, notes, SHA-256 checksums, requirements and unsigned-build
   installation instructions. Works without JavaScript; always permits a different OS choice.
 - /signup and /signin: email, six-digit code, resend cooldown, Turnstile, clear expiry/delivery errors.
@@ -120,8 +106,8 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 - /privacy, /terms, /changelog: accurate processor, retention, export and deletion information.
   Legal copy needs review before public release; a domain suffix alone does not establish jurisdiction.
 - The auracode://signin link prefills email only, never tokens. Display Download beside Open auracode.
-- Reduced motion, keyboard access, and a whole page without JavaScript (swimmers still at their
-  anchors) are required.
+- Reduced motion, keyboard access, and a whole page without JavaScript (including essential
+  information) are required.
 
 ## Projects, chats, agent switching
 - **Project** = name + colour + 1..n folders + optional default agent/model. Folders have a portable
@@ -171,7 +157,7 @@ auracode/                        Cargo workspace + pnpm workspace
 - **Processes.** One Tauri process runs aura-core on tokio (`panic = "unwind"` in release; panics contained
   per task). aura-core doesn't depend on Tauri, so a headless daemon can reuse it later for remote access.
 - **Shell.** Tauri 2.12.x: the window keeps its platform material plan (vibrancy on macOS, Mica on
-  Windows 11, opaque elsewhere), but Graphite paints every surface opaque black, so no material
+  Windows 11, opaque elsewhere), but the interface uses solid surfaces, so native material
   shows through. Overlay titlebar + `trafficLightPosition`
   on macOS; Windows titlebar decided by
   an M0 spike (custom controls lose Snap Layouts, so native caption buttons are the default). Plugins:
@@ -454,7 +440,7 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
 - **M1e Catalog.** Detection on macOS/Windows, channels, versions, vendor updates,
   last-verified badges, auth status. Done when `aura-cli smoke <agent>` passes for every installed agent.
-- **M2a Design system + transcript.** Dark-only Graphite tokens, fonts, state-driven agent marks,
+- **M2a Design system + transcript.** Shared theme tokens, fonts, state-driven agent marks,
   transcript components and accessibility against live protocol fixtures. Retire legacy shader/serif
   dependencies only when no retained Design Lab direction uses them.
 - **M2b App shell with real agents.** Sidebar, projects, chats, persistence, titles, edit/retry/fork,

@@ -20,7 +20,6 @@ import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
 import type { CloneDraft } from "../../lib/setup-actions/clone";
 import type { WorkspaceStore } from "../../lib/workspace";
 import { projectName } from "../chat/ChatList";
-import { SETUP_SWIMMERS, SETUP_WATER_DEPTH, Water } from "../Water";
 import { AgentRoster } from "./AgentsScreen";
 import { CloneBody, cloneHeading, useClone } from "./CloneProject";
 import { type IntroMode, SetupIntro } from "./SetupIntro";
@@ -328,7 +327,6 @@ export function Onboarding({
     saved === null ? "pending" : saved.cold_start && !reduced ? "live" : "still";
   return (
     <main className="setup-shell g-root" data-cinematic={cinematic || undefined}>
-      <Water className="setup-water" swimmers={SETUP_SWIMMERS} depth={SETUP_WATER_DEPTH} giveWay />
       <div className="setup-drag" data-tauri-drag-region="" />
       <header className="setup-top">
         <Wordmark size={16} />

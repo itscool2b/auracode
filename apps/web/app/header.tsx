@@ -1,5 +1,5 @@
 import { Wordmark } from "@auracode/ui/graphite";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The 64px sticky nav, edge to edge like Vercel's: the wordmark at left; Changelog, Sign in and the
@@ -9,6 +9,15 @@ import { useEffect, useRef } from "react";
  * stays in the bar.
  */
 export function SiteHeader() {
+  const [appearance, setAppearance] = useState("system");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("auracode-appearance");
+      if (saved === "light" || saved === "dark") setAppearance(saved);
+    } catch {
+      /* Storage may be unavailable. */
+    }
+  }, []);
   const header = useRef<HTMLElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
 
@@ -61,6 +70,28 @@ export function SiteHeader() {
           <Wordmark size={16} />
         </a>
         <div className="nav-actions">
+          <label className="appearance-control">
+            <span className="sr-only">Appearance</span>
+            <select
+              value={appearance}
+              onChange={(event) => {
+                const value = event.target.value;
+                setAppearance(value);
+                if (value === "system") delete document.documentElement.dataset.theme;
+                else document.documentElement.dataset.theme = value;
+                try {
+                  if (value === "system") localStorage.removeItem("auracode-appearance");
+                  else localStorage.setItem("auracode-appearance", value);
+                } catch {
+                  /* Appearance still applies for this page. */
+                }
+              }}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
           <nav className="nav-links g-dim-text" aria-label="Main">
             <a href="/changelog">Changelog</a>
             <a href="/signin">Sign in</a>
@@ -77,6 +108,7 @@ export function SiteHeader() {
               </svg>
             </summary>
             <nav className="nav-sheet" aria-label="Menu">
+              <a href="/download">Download</a>
               <a href="/changelog">Changelog</a>
               <a href="/signin">Sign in</a>
               <a href="/account">Account</a>

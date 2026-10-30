@@ -10,128 +10,139 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installQuitQuestion } from "./components/QuitQuestionDialog";
+import { initializeAppearance } from "./lib/appearance";
 import { AppStore } from "./lib/chat/appStore";
 import { tauriTransport } from "./lib/chat/transport";
 import { installDraftQuit } from "./lib/draftQuit";
-import { cancelDemoStream, startDemoStream } from "./lib/ipc";
-import { installMagnetic } from "./lib/magnetic";
+import { cancelDemoStream, inTauri, startDemoStream } from "./lib/ipc";
 import { installProfileEvents } from "./lib/profiles";
 import { StreamStore } from "./lib/session";
+import { setupApi } from "./lib/setup";
 import { WorkspaceStore, workspaceApi } from "./lib/workspace";
 
+initializeAppearance();
 installProfileEvents();
 const store = new StreamStore({ start: startDemoStream, cancel: cancelDemoStream });
 const chats = new AppStore(tauriTransport);
 const workspace = new WorkspaceStore(workspaceApi);
 installDraftQuit();
 installQuitQuestion();
-installMagnetic();
 
 const container = document.getElementById("root");
-if (container) {
-  if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
-    const mode = new URLSearchParams(location.search).get("preview");
-    if (new URLSearchParams(location.search).has("quit"))
-      void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
-    if (mode === "config-sync" || mode === "plugin-sync")
-      void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
-        mountConfigSyncPreview(container, mode),
+// The native window stays hidden until App paints. Resolve the active profile's appearance first,
+// including after a profile switch reload; a locked or unavailable profile uses the system theme.
+const appearanceReady =
+  inTauri() && !(import.meta.env.DEV && new URLSearchParams(location.search).has("preview"))
+    ? installProfileEvents()
+        .then(() => setupApi.snapshot())
+        .catch(() => {})
+    : Promise.resolve();
+void appearanceReady.then(() => {
+  if (container) {
+    if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
+      const mode = new URLSearchParams(location.search).get("preview");
+      if (new URLSearchParams(location.search).has("quit"))
+        void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
+      if (mode === "config-sync" || mode === "plugin-sync")
+        void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
+          mountConfigSyncPreview(container, mode),
+        );
+      else if (mode === "header-labels")
+        void import("./dev/headerLabelsPreview").then(({ mountHeaderLabelsPreview }) =>
+          mountHeaderLabelsPreview(container),
+        );
+      else if (mode === "setup-recovery")
+        void import("./dev/setupRecoveryPreview").then(({ mountSetupRecoveryPreview }) =>
+          mountSetupRecoveryPreview(container),
+        );
+      else if (
+        mode === "plugins" ||
+        mode === "plugins-pi" ||
+        mode === "plugins-update" ||
+        mode === "plugins-failed" ||
+        mode === "plugins-progressive"
+      )
+        void import("./dev/pluginLibraryPreview").then(({ mountPluginLibraryPreview }) =>
+          mountPluginLibraryPreview(container, mode),
+        );
+      else if (mode === "agent-marks")
+        void import("./dev/agentMarksPreview").then(({ mountAgentMarksPreview }) =>
+          mountAgentMarksPreview(container),
+        );
+      else if (mode === "questions")
+        void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
+          mountQuestionsPreview(container),
+        );
+      else if (mode === "steering")
+        void import("./dev/steeringPreview").then(({ mountSteeringPreview }) =>
+          mountSteeringPreview(container),
+        );
+      else if (mode === "worktree-setup")
+        void import("./dev/worktreeSetupPreview").then(({ mountWorktreeSetupPreview }) =>
+          mountWorktreeSetupPreview(container),
+        );
+      else if (mode === "profiles")
+        void import("./dev/profilesPreview").then(({ mountProfilesPreview }) =>
+          mountProfilesPreview(container),
+        );
+      else if (mode === "account")
+        void import("./dev/accountPreview").then(({ mountAccountPreview }) =>
+          mountAccountPreview(container),
+        );
+      else if (mode === "verification")
+        void import("./dev/verificationPreview").then(({ mountVerificationPreview }) =>
+          mountVerificationPreview(container),
+        );
+      else if (mode === "project-tools")
+        void import("./dev/projectToolsPreview").then(({ mountProjectToolsPreview }) =>
+          mountProjectToolsPreview(container),
+        );
+      else if (mode === "data-transfer")
+        void import("./dev/dataTransferPreview").then(({ mountDataTransferPreview }) =>
+          mountDataTransferPreview(container),
+        );
+      else if (mode === "keep-local")
+        void import("./dev/accountPreservationPreview").then(
+          ({ mountAccountPreservationPreview }) => mountAccountPreservationPreview(container),
+        );
+      else if (mode === "git" || mode === "git-missing" || mode === "git-conflict")
+        void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
+      else if (mode === "chat-options")
+        void import("./dev/chatOptionsPreview").then(({ mountChatOptionsPreview }) =>
+          mountChatOptionsPreview(container),
+        );
+      else if (mode?.startsWith("instructions"))
+        void import("./dev/instructionsPreview").then(({ mountInstructionsPreview }) =>
+          mountInstructionsPreview(container, mode),
+        );
+      else if (mode === "settings")
+        void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
+          mountSettingsPreview(container),
+        );
+      else if (mode?.startsWith("delete-data"))
+        void import("./dev/deleteDataPreview").then(({ mountDeleteDataPreview }) =>
+          mountDeleteDataPreview(container, mode),
+        );
+      else if (
+        mode === "setup" ||
+        mode === "agents" ||
+        mode === "agents-installing" ||
+        mode === "new-project" ||
+        mode === "clone" ||
+        mode === "clone-running" ||
+        mode === "clone-error"
+      )
+        void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
+          mountSetupPreview(container),
+        );
+      else void import("./dev/preview").then(({ mountPreview }) => mountPreview(container));
+    } else
+      createRoot(container).render(
+        <StrictMode>
+          <ErrorBoundary>
+            <App store={store} chats={chats} transport={tauriTransport} workspace={workspace} />
+          </ErrorBoundary>
+        </StrictMode>,
       );
-    else if (mode === "header-labels")
-      void import("./dev/headerLabelsPreview").then(({ mountHeaderLabelsPreview }) =>
-        mountHeaderLabelsPreview(container),
-      );
-    else if (mode === "setup-recovery")
-      void import("./dev/setupRecoveryPreview").then(({ mountSetupRecoveryPreview }) =>
-        mountSetupRecoveryPreview(container),
-      );
-    else if (
-      mode === "plugins" ||
-      mode === "plugins-pi" ||
-      mode === "plugins-update" ||
-      mode === "plugins-failed" ||
-      mode === "plugins-progressive"
-    )
-      void import("./dev/pluginLibraryPreview").then(({ mountPluginLibraryPreview }) =>
-        mountPluginLibraryPreview(container, mode),
-      );
-    else if (mode === "agent-marks")
-      void import("./dev/agentMarksPreview").then(({ mountAgentMarksPreview }) =>
-        mountAgentMarksPreview(container),
-      );
-    else if (mode === "questions")
-      void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
-        mountQuestionsPreview(container),
-      );
-    else if (mode === "steering")
-      void import("./dev/steeringPreview").then(({ mountSteeringPreview }) =>
-        mountSteeringPreview(container),
-      );
-    else if (mode === "worktree-setup")
-      void import("./dev/worktreeSetupPreview").then(({ mountWorktreeSetupPreview }) =>
-        mountWorktreeSetupPreview(container),
-      );
-    else if (mode === "profiles")
-      void import("./dev/profilesPreview").then(({ mountProfilesPreview }) =>
-        mountProfilesPreview(container),
-      );
-    else if (mode === "account")
-      void import("./dev/accountPreview").then(({ mountAccountPreview }) =>
-        mountAccountPreview(container),
-      );
-    else if (mode === "verification")
-      void import("./dev/verificationPreview").then(({ mountVerificationPreview }) =>
-        mountVerificationPreview(container),
-      );
-    else if (mode === "project-tools")
-      void import("./dev/projectToolsPreview").then(({ mountProjectToolsPreview }) =>
-        mountProjectToolsPreview(container),
-      );
-    else if (mode === "data-transfer")
-      void import("./dev/dataTransferPreview").then(({ mountDataTransferPreview }) =>
-        mountDataTransferPreview(container),
-      );
-    else if (mode === "keep-local")
-      void import("./dev/accountPreservationPreview").then(({ mountAccountPreservationPreview }) =>
-        mountAccountPreservationPreview(container),
-      );
-    else if (mode === "git" || mode === "git-missing" || mode === "git-conflict")
-      void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
-    else if (mode === "chat-options")
-      void import("./dev/chatOptionsPreview").then(({ mountChatOptionsPreview }) =>
-        mountChatOptionsPreview(container),
-      );
-    else if (mode?.startsWith("instructions"))
-      void import("./dev/instructionsPreview").then(({ mountInstructionsPreview }) =>
-        mountInstructionsPreview(container, mode),
-      );
-    else if (mode === "settings")
-      void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
-        mountSettingsPreview(container),
-      );
-    else if (mode?.startsWith("delete-data"))
-      void import("./dev/deleteDataPreview").then(({ mountDeleteDataPreview }) =>
-        mountDeleteDataPreview(container, mode),
-      );
-    else if (
-      mode === "setup" ||
-      mode === "agents" ||
-      mode === "agents-installing" ||
-      mode === "new-project" ||
-      mode === "clone" ||
-      mode === "clone-running" ||
-      mode === "clone-error"
-    )
-      void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
-        mountSetupPreview(container),
-      );
-    else void import("./dev/preview").then(({ mountPreview }) => mountPreview(container));
-  } else
-    createRoot(container).render(
-      <StrictMode>
-        <ErrorBoundary>
-          <App store={store} chats={chats} transport={tauriTransport} workspace={workspace} />
-        </ErrorBoundary>
-      </StrictMode>,
-    );
-}
+  }
+});

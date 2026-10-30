@@ -1,34 +1,14 @@
-# Product reference audit
+# Reference audit
 
-Reviewed 2026-10-26 against the original handoff and the owner's correction. The product is dark
-only. Earlier light studies are historical. The actual reference images were inspected through
-Mobbin, alongside the selected Orbit Design Lab screens, before replacing the old application frame.
+Status: reference observations support a proposed visual checkpoint, awaiting owner review. They do not establish visual approval or complete product parity.
 
-| Reference | Observed structure | Application |
+| Reference | Observed contribution | Intended adaptation |
 | --- | --- | --- |
-| [Grok conversation](https://mobbin.com/screens/b851f7ba-c1ad-47bf-95f5-ce96559cd10c) | Narrow navigation, quiet header actions, centered prose, one rounded composer with controls along its lower edge | Chat frame, transcript and composer |
-| [SpaceXAI Grok Bot](https://mobbin.com/sites/sections/dfea7d6f-670a-4d55-8289-ff0267c89efb) | Sparse navigation and a large contained product viewport | Product presentation and website hierarchy |
-| [Harvey product panels](https://mobbin.com/sites/sections/889f579b-4c96-4cf5-b8f5-411f4e7ac478) | Narrow navigation, restrained project headers, clear tables and tabs, solid work surfaces | Project tray and auxiliary panels |
-| [Aside product hero](https://mobbin.com/sites/sections/bdad14df-7d77-4d9d-8c30-dfd826d134d1) | Compact project navigation, centered empty state, composer with an independent control row | Empty chat and autonomy controls |
-| [X Money account](https://mobbin.com/screens/af77fad2-56b6-47ce-8f8d-a03c93c80315) | Small subdued labels, strong numbers, compact actions, restrained activity sections | Usage, receipts and confirmation hierarchy |
-| [X Money send](https://mobbin.com/screens/7a1d8e7b-e9da-4f30-9c66-a14eaabf0498) | Simple search and list rows, secondary metadata, clear separators | Search and selection menus |
+| [Vercel hero](https://mobbin.com/sites/sections/42b13454-50c5-40ec-bd46-c7c1ea521873) | Restrained hierarchy and sparse hero composition | Three focused homepage objects, modest heading scale, real product imagery, strong light and dark modes |
+| [Typesafe proof](https://mobbin.com/sites/sections/0c9f4512-f64c-4f8e-b8d2-ed0cff5c19de) | Distinctive staged visual evidence | Two successive real handoff states linked causally, without inventing features |
+| [Harvey benefits](https://mobbin.com/sites/sections/13ddabd9-7090-4949-88af-9d1cd651ccb5) | Clear list and supporting visual organization | Six capability tabs with a one-third control list and two-thirds evidence area |
+| Installed Devin desktop | Compact work surfaces, navigation and settings organization across light and dark | Desktop shell, settings and density, adapted to existing auracode capabilities |
 
-Broad searches also returned unrelated payment, writing and subscription screens. Those were
-excluded. Marketing typography and decorative backgrounds do not override the approved Geist,
-solid surfaces, semantic color and Orbit marks.
+The Devin inspection covered 18 organization settings sections plus overview, five personal sections, six Customize sections, three Security sections, the main interface and nested screens in both themes. The inspected account had no populated active states, and the terminal was not inspected. These observations do not prove how those missing states look or behave.
 
-## Implementation status
-
-The real desktop now uses compact navigation with Needs you, project disclosure rows and an agent
-dock; a title-led header with session controls in a disclosure; and a single composer with agent,
-model and autonomy controls. Pending permissions replace the composer while preserving its draft.
-Production theme selection is removed. The reference fixture has been visually inspected in dark.
-
-Project management, the three-column handoff picker, Changes panel, onboarding, settings and website
-are implemented. Their focused browser gates exercise production components with synthetic native
-responses and include accessibility and responsive checks. Local import, export, project terminals,
-Git initialization and interrupted profile recovery now use the same dark modal language. Account
-lifecycle and portable folder resolution are implemented with focused browser verification. The
-website is published, and an isolated native Windows inspection covered onboarding and the workspace.
-Final integrated visuals and native Windows/macOS acceptance remain pending; these checks do not
-establish complete native parity or performance qualification.
+The Typesafe hero capture was loading, the inspected Harvey hero did not match the intended reference, and native Chrome policy stopped the complete live landing-page audit, leaving that URL unverified. The linked Mobbin section evidence supports the named sections only. No exact clone or comprehensive live-site audit is claimed. Never ship reference logos, artwork, copy or proprietary assets. The canonical proposed product decisions and verification gates are in [visual-language.md](visual-language.md).

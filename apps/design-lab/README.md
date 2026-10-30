@@ -1,5 +1,7 @@
 # auracode Design Lab
 
+**Historical studies:** This lab is not the production design authority. The current proposed direction and pending visual checkpoint are in [the visual language](../../docs/design/visual-language.md). Orbit remains selected only inside this historical gallery.
+
 The M1a Design Lab from [docs/plan.md](../../docs/plan.md): visual directions for the auracode UI
 (Aurora, Noir and Halo, then Orbit after the owner turned those three down), each rendering the same
 recorded-style chat, so the owner could pick one. The owner chose **Orbit**: the gallery opens with

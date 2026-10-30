@@ -9,6 +9,7 @@ import type {
   SetupAction,
   SetupSnapshot,
 } from "../../bindings";
+import { applySetupAppearance } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel } from "../../lib/chat/present";
 import { errorMessage } from "../../lib/errors";
 import {
@@ -146,6 +147,7 @@ export function GeneralPanel({
     try {
       const next = await api.apply(saved.preferences.revision, action);
       setMotionPreference(next.preferences.motion);
+      applySetupAppearance(next.preferences);
       if (mounted.current) setSaved(next);
     } catch (failure) {
       if (mounted.current) setError(errorMessage(failure));
@@ -290,6 +292,25 @@ export function GeneralPanel({
       <section className="settings-section" aria-labelledby="settings-app">
         <h2 id="settings-app">App</h2>
         <div className="settings-group">
+          <Row title="Appearance" detail="System follows your device's light or dark appearance.">
+            <fieldset className="settings-segmented settings-control" disabled={disabled}>
+              <legend className="sr-only">Appearance</legend>
+              {(["system", "light", "dark"] as const).map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="settings-appearance"
+                    value={value}
+                    checked={(saved?.preferences.appearance ?? "system") === value}
+                    onChange={() => void change({ type: "appearance", value })}
+                  />
+                  <span>
+                    {value === "system" ? "System" : value === "light" ? "Light" : "Dark"}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </Row>
           <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
             <fieldset className="settings-segmented settings-control" disabled={disabled}>
               <legend className="sr-only">Motion</legend>

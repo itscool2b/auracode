@@ -53,20 +53,13 @@
   overflow: hidden;
   border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow:
-    0 0 0 1px var(--ui-pane-rim),
-    inset 0 1px 0 var(--ui-pane-rim-top);
+  border-left: 1px solid var(--g-line);
+  box-shadow: none;
 }
 
 /* The light: painted under the pane's content, never over a word. */
 .chat-main::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: -1;
-  height: 280px;
-  background-image: radial-gradient(72% 100% at 50% 0, var(--ui-pane-light), transparent);
-  pointer-events: none;
+  content: none;
 }
 
 .chat-main > .chat-drag {
@@ -151,17 +144,15 @@
   .chat-main:has(.changes-panel) .changes-panel {
     grid-column: 2;
     grid-row: 1 / span 2;
-    border-left: 0;
+    border-left: 1px solid var(--g-line);
     border-radius: var(--ui-pane-radius);
-    box-shadow:
-      0 0 0 1px var(--ui-pane-rim),
-      inset 0 1px 0 var(--ui-pane-rim-top);
+    box-shadow: none;
   }
 
   /* The panel's drag handle fills the gutter between the two panes. */
   .chat-main:has(.changes-panel) .changes-resizer {
-    left: calc(var(--ui-pane-inset) * -1);
-    width: var(--ui-pane-inset);
+    left: -4px;
+    width: 8px;
   }
 }
 
@@ -187,20 +178,12 @@
   height: auto;
   border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow:
-    0 0 0 1px var(--ui-pane-rim),
-    inset 0 1px 0 var(--ui-pane-rim-top);
+  box-shadow: none;
 }
 
 /* The pane's light, as the chat's: under the content, never over a word. */
 .pane-shell > :is(.agents-screen, .plugins-screen)::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: -1;
-  height: 280px;
-  background-image: radial-gradient(72% 100% at 50% 0, var(--ui-pane-light), transparent);
-  pointer-events: none;
+  content: none;
 }
 
 .pane-shell .agents-page {
@@ -558,9 +541,9 @@ details.setup-install-review[open] > summary::before {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background-color: var(--g-surface-2);
+  background-color: var(--g-hover);
   opacity: 0;
-  transform: scale(0.96);
+  transform: none;
   pointer-events: none;
   transition:
     opacity var(--g-dur-fast) var(--g-ease),
@@ -602,7 +585,7 @@ details.setup-install-review[open] > summary::before {
 }
 
 :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active::before {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   opacity: 1;
   transform: none;
   transition-duration: 0ms;
@@ -1119,6 +1102,7 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-8);
   height: var(--g-app-header);
   padding: 0 var(--g-space-8) 0 var(--g-space-16);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .chat-header-who {
@@ -1406,10 +1390,10 @@ details.setup-install-review[open] > summary::before {
   overflow: auto;
   /* The ring is an inset hairline, so the panel's content starts on the grid (4.6, 3.6). */
   border: 0;
-  border-radius: var(--g-radius-12);
+  border-radius: var(--g-radius-8);
   background-color: var(--g-surface-2);
   box-shadow:
-    inset 0 0 0 1px var(--g-line-strong),
+    inset 0 0 0 1px var(--g-line),
     var(--g-shadow);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);

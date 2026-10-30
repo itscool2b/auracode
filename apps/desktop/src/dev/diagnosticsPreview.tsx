@@ -52,7 +52,7 @@ function Preview() {
       />
     );
   return (
-    <div className="app diagnostics-shell" data-theme="dark">
+    <div className="app diagnostics-shell">
       <Sidebar brandId="claude-code" onBrandChange={() => {}} orbState="idle" onChats={() => {}} />
       <main className="main">
         <div className="drag-strip" data-tauri-drag-region="" />

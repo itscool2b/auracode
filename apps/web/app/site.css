@@ -543,7 +543,7 @@ canvas {
 .product-frame {
   width: min(100%, 1120px);
   margin: 88px auto 0;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 36 / 19;
   overflow: hidden;
   border-radius: var(--g-radius-16);
   background-color: var(--g-water-deep);
@@ -569,80 +569,6 @@ canvas {
  * headline's words rise one after another, the lead and the button follow, the swimmers fade in and
  * the product rises out of the deep last. Transform and opacity only.
  */
-.js .hero > .g-shallows-light {
-  animation: site-fade 1400ms var(--g-ease-reveal) both;
-}
-
-.js .hero-word {
-  animation: g-rise var(--g-dur-headline) var(--g-ease-quint) both;
-  animation-delay: calc(120ms + var(--i, 0) * var(--g-stagger));
-}
-
-.js .hero-lead {
-  animation: site-rise 700ms var(--g-ease-reveal) 480ms both;
-}
-
-.js .hero-actions {
-  animation: site-rise 700ms var(--g-ease-reveal) 600ms both;
-}
-
-.js .hero-swimmers {
-  animation: site-fade 2400ms var(--g-ease-reveal) 240ms both;
-}
-
-.js .product-frame {
-  animation: site-surface 1200ms var(--g-ease-reveal) 720ms both;
-}
-
-/* Where scroll-driven animation runs (on the compositor), the screenshot settles as it comes in. */
-@supports (animation-timeline: view()) {
-  .js .product-frame picture {
-    animation: site-settle linear both;
-    animation-timeline: view();
-    animation-range: entry 0% cover 40%;
-  }
-}
-
-@keyframes site-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes site-rise {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes site-surface {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 40px, 0) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes site-settle {
-  from {
-    transform: scale(1.05);
-  }
-  to {
-    transform: none;
-  }
-}
-
 /* --------------------------------------------- capabilities (Harvey's timer tabs, Shallows) */
 
 .title-stack {
@@ -659,21 +585,24 @@ canvas {
   margin-top: var(--heading-gap);
 }
 
+.caps .title-stack {
+  margin-inline: 0;
+  text-align: left;
+}
+
 /* A quieter water than the hero's: the panel is a stage for the view, not a second hero. */
 .caps-panel {
-  --g-shallows-radius: 24px;
-  --g-water-surface: var(--g-surface-3);
-  --g-water-shallow: var(--g-surface-2);
-  --g-water-low: var(--g-surface-1);
   display: grid;
-  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   min-height: 600px;
+  background: var(--g-surface-2);
+  border: 1px solid var(--g-line);
 }
 
 .caps-side {
   display: flex;
   flex-direction: column;
-  padding: 36px 32px 40px 40px;
+  padding: 32px;
 }
 
 .caps-tabs {
@@ -685,7 +614,8 @@ canvas {
   display: block;
   padding: 13px 0 15px;
   border: 0;
-  border-radius: var(--g-radius-6);
+  border-bottom: 1px solid var(--g-line);
+  border-radius: 0;
   background: none;
   color: var(--g-fg-3);
   font-size: 16px;
@@ -705,6 +635,7 @@ canvas {
 
 .caps-tab[aria-selected="true"] {
   color: var(--g-fg-1);
+  font-weight: 600;
 }
 
 .caps-tab:focus-visible {
@@ -874,11 +805,11 @@ canvas {
   position: relative;
   display: grid;
   min-width: 0;
-  margin: 20px 20px 20px 0;
+  margin: 20px;
   overflow: hidden;
-  border-radius: var(--g-radius-16);
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
   background-color: var(--g-surface-1);
-  box-shadow: 0 24px 56px -24px rgb(0 0 0 / 0.6);
   container-type: inline-size;
 }
 
@@ -888,9 +819,7 @@ canvas {
   inset: 0;
   z-index: 3;
   border-radius: inherit;
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.06),
-    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  box-shadow: none;
   pointer-events: none;
 }
 
@@ -1183,13 +1112,9 @@ canvas {
 }
 
 .m-composer {
-  border-radius: 20px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
   background-color: var(--g-surface-2);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.07),
-    inset 0 1px 0 rgb(255 255 255 / 0.06),
-    0 24px 56px -24px rgb(0 0 0 / 0.8),
-    0 4px 16px -8px rgb(0 0 0 / 0.5);
 }
 
 .m-input {
@@ -1213,7 +1138,7 @@ canvas {
   height: 18px;
   margin-left: 1px;
   background-color: var(--g-fg-1);
-  animation: m-blink 1100ms steps(1) infinite;
+  animation: none;
 }
 
 @keyframes m-blink {
@@ -1338,6 +1263,92 @@ canvas {
 
 .m-handoff > .m-strong {
   margin-left: auto;
+}
+
+/* One task, two moments: the next message carries the preceding turn forward. */
+.handoff-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--g-surface-2);
+}
+
+.handoff-prior {
+  position: absolute;
+  inset: 28px auto auto 28px;
+  width: 72%;
+  height: 56%;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+}
+
+.handoff-prior .m-body {
+  padding: 8px 20px 0;
+}
+.handoff-prior .m-user {
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.handoff-prior .m-prose {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.handoff-next {
+  position: absolute;
+  right: 28px;
+  bottom: 28px;
+  width: 66%;
+  padding: 12px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+  background: var(--g-surface-1);
+}
+
+.handoff-next .m-handoff {
+  padding: 0 8px;
+}
+.handoff-next .m-composer {
+  margin-top: 8px;
+}
+.handoff-link {
+  position: absolute;
+  top: 60%;
+  right: 18%;
+  width: 12%;
+  height: 1px;
+  background: var(--g-line-strong);
+  transform: rotate(38deg);
+  transform-origin: left center;
+}
+
+@container (max-width: 480px) {
+  .handoff-prior {
+    inset: 12px auto auto 12px;
+    width: 86%;
+    height: 57%;
+  }
+  .handoff-prior .m-body {
+    padding: 4px 12px 0;
+  }
+  .handoff-next {
+    right: 12px;
+    bottom: 12px;
+    width: 86%;
+  }
+  .handoff-link {
+    top: 58%;
+    right: 11%;
+  }
+  .handoff-next .m-handoff {
+    font-size: 11px;
+    gap: 4px;
+  }
+  .handoff-next .m-handoff > .m-strong {
+    display: none;
+  }
 }
 
 /* The queue (6.12): what waits behind the running turn, each with its remove. */
@@ -1806,13 +1817,9 @@ canvas {
 .m-card {
   width: 100%;
   margin-top: 24px;
-  border-radius: 20px;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
   background-color: var(--g-surface-2);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.07),
-    inset 0 1px 0 rgb(255 255 255 / 0.06),
-    0 24px 56px -24px rgb(0 0 0 / 0.8),
-    0 4px 16px -8px rgb(0 0 0 / 0.5);
 }
 
 .m-card-row {
@@ -1842,7 +1849,7 @@ canvas {
   height: 32px;
   padding: 0 12px 0 4px;
   box-sizing: border-box;
-  border-radius: var(--g-radius-pill);
+  border-radius: 6px;
   box-shadow: inset 0 0 0 1px var(--g-line-strong);
   color: var(--g-fg-2);
   font-weight: 500;
@@ -3296,4 +3303,282 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
 
 .device-verification .verification {
   min-height: 65px;
+}
+
+/* Website checkpoint: the product is the visual centerpiece. */
+:root {
+  --g-web-gutter: 20px;
+  --g-web-max: 1200px;
+  --inset: 0px;
+  --section-pad: 64px;
+  --heading-gap: 32px;
+  --site-h2: 32px;
+  --site-h2-leading: 38px;
+  --site-lead: 16px;
+  --site-lead-leading: 24px;
+  --site-display: 36px;
+  --nav-pad: 20px;
+}
+@media (min-width: 768px) {
+  :root {
+    --g-web-gutter: 32px;
+    --nav-pad: 32px;
+    --section-pad: 96px;
+    --site-display: 48px;
+  }
+}
+.site-nav,
+.site-nav[data-live]:not([data-scrolled]) {
+  background: var(--g-bg);
+  border-bottom: 1px solid var(--g-line);
+}
+.nav-inner {
+  max-width: 1264px;
+  margin-inline: auto;
+}
+.appearance-control select {
+  min-height: 40px;
+  max-width: 80px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--g-fg-2);
+  cursor: pointer;
+  font-size: 13px;
+}
+.appearance-control select:hover {
+  background: var(--g-hover);
+}
+.appearance-control select:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+.hero {
+  width: var(--col);
+  margin: 0 auto;
+  padding: 96px 0 0;
+  text-align: left;
+}
+.hero-layout {
+  display: grid;
+  grid-template-columns: 5fr 4fr 3fr;
+  align-items: center;
+  gap: 32px;
+  min-height: 280px;
+}
+.hero-copy {
+  max-width: none;
+  margin: 0;
+}
+.hero-title {
+  font-size: var(--site-display);
+  line-height: 52px;
+  letter-spacing: -0.045em;
+}
+.hero-line {
+  width: auto;
+  margin: 0;
+  white-space: normal;
+}
+.hero-lead {
+  max-width: 390px;
+  margin: 20px 0 0;
+  text-wrap: pretty;
+}
+.hero-actions {
+  justify-content: flex-start;
+  margin-top: 24px;
+}
+.hero-detail {
+  height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  background: var(--g-surface-1);
+}
+.hero-detail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 72% 70%;
+}
+.hero-aside {
+  justify-self: end;
+  font: 500 12px / 20px var(--g-mono);
+  letter-spacing: 0.04em;
+  color: var(--g-fg-2);
+}
+.product-frame {
+  width: 100%;
+  margin: 32px auto 0;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  background: var(--g-surface-1);
+  box-shadow: none;
+}
+.js .hero-word,
+.js .hero-lead,
+.js .hero-actions,
+.js .product-frame,
+.js .product-frame picture {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+.m-water {
+  background: var(--g-surface-2);
+}
+.m-scene,
+.m-scene.is-active,
+.caps-note,
+.caps-note.is-active {
+  transform: none;
+  transition:
+    opacity 240ms cubic-bezier(0.2, 0, 0, 1),
+    visibility 0ms 240ms;
+}
+.m-scene.is-active,
+.caps-note.is-active {
+  transition:
+    opacity 240ms cubic-bezier(0.2, 0, 0, 1),
+    visibility 0ms;
+}
+.agent-strip-lift,
+.agent-strip > li:hover .agent-strip-lift {
+  transform: none;
+}
+.closing {
+  padding-top: 64px;
+}
+.closing-panel {
+  padding: 64px 32px;
+  border: 1px solid var(--g-line);
+  background: var(--g-surface-2);
+}
+.js [data-reveal] {
+  transform: translateY(8px);
+  transition:
+    opacity 240ms cubic-bezier(0.2, 0, 0, 1),
+    transform 240ms cubic-bezier(0.2, 0, 0, 1);
+  transition-delay: 0ms;
+}
+.js [data-reveal][data-revealed] {
+  transform: none;
+}
+@media (max-width: 1023px) {
+  .caps-panel {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .hero {
+    padding-top: 48px;
+  }
+  .hero-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .hero-title {
+    line-height: 40px;
+  }
+  .hero-detail {
+    max-width: 440px;
+    width: 100%;
+  }
+  .hero-aside {
+    justify-self: start;
+  }
+  .product-frame {
+    margin-top: 32px;
+  }
+  .caps-view {
+    margin: 12px;
+  }
+  .closing-panel {
+    padding: 48px 24px;
+  }
+  .nav-actions {
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal],
+  .m-scene,
+  .m-scene.is-active,
+  .caps-note,
+  .caps-note.is-active {
+    transition: none;
+    transform: none;
+  }
+}
+.agent-slot {
+  display: inline-grid;
+  clip-path: inset(-0.1em 0);
+  vertical-align: bottom;
+}
+.agent-word,
+.agent-measure {
+  grid-area: 1 / 1;
+}
+.agent-measure {
+  position: static;
+  visibility: hidden;
+}
+.agent-word {
+  animation: agent-enter 250ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+@keyframes agent-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-word {
+    animation: none;
+  }
+}
+:is(.product-frame, .hero-detail) > .theme-image-light {
+  display: none;
+}
+:is(.product-frame, .hero-detail) > .theme-image-dark {
+  display: block;
+}
+:root[data-theme="light"] :is(.product-frame, .hero-detail) > .theme-image-light {
+  display: block;
+}
+:root[data-theme="light"] :is(.product-frame, .hero-detail) > .theme-image-dark {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) :is(.product-frame, .hero-detail) > .theme-image-light {
+    display: block;
+  }
+  :root:not([data-theme]) :is(.product-frame, .hero-detail) > .theme-image-dark {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .nav-actions > .g-button {
+    display: none;
+  }
+}
+.appearance-control {
+  display: none;
+}
+.js .appearance-control {
+  display: block;
+}
+@media (max-width: 767px) {
+  .product-frame {
+    aspect-ratio: 4 / 3;
+  }
+  .product-frame img {
+    object-position: 62% top;
+  }
 }

@@ -1,12 +1,5 @@
 import { AGENT_BRAND_IDS, type AgentBrandId } from "@auracode/ui";
-import {
-  AgentMark,
-  Creature,
-  Logo,
-  Shallows,
-  type SwimmerSpec,
-  Swimmers,
-} from "@auracode/ui/graphite";
+import { AgentMark, Logo } from "@auracode/ui/graphite";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useInView, usePageVisible, useReducedMotion } from "../motion";
 import { AgentStrip } from "./AgentStrip";
@@ -24,18 +17,6 @@ const HOVER_INTENT_MS = 90;
  * chooses it in the view), and the views illustrate them, so they stay out of the accessibility
  * tree.
  */
-
-const SEAL: readonly SwimmerSpec[] = [
-  {
-    kind: "seal",
-    x: 0.14,
-    y: 0.86,
-    size: "clamp(120px, 14vw, 200px)",
-    depth: 0.35,
-    speed: 7,
-    phase: 4,
-  },
-];
 
 /*
  * The views are the app as it is today (visual language 6.1 to 6.14), at its own sizes, from
@@ -369,10 +350,7 @@ function AgentsView({ pointed }: { pointed: AgentBrandId | null }) {
   const chosen = pointed !== null && found ? pointed : "claude-code";
   return (
     <div className="m-pane m-new">
-      <Shallows className="m-water" aria-hidden="true">
-        <Creature kind="seal" className="m-swimmer m-swimmer-seal" />
-        <Creature kind="turtle" facing="left" className="m-swimmer m-swimmer-far" />
-      </Shallows>
+      <div className="m-water" aria-hidden="true" />
       <div className="m-new-column">
         <Logo size={32} className="m-new-logo" />
         <p className="m-new-title">What are we working on?</p>
@@ -411,25 +389,27 @@ function AgentsView({ pointed }: { pointed: AgentBrandId | null }) {
 /** A chat handed from Claude Code to Codex: the handoff waits in view above the composer. */
 function HandoffView() {
   return (
-    <div className="m-pane">
-      <Header title="Review the pacing change" project="auracode" />
-      <div className="m-body">
-        <p className="m-user">Check the pacing change for edge cases before we ship.</p>
-        <div className="m-turn">
-          <Fold>Thought for 3.1 s</Fold>
-          <Tool icon="edit" verb="Edited" object="src/pacing.ts">
-            <span className="m-stat">
-              <span className="m-add">+12</span> <span className="m-del">−3</span>
-            </span>
-          </Tool>
-          <p className="m-prose">
-            Frame pacing now waits on the clock and the tests pass. I did not look at what happens
-            when a frame lands late.
-          </p>
-          <Actions time="1m 12s" />
+    <div className="handoff-stage">
+      <div className="handoff-prior m-pane">
+        <Header title="Review the pacing change" project="auracode" />
+        <div className="m-body">
+          <p className="m-user">Check the pacing change for edge cases before we ship.</p>
+          <div className="m-turn">
+            <Fold>Thought for 3.1 s</Fold>
+            <Tool icon="edit" verb="Edited" object="src/pacing.ts">
+              <span className="m-stat">
+                <span className="m-add">+12</span> <span className="m-del">−3</span>
+              </span>
+            </Tool>
+            <p className="m-prose">
+              Frame pacing now waits on the clock and the tests pass. I did not look at what happens
+              when a frame lands late.
+            </p>
+          </div>
         </div>
       </div>
-      <div className="m-dock">
+      <span className="handoff-link" aria-hidden="true" />
+      <div className="handoff-next">
         <p className="m-handoff">
           <AgentMark agent="codex" size={16} />
           Next message includes a handoff to Codex
@@ -808,7 +788,7 @@ const ITEMS: readonly {
 export function Capabilities() {
   const panel = useRef<HTMLDivElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(1);
   const [held, setHeld] = useState(false);
   const [live, setLive] = useState(false);
   const [pointed, setPointed] = useState<AgentBrandId | null>(null);
@@ -883,8 +863,7 @@ export function Capabilities() {
           data-auto={auto ? "" : undefined}
           data-running={running ? "" : undefined}
         >
-          <Shallows className="caps-panel">
-            <Swimmers swimmers={SEAL} className="caps-swimmers" giveWay={false} />
+          <div className="caps-panel">
             <div className="caps-side">
               <div
                 className="caps-tabs"
@@ -958,7 +937,7 @@ export function Capabilities() {
                 </div>
               ))}
             </div>
-          </Shallows>
+          </div>
         </div>
       </div>
     </section>

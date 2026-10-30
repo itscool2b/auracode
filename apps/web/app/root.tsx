@@ -1,4 +1,3 @@
-import { Shallows, type SwimmerSpec, Swimmers } from "@auracode/ui/graphite";
 import type { ReactNode } from "react";
 import {
   isRouteErrorResponse,
@@ -17,12 +16,11 @@ import { SiteHeader } from "./header";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" className="g-root" suppressHydrationWarning>
+    <html lang="en" className="g-root" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="dark" />
-        <meta name="theme-color" content="#000000" />
+        <meta name="color-scheme" content="light dark" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -30,7 +28,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta property="og:image" content="https://auracode.si/og.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="The auracode logo, a sea lion and a sea turtle" />
+        <meta property="og:image:alt" content="The auracode logo" />
         <meta name="twitter:card" content="summary_large_image" />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed, hashed boot script. */}
         <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
@@ -56,19 +54,13 @@ export default function App() {
   return <Outlet />;
 }
 
-/** One turtle crossing the empty water. */
-const LOST: readonly SwimmerSpec[] = [
-  { kind: "turtle", x: 0.22, y: 0.3, size: "clamp(84px, 13vw, 168px)", tilt: -12, phase: 2 },
-];
-
 export function ErrorBoundary() {
   const error = useRouteError();
   const missing = isRouteErrorResponse(error) && error.status === 404;
   return (
     <main id="main" className="page error-page">
       <div className="frame page-frame">
-        <Shallows className="error-panel" shimmer>
-          <Swimmers swimmers={LOST} className="error-swimmers" />
+        <div className="error-panel">
           {missing ? (
             <p className="error-code" aria-hidden="true">
               404
@@ -88,7 +80,7 @@ export function ErrorBoundary() {
               </a>
             )}
           </div>
-        </Shallows>
+        </div>
       </div>
     </main>
   );

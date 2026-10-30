@@ -460,7 +460,7 @@
  */
 .setup-intro[data-leaving] .setup-intro-stage {
   opacity: 0;
-  transform: translateY(calc(var(--g-space-12) * -1));
+  transform: translateY(-2px);
 }
 
 .setup-intro[data-leaving="fast"] .setup-intro-stage {
@@ -577,11 +577,11 @@
 }
 
 .setup-intro[data-mode="live"] .setup-intro-mark {
-  animation: setup-intro-form var(--ui-intro-form) var(--g-ease-out) var(--ui-intro-form-at) both;
+  animation: setup-intro-form var(--g-dur-base) var(--g-ease-out) both;
 }
 
 .setup-intro[data-mode="live"] .setup-intro-word > .g-wordmark {
-  animation: g-rise var(--g-dur-headline) var(--g-ease-quint) var(--ui-intro-word-at) both;
+  animation: setup-intro-form var(--g-dur-base) var(--g-ease-out) both;
 }
 
 @keyframes setup-intro-water {
@@ -642,11 +642,9 @@
 @keyframes setup-intro-form {
   from {
     opacity: 0;
-    transform: scale(0.9);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

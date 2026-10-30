@@ -214,7 +214,7 @@ textarea.account-secret {
   height: 192px;
   border: 0;
   border-radius: var(--g-radius-8);
-  color-scheme: dark;
+  color-scheme: var(--g-color-scheme);
 }
 
 /* AccountVerification marks the frame when the keyboard moves focus into it. */

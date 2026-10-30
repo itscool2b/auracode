@@ -18,7 +18,7 @@
   flex-direction: column;
   box-sizing: border-box;
   width: 100%;
-  max-width: 688px;
+  max-width: 720px;
   min-height: 0;
   margin: 0 auto;
   /*
@@ -36,7 +36,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: var(--g-space-32);
+  margin-bottom: var(--g-space-24);
   text-align: center;
 }
 
@@ -49,8 +49,8 @@
 .new-chat-title {
   margin: 0;
   color: var(--g-fg-3);
-  font-size: var(--g-text-display);
-  line-height: var(--g-leading-display);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
   font-weight: 500;
   letter-spacing: var(--g-tracking-display);
   text-wrap: balance;
@@ -78,7 +78,7 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--ui-card-radius);
-  background-color: var(--g-surface-2);
+  background-color: var(--g-surface-1);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
@@ -110,7 +110,7 @@
 }
 
 /*
- * An agent: a 32px pill, its 24px mark 4px in, over a native radio that fills the pill unseen.
+ * An agent: a 32px control, its 24px mark 4px in, over a native radio that fills the control.
  * Colours move on hover in 100ms; a press drops the tween.
  */
 .new-chat-agent {
@@ -122,7 +122,7 @@
   height: 32px;
   padding: 0 var(--g-space-12) 0 var(--g-space-4);
   border: 0;
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
   background-color: transparent;
   box-shadow: inset 0 0 0 1px var(--g-line-strong);
   color: var(--g-fg-2);
@@ -141,7 +141,7 @@
 
 .new-chat-agent .g-agent-mark,
 .new-chat-unavailable .g-agent-mark {
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
 }
 
 @media (hover: hover) {
@@ -160,7 +160,7 @@
   height: 100%;
   margin: 0;
   border: 0;
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
   opacity: 0;
   cursor: pointer;
 }

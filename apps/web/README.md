@@ -41,12 +41,9 @@ fabricated mock. Regenerate it whenever the app changes visibly with
 900 and 2x and writes the WebP sources (480, 960, 1440 and 2240 wide) and the PNG fallback. The
 capabilities panel's views are drawn from tokens after the app's own preview modes (New chat, a
 pending handoff, the Changes panel, the picker, the queue and the sidebar); update them with the
-app. The
-favicons and the social card are generated at build time by `scripts/site-images.ts` from the
-logo's and the creatures' own paths; the social card is drawn in Shallows. The site is built in
-Shallows (`Shallows`, `Swimmers` and `Creature` from `@auracode/ui/graphite`) and ships no dither
-engine. Without JavaScript the swimmers render still at their anchors, the capabilities panel shows
-its first row and the FAQ opens natively. Reduced motion holds every swimmer still.
+app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
+logo's own paths. Without JavaScript the site follows the system theme, the capabilities panel shows
+the handoff example and the FAQ opens natively. Reduced motion disables automatic cycling and transitions.
 
 ## Deployment prerequisites
 

@@ -25,14 +25,13 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
+  margin: 0;
   overflow: auto;
   /* The chat's pane (6.1): rounded, a calm rim outside it and its top edge lit. */
   border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow:
-    0 0 0 1px var(--ui-pane-rim),
-    inset 0 1px 0 var(--ui-pane-rim-top);
+  border-left: 1px solid var(--g-line);
+  box-shadow: none;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
@@ -43,7 +42,7 @@
 
 .settings-content {
   box-sizing: border-box;
-  width: min(100%, 760px);
+  width: min(100%, 780px);
   margin-inline: auto;
   padding: var(--g-space-48) var(--g-space-40) var(--g-space-64);
 }
@@ -130,8 +129,9 @@
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
 }
 
 .settings-group:empty {
@@ -732,7 +732,7 @@ h1 + .settings-group {
 .settings-sidebar {
   position: relative;
   display: flex;
-  flex: 0 0 var(--g-app-sidebar);
+  flex: 0 0 var(--ui-sidebar-width);
   flex-direction: column;
   min-width: 0;
   padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
@@ -785,9 +785,9 @@ h1 + .settings-group {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background-color: var(--g-surface-2);
+  background-color: var(--g-hover);
   opacity: 0;
-  transform: scale(0.96);
+  transform: none;
   pointer-events: none;
   transition:
     opacity var(--g-dur-fast) var(--g-ease),
@@ -863,7 +863,7 @@ h1 + .settings-group {
 }
 
 .settings-sidebar nav button[aria-current]::before {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   opacity: 1;
   transform: none;
 }

@@ -52,7 +52,6 @@ function Fixture() {
   return (
     <main
       className="g-root"
-      data-theme="dark"
       style={{
         display: "flex",
         flexDirection: "column",

@@ -643,6 +643,19 @@
   color: var(--g-fg-3);
 }
 
+/* Vendor-supplied white marks keep their original artwork on a contrasting plate in both themes. */
+.g-agent-mark:where(
+  [data-logo][data-agent="codex"],
+  [data-logo][data-agent="pi"],
+  [data-logo][data-agent="opencode"],
+  [data-logo][data-agent="antigravity"],
+  [data-logo][data-agent="cursor"],
+  [data-logo][data-agent="hermes"],
+  [data-logo][data-agent="oh-my-pi"]
+):where([data-state="idle"], [data-ghost]) {
+  background-color: var(--g-brand-plate);
+}
+
 .g-agent-mark-glyph {
   display: block;
   padding-top: 0.06em;

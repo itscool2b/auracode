@@ -4,10 +4,10 @@ import { access, readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../build/client/", import.meta.url);
-test("public pages are prerendered, dark and usable without JavaScript", async () => {
+test("public pages are prerendered and follow the system theme without JavaScript", async () => {
   for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
-    assert.match(html, /<html[^>]*data-theme="dark"/);
+    assert.doesNotMatch(html, /<html[^>]*data-theme=/);
     assert.match(html, /<main/);
     assert.match(html, /<h1/);
     assert.doesNotMatch(html, /data-theme="light"/);
@@ -20,13 +20,18 @@ test("public pages are prerendered, dark and usable without JavaScript", async (
   await access(new URL("images/desktop-dark.png", root));
   for (const width of [480, 960, 1440, 2240])
     await access(new URL(`images/desktop-dark-${width}.webp`, root));
+  await access(new URL("images/desktop-light.png", root));
+  for (const width of [480, 960, 1440, 2240])
+    await access(new URL(`images/desktop-light-${width}.webp`, root));
+  for (const theme of ["light", "dark"])
+    await access(new URL(`images/hero-detail-${theme}.webp`, root));
   const home = await readFile(new URL("index.html", root), "utf8");
-  assert.match(home, /<picture><source[^>]*type="image\/webp"/);
+  assert.match(home, /<picture[^>]*><source[^>]*type="image\/webp"/);
   assert.match(
     home,
     /desktop-dark-480.webp 480w, \/images\/desktop-dark-960.webp 960w, \/images\/desktop-dark-1440.webp 1440w/,
   );
-  assert.match(home, /sizes="\(max-width: 620px\) calc\(100vw - 60px\)/);
+  assert.match(home, /sizes="\(max-width: 1240px\) calc\(100vw - 40px\)/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");

@@ -734,6 +734,9 @@ export type AppInfo = {
 	fatal: string | null,
 };
 
+/**  Appearance belongs to the active profile on this device, just like motion preferences. */
+export type AppearancePreference = "system" | "light" | "dark";
+
 /**  One normalized event in a chat. */
 export type AuraEvent = 
 /**  The session actor started a turn for the queued prompt `prompt_id`. */
@@ -2462,7 +2465,7 @@ export type SessionStatus =
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
 
-export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
 /**  Changing the agent clears the default model, which belongs to the previous agent. */
 { type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
@@ -2482,6 +2485,7 @@ export type SetupPreferences = {
 	revision: number,
 	step: SetupStep,
 	motion: MotionPreference,
+	appearance: AppearancePreference,
 	completed: boolean,
 	first_project_id: string | null,
 	/**  Files written before these settings existed read their defaults ([`fill_defaults`]). */

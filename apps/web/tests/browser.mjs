@@ -58,6 +58,7 @@ try {
       const context = await browser.newContext({
         viewport: { width: 1440, height: 1000 },
         reducedMotion: "reduce",
+        colorScheme: "dark",
       });
       const page = await context.newPage();
       const failures = [];
@@ -72,17 +73,59 @@ try {
         return route.continue();
       });
       await page.goto(base);
+      assert.equal(
+        await page
+          .getByRole("tab", { name: "Switch agents mid-chat" })
+          .getAttribute("aria-selected"),
+        "true",
+      );
+      const appearance = page.getByLabel("Appearance");
+      await appearance.selectOption("light");
+      assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll(".theme-image-light img, img.theme-image-light")].every(
+          (image) => image.complete && image.naturalWidth > 0,
+        ),
+      );
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
+          .violations,
+        [],
+      );
+      await page.screenshot({ path: join(artifacts, `${name}-home-light.png`), fullPage: true });
+      await page.getByRole("tab", { name: "Switch agents mid-chat" }).click();
+      await page
+        .locator(".handoff-stage")
+        .screenshot({ path: join(artifacts, `${name}-handoff-light.png`) });
+      await page.reload();
+      await page.waitForFunction(
+        () => document.querySelector(".appearance-control select")?.value === "light",
+      );
+      assert.equal(await page.getByLabel("Appearance").inputValue(), "light");
+      await appearance.selectOption("dark");
+      assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll(".theme-image-dark img, img.theme-image-dark")].every(
+          (image) => image.complete && image.naturalWidth > 0,
+        ),
+      );
+      await appearance.selectOption("system");
+      assert.equal(await page.evaluate(() => localStorage.getItem("auracode-appearance")), null);
+      assert.equal(await page.locator("html").getAttribute("data-theme"), null);
       await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
       await page.waitForFunction(() => {
         const image = document.querySelector(".product-frame img");
         return image?.complete && image.naturalWidth > 0;
       });
       assert.match(
-        await page.locator(".product-frame img").evaluate((image) => image.currentSrc),
+        await page
+          .locator(".product-frame .theme-image-dark img")
+          .evaluate((image) => image.currentSrc),
         /desktop-dark-\d+\.webp$/,
       );
       await page.screenshot({ path: join(artifacts, `${name}-home.png`), fullPage: true });
-      assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+      assert.equal(await page.locator("html").getAttribute("data-theme"), null);
       await settled(page);
       let axe = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -127,12 +170,25 @@ try {
       await page.keyboard.press("ArrowDown");
       assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
       assert.equal(await page.evaluate(() => document.activeElement?.id), "caps-tab-handoff");
+      const handoff = page.locator(".handoff-stage");
+      assert.equal(await handoff.isVisible(), true);
+      assert.equal(await handoff.locator(".handoff-prior").isVisible(), true);
+      assert.equal(await handoff.locator(".handoff-next").isVisible(), true);
+      assert.match(await handoff.locator(".handoff-prior").textContent(), /Frame pacing now waits/);
+      assert.match(
+        await handoff.locator(".handoff-next").textContent(),
+        /Next message includes a handoff to Codex/,
+      );
+      await handoff.screenshot({ path: join(artifacts, `${name}-handoff.png`) });
       await page.keyboard.press("End");
       assert.equal(await tabs.nth(5).getAttribute("aria-selected"), "true");
       await page.keyboard.press("Home");
       assert.equal(await tabs.nth(0).getAttribute("aria-selected"), "true");
       await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
+      await tabs.nth(1).click();
+      await handoff.screenshot({ path: join(artifacts, `${name}-handoff-mobile.png`) });
+      await tabs.first().click();
       await page.screenshot({ path: join(artifacts, `${name}-mobile.png`), fullPage: true });
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -153,7 +209,7 @@ try {
         (route) =>
           route.fulfill({
             contentType: "text/javascript",
-            body: "window.turnstile={render(el,options){options.callback('synthetic-ui-token');return 'test';},remove(){}};",
+            body: "window.turnstile={render(el,options){window.testTurnstileTheme=options.theme;options.callback('synthetic-ui-token');return 'test';},remove(){}};",
           }),
       );
       let verifications = 0;
@@ -175,6 +231,11 @@ try {
       });
       await page.goto(`${base}/signup`);
       await page.getByRole("heading", { name: "Invited sign-in" }).waitFor();
+      await page.waitForFunction(() => window.testTurnstileTheme === "dark");
+      await page.getByLabel("Appearance").selectOption("light");
+      await page.waitForFunction(() => window.testTurnstileTheme === "light");
+      await page.getByLabel("Appearance").selectOption("system");
+      await page.waitForFunction(() => window.testTurnstileTheme === "dark");
       await page.getByLabel("Email address").fill("uninvited@example.invalid");
       await page.getByRole("button", { name: "Send a code" }).click();
       await page.getByRole("alert").filter({ hasText: "invite-only" }).waitFor();
@@ -364,11 +425,15 @@ try {
         fullPage: true,
       });
       assert.deepEqual(failures, []);
-      const nojs = await browser.newContext({ javaScriptEnabled: false });
+      const nojs = await browser.newContext({ javaScriptEnabled: false, colorScheme: "light" });
       const staticPage = await nojs.newPage();
       await staticPage.goto(`${base}/download`);
       await staticPage.getByRole("heading", { name: "Windows", exact: true }).waitFor();
       await staticPage.getByRole("heading", { name: "macOS", exact: true }).waitFor();
+      assert.equal(
+        await staticPage.evaluate(() => getComputedStyle(document.body).backgroundColor),
+        "rgb(250, 250, 250)",
+      );
       await nojs.close();
       await context.close();
       console.log(

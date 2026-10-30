@@ -68,7 +68,6 @@ function Fixture() {
   return (
     <main
       className="g-root"
-      data-theme="dark"
       style={{
         padding: 24,
         minHeight: "100vh",

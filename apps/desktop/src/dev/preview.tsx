@@ -17,7 +17,6 @@ import { ChatView } from "../components/chat/ChatView";
 import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
 import { SidebarFooter } from "../components/chat/SidebarFooter";
 import { createXtermRuntime } from "../components/chat/terminalRuntime";
-import { PANE_SWIMMERS, Water } from "../components/Water";
 import {
   attachResult,
   chatSummary,
@@ -855,7 +854,6 @@ function Preview() {
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
     <div
       className="chat-app"
-      data-theme="dark"
       data-glass="none"
       data-os={new URLSearchParams(location.search).get("os") ?? "windows"}
       data-sidebar-collapsed={collapsed}
@@ -886,7 +884,6 @@ function Preview() {
         />
       </aside>
       <main className="chat-main">
-        {selected === null ? <Water className="pane-water" swimmers={PANE_SWIMMERS} /> : null}
         <div className="chat-drag" />
         {selected === null ? (
           <NewChatPreview
