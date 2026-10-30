@@ -115,8 +115,12 @@ pub async fn setup_apply(
     revision: u32,
     action: SetupAction,
 ) -> Result<SetupSnapshot, AppError> {
+    let appearance_changed = matches!(&action, SetupAction::Appearance { .. });
     let snapshot = run(&state, Some((revision, action))).await?;
     // Settings' switches take effect at once: new chats, notifications, keep-awake, closing.
     crate::general_preferences::apply(&app, &snapshot.preferences.general);
+    if appearance_changed {
+        crate::appearance::apply(&app, snapshot.preferences.appearance);
+    }
     Ok(snapshot)
 }
