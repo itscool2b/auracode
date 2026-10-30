@@ -163,6 +163,32 @@ function recorded(source: { events: readonly { type: string; data: unknown }[] }
 }
 
 function synthetic(mode: string): AuraEvent[] {
+  // The native smoke's short history crosses a prompt boundary just above the bottom.
+  // Keep both resolved permission rows: their measured heights trigger viewport clamping
+  // when the sticky prompt releases its reserved space.
+  if (mode === "smoke-scroll")
+    return [
+      ev.turnStarted("echo"),
+      ev.user("echo-user", "/echo Hello from the smoke run"),
+      ev.message("echo-answer", "Hello from the smoke run"),
+      ev.messageDone("echo-answer"),
+      ev.turnEnded("echo"),
+      ...synthetic("settled"),
+      ...["auto", "allow"].flatMap((id) => [
+        ev.turnStarted(id),
+        ev.user(`${id}-user`, `/permission ${id}`),
+        ev.toolCall(`${id}-tool`, {
+          kind: "execute",
+          title: "Run ls -la",
+          status: "completed",
+        }),
+        ev.permission(`${id}-permission`),
+        ev.permissionResolved(`${id}-permission`, "allow", id === "auto" ? "auto" : "user"),
+        ev.message(`${id}-answer`, "Done."),
+        ev.messageDone(`${id}-answer`),
+        ev.turnEnded(id),
+      ]),
+    ];
   if (mode === "focus-group")
     return [
       ev.turnStarted("focus-group"),
@@ -511,6 +537,7 @@ function Preview() {
   const requested = new URLSearchParams(location.search).get("preview") ?? "settled";
   const mode = [
     "settled",
+    "smoke-scroll",
     "streaming",
     "thinking",
     "permission",

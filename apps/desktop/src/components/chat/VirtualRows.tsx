@@ -110,11 +110,18 @@ export function VirtualRows({
     reading.current && reading.current.revision !== historyRevision ? () => false : undefined;
   const total = virtual.getTotalSize();
   const visibleItems = virtual.getVirtualItems();
+  // Explicit prompt navigation uses the viewport itself until the header has gone and the
+  // second scrollToIndex below aligns that prompt in the enlarged viewport.
+  const promptInset =
+    returningToPrompt.current === null ? (promptHost?.getBoundingClientRect().height ?? 0) : 0;
+  // Choose the prompt from the same point in the shell whether its header reserves space or
+  // not. Otherwise the header's own scroll compensation can cross a prompt boundary and hide
+  // the header again, reversing the compensation on the next frame.
   // When the content shrinks to fit, the browser clamps scrollTop without a scroll event, so the
   // remembered offset can point past the end. Clamp it before choosing the first visible row.
   const offset = Math.min(
-    virtual.scrollOffset ?? 0,
-    Math.max(0, total - (virtual.scrollRect?.height ?? 0)),
+    (virtual.scrollOffset ?? 0) - promptInset,
+    Math.max(0, total - (virtual.scrollRect?.height ?? 0) - promptInset),
   );
   const firstVisible = visibleItems.find((item) => item.end > offset + 1);
   const prompt = firstVisible && rows[firstVisible.index]?.prompt;
@@ -131,8 +138,10 @@ export function VirtualRows({
       returningToPrompt.current = null;
       if (index >= 0) virtual.scrollToIndex(index, { align: "start" });
     } else if (previous !== null && Math.abs(top - previous) > 0.5) {
-      // Reserving or releasing the prompt header must not move the text being read.
-      virtual.scrollToOffset(element.scrollTop + top - previous);
+      // Releasing the prompt header enlarges the viewport and can clamp the DOM's scrollTop
+      // before this effect runs. Adjust the pre-clamp position, or the header height is
+      // subtracted twice and the first visible prompt can alternate on every frame.
+      virtual.scrollToOffset((virtual.scrollOffset ?? element.scrollTop) + top - previous);
       stick.current?.acknowledgeAdjustment();
     }
   });
