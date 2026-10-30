@@ -2,6 +2,8 @@
 
 Status: **proposed visual checkpoint, awaiting owner review**. This is the current direction for the production website and desktop app. The checkpoint establishes a representative homepage and desktop workspace in both appearances. Full surface rollout, visual approval, native release verification and integration acceptance remain pending. Do not describe this styling as approved until the owner reviews the checkpoint. These decisions supersede the old dark-only Graphite, Orbit and Shallows directions. Historical Design Lab screens are studies, not product authority.
 
+The implemented proposal, reproducible review gallery and verification limits are recorded in [checkpoint-2026-10-30.md](checkpoint-2026-10-30.md).
+
 ## Purpose and boundaries
 
 The website combines Vercel's restrained hierarchy, Harvey's clear organization, and Typesafe's distinctive staged product proof. The desktop takes its organizational and visual cues primarily from Devin, with restrained touches from the Aura website. Adapt patterns to auracode's own product and capabilities. Do not copy reference brands, artwork or content, or imply unsupported functionality. Recompose layouts and navigation grouping while preserving existing actions, content, capabilities and workflows. Preserve the actual auracode logo, including its sea lion and turtle artwork, and its app icons and favicons. Remove independent decorative animals, swimming and water motifs across production surfaces and generated social art.

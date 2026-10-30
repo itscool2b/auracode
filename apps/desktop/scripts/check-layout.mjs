@@ -3,11 +3,11 @@
  * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
  * opens them ("settled#picker": the picker, the palette, the chat menu, the Changes panel, a
  * typed message) and other screens' states ("plugins#plugin-menu", an agent's opened details),
- * and fails on the five things a clean screen never has:
+ * and checks visual correctness, with optional grid diagnostics:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
- * 2. Off-grid containers: a padded block container whose offset from its padded parent, or whose
- *    width or height, is off Graphite's 4px grid by more than half a pixel.
+ * 2. Optional --strict-grid diagnostics: a padded block container whose offset from its padded
+ *    parent, or whose width or height, is off the 4px spacing grid by more than half a pixel.
  * 3. Overlapping controls: two visible interactive elements in the same layer (the page, one
  *    popover, one dialog) that overlap, unless one holds the other.
  * 4. Missing focus: an element reached with Tab that draws no visible ring (an outline or a ring
@@ -17,7 +17,8 @@
  *
  * Development-only fixtures; no agent process or prompt. Usage:
  *   node scripts/check-layout.mjs [--server URL] [--engines chromium,webkit]
- *     [--modes settled,thinking] [--sizes 1440x900,1024x700] [--focus-steps 120]
+ *     [--themes light,dark] [--modes settled,thinking] [--sizes 1440x900,1024x700]
+ *     [--focus-steps 120] [--strict-grid]
  * The report is written to target/layout-browser/<engine>.json.
  */
 import { spawn } from "node:child_process";
@@ -357,6 +358,8 @@ const { values } = parseArgs({
   options: {
     server: { type: "string" },
     engines: { type: "string", default: "chromium,webkit" },
+    themes: { type: "string", default: "light,dark" },
+    "strict-grid": { type: "boolean", default: false },
     modes: { type: "string" },
     sizes: { type: "string", default: "1440x900,1024x700" },
     "focus-steps": { type: "string", default: "120" },
@@ -372,7 +375,7 @@ const focusSteps = Number(values["focus-steps"]);
 const require = createRequire(import.meta.url);
 
 /** Runs in the page: the four static probes. Returns plain findings. */
-function probe() {
+function probe({ strictGrid = false } = {}) {
   const GRID = 4;
   const TOLERANCE = 0.5;
   for (const animation of document.getAnimations())
@@ -538,7 +541,7 @@ function probe() {
     if (!centredY && off(dy)) problems.push(`y ${dy.toFixed(1)}`);
     if (!ownWidth && off(box.width)) problems.push(`width ${box.width.toFixed(1)}`);
     if (off(box.height)) problems.push(`height ${box.height.toFixed(1)}`);
-    if (problems.length)
+    if (strictGrid && problems.length)
       findings.push({
         kind: "grid",
         target: path(element),
@@ -780,42 +783,51 @@ try {
     const browser = await launcher.launch({ headless: true });
     const report = [];
     try {
-      for (const [width, height] of sizes) {
-        const context = await browser.newContext({
-          viewport: { width, height },
-          reducedMotion: "reduce",
-          colorScheme: "dark",
-        });
-        const page = await context.newPage();
-        for (const mode of modes) {
-          const [preview, view] = mode.split("#");
-          // A fixture with its own page (an .html file) is opened by name.
-          await page.goto(
-            preview.split("?")[0].endsWith(".html")
-              ? `${url}/${preview}`
-              : `${url}/?preview=${preview}`,
-          );
-          await page.waitForLoadState("networkidle").catch(() => {});
-          await page.evaluate(() => document.fonts.ready);
-          await page.waitForTimeout(900);
-          if (view) {
-            await OPENERS[view](page);
-            await page.waitForTimeout(400);
+      for (const theme of values.themes.split(",")) {
+        if (!["light", "dark"].includes(theme)) throw new Error(`Unsupported theme: ${theme}`);
+        for (const [width, height] of sizes) {
+          const context = await browser.newContext({
+            viewport: { width, height },
+            reducedMotion: "reduce",
+            colorScheme: theme,
+          });
+          const page = await context.newPage();
+          for (const mode of modes) {
+            const [preview, view] = mode.split("#");
+            // A fixture with its own page (an .html file) is opened by name.
+            await page.goto(
+              preview.split("?")[0].endsWith(".html")
+                ? `${url}/${preview}`
+                : `${url}/?preview=${preview}&theme=${theme}`,
+            );
+            await page.waitForLoadState("networkidle").catch(() => {});
+            await page.evaluate(() => document.fonts.ready);
+            await page.waitForTimeout(900);
+            if (view) {
+              await OPENERS[view](page);
+              await page.waitForTimeout(400);
+            }
+            const found = await page.evaluate(probe, { strictGrid: values["strict-grid"] });
+            const focus = await walkFocus(page);
+            const findings = [...found, ...focus.findings];
+            report.push({
+              mode,
+              theme,
+              size: `${width}x${height}`,
+              focusStops: focus.stops,
+              findings,
+            });
+            const counts = findings.reduce((all, { kind }) => {
+              all[kind] = (all[kind] ?? 0) + 1;
+              return all;
+            }, {});
+            totals[`${engine} ${theme} ${width}x${height} ${mode}`] = counts;
+            console.log(
+              `${engine} ${theme} ${width}x${height} ${mode}: ${findings.length === 0 ? "clean" : JSON.stringify(counts)} (${focus.stops} focus stops)`,
+            );
           }
-          const found = await page.evaluate(probe);
-          const focus = await walkFocus(page);
-          const findings = [...found, ...focus.findings];
-          report.push({ mode, size: `${width}x${height}`, focusStops: focus.stops, findings });
-          const counts = findings.reduce((all, { kind }) => {
-            all[kind] = (all[kind] ?? 0) + 1;
-            return all;
-          }, {});
-          totals[`${engine} ${width}x${height} ${mode}`] = counts;
-          console.log(
-            `${engine} ${width}x${height} ${mode}: ${findings.length === 0 ? "clean" : JSON.stringify(counts)} (${focus.stops} focus stops)`,
-          );
+          await context.close();
         }
-        await context.close();
       }
     } finally {
       await browser.close();

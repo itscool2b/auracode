@@ -147,9 +147,9 @@ async function inspect(engine, launcher) {
           `${mode}: horizontal page overflow`,
         );
         assert.equal(
-          await page.locator(".chat-app").getAttribute("data-theme"),
-          "dark",
-          "the product must stay dark regardless of system appearance",
+          await page.locator("html").getAttribute("data-theme"),
+          theme,
+          "system appearance must reach the chat and its portals",
         );
         await settled(page);
         const scan = await new AxeBuilder({ page })
@@ -255,6 +255,9 @@ async function inspect(engine, launcher) {
         node.scrollTop += node.clientHeight * 0.7;
         await paint();
       }
+      // Expanded tool content can exceed two viewport steps with either theme's font metrics.
+      node.scrollTop = node.scrollHeight;
+      await paint();
       const frames = [];
       for (let frame = 0; frame < 60; frame++) {
         await new Promise(requestAnimationFrame);
@@ -648,6 +651,12 @@ async function inspect(engine, launcher) {
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
     const thought = page.locator(".chat-thought");
     await thought.locator("summary").click();
+    // Opening the disclosure can change virtual row heights and restore the tail position.
+    // Scroll away again so the jump control is offered before testing the return to the tool.
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+      node.scrollTop = 0;
+    });
     await page.getByTestId("jump-latest").click();
     await lastTool.waitFor();
     assert.notEqual(
