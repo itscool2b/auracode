@@ -84,7 +84,7 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
       if (message.type() === "error" && message.text().includes("Content Security Policy"))
         errors.push(message.text());
     });
-    // The app's explicit choice must reach the remote child even when it opposes the OS.
+    // The desktop frame follows its theme; the hosted verification page stays light.
     await page.goto("http://tauri.localhost/?preview=verification&theme=light");
     const request = page.getByRole("button", { name: "Request sign-in code" });
     const child = page.frameLocator("iframe");
@@ -96,7 +96,7 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
     const nonce = await childFrame.evaluate(() => window.syntheticAttempt);
     const assertTheme = async (theme) => {
       await childFrame
-        .waitForFunction((expected) => window.syntheticTheme === expected, theme)
+        .waitForFunction(() => window.syntheticTheme === "light")
         .catch(async (error) => {
           const state = JSON.stringify({
             parent: await page.evaluate(() => ({
@@ -124,7 +124,7 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
           dark: matchMedia("(prefers-color-scheme: dark)").matches,
           nonce: window.syntheticAttempt,
         })),
-        { scheme: theme, dark: theme === "dark", nonce },
+        { scheme: "light", dark: theme === "dark", nonce },
       );
       assert.equal(
         await child.getByRole("button", { name: "Complete synthetic verification" }).count(),
@@ -171,15 +171,11 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-account-verification-light.png`) });
 
-    // Retheme the existing iframe in place. A replaced widget must invalidate its previous proof.
+    // Retheme the frame without replacing the light website widget or invalidating its proof.
+    const initialRenders = await childFrame.evaluate(() => window.syntheticRenders);
     await setAppearance("dark");
     await assertTheme("dark");
-    await page.waitForFunction(
-      () => document.querySelector(".account-verification").dataset.phase === "pending",
-    );
-    assert.equal(await request.isDisabled(), true);
-    await child.getByRole("button", { name: "Complete synthetic verification" }).click();
-    await page.getByText("Verification complete.", { exact: true }).waitFor();
+    assert.equal(await childFrame.evaluate(() => window.syntheticRenders), initialRenders);
     assert.equal(await request.isEnabled(), true);
 
     // Returning to System without a visual change keeps the valid widget, then follows the OS.
@@ -190,14 +186,9 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
     assert.equal(await request.isEnabled(), true);
     await page.evaluate(() => window.syntheticSystemAppearance("light"));
     await assertTheme("light");
-    await page.waitForFunction(
-      () => document.querySelector(".account-verification").dataset.phase === "pending",
-    );
-    assert.equal(await request.isDisabled(), true);
+    assert.equal(await request.isEnabled(), true);
     await page.evaluate(() => window.syntheticSystemAppearance("dark"));
     await assertTheme("dark");
-    await child.getByRole("button", { name: "Complete synthetic verification" }).click();
-    await page.getByText("Verification complete.", { exact: true }).waitFor();
     assert.equal(await request.isEnabled(), true);
     assert.deepEqual(
       await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })),

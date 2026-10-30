@@ -1,6 +1,6 @@
 # Aura visual system
 
-Status: **full styling pass in progress, awaiting owner visual approval**. This direction covers the light-only production website and the desktop app in both appearances. The expanded pass is being implemented and tested; visual approval, final verification and native release acceptance remain pending. Do not treat current styling or captures as an approved golden baseline. These decisions supersede the old dark-only Graphite, Orbit and Shallows directions. Historical Design Lab screens are studies, not product authority.
+Status: **full styling pass implemented, awaiting owner visual approval**. This direction covers the light-only production website and the desktop app in both appearances. Local visual and browser verification is recorded in the review record; final remote integration checks and native release acceptance remain separate gates. Do not treat current styling or captures as an approved golden baseline until the owner locks the design. These decisions supersede the old dark-only Graphite, Orbit and Shallows directions. Historical Design Lab screens are studies, not product authority.
 
 The implemented proposal, reproducible review gallery and verification limits are recorded in [checkpoint-2026-10-30.md](checkpoint-2026-10-30.md).
 
@@ -16,7 +16,7 @@ Dark background and first four surfaces are `#101112`, `#141516`, `#1c1d1f`, `#2
 
 Desktop uses Inter for interface and prose, website uses Geist, and machine-generated text uses Geist Mono. Desktop chrome is 13/20px, prose 15/24px, metadata 12/16px, title 20/28px. Website hero is 48/52px, 36/40px on mobile; section heading 32/38px; body 16/24px. Use a compact 6, 8 and 12px radius family. These values guide production consistency; preserve legibility and actual content needs.
 
-Desktop appearance defaults to System, with profile-local persisted Light and Dark overrides in the versioned setup preferences. Follow OS changes while System is selected and keep the document root, native window and menus, portals and terminal palette consistent with the resolved desktop appearance. The website is permanently light, with no appearance control or persisted theme, including its script-free standalone notices page. Website forms and third-party verification use light appearance. Preserve non-JavaScript behavior and the website's hashed content security policy.
+Desktop appearance defaults to System, with profile-local persisted Light and Dark overrides in the versioned setup preferences. Follow OS changes while System is selected and keep the document root, native window and menus, portals and terminal palette consistent with the resolved desktop appearance. The website is permanently light, with no appearance control or persisted theme, including its script-free standalone notices page. Website forms and third-party verification use light appearance. The hosted verification page also remains light inside a dark desktop dialog; the surrounding native UI retains its selected appearance. Preserve non-JavaScript behavior and the website's hashed content security policy.
 
 ## Desktop composition
 

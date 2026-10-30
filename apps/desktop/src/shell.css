@@ -37,10 +37,8 @@
 }
 
 /*
- * The main pane (Shallows, 6.1): one rounded, opaque panel inset from the black window, with a calm
- * rim lit along its top edge and a faint light falling from the top, as the water's does. The chat
- * and New chat sit in it (Settings and Diagnostics draw the same pane); the sidebar stays on the
- * black base. The rim is drawn outside the pane, so nothing inside can cover it.
+ * The main pane is a flat, opaque work surface beside the sidebar. Chat and New chat share it;
+ * Settings and Diagnostics use the same paired surface tokens and native title-control clearance.
  */
 .chat-main {
   position: relative;

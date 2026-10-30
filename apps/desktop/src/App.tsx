@@ -352,7 +352,6 @@ export function App({
 
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
-  // The stress view's ambient water: every swimmer at once, moving only while something streams.
 
   if (view === "setup")
     return (

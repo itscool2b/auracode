@@ -1,6 +1,5 @@
 /*
- * The app's micro-motion (docs/design/visual-language.md, 3.8 and 6.1 to 6.20, Shallows): the small
- * places a hand or an eye lands on settle the way the water moves, softly and once. Only transform
+ * The app's interaction motion follows docs/design/visual-language.md. Only transform
  * (and `translate`) and opacity ever move; colour may cross-fade, nothing changes layout, nothing
  * idles, and every rule here stands still under reduced motion (the OS setting or the app's own).
  *
