@@ -4789,3 +4789,17 @@ An earlier full browser run timed out at the existing history-250 wait. Six focu
 replays and the unchanged full rerun passed; that intermittent failure is retained without
 claiming its cause was fixed. Hosted native chat, reopen and the complete layout probe still
 require a final-source rerun.
+
+### 2026-10-30: Keep the slow-folder test hook from delaying unrelated probes
+
+The integrated account-sync rerun passed 640 library tests and failed the existing folder-list
+responsiveness test before reaching integration tests. Its test-only delay retained a mutex
+guard through the simulated slow-folder sleep, so an unrelated folder could also miss the list
+deadline. This reproduced a previously intermittent assertion without involving process spawning.
+
+The hook now releases its configuration lock before sleeping. The existing regression deliberately
+starts the slow probe first and preserves its original deadlines, folder states and singleflight
+assertions. It fails deterministically before the repair, then passes four consecutive targeted
+runs afterward. The change is entirely test-only; production folder checks are unchanged.
+Independent review, scoped all-target account-sync Clippy and formatting pass. The complete
+account-sync test suite and final hosted CI remain pending at this checkpoint.
