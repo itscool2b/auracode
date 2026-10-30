@@ -4742,3 +4742,28 @@ three failing scenario tests before the harness correction. A negative case veri
 unchecked radio preserves the native-window result and prevents chat creation. All 15 acceptance
 inventory/WebDriver script tests, changed-file Biome, instruction parity and diff checks pass.
 The actual hosted Windows WebDriver rerun is still required; this entry records no native pass.
+
+### 2026-10-30: Repair process spawning and the Windows link fixture exposed by CI
+
+The completed hosted run passed both encrypted-storage jobs, PowerShell checks and generated
+binding parity. The bootstrap artifact exactly matched committed bindings. Hosted Windows also
+passed the three targets previously unavailable under local Application Control. Its ordinary
+workspace run passed 2183 tests with one intentional Worker-harness ignore and one failing
+relative-link fixture. macOS exposed a separate PTY lifetime failure. Neither full workspace
+run is recorded as passing.
+
+Owned process launches now serialize the short spawn boundary with PTY descriptor setup.
+The previous shared spawn guard allowed concurrent launches to inherit temporary descriptors,
+consistent with the macOS PTY test stalling until its sibling's 600-second lifetime expired.
+Editor, cleanup-review Git, detached cleanup helper and macOS process-table launches use the
+same boundary. The guard is released before waiting or draining output. Two deterministic
+regressions failed before correction; 236 process tests and seven affected caller tests pass,
+with scoped all-target Clippy and formatting. Independent review is complete. The actual macOS
+runtime rerun remains required; the failed run did not capture the individual inherited descriptor.
+
+The Windows relative-link fixture now constructs its target with native path components while
+retaining the linked-folder traversal and canonical destination assertions. A Windows error-123
+assertion preserves conservative classification of an invalid target. No production classifier
+or test skip changed. All 79 configuration-library tests and scoped Clippy pass locally, but this
+PC's existing missing-symlink-privilege skip means actual traversal must be verified on hosted
+Windows. No security setting or owner data was changed.
