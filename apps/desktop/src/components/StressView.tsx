@@ -11,8 +11,8 @@ import { ArrowLeftIcon } from "./icons";
 import { Answer } from "./Markdown";
 
 /**
- * The worst case the UI must stay smooth under: up to 24 live orbs, the lit water with every
- * swimmer, and a fast markdown stream, with the frame rate on screen. `seconds` > 0 streams for
+ * The worst case the UI must stay smooth under: up to 24 live orbs and a fast markdown stream,
+ * with the frame rate on screen. `seconds` > 0 streams for
  * that long, in one turn or, past what a turn holds, several back to back; 0 streams turn after
  * turn until stopped (what the power spike measures). `StressRun` sizes the turns.
  */
@@ -115,15 +115,6 @@ export function StressView({
             step={10}
             onChange={(rate) => onConfigChange({ ...config, rate })}
           />
-          <label className="field">
-            <input
-              type="checkbox"
-              className="g-switch"
-              checked={config.aura}
-              onChange={(event) => onConfigChange({ ...config, aura: event.currentTarget.checked })}
-            />
-            Lit water
-          </label>
           <div className="stress-run">
             <button
               type="button"

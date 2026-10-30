@@ -211,7 +211,6 @@
     .agent-row[data-open] .agent-row-update,
     .agent-row[data-open] .agent-row-note,
     .agent-detail,
-    .plugins-harness,
     .library-feedback
   ) {
   background-color: var(--g-surface-2);
@@ -323,6 +322,12 @@
 .chat-app input[type="checkbox"]:not([role="switch"]):checked,
 .g-dialog input[type="checkbox"]:not([role="switch"]):checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
+}
+
+:root[data-theme="light"]
+  :is(.chat-app, .g-dialog)
+  input[type="checkbox"]:not([role="switch"]):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='white' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
 .chat-app input[type="radio"]:not([role="switch"]):checked,
@@ -869,9 +874,19 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-row[aria-current="true"]::before {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   opacity: 1;
   transform: none;
+}
+
+.chat-row[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 2px;
+  height: 12px;
+  background-color: var(--g-volt);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -923,7 +938,7 @@ details.setup-install-review[open] > summary::before {
 
 /* On the open chat the menu button takes the row's fill, so the title ends cleanly. */
 .chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
 }
 
 .chat-row-status {
@@ -1244,7 +1259,7 @@ details.setup-install-review[open] > summary::before {
 @keyframes chat-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.96);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;
@@ -1411,7 +1426,7 @@ details.setup-install-review[open] > summary::before {
 @keyframes chat-popover-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.96);
+    transform: translateY(2px);
   }
   to {
     opacity: 1;

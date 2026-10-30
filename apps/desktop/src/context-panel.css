@@ -47,7 +47,7 @@
   width: 8px;
   height: auto;
   margin: 0;
-  padding: 0 calc((var(--ui-pane-inset) - var(--g-space-2)) / 2);
+  padding: 0 calc((var(--g-space-8) - var(--g-space-2)) / 2);
   border: 0;
   background-clip: content-box;
   cursor: col-resize;
@@ -75,8 +75,7 @@
 }
 
 /*
- * The tabs read like Grok's header pills: words in fg-2 on the pane, the open one on a surface-3
- * fill. The white pill stays for the one primary action on screen.
+ * Workspace tabs use a quiet fill to identify the active view.
  */
 .context-panel-tabs {
   display: inline-flex;
@@ -94,7 +93,7 @@
   gap: var(--g-space-6);
   height: 28px;
   padding: 0 var(--g-space-12);
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
   color: var(--g-fg-2);
   font-weight: 500;
   white-space: nowrap;
@@ -110,7 +109,7 @@
 }
 
 .context-panel-tabs button[aria-selected="true"] {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-selected);
   color: var(--g-fg-1);
 }
 

@@ -3,7 +3,7 @@
 /* Align Refresh with the right edge of the selected agent's content. */
 .plugins-screen .library-heading {
   width: 100%;
-  max-width: 1168px;
+  max-width: 988px;
 }
 
 .plugins-body {
@@ -58,8 +58,19 @@
 }
 
 .plugins-agents > button[aria-current="page"] {
+  position: relative;
   background-color: var(--g-selected);
   color: var(--g-fg-1);
+}
+
+.plugins-agents > button[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 2px;
+  height: 12px;
+  background-color: var(--g-volt);
 }
 
 .plugins-agents > button:focus-visible {
@@ -106,7 +117,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--g-space-16);
-  max-width: 880px;
+  max-width: 700px;
 }
 
 .plugins-agent-head {
@@ -260,21 +271,12 @@
 }
 
 .plugins-rows {
-  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--g-space-4) var(--g-space-16);
   margin: 0;
   padding: 0;
   list-style: none;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-}
-
-.plugins-rows::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--g-line);
-  pointer-events: none;
 }
 
 /* 60px rows, as on Agents: a 28px action and two lines of text both centre on the grid. */
@@ -283,12 +285,21 @@
   align-items: center;
   gap: var(--g-space-12);
   min-height: 60px;
-  padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
+  padding: var(--g-space-8);
+  border-radius: var(--g-radius-6);
   contain: layout style;
 }
 
-.plugins-row + .plugins-row {
-  box-shadow: inset 0 1px 0 var(--g-line);
+@media (hover: hover) {
+  .plugins-row:hover {
+    background-color: var(--g-hover);
+  }
+}
+
+@media (max-width: 1100px) {
+  .plugins-rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .plugins-row-text {
