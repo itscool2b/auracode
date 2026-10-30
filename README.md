@@ -26,8 +26,8 @@ the design authority for new product screens.
 Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
 and Cloudflare Email Service. The website is published at [auracode.si](https://auracode.si) and its
 isolated preview;
-the Rust API is available only in preview. Production API resources are prepared, but public API
-routing remains closed and accounts and downloads are not enabled. Real email/device acceptance
+the Rust API is routed on both hosts. Its current public configuration reports `private_preview=true`;
+public accounts are not enabled and downloads are not published. Real email/device acceptance
 remains pending. Production account storage remains empty.
 React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
 Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.

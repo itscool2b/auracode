@@ -45,10 +45,10 @@ the default example and the FAQ opens natively. The standalone notices page is s
 The assets-only `wrangler.toml` remains available. The separate [Rust website Worker](../web-worker/README.md)
 embeds the same public build for ordinary code deployment without an Assets upload. It is deployed
 at [auracode.si](https://auracode.si) and [preview.auracode.si](https://preview.auracode.si).
-Live checks verified all 48 public files, nine page HEAD responses, security headers and missing-asset
-handling. Preview `/api/*` resolves to
-the more-specific Rust API Worker route on the same origin. Production `/api/*` remains closed with
-404 responses; public accounts are not enabled. Deploy only one website implementation per route
+The Rust API Worker is routed on both hosts, and its current public configuration reports
+`private_preview=true`; public accounts are not enabled and downloads are not published. Styling
+production rollout is authorized and follows the merge and automatic deployment; it is not yet
+claimed as deployed here. Deploy only one website implementation per route
 and rebuild from the final integrated source. The generated `_headers` supplies a hash-based CSP
 for the exact prerendered framework scripts. Rebuild headers
 whenever HTML changes. Turnstile is the only permitted third-party script and frame origin.
