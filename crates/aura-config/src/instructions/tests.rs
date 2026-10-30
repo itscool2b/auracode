@@ -129,7 +129,7 @@ fn case_insensitive(dir: &Path) -> bool {
     found
 }
 
-fn symlink(target: &str, link: &Path) -> bool {
+fn symlink(target: impl AsRef<Path>, link: &Path) -> bool {
     #[cfg(windows)]
     let made = std::os::windows::fs::symlink_file(target, link);
     #[cfg(unix)]
@@ -1001,6 +1001,11 @@ fn link_classification_follows_the_resolved_target_never_the_link_text() {
     );
     let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
     assert_eq!(classify_link(Some(&root), Err(denied)), LinkTarget::Outside);
+    #[cfg(windows)]
+    assert_eq!(
+        classify_link(Some(&root), Err(std::io::Error::from_raw_os_error(123))),
+        LinkTarget::Outside
+    );
     assert_eq!(
         classify_link(None, Ok(root.join("AGENTS.md"))),
         LinkTarget::Outside
@@ -1023,7 +1028,10 @@ fn a_relative_link_through_a_linked_folder_is_classified_by_where_the_os_resolve
         return;
     }
     // By text `linked/../AGENTS.md` is the project's AGENTS.md; the OS may follow `linked` first.
-    if !symlink("linked/../AGENTS.md", &fixture.project.join("CLAUDE.md")) {
+    // Windows stores a relative symlink's target verbatim, so use native separators without
+    // normalizing away `..` or resolving the linked folder before the OS opens the link.
+    let target = Path::new("linked").join("..").join("AGENTS.md");
+    if !symlink(&target, &fixture.project.join("CLAUDE.md")) {
         eprintln!("skipped: creating a file symlink needs Developer Mode or elevation here");
         return;
     }
