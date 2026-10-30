@@ -4698,12 +4698,16 @@ and restoration, and committed-file recreation with a separate uncommitted backu
 A real public clone succeeded and was added normally. Search and ordinary quit/restart/quit preserved
 projects, history and preferences; both quits exited successfully.
 
-The final embedded Demo smoke launch is held while gaming because Windows smoke shows and focuses
-a window. Tray-icon reopen/quit could not be targeted by the installed input tool, and notification
-clicks remain unobserved. Minimal real Claude/Codex pipelines were exercised through Rust APIs;
-the Codex exact-text helper's punctuation deviation remains recorded. No further paid turn was used.
+The final embedded build passes. Its Demo smoke launch stays off this PC while gaming because
+Windows smoke shows and focuses a window. The owner requested CI for the remaining verification;
+workflow dispatch and its result are the next gate. Tray-icon reopen/quit could not be targeted
+by the installed input tool, and notification clicks remain unobserved. Minimal real Claude/Codex
+pipelines were exercised through Rust APIs; the Codex exact-text helper's punctuation deviation
+remains recorded. No further paid turn was used. No owner agent credential or configuration files
+were inspected or changed.
+
 Windows shell fixtures retain six documented POSIX/executable-bit assumptions and PowerShell 5 is
-policy-blocked; PowerShell 7 checks pass. Real account sign-in/email, macOS, hosted CI billing and
-dispatch, signing/key backup and release/domain decisions remain owner/platform gates. Real cleanup,
-uninstall, owner agent credentials/configuration and the product's real PR-creation flow were not
-used. Publication and post-merge asset verification remain pending at this checkpoint.
+policy-blocked; PowerShell 7 checks pass. Real account sign-in/email, native macOS hands-on acceptance,
+signing/key backup and release/domain decisions remain owner/platform gates. Real cleanup, uninstall
+and the product's real PR-creation flow were not used. GitHub billing availability, CI results,
+publication and post-merge asset verification remain pending at this checkpoint.
