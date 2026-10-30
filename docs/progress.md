@@ -4767,3 +4767,25 @@ assertion preserves conservative classification of an invalid target. No product
 or test skip changed. All 79 configuration-library tests and scoped Clippy pass locally, but this
 PC's existing missing-symlink-privilege skip means actual traversal must be verified on hosted
 Windows. No security setting or owner data was changed.
+
+### 2026-10-30: Stabilize the sticky prompt at the transcript boundary
+
+Both hosted native chat checks stopped because the transcript reader could not reach the end.
+A four-turn fixture using the real transcript reproduced an idle feedback loop: the sticky
+prompt repeatedly reserved and released 32 pixels while scrollTop alternated by 64 pixels.
+The content height stayed fixed. Prompt selection now uses a stable point in the surrounding
+chat, and header removal compensates from the virtualizer's offset before viewport clamping.
+Explicit return-to-prompt navigation retains its separate final alignment.
+
+The normal chat acceptance command now observes 60 idle frames, uses wheel input, returns to
+a later prompt, reads every turn through the unchanged native smoke reader, and checks that
+appended output stays pinned. Chromium and WebKit pass these checks and the existing history,
+focus, reading-anchor and minimum-window checks, with 88 accessibility scans. All 39 focused
+scroll/smoke unit tests pass. Independent review is complete, and the integrated desktop
+typecheck, 534 tests and ten Node tests pass with 19 existing skips. No styling, smoke-reader
+limit or tolerance changed.
+
+An earlier full browser run timed out at the existing history-250 wait. Six focused sequence
+replays and the unchanged full rerun passed; that intermittent failure is retained without
+claiming its cause was fixed. Hosted native chat, reopen and the complete layout probe still
+require a final-source rerun.
