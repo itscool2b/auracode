@@ -185,7 +185,7 @@ const HOLDS: Record<ConfigHold["kind"], string> = {
 };
 
 /**
- * Configuration sync as settings rows in one well (X Money's groups): each agent file with where it
+ * Configuration sync as settings rows in one well: each agent file with where it
  * applies, where it stands, a switch to keep it on this device and Review. Every change is reviewed
  * in a dialog first (one sentence, the choice, four versions, Cancel and one action); History holds
  * what was applied here, each with its own reviewed restore.

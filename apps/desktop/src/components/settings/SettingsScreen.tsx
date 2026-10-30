@@ -211,8 +211,8 @@ export function SettingsScreen({
         </nav>
       </aside>
       <main className="settings-main">
-        <div className="settings-drag" data-tauri-drag-region="" />
         <nav className="settings-breadcrumb" aria-label="Settings breadcrumbs">
+          <div className="settings-breadcrumb-drag" data-tauri-drag-region="" aria-hidden="true" />
           <span>Settings</span>
           <span aria-hidden="true">/</span>
           <span aria-current="page">{title}</span>
