@@ -46,9 +46,8 @@ The assets-only `wrangler.toml` remains available. The separate [Rust website Wo
 embeds the same public build for ordinary code deployment without an Assets upload. It is deployed
 at [auracode.si](https://auracode.si) and [preview.auracode.si](https://preview.auracode.si).
 The Rust API Worker is routed on both hosts, and its current public configuration reports
-`private_preview=true`; public accounts are not enabled and downloads are not published. Styling
-production rollout is authorized and follows the merge and automatic deployment; it is not yet
-claimed as deployed here. Deploy only one website implementation per route
+`private_preview=true`; public accounts are not enabled and downloads are not published. Production styling deploys automatically from main after merge through Cloudflare Workers Builds;
+verify the deployment against the merged commit. Deploy only one website implementation per route
 and rebuild from the final integrated source. The generated `_headers` supplies a hash-based CSP
 for the exact prerendered framework scripts. Rebuild headers
 whenever HTML changes. Turnstile is the only permitted third-party script and frame origin.
