@@ -307,11 +307,45 @@ async function inspect(engine, launcher) {
         prompt && Math.abs(prompt.getBoundingClientRect().top - log.getBoundingClientRect().top) < 3
       );
     });
-    await page.mouse.wheel(0, 2000);
-    await page.waitForFunction(() => {
-      const node = document.querySelector('[data-testid="transcript"]');
-      return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+    // The dismissed prompt's coordinates can become its header again during the scroll.
+    // Keep this real wheel gesture over the stable middle of the transcript instead.
+    await scrollSurface.hover();
+    const returnPointer = await scrollSurface.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     });
+    await page.mouse.wheel(0, 2000);
+    try {
+      await page.waitForFunction(() => {
+        const node = document.querySelector('[data-testid="transcript"]');
+        return Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2;
+      });
+    } catch (cause) {
+      const geometry = await page.evaluate((pointer) => {
+        const node = document.querySelector('[data-testid="transcript"]');
+        const hit = document.elementFromPoint(pointer.x, pointer.y);
+        return {
+          scrollTop: node.scrollTop,
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+          pointer,
+          hit: hit && {
+            tag: hit.tagName,
+            class: hit.getAttribute("class"),
+            testId: hit.getAttribute("data-testid"),
+            inTranscript: node.contains(hit),
+          },
+        };
+      }, returnPointer);
+      await writeFile(
+        resolve(out, `${engine}-smoke-return-scroll.json`),
+        JSON.stringify(geometry, null, 2),
+      );
+      throw new Error(
+        `${engine}: return wheel did not reach the transcript bottom: ${JSON.stringify(geometry)}`,
+        { cause },
+      );
+    }
     const complete = await page.evaluate(async () => {
       const { readFullTranscript } = await import("/src/lib/smokePage.ts");
       return (await readFullTranscript()).map((turn) => ({

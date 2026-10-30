@@ -32,7 +32,7 @@ Preserve all content and actions on home, download, sign in, sign up, device ver
 
 ## Motion and accessibility
 
-Motion is primarily event-driven; avoid decorative ambient motion. Existing marketing agent rotation and capability cycles are preserved and pause offscreen and under reduced motion. Use `cubic-bezier(0.2, 0, 0, 1)`: hover 120ms, press 80ms, popover 160ms with at most 2px travel, panel 180ms, website entrance 240ms with at most 8px travel once per capability, and fixed-width agent-name rotation 250ms. Reduced motion removes movement and duration. State changes must remain understandable without animation. Preserve visible keyboard focus, native dialog behavior, accessible names, error announcements, readable contrast, and robust zoom and reflow.
+Motion is primarily event-driven; avoid decorative ambient motion. Existing marketing agent rotation and capability cycles pause while the page is hidden and under reduced motion; the capability cycle also pauses when its section is offscreen or being used. Use `cubic-bezier(0.2, 0, 0, 1)`: hover 120ms, press 80ms, popover 160ms with at most 2px travel, panel 180ms, website entrance 240ms with at most 8px travel once per capability, and fixed-width agent-name rotation 250ms. Reduced motion removes movement and duration. State changes must remain understandable without animation. Preserve visible keyboard focus, native dialog behavior, accessible names, error announcements, readable contrast, and robust zoom and reflow.
 
 ## Governance and verification
 
