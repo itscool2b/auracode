@@ -18,7 +18,7 @@ The integrated product is in development and final acceptance is pending. The fu
 live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) records implementation and
 verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
 
-Visual work follows the paired light and dark [Aura visual system](docs/design/visual-language.md).
+Visual work follows the [Aura visual system](docs/design/visual-language.md): a light-only website and a desktop with System, Light and Dark appearances.
 The [styling review record](docs/design/checkpoint-2026-10-30.md) tracks the full pass and its
 review gallery. Owner visual approval and final verification remain pending. Historical Design Lab studies are not
 the design authority for new product screens.

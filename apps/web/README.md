@@ -1,6 +1,6 @@
 # auracode.si
 
-Light and dark React Router 7 interface, prerendered to static HTML. Cloudflare serves `build/client`.
+Light-only React Router 7 interface, prerendered to static HTML. Cloudflare serves `build/client`.
 `entry.server.tsx` is build-time React rendering only; the server output is removed by `ssr:false`.
 There is no JavaScript application backend. The Rust Worker in `apps/api` owns every account,
 authentication, authorization, email, export and sync operation.
@@ -37,8 +37,8 @@ fabricated mock. Regenerate it whenever the app changes visibly with
 capabilities panel's views are drawn from tokens after the app's own preview modes (New chat, a
 pending handoff, the Changes panel, the picker, the queue and the sidebar); update them with the
 app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
-logo's own paths. Without JavaScript the site follows the system theme, the capabilities panel shows
-the default example and the FAQ opens natively. The standalone notices page is script-free and follows the system appearance only. Reduced motion disables automatic cycling and transitions.
+logo's own paths. Without JavaScript the site remains light, the capabilities panel shows
+the default example and the FAQ opens natively. The standalone notices page is script-free and remains light. The website has no appearance control or persisted theme. Reduced motion disables automatic cycling and transitions.
 
 ## Deployment prerequisites
 

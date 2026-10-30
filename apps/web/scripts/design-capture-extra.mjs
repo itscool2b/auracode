@@ -78,11 +78,12 @@ export async function captureSiteRoutes(page, theme, save, base) {
   await save(page, theme, "web-account", "Website: populated account", true);
   await page.goto(`${base}/third-party-notices`);
   await page.getByRole("heading", { name: "Third-party notices" }).waitFor();
-  await save(page, theme, "web-notices", "Website: notices (System appearance)");
+  await save(page, theme, "web-notices", "Website: notices");
 }
 
 export async function captureDesktopRoutes(page, theme, save, base) {
   for (const [mode, title] of [
+    ["new", "Desktop: empty new chat"],
     ["new-worktree", "Desktop: new chat"],
     ["setup", "Desktop: welcome and setup"],
     ["agents", "Desktop: agents"],
@@ -118,15 +119,26 @@ export async function captureDesktopRoutes(page, theme, save, base) {
     await page.waitForFunction(() => document.querySelector("#root")?.childElementCount > 0);
     await page.waitForLoadState("networkidle");
     if (mode === "setup") await page.getByRole("button", { name: "Get started" }).waitFor();
+    if (mode === "git-conflict") {
+      await page.getByRole("button", { name: "Review merge", exact: true }).click();
+      await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
+    }
     await save(page, theme, `desktop-${mode}`, title);
   }
-  for (const tab of ["Shortcuts", "About"]) {
-    await page.goto(`${base}/?preview=settings&theme=${theme}`);
+  for (const tab of ["Account", "Configuration sync", "Shortcuts", "About"]) {
+    const account = tab === "Account" ? "&account=ready" : "";
+    await page.goto(`${base}/?preview=settings&theme=${theme}${account}`);
     await page.getByRole("button", { name: tab, exact: true }).click();
-    await page.getByRole("heading", { name: tab === "About" ? /^About/ : tab }).waitFor();
+    await page.getByRole("heading", { level: 1, name: tab === "About" ? /^About/ : tab }).waitFor();
     await page.locator(".settings-main").evaluate((node) => {
       node.scrollTop = 0;
     });
-    await save(page, theme, `settings-${tab.toLowerCase()}`, `Desktop: ${tab}`);
+    await page.waitForLoadState("networkidle");
+    await save(
+      page,
+      theme,
+      `settings-${tab.toLowerCase().replaceAll(" ", "-")}`,
+      `Desktop: ${tab}`,
+    );
   }
 }

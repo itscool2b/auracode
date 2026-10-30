@@ -16,11 +16,11 @@ import { SiteHeader } from "./header";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="g-root" suppressHydrationWarning>
+    <html lang="en" data-theme="light" className="g-root">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light dark" />
+        <meta name="color-scheme" content="light" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

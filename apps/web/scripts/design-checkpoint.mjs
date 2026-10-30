@@ -111,27 +111,29 @@ try {
       const origin = new URL(route.request().url()).origin;
       return [siteUrl, desktopUrl].includes(origin) ? route.continue() : route.abort();
     });
-    await page.goto(`${siteUrl}/`);
-    await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
-    await page
-      .waitForFunction(() =>
-        [...document.querySelectorAll(".product-frame img")].some(
-          (i) => i.complete && i.naturalWidth > 0,
-        ),
-      )
-      .catch(async () => {
-        throw new Error(
-          `Product images unavailable: ${JSON.stringify(await page.locator(".product-frame img").evaluateAll((images) => images.map((i) => [i.currentSrc, i.complete, i.naturalWidth])))}`,
-        );
-      });
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await save(page, theme, "homepage-full", "Homepage, full page", true);
-    await save(page, theme, "homepage-viewport", "Homepage, first viewport");
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    await save(page, theme, "homepage-mobile", "Homepage, mobile", true);
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await captureSiteRoutes(page, theme, save, siteUrl);
+    if (theme === "light") {
+      await page.goto(`${siteUrl}/`);
+      await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
+      await page
+        .waitForFunction(() =>
+          [...document.querySelectorAll(".product-frame img")].some(
+            (i) => i.complete && i.naturalWidth > 0,
+          ),
+        )
+        .catch(async () => {
+          throw new Error(
+            `Product images unavailable: ${JSON.stringify(await page.locator(".product-frame img").evaluateAll((images) => images.map((i) => [i.currentSrc, i.complete, i.naturalWidth])))}`,
+          );
+        });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await save(page, theme, "homepage-full", "Homepage, full page", true);
+      await save(page, theme, "homepage-viewport", "Homepage, first viewport");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await save(page, theme, "homepage-mobile", "Homepage, mobile", true);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await captureSiteRoutes(page, theme, save, siteUrl);
+    }
     const preview = (mode, extra = "") =>
       `${desktopUrl}/?preview=${mode}&theme=${theme}&agents=lineup${extra}`;
     await page.goto(preview("settled"));
@@ -170,7 +172,7 @@ try {
     await context.close();
   }
   const data = JSON.stringify(entries).replaceAll("<", "\\u003c");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aura styling review</title><style>body{margin:0;background:#101112;color:#fafafa;font:15px/1.5 system-ui,sans-serif}header{position:sticky;top:0;background:#141516;padding:16px 24px;border-bottom:1px solid #303236;display:flex;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0 auto 0 0}select,a{color:inherit;background:#1c1d1f;border:1px solid #666a70;border-radius:6px;padding:8px}main{max-width:1440px;margin:auto;padding:24px}h2{font-size:16px}img{display:block;max-width:100%;height:auto;border:1px solid #303236}p{color:#a1a1aa}</style></head><body><header><h1>Aura styling review</h1><label>Theme <select id="theme"><option>light</option><option>dark</option></select></label><label>View <select id="view"></select></label><a href="${siteUrl}/">Live website</a><a href="${desktopUrl}/?preview=settled">Live desktop fixture</a></header><main><h2 id="title"></h2><p>Desktop and website captures use synthetic preview data. Full homepage and mobile views scroll vertically.</p><img id="capture" alt=""></main><script>const items=${data},theme=document.querySelector('#theme'),view=document.querySelector('#view'),image=document.querySelector('#capture'),title=document.querySelector('#title'); for(const item of items.filter(i=>i.theme==='light'))view.add(new Option(item.title,item.id));function update(){const item=items.find(i=>i.theme===theme.value&&i.id===view.value);image.src=item.name;image.alt=item.title+' in '+item.theme;title.textContent=image.alt}theme.onchange=view.onchange=update;update()</script></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aura styling review</title><style>body{margin:0;background:#101112;color:#fafafa;font:15px/1.5 system-ui,sans-serif}header{position:sticky;top:0;background:#141516;padding:16px 24px;border-bottom:1px solid #303236;display:flex;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0 auto 0 0}select,a{color:inherit;background:#1c1d1f;border:1px solid #666a70;border-radius:6px;padding:8px}main{max-width:1440px;margin:auto;padding:24px}h2{font-size:16px}img{display:block;max-width:100%;height:auto;border:1px solid #303236}p{color:#a1a1aa}</style></head><body><header><h1>Aura styling review</h1><label>Theme <select id="theme"><option>light</option><option>dark</option></select></label><label>View <select id="view"></select></label><a href="${siteUrl}/">Live website</a><a href="${desktopUrl}/?preview=settled">Live desktop fixture</a></header><main><h2 id="title"></h2><p>The website is always light. Desktop captures include light and dark. Captures use synthetic preview data; full homepage and mobile views scroll vertically.</p><img id="capture" alt=""></main><script>const items=${data},theme=document.querySelector('#theme'),view=document.querySelector('#view'),image=document.querySelector('#capture'),title=document.querySelector('#title'); function views(){const selected=view.value;view.replaceChildren();for(const item of items.filter(i=>i.theme===theme.value))view.add(new Option(item.title,item.id));if([...view.options].some(o=>o.value===selected))view.value=selected}function update(){const item=items.find(i=>i.theme===theme.value&&i.id===view.value);image.src=item.name;image.alt=item.title+' in '+item.theme;title.textContent=image.alt}theme.onchange=()=>{views();update()};view.onchange=update;views();update()</script></body></html>`;
   await writeFile(resolve(output, "index.html"), html);
   await writeFile(resolve(output, "manifest.json"), `${JSON.stringify(entries, null, 2)}\n`);
   console.log(`Gallery: ${output}/index.html`);

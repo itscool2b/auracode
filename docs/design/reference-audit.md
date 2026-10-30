@@ -1,10 +1,10 @@
 # Reference audit
 
-Status: reference observations support the proposed full styling pass, awaiting owner review. They do not establish visual approval or complete product parity.
+Status: reference observations support the proposed full styling pass, awaiting owner review. The owner subsequently chose a permanently light website; desktop retains light and dark appearances. They do not establish visual approval or complete product parity.
 
 | Reference | Observed contribution | Intended adaptation |
 | --- | --- | --- |
-| [Vercel hero](https://mobbin.com/sites/sections/42b13454-50c5-40ec-bd46-c7c1ea521873) | Restrained hierarchy and sparse hero composition | Restrained hierarchy, modest heading scale, real product imagery and light and dark product modes |
+| [Vercel hero](https://mobbin.com/sites/sections/42b13454-50c5-40ec-bd46-c7c1ea521873) | Restrained hierarchy and sparse hero composition | Restrained hierarchy, modest heading scale, real product imagery and the light-only website |
 | [Typesafe proof](https://mobbin.com/sites/sections/0c9f4512-f64c-4f8e-b8d2-ed0cff5c19de) | Distinctive staged visual evidence | Two successive chat and handoff planes on a muted coral dither field, without inventing features |
 | [Harvey benefits](https://mobbin.com/sites/sections/13ddabd9-7090-4949-88af-9d1cd651ccb5) | Clear list and supporting visual organization | An open capability rail with supporting product evidence |
 | Installed Devin desktop | Compact work surfaces, navigation and settings organization across light and dark | Desktop shell, settings and density, adapted to existing auracode capabilities |

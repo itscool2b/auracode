@@ -3255,24 +3255,7 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
   max-width: 1264px;
   margin-inline: auto;
 }
-.appearance-control select {
-  min-height: 40px;
-  max-width: 80px;
-  border: 0;
-  border-radius: 6px;
-  padding: 0 4px;
-  background: transparent;
-  color: var(--g-fg-2);
-  cursor: pointer;
-  font-size: 13px;
-}
-.appearance-control select:hover {
-  background: var(--g-hover);
-}
-.appearance-control select:focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: 2px;
-}
+
 .hero {
   width: var(--col);
   margin: 0 auto;
@@ -3454,37 +3437,12 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
     animation: none;
   }
 }
-:is(.product-frame, .hero-detail) > .theme-image-light {
-  display: none;
-}
-:is(.product-frame, .hero-detail) > .theme-image-dark {
-  display: block;
-}
-:root[data-theme="light"] :is(.product-frame, .hero-detail) > .theme-image-light {
-  display: block;
-}
-:root[data-theme="light"] :is(.product-frame, .hero-detail) > .theme-image-dark {
-  display: none;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) :is(.product-frame, .hero-detail) > .theme-image-light {
-    display: block;
-  }
-  :root:not([data-theme]) :is(.product-frame, .hero-detail) > .theme-image-dark {
-    display: none;
-  }
-}
 @media (max-width: 480px) {
   .nav-actions > .g-button {
     display: none;
   }
 }
-.appearance-control {
-  display: none;
-}
-.js .appearance-control {
-  display: block;
-}
+
 @media (max-width: 767px) {
   .product-frame {
     aspect-ratio: 4 / 3;
@@ -3500,18 +3458,7 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
   --site-field-ink: #3c2321;
   --site-grid: rgba(60, 35, 33, 0.14);
 }
-:root[data-theme="dark"] {
-  --site-field: #4b3334;
-  --site-field-ink: #fae3df;
-  --site-grid: rgba(250, 227, 223, 0.17);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --site-field: #4b3334;
-    --site-field-ink: #fae3df;
-    --site-grid: rgba(250, 227, 223, 0.17);
-  }
-}
+
 .hero {
   padding-top: 72px;
 }

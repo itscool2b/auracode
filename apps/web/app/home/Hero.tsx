@@ -41,21 +41,7 @@ export function Hero() {
           <span>YOUR AGENTS / ONE WINDOW</span>
         </div>
         <figure className="product-frame">
-          <picture className="theme-image-dark">
-            <source
-              type="image/webp"
-              srcSet="/images/desktop-dark-480.webp 480w, /images/desktop-dark-960.webp 960w, /images/desktop-dark-1440.webp 1440w, /images/desktop-dark-2240.webp 2240w"
-              sizes="(max-width: 1240px) calc(100vw - 40px), 1200px"
-            />
-            <img
-              src="/images/desktop-dark.png"
-              width="1440"
-              height="760"
-              alt="The auracode desktop: project navigation, an agent response with code, and a composer with agent and autonomy controls."
-              fetchPriority="high"
-            />
-          </picture>
-          <picture className="theme-image-light">
+          <picture>
             <source
               type="image/webp"
               srcSet="/images/desktop-light-480.webp 480w, /images/desktop-light-960.webp 960w, /images/desktop-light-1440.webp 1440w, /images/desktop-light-2240.webp 2240w"

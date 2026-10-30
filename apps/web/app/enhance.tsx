@@ -6,7 +6,7 @@ import { useEffect } from "react";
  * The build hashes it into the static CSP (scripts/headers.mjs).
  */
 export const BOOT_SCRIPT =
-  '(function(){var d=document.documentElement;try{var p=localStorage.getItem("auracode-appearance");if(p==="light"||p==="dark")d.dataset.theme=p}catch(e){}if(!("IntersectionObserver"in window))return;d.classList.add("js");setTimeout(function(){if(!d.hasAttribute("data-ready"))d.classList.remove("js")},4000)})();';
+  '(function(){var d=document.documentElement;if(!("IntersectionObserver"in window))return;d.classList.add("js");setTimeout(function(){if(!d.hasAttribute("data-ready"))d.classList.remove("js")},4000)})();';
 
 /**
  * Marks the page hydrated and reveals blocks as they enter. Reduced motion renders them in place.

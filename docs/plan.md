@@ -7,7 +7,7 @@ The proposed full Aura styling pass supersedes the older Graphite, Orbit and Sha
 `docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
 The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
-fixes rerun as needed. Visual work follows the proposed light and dark Aura system and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
+fixes rerun as needed. Visual work follows the proposed Aura system, with a light-only website and light and dark desktop appearances, and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
@@ -69,7 +69,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 5. Every animation means something: agent marks and live labels show real state, not decoration.
 
 ## UX spec: app
-The proposed [visual language](design/visual-language.md) governs the desktop and website. Use system appearance by default with persisted light and dark overrides; preserve the logo and remove standalone animal and water decoration. The following functional requirements remain in force.
+The proposed [visual language](design/visual-language.md) governs the desktop and website. Use system appearance by default with persisted light and dark overrides on desktop; the website and its standalone notices page remain light without an appearance control or persisted theme. Preserve the logo and remove standalone animal and water decoration. The following functional requirements remain in force.
 
 - Collapsible project/chat sidebar, Needs you inbox, agent dock, account menu, main transcript,
   composer, and a right panel for Changes, Files, Plan, and Session information.
