@@ -6,14 +6,14 @@
     "Cargo.toml": "fa7a4ad1ae18ee6891bc86117d7a9d6e4e712e9fe15d5e658cf715c859a69d6f",
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
-    "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
+    "apps/design-lab/package.json": "d4a15cb26c5d0a0273824b78fcf258b82173a06e451e82c5292778883da2a19c",
     "apps/desktop/package.json": "d9fcb9d65999bed0d3c42a16caa1d648f8b923f6670f707a297fc6058687dd7b",
     "apps/desktop/src-tauri/Cargo.toml": "1ae7923eabc09a0d2a2e4e18b742084d4332c56837d245c6073d5aa46dc0ae25",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "c5fdd28a728541a829c399d0a78cf6044970a5a15aebcf6f42460ca9cfebaf7a",
     "crates/aura-agents/Cargo.toml": "ac7691f5a61b30e2ccf587aba4e9f9eed9b7690afc70c5980f7c1cef4eff5ad5",
-    "crates/aura-cli/Cargo.toml": "5f7f902ba9dd355a90a73c371099ad9d0fcd4ba769e1bbd6f2eefd05a2e0f646",
+    "crates/aura-cli/Cargo.toml": "6f3ea47c817b827d8b09ebeea5f7627e74e8b358b5a72c118bea365caf182c41",
     "crates/aura-config/Cargo.toml": "6933baa2560a1fed11dac92001b0bb3b76b8badd19ad236a4c865c68924ad6fd",
     "crates/aura-core/Cargo.toml": "8dc393ffeec1bb55ae3c3912b2e6441ff9ebdc30415de29942c8c32e0c3ad9d7",
     "crates/aura-drivers/Cargo.toml": "283a14f1f14ee97e30198d876fdcb350869b22b1779bc3f948dc896c40958317",
@@ -21,8 +21,8 @@
     "crates/aura-protocol/Cargo.toml": "5d2b9ca24f6c0cc9ebe7a08fa6de7aa25d9fb28be8ae2443b3100dc40dc36c70",
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
     "crates/aura-sync/Cargo.toml": "aa968fa121135ffac6f919092d65af607cd8405a08338ea98d8cccdabb523ddb",
-    "packages/ui/package.json": "4bb136356d059cc3e7cf35388104fd18cfb826cf3b52b34f9ae7099ce9960ea3",
-    "pnpm-lock.yaml": "44944a54231f3bac3810a3352f121efe65fab64c881144e2dc1140c48b7889a6",
+    "packages/ui/package.json": "3470a9a657216482a79773dd3101a44cde933fd9f34c4fca247b04627c0ab8fd",
+    "pnpm-lock.yaml": "7e143f4cf118123908d58f54cb4e9a41024bf365fc9627e71713e75705397aaa",
     "third-party/overrides.json": "1668ed5256042168b3bfe4c929ca1a12736cd4398d1043f1278195d75704b186"
   },
   "records": [
@@ -8763,6 +8763,21 @@
         {
           "sha256": "71609cbb5c78b5870d712eab73a31d76622635c6ed034ab5cee3b9ecbda8685f",
           "source": "https://registry.npmjs.org/@fontsource-variable/geist/-/geist-5.3.0.tgz#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@fontsource-variable/inter",
+      "version": "5.3.0",
+      "license": "OFL-1.1",
+      "source": "https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.3.0.tgz",
+      "distributions": ["desktop", "web"],
+      "targets": [],
+      "files": [
+        {
+          "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345",
+          "source": "https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.3.0.tgz#LICENSE"
         }
       ]
     },

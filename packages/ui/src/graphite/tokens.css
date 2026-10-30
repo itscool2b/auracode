@@ -1,62 +1,32 @@
-/*
- * Graphite tokens: docs/design/visual-language.md, section 3. Variables only, on :root.
- *
- * The product is dark only. Every text colour is a solid hex, so WebView2 and WebKit rasterise text
- * against an opaque colour (alpha text was one cause of the old app's soft, uneven type). Alpha is
- * used only for tints painted behind content: chips, diff rows, the scrim.
- *
- * Colour means five things and nothing else: volt (look here), green (passed, added), red (failed,
- * removed), the white of the primary pill, and the grey ladder for everything else.
- * graphite/tokens.ts mirrors the values the canvas and tests need; tokens.test.ts keeps them equal.
+/* Aura visual system. Graphite names remain compatibility aliases.
+ * Solid text, shared semantic states, and explicit or system appearance.
+ * tokens.ts mirrors both palettes; tests verify parity and contrast.
  */
 
 :root {
-  /* Surfaces, back to front. Wells sit one step below their container. */
-  --g-bg: #000000;
-  --g-surface-1: #0a0a0a;
-  --g-surface-2: #111111;
-  --g-surface-3: #191919;
-  --g-surface-4: #222222;
-
-  /* Lines */
-  --g-line-faint: #141414;
-  --g-line: #1f1f1f;
-  --g-line-strong: #2e2e2e;
-
-  /* Text. fg-3 passes 4.5:1 on bg and surfaces 1 to 3; fg-4 never carries information. */
-  --g-fg-1: #ededed;
-  --g-fg-2: #a3a3a3;
-  --g-fg-3: #858585;
-  --g-fg-4: #4d4d4d;
-  --g-on-light: #000000;
-
-  /* The primary pill: the one white object on a screen. Hover settles to pure white. */
-  --g-primary: #ededed;
-  --g-primary-hover: #ffffff;
-  --g-primary-active: #d6d6d6;
-
-  /* Signal. Volt is the only accent: needs you, live, new, the glint. */
+  --g-bg: #101112;
+  --g-surface-1: #141516;
+  --g-surface-2: #1c1d1f;
+  --g-surface-3: #202226;
+  --g-surface-4: #292b2f;
+  --g-line-faint: #25272a;
+  --g-line: #303236;
+  --g-line-strong: #666a70;
+  --g-fg-1: #fafafa;
+  --g-fg-2: #a1a1aa;
+  --g-fg-3: #9b9ba4;
+  --g-fg-4: #666a70;
+  --g-on-light: #18181b;
+  --g-primary: #fafafa;
+  --g-primary-hover: #e4e4e7;
+  --g-primary-active: #d4d4d8;
   --g-volt: #ccff33;
-  --g-volt-tint: rgb(204 255 51 / 0.12);
   --g-green: #3dd68c;
-  --g-green-tint: rgb(61 214 140 / 0.12);
   --g-red: #ff5c5c;
   --g-red-hover: #ff7a7a;
-  --g-red-tint: rgb(255 92 92 / 0.12);
-
-  /* Diffs, inside code wells only */
-  --g-diff-add-line: rgb(61 214 140 / 0.1);
-  --g-diff-add-word: rgb(61 214 140 / 0.24);
-  --g-diff-del-line: rgb(255 92 92 / 0.1);
-  --g-diff-del-word: rgb(255 92 92 / 0.24);
   --g-diff-hunk: #111111;
-
-  /* Selection, scrim, focus */
-  --g-selection: #333333;
-  --g-scrim: rgb(0 0 0 / 0.72);
-  --g-focus: #ededed;
-
-  /* Code and terminal: hues live inside wells only, never in chrome */
+  --g-selection: #292b2f;
+  --g-focus: #ccff33;
   --g-code-fg: #d4d4d4;
   --g-code-bright: #ededed;
   --g-code-dim: #858585;
@@ -80,33 +50,45 @@
   --g-ansi-bright-magenta: #e4bdff;
   --g-ansi-bright-cyan: #8ae6e6;
   --g-ansi-bright-white: #ededed;
-
-  /*
-   * Project marks: four quiet tones a person can give a project in the app. They mark that
-   * project's own swatch and nothing else; chrome never takes them.
-   */
   --g-project-slate: #8a98a6;
   --g-project-sand: #a59e92;
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
-
-  /*
-   * Shallows (4.16): the lit water. One vertical falloff from the surface's grey to the deep grey,
-   * a soft light at the top and a faint rim; the silhouettes sit a few steps darker than the water
-   * they cross, the far ones closer to its grey.
-   */
   --g-water-surface: #1e1e1e;
   --g-water-shallow: #161616;
   --g-water-mid: #0d0d0d;
   --g-water-low: #080808;
   --g-water-deep: #050505;
+  --g-shade-near: #080808;
+  --g-shade-far: #121212;
+  --g-hover: #202226;
+  --g-selected: #292b2f;
+  --g-outline: #666a70;
+  --g-overlay: #1c1d1f;
+  --g-warning: #e6cc6e;
+  --g-warning-tint: #2a2517;
+  --g-green-tint: #14251b;
+  --g-red-tint: #2d191d;
+  --g-on-danger: #18181b;
+  --g-code-bg: #141516;
+  --g-terminal-bg: #141516;
+  --g-terminal-fg: #d4d4d4;
+  --g-terminal-cursor: #fafafa;
+  --g-terminal-cursor-text: #141516;
+  --g-terminal-selection: #333333;
+  --g-color-scheme: dark;
+  --g-volt-tint: rgb(204 255 51 / 0.12);
+  --g-scrim: rgb(0 0 0 / 0.64);
+  --g-diff-add-line: rgb(61 214 140 / 0.1);
+  --g-diff-add-word: rgb(61 214 140 / 0.24);
+  --g-diff-del-line: rgb(255 92 92 / 0.1);
+  --g-diff-del-word: rgb(255 92 92 / 0.24);
   --g-water-light: rgb(255 255 255 / 0.045);
   --g-water-caustic: rgb(255 255 255 / 0.028);
   --g-water-rim: rgb(255 255 255 / 0.05);
-  --g-shade-near: #080808;
-  --g-shade-far: #121212;
-  --g-shallows-radius: 28px;
-  --g-shallows-radius-compact: 20px;
+  --g-shallows-radius: 12px;
+  --g-shallows-radius-compact: 12px;
+  --g-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
 
   /* Type. Integer weights only: 400, 500, 600. */
   --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -117,7 +99,7 @@
   --g-weight-semibold: 600;
 
   /* App scale: size / line height, tracking only where it is negative */
-  --g-text-ui: 14px;
+  --g-text-ui: 13px;
   --g-leading-ui: 20px;
   --g-text-prose: 15px;
   --g-leading-prose: 24px;
@@ -125,7 +107,7 @@
   --g-leading-meta: 16px;
   --g-text-heading: 16px;
   --g-leading-heading: 22px;
-  --g-text-title: 22px;
+  --g-text-title: 20px;
   --g-leading-title: 28px;
   --g-tracking-title: -0.015em;
   --g-text-display: 32px;
@@ -140,19 +122,19 @@
   --g-leading-key: 16px;
 
   /* Website scale */
-  --g-web-hero: clamp(48px, 7vw, 96px);
-  --g-web-hero-leading: 0.98;
-  --g-web-hero-tracking: -0.045em;
-  --g-web-h2: clamp(36px, 4.4vw, 56px);
-  --g-web-h2-leading: 1.04;
+  --g-web-hero: 48px;
+  --g-web-hero-leading: 52px;
+  --g-web-hero-tracking: -0.035em;
+  --g-web-h2: 32px;
+  --g-web-h2-leading: 38px;
   --g-web-h2-tracking: -0.035em;
   --g-web-h3: 24px;
   --g-web-h3-leading: 30px;
   --g-web-h3-tracking: -0.02em;
-  --g-web-lead: 20px;
-  --g-web-lead-leading: 30px;
+  --g-web-lead: 16px;
+  --g-web-lead-leading: 24px;
   --g-web-body: 16px;
-  --g-web-body-leading: 26px;
+  --g-web-body-leading: 24px;
   --g-web-small: 14px;
   --g-web-small-leading: 22px;
   --g-web-wordmark: clamp(96px, 20vw, 280px);
@@ -184,68 +166,253 @@
   --g-radius-16: 16px;
   --g-radius-pill: 999px;
 
-  /* Elevation: one soft dark shadow, for menus, popovers and modals only */
-  --g-shadow: 0 16px 48px -12px rgb(0 0 0 / 0.8), 0 4px 12px -4px rgb(0 0 0 / 0.6);
-
   /* Layout */
   --g-web-max: 1200px;
-  --g-web-gutter: clamp(16px, 4vw, 40px);
+  --g-web-gutter: 32px;
   --g-app-column: 720px;
-  --g-app-sidebar: 264px;
-  --g-app-header: 44px;
+  --g-app-sidebar: 256px;
+  --g-app-header: 40px;
   --g-app-panel: 380px;
 
-  /*
-   * Motion, measured on the reference sites (target/design-research/motion.md). No springs, no
-   * bounce, nothing idles. Only --g-ease-in and --g-dur-exit are not yet measured.
-   */
-  --g-ease: cubic-bezier(0.4, 0, 0.2, 1); /* hover colour and fill: x.ai, X Money, Vercel, Aside */
-  --g-ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* letters, underline and line draws: x.ai */
-  --g-ease-quint: cubic-bezier(0.23, 1, 0.32, 1); /* headlines, panels, accordion: X Money */
-  --g-ease-smooth: cubic-bezier(0.32, 0.72, 0, 1); /* sibling dim, blur-free reveals: X Money */
-  --g-ease-settle: cubic-bezier(0, 0.7, 0.3, 1); /* button hover with a slow tail: Harvey */
-  --g-ease-soft: cubic-bezier(0.3, 0.3, 0.3, 1); /* nav sibling dim: Harvey */
-  --g-ease-step: cubic-bezier(0.7, 0, 0.7, 0.7); /* word wheel step: Harvey */
-  --g-ease-in-out: cubic-bezier(0.7, 0, 0.3, 1); /* tab switch, crossfades: Harvey */
-  --g-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1); /* rows entering: Aside, x.ai */
-  --g-ease-in: cubic-bezier(0.4, 0, 1, 1); /* exits */
-  --g-dur-micro: 100ms;
-  --g-dur-fast: 150ms;
-  --g-dur-base: 200ms;
+  /* Authored motion. Named timings communicate purpose, never idle decoration. */
+  --g-ease: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-quint: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-smooth: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-settle: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-soft: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-step: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-in-out: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-reveal: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-in: cubic-bezier(0.2, 0, 0, 1);
+  --g-dur-micro: 80ms;
+  --g-dur-fast: 120ms;
+  --g-dur-base: 160ms;
   --g-dur-letter: 250ms;
-  --g-dur-panel: 300ms;
-  --g-dur-settle: 300ms;
-  --g-dur-row: 340ms;
-  --g-dur-dim: 500ms;
-  --g-dur-step: 600ms;
-  --g-dur-headline: 650ms;
-  --g-dur-reveal: 800ms;
-  --g-dur-count: 950ms;
+  --g-dur-panel: 180ms;
+  --g-dur-settle: 120ms;
+  --g-dur-row: 240ms;
+  --g-dur-dim: 120ms;
+  --g-dur-step: 180ms;
+  --g-dur-headline: 240ms;
+  --g-dur-reveal: 240ms;
+  --g-dur-count: 240ms;
   --g-dur-tick: 1100ms;
   --g-dur-shimmer: 1400ms;
   --g-dur-glint: 3000ms;
   --g-dur-cycle: 3000ms;
   --g-dur-timer: 7500ms;
   --g-dur-exit: 120ms;
-  --g-stagger: 55ms;
-  --g-stagger-letter: 25ms;
-  --g-stagger-row: 70ms;
+  --g-stagger: 0ms;
+  --g-stagger-letter: 0ms;
+  --g-stagger-row: 0ms;
 }
 
-/*
- * Reduced motion, from the OS or from the app's own setting (motion.ts writes data-motion on the
- * html element). Movement stops; colour and opacity changes stay, because they are not motion.
- */
+:root[data-theme="light"] {
+  --g-bg: #fafafa;
+  --g-surface-1: #ffffff;
+  --g-surface-2: #f4f4f5;
+  --g-surface-3: #f0f0f2;
+  --g-surface-4: #e8e8eb;
+  --g-line-faint: #ececef;
+  --g-line: #e4e4e7;
+  --g-line-strong: #8b8d94;
+  --g-fg-1: #18181b;
+  --g-fg-2: #52525b;
+  --g-fg-3: #63636d;
+  --g-fg-4: #8b8d94;
+  --g-on-light: #fafafa;
+  --g-primary: #18181b;
+  --g-primary-hover: #303036;
+  --g-primary-active: #09090b;
+  --g-volt: #496800;
+  --g-green: #166534;
+  --g-red: #b91c1c;
+  --g-red-hover: #991b1b;
+  --g-diff-hunk: #f4f4f5;
+  --g-selection: #dde2ea;
+  --g-focus: #628600;
+  --g-code-fg: #24292f;
+  --g-code-bright: #18181b;
+  --g-code-dim: #63636d;
+  --g-code-keyword: #b42318;
+  --g-code-string: #0550ae;
+  --g-code-number: #6b21a8;
+  --g-code-function: #18181b;
+  --g-ansi-black: #24292f;
+  --g-ansi-red: #b42318;
+  --g-ansi-green: #166534;
+  --g-ansi-yellow: #7a5200;
+  --g-ansi-blue: #1d4ed8;
+  --g-ansi-magenta: #7e22ce;
+  --g-ansi-cyan: #0e6d79;
+  --g-ansi-white: #52525b;
+  --g-ansi-bright-black: #63636d;
+  --g-ansi-bright-red: #991b1b;
+  --g-ansi-bright-green: #14532d;
+  --g-ansi-bright-yellow: #854d0e;
+  --g-ansi-bright-blue: #1e40af;
+  --g-ansi-bright-magenta: #6b21a8;
+  --g-ansi-bright-cyan: #155e75;
+  --g-ansi-bright-white: #18181b;
+  --g-project-slate: #8a98a6;
+  --g-project-sand: #a59e92;
+  --g-project-sage: #8c9c88;
+  --g-project-clay: #a88e80;
+  --g-water-surface: #ffffff;
+  --g-water-shallow: #fafafa;
+  --g-water-mid: #f4f4f5;
+  --g-water-low: #f4f4f5;
+  --g-water-deep: #ececef;
+  --g-shade-near: #e4e4e7;
+  --g-shade-far: #f0f0f2;
+  --g-hover: #f0f0f2;
+  --g-selected: #e8e8eb;
+  --g-outline: #8b8d94;
+  --g-overlay: #ffffff;
+  --g-warning: #92400e;
+  --g-warning-tint: #fff7e6;
+  --g-green-tint: #edf7ef;
+  --g-red-tint: #fef0f0;
+  --g-on-danger: #fafafa;
+  --g-code-bg: #f4f4f5;
+  --g-terminal-bg: #f4f4f5;
+  --g-terminal-fg: #24292f;
+  --g-terminal-cursor: #18181b;
+  --g-terminal-cursor-text: #f4f4f5;
+  --g-terminal-selection: #dde2ea;
+  --g-color-scheme: light;
+  --g-volt-tint: rgb(73 104 0 / 0.08);
+  --g-scrim: rgb(24 24 27 / 0.32);
+  --g-diff-add-line: #edf7ef;
+  --g-diff-add-word: #d1ead6;
+  --g-diff-del-line: #fef0f0;
+  --g-diff-del-word: #f9d5d5;
+  --g-water-light: transparent;
+  --g-water-caustic: transparent;
+  --g-water-rim: #e4e4e7;
+  --g-shallows-radius: 12px;
+  --g-shallows-radius-compact: 12px;
+  --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
+}
+
+/* No JavaScript is needed to follow the system appearance. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --g-bg: #fafafa;
+    --g-surface-1: #ffffff;
+    --g-surface-2: #f4f4f5;
+    --g-surface-3: #f0f0f2;
+    --g-surface-4: #e8e8eb;
+    --g-line-faint: #ececef;
+    --g-line: #e4e4e7;
+    --g-line-strong: #8b8d94;
+    --g-fg-1: #18181b;
+    --g-fg-2: #52525b;
+    --g-fg-3: #63636d;
+    --g-fg-4: #8b8d94;
+    --g-on-light: #fafafa;
+    --g-primary: #18181b;
+    --g-primary-hover: #303036;
+    --g-primary-active: #09090b;
+    --g-volt: #496800;
+    --g-green: #166534;
+    --g-red: #b91c1c;
+    --g-red-hover: #991b1b;
+    --g-diff-hunk: #f4f4f5;
+    --g-selection: #dde2ea;
+    --g-focus: #628600;
+    --g-code-fg: #24292f;
+    --g-code-bright: #18181b;
+    --g-code-dim: #63636d;
+    --g-code-keyword: #b42318;
+    --g-code-string: #0550ae;
+    --g-code-number: #6b21a8;
+    --g-code-function: #18181b;
+    --g-ansi-black: #24292f;
+    --g-ansi-red: #b42318;
+    --g-ansi-green: #166534;
+    --g-ansi-yellow: #7a5200;
+    --g-ansi-blue: #1d4ed8;
+    --g-ansi-magenta: #7e22ce;
+    --g-ansi-cyan: #0e6d79;
+    --g-ansi-white: #52525b;
+    --g-ansi-bright-black: #63636d;
+    --g-ansi-bright-red: #991b1b;
+    --g-ansi-bright-green: #14532d;
+    --g-ansi-bright-yellow: #854d0e;
+    --g-ansi-bright-blue: #1e40af;
+    --g-ansi-bright-magenta: #6b21a8;
+    --g-ansi-bright-cyan: #155e75;
+    --g-ansi-bright-white: #18181b;
+    --g-project-slate: #8a98a6;
+    --g-project-sand: #a59e92;
+    --g-project-sage: #8c9c88;
+    --g-project-clay: #a88e80;
+    --g-water-surface: #ffffff;
+    --g-water-shallow: #fafafa;
+    --g-water-mid: #f4f4f5;
+    --g-water-low: #f4f4f5;
+    --g-water-deep: #ececef;
+    --g-shade-near: #e4e4e7;
+    --g-shade-far: #f0f0f2;
+    --g-hover: #f0f0f2;
+    --g-selected: #e8e8eb;
+    --g-outline: #8b8d94;
+    --g-overlay: #ffffff;
+    --g-warning: #92400e;
+    --g-warning-tint: #fff7e6;
+    --g-green-tint: #edf7ef;
+    --g-red-tint: #fef0f0;
+    --g-on-danger: #fafafa;
+    --g-code-bg: #f4f4f5;
+    --g-terminal-bg: #f4f4f5;
+    --g-terminal-fg: #24292f;
+    --g-terminal-cursor: #18181b;
+    --g-terminal-cursor-text: #f4f4f5;
+    --g-terminal-selection: #dde2ea;
+    --g-color-scheme: light;
+    --g-volt-tint: rgb(73 104 0 / 0.08);
+    --g-scrim: rgb(24 24 27 / 0.32);
+    --g-diff-add-line: #edf7ef;
+    --g-diff-add-word: #d1ead6;
+    --g-diff-del-line: #fef0f0;
+    --g-diff-del-word: #f9d5d5;
+    --g-water-light: transparent;
+    --g-water-caustic: transparent;
+    --g-water-rim: #e4e4e7;
+    --g-shallows-radius: 12px;
+    --g-shallows-radius-compact: 12px;
+    --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --g-web-hero: 36px;
+    --g-web-hero-leading: 40px;
+    --g-web-gutter: 20px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --g-dur-micro: 0ms;
+    --g-dur-fast: 0ms;
+    --g-dur-base: 0ms;
     --g-dur-letter: 0ms;
     --g-dur-panel: 0ms;
+    --g-dur-settle: 0ms;
     --g-dur-row: 0ms;
+    --g-dur-dim: 0ms;
     --g-dur-step: 0ms;
     --g-dur-headline: 0ms;
     --g-dur-reveal: 0ms;
     --g-dur-count: 0ms;
+    --g-dur-tick: 0ms;
+    --g-dur-shimmer: 0ms;
     --g-dur-glint: 0ms;
+    --g-dur-exit: 0ms;
     --g-stagger: 0ms;
     --g-stagger-letter: 0ms;
     --g-stagger-row: 0ms;
@@ -253,14 +420,22 @@
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) {
+  --g-dur-micro: 0ms;
+  --g-dur-fast: 0ms;
+  --g-dur-base: 0ms;
   --g-dur-letter: 0ms;
   --g-dur-panel: 0ms;
+  --g-dur-settle: 0ms;
   --g-dur-row: 0ms;
+  --g-dur-dim: 0ms;
   --g-dur-step: 0ms;
   --g-dur-headline: 0ms;
   --g-dur-reveal: 0ms;
   --g-dur-count: 0ms;
+  --g-dur-tick: 0ms;
+  --g-dur-shimmer: 0ms;
   --g-dur-glint: 0ms;
+  --g-dur-exit: 0ms;
   --g-stagger: 0ms;
   --g-stagger-letter: 0ms;
   --g-stagger-row: 0ms;
