@@ -4803,3 +4803,44 @@ assertions. It fails deterministically before the repair, then passes four conse
 runs afterward. The change is entirely test-only; production folder checks are unchanged.
 Independent review, scoped all-target account-sync Clippy and formatting pass. The complete
 account-sync test suite and final hosted CI remain pending at this checkpoint.
+
+### 2026-10-30: Complete the final Windows and macOS functionality checks
+
+[Final CI](https://github.com/itscool2b/auracode/actions/runs/40987992919) passed on
+`b52beae2050579224bdb3c433780c4ce34c9e849`: all six executed jobs succeeded. The binding
+refresh/bootstrap and comparison jobs intentionally skipped because this run used check mode.
+Both platform jobs checked generated bindings against committed bytes; their downloaded exports
+also matched exactly. The earlier refresh run's committed-byte and cross-platform comparisons
+remain recorded. This entry changes only the verification record, not the tested application.
+
+The ordinary workspace suites passed 2248 tests on macOS and 2186 on Windows, with zero failures
+and one explicit compiled-Worker-harness ignore per platform. The separate Worker runtime checks
+exercised that harness. Both encrypted-storage jobs, feature Clippy checks, workspace Clippy and
+Rust formatting passed. The repaired macOS PTY suite passed all four tests in 0.74 seconds.
+The final local core account-sync `--tests` run passed 743 tests, including 102 integration tests,
+with no failures or ignores. Its only difference from the CI source was progress documentation.
+
+Both native builds and stream checks passed. Chat passed 30 of 30 checks and reopen passed eight
+of eight on each platform, including held queues, interrupted output and a persisted large blob.
+Windows external WebDriver passed all five native-window, chat, interruption and reload checks
+with matching runtime and driver versions. The previously blocked local install, sync-review and
+doctest targets passed on hosted Windows; this does not imply a local security-policy change.
+
+The complete layout probe passed all 412 views. Chromium and WebKit chat checks passed the prompt
+boundary and header-label assertions alongside 88 accessibility scans. Settings, Plugins,
+Instructions, account recovery, clone/setup, worktrees, terminals, cleanup-review fixtures,
+website and synthetic release checks all passed, as did Worker builds/runtime tests and the
+remaining workflow/script checks. Local desktop verification passed 534 tests and ten Node tests
+with 19 existing Vitest skips. Hosted macOS ran all 553 Vitest tests; its Node suite passed eight
+and skipped two Windows-only NSIS-template checks, which passed in the local ten-test suite.
+The normal website build and four static tests passed; its file hashes
+are retained for deployment verification. Lint retains 26 existing CSS warnings.
+
+Original failures remain recorded. The browser history wait passed unchanged on rerun, with no
+claim that its intermittent cause was fixed. The minimal headless Claude/Codex pipelines remain
+qualified separately: Claude's result-to-idle gap and subsequent queue passed, while Codex's
+strict helper expected `ok` and received `ok.`. No extra paid turn was used. Native macOS hands-on,
+invited sign-in/email, tray-icon targeting and unobserved notification clicks remain open alongside
+signing/key backup and installer/release/domain approvals. No real cleanup/uninstall or owner
+agent credential/configuration file inspection occurred. Finished PR publication, the authorized
+merge and deployed-asset checks follow this verification checkpoint.
