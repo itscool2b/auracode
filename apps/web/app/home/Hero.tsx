@@ -10,7 +10,7 @@ export function Hero() {
           <h1 id="hero-title" className="hero-title" aria-label="One window for your coding agents">
             <span className="hero-line">One window for</span>
             <span className="hero-line">
-              <RotatingAgent names={AGENT_NAMES} />.
+              <RotatingAgent names={AGENT_NAMES} />
             </span>
           </h1>
           <p className="hero-lead">

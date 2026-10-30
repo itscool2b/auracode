@@ -13,10 +13,10 @@ export function RotatingAgent({ names }: { names: readonly string[] }) {
   return (
     <span className="agent-slot">
       <span className="agent-word" key={index}>
-        {names[index] ?? ""}
+        {names[index] ?? ""}.
       </span>
       <span className="agent-measure">
-        {names.reduce((longest, name) => (name.length > longest.length ? name : longest), "")}
+        {names.reduce((longest, name) => (name.length > longest.length ? name : longest), "")}.
       </span>
     </span>
   );
