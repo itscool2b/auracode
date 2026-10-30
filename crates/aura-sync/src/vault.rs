@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use zeroize::{Zeroize, Zeroizing};
 
+mod lease;
 mod passphrase;
 pub use passphrase::PassphraseStore;
 mod directory;
@@ -53,6 +54,30 @@ impl VaultEntry {
             .map_err(|_| VaultError::Invalid)?;
         Ok(Self(crypto::encode(&Sha256::digest(tuple))))
     }
+    /// The entry's name in the platform store (`auracode.sync.v1:<digest>`), as Credential Manager
+    /// and Keychain Access show it. The digest names no account, email or folder.
+    pub fn target(&self) -> String {
+        format!("{SERVICE}:{}", self.0)
+    }
+    /// Safe review label even when a legacy or malformed entry name contains private text.
+    /// Canonical digest targets retain their platform spelling; all other names are hashed.
+    pub fn opaque_target(&self) -> String {
+        if crypto::decode(&self.0, 32).is_ok_and(|bytes| bytes.len() == 32) {
+            self.target()
+        } else {
+            format!(
+                "{SERVICE}:unrecognized-{}",
+                crypto::encode(&Sha256::digest(self.0.as_bytes()))
+            )
+        }
+    }
+    /// An entry the platform listed under auracode's own service ([`NativeStore::app_entries`]).
+    /// Other services and embedded NULs are refused. Malformed names inside our service stay
+    /// discoverable so their payloads can conservatively protect account keys.
+    fn from_target(target: &str) -> Option<Self> {
+        let name = target.strip_prefix(SERVICE)?.strip_prefix(':')?;
+        (!name.contains('\0')).then(|| Self(name.to_owned()))
+    }
     pub fn new(origin: &str, account: &str) -> Result<Self> {
         crypto::identifier(account).map_err(|_| VaultError::Invalid)?;
         let origin = reqwest::Url::parse(origin).map_err(|_| VaultError::Invalid)?;
@@ -82,10 +107,24 @@ pub trait SecretStore: Send + Sync {
 
 pub struct NativeStore {
     store: Arc<keyring_core::CredentialStore>,
+    _lease: aura_process::locked_file::LockedFile,
 }
 impl NativeStore {
     /// This constructs a provider, without reading or writing any credential.
     pub fn new() -> Result<Self> {
+        Self::open(false, true)
+    }
+    /// Exclusively owns the native service until dropped. Acquire after target apps exit.
+    pub fn for_cleanup() -> Result<Self> {
+        Self::open(true, true)
+    }
+    /// Read-only review: never creates even the empty lease file.
+    pub fn for_review() -> Result<Self> {
+        Self::open(false, false)
+    }
+    fn open(exclusive: bool, create: bool) -> Result<Self> {
+        let parent = dirs::data_local_dir().ok_or(VaultError::Busy)?;
+        let _lease = lease::acquire(&parent.join("si.auracode.sync.v1.lock"), exclusive, create)?;
         #[cfg(windows)]
         let store = windows_native_keyring_store::Store::new().map_err(platform)?;
         #[cfg(target_os = "macos")]
@@ -93,19 +132,21 @@ impl NativeStore {
         #[cfg(not(any(windows, target_os = "macos")))]
         return Err(VaultError::Unavailable);
         #[cfg(any(windows, target_os = "macos"))]
-        Ok(Self { store })
+        Ok(Self { store, _lease })
     }
-    /// Removes every entry in auracode's own service and returns how many went: the data cleanup
-    /// for an uninstall or a reset to a fresh install, so entries whose records are already gone
-    /// go too. The platform does the matching (Windows filters Credential Manager by the
-    /// `auracode.sync.v1:` target prefix, macOS the keychain by its service), so no other app's
-    /// credential reaches this process, and each hit is checked again before it is deleted.
-    pub fn sweep_app_entries(&self) -> Result<usize> {
+    /// Every entry in auracode's own service, by name only. The data cleanup reads the data-folder
+    /// indexes among them to tell which account keys another data folder still uses, so it never
+    /// removes what another install of auracode on this machine needs. The platform does the
+    /// matching (Windows filters Credential Manager by the `auracode.sync.v1:` target prefix,
+    /// macOS the keychain by its service), so no other app's credential reaches this process, and
+    /// each hit is checked again. Nothing is removed here.
+    pub fn app_entries(&self) -> Result<Vec<VaultEntry>> {
         let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
         #[cfg(windows)]
-        return credential_manager::remove_prefixed(&format!("{SERVICE}:"));
+        let targets = credential_manager::list_prefixed(&format!("{SERVICE}:"))?;
         #[cfg(not(windows))]
-        return sweep_by_service(self.store.as_ref());
+        let targets = list_by_service(self.store.as_ref())?;
+        Ok(app_entries(&targets))
     }
     fn entry(&self, entry: &VaultEntry) -> Result<keyring_core::Entry> {
         let target = format!("{SERVICE}:{}", entry.0);
@@ -147,32 +188,35 @@ impl SecretStore for NativeStore {
         }
     }
 }
-/// The keychain sweep: the store's own search by exact service, then a second check of each hit,
-/// since a store may match loosely (keyring-core's mock matches substrings).
+/// The listed names that are auracode's own entries, sorted, each once.
+fn app_entries(targets: &[String]) -> Vec<VaultEntry> {
+    let mut entries: Vec<VaultEntry> = targets
+        .iter()
+        .filter_map(|target| VaultEntry::from_target(target))
+        .collect();
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    entries.dedup();
+    entries
+}
+
+/// The keychain listing: the store's own search by exact service, then a second check of each
+/// hit, since a store may match loosely (keyring-core's mock matches substrings). Only names are
+/// taken; no secret is read.
 #[cfg_attr(windows, allow(dead_code))]
-fn sweep_by_service(store: &keyring_core::CredentialStore) -> Result<usize> {
+fn list_by_service(store: &keyring_core::CredentialStore) -> Result<Vec<String>> {
     let spec = std::collections::HashMap::from([("service", SERVICE)]);
     let entries = match store.search(&spec) {
         Ok(entries) => entries,
-        Err(keyring_core::Error::NoEntry) => return Ok(0),
+        Err(keyring_core::Error::NoEntry) => return Ok(Vec::new()),
         Err(error) => return Err(platform(error)),
     };
     let prefix = format!("{SERVICE}:");
-    let mut removed = 0;
-    for entry in entries {
-        let ours = entry
-            .get_specifiers()
-            .is_some_and(|(service, user)| service == SERVICE && user.starts_with(&prefix));
-        if !ours {
-            continue;
-        }
-        match entry.delete_credential() {
-            Ok(()) => removed += 1,
-            Err(keyring_core::Error::NoEntry) => {}
-            Err(error) => return Err(platform(error)),
-        }
-    }
-    Ok(removed)
+    Ok(entries
+        .iter()
+        .filter_map(|entry| entry.get_specifiers())
+        .filter(|(service, user)| service == SERVICE && user.starts_with(&prefix))
+        .map(|(_, user)| user)
+        .collect())
 }
 
 /// Credential Manager's own filtered enumeration: `CredEnumerateW` with a `prefix*` filter returns
@@ -184,7 +228,7 @@ mod credential_manager {
     use super::{Result, VaultError};
     use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, GetLastError};
     use windows_sys::Win32::Security::Credentials::{
-        CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredEnumerateW, CredFree,
+        CRED_TYPE_GENERIC, CREDENTIALW, CredEnumerateW, CredFree,
     };
 
     pub(super) fn wide(text: &str) -> Vec<u16> {
@@ -208,7 +252,9 @@ mod credential_manager {
         String::from_utf16(unsafe { std::slice::from_raw_parts(text, length) }).ok()
     }
 
-    pub(super) fn remove_prefixed(prefix: &str) -> Result<usize> {
+    /// The generic credentials whose target starts with `prefix`, by target name. Their secret
+    /// bytes are cleared before the buffer is freed and never leave this function.
+    pub(super) fn list_prefixed(prefix: &str) -> Result<Vec<String>> {
         if prefix.is_empty() || prefix.contains('*') {
             return Err(VaultError::Invalid);
         }
@@ -220,7 +266,7 @@ mod credential_manager {
         if found == 0 {
             // SAFETY: reads this thread's last error right after the failed call.
             return match unsafe { GetLastError() } {
-                ERROR_NOT_FOUND => Ok(0),
+                ERROR_NOT_FOUND => Ok(Vec::new()),
                 _ => Err(VaultError::Unavailable),
             };
         }
@@ -250,68 +296,15 @@ mod credential_manager {
         }
         // SAFETY: frees the one buffer CredEnumerateW allocated; nothing points into it now.
         unsafe { CredFree(credentials.cast()) };
-        let mut removed = 0;
-        for target in targets {
-            let name = wide(&target);
-            // SAFETY: a NUL-terminated target name that lives across the call.
-            if unsafe { CredDeleteW(name.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 {
-                removed += 1;
-            // SAFETY: reads this thread's last error right after the failed call.
-            } else if unsafe { GetLastError() } != ERROR_NOT_FOUND {
-                return Err(VaultError::Unavailable);
-            }
-        }
-        Ok(removed)
+        Ok(targets)
     }
 
     #[cfg(test)]
     mod tests {
         #[test]
         fn refuses_an_empty_or_wildcard_prefix() {
-            assert!(super::remove_prefixed("").is_err());
-            assert!(super::remove_prefixed("auracode*").is_err());
-        }
-
-        /// Writes and sweeps throwaway session credentials under a random test-only prefix, never
-        /// auracode's own service. Ignored by default because it uses the real Credential
-        /// Manager: `cargo test -p aura-sync --lib credential_manager -- --ignored`.
-        #[test]
-        #[ignore = "uses the real Windows Credential Manager with a throwaway test prefix"]
-        fn removes_only_targets_with_the_prefix() {
-            use windows_sys::Win32::Security::Credentials::{
-                CRED_PERSIST_SESSION, CREDENTIALW, CredWriteW,
-            };
-            let unique = format!(
-                "{:x}-{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos(),
-                std::process::id()
-            );
-            let prefix = format!("auracode.sweep-test.{unique}:");
-            let unrelated = format!("auracode.sweep-test-other.{unique}:kept");
-            let write = |target: &str| {
-                let name = super::wide(target);
-                let mut secret = *b"synthetic";
-                let credential = CREDENTIALW {
-                    Type: super::CRED_TYPE_GENERIC,
-                    TargetName: name.as_ptr().cast_mut(),
-                    CredentialBlobSize: secret.len() as u32,
-                    CredentialBlob: secret.as_mut_ptr(),
-                    Persist: CRED_PERSIST_SESSION,
-                    ..Default::default()
-                };
-                // SAFETY: every pointer lives across the call.
-                assert_ne!(unsafe { CredWriteW(&credential, 0) }, 0);
-            };
-            write(&format!("{prefix}one"));
-            write(&format!("{prefix}two"));
-            write(&unrelated);
-            assert_eq!(super::remove_prefixed(&prefix).unwrap(), 2);
-            assert_eq!(super::remove_prefixed(&prefix).unwrap(), 0);
-            // The unrelated target survived the sweep; remove it by its own exact name.
-            assert_eq!(super::remove_prefixed(&unrelated).unwrap(), 1);
+            assert!(super::list_prefixed("").is_err());
+            assert!(super::list_prefixed("auracode*").is_err());
         }
     }
 }

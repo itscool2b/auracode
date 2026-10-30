@@ -4,7 +4,7 @@ use crate::{
     state::AppState,
 };
 use aura_core::cloning::Clones;
-use aura_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord};
+use aura_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord, CloneRecovery};
 use std::sync::Arc;
 use tauri::{State, Webview};
 
@@ -100,5 +100,104 @@ pub async fn clone_status(
     service
         .status(webview.label(), &id, after)
         .await
+        .map_err(error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clone_recovery_list(
+    webview: Webview,
+    state: State<'_, AppState>,
+    service: State<'_, Arc<Clones>>,
+) -> Result<Vec<CloneRecovery>, AppError> {
+    current(&webview, &state)?;
+    let service = Arc::clone(service.inner());
+    tauri::async_runtime::spawn_blocking(move || service.recovery_list())
+        .await
+        .map_err(|_| AppError::new(AppErrorCode::Internal, "Clone recovery could not be read."))?
+        .map_err(error)
+}
+
+/// Revalidates the stored destination before handing it to the normal project form.
+#[tauri::command]
+#[specta::specta]
+pub async fn clone_recovery_ready(
+    webview: Webview,
+    state: State<'_, AppState>,
+    service: State<'_, Arc<Clones>>,
+    id: String,
+) -> Result<CloneRecovery, AppError> {
+    current(&webview, &state)?;
+    let service = Arc::clone(service.inner());
+    let record = tauri::async_runtime::spawn_blocking(move || service.recovery_get(&id))
+        .await
+        .map_err(|_| {
+            AppError::new(
+                AppErrorCode::Internal,
+                "The cloned folder could not be checked.",
+            )
+        })?
+        .map_err(error)?;
+    if !record.can_add {
+        return Err(AppError::new(AppErrorCode::InvalidArgument, record.detail));
+    }
+    Ok(record)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clone_recovery_open(
+    webview: Webview,
+    state: State<'_, AppState>,
+    service: State<'_, Arc<Clones>>,
+    id: String,
+) -> Result<(), AppError> {
+    current(&webview, &state)?;
+    let service = Arc::clone(service.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        let record = service.recovery_get(&id).map_err(error)?;
+        let path = record
+            .destination
+            .filter(|_| record.can_open)
+            .ok_or_else(|| {
+                AppError::new(
+                    AppErrorCode::InvalidArgument,
+                    "The saved clone folder cannot be safely opened.",
+                )
+            })?;
+        tauri_plugin_opener::reveal_item_in_dir(path).map_err(|_| {
+            AppError::new(
+                AppErrorCode::RevealFailed,
+                "The file manager could not show this folder.",
+            )
+        })
+    })
+    .await
+    .map_err(|_| {
+        AppError::new(
+            AppErrorCode::Internal,
+            "The clone folder could not be opened.",
+        )
+    })?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clone_recovery_dismiss(
+    webview: Webview,
+    state: State<'_, AppState>,
+    service: State<'_, Arc<Clones>>,
+    id: String,
+) -> Result<(), AppError> {
+    current(&webview, &state)?;
+    let service = Arc::clone(service.inner());
+    tauri::async_runtime::spawn_blocking(move || service.recovery_dismiss(&id))
+        .await
+        .map_err(|_| {
+            AppError::new(
+                AppErrorCode::Internal,
+                "The recovery notice could not be dismissed.",
+            )
+        })?
         .map_err(error)
 }

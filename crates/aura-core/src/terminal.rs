@@ -75,6 +75,7 @@ struct Running {
     control: PtyControl,
 }
 struct Slot {
+    pending_setup: Mutex<Option<PendingSetup>>,
     owner: String,
     claimed: AtomicBool,
     timed_out: AtomicBool,
@@ -95,10 +96,17 @@ impl Slot {
     }
     fn cancel(&self) {
         self.canceled.send_replace(true);
+        lock(&self.pending_setup).take();
         if let Some(running) = lock(&self.running).as_ref() {
             running.control.kill();
         }
     }
+}
+
+struct PendingSetup {
+    chat_id: String,
+    token: String,
+    launch: crate::session::WorktreeSetupLaunch,
 }
 impl Drop for Slot {
     fn drop(&mut self) {
@@ -150,6 +158,27 @@ impl Drop for TerminalTicket {
     }
 }
 impl TerminalTicket {
+    /// A prepared setup remains owned while reserve/start cross IPC. Closing the pending slot
+    /// drops its Rust completion owner and holds the generation even if Start never arrives.
+    pub fn pending_setup(
+        self,
+        chat_id: String,
+        token: String,
+        launch: crate::session::WorktreeSetupLaunch,
+    ) -> Result<String, TerminalError> {
+        {
+            let mut pending = lock(&self.slot.pending_setup);
+            if *self.slot.canceled.borrow() {
+                return Err(TerminalError::Closed);
+            }
+            *pending = Some(PendingSetup {
+                chat_id,
+                token,
+                launch,
+            });
+        }
+        Ok(self.pending())
+    }
     /// A setup launch owns the caller's folder reservations through process cleanup. Startup
     /// continues in an owned task if the IPC future disappears; its ticket still responds to Close.
     pub async fn start_guarded(
@@ -165,6 +194,29 @@ impl TerminalTicket {
             size,
             guard,
             Some(Duration::from_secs(600)),
+            None,
+        ))
+        .await
+        .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
+    }
+
+    /// Reports setup completion from the process owner after confirmed cleanup. Dropping this
+    /// sender on any launch error leaves the persisted attempt failed, never successful.
+    pub async fn start_setup(
+        self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+        completion: Option<tokio::sync::oneshot::Sender<Result<(), String>>>,
+    ) -> Result<String, TerminalError> {
+        tokio::spawn(self.start_guarded_owned(
+            spawner,
+            spec,
+            size,
+            guard,
+            Some(Duration::from_secs(600)),
+            completion,
         ))
         .await
         .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
@@ -183,7 +235,7 @@ impl TerminalTicket {
         if !self.slot.project.load(Ordering::Acquire) {
             return Err(TerminalError::NotProject);
         }
-        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None))
+        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None, None))
             .await
             .map_err(|_| TerminalError::Start("Terminal startup ended unexpectedly.".into()))?
     }
@@ -195,6 +247,7 @@ impl TerminalTicket {
         size: PtySize,
         guard: Box<dyn Send + Sync>,
         limit: Option<Duration>,
+        completion: Option<tokio::sync::oneshot::Sender<Result<(), String>>>,
     ) -> Result<String, TerminalError> {
         if *self.slot.canceled.borrow() {
             return Err(TerminalError::Closed);
@@ -210,15 +263,16 @@ impl TerminalTicket {
         self.slot.cleanup.send_replace(None);
         // This monitor is independent of output consumption, window lifetime and IPC cancellation.
         tokio::spawn(async move {
-            tokio::select! {
+            let failure = tokio::select! {
                 biased;
-                _=control.exited()=>{},
-                _=canceled.wait_for(|value|*value)=>{},
+                _=canceled.wait_for(|value|*value)=>Some("Setup was canceled when its terminal closed. Retry setup.".to_owned()),
+                _=control.exited()=>None,
                 _=async {match limit {Some(limit)=>tokio::time::sleep(limit).await,None=>std::future::pending().await}}=>{
                     if let Some(slot)=slot.upgrade(){slot.setup_timed_out.store(true,Ordering::Release);}
                     control.kill();
+                    Some("Setup timed out after ten minutes. Retry setup.".to_owned())
                 },
-            }
+            };
             let report = control.shutdown().await;
             let confirmed = report.exit.is_some() && report.leftovers.is_empty();
             if !confirmed {
@@ -230,6 +284,16 @@ impl TerminalTicket {
                 slot.cleanup_unconfirmed
                     .store(!confirmed, Ordering::Release);
                 slot.cleanup.send_replace(Some(confirmed));
+            }
+            if let Some(completion) = completion {
+                let result = match (failure,confirmed,report.exit.and_then(|exit|exit.code)) {
+                    (None,true,Some(0)) => Ok(()),
+                    (Some(detail),_,_) => Err(detail),
+                    (_,false,_) => Err("Setup process cleanup could not be confirmed. Review its terminal before retrying.".into()),
+                    (_,_,Some(code)) => Err(format!("Setup exited with code {code}. Retry setup.")),
+                    _ => Err("Setup ended without a successful exit status. Retry setup.".into()),
+                };
+                let _ = completion.send(result);
             }
         });
         let mut running = lock(&self.slot.running);
@@ -369,6 +433,7 @@ impl Terminals {
         let (canceled, _) = watch::channel(false);
         let (cleanup, _) = watch::channel(Some(true));
         let slot = Arc::new(Slot {
+            pending_setup: Mutex::new(None),
             owner: owner.into(),
             claimed: AtomicBool::new(true),
             timed_out: AtomicBool::new(false),
@@ -390,6 +455,9 @@ impl Terminals {
 
     pub fn claim(&self, owner: &str, id: &str) -> Result<TerminalTicket, TerminalError> {
         let slot = self.slot(owner, id)?;
+        if lock(&slot.pending_setup).is_some() {
+            return Err(TerminalError::AlreadyOpen);
+        }
         if slot.claimed.swap(true, Ordering::AcqRel) {
             return Err(TerminalError::AlreadyOpen);
         }
@@ -399,6 +467,39 @@ impl Terminals {
             slot,
             committed: false,
         })
+    }
+
+    pub fn claim_setup(
+        &self,
+        owner: &str,
+        id: &str,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<(TerminalTicket, crate::session::WorktreeSetupLaunch), TerminalError> {
+        let slot = self.slot(owner, id)?;
+        let launch = {
+            let mut pending = lock(&slot.pending_setup);
+            if *slot.canceled.borrow()
+                || pending
+                    .as_ref()
+                    .is_none_or(|entry| entry.chat_id != chat_id || entry.token != token)
+            {
+                return Err(TerminalError::Closed);
+            }
+            if slot.claimed.swap(true, Ordering::AcqRel) {
+                return Err(TerminalError::AlreadyOpen);
+            }
+            pending.take().ok_or(TerminalError::Closed)?.launch
+        };
+        Ok((
+            TerminalTicket {
+                terminals: self.clone(),
+                id: id.into(),
+                slot,
+                committed: false,
+            },
+            launch,
+        ))
     }
 
     fn slot(&self, owner: &str, id: &str) -> Result<Arc<Slot>, TerminalError> {
@@ -611,6 +712,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let terminals = Terminals::default();
         let released = Arc::new(AtomicBool::new(false));
+        let (completion, finished) = tokio::sync::oneshot::channel();
         let id = terminals
             .reserve("setup")
             .unwrap()
@@ -623,6 +725,7 @@ mod tests {
                 PtySize { rows: 24, cols: 80 },
                 Box::new(Guard(released.clone())),
                 Some(Duration::from_millis(250)),
+                Some(completion),
             )
             .await
             .unwrap();
@@ -631,6 +734,7 @@ mod tests {
             .ok()
             .map(|(_, running)| running);
         released_after_cleanup(&released, running.as_ref()).await;
+        assert!(finished.await.unwrap().unwrap_err().contains("timed out"));
         assert!(matches!(
             terminals.read("setup", &id).await,
             Err(TerminalError::SetupTimedOut)
@@ -697,11 +801,102 @@ mod tests {
         }
         println!("local-terminal-ready");
         std::io::stdout().flush().unwrap();
+        if let Some(code) = std::env::var_os("AURACODE_TERMINAL_TEST_EXIT") {
+            std::process::exit(code.to_string_lossy().parse().unwrap());
+        }
         let mut line = String::new();
         std::io::stdin().read_line(&mut line).unwrap();
         println!("local-terminal-input:{}", line.trim());
         std::io::stdout().flush().unwrap();
         std::thread::sleep(Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn setup_completion_comes_from_owned_exit_even_without_output_polling() {
+        for code in [0, 3] {
+            let folder = tempfile::tempdir().unwrap();
+            let terminals = Terminals::default();
+            let mut spec = local_spec(folder.path());
+            spec.launch.set_env.push((
+                "AURACODE_TERMINAL_TEST_EXIT".into(),
+                code.to_string().into(),
+            ));
+            let (completion, finished) = tokio::sync::oneshot::channel();
+            let id = terminals
+                .reserve("setup")
+                .unwrap()
+                .start_setup(
+                    Spawner::new(
+                        LeftoverRegistry::disabled(),
+                        tokio::runtime::Handle::current(),
+                    ),
+                    spec,
+                    PtySize { rows: 24, cols: 80 },
+                    Box::new(()),
+                    Some(completion),
+                )
+                .await
+                .unwrap();
+            let result = tokio::time::timeout(Duration::from_secs(30), finished)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.is_ok(), code == 0, "{result:?}");
+            terminals.close("setup", &id).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn setup_close_and_launch_failure_cannot_report_success() {
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let spawner = Spawner::new(
+            LeftoverRegistry::disabled(),
+            tokio::runtime::Handle::current(),
+        );
+        let (completion, finished) = tokio::sync::oneshot::channel();
+        let id = terminals
+            .reserve("setup")
+            .unwrap()
+            .start_setup(
+                spawner.clone(),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(()),
+                Some(completion),
+            )
+            .await
+            .unwrap();
+        terminals.close("setup", &id).unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(30), finished)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap_err()
+                .contains("canceled")
+        );
+        let (completion, finished) = tokio::sync::oneshot::channel();
+        let mut missing = local_spec(folder.path());
+        missing.launch.program = folder.path().join("missing-setup-executable");
+        assert!(
+            terminals
+                .reserve("setup")
+                .unwrap()
+                .start_setup(
+                    spawner,
+                    missing,
+                    PtySize { rows: 24, cols: 80 },
+                    Box::new(()),
+                    Some(completion)
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            finished.await.is_err(),
+            "launch failure drops its completion sender"
+        );
     }
 
     fn local_spec(folder: &std::path::Path) -> SpawnSpec {

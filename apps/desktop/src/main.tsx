@@ -37,11 +37,20 @@ if (container) {
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
         mountConfigSyncPreview(container, mode),
       );
+    else if (mode === "header-labels")
+      void import("./dev/headerLabelsPreview").then(({ mountHeaderLabelsPreview }) =>
+        mountHeaderLabelsPreview(container),
+      );
+    else if (mode === "setup-recovery")
+      void import("./dev/setupRecoveryPreview").then(({ mountSetupRecoveryPreview }) =>
+        mountSetupRecoveryPreview(container),
+      );
     else if (
       mode === "plugins" ||
       mode === "plugins-pi" ||
       mode === "plugins-update" ||
-      mode === "plugins-failed"
+      mode === "plugins-failed" ||
+      mode === "plugins-progressive"
     )
       void import("./dev/pluginLibraryPreview").then(({ mountPluginLibraryPreview }) =>
         mountPluginLibraryPreview(container, mode),

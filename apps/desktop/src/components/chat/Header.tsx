@@ -25,6 +25,7 @@ export function Header({
   state,
   listed = null,
   project = null,
+  folderLabel = null,
   agent,
   resumable,
   onStart,
@@ -51,6 +52,8 @@ export function Header({
    * the folder name stands in only when the workspace does not know the project.
    */
   readonly project?: string | null;
+  /** Rust's selected folder label retains the managed worktree's branch and source. */
+  readonly folderLabel?: string | null;
   /** The chat's agent as detection sees it, for the version that will run. */
   readonly agent: AgentEntry | null;
   /** There is an earlier session a start would continue. */
@@ -79,6 +82,9 @@ export function Header({
   const ready = agent?.availability.state === "ready" ? agent.availability : null;
   const version = ready?.version ?? session?.agent_version ?? null;
   const folderState = chat ? folderStateLabel(chat.folder_state) : null;
+  const projectLabel = project ?? (chat ? projectName(chat.folder) : null);
+  const location =
+    folderLabel && folderLabel !== projectLabel ? `${projectLabel} · ${folderLabel}` : projectLabel;
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
   const activity = chatActivity(state);
@@ -98,7 +104,7 @@ export function Header({
         </span>
         {chat ? (
           <span className="chat-header-folder" title={chat.folder}>
-            {project ?? projectName(chat.folder)}
+            {location}
             {folderState !== null ? <span className="chat-row-flag"> · {folderState}</span> : null}
           </span>
         ) : null}

@@ -2,6 +2,7 @@
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
 mod checkpoints;
+mod cloning;
 mod conversation;
 mod folder_context;
 mod folder_resolution;
@@ -15,6 +16,7 @@ mod workspace;
 mod workspace_removal;
 mod worktree_chat;
 mod worktree_guards;
+mod worktree_setup;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -996,6 +998,16 @@ async fn the_chat_list_never_waits_long_for_a_folder() {
     );
 
     let checks = rig.manager.slow_folder(&slow, Duration::from_millis(1500));
+    // Start the delayed check first: the quick folder must not depend on blocking-pool order.
+    let slow_check = tokio::spawn({
+        let manager = rig.manager.clone();
+        let slow = slow.clone();
+        async move { manager.check_folders(vec![slow]).await }
+    });
+    eventually("the delayed folder check started", || {
+        checks.load(Ordering::SeqCst) == 1
+    })
+    .await;
     std::fs::remove_dir_all(&quick).expect("remove");
     let started = std::time::Instant::now();
     let listed = states(rig.manager.chats().await.expect("chats"));
@@ -1024,6 +1036,7 @@ async fn the_chat_list_never_waits_long_for_a_folder() {
         "not checked again while its check runs"
     );
     // Once the hung check answers, its result shows, even while the next check hangs again.
+    slow_check.await.expect("the initial folder check task");
     tokio::time::sleep(Duration::from_millis(1600)).await;
     let listed = states(rig.manager.chats().await.expect("chats"));
     assert_eq!(listed[&a.id], FolderState::Missing);

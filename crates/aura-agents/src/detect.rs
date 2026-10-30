@@ -75,8 +75,10 @@ struct Live {
     state: Mutex<LiveState>,
     preferences: Option<PathBuf>,
     selection_gate: tokio::sync::Mutex<()>,
-    /// One Plugin library listing at a time: each runs several vendor commands in turn.
-    listing_gate: tokio::sync::Mutex<()>,
+    /// At most two providers run listings, each provider runs its commands in turn.
+    listing_slots: tokio::sync::Semaphore,
+    #[cfg(test)]
+    listing_admission_gate: Mutex<Option<Gate>>,
 }
 
 #[derive(Default)]
@@ -89,6 +91,8 @@ struct LiveState {
     releases: HashMap<String, aura_protocol::agents::LatestRelease>,
     /// The last Plugin library listing of each provider, with the version it was read from.
     listings: HashMap<String, crate::plugins::AgentListings>,
+    listing_jobs: HashMap<String, ListingJob>,
+    listing_generation: u64,
     maintenance: HashSet<String>,
     minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
@@ -96,6 +100,27 @@ struct LiveState {
     probes: HashMap<String, Probe>,
     installs: HashMap<String, Install>,
     generation: u64,
+}
+
+struct ListingJob {
+    version: String,
+    revision: u64,
+    generation: u64,
+    minimum: Option<u64>,
+    task: SharedTask<Option<crate::plugins::AgentListings>>,
+    gate: Arc<tokio::sync::Mutex<()>>,
+}
+
+fn provider_detection_generations(
+    state: &LiveState,
+    provider: &str,
+) -> std::collections::BTreeMap<String, u64> {
+    state
+        .results
+        .iter()
+        .filter(|(id, _)| crate::installation::provider_namespace(id) == provider)
+        .map(|(id, (generation, _))| (id.clone(), *generation))
+        .collect()
 }
 
 struct MaintenanceGuard {
@@ -751,10 +776,43 @@ impl Detector {
         }
     }
 
-    /// The Plugin library listings of one agent, read with its own reviewed CLI commands. Cached
-    /// per provider with the version they were read from: a changed installed version (an update
-    /// through any channel, seen by detection) reads them again and reports the change. `None`:
-    /// not installed here, or an agent without reviewed listing commands.
+    /// Reload auracode's choices and environment without waiting for catalog-wide detection.
+    pub async fn prepare_plugin_refresh(&self) {
+        self.reload_connections().await;
+        if let Mode::Live(live) = &self.mode {
+            selections::refresh_preferences(live).await;
+            live.env.refresh();
+        }
+    }
+
+    /// Reprobe one supported provider inside the core's bounded refresh stream. Other catalog
+    /// providers cannot delay its listings. Connections of one provider are checked in turn.
+    pub async fn refresh_plugin_provider(&self, id: &str) {
+        if crate::plugins::recipes(id).is_empty() && id != "opencode" {
+            return;
+        }
+        match &self.mode {
+            Mode::Live(live) => {
+                let _slot = live.listing_slots.acquire().await;
+                for spec in &live.specs {
+                    if crate::installation::provider_namespace(spec.id) == id {
+                        live.probe(spec, true).wait().await;
+                    }
+                }
+            }
+            Mode::Fixed { agents } => {
+                for fixed in agents {
+                    if crate::installation::provider_namespace(fixed.agent.spec.id) == id {
+                        fixed.detect().await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Listings read with the provider's reviewed commands, shared with any refresh in flight.
+    /// A changed installation version invalidates the cache and reports the version change.
+    /// None means not installed or no reviewed listing commands.
     pub async fn plugin_listings(
         &self,
         id: &str,
@@ -764,35 +822,167 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return None;
         };
-        let spec = self.connection_for(id)?;
-        let installation = live.detect(&spec).await.installation?;
         let provider = crate::installation::provider_namespace(id).to_owned();
         if crate::plugins::recipes(&provider).is_empty() {
             return None;
         }
-        let _turn = live.listing_gate.lock().await;
-        let cached = lock(&live.state).listings.get(&provider).cloned();
-        if crate::plugins::cache_answers(cached.as_ref(), &installation.version, refresh) {
-            return cached.map(|cached| crate::plugins::AgentListings {
-                version_change: None,
-                ..cached
-            });
+        for _ in 0..ATTEMPTS {
+            let (revision, minimum, detections) = {
+                let state = lock(&live.state);
+                (
+                    state.configuration_revision,
+                    state.minimum_generation.get(&provider).copied(),
+                    provider_detection_generations(&state, &provider),
+                )
+            };
+            let installation = match self.connection_for(id) {
+                Some(spec) => live.detect(&spec).await.installation,
+                None => None,
+            };
+            #[cfg(test)]
+            {
+                let gate = lock(&live.listing_admission_gate).take();
+                if let Some(gate) = gate {
+                    gate.pass().await;
+                }
+            }
+            let (job, job_generation) = {
+                let mut state = lock(&live.state);
+                // Resolution can await a probe. Never label an old executable with a selection
+                // revision published while that resolution was in progress.
+                if state.configuration_revision != revision
+                    || state.minimum_generation.get(&provider).copied() != minimum
+                    || provider_detection_generations(&state, &provider) != detections
+                {
+                    continue;
+                }
+                let Some(installation) = installation else {
+                    state.listings.remove(&provider);
+                    state.listing_generation += 1;
+                    let generation = state.listing_generation;
+                    if let Some(job) = state.listing_jobs.get_mut(&provider) {
+                        job.task.cancel();
+                        // Retain its sequencing gate for a later reinstall, while making both
+                        // admission and publication of this obsolete job impossible.
+                        job.version.clear();
+                        job.generation = generation;
+                    }
+                    return None;
+                };
+                if let Some(job) = state.listing_jobs.get(&provider)
+                    && job.version == installation.version
+                    && job.revision == revision
+                    && job.minimum == minimum
+                    && job.task.is_running()
+                {
+                    (job.task.clone(), job.generation)
+                } else {
+                    let cached = state.listings.get(&provider).cloned();
+                    if crate::plugins::cache_answers(
+                        cached.as_ref(),
+                        &installation.version,
+                        refresh,
+                    ) {
+                        return cached.map(|cached| crate::plugins::AgentListings {
+                            version_change: None,
+                            ..cached
+                        });
+                    }
+                    let gate = state
+                        .listing_jobs
+                        .get(&provider)
+                        .map(|previous| {
+                            previous.task.cancel();
+                            previous.gate.clone()
+                        })
+                        .unwrap_or_default();
+                    state.listing_generation += 1;
+                    let generation = state.listing_generation;
+                    let owned = Arc::clone(live);
+                    let namespace = provider.clone();
+                    let installation = installation.clone();
+                    let version = installation.version.clone();
+                    let provider_gate = Arc::clone(&gate);
+                    let task = SharedTask::spawn(&live.rt, async move {
+                        let _provider = provider_gate.lock().await;
+                        let _slot = owned.listing_slots.acquire().await.ok()?;
+                        let mut listings = crate::plugins::run_listings(
+                            &installation,
+                            owned.env.get().await,
+                            &owned.registry,
+                        )
+                        .await;
+                        crate::plugins::retain_failed_entries(&mut listings, cached.as_ref());
+                        let fresh = crate::plugins::AgentListings {
+                            version_change: cached
+                                .filter(|cached| cached.version != installation.version)
+                                .map(|cached| aura_protocol::plugins::VersionChange {
+                                    from: cached.version,
+                                    to: installation.version.clone(),
+                                }),
+                            version: installation.version,
+                            updated_at: now,
+                            listings,
+                        };
+                        let mut state = lock(&owned.state);
+                        if state.configuration_revision != revision
+                            || state.minimum_generation.get(&namespace).copied() != minimum
+                            || state
+                                .listing_jobs
+                                .get(&namespace)
+                                .is_none_or(|job| job.generation != generation)
+                        {
+                            return None;
+                        }
+                        state.listings.insert(namespace, fresh.clone());
+                        Some(fresh)
+                    });
+                    state.listing_jobs.insert(
+                        provider.clone(),
+                        ListingJob {
+                            version,
+                            revision,
+                            generation,
+                            minimum,
+                            task: task.clone(),
+                            gate,
+                        },
+                    );
+                    (task, generation)
+                }
+            };
+            match job.wait().await {
+                Some(result) => return result,
+                // A replaced request may have just cancelled its last waiter. Do not join
+                // that cancelled job permanently; the next attempt creates fresh work.
+                None => {
+                    let state = lock(&live.state);
+                    if state.listing_jobs.get(&provider).is_none_or(|job| {
+                        job.generation != job_generation
+                            || job.revision != state.configuration_revision
+                            || job.minimum != state.minimum_generation.get(&provider).copied()
+                    }) {
+                        return None;
+                    }
+                    continue;
+                }
+            }
         }
-        let listings =
-            crate::plugins::run_listings(&installation, live.env.get().await, &live.registry).await;
-        let fresh = crate::plugins::AgentListings {
-            version_change: cached
-                .filter(|cached| cached.version != installation.version)
-                .map(|cached| aura_protocol::plugins::VersionChange {
-                    from: cached.version,
-                    to: installation.version.clone(),
-                }),
-            version: installation.version,
-            updated_at: now,
-            listings,
-        };
-        lock(&live.state).listings.insert(provider, fresh.clone());
-        Some(fresh)
+        None
+    }
+
+    /// Last public listing facts, without detection or CLI work.
+    pub fn cached_plugin_listings(
+        &self,
+    ) -> std::collections::BTreeMap<String, crate::plugins::AgentListings> {
+        match &self.mode {
+            Mode::Live(live) => lock(&live.state)
+                .listings
+                .iter()
+                .map(|(id, listing)| (id.clone(), listing.clone()))
+                .collect(),
+            Mode::Fixed { .. } => Default::default(),
+        }
     }
 
     /// Runs the vendor's local status command and retains only a coarse status, never account data.
@@ -955,7 +1145,9 @@ impl Detector {
             state: Mutex::new(state),
             preferences,
             selection_gate: tokio::sync::Mutex::new(()),
-            listing_gate: tokio::sync::Mutex::new(()),
+            listing_slots: tokio::sync::Semaphore::new(2),
+            #[cfg(test)]
+            listing_admission_gate: Mutex::new(None),
         });
         let background = Arc::clone(&live);
         rt.spawn(async move { background.detect_every(false).await });
@@ -1179,6 +1371,126 @@ mod tests {
             PathBuf::from("/data/adapters"),
             Handle::current(),
         )
+    }
+
+    #[tokio::test]
+    async fn listing_admission_retries_an_installation_resolved_before_selection_changed() {
+        let detector = live();
+        detector.detect_all(true).await;
+        let Mode::Live(live) = &detector.mode else {
+            panic!("live detector");
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let old_path = temp.path().join("old-claude");
+        let new_path = temp.path().join("new-claude");
+        let old =
+            crate::installation::native("claude", "2.1.310", old_path.to_str().unwrap()).unwrap();
+        let mut new =
+            crate::installation::native("claude", "2.1.312", new_path.to_str().unwrap()).unwrap();
+        // An unsupported host gives the new result a distinct, deterministic listing failure
+        // before any helper starts. These synthetic installations never execute a real CLI.
+        new.host = aura_protocol::agents::AgentHost::Unsupported;
+        let detection = |installation: aura_protocol::agents::AgentInstallation| Detection {
+            availability: Availability::Ready {
+                version: Some(installation.version.clone()),
+                path: installation.launch_path.clone(),
+            },
+            installation: Some(installation),
+            needs_download: false,
+            located: None,
+        };
+        {
+            let mut state = lock(&live.state);
+            let generation = state.generation;
+            state
+                .results
+                .insert("claude".into(), (generation, detection(old)));
+        }
+        let gate = Gate::new();
+        *lock(&live.listing_admission_gate) = Some(gate.clone());
+        let listing = tokio::spawn({
+            let detector = detector.clone();
+            async move { detector.plugin_listings("claude", true, 1).await.unwrap() }
+        });
+        gate.until_waiting(1).await;
+        assert!(selections::replace_selections(
+            live,
+            Ok([("claude".into(), new_path)].into())
+        ));
+        {
+            let mut state = lock(&live.state);
+            let generation = state.generation;
+            state
+                .results
+                .insert("claude".into(), (generation, detection(new)));
+        }
+        gate.open();
+        let result = listing.await.unwrap();
+        assert_eq!(
+            result.version, "2.1.312",
+            "the old installation cannot be admitted under the new revision"
+        );
+        assert!(
+            result
+                .listings
+                .iter()
+                .all(|listing| matches!(&listing.state,
+            aura_protocol::plugins::ListingState::Failed { reason }
+                if reason == "auracode lists plugins only for agents installed on this computer."))
+        );
+        assert_eq!(detector.cached_plugin_listings()["claude"], result);
+    }
+
+    #[tokio::test]
+    async fn an_older_missing_resolution_cannot_erase_a_reinstalled_provider_cache() {
+        let detector = live();
+        detector.detect_all(true).await;
+        let Mode::Live(live) = &detector.mode else {
+            panic!("live detector");
+        };
+        let gate = Gate::new();
+        *lock(&live.listing_admission_gate) = Some(gate.clone());
+        let older = tokio::spawn({
+            let detector = detector.clone();
+            async move { detector.plugin_listings("claude", false, 1).await }
+        });
+        gate.until_waiting(1).await;
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("new-claude");
+        let mut installation =
+            crate::installation::native("claude", "2.1.312", path.to_str().unwrap()).unwrap();
+        installation.host = aura_protocol::agents::AgentHost::Unsupported;
+        {
+            let mut state = lock(&live.state);
+            state.generation += 1;
+            let generation = state.generation;
+            state.results.insert(
+                "claude".into(),
+                (
+                    generation,
+                    Detection {
+                        availability: Availability::Ready {
+                            version: Some(installation.version.clone()),
+                            path: installation.launch_path.clone(),
+                        },
+                        installation: Some(installation),
+                        needs_download: false,
+                        located: None,
+                    },
+                ),
+            );
+        }
+        // A newer reprobe and listing complete while the older missing result is paused. The
+        // synthetic unsupported host finishes without launching any CLI or reading agent files.
+        let fresh = detector.plugin_listings("claude", true, 2).await.unwrap();
+        assert_eq!(fresh.version, "2.1.312");
+        gate.open();
+        assert_eq!(
+            older.await.unwrap(),
+            Some(fresh.clone()),
+            "the stale None must retry current facts instead of clearing the newer result"
+        );
+        assert_eq!(detector.cached_plugin_listings()["claude"], fresh);
     }
 
     fn progress() -> mpsc::UnboundedSender<String> {

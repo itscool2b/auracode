@@ -35,7 +35,7 @@ use aura_process::{
 use aura_protocol::session::{
     AuthPrompt, Availability, ChatAttach, ChatSnapshot, ChatSummary, ConfigCategory, ConfigKind,
     ConfigOption, ConfigValue, ErrorInfo, FolderState, HistoryPage, PromptAck, QueuedPrompt,
-    SessionLists,
+    SendingPrompt, SessionLists,
 };
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, HoldCause,
@@ -94,6 +94,7 @@ pub(crate) type FolderContextReply = (
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    SetupChanged(aura_protocol::worktree_setup::WorktreeSetupAttempt),
     FolderContext {
         reply: oneshot::Sender<Result<FolderContextReply, SessionError>>,
     },
@@ -107,6 +108,10 @@ pub(crate) enum ChatMsg {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     ReserveGit {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReserveSetup {
         id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -269,6 +274,7 @@ impl ChatMsg {
             ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Revert { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::ReserveSetup { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
@@ -296,7 +302,7 @@ impl ChatMsg {
             ChatMsg::Shutdown { reply, .. } => {
                 let _ = reply.send(());
             }
-            ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } => {}
+            ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } | ChatMsg::SetupChanged(_) => {}
             #[cfg(test)]
             ChatMsg::Panic => {}
         }
@@ -566,6 +572,8 @@ struct Prompt {
 
 /// One chat's actor.
 pub(crate) struct ChatActor {
+    setup_reservation: bool,
+    worktree_setup: Option<aura_protocol::worktree_setup::WorktreeSetupAttempt>,
     chat_id: String,
     shared: Arc<Shared>,
     store: Arc<ChatStore>,
@@ -663,6 +671,7 @@ impl ChatActor {
         load: ChatLoad,
     ) -> ChatActor {
         let ChatLoad {
+            worktree_setup,
             initial_model,
             remote_history,
             continuation,
@@ -756,6 +765,8 @@ impl ChatActor {
             // Every queued row of a loaded chat comes back held: auracode restarted with it.
             hold_cause: HoldCause::Restart,
             queue_wait: None,
+            worktree_setup,
+            setup_reservation: false,
             last_activity: Instant::now(),
             quitting: false,
             shutdown_reply: None,
@@ -929,9 +940,38 @@ impl ChatActor {
             }
         }
         match msg {
+            ChatMsg::SetupChanged(attempt) => {
+                if self.worktree_setup.as_ref().is_some_and(|current| {
+                    current.generation > attempt.generation
+                        || (current.generation == attempt.generation
+                            && (matches!(current.state,aura_protocol::worktree_setup::WorktreeSetupState::Succeeded | aura_protocol::worktree_setup::WorktreeSetupState::Failed | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted)
+                            || (current.state == aura_protocol::worktree_setup::WorktreeSetupState::Running && attempt.state == aura_protocol::worktree_setup::WorktreeSetupState::Awaiting)))
+                }) {
+                    return;
+                }
+                let succeeded = !attempt.blocks_agent();
+                let failed = matches!(
+                    attempt.state,
+                    aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                        | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+                );
+                self.worktree_setup = Some(attempt);
+                if failed {
+                    self.hold_queue(HoldCause::Error);
+                }
+                self.info_dirty = true;
+                self.schedule_flush();
+                if succeeded {
+                    let _ = self.start(false, false);
+                }
+            }
             #[cfg(feature = "account-sync")]
             ChatMsg::ImportSync { reply } => self.import_sync(reply),
             ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
+            ChatMsg::ReserveSetup { id, reply } => {
+                self.reserve_workspace(id.clone(), true, reply);
+                self.setup_reservation = self.git_reservation.as_deref() == Some(&id);
+            }
             ChatMsg::ReserveWorkspace {
                 id,
                 restoring,
@@ -939,10 +979,21 @@ impl ChatActor {
             } => self.reserve_workspace(id, restoring, reply),
             ChatMsg::ReleaseGit { id } => {
                 if self.git_reservation.as_deref() == Some(&id) {
+                    let setup = self.setup_reservation;
+                    self.setup_reservation = false;
                     self.git_reservation = None;
                     self.organizing = false;
                     // A prompt queued meanwhile (a restore keeps the queue) goes once it may.
                     self.dispatch_next();
+                    if setup
+                        && self
+                            .worktree_setup
+                            .as_ref()
+                            .is_some_and(|attempt| !attempt.blocks_agent())
+                        && self.status == SessionStatus::Stopped
+                    {
+                        let _ = self.start(false, false);
+                    }
                 }
             }
             ChatMsg::FolderLocated {
@@ -1575,7 +1626,7 @@ impl ChatActor {
     fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
         self.require_workspace()?;
         self.require_remote_handoff()?;
-        if self.organizing {
+        if self.organizing && !self.setup_reservation {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
             ));
@@ -1618,7 +1669,8 @@ impl ChatActor {
         }
         let prompt_id = new_id();
         let now = now_millis();
-        if self.can_dispatch() {
+        // A prompt goes at once only with nothing queued before it: held prompts keep their place.
+        if self.queue.is_empty() && self.can_dispatch() {
             let queued = self.dispatch(Prompt {
                 id: prompt_id.clone(),
                 parts,
@@ -1636,10 +1688,17 @@ impl ChatActor {
             parts,
             chat_id: self.chat_id.clone(),
             text,
-            held: false,
+            held: self.worktree_setup.as_ref().is_some_and(|attempt| {
+                matches!(
+                    attempt.state,
+                    aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                        | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+                )
+            }),
             created_at: now,
         };
         let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
+        let held = row.held;
         self.queue.push(row.clone());
         self.queue_op(Op::QueuePut(row));
         self.push(
@@ -1647,26 +1706,42 @@ impl ChatActor {
                 prompt_id: prompt_id.clone(),
                 state: PromptState::Queued,
                 preview: Some(preview),
+                held: Some(held),
             },
             None,
         );
         self.info_dirty = true;
-        if matches!(
-            self.status,
-            SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
-        ) {
-            // A full slot shows as a card; the prompt stays queued.
-            let _ = self.start(false, false);
-        }
+        self.advance();
         Ok(PromptAck {
             prompt_id,
             queued: true,
         })
     }
 
+    /// The queue's head may go now: it is sent when the agent can take it, or the agent starts
+    /// when it is stopped (a full slot shows as a card; the prompt stays queued). A held head is
+    /// the person's to send or discard, so nothing behind it moves on its own.
+    fn advance(&mut self) {
+        if !self.queue.first().is_some_and(|row| !row.held) {
+            return;
+        }
+        if self.can_dispatch() {
+            self.dispatch_next();
+        } else if matches!(
+            self.status,
+            SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
+        ) {
+            let _ = self.start(false, false);
+        }
+    }
+
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
-        !self.organizing
+        !self
+            .worktree_setup
+            .as_ref()
+            .is_some_and(|attempt| attempt.blocks_agent())
+            && !self.organizing
             && !self.steering_pending
             && self.checkpointing.is_none()
             && self.status == SessionStatus::Ready
@@ -1685,7 +1760,7 @@ impl ChatActor {
         let Some(index) = self.queue.iter().position(|row| row.id == prompt_id) else {
             return Err(SessionError::RequestNotPending);
         };
-        self.queue.remove(index);
+        let removed = self.queue.remove(index);
         self.queue_op(Op::QueueRemove {
             id: prompt_id.to_owned(),
         });
@@ -1694,11 +1769,16 @@ impl ChatActor {
                 prompt_id: prompt_id.to_owned(),
                 state: PromptState::Cancelled,
                 preview: None,
+                held: None,
             },
             None,
         );
         self.info_dirty = true;
         self.schedule_flush();
+        // Discarding the held prompt everything waited behind lets the next one go, as if sent.
+        if index == 0 && removed.held {
+            self.advance();
+        }
         Ok(())
     }
 
@@ -1759,12 +1839,21 @@ impl ChatActor {
         prompt_id: &str,
         index: usize,
     ) -> Result<Vec<QueuedPrompt>, SessionError> {
+        self.waiting(prompt_id)?;
+        // `index` counts the rows the person sees; the prompt on its way keeps its own place.
+        let sending = self.sending_id().map(str::to_owned).and_then(|id| {
+            let at = self.queue.iter().position(|row| row.id == id)?;
+            Some((at, self.queue.remove(at)))
+        });
         let from = self.waiting(prompt_id)?;
         let to = index.min(self.queue.len().saturating_sub(1));
         if from != to {
             let row = self.queue.remove(from);
             self.queue.insert(to, row);
             self.save_order(None);
+        }
+        if let Some((at, row)) = sending {
+            self.queue.insert(at.min(self.queue.len()), row);
         }
         Ok(self.queued_prompts())
     }
@@ -1876,16 +1965,40 @@ impl ChatActor {
         self.refresh_attention();
     }
 
+    /// The prompts that wait, as the queue shows them: the one on its way (see [`Self::sending`])
+    /// is not waiting, and shows in the transcript instead.
     fn queued_prompts(&self) -> Vec<QueuedPrompt> {
+        let sending = self.sending_id();
         self.queue
             .iter()
-            .map(|row| QueuedPrompt {
+            .filter(|row| Some(row.id.as_str()) != sending)
+            .map(shown)
+            .collect()
+    }
+
+    /// The prompt on its way to the agent: its folder checkpoint is being saved, and it goes the
+    /// moment that ends. It stays a stored queued row meanwhile (a crash brings it back held), but
+    /// it does not wait behind anything, so it is not part of the queue the person sees. A Stop
+    /// during the save holds it, and then it waits like any held prompt.
+    fn sending_id(&self) -> Option<&str> {
+        let (id, _) = self.checkpointing.as_ref()?;
+        self.queue
+            .iter()
+            .any(|row| row.id == *id && !row.held)
+            .then_some(id.as_str())
+    }
+
+    fn sending(&self) -> Option<SendingPrompt> {
+        let id = self.sending_id()?;
+        self.queue
+            .iter()
+            .find(|row| row.id == id)
+            .map(|row| SendingPrompt {
                 prompt_id: row.id.clone(),
-                preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
-                held: row.held,
+                text: row.text.clone(),
+                parts: row.parts.clone(),
                 created_at: row.created_at,
             })
-            .collect()
     }
 
     fn require_workspace(&self) -> Result<(), SessionError> {
@@ -1917,18 +2030,35 @@ impl ChatActor {
         }
     }
 
-    /// Holds every queued row: rows typed afterwards are not held, and go first at the next `Ready`.
+    /// Holds every queued row. Rows typed afterwards are not held but wait behind the held ones,
+    /// which go only when the person sends them (or are discarded): order is kept.
     fn hold_queue(&mut self, cause: HoldCause) {
         if self.queue.iter().all(|row| row.held) {
             return;
         }
         self.hold_cause = cause;
-        for row in &mut self.queue {
-            row.held = true;
-        }
+        let changed: Vec<_> = self
+            .queue
+            .iter_mut()
+            .filter_map(|row| {
+                if row.held {
+                    return None;
+                }
+                row.held = true;
+                Some(AuraEvent::PromptLifecycle {
+                    prompt_id: row.id.clone(),
+                    state: PromptState::Queued,
+                    preview: Some(cap_chars(row.text.clone(), PREVIEW_CHARS)),
+                    held: Some(true),
+                })
+            })
+            .collect();
         self.queue_op(Op::QueueHoldAll {
             chat_id: self.chat_id.clone(),
         });
+        for event in changed {
+            self.push(event, None);
+        }
         self.info_dirty = true;
         self.schedule_flush();
     }
@@ -1940,10 +2070,11 @@ impl ChatActor {
         if !self.can_dispatch() {
             return;
         }
-        let Some(index) = self.queue.iter().position(|row| !row.held) else {
+        // The head goes first; a held head waits for the person, and everything behind it with it.
+        if !self.queue.first().is_some_and(|row| !row.held) {
             return;
-        };
-        let row = self.queue.remove(index);
+        }
+        let row = self.queue.remove(0);
         self.dispatch(Prompt {
             id: row.id,
             parts: if row.parts.is_empty() {
@@ -1973,13 +2104,15 @@ impl ChatActor {
             };
             let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
             let prompt_id = row.id.clone();
-            self.queue.push(row.clone());
+            // It was next, so it keeps the head.
+            self.queue.insert(0, row.clone());
             self.queue_op(Op::QueuePut(row));
             self.push(
                 AuraEvent::PromptLifecycle {
                     prompt_id,
                     state: PromptState::Queued,
                     preview: Some(preview),
+                    held: Some(true),
                 },
                 None,
             );
@@ -1995,6 +2128,9 @@ impl ChatActor {
             self.dispatch_prepared(prompt, turn_id, None);
             return false;
         };
+        // Stored as a queued row while its checkpoint saves, so a crash brings it back (held). It
+        // is the next to go, so it stands at the head; it is sending, not waiting
+        // ([`Self::sending_id`]).
         let row = QueuedRow {
             id: prompt.id.clone(),
             chat_id: self.chat_id.clone(),
@@ -2003,16 +2139,18 @@ impl ChatActor {
             held: false,
             created_at: prompt.created_at,
         };
-        self.queue.push(row.clone());
+        self.queue.insert(0, row.clone());
         self.queue_op(Op::QueuePut(row));
         self.push(
             AuraEvent::PromptLifecycle {
                 prompt_id: prompt.id.clone(),
-                state: PromptState::Queued,
+                state: PromptState::Sending,
                 preview: Some(cap_chars(prompt.text.clone(), PREVIEW_CHARS)),
+                held: None,
             },
             None,
         );
+        self.info_dirty = true;
         let chat_id = self.chat_id.clone();
         let folder = self.chat.folder.clone();
         let folder_id = self.chat.folder_id.clone();
@@ -2133,6 +2271,7 @@ impl ChatActor {
                 prompt_id: prompt.id,
                 state: PromptState::Started,
                 preview: None,
+                held: None,
             },
             tagged,
         );
@@ -2332,6 +2471,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id.clone(),
                     state: PromptState::Cancelled,
                     preview: None,
+                    held: None,
                 },
                 tag.clone(),
             );
@@ -2451,6 +2591,17 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            return Err(SessionError::Organization(
+                attempt.detail.clone().unwrap_or_else(|| {
+                    "Setup is running. Your messages stay queued until it succeeds.".into()
+                }),
+            ));
+        }
         self.require_workspace()?;
         if self.shared.deps.store.config_recovery_pending() {
             return Err(SessionError::Organization(
@@ -3143,6 +3294,9 @@ impl ChatActor {
                     return;
                 }
                 self.checkpointing = None;
+                // The prompt is no longer on its way: it went, or it waits in the queue (held).
+                self.info_dirty = true;
+                self.schedule_flush();
                 if generation != self.generation {
                     return;
                 }
@@ -3907,6 +4061,7 @@ impl ChatActor {
                 prompt_id: turn.prompt_id.clone(),
                 state,
                 preview: None,
+                held: None,
             },
             tag,
         );
@@ -4222,6 +4377,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Cancelled,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );
@@ -4249,7 +4405,9 @@ impl ChatActor {
         }
         if let Some(fresh) = self.pending_start.take() {
             let _ = self.start(fresh, false);
-        } else if self.status == SessionStatus::Stopped && self.queue.iter().any(|row| !row.held) {
+        } else if self.status == SessionStatus::Stopped
+            && self.queue.first().is_some_and(|row| !row.held)
+        {
             let _ = self.start(false, false);
         }
     }
@@ -4292,6 +4450,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Failed,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );
@@ -4339,6 +4498,7 @@ impl ChatActor {
                     prompt_id: turn.prompt_id,
                     state: PromptState::Failed,
                     preview: None,
+                    held: None,
                 },
                 tag,
             );
@@ -4535,7 +4695,7 @@ impl ChatActor {
             && self.turn.is_none()
             && self.subscribers.is_empty()
             && !self.normalizer.has_open_requests()
-            && !self.queue.iter().any(|row| !row.held)
+            && !self.queue.first().is_some_and(|row| !row.held)
             && !self.quitting
             && self
                 .driver
@@ -4824,13 +4984,26 @@ impl ChatActor {
     /// Why the queued prompts wait, while any are queued (see [`QueueWait`]). The first match in
     /// the order a person would have to clear them wins.
     fn compute_queue_wait(&self) -> Option<QueueWait> {
-        if self.queue.is_empty() {
-            return None;
-        }
+        // The prompt on its way does not wait: only the ones after it do.
+        let sending = self.sending_id();
+        let next = self
+            .queue
+            .iter()
+            .find(|row| Some(row.id.as_str()) != sending)?;
         if !self.store.workspace_available(&self.chat_id) {
             return Some(QueueWait::WorkspaceRemoved);
         }
-        if self.queue.iter().all(|row| row.held) {
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            return Some(QueueWait::Setup {
+                state: attempt.state,
+                detail: attempt.detail.clone(),
+            });
+        }
+        if next.held {
             return Some(QueueWait::Held {
                 after: self.hold_cause,
             });
@@ -4946,6 +5119,7 @@ impl ChatActor {
 
     fn session_info(&self) -> SessionInfo {
         SessionInfo {
+            worktree_setup: self.worktree_setup.clone(),
             status: self.status,
             detail: self.detail.clone(),
             native_session_id: self.native_session_id.clone(),
@@ -4959,6 +5133,7 @@ impl ChatActor {
             queue_held: self.queue.iter().any(|row| row.held),
             revision: self.revision,
             queue_wait: self.compute_queue_wait(),
+            sending: self.sending(),
         }
     }
 
@@ -4997,6 +5172,16 @@ impl ChatActor {
 impl Drop for ChatActor {
     fn drop(&mut self) {
         self.cancel_checkpoint();
+    }
+}
+
+/// A queued row as the queue and the header show it.
+fn shown(row: &QueuedRow) -> QueuedPrompt {
+    QueuedPrompt {
+        prompt_id: row.id.clone(),
+        preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
+        held: row.held,
+        created_at: row.created_at,
     }
 }
 

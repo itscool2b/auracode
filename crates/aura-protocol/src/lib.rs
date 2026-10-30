@@ -123,6 +123,10 @@ pub enum AuraEvent {
         state: PromptState,
         /// The prompt's first 256 characters, sent with `Queued`.
         preview: Option<String>,
+        /// Exact hold when queued or when a queued row's hold changes; absent for other states
+        /// and older producers.
+        #[serde(default)]
+        held: Option<bool>,
     },
     Notice {
         level: NoticeLevel,
@@ -555,6 +559,8 @@ pub struct LimitWindow {
 /// Live header state of a chat. Never stored; coalesced to at most one per frame.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SessionInfo {
+    #[serde(default)]
+    pub worktree_setup: Option<worktree_setup::WorktreeSetupAttempt>,
     pub status: SessionStatus,
     /// What is happening now: "Starting Hermes", "Stopping the turn; press Esc again to force stop".
     pub detail: Option<String>,
@@ -575,13 +581,22 @@ pub struct SessionInfo {
     /// Why the queued prompts are not going to the agent yet, while any are queued. `None` with
     /// prompts queued means the next one is on its way.
     pub queue_wait: Option<QueueWait>,
+    /// The prompt on its way to the agent while its folder checkpoint saves: shown as sending in
+    /// the transcript, not in the queue. `None` once it went, or when a stop or a failed
+    /// checkpoint put it back in the queue, held.
+    #[serde(default)]
+    pub sending: Option<session::SendingPrompt>,
 }
 
-/// Why queued prompts wait. The first prompt that is not held goes next; when every prompt is held,
-/// they wait for the person ([`QueueWait::Held`]).
+/// Why queued prompts wait. Prompts go in order: a held prompt waits for the person to send or
+/// discard it, and every prompt queued behind it waits too ([`QueueWait::Held`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum QueueWait {
+    Setup {
+        state: worktree_setup::WorktreeSetupState,
+        detail: Option<String>,
+    },
     /// The agent is starting or resuming its session.
     Starting,
     /// The agent is working on a turn.
@@ -611,7 +626,7 @@ pub enum QueueWait {
     FolderMissing,
     /// The chat's project or folder was removed.
     WorkspaceRemoved,
-    /// Every queued prompt is held, since `after`.
+    /// The next prompt is held, since `after`, and waits for the person with any behind it.
     Held { after: HoldCause },
 }
 
@@ -657,6 +672,8 @@ pub enum SessionStatus {
 #[serde(rename_all = "snake_case")]
 pub enum PromptState {
     Queued,
+    /// On its way: its folder checkpoint is being saved, and it goes to the agent right after.
+    Sending,
     Started,
     Completed,
     Cancelled,
@@ -793,6 +810,32 @@ impl EventBatch {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn queued_lifecycle_retains_exact_hold_and_accepts_legacy_missing_hold() {
+        let event: AuraEvent = serde_json::from_value(json!({
+            "type": "prompt_lifecycle", "prompt_id": "held", "state": "queued",
+            "preview": "new held message", "held": true
+        }))
+        .unwrap();
+        assert!(matches!(
+            event,
+            AuraEvent::PromptLifecycle {
+                held: Some(true),
+                ..
+            }
+        ));
+        assert_eq!(round_trip(&event), event);
+        let legacy: AuraEvent = serde_json::from_value(json!({
+            "type": "prompt_lifecycle", "prompt_id": "legacy", "state": "queued",
+            "preview": "older producer"
+        }))
+        .unwrap();
+        assert!(matches!(
+            legacy,
+            AuraEvent::PromptLifecycle { held: None, .. }
+        ));
+    }
 
     fn round_trip(event: &AuraEvent) -> AuraEvent {
         let text = serde_json::to_string(event).expect("serialize");
@@ -1043,6 +1086,7 @@ mod tests {
                 prompt_id: "p".into(),
                 state: PromptState::Queued,
                 preview: Some("Fix the build".into()),
+                held: Some(false),
             },
             AuraEvent::Notice {
                 level: NoticeLevel::Error,

@@ -16,6 +16,7 @@ import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
 import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
+import { UserMessage } from "./UserMessage";
 import { type TranscriptRow, VirtualRows } from "./VirtualRows";
 
 /**
@@ -60,18 +61,22 @@ export function Transcript({
   const activity = chatActivity(state);
   const chatAgentId = state.chat?.agent_id ?? "generic";
   const chatAgentName = state.session?.agent_name ?? state.chat?.agent_name ?? "Agent";
+  // A message on its way (its folder checkpoint saving) shows as sent, with "Sending" under it.
+  const sending = state.sending;
   const pendingLabel =
-    activity === "waiting"
-      ? "Waiting on you"
-      : status === "starting"
-        ? "Starting session"
-        : status === "cancelling" || status === "stopping"
-          ? "Stopping"
-          : status === "running" && !hasLiveLine(last)
-            ? last?.end === null
-              ? "Thinking"
-              : "Working"
-            : null;
+    sending !== null
+      ? "Sending"
+      : activity === "waiting"
+        ? "Waiting on you"
+        : status === "starting"
+          ? "Starting session"
+          : status === "cancelling" || status === "stopping"
+            ? "Stopping"
+            : status === "running" && !hasLiveLine(last)
+              ? last?.end === null
+                ? "Thinking"
+                : "Working"
+              : null;
   const rows: TranscriptRow[] = [];
   let focusedGroupKey: string | null = null;
   let focusedGroupPhase = "";
@@ -226,6 +231,35 @@ export function Transcript({
         ),
       });
   }
+  if (sending !== null)
+    rows.push({
+      key: `sending:${sending.prompt_id}`,
+      estimate: 72,
+      content: (
+        <div
+          className="chat-segment chat-sending"
+          data-testid="sending-message"
+          data-test-prompt-id={sending.prompt_id}
+        >
+          <UserMessage
+            item={{ kind: "user", key: `sending:${sending.prompt_id}`, text: sending.text }}
+          />
+          {sending.parts.some((part) => part.type !== "text") ? (
+            <ul aria-label="Message attachments">
+              {sending.parts.flatMap((part) =>
+                part.type === "image" ? (
+                  <li key={`image:${part.blob}`}>Attached image ({part.mime})</li>
+                ) : part.type === "mention" ? (
+                  <li key={`mention:${part.path}`}>Mentioned file: {part.path}</li>
+                ) : (
+                  []
+                ),
+              )}
+            </ul>
+          ) : null}
+        </div>
+      ),
+    });
   if (pendingLabel)
     rows.push({
       key: `now:${last?.key ?? "new"}:${pendingLabel}`,
@@ -261,8 +295,10 @@ export function Transcript({
         : new Map(current).set(key, { phase: focusedGroupPhase, open: true }),
     );
   }, [focusedGroupKey, focusedGroupPhase]);
+  const [promptHost, setPromptHost] = useState<HTMLDivElement | null>(null);
   return (
     <div className="chat-transcript-shell">
+      <div ref={setPromptHost} />
       <div
         ref={scrollRef}
         className="chat-transcript"
@@ -274,6 +310,7 @@ export function Transcript({
       >
         <DisclosureMemory.Provider value={disclosures}>
           <VirtualRows
+            promptHost={promptHost}
             rows={rows}
             leading={leading}
             scroller={scroller}

@@ -1,5 +1,86 @@
 # Auracode implementation progress
 
+## 2026-10-29: Native clone folder admission
+
+The native onboarding clone path reserved the selected parent and then rejected its own child
+destination as an overlapping mutation. Shared Git admission now checks and reserves the complete
+folder batch under one lock. Existing chat, terminal and mutation owners still block overlapping
+paths. Both parent and child retain their actor reservations and release with the operation guard.
+
+The regression failed through `SessionManager::clone_check` and `clone_start` before the fix.
+Seven focused session tests now pass using a temporary home, isolated Git settings and a real
+local repository reached through the normal HTTPS form. They cover clone success and restart
+recovery, external owners, real Git failure and cancellation, both requested chat actors, actor
+refusal and cancellation during actor admission. A separate batch test checks atomic failure and
+independent retention of nested requested paths. The broad core run passed 640 unit tests and
+failed the unchanged folder-list timing test; its isolated rerun passed. All 102 integration
+tests passed separately. Core account-sync Clippy with warnings denied, changed-file rustfmt,
+instruction parity and diff checks pass. Independent review and rebuilt native acceptance remain
+pending.
+
+## 2026-10-29: Canonical Sending messages and the prompt header
+
+Local branch `codex/chat-sending` preserves held-message FIFO. A new message waits behind
+older held messages until they are released. While Rust saves the checkpoint, `SessionInfo.sending`
+carries the persisted prompt ID, complete text, attachment parts and creation time. React uses
+that ID to reconcile queue removal and the canonical user turn, including when the command
+acknowledgment arrives after the event. No truncated-prefix matching or eight-message cache
+remains. Attachment-only prompts remain visible while sending and after reattachment.
+
+The prompt header has its own reserved space above the transcript scrollport. Changing its
+height preserves the reading position, and clicking it returns to the actual prompt. The chat
+browser check now asserts that the header does not cover transcript content.
+
+Focused verification: desktop chat-store and screen tests 77 passed; Rust checkpoint tests
+6 passed, queue-wait tests 13 passed and session-turn tests 29 passed. Chromium and WebKit
+`check-chat.mjs` passed, each with 32 accessibility scans, queue reasons, reading anchors,
+prompt navigation and bounded history/tool rendering. Changed frontend sources pass Biome;
+style and local instruction checks pass.
+
+Independent review found a prompt could leave Sending while background work still delayed
+dispatch. The chat now refreshes the durable queue whenever Sending clears without its matching
+start or lifecycle event, including unheld returns. The attachment-only regression failed before
+the fix; chat-store, transcript and queue-wait tests now pass 73 tests. Scoped review remains
+pending alongside the publication gates below.
+
+Pending before publication: independent review, native walkthrough and integrated gates.
+Windows Application Control blocks the pinned pnpm executable, so frozen install has not run.
+The desktop and workspace binding exporters stop in dependencies with E0463; regenerated
+bindings and the resulting TypeScript check remain pending. Installed-dependency tests above
+do not establish those unavailable gates.
+## 2026-10-29: Clone recovery admission review
+
+Recovery actions and normal clone admission are now mutually exclusive. A delayed completed-clone
+check cannot replace a newly running clone's ownership record or prevent cancellation on close.
+Both deferred-response regressions failed before the fix. All 21 focused frontend tests,
+TypeScript checks and Chromium/WebKit setup-action checks pass. The Rust lifecycle test also
+replaces only `.git`, verifies project addition is refused, and preserves both directories when
+the notice is dismissed. All 14 clone tests pass on the integrated sources. Independent re-review,
+native command compilation and main desktop binding generation remain publication gates.
+
+## 2026-10-29: Interrupted clone recovery
+
+Local branch `codex/clone-recovery` records clone lifecycle phases in app data before destination
+creation, after creation, after a successful Git exit, and on settlement. Records contain the
+validated address, path and directory identities, with no command output or environment. Recovery
+preserves destination files, including missing, replaced or linked paths and malformed records.
+The onboarding clone form and New project dialog list previous clones with Open folder, Retry in
+another folder, Add existing project for a completed clone, and record-only Dismiss notice. Adding
+an existing clone revalidates its directory and Git identities before the normal project form.
+
+Verified on Windows with temporary folders and isolated Git configuration: core cloning tests
+14 passed, including a real clone from a local bare repository; core account-sync Clippy passed
+with warnings denied; setup-action bindings regenerated from Rust; desktop typecheck passed;
+focused clone frontend tests 19 passed. Chromium and WebKit setup-action checks passed with
+recovery actions, accessibility and a dialog overflow assertion. Formatting and local instruction
+checks passed. The initial Rust compile found a Drop-constructor move and the narrow Windows
+identity wrapper needed an explicit unsafe-code allowance; both were fixed before passing checks.
+
+Native command compilation, the full desktop bindings exporter, native walkthrough and independent
+review remain pending. Windows directory-entry power-loss durability and Unix execution have not
+been verified. Test linking retains the existing OpenSSL missing-PDB warning. The pinned package
+manager remains blocked, so frontend results used installed dependencies.
+
 ## 2026-10-28: Instruction files, one file for every agent or a file per agent
 
 Branch `instructions` (from `origin/main`, with `origin/main` 6c383b5 merged in). Details,
@@ -4233,3 +4314,533 @@ its sub-checks, after building the website it reads), `check-new-chat-worktree`,
 time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
 same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
 page). WebKit's `check-layout`, the native macOS build and CI were not run.
+
+
+## 2026-10-29: Scoped secure-store cleanup
+
+Replaced the cleanup's blanket service sweep with names-only discovery and one pure decision
+routine shared by Settings review, CLI dry-run and execution. Only validated v1/v2 account
+indexes and whole supported account bundles are classified. Foreign indexes protect references
+under both production and preview, including removal receipts. Unknown or unreadable entries
+retain all account keys and retry indexes. Custom-only cleanup preserves orphan bundles.
+
+The review carries opaque target/value fingerprints to the child cleanup. Immediate replanning
+can only narrow that set; changed or newly retained indexes protect their references. Account
+deletion precedes owning-index deletion, and failures preserve retry indexes. Missing roots use
+the nearest canonical existing ancestor and a validated suffix; ambiguous paths preserve keys.
+Settings and CLI now show each opaque target's kind, decision and reason, plus warnings.
+
+Native stores hold shared lifetime leases and cleanup holds an exclusive lease after target apps
+exit. The permanent empty local-data `si.auracode.sync.v1.lock` file has no user data and is never
+removed. No-follow opens, regular-file validation, nonblocking locks and explicit unlocks avoid
+unlocked fallbacks. Dry-run branches before process waits, quit requests, deletions and Trash,
+and opens an existing lease only. The uninstall guide removes blanket credential-deletion steps
+and explains retained keys, retries, older binaries and the permanent lock.
+
+Verification: aura-sync's vault filter passes 14/14, including temporary-file and subprocess
+lease tests; aura-core's account-sync uninstall filter passes 26/26 with fake stores and temporary
+data roots. Core/sync Clippy (all targets, account-sync, `-D warnings`) passes. Focused dialog
+Vitest passes 8/8, uninstaller hook tests 5/5, and refreshed notice catalogue tests 6/6. Touched
+frontend Biome, rustfmt, diff checks and instruction parity pass. Cargo.lock and catalogue input
+hashes are refreshed. Malformed native entry names use opaque review aliases, and the inherited
+ignored real Credential Manager mutation test was removed.
+
+The desktop Rust uninstall test build is blocked before desktop source checking by E0463 in its
+existing serde/specta/process_wrap/windows dependency graph. Its new dry-run dispatch and review
+argument tests remain unexecuted. Generated bindings and integrated typechecking remain with the
+coordinator. Native secure-store cleanup has not been run, including dry-run; no real credentials,
+application data or agent homes were accessed. Native macOS integration remains unverified.
+
+## 2026-10-29: durable revert recovery
+
+Reverts save every selected original and its recovery manifest before the first working-file
+mutation. Local profiles use private `checkpoints/reverts/<token>` groups. Account profiles keep
+token-bound encrypted checkpoint child groups, including after a partial revert. The same-volume
+swap still checks the actual renamed file before publishing replacement bytes and refuses to
+replace a concurrent writer's path. Complete and partial reverts copy, verify and sync surviving
+swap objects before unlinking their sources, so the durable store can be on another volume.
+
+Legacy cleanup now requires bounded recovery metadata for an existing checkpoint in the same chat,
+folder and canonical root, with expected regular-file entries. Invalid manifests, arbitrary UUID
+directories, links, junctions and unexpected contents stay untouched. Interrupted cleanup retains
+its earlier content catalogs and can resume. Storage or cleanup failure is an explicit revert error;
+if saving and no-clobber restoration both fail, the only surviving copy stays available at the
+reported recovery path. Recovery browsing/export still needs its separate UI integration.
+
+Focused checkpoint and session-checkpoint tests pass with Account encryption enabled. They cover
+Local/Account success and partial failure, backup failure before mutation, concurrent writes,
+copy-path recovery, interrupted cleanup, invalid manifests, Windows junction preservation and
+ciphertext-only Account recovery. Formatting and instruction parity were checked. Full integrated
+checks, binding regeneration and macOS qualification remain integration gates.
+
+
+### Revert recovery review follow-up
+
+Independent review found missing sync of the first Local recovery root's parent, missing file and
+parent sync before removing an emergency-restored original's staging link, and a legacy validation
+handle dropped before cleanup. Recovery now retains that capability and exact journal, rejects
+directory or journal substitution, syncs Local recovery parents on creation and retry, and keeps a
+staged original if either emergency restoration sync fails. Windows directory-entry crash durability
+is explicitly unverified because the existing directory sync helper is Unix-only. Added deterministic
+parent/file sync failure and directory/journal substitution fixtures. The amended checkpoint and
+session-checkpoint suite passes 33 tests. Aura-core Clippy passes with Account sync enabled and
+with no default features, including test targets and warnings denied. Formatting, instruction parity
+and diff checks pass. No native app walkthrough or cleanup of real data was performed.
+
+## 2026-10-29: Durable setup admission and retained worktree discovery (in verification)
+
+Worktree chats now persist setup state and generation before becoming visible. Their normal
+conversation opens immediately, with setup review/output in the docked terminal panel and the
+composer using the saved queue throughout. Rust gates explicit starts and dispatch, records
+terminal-owner success only after confirmed cleanup, holds messages on failure and interrupts
+unfinished attempts at restart. Retries review only the command, preserve copied files and reject
+older generation tokens/completions.
+
+A profile-scoped worktree registry route exposes retained folders whose chat could not be saved.
+New chat and Project settings show their branch, source, retained path and detail, reviewed recovery
+and Open folder. Recovery retains reconciled chatless records. Managed worktree folder labels name
+the branch and source, New chat omits them as source folders, and Move chat keeps its destinations.
+See `docs/worktree-setup-and-recovery.md` for execution and recovery behavior.
+
+Verification: all desktop Vitest tests passed (504 passed, 19 skipped). Chromium passed the new
+setup/recovery flow with Axe and the New chat checker with seven Axe scans; the running setup
+screenshot was inspected. Core worktree tests passed 18/18 and terminal tests 16/16. With
+account-sync, setup regressions passed 14/14 and migration/backup tests 12/12; core Clippy for the
+library and tests passed with warnings denied. Biome, rustfmt and instruction parity passed.
+Desktop binding export remains blocked by dependency E0463 errors for serde, specta, process_wrap
+and windows. Generated bindings were left untouched; TypeScript checking is blocked on those new
+types/commands. Native app and macOS verification remain integration gates.
+
+## Plugin library progressive loading (2026-10-29)
+
+The library publishes cached detection, cached listing rows and file inventory for all four supported
+agents before starting listings, then publishes each completed provider independently through a typed
+Tauri channel. At most two providers refresh at once; commands within a provider remain sequential
+and overlapping listing requests share their work. Failed refreshes retain cached and file rows.
+Generations reject superseded installation/configuration jobs, new reads cancel older requests, and
+profile draining and shutdown cancel owned refresh futures. Renderer request lifetimes ignore stale
+callbacks and replies after unmount, including StrictMode remounts. Initial detection is explicitly
+checking. Cursor, Grok Build, Antigravity and Hermes remain unavailable, and OpenCode sync remains
+unsupported. The Plugin library row-menu regression from d8bd025 is retained; its layout probe waits
+for that menu's actual first focused item.
+
+The controlled progressive browser fixture and the existing Plugin library/sync checks passed in
+Chromium and WebKit with clean axe audits. The menu and item layout probes passed all eight
+engine/viewport views. Focused Vitest passed 13 tests for progressive requests, stale replies/errors/completion,
+unmount/remount, checking detection and existing section wording. aura-agents passed all 109 unit
+and integration tests, including the shared fixture environment changes. The core Plugin library
+assembly and account-sync integration suites passed four tests each.
+The two General preferences tests also passed, including rejection of an OpenCode sync action.
+All-target Clippy on aura-agents and aura-core with account-sync passed with warnings denied.
+
+Controlled Windows measurements with temporary homes and delayed fake CLIs: cold first usable
+648.9763 ms, fast provider 1.1081209 s while Claude remained blocked, all finished 1.2424665 s;
+warm first usable 2.5796 ms and all finished 3.0168 ms. These measure the actual core stream with
+fixtures, not owner CLI performance. Generated-binding typecheck remains an integration gate for
+the coordinator. Standalone desktop checking stopped before app code with missing third-party
+crate metadata (`paste`, `serde`, `url`, `schemars`, `json_patch`, `plist`); no third-party artifacts
+were cleaned. No owner configuration, paid agent runs, hosted CI, deployments or releases were used.
+
+## 2026-10-29: Instructions interruption recovery
+
+Implemented version 2 journals with explicit backup, file publication, managed metadata and settlement
+boundaries. Opening Instructions and applying later changes recover under the existing configuration
+gate. Recovery rolls back only exact before/after/staged states, finishes committed metadata with an
+entry comparison, preserves external edits, and blocks overlapping unresolved writes. Startup and
+Instructions expose retained journal paths. Only settled journals count toward the newest-40 retention
+limit; malformed and unresolved evidence stays. Legacy complete journals retain their evidence because
+they did not record metadata intent. All verification fixtures use temporary or synthetic homes.
+
+Verification: aura-config 170/170 tests (75 unit, 95 integration), all-target Clippy with warnings
+denied, focused frontend tests 9/9, desktop TypeScript, touched frontend Biome checks, rustfmt and
+instruction parity. Chromium and WebKit Instructions flows each pass 11 axe scans with zero
+violations, including pending/recovered notices and the immediate overlap error with its backup
+path; screenshots were inspected. The first Rust run caught a case-only rename recovery regression,
+fixed by checking original content because rename mutations have no replacement bytes. The native
+desktop startup-notice test and native binding export remain unrun because the shared desktop graph
+has blocked dependencies; exported DTO shapes did not change. The dedicated Unix symlink interruption
+test requires macOS verification.
+### 2026-10-29: Setup admission review follow-up
+
+Prelaunch setup failures now hold messages even when no process starts. Review tokens bind their
+observed generation before apply admission. The Rust completion owner starts before expiry,
+folder and reservation checks; a setup-specific native terminal reservation owns the prepared
+launch across reserve/start IPC, and only its matching chat/token can claim it. Busy windows,
+closed pending slots, expired reviews/commands and unavailable folders record failure. Stale or
+unrelated tokens cannot fail replacement attempts. A successful retry keeps failed messages held.
+
+Focused verification passed: account-sync setup regressions 16/16, all terminal tests 16/16, the
+foreign-key index check 1/1 after updating its expected count to twenty, core Clippy library/tests
+with warnings denied, and frontend API/terminal/setup tests 15/15. Existing worktree card and Git
+review containers replace compact file rows and the single-row chat banner for rich recovery/setup
+content; no CSS was changed. Root's integrated browser/layout recheck remains pending for those
+container changes. Native bindings remain generated only by the integration owner.
+Independent review found two admission races in this piece. Profile drain cancellation now holds a
+scoped pause that rejects library requests registered after drain began, including a command that
+already acquired its profile lease. Failed or abandoned transitions drop that pause and deliberately
+reopen the current manager; successful retired managers remain shut down. Listing resolution now
+captures the configuration revision before resolving the connection and installation, validates it
+under the listing admission lock, and retries if the selection changed in that gap. Deterministic
+boundary tests passed: detector admission 1/1, all agent unit tests 67/67, provider and selection
+integration 6/6 each, core progressive integration 5/5 and core assembly 4/4. All-target Clippy for
+aura-agents and aura-core with account-sync passed with warnings denied. The two native profile
+lease tests are written but remain unrun because the desktop dependency graph is blocked before
+app code. They remain an explicit integration gate.
+## Task 6 review correction, verified
+
+The independent round-1 review found two malformed-evidence gaps. Source now preserves validated
+metadata identity hints even when journal schema validation fails, and uses one phase validator for
+recovery and retention. Contradictory rollback/commit evidence is rejected before recovery writes,
+and successful recovery must reach a valid terminal state. Added deterministic temporary-home
+regressions for same-entry blocking versus unrelated writes, invalid identity hints, contradictory
+markers with byte-preserved file/journal evidence, and malformed marker bytes. Verification passed:
+aura-config 174/174 tests (79 unit, 95 integration), all-target Clippy with warnings denied, rustfmt,
+instruction parity, and diff checks. The native startup-notice test remains unrun because the desktop
+dependency graph is blocked; these fixes change no frontend or exported DTO shape.
+
+### 2026-10-29: Preserve setup retry capacity after receipt expiry
+
+Setup review admission now reclaims this chat's obsolete review before checking capacity. The
+cache bounds 64 chats, each with its current generation command receipt and one replacement
+review, so expired bound receipts preserve failure attribution without locking out retries.
+The old command identity remains valid until retry apply replaces its generation; unrelated
+chat receipts retain their generation identity.
+
+The full-cache regression first reproduced the review refusal, then passed with the change.
+All account-sync setup tests passed 17/17, including earlier prelaunch failure and queue-hold
+regressions. Core Clippy library/tests with warnings denied, rustfmt and instruction parity passed.
+Root also reported the integrated setup/recovery layout checks clean in sixteen
+focused views across both browser engines. Native bindings remain an integration-owner gate.
+
+### 2026-10-29: Setup acceptance fixture follows the integrated queue
+
+The settings acceptance sweep exposed a fixture mismatch after FIFO held-row controls were
+integrated: one held message offers Send it now, while Send all appears for multiple held rows.
+The setup/recovery checker now uses that single-row action. Its native-free transport implements
+selected-row sending, releases only the unheld prefix and queues new messages behind a held head,
+matching the production actor contracts. The checker also verifies sending a later held row keeps
+the other hold and that releasing the head sends the following unheld message in order.
+
+Biome, JavaScript syntax and instruction parity checks passed. No production backend or UI changed.
+The coordinator's failed settings log is the red evidence; both-engine settings reruns remain the
+coordinator's gate after merging this fixture change. No Cargo or browser process ran for this fix.
+
+### 2026-10-29: Close integrated journal cleanup and provider availability gaps
+
+Custom data-root cleanup now includes app-owned clone lifecycle journals. A temporary-root test
+creates real lifecycle records and two local Git clones, then verifies journal removal, unchanged
+repository commits and untracked work, preserved unrelated custom-root files and a successful
+repeat cleanup. Secure storage stays in the in-memory fake store throughout the test.
+
+A provider whose installation disappears now loses its cached CLI listings and live timestamp;
+the library falls back to the current file inventory. Refresh completion and subsequent opening
+cannot retain stale Live rows. Admission validates provider detection generations so an older
+missing result cannot erase a newer reinstall result. Actual listing-command failures still keep
+cached rows with their failure warning. The integrated SessionInfo growth also required boxing
+the mock driver's private event message; public protocol serialization is unchanged.
+
+Both source findings reproduced before their fixes. Green checks passed: cleanup 27/27, core
+library integration 6/6, assembly 5/5, agents unit 68/68, provider 7/7, selection 6/6 and mock-driver
+20/20. Broad all-target Clippy for agents, core with account-sync and drivers with replay passed
+with warnings denied, along with rustfmt, instruction parity and diff checks. This fix wave ran
+no browser, server, owner store/configuration access, real cleanup, paid agent prompt or hosted CI.
+Native compilation, bindings and the final integrated acceptance gates remain with the coordinator.
+
+### 2026-10-29: Scoped cleanup acceptance fixtures
+
+The delete-data browser checker still expected the old blanket key-deletion wording. It now
+checks complete scoped decisions: deleted-root index, exclusive accounts and eligible orphan
+bundles removed; foreign indexes and shared accounts retained, with their exact reasons and
+unique opaque targets. A synthetic unknown-payload case retains every key and retry index and
+shows the uncertainty warning on both Windows and macOS previews. Sharing alone has no such
+warning. The narrow view also checks the populated key rows.
+
+The preview and dialog unit tests share typed synthetic key data. No production cleanup behavior
+changed and no native cleanup, Cargo or browser run was performed for this follow-up. Targeted
+Vitest passes 9/9; touched-file Biome, checker syntax, diff and instruction parity checks pass.
+Chromium/WebKit runtime verification remains with the integration coordinator.
+
+### 2026-10-29: Verify scoped cleanup and unsupported Plugin explanations
+
+The updated cleanup reviews pass in Chromium and WebKit, including shared and unknown entry
+retention, failed-start retry, macOS Trash wording and narrow-window rendering. All 16 accessibility
+audits and 12 focused layout views passed. The Plugin checker now explicitly verifies the explanation
+for unsupported extension readers and OpenCode configuration sync; both browser engines passed.
+
+The pinned pnpm 12.15.0 executable is now available. Frozen install passed across all seven workspace
+projects without lockfile resolution changes. Pinned lint passes with 26 existing CSS specificity
+warnings; UI typecheck and 261 tests, design-lab typecheck and 352 tests, web typecheck/build and four
+static tests, and 29 root script tests pass. No dependency or production styling change was needed.
+
+The refreshed core account-sync unit and integration suite passed 734 tests after the final backend
+review fixes. A later setup hold-event visibility regression is being corrected separately. Native
+compilation, binding export, integrated desktop typecheck and Windows hands-on acceptance remain
+open under the host's application-control restriction. Nothing has been published from this train.
+
+### 2026-10-29: Exact live queue holds across setup retries
+
+The browser rerun exposed a production visibility gap: a second message typed during interrupted
+setup was held in Rust but appeared unheld because another held row already existed. A separate
+red browser assertion reproduced the same problem for a message queued during a retry when that
+retry failed. Rust now includes the exact hold on queued lifecycle events and emits an update when
+an existing queued row becomes held. Other lifecycle states leave that optional field empty, and
+older producers without it remain readable.
+
+The chat store uses this row truth without duplicating setup admission rules or reattaching. A
+same-ID queue update preserves its position and creation time, so hold updates do not reorder the
+queue or reset loaded conversation history. The setup fixture mirrors these authoritative events.
+Focused store tests passed 49/49 after red regressions, including duplicate/old frames,
+setup boundaries, mixed held/unheld rows, preserved history and exact reattach snapshots. A stopped
+Sending row returns ahead of its followers with its original timestamp. Final
+setup/recovery browser checks passed in Chromium (3.96 seconds) and WebKit (8.61 seconds), including
+the later-held-row action, held-head FIFO and retry-failure updates. A full settings run passed both
+engines in 174.83 seconds before the final mixed-hold extension; the final extension received the
+focused both-engine rerun. Browser ownership was released with engines and server closed.
+
+Rust setup and queue filters passed 18/18 each; protocol tests passed 24/24, including legacy
+missing-field compatibility. Branch-local Clippy encountered the already-reviewed mock-driver
+enum-size issue fixed on the coordinator's newer ancestor. The normal locked desktop exporter
+compiled the native library and passed 1/1; its actual generated bindings are retained. Desktop
+typecheck passed, followed by store/transcript tests 72/72. Broad integrated Clippy remains a
+coordinator gate. Generated bindings were not edited by hand.
+
+### 2026-10-29: Keep worktree branches visible in the chat header
+
+The native walkthrough found that a managed-worktree chat's header showed only its source project.
+The chat screen now follows the selected chat's project and folder IDs and passes Rust's existing
+folder display label to the header. A worktree shows its branch and source beside the actual project
+name, including custom project names. Local folders keep their display names without repeating an
+equal project name. Missing workspace metadata retains the existing folder-name fallback.
+
+The regression first failed for custom Local and managed-worktree labels, then passed after the
+presentation fix. All desktop tests passed: 534 frontend tests with 19 existing skips, plus 10 Node
+script tests. Desktop typecheck, changed-file Biome checks, stylesheet policy and instruction parity
+checks passed. This change adds no Rust logic, generated binding edits or styling. Native and browser
+acceptance remain with the integration coordinator.
+
+### 2026-10-29: Exercise header labels through the normal chat acceptance gate
+
+A development-only preview now mounts the real chat screen and its workspace/chat stores with
+synthetic metadata. Sidebar selection exercises the stored project and folder IDs for a managed
+worktree, a custom source project, a second Local folder in the same project, and equal Local
+project/folder names. The worktree label uses Rust's full source-path format with a long Windows
+path, rather than the shorter label used in the earlier markup test.
+
+The new checker verifies all four selections in Chromium and WebKit at 1440x900, 1024x700 and the
+native minimum of 960x640. All 24 views and accessibility scans passed. It checks the complete
+accessible label and path tooltip, readable project/branch prefix, existing path ellipsis, clear
+header controls and absence of horizontal overflow. Minimum and wide screenshots were inspected.
+The normal check-chat command now invokes this checker on its existing server and forwards its
+engine selection. The fresh integrated command passed both engines with 88 accessibility scans,
+plus its queue, history, anchor, control, motion and minimum-window assertions.
+
+An initial broad WebKit run timed out locating history-250 after scrolling to the first loaded turn.
+The fresh integrated run passed that unchanged assertion without a product or synchronization fix;
+the original failure log is retained and its cause remains unproven. Desktop tests passed 534 with
+19 existing skips, plus 10 Node script tests; focused header tests, typecheck, Biome, instruction
+parity, stylesheet policy and diff checks passed. No production CSS, Rust or generated bindings
+changed. Owned browsers and the single preview server were stopped after verification.
+
+### 2026-10-29: Keep Instructions recovery notice fixtures portable
+
+The newly executable desktop library suite exposed a Windows test-path mismatch. The startup
+notice was present and named the retained journal, but the fixture built its expected path with
+mixed separators while directory enumeration returned normal Windows separators. A diagnostic
+red run captured the existing notice; changing only the path construction to component joins made
+the original assertion pass. No product notice or journal-recovery behavior changed.
+
+The fixture now checks journals retained before boot and after startup, preserving the complete
+notice/path assertion in both cases. It also verifies unchanged malformed journal bytes, no new
+journal marker files and an untouched temporary instruction target. The focused regression passes.
+The separately reviewed Demo catalog fixture now expects one visible entry per agent and verifies
+all five alternate-connection groups, Automatic selection and their unavailable state on an empty
+test PATH. Its real startup, transcript, shutdown and restart assertions remain intact.
+
+Combined verification passed all 224 desktop library tests and all three Demo integration tests,
+with no failures or ignores. Workspace formatting and desktop all-targets Clippy with warnings denied
+passed. Both changes received independent source review with no findings. No production code,
+generated bindings, owner configuration, credential access or visible application interaction changed.
+
+### 2026-10-29: Integrated functionality and isolated Windows acceptance
+
+All seven functionality changes and their independent review fixes are integrated locally:
+canonical Sending and held FIFO, scoped cleanup, durable revert backups, compose during setup,
+retained-worktree recovery, progressive Plugin inventory, interrupted Instructions recovery,
+and interrupted clones. Native testing also found and fixed clone admission and worktree labels.
+Backend decisions remain in Rust. The excluded styling, fade-mask, Demo-mark and site-flair work
+was not imported.
+
+The core account-sync suite passed 743 tests, including 102 integration tests. Workspace Clippy
+and formatting passed. The ordinary full workspace run executed 2164 passing tests, two failing
+desktop assertions and one intentionally ignored Worker-harness test. The two assertions were
+corrected as documented above; the complete affected desktop library and Demo suites then passed
+224 and three tests, with scoped all-targets Clippy and formatting. Three workspace targets were
+unavailable under Windows Application Control: agents install, config sync_review and core
+doctests. They are not passing results. The doctest block was confirmed through Code Integrity
+events. No operating-system security settings or blocked artifacts were changed.
+
+Pinned pnpm 12.15.0 frozen installation passes after the final manifest change. Frontend checks
+pass with 534 desktop tests, 19 existing skips and ten Node tests; UI 261, design lab 352, web/static
+four and root scripts 29 pass. Lint retains 26 existing CSS warnings. Actual native binding export,
+414 runtime notice records, both Worker release builds and 28 isolated Worker runtime tests pass.
+Both browser engines pass synthetic release validation and the affected acceptance suites. The
+complete layout probe passed 412 views; the final normal chat checker passes 88 accessibility
+scans, including long backend header labels at the minimum native size. The first WebKit history
+wait timed out and passed unchanged on rerun; its cause remains unproven.
+
+Windows hands-on acceptance used fresh isolated data, synthetic agent homes and scratch repositories
+with Demo. It verified offline onboarding, conversations, held FIFO, prompt navigation, Changes and
+reviewed revert, terminals, Instructions, Plugin rendering/menu stability, settings and shortcuts.
+Setup failure and restart held all messages with reasons; reviewed retry succeeded and explicit
+release delivered them once in order. Native Git checks covered visible handoffs, dirty-target
+refusal, conflict preview, a reviewed two-parent merge, retained uncommitted files through retirement
+and restoration, and committed-file recreation with a separate uncommitted backup preserved.
+A real public clone succeeded and was added normally. Search and ordinary quit/restart/quit preserved
+projects, history and preferences; both quits exited successfully.
+
+The final embedded build passes. Its Demo smoke launch stays off this PC while gaming because
+Windows smoke shows and focuses a window. The owner requested CI for the remaining verification;
+workflow dispatch and its result are the next gate. Tray-icon reopen/quit could not be targeted
+by the installed input tool, and notification clicks remain unobserved. Minimal real Claude/Codex
+pipelines were exercised through Rust APIs; the Codex exact-text helper's punctuation deviation
+remains recorded. No further paid turn was used. No owner agent credential or configuration files
+were inspected or changed.
+
+Windows shell fixtures retain six documented POSIX/executable-bit assumptions and PowerShell 5 is
+policy-blocked; PowerShell 7 checks pass. Real account sign-in/email, native macOS hands-on acceptance,
+signing/key backup and release/domain decisions remain owner/platform gates. Real cleanup, uninstall
+and the product's real PR-creation flow were not used. GitHub billing availability, CI results,
+publication and post-merge asset verification remain pending at this checkpoint.
+
+### 2026-10-29: Correct the final CI acceptance inventory and layout deadline
+
+After the owner resolved the Actions billing gate, the final hosted run executed the browser
+checks. Chat acceptance passed, including the header-label checker launched by check-chat.
+The CI inventory meta-test only followed static imports, so it incorrectly reported that child
+checker as uncovered. It now also follows explicit Node child-checker invocations; removing a
+checker from the invoked script graph still leaves it uncovered.
+
+The complete layout probe reached 410 of 412 clean views with no findings before its 15-minute
+step deadline. The final two views were not verified by that run. Only the complete layout step
+now has a 20-minute limit; the meta-test keeps other browser steps bounded to 15 minutes.
+Both meta-test failures were reproduced locally before correction. All 14 acceptance-inventory
+and WebDriver script tests, changed-file Biome, workflow policy and instruction parity checks
+pass. Full hosted layout completion remains pending, alongside the separately diagnosed Rust
+workspace and native chat-smoke failures. No passing result is inferred from the timeout.
+
+### 2026-10-29: Exercise the current native agent radio control in WebDriver
+
+The external Windows test reached the embedded native window with matching WebView and driver
+versions, but waited for a removed select option. Its retained DOM shows Demo ready in the current
+radio group. The test now clicks Demo's visible label through WebDriver, then checks the associated
+radio's checked state before creating the chat. The hidden radio input is not used as a visible
+click target. Folder setup remains the only setup IPC; chat input, stop and reload still use the
+external driver.
+
+The scenario double now models the radio selection and rejects the stale option control, producing
+three failing scenario tests before the harness correction. A negative case verifies that an
+unchecked radio preserves the native-window result and prevents chat creation. All 15 acceptance
+inventory/WebDriver script tests, changed-file Biome, instruction parity and diff checks pass.
+The actual hosted Windows WebDriver rerun is still required; this entry records no native pass.
+
+### 2026-10-30: Repair process spawning and the Windows link fixture exposed by CI
+
+The completed hosted run passed both encrypted-storage jobs, PowerShell checks and generated
+binding parity. The bootstrap artifact exactly matched committed bindings. Hosted Windows also
+passed the three targets previously unavailable under local Application Control. Its ordinary
+workspace run passed 2183 tests with one intentional Worker-harness ignore and one failing
+relative-link fixture. macOS exposed a separate PTY lifetime failure. Neither full workspace
+run is recorded as passing.
+
+Owned process launches now serialize the short spawn boundary with PTY descriptor setup.
+The previous shared spawn guard allowed concurrent launches to inherit temporary descriptors,
+consistent with the macOS PTY test stalling until its sibling's 600-second lifetime expired.
+Editor, cleanup-review Git, detached cleanup helper and macOS process-table launches use the
+same boundary. The guard is released before waiting or draining output. Two deterministic
+regressions failed before correction; 236 process tests and seven affected caller tests pass,
+with scoped all-target Clippy and formatting. Independent review is complete. The actual macOS
+runtime rerun remains required; the failed run did not capture the individual inherited descriptor.
+
+The Windows relative-link fixture now constructs its target with native path components while
+retaining the linked-folder traversal and canonical destination assertions. A Windows error-123
+assertion preserves conservative classification of an invalid target. No production classifier
+or test skip changed. All 79 configuration-library tests and scoped Clippy pass locally, but this
+PC's existing missing-symlink-privilege skip means actual traversal must be verified on hosted
+Windows. No security setting or owner data was changed.
+
+### 2026-10-30: Stabilize the sticky prompt at the transcript boundary
+
+Both hosted native chat checks stopped because the transcript reader could not reach the end.
+A four-turn fixture using the real transcript reproduced an idle feedback loop: the sticky
+prompt repeatedly reserved and released 32 pixels while scrollTop alternated by 64 pixels.
+The content height stayed fixed. Prompt selection now uses a stable point in the surrounding
+chat, and header removal compensates from the virtualizer's offset before viewport clamping.
+Explicit return-to-prompt navigation retains its separate final alignment.
+
+The normal chat acceptance command now observes 60 idle frames, uses wheel input, returns to
+a later prompt, reads every turn through the unchanged native smoke reader, and checks that
+appended output stays pinned. Chromium and WebKit pass these checks and the existing history,
+focus, reading-anchor and minimum-window checks, with 88 accessibility scans. All 39 focused
+scroll/smoke unit tests pass. Independent review is complete, and the integrated desktop
+typecheck, 534 tests and ten Node tests pass with 19 existing skips. No styling, smoke-reader
+limit or tolerance changed.
+
+An earlier full browser run timed out at the existing history-250 wait. Six focused sequence
+replays and the unchanged full rerun passed; that intermittent failure is retained without
+claiming its cause was fixed. Hosted native chat, reopen and the complete layout probe still
+require a final-source rerun.
+
+### 2026-10-30: Keep the slow-folder test hook from delaying unrelated probes
+
+The integrated account-sync rerun passed 640 library tests and failed the existing folder-list
+responsiveness test before reaching integration tests. Its test-only delay retained a mutex
+guard through the simulated slow-folder sleep, so an unrelated folder could also miss the list
+deadline. This reproduced a previously intermittent assertion without involving process spawning.
+
+The hook now releases its configuration lock before sleeping. The existing regression deliberately
+starts the slow probe first and preserves its original deadlines, folder states and singleflight
+assertions. It fails deterministically before the repair, then passes four consecutive targeted
+runs afterward. The change is entirely test-only; production folder checks are unchanged.
+Independent review, scoped all-target account-sync Clippy and formatting pass. The complete
+account-sync test suite and final hosted CI remain pending at this checkpoint.
+
+### 2026-10-30: Complete the final Windows and macOS functionality checks
+
+[Final CI](https://github.com/itscool2b/auracode/actions/runs/40987992919) passed on
+`b52beae2050579224bdb3c433780c4ce34c9e849`: all six executed jobs succeeded. The binding
+refresh/bootstrap and comparison jobs intentionally skipped because this run used check mode.
+Both platform jobs checked generated bindings against committed bytes; their downloaded exports
+also matched exactly. The earlier refresh run's committed-byte and cross-platform comparisons
+remain recorded. This entry changes only the verification record, not the tested application.
+
+The ordinary workspace suites passed 2248 tests on macOS and 2186 on Windows, with zero failures
+and one explicit compiled-Worker-harness ignore per platform. The separate Worker runtime checks
+exercised that harness. Both encrypted-storage jobs, feature Clippy checks, workspace Clippy and
+Rust formatting passed. The repaired macOS PTY suite passed all four tests in 0.74 seconds.
+The final local core account-sync `--tests` run passed 743 tests, including 102 integration tests,
+with no failures or ignores. Its only difference from the CI source was progress documentation.
+
+Both native builds and stream checks passed. Chat passed 30 of 30 checks and reopen passed eight
+of eight on each platform, including held queues, interrupted output and a persisted large blob.
+Windows external WebDriver passed all five native-window, chat, interruption and reload checks
+with matching runtime and driver versions. The previously blocked local install, sync-review and
+doctest targets passed on hosted Windows; this does not imply a local security-policy change.
+
+The complete layout probe passed all 412 views. Chromium and WebKit chat checks passed the prompt
+boundary and header-label assertions alongside 88 accessibility scans. Settings, Plugins,
+Instructions, account recovery, clone/setup, worktrees, terminals, cleanup-review fixtures,
+website and synthetic release checks all passed, as did Worker builds/runtime tests and the
+remaining workflow/script checks. Local desktop verification passed 534 tests and ten Node tests
+with 19 existing Vitest skips. Hosted macOS ran all 553 Vitest tests; its Node suite passed eight
+and skipped two Windows-only NSIS-template checks, which passed in the local ten-test suite.
+The normal website build and four static tests passed; its file hashes
+are retained for deployment verification. Lint retains 26 existing CSS warnings.
+
+Original failures remain recorded. The browser history wait passed unchanged on rerun, with no
+claim that its intermittent cause was fixed. The minimal headless Claude/Codex pipelines remain
+qualified separately: Claude's result-to-idle gap and subsequent queue passed, while Codex's
+strict helper expected `ok` and received `ok.`. No extra paid turn was used. Native macOS hands-on,
+invited sign-in/email, tray-icon targeting and unobserved notification clicks remain open alongside
+signing/key backup and installer/release/domain approvals. No real cleanup/uninstall or owner
+agent credential/configuration file inspection occurred. Finished PR publication, the authorized
+merge and deployed-asset checks follow this verification checkpoint.

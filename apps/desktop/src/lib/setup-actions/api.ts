@@ -2,7 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { createContext } from "react";
 import type { TerminalTransport } from "../terminal";
 import { terminalTransport } from "../terminal";
-import type { AgentInstallReview, CloneCheck, CloneInput, CloneRecord } from "./bindings";
+import type {
+  AgentInstallReview,
+  CloneCheck,
+  CloneInput,
+  CloneRecord,
+  CloneRecovery,
+} from "./bindings";
 
 async function call<T>(command: string, args: Record<string, unknown>): Promise<T> {
   try {
@@ -46,6 +52,10 @@ export interface CloneApi {
   cancel(id: string): Promise<void>;
   /** With `after`, resolves at the next revision (or within ten seconds). */
   status(id: string, after: number | null): Promise<CloneRecord>;
+  recoveryList(): Promise<CloneRecovery[]>;
+  recoveryReady(id: string): Promise<CloneRecovery>;
+  recoveryOpen(id: string): Promise<void>;
+  recoveryDismiss(id: string): Promise<void>;
 }
 export const cloneApi: CloneApi = {
   check: (input) => call("clone_check", { input }),
@@ -53,4 +63,8 @@ export const cloneApi: CloneApi = {
   start: (id) => call("clone_start", { id }),
   cancel: (id) => call("clone_cancel", { id }),
   status: (id, after) => call("clone_status", { id, after }),
+  recoveryList: () => call("clone_recovery_list", {}),
+  recoveryReady: (id) => call("clone_recovery_ready", { id }),
+  recoveryOpen: (id) => call("clone_recovery_open", { id }),
+  recoveryDismiss: (id) => call("clone_recovery_dismiss", { id }),
 };

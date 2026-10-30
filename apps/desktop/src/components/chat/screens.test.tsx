@@ -354,6 +354,55 @@ describe("the sidebar footer", () => {
 });
 
 describe("the header", () => {
+  it.each([
+    {
+      name: "keeps a Local folder beside its custom project name",
+      project: "Personal notes",
+      folder: "C:/work/notes",
+      folderLabel: "notes",
+      expected: "Personal notes · notes",
+    },
+    {
+      name: "does not repeat equal Local project and folder names",
+      project: "repo",
+      folder: "C:/work/repo",
+      folderLabel: "repo",
+      expected: "repo",
+    },
+    {
+      name: "names the managed branch and its custom source project",
+      project: "Client portal",
+      folder: "C:/profile/worktrees/9d6cd062e86e",
+      folderLabel: "aura/9d6cd062 (worktree from C:/work/repo)",
+      expected: "Client portal · aura/9d6cd062 (worktree from C:/work/repo)",
+    },
+    {
+      name: "uses the folder name while workspace metadata is unavailable",
+      project: null,
+      folder: "C:/work/notes",
+      folderLabel: null,
+      expected: "notes",
+    },
+  ])("$name", async ({ project, folder, folderLabel, expected }) => {
+    const state = await stateWith(historyPage("c1", []), {
+      chat: chatSummary("c1", { folder }),
+    });
+    const html = renderToStaticMarkup(
+      <Header
+        state={state}
+        project={project}
+        folderLabel={folderLabel}
+        agent={null}
+        resumable={false}
+        onStart={noop}
+        onStop={noop}
+        onShowLog={noop}
+      />,
+    );
+    const location = html.match(/<span class="chat-header-folder"[^>]*>(.*?)<\/span>/)?.[1];
+    expect(location).toBe(expected);
+  });
+
   it("offers Start or Resume, and Start fresh, while nothing runs; Stop session while it runs", async () => {
     const stopped = await stateWith(historyPage("c1", []), {
       session: sessionInfo({ status: "stopped" }),
@@ -768,13 +817,49 @@ describe("the queue and the composer's stop button", () => {
     expect(html).toContain('data-test-reason="held"');
     // The reason replaces the general note under the list.
     expect(html).not.toContain("chat-queue-note");
+    // The head acts on the first held message; the later held one keeps its own Send.
     expect(buttons(html).map((b) => b.label)).toEqual([
-      "Send queued",
-      "Send this message now",
+      "Send it now",
+      "Discard",
+      "Send all",
       "Remove from the queue",
       "Send this message now",
       "Remove from the queue",
     ]);
+  });
+
+  it("keeps a new message behind a held one, offering Send it now or Discard for the held one", () => {
+    const queue = [
+      { prompt_id: "held", preview: "typed before the restart", held: true, created_at: 1 },
+      { prompt_id: "new", preview: "typed after it", held: false, created_at: 2 },
+    ];
+    const wait = queueWaitView({ reason: "held", after: "restart" }, "Claude Code", {
+      canInterrupt: true,
+      canRecreate: false,
+    });
+    const html = renderToStaticMarkup(
+      <QueueList
+        queue={queue}
+        held={true}
+        wait={wait}
+        onRemove={noop}
+        onSendQueued={noop}
+        onSendNow={noop}
+      />,
+    );
+    expect(html).toContain("Held after a restart");
+    expect(html).toContain("2 queued");
+    // One held message: no Send all, and no second Send on its own row.
+    expect(buttons(html).map((b) => b.label)).toEqual([
+      "Send it now",
+      "Discard",
+      "Remove from the queue",
+      "Remove from the queue",
+    ]);
+    expect(html).toContain('data-testid="queue-send-held"');
+    expect(html).toContain('data-testid="queue-discard-held"');
+    expect(html).not.toContain('data-testid="send-queued"');
+    expect(wait?.detail).toContain("Send it now, or discard it.");
   });
 
   it("says a message typed while the agent starts goes once it has started", () => {
@@ -862,6 +947,31 @@ describe("turns and the transcript", () => {
     expect(html).toContain("Earlier part of this turn not loaded");
     expect(html).toContain("the end of a long turn");
     expect(html.indexOf("Load earlier")).toBeLessThan(html.indexOf("Earlier part of this turn"));
+  });
+
+  it("shows an attachment-only sending message without inventing a text preview", async () => {
+    const state = await stateWith(historyPage("c1", []), {
+      session: sessionInfo({
+        status: "running",
+        sending: {
+          prompt_id: "image-prompt",
+          text: "",
+          parts: [
+            { type: "image", blob: "a".repeat(64), mime: "image/png" },
+            { type: "mention", path: "src/main.rs" },
+          ],
+          created_at: 123,
+        },
+      }),
+    });
+    const html = renderToStaticMarkup(
+      <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(html).toContain('data-test-prompt-id="image-prompt"');
+    expect(html).toContain("Attached image (image/png)");
+    expect(html).toContain("Mentioned file: src/main.rs");
+    expect(html).toContain("Sending");
+    expect(html.match(/data-test-kind="user"/g)).toHaveLength(1);
   });
 
   it("labels each turn with the agent that ran it after the chat switched agents", async () => {

@@ -49,7 +49,7 @@ mod worktree_setup;
 
 pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
-pub use plugin_library::{PluginFacts, assemble as assemble_plugin_library};
+pub use plugin_library::{PluginFacts, PluginRefreshPause, assemble as assemble_plugin_library};
 pub use project_tools::{EditorLaunch, EditorOpen};
 pub use worktree_setup::WorktreeSetupLaunch;
 
@@ -308,6 +308,7 @@ pub(crate) struct Shared {
     /// Subscription id -> (chat, owner).
     subscriptions: Mutex<HashMap<String, (String, String)>>,
     shutting_down: AtomicBool,
+    plugin_refresh: tokio::sync::watch::Sender<plugin_library::RefreshState>,
     /// Writes an actor still held after the store closed, so they were never saved. A quit
     /// drains every actor before the store closes, so this stays 0 unless a deadline ran out.
     pub(crate) lost_writes: AtomicU64,
@@ -364,12 +365,13 @@ impl Shared {
     /// result.
     fn check_folder(&self, folder: PathBuf) {
         #[cfg(test)]
-        if let Some((_, delay, checks)) = lock(&self.slow_folder)
-            .clone()
-            .filter(|(slow, _, _)| *slow == folder)
         {
-            checks.fetch_add(1, Ordering::SeqCst);
-            std::thread::sleep(delay);
+            // Release the hook lock before delaying one folder, so unrelated probes stay free.
+            let slow = lock(&self.slow_folder).clone();
+            if let Some((_, delay, checks)) = slow.filter(|(slow, _, _)| *slow == folder) {
+                checks.fetch_add(1, Ordering::SeqCst);
+                std::thread::sleep(delay);
+            }
         }
         let state = folder_state(&folder, false);
         let mut checks = lock(&self.folders);
@@ -439,6 +441,7 @@ impl SessionManager {
                     chat_states: Mutex::new(HashMap::new()),
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
+                    plugin_refresh: tokio::sync::watch::channel(Default::default()).0,
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
@@ -1257,6 +1260,9 @@ impl SessionManager {
     pub async fn shutdown_all(&self, deadline: Duration) -> ShutdownSummary {
         let started = Instant::now();
         self.shared().shutting_down.store(true, Ordering::Release);
+        self.shared()
+            .plugin_refresh
+            .send_modify(|state| state.generation += 1);
         let mailboxes: Vec<mpsc::UnboundedSender<ChatMsg>> = lock(&self.inner.actors)
             .values()
             .map(|entry| entry.mailbox.clone())

@@ -44,7 +44,7 @@ job breakaway for Hermes' gateway (M1e), ACP elicitation, compaction updates,
 | 8 | Claude without bypass | Full auto falls back to `acceptEdits` with a note and no auto-answers. | The user's own settings removed bypass (`disableBypassPermissionsMode`); answering for them would defeat their policy (simple auto-answered). |
 | 9 | Options | One `ConfigOption` list (select or toggle, with a category). ACP config options win; legacy `modes` and `models` become synthesized options; the legacy model is set with an untyped `session/set_model`. A mode picked by hand overrides autonomy's auto-answers. | All agree; the hand-picked rule closes the review's "Ask-mode Hermes still auto-approves" gap. |
 | 10 | When an agent starts | On `chat_create`, on `chat_send` to a stopped chat, and on `chat_start` (with "Start fresh" as an option); never just because a chat was opened. Idle agents stop after 10 minutes without a viewer. | Opening an old chat to read it must not spawn an adapter and run the user's `SessionStart` hooks (robust started on every subscribe). |
-| 11 | Prompt queue | Persisted in `queued_prompts` with a per-row hold. Rows queued before a stop, interrupt, error, crash or restart are held; a prompt typed after that moment is not, and goes first. | Typed text survives a crash, and nothing the user queued before saying stop is sent without them (simple kept the queue in memory and continued after a soft interrupt). One sticky pause flag stranded prompts typed after a stop. |
+| 11 | Prompt queue | Persisted in `queued_prompts` with a per-row hold. Rows queued before a stop, interrupt, error, crash or restart are held; a prompt typed after that moment is not held but waits behind them, in order, until the person sends or discards the held one (2026-10-28: it used to go first, which skipped the held one after a restart). | Typed text survives a crash, and nothing the user queued before saying stop is sent without them (simple kept the queue in memory and continued after a soft interrupt). One sticky pause flag stranded prompts typed after a stop. |
 | 12 | Storage | One writer thread owns the `Store`: typed ops in one FIFO bounded by count and bytes, group commit, atomic ops, poison isolation. Reads go through the same FIFO, so they see every earlier write. While a disk-full pause holds the FIFO, the store serves reads from saved data through a second channel and marks what is unsaved. No read pool in M1a. | Ordering is the correctness property (join protocol, compaction); tokio-rusqlite (extensible) runs closures without typed batching; a read pool can be added behind the same API later. |
 | 13 | What is stored | Every event except `SessionUpdated`, `PromptLifecycle` and `LimitsUpdated`; `UsageUpdated` only inside a turn. Events outside turns (late agent output, an idle crash) are stored with no turn. | Live state belongs in snapshots; agent output must never be dropped (simple dropped events outside turns). |
 | 14 | Sequence numbers | One space per chat, assigned by the `FrameBatcher` at flush and stored with each row; compaction keeps original seqs. | Frames and rows share one numbering, and `MAX(seq)` never goes backwards. |
@@ -2284,7 +2284,7 @@ at Ready
     there, push outside any turn: Notice { info, "Hermes continued this session while auracode was away (in its
     gateway or another Hermes app). Its latest reply is below; earlier steps aren't shown here." }, then MessageDelta
     and MessageCompleted with id "<spawn_id>.r1" carrying last_reply
-  dispatch() the oldest non-held row, if any
+  dispatch() the head row unless it is held
 ```
 
 Reply hashes are sha256 over the concatenated agent message text of a turn with all whitespace removed, computed
@@ -2297,11 +2297,12 @@ changes.
 send(text)
   text.trim() empty -> PromptEmpty (the text itself is sent exactly as typed); > 1 MiB -> PromptTooLarge; seq near the
   limit -> Internal("This chat is too long to continue; start a new chat."); prompt_id = new_id()
-  Ready -> dispatch(this prompt) now; held rows stay held (what the user just typed goes first); PromptAck { queued: false }
+  Ready with nothing queued -> dispatch(this prompt) now; PromptAck { queued: false }
   otherwise: 20 rows queued -> QueueFull; QueuePut { held: false }; PromptLifecycle { Queued, preview: first 256 chars };
-    PromptAck { queued: true }; Stopped, Failed or AuthRequired -> start(false) (AuthRequired never keeps a process,
+    PromptAck { queued: true }; behind a held row nothing more happens (it waits for the person); otherwise Ready ->
+    dispatch(); Stopped, Failed or AuthRequired -> start(false) (AuthRequired never keeps a process,
     so this cannot start a second one); Stopping -> started when Stopped is reached (6.5.5), unless auracode is quitting
-dispatch(prompt)                      Ready only; the given prompt, or the oldest non-held row
+dispatch(prompt)                      Ready only; the given prompt, or the head row unless it is held
   ordinal += 1; turn_id = new_id(); interrupt_requested = false
   push, tagged turn_id: TurnStarted { turn_id, prompt_id }, UserMessageDelta { "<turn_id>.u", text },
     PromptLifecycle { prompt_id, Started }
@@ -2309,7 +2310,8 @@ dispatch(prompt)                      Ready only; the given prompt, or the oldes
     deletes the queued row)
   DriverCommand::Prompt { turn: TurnRef { turn_id }, parts: [Text { text }] }; state Running; start time recorded
 interrupt (a turn is open), force_stop or stop
-  QueueHoldAll: every row queued until now is held, rows typed afterwards are not; interrupt_requested = true when a
+  QueueHoldAll: every row queued until now is held; rows typed afterwards are not, and wait behind them;
+  interrupt_requested = true when a
   turn is open
 DriverEvent::TurnEnded { stop_reason, usage, error }
   normalizer closes open messages and thoughts; open cards and questions tagged with this turn -> resolved { Cancelled,
@@ -2320,14 +2322,15 @@ DriverEvent::TurnEnded { stop_reason, usage, error }
   error kind AuthRequired -> the failed prompt goes back into the queue, held (same prompt_id; its original created_at
     keeps its place); QueueHoldAll; Shutdown { cancel_grace: 0, process: STANDARD }; state Stopping, then AuthRequired
     with `auth` set
-  else: stop_reason Error with no user stop -> QueueHoldAll; state Ready; dispatch() the oldest non-held row, if any
+  else: stop_reason Error with no user stop -> QueueHoldAll; state Ready; dispatch() the head row unless it is held
 resume_queue()   QueueReleaseAll; Ready -> dispatch(); Stopped, Failed or AuthRequired -> start(false)
-cancel_queued()  QueueRemove; PromptLifecycle { Cancelled }; unknown id -> RequestNotPending
+cancel_queued()  QueueRemove; PromptLifecycle { Cancelled }; unknown id -> RequestNotPending; removing a held head
+                 lets the next row go as a send would (dispatch, or start a stopped agent)
 ```
 
-So an `end_turn` reply racing the user's Stop still holds the rows queued before the Stop (decision 11), a prompt
-typed after a stop or crash is sent at the next `Ready`, and a prompt typed during a turn after a cancel is sent when
-that turn ends. After a restart every queued row comes back held: auracode never sends a message on its own after a
+So an `end_turn` reply racing the user's Stop still holds the rows queued before the Stop (decision 11), and a prompt
+typed after a stop, a crash or a cancel waits behind the held rows until the person sends them (Send it now, Send all)
+or discards them. After a restart every queued row comes back held: auracode never sends a message on its own after a
 restart. The auth card's Retry calls `chat_resume_queue`, which releases the held prompts, restarts the agent with
 native resume, and sends them in order, the one that met the sign-in error included.
 
@@ -2762,7 +2765,7 @@ draft keep their numbers; new cases are appended to each table.
 | S12 | history paging | whole turns, byte budget, `has_more`, events outside turns, empty chat, a turn larger than a page (a generated 50 MB turn, compacted and not) paged by rows with `cut_turn_id` | `history_pages_*`, `huge_turn_pages_by_rows` (C) |
 | S13 | compaction rules | per 6.3.1, FTS rows written | `compaction_*` (C) |
 | S14 | a turn over 32 MiB | not merged; FTS capped; memory bounded | `huge_turn_skips_merge` (C, scaled-down limit) |
-| S15 | queue | queued while running, next after a normal end; rows held at interrupt, stop, error, crash and restart; a prompt typed after a stop or crash is sent at the next `Ready`; a prompt typed during a turn that follows a cancel is sent when it ends; remove; survives a restart held; Send queued releases | `queue_*` (C) |
+| S15 | queue | queued while running, next after a normal end; rows held at interrupt, stop, error, crash and restart; a prompt typed after a stop, crash or cancel waits behind the held rows; Send it now or Discard on the held head; remove; survives a restart held; Send queued releases | `queue_*` (C) |
 | S16 | empty, oversized, or over-queued prompt | `prompt_empty`, `prompt_too_large`, `queue_full` | `send_validation` (C) |
 | S17 | prompt while stopped or failed | starts the agent; dispatched at `Ready`, not held | `send_starts_agent` (C) |
 | S18 | option change during a turn | sent at once, except deferred Hermes mode changes | `option_change_during_turn` (C) |
@@ -3120,7 +3123,7 @@ implementers build these; each can change later without touching a frozen interf
 5. **Agents start on demand**, not when an old chat is opened (decision 10). Alternative: start on open, so the
    pickers are filled at once, at the cost of spawning agents and running the user's `SessionStart` hooks on every
    chat click. Changing it is one call in the actor's attach path.
-6. **A stop holds the prompts queued before it** (decision 11) and a new prompt goes first. Alternative: continue with
+6. **A stop holds the prompts queued before it** (decision 11) and a new prompt waits behind them. Alternative: continue with
    the queued prompts after a soft interrupt. Changing it is one branch in 6.5.3.
 7. **Windows Hermes in M1a needs its gateway already running** (decision 19). Alternative: build the breakaway job now,
    as about 150 lines of `unsafe` Windows code; CI could run a test child but has no Hermes, so the real case waits

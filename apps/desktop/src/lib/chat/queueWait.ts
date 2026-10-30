@@ -4,12 +4,16 @@ import type { HoldCause, QueueWait } from "../../bindings";
 export type QueueAction =
   /** Moves the next message ahead now: interrupts the running turn, or stops waiting for idle. */
   | "send_now"
-  /** Releases every held message ("Send queued"). */
+  /**
+   * The held message everything waits behind: Send it now, or Discard (and Send all when more
+   * than one is held). A held message never goes on its own.
+   */
   | "send_held"
   /** Starts the agent again after a failed start, or starts a stopped one. */
   | "start"
   /** Recreates this chat's missing worktree folder. */
-  | "recreate";
+  | "recreate"
+  | "setup";
 
 export interface QueueWaitView {
   readonly reason: QueueWait["reason"];
@@ -61,6 +65,19 @@ export function queueWaitView(
     failed = false,
   ): QueueWaitView => ({ reason: wait.reason, text, detail, action, failed });
   switch (wait.reason) {
+    case "setup": {
+      const failed = wait.state === "failed" || wait.state === "interrupted";
+      return view(
+        failed
+          ? (wait.detail ?? "Setup failed. Retry setup above.")
+          : wait.state === "running"
+            ? "Setup is running"
+            : "Waiting for setup review",
+        failed ? "setup" : null,
+        "Your messages stay queued until setup succeeds.",
+        failed,
+      );
+    }
     case "starting":
       return view(`Starting ${agent}`, null, "Your message goes as soon as it is ready.");
     case "working":
@@ -113,7 +130,7 @@ export function queueWaitView(
       return view(
         heldText(wait.after, agent),
         "send_held",
-        "Held messages wait for you. Send one, or send them all.",
+        "A held message waits for you, and every message after it waits behind it. Send it now, or discard it.",
       );
   }
 }

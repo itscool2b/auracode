@@ -362,27 +362,35 @@ impl LiveAgents {
     }
 
     pub(crate) fn reserve_folder(&self, folder: &Path) -> bool {
+        self.reserve_folders(&[folder.to_owned()])
+    }
+
+    /// One mutation may own nested paths. Check every path against prior owners before
+    /// recording any of them, so paths in this operation cannot reject one another.
+    pub(crate) fn reserve_folders(&self, folders: &[PathBuf]) -> bool {
         let mut inner = self.lock();
         if inner.quiescing
             || inner.owned_draining
-            || inner
-                .folder_uses
-                .keys()
-                .any(|held| folder.starts_with(held) || held.starts_with(folder))
-            || inner
-                .mutations
-                .iter()
-                .any(|held| folder.starts_with(held) || held.starts_with(folder))
-            || inner.slots.iter().any(|chat| {
-                inner.folders.get(chat).is_none_or(|held| {
-                    held.iter()
+            || folders.iter().any(|folder| {
+                inner
+                    .folder_uses
+                    .keys()
+                    .any(|held| folder.starts_with(held) || held.starts_with(folder))
+                    || inner
+                        .mutations
+                        .iter()
                         .any(|held| folder.starts_with(held) || held.starts_with(folder))
-                })
+                    || inner.slots.iter().any(|chat| {
+                        inner.folders.get(chat).is_none_or(|held| {
+                            held.iter()
+                                .any(|held| folder.starts_with(held) || held.starts_with(folder))
+                        })
+                    })
             })
         {
             return false;
         }
-        inner.mutations.insert(folder.into());
+        inner.mutations.extend(folders.iter().cloned());
         true
     }
 
@@ -431,6 +439,30 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[test]
+    fn failed_batch_admission_does_not_reserve_an_earlier_disjoint_path() {
+        let live = LiveAgents::new(12);
+        let free = PathBuf::from("/fixture/free");
+        let busy = PathBuf::from("/fixture/busy");
+        assert!(live.begin_folder_use(busy.clone()));
+        assert!(!live.reserve_folders(&[free.clone(), busy.clone()]));
+        assert_eq!(live.owned_work_count(), 0);
+        assert!(live.begin_folder_use(free.clone()));
+        live.end_folder_use(&free);
+        live.end_folder_use(&busy);
+        assert!(live.reserve_folders(&[free.clone(), free.join("child")]));
+        assert!(!live.begin_folder_use(free.join("child/deeper")));
+        assert!(!live.reserve_folder(&free));
+        live.release_folder(&free);
+        assert!(
+            !live.reserve_folder(&free),
+            "the requested child remains held"
+        );
+        live.release_folder(&free.join("child"));
+        assert!(live.reserve_folder(&free));
+        live.release_folder(&free);
+    }
 
     #[test]
     fn project_terminal_shares_agents_but_excludes_overlapping_mutations_and_idle_barriers() {

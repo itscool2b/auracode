@@ -4,6 +4,7 @@
 #[cfg(feature = "account-sync")]
 mod encrypted;
 mod git;
+mod recovery;
 mod revert;
 pub(crate) mod scan;
 pub(crate) use revert::apply_file;
@@ -124,6 +125,7 @@ impl Checkpoints {
             ));
         }
         let operation = self.operation(folder_id, &root, true).await?;
+        self.sweep_reverts(&root, chat_id, folder_id).await?;
         let paths = self.paths(&operation, &root).await?;
         #[cfg(feature = "account-sync")]
         if let Storage::Encrypted(files) = &self.storage {
@@ -339,6 +341,8 @@ impl Checkpoints {
         let _guard = self.gate.lock().await;
         let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
         let operation = self.operation(folder_id, &manifest.root, false).await?;
+        self.sweep_reverts(&manifest.root, chat_id, folder_id)
+            .await?;
         let current = self.current(&operation, &manifest).await?;
         let files = changes(&manifest.files, &current.files)
             .into_iter()

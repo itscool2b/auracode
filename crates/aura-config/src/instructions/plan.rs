@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use super::{
     Action, Change, Content, FileKind, Prepared, Review, ReviewFile,
     agents::{AGENTS, AgentRule, Pick, RootId},
-    apply::{Dependency, Expect, Mutation},
+    apply::{self, Dependency, Expect, Mutation},
     imports, manifest,
     model::{Model, normalize},
     text,
@@ -251,7 +251,11 @@ impl<'m, 'c> Builder<'m, 'c> {
             roots: model.roots.iter().map(|root| root.path.clone()).collect(),
             mutations,
             dependencies,
-            manifest: manifest.map(|entry| (model.identity.clone(), entry)),
+            manifest: manifest.map(|entry| apply::MetadataIntent {
+                identity: model.identity.clone(),
+                before: model.record.clone(),
+                after: entry,
+            }),
             state_dir: model.context.state_dir.clone(),
             expires: std::time::Instant::now(),
         })

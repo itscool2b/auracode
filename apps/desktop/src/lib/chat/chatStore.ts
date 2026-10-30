@@ -10,6 +10,7 @@ import type {
   HistoryPage,
   LimitWindow,
   QueuedPrompt,
+  SendingPrompt,
   SessionInfo,
   SessionLists,
   SessionStatus,
@@ -38,11 +39,10 @@ import type { Transport } from "./transport";
  * whenever the session's `revision` changes; Esc interrupts, then force-stops; "Load full output"
  * pages through a blob; "Still working" shows after a minute without frames during a turn.
  *
- * **Held prompts.** "Send queued" follows `SessionInfo.queue_held`. Which prompts are held, the
- * frames never say: the marks come from the snapshot, and a hold holds every prompt queued until
- * then. When the frames cannot place a hold against the prompts listed (one queued as the hold
- * ran, or a hold while some were already held), the view joins again: the snapshot's queue is
- * exact.
+ * **Held prompts.** "Send queued" follows `SessionInfo.queue_held`. The snapshot and each queued
+ * lifecycle event identify each row's hold; a later hold catches every prompt queued until then.
+ * When frames cannot place a later hold against the prompts listed (one queued as the hold ran,
+ * or a hold while some were already held), the view joins again for the snapshot's exact queue.
  */
 
 export type ChatPhase = "attaching" | "live" | "failed";
@@ -75,6 +75,11 @@ export interface ChatState {
   readonly openTurnId: string | null;
   readonly steeringPending: boolean;
   readonly queue: readonly QueuedPrompt[];
+  /**
+   * The message on its way to the agent while its folder checkpoint saves: it shows in the
+   * transcript as sending, with the canonical body and attachments from the persisted row.
+   */
+  readonly sending: SendingPrompt | null;
   readonly usage: UsageInfo | null;
   readonly limits: readonly LimitWindow[] | null;
   readonly lastError: ErrorInfo | null;
@@ -154,6 +159,7 @@ function initialState(chatId: string): ChatState {
     openTurnId: null,
     steeringPending: false,
     queue: [],
+    sending: null,
     usage: null,
     limits: null,
     lastError: null,
@@ -441,6 +447,7 @@ export class ChatStore {
       session: snapshot.session,
       openTurnId: snapshot.open_turn_id,
       queue: snapshot.queue,
+      sending: snapshot.session.sending ?? null,
       usage: snapshot.usage,
       limits: snapshot.limits,
       lastError: snapshot.last_error,
@@ -515,6 +522,7 @@ export class ChatStore {
       case "turn_started":
         return {
           ...state,
+          sending: state.sending?.prompt_id === event.prompt_id ? null : state.sending,
           openTurnId: event.turn_id,
           turnAgents: withLiveTurnAgent(state, event.turn_id),
         };
@@ -525,18 +533,35 @@ export class ChatStore {
         return this.#sessionChanged(state, session);
       }
       case "prompt_lifecycle": {
-        if (event.state === "queued") {
-          // A prompt is queued unheld; a hold later catches it.
-          const queued: QueuedPrompt = {
-            prompt_id: event.prompt_id,
-            preview: event.preview ?? "",
-            held: false,
-            created_at: this.#now(),
-          };
-          this.#queuedSinceUpdate.add(event.prompt_id);
+        if (event.state === "sending") {
+          // On its way: the transcript shows it as sending; it waits behind nothing.
+          this.#queuedSinceUpdate.delete(event.prompt_id);
           return {
             ...state,
-            queue: [...state.queue.filter((row) => row.prompt_id !== event.prompt_id), queued],
+            queue: state.queue.filter((row) => row.prompt_id !== event.prompt_id),
+          };
+        }
+        const returned = state.sending?.prompt_id === event.prompt_id ? state.sending : null;
+        if (returned !== null) state = { ...state, sending: null };
+        if (event.state === "queued") {
+          // The core owns each row's hold. Older producers omit it and retain the old behavior.
+          const index = state.queue.findIndex((row) => row.prompt_id === event.prompt_id);
+          const previous = index < 0 ? undefined : state.queue[index];
+          const queued: QueuedPrompt = {
+            prompt_id: event.prompt_id,
+            preview: event.preview ?? previous?.preview ?? "",
+            held: event.held ?? false,
+            created_at: previous?.created_at ?? returned?.created_at ?? this.#now(),
+          };
+          this.#queuedSinceUpdate.add(event.prompt_id);
+          const queue = [...state.queue];
+          // A capture that was stopped returns the Sending head before its waiting followers.
+          if (index < 0 && returned !== null) queue.unshift(queued);
+          else if (index < 0) queue.push(queued);
+          else queue[index] = queued;
+          return {
+            ...state,
+            queue,
           };
         }
         this.#queuedSinceUpdate.delete(event.prompt_id);
@@ -591,11 +616,18 @@ export class ChatStore {
     } else if (session.status !== "auth_required") {
       this.#authRefreshed = false;
     }
+    // A lifecycle or canonical start clears its own Sending identity before this update. If
+    // Sending disappears otherwise, rejoin for the queue: capture can finish while background
+    // work still blocks dispatch, or Stop/failure can return the prompt held.
+    const sending = session.sending ?? null;
+    if (sending !== null) queue = queue.filter((row) => row.prompt_id !== sending.prompt_id);
+    if (state.sending !== null && sending === null) rejoin = true;
     if (rejoin) this.#rejoinSoon();
     return {
       ...state,
       session,
       queue,
+      sending,
       auth: session.status === "auth_required" ? state.auth : null,
     };
   }

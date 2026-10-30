@@ -36,7 +36,7 @@ describe("Plugin library wording", () => {
       "From claude plugin list --json --available",
     );
     expect(sourceText({ state: "failed", reason: "It failed." }, "codex mcp list --json")).toBe(
-      "It failed. Showing what its files declare.",
+      "It failed. Showing the last available entries.",
     );
     expect(sourceText({ state: "files", reason: "From the folder." }, null)).toBe(
       "From the folder.",

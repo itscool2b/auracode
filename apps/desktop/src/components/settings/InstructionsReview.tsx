@@ -116,7 +116,16 @@ export function ReviewDialog({
       const result = await api.apply(id);
       if (result.rolled_back || result.recovery_required) {
         setReview(null);
-        setError(result.message ?? "The change stopped. Every file was put back.");
+        const message =
+          result.message ??
+          (result.rolled_back
+            ? "The change stopped. Every file was put back."
+            : "The change stopped. Some files may have changed.");
+        setError(
+          result.backup
+            ? `${message} Backups and recovery details are kept at ${result.backup}.`
+            : message,
+        );
         setApplying(false);
         return;
       }

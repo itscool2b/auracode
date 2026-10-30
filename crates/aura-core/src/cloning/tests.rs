@@ -39,6 +39,186 @@ fn input(remote: &str, parent: Option<&Path>, name: Option<&str>) -> CloneInput 
     }
 }
 
+#[tokio::test]
+async fn lifecycle_survives_restart_without_output_and_dismissal_keeps_the_clone() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let parent = temp.path().join("code");
+    std::fs::create_dir(&data).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    let env = synthetic_git(temp.path());
+    let service = Clones::new(Some(data.clone()));
+    let review = service
+        .check(
+            "window",
+            input("https://github.com/owner/repo", Some(&parent), None),
+            env,
+        )
+        .await
+        .unwrap()
+        .review
+        .unwrap();
+    let (prepared, job) = service.take("window", &review.id).unwrap();
+    let restarted = Clones::new(Some(data.clone()));
+    // The planned record exists before a destination. Recovery never creates that folder.
+    let before = restarted.recovery_list().unwrap();
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].state, CloneState::Failed);
+    assert!(!parent.join("repo").exists());
+    let destination = files::begin(prepared).unwrap();
+    job.journal.as_ref().unwrap().created(&destination).unwrap();
+    std::fs::write(parent.join("repo/user-work"), "keep my changes").unwrap();
+    job.update(|record| record.output = vec!["private raw Git output".into()]);
+    let interrupted = restarted.recovery_list().unwrap();
+    assert_eq!(interrupted[0].state, CloneState::Interrupted);
+    assert!(interrupted[0].can_open);
+    assert!(!interrupted[0].can_add);
+    assert!(
+        service.recovery_list().unwrap().is_empty(),
+        "active attempt is not an interrupted notice"
+    );
+    std::fs::create_dir(parent.join("repo/.git")).unwrap();
+    job.journal
+        .as_ref()
+        .unwrap()
+        .git_finished(&destination)
+        .unwrap();
+    // Git exited but the app stopped before project addition or its final Ready update.
+    let completed = restarted.recovery_get(&review.id).unwrap();
+    assert!(completed.can_add && completed.can_open);
+    assert_eq!(completed.state, CloneState::Ready);
+    let journal = data.join("clones").join(format!("{}.json", review.id));
+    assert!(
+        !std::fs::read_to_string(&journal)
+            .unwrap()
+            .contains("private raw Git output")
+    );
+    drop(destination);
+    // Ending the old instance is independent of the restart's read-only view.
+    drop(service);
+    drop(job);
+    assert_eq!(restarted.recovery_get(&review.id).unwrap(), completed);
+    // Keeping the destination identity does not authorize a substituted Git directory.
+    std::fs::rename(parent.join("repo/.git"), parent.join("repo/.git-original")).unwrap();
+    std::fs::create_dir(parent.join("repo/.git")).unwrap();
+    let changed_git = restarted.recovery_get(&review.id).unwrap();
+    assert!(changed_git.can_open && !changed_git.can_add);
+    assert_eq!(changed_git.state, CloneState::Interrupted);
+    restarted.recovery_dismiss(&review.id).unwrap();
+    restarted.recovery_dismiss(&review.id).unwrap();
+    assert!(restarted.recovery_list().unwrap().is_empty());
+    assert!(parent.join("repo/.git").is_dir());
+    assert!(parent.join("repo/.git-original").is_dir());
+    assert_eq!(
+        std::fs::read_to_string(parent.join("repo/user-work")).unwrap(),
+        "keep my changes"
+    );
+}
+
+#[tokio::test]
+async fn replaced_and_linked_destinations_are_preserved_and_never_offered_as_completed() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let parent = temp.path().join("code");
+    std::fs::create_dir(&data).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    let service = Clones::new(Some(data.clone()));
+    let review = service
+        .check(
+            "window",
+            input("https://github.com/owner/repo", Some(&parent), None),
+            synthetic_git(temp.path()),
+        )
+        .await
+        .unwrap()
+        .review
+        .unwrap();
+    let (prepared, job) = service.take("window", &review.id).unwrap();
+    let destination = files::begin(prepared).unwrap();
+    job.journal.as_ref().unwrap().created(&destination).unwrap();
+    std::fs::create_dir(parent.join("repo/.git")).unwrap();
+    job.journal
+        .as_ref()
+        .unwrap()
+        .git_finished(&destination)
+        .unwrap();
+    drop(destination);
+    std::fs::rename(parent.join("repo"), parent.join("moved")).unwrap();
+    std::fs::create_dir_all(parent.join("repo/.git")).unwrap();
+    std::fs::write(parent.join("repo/foreign.txt"), "foreign").unwrap();
+    let restarted = Clones::new(Some(data));
+    let record = restarted.recovery_get(&review.id).unwrap();
+    assert!(!record.can_open && !record.can_add);
+    assert_eq!(
+        std::fs::read_to_string(parent.join("repo/foreign.txt")).unwrap(),
+        "foreign"
+    );
+    // A redirect to the original folder still fails the no-follow boundary.
+    std::fs::rename(parent.join("repo"), parent.join("foreign")).unwrap();
+    #[cfg(windows)]
+    {
+        let result = Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(parent.join("repo"))
+            .arg(parent.join("moved"))
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "fixture junction creation failed");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(parent.join("moved"), parent.join("repo")).unwrap();
+    let linked = restarted.recovery_get(&review.id).unwrap();
+    assert!(!linked.can_open && !linked.can_add);
+    restarted.recovery_dismiss(&review.id).unwrap();
+    assert!(parent.join("repo").exists());
+    assert!(parent.join("foreign/foreign.txt").exists());
+}
+
+#[tokio::test]
+async fn corrupt_records_and_failed_publication_preserve_folders_and_unknown_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    std::fs::create_dir(&data).unwrap();
+    let service = Clones::new(Some(data.clone()));
+    let review = service
+        .check(
+            "window",
+            input("https://github.com/owner/repo", Some(temp.path()), None),
+            synthetic_git(temp.path()),
+        )
+        .await
+        .unwrap()
+        .review
+        .unwrap();
+    // A journal root occupied by a file prevents destination creation.
+    std::fs::write(data.join("clones"), "unknown data").unwrap();
+    assert!(service.take("window", &review.id).is_err());
+    assert!(!temp.path().join("repo").exists());
+    std::fs::rename(data.join("clones"), data.join("saved-unknown")).unwrap();
+    std::fs::create_dir(data.join("clones")).unwrap();
+    let id = uuid::Uuid::now_v7().to_string();
+    let record = data.join("clones").join(format!("{id}.json"));
+    std::fs::write(&record, "{broken").unwrap();
+    std::fs::write(data.join("clones/foreign.txt"), "keep").unwrap();
+    let records = service.recovery_list().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].destination.is_none() && records[0].remote.is_none());
+    assert!(!records[0].can_open && !records[0].can_add);
+    assert!(records[0].detail.contains(&id));
+    assert_eq!(service.recovery_list().unwrap(), records);
+    assert_eq!(std::fs::read_to_string(&record).unwrap(), "{broken");
+    assert!(service.recovery_dismiss("../saved-unknown").is_err());
+    service.recovery_dismiss(&id).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(data.join("saved-unknown")).unwrap(),
+        "unknown data"
+    );
+    assert_eq!(
+        std::fs::read_to_string(data.join("clones/foreign.txt")).unwrap(),
+        "keep"
+    );
+}
+
 fn entries(folder: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(folder)
         .unwrap()

@@ -55,7 +55,10 @@ impl Machine {
     pub fn install_tool(&self, dir: &Path, name: &str) -> PathBuf {
         std::fs::create_dir_all(dir).expect("mkdir");
         let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        std::fs::copy(env!("CARGO_BIN_EXE_aura-agents-testbin"), &path).expect("copy");
+        let binary = option_env!("CARGO_BIN_EXE_aura-agents-testbin")
+            .or(option_env!("CARGO_BIN_EXE_aura-plugin-testbin"))
+            .expect("the package's fake CLI binary");
+        std::fs::copy(binary, &path).expect("copy");
         path
     }
 
@@ -89,14 +92,26 @@ impl Machine {
     }
 
     pub fn env_with_path(&self, path: &[&Path], extra: &[(&str, &str)]) -> ResolvedEnv {
-        let mut vars: EnvMap = aura_process::process_env();
+        // Keep only OS launch requirements. Tests never inherit agent homes, executable
+        // overrides, package-manager roots or credentials from the owner's environment.
+        let system = aura_process::process_env();
+        let mut vars = EnvMap::new();
+        for name in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "SystemDrive"] {
+            if let Some(value) = system.get(&EnvKey::from(name)) {
+                vars.insert(EnvKey::from(name), value.clone());
+            }
+        }
         for name in [
-            "CLAUDE_CODE_EXECUTABLE",
-            "CODEX_PATH",
-            "HOME",
-            "USERPROFILE",
+            "TEMP",
+            "TMP",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
         ] {
-            vars.remove(&EnvKey::from(name));
+            let path = self.root.path().join(name);
+            std::fs::create_dir_all(&path).expect("isolated environment folder");
+            vars.insert(EnvKey::from(name), path.into_os_string());
         }
         vars.insert(
             EnvKey::from("PATH"),

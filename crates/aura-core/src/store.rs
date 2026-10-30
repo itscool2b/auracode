@@ -66,7 +66,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 14;
+pub const SCHEMA_VERSION: u32 = 15;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -104,6 +104,10 @@ static MIGRATIONS: std::sync::LazyLock<[M<'static>; SCHEMA_VERSION as usize]> =
                 include_str!("../migrations/0014_plain_folder_paths.sql"),
                 plain_folder_paths,
             )
+            .foreign_key_check(),
+            M::up(include_str!(
+                "../migrations/0015_worktree_setup_attempts.sql"
+            ))
             .foreign_key_check(),
         ]
     });
@@ -1018,7 +1022,7 @@ mod tests {
     use super::*;
     use std::collections::{BTreeSet, HashSet};
 
-    const TABLES: [&str; 22] = [
+    const TABLES: [&str; 23] = [
         "settings",
         "projects",
         "project_folders",
@@ -1031,6 +1035,7 @@ mod tests {
         "agent_cache",
         "queued_prompts",
         "worktree_setup",
+        "worktree_setup_attempts",
         "sync_config_device",
         "sync_blobs",
         "sync_blob_refs",
@@ -1417,7 +1422,7 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 19,
+            checked, 20,
             "every foreign key in the listed tables was checked"
         );
     }
@@ -2383,12 +2388,12 @@ mod tests {
         let (store, info) = open_with(&p.db, &p.backups, migrations()).expect("current");
         let OpenOutcome::Migrated {
             from: 13,
-            to: 14,
+            to: SCHEMA_VERSION,
             backup: Some(backup),
         } = &info.outcome
         else {
             panic!(
-                "expected Migrated from 13 to 14 with a backup, got {:?}",
+                "expected Migrated from 13 to the current schema with a backup, got {:?}",
                 info.outcome
             );
         };

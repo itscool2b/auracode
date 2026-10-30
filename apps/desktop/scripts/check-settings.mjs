@@ -19,6 +19,7 @@ import { checkProjectTools } from "./check-project-tools.mjs";
 import { checkQuestions } from "./check-questions.mjs";
 import { checkSessionFallback } from "./check-session-fallback.mjs";
 import { checkSettingsNavigation } from "./check-settings-navigation.mjs";
+import { checkSetupRecovery } from "./check-setup-recovery.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
@@ -201,6 +202,7 @@ try {
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);
       await checkWorktreeSetup(browser, url, out, engine);
+      await checkSetupRecovery(browser, url);
       await checkConfigSync(browser, url, out, engine);
       await checkSteering(browser, url, out, engine);
       await checkQuestions(browser, url, out, engine);

@@ -27,10 +27,56 @@ pub use audit::audit_profile;
 use index::Index;
 
 /// The secure-store entry that holds `root`'s account and profile index for `origin`, for the
-/// data cleanup (crate::uninstall). `None` when the folder cannot be resolved.
+/// data cleanup (crate::uninstall). A folder already deleted is named by its parent's real path,
+/// so a cleanup that could not reach the secure store the first time still finds the index on a
+/// later run. `None` when neither can be resolved.
 pub(crate) fn profile_index_entry(origin: &str, root: &std::path::Path) -> Option<VaultEntry> {
-    index::entry(origin, root).ok()
+    let canonical = cleanup_identity(root)?;
+    index::entry_at(origin, &canonical).ok()
 }
+
+/// Missing suffixes are safe only beneath a canonical existing directory. Reject lexical
+/// parent traversal and dangling links rather than guessing their former destinations.
+pub(crate) fn cleanup_identity(root: &std::path::Path) -> Option<std::path::PathBuf> {
+    use std::path::Component;
+    if !root.is_absolute() || root.components().any(|c| matches!(c, Component::ParentDir)) {
+        return None;
+    }
+    let mut ancestor = root;
+    let mut suffix = Vec::new();
+    loop {
+        match std::fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                let mut canonical = std::fs::canonicalize(ancestor).ok()?;
+                if !canonical.is_dir() {
+                    return None;
+                }
+                for part in suffix.iter().rev() {
+                    canonical.push(part);
+                }
+                return Some(canonical);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                suffix.push(ancestor.file_name()?.to_os_string());
+                ancestor = ancestor.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Validated references for cleanup, never exposed in review rows or logs.
+pub(crate) fn cleanup_references(bytes: &[u8]) -> Option<Vec<String>> {
+    let index = Index::decode(bytes, crate::uninstall::ORIGINS[0]).ok()?;
+    let mut ids: Vec<_> = index.accounts.keys().cloned().collect();
+    if let Some(receipt) = index.removal {
+        ids.push(receipt.account_id);
+    }
+    ids.sort();
+    ids.dedup();
+    Some(ids)
+}
+
 pub type Result<T> = std::result::Result<T, AccountFailure>;
 
 pub struct Accounts {

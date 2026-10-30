@@ -136,11 +136,12 @@ export function ChatsScreen({
         .map((entry) => liveById.get(entry.chat.id) ?? entry.chat)
     : snapshot.chats;
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
-  const selectedProjectId = organization.data?.chats.find(
-    (entry) => entry.chat.id === selected,
-  )?.project_id;
+  const selectedEntry = organization.data?.chats.find((entry) => entry.chat.id === selected);
   const selectedProject =
-    organization.data?.projects.find((project) => project.id === selectedProjectId)?.name ?? null;
+    organization.data?.projects.find((project) => project.id === selectedEntry?.project_id) ?? null;
+  const selectedFolder = selectedProject?.folders.find(
+    (folder) => folder.id === selectedEntry?.folder_id,
+  );
   // A fresh New chat selects the default agent once detection says it can run here; a choice the
   // person made (the dock, a click) is never replaced.
   const preselected = useRef(new WeakSet<NewChatDraft>());
@@ -258,7 +259,8 @@ export function ChatsScreen({
             terminals={terminals}
             transport={transport}
             listed={snapshot.chats?.find((chat) => chat.id === selected) ?? null}
-            project={selectedProject}
+            project={selectedProject?.name ?? null}
+            folderLabel={selectedFolder?.display_name ?? null}
             storage={snapshot.storage}
             agents={snapshot.agents}
           />

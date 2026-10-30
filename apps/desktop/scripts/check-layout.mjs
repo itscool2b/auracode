@@ -107,12 +107,14 @@ export const MODES = [
   // The quit question, in the window's own dialog over the chat.
   "settled&quit#quit",
   "thinking#typed",
-  // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
-  // Create, and the recreate dialog for a deleted worktree folder.
+  // The worktree chip, the new-chat setup choice, and the normal chat's setup review/terminal.
   "new-worktree#worktree",
   "new-worktree#local",
   "new-worktree#branch-error",
-  "new-setup#setup",
+  "new-setup",
+  "setup-recovery",
+  "setup-recovery#setup",
+  "setup-actions.html?recovery#clone-recovery",
   "git-missing#recreate",
   // The docked terminal panel: two tabs open, opened with Ctrl+`, its shell menu, and resized.
   "terminal-panel",
@@ -197,6 +199,32 @@ async function openAgent(page, name) {
 /** Centres the opened row in the page's scroller, so every probe sees the whole of it. */
 const showRow = (row) => row.evaluate((node) => node.scrollIntoView({ block: "center" }));
 
+/** Resolves after two painted frames: every scroll event of an earlier scroll has arrived. */
+const frames = (page) =>
+  page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+
+/**
+ * Opens a Plugin library row's menu as a person does: the row is brought into view and its scroll
+ * has settled, then the click. Waits for the open state itself (the trigger expanded, the menu
+ * shown, its first item holding focus) rather than for time to pass.
+ */
+async function openRowMenu(page, name) {
+  const trigger = page.getByRole("button", { name, exact: true });
+  await trigger.scrollIntoViewIfNeeded();
+  await frames(page);
+  await trigger.click();
+  await page.getByRole("button", { name, exact: true, expanded: true }).waitFor();
+  await page.getByRole("menu", { name }).waitFor();
+  const first = await page
+    .getByRole("menu", { name })
+    .getByRole("menuitem")
+    .first()
+    .elementHandle();
+  await page.waitForFunction((item) => document.activeElement === item, first);
+}
+
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
   codex: async (page) => showRow(await openAgent(page, "Codex")),
@@ -238,14 +266,13 @@ const OPENERS = {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
   },
-  "plugin-menu": async (page) => {
-    await page.getByRole("button", { name: "tools actions" }).click();
-    await page.getByRole("menu", { name: "tools actions" }).waitFor();
-  },
+  "plugin-menu": (page) => openRowMenu(page, "tools actions"),
   "plugin-item": async (page) => {
     // The menu opens with its first item focused; Enter picks it without scrolling the page.
-    await page.getByRole("button", { name: "review-changes actions" }).click();
-    await page.getByRole("menuitem", { name: "Preview and copy…" }).waitFor();
+    await openRowMenu(page, "review-changes actions");
+    await page.waitForFunction(
+      () => document.activeElement?.textContent?.trim() === "Preview and copy…",
+    );
     await page.keyboard.press("Enter");
     await page.getByLabel("Copy destination").waitFor();
   },
@@ -276,9 +303,13 @@ const OPENERS = {
     await page.locator(".new-chat-worktree-error").waitFor();
   },
   setup: async (page) => {
-    await page.getByTestId("new-chat-create").click();
-    await page.getByRole("button", { name: "Start setup", exact: true }).click();
-    await page.locator('.terminal-sheet[data-state="running"]').waitFor();
+    await page.getByRole("region", { name: "Review setup command" }).waitFor();
+    await page.getByRole("button", { name: "Run reviewed setup", exact: true }).click();
+    await page.locator('.terminal-panel [role="tab"][data-state="running"]').waitFor();
+  },
+  "clone-recovery": async (page) => {
+    await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+    await page.getByRole("region", { name: "Interrupted clones" }).waitFor();
   },
   recreate: async (page) => {
     await page.getByRole("button", { name: "Recreate folder", exact: true }).click();
@@ -760,7 +791,9 @@ try {
           const [preview, view] = mode.split("#");
           // A fixture with its own page (an .html file) is opened by name.
           await page.goto(
-            preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
+            preview.split("?")[0].endsWith(".html")
+              ? `${url}/${preview}`
+              : `${url}/?preview=${preview}`,
           );
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);

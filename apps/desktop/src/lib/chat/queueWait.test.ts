@@ -10,6 +10,17 @@ function said(wait: QueueWait, context = CAN) {
 }
 
 describe("why queued messages wait, in words", () => {
+  it("explains setup admission and gives a concrete retry after failure", () => {
+    expect(said({ reason: "setup", state: "running", detail: null })).toEqual({
+      text: "Setup is running",
+      action: null,
+      failed: false,
+    });
+    expect(said({ reason: "setup", state: "failed", detail: "Setup exited with code 2." })).toEqual(
+      { text: "Setup exited with code 2.", action: "setup", failed: true },
+    );
+    expect(said({ reason: "setup", state: "interrupted", detail: null })?.action).toBe("setup");
+  });
   it("names every reason plainly with the one action that helps", () => {
     expect(said({ reason: "starting" })).toEqual({
       text: "Starting Claude Code",

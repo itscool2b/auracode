@@ -254,6 +254,7 @@ export function CloneBody({
           {view.notice}
         </p>
       ) : null}
+      <CloneRecoveryNotices controller={controller} view={view} fixedRemote={fixedRemote} />
       <div className="setup-field">
         <label htmlFor={`${ids}-remote`}>Repository</label>
         <input
@@ -356,6 +357,83 @@ export function CloneBody({
         </button>
       </Actions>
     </form>
+  );
+}
+
+function CloneRecoveryNotices({
+  controller,
+  view,
+  fixedRemote,
+}: {
+  controller: CloneController;
+  view: CloneView;
+  fixedRemote: boolean;
+}) {
+  const recoveries = view.recoveries.filter(
+    (record) => !fixedRemote || record.remote === view.remote,
+  );
+  return (
+    <>
+      {view.recoveryError ? (
+        <p role="alert" className="setup-alert">
+          {view.recoveryError}
+        </p>
+      ) : null}
+      {recoveries.length ? (
+        <section aria-label="Interrupted clones" className="setup-field">
+          <h3>Previous clones</h3>
+          {recoveries.map((record) => (
+            <div key={record.id} className="setup-field">
+              <p>{record.detail}</p>
+              {record.destination ? <p className="setup-path">{record.destination}</p> : null}
+              <div className="g-dialog-actions">
+                {record.can_open ? (
+                  <button
+                    type="button"
+                    className="g-button"
+                    disabled={!controller.canRecover}
+                    onClick={() => void controller.recover(record.id, "open")}
+                  >
+                    Open folder
+                  </button>
+                ) : null}
+                {record.can_add ? (
+                  <button
+                    type="button"
+                    className="g-button"
+                    disabled={!controller.canRecover}
+                    onClick={() => void controller.recover(record.id, "add")}
+                  >
+                    Add existing project
+                  </button>
+                ) : null}
+                {record.remote ? (
+                  <button
+                    type="button"
+                    className="g-button"
+                    disabled={!controller.canRecover}
+                    onClick={() => controller.retryElsewhere(record)}
+                  >
+                    Retry in another folder
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="g-button"
+                  disabled={!controller.canRecover}
+                  onClick={() => void controller.recover(record.id, "dismiss")}
+                >
+                  Dismiss notice
+                </button>
+              </div>
+            </div>
+          ))}
+          <p className="setup-footnote">
+            Dismissing a notice removes its record only. Your folders stay where they are.
+          </p>
+        </section>
+      ) : null}
+    </>
   );
 }
 

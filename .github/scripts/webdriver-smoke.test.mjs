@@ -136,6 +136,7 @@ test("the child cannot inherit a real profile, embedded smoke or agent configura
 
 function scenarioDriver() {
   const calls = [];
+  let demoSelected = false;
   const driver = {
     async command(method, path, body) {
       calls.push({ method, path, body });
@@ -150,6 +151,14 @@ function scenarioDriver() {
     },
     async click(selector, using) {
       calls.push({ click: selector, using });
+      if (selector.includes('[data-testid="new-chat-agent"]')) {
+        assert.equal(
+          selector,
+          '[data-testid="new-chat-agent"] label:has(input[type="radio"][value="mock"])',
+          "agent choices are radio labels, not select options",
+        );
+        demoSelected = true;
+      }
     },
     async scroll(selector, deltaY) {
       calls.push({ scroll: selector, deltaY });
@@ -160,11 +169,13 @@ function scenarioDriver() {
     async type(selector, text) {
       calls.push({ type: selector, text });
     },
-    async elements() {
+    async elements(selector) {
+      if (selector === '[data-testid="new-chat-agent"] input[type="radio"][value="mock"]')
+        return ["demo-radio"];
       return ["echo-prompt", "slow-prompt"];
     },
     async element(id, _method, action) {
-      if (action === "property/value") return "mock";
+      if (id === "demo-radio" && action === "property/checked") return demoSelected;
       if (id.includes("prompt-text")) return "/echo External native WebDriver hello";
       return "External native WebDriver hello";
     },
@@ -209,6 +220,20 @@ test("a failed create check retains earlier evidence and cannot report success",
     /native typing failed/,
   );
   assert.deepEqual(checks, ["native-window", "create-demo-chat"]);
+});
+
+test("an unselected Demo radio stops before chat creation and retains native-window evidence", async () => {
+  const { driver, calls } = scenarioDriver();
+  const element = driver.element;
+  driver.element = async (id, method, action) =>
+    id === "demo-radio" && action === "property/checked" ? false : element(id, method, action);
+  const checks = [];
+  await assert.rejects(
+    exerciseApp(driver, "owned", async () => {}, checks),
+    /Demo radio must be selected/,
+  );
+  assert.deepEqual(checks, ["native-window"]);
+  assert(!calls.some((call) => call.click === '[data-testid="new-chat-create"]'));
 });
 
 test("resizes the native window only when its driver advertises support", async () => {

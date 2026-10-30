@@ -9,6 +9,7 @@ import type { AgentEntry, AgentInstallation } from "../bindings";
 import { NewChat } from "../components/chat/NewChat";
 import { NewChatDraft } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
+import { worktreeRecoveryApi } from "../lib/worktreeRecovery";
 import { FIXTURE_FOLDER, type NewChatScenario, newChatFixture } from "./newChatWorktreeFixture";
 
 const mode = new URLSearchParams(location.search).get("agents");
@@ -115,6 +116,7 @@ export function NewChatPreview({
     [],
   );
   const fixture = useMemo(() => (scenario ? newChatFixture(scenario) : null), [scenario]);
+  const recoveryApi = useMemo(() => ({ ...worktreeRecoveryApi, list: async () => [] }), []);
   useEffect(() => {
     if (!fixture) return;
     Object.assign(window, { newChatFixture: { calls: () => [...fixture.calls] } });
@@ -134,6 +136,7 @@ export function NewChatPreview({
       onCreated={onCreated}
       workspace={fixture?.workspace}
       worktreeApi={fixture?.api}
+      recoveryApi={recoveryApi}
     />
   );
 }

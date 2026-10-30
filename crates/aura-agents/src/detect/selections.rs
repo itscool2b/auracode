@@ -166,7 +166,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
     crate::candidates::key(a, cfg!(windows)) == crate::candidates::key(b, cfg!(windows))
 }
 
-fn replace_selections(
+pub(super) fn replace_selections(
     live: &Live,
     choices: Result<crate::preferences::Selections, String>,
 ) -> bool {
@@ -181,6 +181,10 @@ fn replace_selections(
     state.selections = choices;
     state.preference_error = error;
     state.configuration_revision += 1;
+    state.listings.clear();
+    for job in state.listing_jobs.values() {
+        job.task.cancel();
+    }
     state.generation += 1;
     let floor = state.generation;
     for spec in &live.specs {

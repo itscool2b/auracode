@@ -230,6 +230,12 @@ impl AppState {
     pub fn app_info(&self) -> AppInfo {
         let runtime = lock(&self.runtime);
         let mut info = runtime.info.clone();
+        if let Some(root) = &self.data_dir {
+            info.notices
+                .extend(aura_config::instructions::recovery_notices(
+                    &root.join("instructions"),
+                ));
+        }
         info.config_profile_recovery = self.data_dir.as_ref().and_then(|root| {
             crate::profile_config::status(
                 root,
@@ -346,11 +352,17 @@ impl AppState {
             generation: self.access.generation.load(Ordering::Acquire),
         }
     }
-    pub(crate) async fn wait_profile_commands(&self) {
+    pub(crate) async fn wait_profile_commands(
+        &self,
+    ) -> Option<aura_core::session::PluginRefreshPause> {
+        let library_pause = lock(&self.runtime)
+            .chats
+            .as_ref()
+            .map(|chats| chats.manager.pause_plugin_refresh());
         loop {
             let changed = self.access.changed.notified();
             if self.access.active.load(Ordering::Acquire) == 0 {
-                return;
+                return library_pause;
             }
             changed.await;
         }
@@ -558,6 +570,53 @@ mod tests {
             "a first launch checks nothing"
         );
         state.at_exit();
+    }
+
+    /// Retained journals are reported both at startup and when a later write leaves one behind.
+    #[tokio::test]
+    async fn initial_notice_lists_retained_instructions_journal_without_touching_targets() {
+        for before_startup in [true, false] {
+            let dir = tempfile::tempdir().unwrap();
+            let data = dir.path().join("data");
+            let target = dir.path().join("project").join("AGENTS.md");
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(&target, b"Keep the user's instructions.").unwrap();
+            let journal = data
+                .join("instructions")
+                .join("backups")
+                .join(uuid::Uuid::now_v7().to_string());
+            let retain_journal = || {
+                std::fs::create_dir_all(&journal).unwrap();
+                std::fs::write(journal.join("journal.json"), b"{broken").unwrap();
+            };
+            if before_startup {
+                retain_journal();
+            }
+            let state = state(boot(Ok(DataRoot::at(data))));
+            if !before_startup {
+                retain_journal();
+            }
+            let info = state.app_info();
+            assert!(
+                info.notices.iter().any(|notice| {
+                    notice.contains("Instructions change needs recovery")
+                        && notice.contains(&journal.to_string_lossy().to_string())
+                }),
+                "before_startup={before_startup}, journal={}, notices={:?}",
+                journal.display(),
+                info.notices
+            );
+            assert_eq!(
+                std::fs::read(journal.join("journal.json")).unwrap(),
+                b"{broken"
+            );
+            assert_eq!(std::fs::read_dir(&journal).unwrap().count(), 1);
+            assert_eq!(
+                std::fs::read(&target).unwrap(),
+                b"Keep the user's instructions."
+            );
+            state.at_exit();
+        }
     }
 
     /// The sweep's notice arrives after startup and shows with the others from then on.

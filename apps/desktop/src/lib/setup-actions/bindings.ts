@@ -70,6 +70,22 @@ export type CloneRecord = {
 	removed: boolean,
 };
 
+/**  A durable clone notice. Invalid journals have no usable destination or remote. */
+export type CloneRecovery = {
+	id: string,
+	state: CloneState,
+	repository: string | null,
+	remote: string | null,
+	destination: string | null,
+	detail: string,
+	/**
+	 *  A completed clone still has its recorded directory identity and a regular Git directory.
+	 *  Adding it uses the normal project validation flow, never automatic project creation.
+	 */
+	can_add: boolean,
+	can_open: boolean,
+};
+
 /**  One startable clone: the exact Git program and arguments that Start runs, and where. */
 export type CloneReview = {
 	id: string,
@@ -86,4 +102,6 @@ export type CloneReview = {
 
 export type CloneState = "running" | "ready" | "canceled" | "failed" | 
 /**  Git is being stopped; the unfinished folder waits until the stop is confirmed. */
-"cleanup_pending";
+"cleanup_pending" | 
+/**  A prior process stopped before the clone's lifecycle was settled. Its folder is preserved. */
+"interrupted";

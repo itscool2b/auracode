@@ -417,23 +417,79 @@ mod end_to_end {
             );
         }
 
-        // The real detector: the demo agent is built in, and with nothing on PATH every other
-        // agent is missing, so no probe ran anything.
+        // The real detector shows one entry per agent; alternate transports stay in that
+        // entry's connections. With nothing on PATH only the built-in demo agent can run.
         let agents = chats.manager.agents(true).await;
         let ids: Vec<&str> = agents.iter().map(|agent| agent.id.as_str()).collect();
         assert_eq!(
             ids,
-            aura_agents::catalog()
-                .iter()
-                .map(|spec| spec.id)
-                .collect::<Vec<_>>(),
-            "the catalog"
+            [
+                "hermes",
+                "claude",
+                "codex",
+                "antigravity",
+                "cursor",
+                "grok",
+                "omp",
+                "opencode",
+                "pi",
+                "mock"
+            ],
+            "the visible agents, without duplicate transport aliases"
         );
         for agent in &agents {
             match (agent.id.as_str(), &agent.availability) {
                 ("mock", Availability::Ready { .. }) => {}
                 (id, Availability::Missing { .. }) if id != "mock" => {}
                 (id, availability) => panic!("{id} reads {availability:?}"),
+            }
+            let expected_connections: Option<&[&str]> = match agent.id.as_str() {
+                "claude" => Some(&["claude", "claude-acp"]),
+                "codex" => Some(&["codex", "codex-acp"]),
+                "antigravity" => Some(&["antigravity", "agy-stream"]),
+                "grok" => Some(&["grok", "grok-stream"]),
+                "opencode" => Some(&["opencode", "opencode-v2"]),
+                _ => None,
+            };
+            if let Some(expected) = expected_connections {
+                let connections = agent
+                    .connections
+                    .as_ref()
+                    .expect("alternate transports remain available as connections");
+                assert_eq!(
+                    connections.preferred, None,
+                    "{} defaults to Automatic in a fresh profile",
+                    agent.id
+                );
+                assert_eq!(
+                    connections.active, None,
+                    "{} has no runnable connection on an empty PATH",
+                    agent.id
+                );
+                assert_eq!(
+                    connections
+                        .options
+                        .iter()
+                        .map(|connection| connection.id.as_str())
+                        .collect::<Vec<_>>(),
+                    expected,
+                    "{} retains every connection in preference order",
+                    agent.id
+                );
+                assert!(
+                    connections.options.iter().all(|connection| matches!(
+                        connection.availability,
+                        Availability::Missing { .. }
+                    )),
+                    "{} cannot run a hidden connection either",
+                    agent.id
+                );
+            } else {
+                assert!(
+                    agent.connections.is_none(),
+                    "{} has only its single connection",
+                    agent.id
+                );
             }
         }
 

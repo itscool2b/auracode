@@ -7,6 +7,12 @@ import { CloneBody, cloneHeading } from "./CloneProject";
 
 const noop = (): void => {};
 const api: CloneApi = {
+  recoveryList: async () => [],
+  recoveryReady: async () => {
+    throw new Error("unused");
+  },
+  recoveryOpen: async () => {},
+  recoveryDismiss: async () => {},
   check: async () => ({ repository: null, name: null, review: null, problem: null }),
   cancelReview: async () => {},
   start: async () => {
@@ -57,6 +63,42 @@ const render = (change: Partial<CloneView>, layout: "inline" | "dialog" = "inlin
 };
 
 describe("CloneBody", () => {
+  it("shows retained recovery paths and record-only dismissal in onboarding and dialogs", () => {
+    for (const layout of ["inline", "dialog"] as const) {
+      for (const starting of [false, true]) {
+        const markup = render(
+          {
+            starting,
+            recoveries: [
+              {
+                id: "old",
+                state: "ready",
+                repository: "owner/repo",
+                remote: "https://github.com/owner/repo",
+                destination: "C:\\old\\repo",
+                detail: "Git completed this clone.",
+                can_add: true,
+                can_open: true,
+              },
+            ],
+          },
+          layout,
+        );
+        expect(markup).toContain("Interrupted clones");
+        expect(markup).toContain("C:\\old\\repo");
+        for (const action of [
+          "Open folder",
+          "Add existing project",
+          "Retry in another folder",
+          "Dismiss notice",
+        ]) {
+          expect(markup).toContain(action);
+          if (starting) expect(markup).toMatch(new RegExp(`disabled=""[^>]*>${action}</button>`));
+        }
+        expect(markup).toContain("Dismissing a notice removes its record only.");
+      }
+    }
+  });
   it("shows the exact command and its Git before Clone, primary first in setup", () => {
     const markup = render({
       remote: "https://github.com/auracode/orbit",

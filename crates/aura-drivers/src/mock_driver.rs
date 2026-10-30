@@ -292,7 +292,7 @@ fn slash_commands() -> Vec<SlashCommand> {
 
 /// What a turn task tells the driver's loop.
 enum Msg {
-    Event(DriverEvent),
+    Event(Box<DriverEvent>),
     /// A permission request or question waits for its answer.
     Wait {
         request_id: String,
@@ -310,6 +310,12 @@ enum Msg {
         error: Option<DriverError>,
     },
     Crash,
+}
+
+impl Msg {
+    fn event(event: DriverEvent) -> Self {
+        Self::Event(Box::new(event))
+    }
 }
 
 enum Answer {
@@ -630,7 +636,7 @@ impl Mock {
 
     fn on_msg(&mut self, msg: Msg) {
         match msg {
-            Msg::Event(event) => self.push(event),
+            Msg::Event(event) => self.push(*event),
             Msg::Wait {
                 request_id,
                 turn,
@@ -1049,7 +1055,7 @@ impl TurnTask {
                         env: Vec::new(),
                     }],
                 };
-                let _ = self.tx.send(Msg::Event(DriverEvent::AuthRequired(prompt)));
+                let _ = self.tx.send(Msg::event(DriverEvent::AuthRequired(prompt)));
                 self.done(
                     StopReason::Error,
                     None,
@@ -1093,7 +1099,7 @@ impl TurnTask {
     }
 
     fn emit(&self, event: AuraEvent) {
-        let _ = self.tx.send(Msg::Event(DriverEvent::Event {
+        let _ = self.tx.send(Msg::event(DriverEvent::Event {
             turn: Some(self.turn_id.clone()),
             event,
         }));
@@ -1136,7 +1142,7 @@ impl TurnTask {
             }
             AuraEvent::TurnStarted { .. } | AuraEvent::SessionUpdated(_) => true,
             event => tx
-                .send(Msg::Event(DriverEvent::Event {
+                .send(Msg::event(DriverEvent::Event {
                     turn: turn.clone(),
                     event,
                 }))
@@ -1173,7 +1179,7 @@ impl TurnTask {
             turn,
             answer,
         });
-        let _ = self.tx.send(Msg::Event(event));
+        let _ = self.tx.send(Msg::event(event));
         if cancellable {
             tokio::select! {
                 answer = answered => answer.ok(),
@@ -1258,7 +1264,7 @@ impl TurnTask {
             turn: Some(self.turn_id.clone()),
             answer,
         });
-        let _ = self.tx.send(Msg::Event(DriverEvent::Permission {
+        let _ = self.tx.send(Msg::event(DriverEvent::Permission {
             turn: Some(self.turn_id.clone()),
             request,
         }));
@@ -1273,7 +1279,7 @@ impl TurnTask {
             }
             () = tokio::time::sleep(Duration::from_secs(1)) => {
                 let _ = self.tx.send(Msg::Unwait { request_id: request_id.clone() });
-                let _ = self.tx.send(Msg::Event(DriverEvent::PermissionWithdrawn { request_id }));
+                let _ = self.tx.send(Msg::event(DriverEvent::PermissionWithdrawn { request_id }));
                 self.say("The demo agent withdrew its request.");
                 self.done(StopReason::EndTurn, Some(tiny_usage(6)), None);
             }
@@ -1301,12 +1307,12 @@ impl TurnTask {
                 turn: Some(self.turn_id.clone()),
                 answer,
             });
-            let _ = self.tx.send(Msg::Event(event));
+            let _ = self.tx.send(Msg::event(event));
             tokio::select! {
                 answer = answered => answer.ok(),
                 () = tokio::time::sleep(Duration::from_secs(1)) => {
                     let _ = self.tx.send(Msg::Unwait { request_id: request_id.clone() });
-                    let _ = self.tx.send(Msg::Event(DriverEvent::UiWithdrawn { request_id }));
+                    let _ = self.tx.send(Msg::event(DriverEvent::UiWithdrawn { request_id }));
                     self.say("The demo agent withdrew its question.");
                     self.done(StopReason::EndTurn, Some(tiny_usage(5)), None);
                     return;
@@ -1350,7 +1356,7 @@ impl TurnTask {
         self.say("Started a watcher in the background.");
         self.done(StopReason::EndTurn, Some(tiny_usage(6)), None);
         tokio::time::sleep(Duration::from_millis(500)).await;
-        let _ = self.tx.send(Msg::Event(DriverEvent::Event {
+        let _ = self.tx.send(Msg::event(DriverEvent::Event {
             turn: None,
             event: AuraEvent::ToolUpdate(tool_update(
                 &tool,
@@ -1385,7 +1391,7 @@ impl TurnTask {
             Some(_) => "The watcher skipped its cache.",
             None => return,
         };
-        let _ = self.tx.send(Msg::Event(DriverEvent::Event {
+        let _ = self.tx.send(Msg::event(DriverEvent::Event {
             turn: None,
             event: AuraEvent::Notice {
                 level: NoticeLevel::Info,

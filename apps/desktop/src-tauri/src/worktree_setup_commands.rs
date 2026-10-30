@@ -68,6 +68,29 @@ pub async fn worktree_setup_apply(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn worktree_setup_reserve(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+    token: String,
+) -> Result<String, AppError> {
+    use aura_core::terminal::TerminalError;
+    if state.quit.is_quitting() || !state.pages.for_view(webview.label()).is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let id = state
+        .sessions()?
+        .reserve_worktree_setup_terminal(&state.terminals, webview.label(), &chat_id, &token)
+        .await?;
+    if !state.pages.for_view(webview.label()).is_current() {
+        let _ = state.terminals.close(webview.label(), &id);
+        return Err(TerminalError::Closed.into());
+    }
+    Ok(id)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn worktree_setup_start(
     webview: Webview,
     state: State<'_, AppState>,
@@ -81,14 +104,13 @@ pub async fn worktree_setup_start(
     if state.quit.is_quitting() || !state.pages.for_view(webview.label()).is_current() {
         return Err(TerminalError::Closed.into());
     }
+    let (ticket, plan) =
+        state
+            .terminals
+            .claim_setup(webview.label(), &terminal_id, &chat_id, &token)?;
     let size = aura_process::pty::PtySize { rows, cols }
         .validate()
         .map_err(|_| TerminalError::Resize)?;
-    let ticket = state.terminals.claim(webview.label(), &terminal_id)?;
-    let admission = state.sessions()?;
-    let plan = admission
-        .prepare_worktree_setup_terminal(&chat_id, &token)
-        .await?;
     if !state.pages.for_view(webview.label()).is_current() {
         return Err(TerminalError::Closed.into());
     }
@@ -98,6 +120,6 @@ pub async fn worktree_setup_start(
         tauri::async_runtime::handle().inner().clone(),
     );
     Ok(ticket
-        .start_guarded(spawner, plan.spec, size, plan.guard)
+        .start_setup(spawner, plan.spec, size, plan.guard, plan.completion)
         .await?)
 }

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { DataCleanupReview } from "../../bindings";
+import { syntheticCleanupKeys } from "../../dev/deleteDataKeys";
 import {
   cleanupChoice,
   confirmed,
@@ -38,6 +39,8 @@ const REVIEW: DataCleanupReview = {
       unsaved: false,
     },
   ],
+  keys: [],
+  warnings: [],
   secure_store: "Windows Credential Manager",
   app_bundle: null,
 };
@@ -78,9 +81,43 @@ describe("Delete all auracode data", () => {
     expect(html).toContain("1.2 GB");
     expect(html).toContain("<dt>Window and web data</dt>");
     expect(html).toContain(
-      "auracode&#x27;s sign-in, device and account keys in Windows Credential Manager",
+      "Reviewed entries in Windows Credential Manager. Shared and unverifiable keys are retained.",
     );
     expect(html).toContain("Your agents, their settings and your repositories are not touched.");
+  });
+
+  it("shows removal only for this root's index, exclusive accounts and eligible orphans", () => {
+    const keys = syntheticCleanupKeys();
+    const html = render({ ...REVIEW, ...keys });
+    expect(html).toContain("Remove Index: Index belongs to a deleted root");
+    expect(html).toContain("Remove Account: Exclusively referenced by deleted roots");
+    expect(html).toContain("Remove Account: Unreferenced account bundle; default root is deleted");
+    expect(html).toContain("Retain Index: Index belongs to another data root");
+    expect(html).toContain("Retain Account: Referenced by another data root");
+    expect(keys.keys.filter((key) => key.remove)).toHaveLength(3);
+    expect(keys.warnings).toEqual([]);
+    for (const key of keys.keys) {
+      expect(key.target).toMatch(/^auracode\.sync\.v1:[A-Za-z0-9_-]{43}$/);
+      expect(html).toContain(key.target);
+    }
+  });
+
+  it("retains every key and the retry index when the synthetic review has unknown payloads", () => {
+    const keys = syntheticCleanupKeys(true);
+    const html = render({ ...REVIEW, ...keys });
+    expect(keys.keys).toHaveLength(6);
+    expect(keys.keys.every((key) => !key.remove)).toBe(true);
+    expect(html).not.toMatch(/Remove (?:Account|Index|Unknown):/);
+    expect(html).toContain(
+      "Retain Index: Reference discovery is uncertain; retain index for retry",
+    );
+    expect(html).toContain("Retain Index: Index belongs to another data root");
+    expect(html).toContain("Retain Account: Reference discovery is uncertain");
+    expect(html).toContain("Retain Unknown: Unreadable, malformed or unsupported payload");
+    expect(html).toContain('role="status"');
+    expect(html).toContain(
+      "Some secure-store entries or root identities could not be verified. All account keys and retry indexes are retained.",
+    );
   });
 
   it("warns about worktrees with unsaved work and keeps them by default", () => {
@@ -118,6 +155,8 @@ describe("Delete all auracode data", () => {
     const mac = {
       ...REVIEW,
       app_bundle: "/Applications/auracode.app",
+      keys: [],
+      warnings: [],
       secure_store: "the macOS keychain",
     };
     const html = render(mac, { trash: true, typed: "DELETE" });
@@ -127,10 +166,10 @@ describe("Delete all auracode data", () => {
     expect(cleanupChoice(REVIEW, false, true).move_app_to_trash).toBe(false);
   });
 
-  it("says a data folder of its own keeps account keys and the installed app's data", () => {
+  it("says a data folder of its own preserves shared keys and the installed app's data", () => {
     const html = render({ ...REVIEW, scope: "data_folder", worktrees: [] });
     expect(html).toContain("the installed app&#x27;s data");
-    expect(html).toContain("Account keys stay for other data folders.");
+    expect(html).toContain("Shared and unverifiable keys are retained.");
     expect(html).not.toContain("worktree has work");
   });
 

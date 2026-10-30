@@ -3,7 +3,7 @@
  * problem beside its field, the exact command, Git's stages) and never runs Git or touches disk.
  */
 import type { CloneApi } from "../lib/setup-actions/api";
-import type { CloneCheck, CloneRecord } from "../lib/setup-actions/bindings";
+import type { CloneCheck, CloneRecord, CloneRecovery } from "../lib/setup-actions/bindings";
 
 /** How a started clone ends: it finishes, stays running at 62%, or fails like a missing repo. */
 export type CloneOutcome = "ready" | "running" | "error";
@@ -17,6 +17,20 @@ const STAGES: readonly [string, number, number, string | null][] = [
 ];
 
 export function cloneFixture(outcome: CloneOutcome, calls: string[] = []): CloneApi {
+  let recoveries: CloneRecovery[] = new URLSearchParams(location.search).has("recovery")
+    ? [
+        {
+          id: "saved-clone",
+          state: "ready",
+          repository: "auracode/orbit",
+          remote: "https://github.com/auracode/orbit",
+          destination: "C:\\Users\\fixture\\old-clone",
+          detail: "Git completed this clone. The folder has been preserved.",
+          can_add: true,
+          can_open: true,
+        },
+      ]
+    : [];
   let record: CloneRecord | null = null;
   let step = 0;
   let wake: (() => void) | null = null;
@@ -29,6 +43,20 @@ export function cloneFixture(outcome: CloneOutcome, calls: string[] = []): Clone
       };
     });
   return {
+    recoveryList: async () => [...recoveries],
+    recoveryReady: async (id) => {
+      calls.push("clone-recovery-validate");
+      const record = recoveries.find((row) => row.id === id);
+      if (!record) throw new Error("No recovery record in this preview.");
+      return record;
+    },
+    recoveryOpen: async () => {
+      calls.push("clone-recovery-open");
+    },
+    recoveryDismiss: async (id) => {
+      calls.push("clone-recovery-dismiss");
+      recoveries = recoveries.filter((row) => row.id !== id);
+    },
     check: async ({ remote, parent, name }) => {
       calls.push("clone-check");
       const text = remote.trim();

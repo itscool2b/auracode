@@ -20,6 +20,7 @@ export type InstructionsScenario =
   | "conflict"
   | "drift"
   | "large"
+  | "recovery"
   | "review";
 
 const SHARED = `# auracode
@@ -591,7 +592,14 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
   const api: InstructionsApi = {
     snapshot: async () => {
       calls.push("snapshot");
-      return snapshotOf(state);
+      const snapshot = snapshotOf(state);
+      if (scenario === "recovery") {
+        snapshot.notices.push(
+          "An interrupted Instructions change needs recovery. Unrecognized files will be preserved. Its journal and backups are kept at C:/fixture/auracode/instructions/backups/pending.",
+          "An interrupted Instructions change was recovered. Its backup is kept at C:/fixture/auracode/instructions/backups/recovered.",
+        );
+      }
+      return snapshot;
     },
     review: async (_target, change) => {
       calls.push(
@@ -611,6 +619,17 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
           "The item changed after it was displayed. Refresh the Library and try again.",
         );
       reviews.delete(id);
+      if (scenario === "recovery") {
+        return {
+          id,
+          changed: [],
+          rolled_back: false,
+          recovery_required: true,
+          message:
+            "This change overlaps an interrupted Instructions change that still needs attention. External edits were preserved.",
+          backup: "C:/fixture/auracode/instructions/backups/pending",
+        };
+      }
       Object.assign(state, pending.next);
       return {
         id,

@@ -178,10 +178,16 @@ async fn interrupt_cancels_checkpoint_wait_and_holds_the_unsent_prompt() {
     );
 }
 
-/// Every prompt waits for its checkpoint; meanwhile the queue says so, then the prompt goes.
+/// Every prompt waits for its checkpoint. Meanwhile it is on its way (`sending`), not queued: it
+/// waits behind nothing. A prompt sent after it waits, and the queue says why. Then both go.
 #[tokio::test]
 async fn a_saving_checkpoint_says_why_the_prompt_waits() {
-    let (driver, handle) = script();
+    // The first turn keeps running, so the second prompt is still waiting at the end.
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("checkpoint-native"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     let service = enable(&mut rig, true);
     let gate = service.hold_for_test().await;
@@ -191,8 +197,15 @@ async fn a_saving_checkpoint_says_why_the_prompt_waits() {
         .await
         .expect("chat");
     status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
     rig.manager
-        .send(&chat.id, "after the checkpoint".into())
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    let full_text = format!("{}different ending", "unicode 🐢 ".repeat(80));
+    let first = rig
+        .manager
+        .send(&chat.id, full_text.clone())
         .await
         .expect("send");
     status(&rig, &chat.id, SessionStatus::Running).await;
@@ -201,7 +214,45 @@ async fn a_saving_checkpoint_says_why_the_prompt_waits() {
         .attach(&chat.id, Arc::new(Sink::default()))
         .await
         .expect("state");
-    assert_eq!(attached.snapshot.queue.len(), 1);
+    assert!(attached.snapshot.queue.is_empty(), "sending, not queued");
+    assert_eq!(attached.snapshot.session.queue_wait, None);
+    let sending = attached.snapshot.session.sending.expect("on its way");
+    assert_eq!(sending.prompt_id, first.prompt_id);
+    assert_eq!(sending.text, full_text);
+    assert_eq!(
+        sending.parts,
+        vec![aura_protocol::PromptPart::Text { text: full_text }]
+    );
+    assert!(sending.created_at > 0);
+    eventually("the sending lifecycle", || {
+        lock(&sink.frames)
+            .iter()
+            .flat_map(|frame| &frame.events)
+            .any(|event| {
+                matches!(event, AuraEvent::PromptLifecycle { prompt_id, state: aura_protocol::PromptState::Sending, .. } if *prompt_id == first.prompt_id)
+            })
+    })
+    .await;
+    let second = rig
+        .manager
+        .send(&chat.id, "behind it".into())
+        .await
+        .expect("send");
+    assert!(second.queued);
+    let attached = rig
+        .manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .expect("state");
+    assert_eq!(
+        attached
+            .snapshot
+            .queue
+            .iter()
+            .map(|row| row.prompt_id.as_str())
+            .collect::<Vec<_>>(),
+        [second.prompt_id.as_str()]
+    );
     assert_eq!(
         attached.snapshot.session.queue_wait,
         Some(aura_protocol::QueueWait::SavingCheckpoint)
@@ -213,8 +264,16 @@ async fn a_saving_checkpoint_says_why_the_prompt_waits() {
         .attach(&chat.id, Arc::new(Sink::default()))
         .await
         .expect("state");
-    assert!(attached.snapshot.queue.is_empty());
-    assert_eq!(attached.snapshot.session.queue_wait, None);
+    assert_eq!(attached.snapshot.session.sending, None);
+    assert_eq!(
+        attached.snapshot.queue.len(),
+        1,
+        "the second waits for the turn"
+    );
+    assert_eq!(
+        attached.snapshot.session.queue_wait,
+        Some(aura_protocol::QueueWait::Working)
+    );
 }
 
 #[tokio::test]

@@ -21,6 +21,7 @@ export const worktreeSetupApi = {
     invoke<WorktreeSetupResult>("worktree_setup_apply", { chatId, token }),
   terminal: (chatId: string, token: string) => ({
     ...terminalTransport,
+    reserve: () => invoke<string>("worktree_setup_reserve", { chatId, token }),
     start: (terminalId: string, _agentId: string, size: { rows: number; cols: number }) =>
       invoke<string>("worktree_setup_start", { chatId, token, terminalId, ...size }),
   }),

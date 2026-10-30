@@ -21,6 +21,7 @@ import { PANE_SWIMMERS, Water } from "../Water";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
+import { ChatSetup } from "./ChatSetup";
 import type { PaletteCommand } from "./CommandPalette";
 import { Composer } from "./Composer";
 import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
@@ -53,6 +54,7 @@ export function ChatView({
   transport,
   listed,
   project = null,
+  folderLabel = null,
   storage,
   agents,
   onOpenChat,
@@ -67,6 +69,8 @@ export function ChatView({
   readonly listed: ChatSummary | null;
   /** The name of the project the chat belongs to, when the workspace knows it. */
   readonly project?: string | null;
+  /** Rust's display label for the chat's selected project folder, including managed branches. */
+  readonly folderLabel?: string | null;
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
@@ -95,6 +99,20 @@ export function ChatView({
   const [handoffLoaded, setHandoffLoaded] = useState(!transport.conversation);
   const [handoffRevision, setHandoffRevision] = useState(0);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const setup = state.session?.worktree_setup;
+  const setupState = setup?.state;
+  const setupGeneration = setup?.generation;
+  useEffect(() => {
+    void setupGeneration;
+    if (
+      terminals &&
+      setupState &&
+      setupState !== "succeeded" &&
+      setupState !== "running" &&
+      terminals.panel(chatId).tabs.length === 0
+    )
+      terminals.showReview(chatId);
+  }, [terminals, chatId, setupGeneration, setupState]);
 
   useEffect(() => {
     void store.open();
@@ -501,6 +519,7 @@ export function ChatView({
         state={state}
         listed={listed}
         project={project}
+        folderLabel={folderLabel}
         agent={agent}
         resumable={resumable}
         onStart={startSession}
@@ -518,6 +537,33 @@ export function ChatView({
       />
       <div className="chat-work-area">
         <div className="chat-conversation">
+          {setup && setup.state !== "succeeded" ? (
+            <section className="chat-banner" aria-label="Setup status">
+              <span>
+                {setup.state === "running"
+                  ? "Setup is running. You can queue messages below."
+                  : (setup.detail ?? "Setup is waiting for review. You can queue messages below.")}
+              </span>
+              {terminals ? (
+                <button
+                  id={`setup-review-${chatId}`}
+                  type="button"
+                  className="g-button g-button-24"
+                  onClick={() =>
+                    setup.state === "running"
+                      ? terminals.show(chatId)
+                      : terminals.showReview(chatId)
+                  }
+                >
+                  {setup.state === "running"
+                    ? "Show setup terminal"
+                    : setup.state === "awaiting"
+                      ? "Review setup"
+                      : "Retry setup"}
+                </button>
+              ) : null}
+            </section>
+          ) : null}
           {/* A chat with nothing in it yet keeps New chat's lit water behind its composer. */}
           {state.phase === "live" && state.transcript.segments.length === 0 ? (
             <Water className="pane-water" swimmers={PANE_SWIMMERS} />
@@ -632,6 +678,7 @@ export function ChatView({
               onSendNow={(promptId) => void store.sendNow(promptId)}
               onStart={() => startSession(false)}
               onRecreate={missingTree ? () => void reviewRecreate() : undefined}
+              onSetup={() => document.getElementById(`setup-review-${chatId}`)?.click()}
               onLoadText={(promptId) => store.queuedText(promptId)}
               onEdit={(promptId, text) => store.editQueued(promptId, text)}
               onMove={(promptId, index) => store.moveQueued(promptId, index)}
@@ -723,7 +770,25 @@ export function ChatView({
             </div>
           </div>
           {terminals ? (
-            <TerminalPanel chatId={chatId} panels={terminals} onHidden={focusComposer} />
+            <TerminalPanel
+              chatId={chatId}
+              panels={terminals}
+              onHidden={focusComposer}
+              review={
+                setup &&
+                setup.state !== "running" &&
+                setup.state !== "succeeded" &&
+                transport.setup ? (
+                  <ChatSetup
+                    key={`${chatId}:${setup.generation}`}
+                    chatId={chatId}
+                    attempt={setup}
+                    api={transport.setup}
+                    terminals={terminals}
+                  />
+                ) : null
+              }
+            />
           ) : null}
         </div>
         {changesOpen && transport.changes ? (

@@ -17,11 +17,10 @@ const FAST: Retry = Retry {
     step: Duration::from_millis(10),
 };
 
-/// A secure store in memory. `sweep` removes what is left, as auracode's own service would.
+/// A secure store in memory. No platform credentials are accessed.
 #[derive(Default)]
 struct FakeVault {
     entries: Mutex<HashMap<VaultEntry, Vec<u8>>>,
-    sweeps: Mutex<u32>,
 }
 
 impl FakeVault {
@@ -50,12 +49,8 @@ impl AppVault for FakeVault {
         self.entries.lock().unwrap().remove(entry);
         Ok(())
     }
-    fn sweep(&self) -> Result<usize, VaultError> {
-        *self.sweeps.lock().unwrap() += 1;
-        let mut entries = self.entries.lock().unwrap();
-        let count = entries.len();
-        entries.clear();
-        Ok(count)
+    fn entries(&self) -> Result<Vec<VaultEntry>, VaultError> {
+        Ok(self.entries.lock().unwrap().keys().cloned().collect())
     }
 }
 
@@ -234,13 +229,14 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
         br#"{"version":2,"accounts":{"acct-one":null,"acct-two":"7f2c1e9a-1111-4222-8333-944455556666"}}"#,
     );
     let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), b"bundle");
-    vault.put(VaultEntry::new(ORIGINS[0], "acct-two").unwrap(), b"bundle");
-    // An entry whose data folder is already gone: only the sweep finds it.
-    vault.put(VaultEntry::new(ORIGINS[1], "orphan").unwrap(), b"bundle");
+    vault.put(account.clone(), &bundle());
+    vault.put(VaultEntry::new(ORIGINS[0], "acct-two").unwrap(), &bundle());
+    // A valid orphan account is removable when the default root is included.
+    vault.put(VaultEntry::new(ORIGINS[1], "orphan").unwrap(), &bundle());
 
     let git = GitTool::from_path();
-    let plan = plan(&targets, &git);
+    let mut plan = plan(&targets, &git);
+    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
     assert_eq!(plan.worktrees.len(), 1);
     assert!(!plan.worktrees[0].unsaved(), "{:?}", plan.worktrees[0]);
     let kinds: Vec<_> = plan.items.iter().map(|item| item.kind).collect();
@@ -302,7 +298,8 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
     assert_eq!(report.vault.swept, 1);
 
     // A second run finds nothing and changes nothing.
-    let again = super::plan(&targets, &git);
+    let mut again = super::plan(&targets, &git);
+    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
     assert!(again.is_empty(), "{:?}", again.items);
     let second = execute(
         &again,
@@ -411,11 +408,18 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
         br#"{"version":2,"accounts":{"acct-one":null}}"#,
     );
     let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), b"bundle");
+    vault.put(account.clone(), &bundle());
 
-    let targets = Targets::data_folder(folder.clone());
+    let mut targets = Targets::data_folder(folder.clone());
+    // Keep even default-root canonicalization inside this fixture's temporary home.
+    targets.default_root = m
+        .dirs
+        .local_data
+        .as_ref()
+        .map(|dir| dir.join(crate::paths::APP_IDENTIFIER));
     let git = GitTool::from_path();
-    let plan = plan(&targets, &git);
+    let mut plan = plan(&targets, &git);
+    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
     assert!(plan.items.iter().all(|item| item.kind == ItemKind::Entry));
     let report = execute(
         &plan,
@@ -437,10 +441,9 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     assert!(!folder.join("device.json.corrupt-1792840000000").exists());
     assert!(!folder.join(".state.json.tmp-1a2b").exists());
     assert!(folder.join("my-notes.txt").exists() && folder.join("project/README.md").exists());
-    // Only this folder's index goes: the account key can belong to the installed app too.
+    // This folder's index and exclusive account go after checking every other index.
     assert!(!vault.has(&index));
-    assert!(vault.has(&account));
-    assert_eq!(*vault.sweeps.lock().unwrap(), 0);
+    assert!(!vault.has(&account));
 
     // An emptied data folder of its own goes as well.
     let lone = m.home.join("lone");
@@ -449,6 +452,127 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     let report = execute(&plan, &WorktreeChoice::KeepUnsaved, None, &git, &FAST);
     assert!(report.complete());
     assert!(!lone.exists());
+}
+
+#[tokio::test]
+async fn custom_root_cleanup_removes_clone_journals_and_preserves_destination_repositories() {
+    let m = machine();
+    let folder = m.home.join("chosen");
+    data_folder(&folder);
+    write(&folder.join("my-notes.txt"), "unrelated custom-root file");
+    let source = repository(&m.home.join("source"));
+    let bin = m.home.join("synthetic-bin");
+    let synthetic = bin.join(if cfg!(windows) { "git.exe" } else { "git" });
+    write(&synthetic, "synthetic executable, never run");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&synthetic, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let env = std::sync::Arc::new(aura_process::ResolvedEnv {
+        vars: [("PATH".into(), bin.into_os_string())].into(),
+        source: aura_process::EnvSource::Fallback {
+            reason: "fixture".into(),
+        },
+        warnings: Vec::new(),
+        resolved_at_ms: 0,
+    });
+    let clones = crate::cloning::Clones::new(Some(folder.clone()));
+    let mut destinations = Vec::new();
+    for (parent, name) in [
+        (&folder, "cloned-in-root"),
+        (&m.home, "cloned-outside-root"),
+    ] {
+        let review = clones
+            .check(
+                "fixture",
+                aura_protocol::setup_actions::CloneInput {
+                    remote: "https://github.com/fixture/repository".into(),
+                    parent: Some(parent.to_string_lossy().into_owned()),
+                    name: Some(name.into()),
+                },
+                env.clone(),
+            )
+            .await
+            .unwrap()
+            .review
+            .unwrap();
+        // This creates the real app-owned lifecycle record without executing the synthetic Git.
+        let (prepared, job) = clones.take("fixture", &review.id).unwrap();
+        drop(prepared);
+        drop(job);
+        let destination = parent.join(name);
+        fixture_git(
+            &m.home,
+            &[
+                "clone",
+                "-q",
+                source.to_str().unwrap(),
+                destination.to_str().unwrap(),
+            ],
+        );
+        write(&destination.join("untracked-note.txt"), "keep user work");
+        let head = fixture_git(&destination, &["rev-parse", "HEAD"]);
+        destinations.push((destination, head));
+    }
+    drop(clones);
+    assert_eq!(std::fs::read_dir(folder.join("clones")).unwrap().count(), 2);
+    let vault = FakeVault::default();
+    let index = crate::accounts::profile_index_entry(ORIGINS[0], &folder).unwrap();
+    vault.put(index.clone(), br#"{"version":2,"accounts":{}}"#);
+    let mut targets = Targets::data_folder(folder.clone());
+    targets.default_root = Some(m.home.join("unused-default-root"));
+    let git = GitTool::from_path();
+    let mut reviewed = plan(&targets, &git);
+    reviewed.vault = review_vault(
+        &vault,
+        &reviewed.data_roots,
+        reviewed.default_root.as_deref(),
+    );
+    let report = execute(
+        &reviewed,
+        &WorktreeChoice::KeepUnsaved,
+        Some(&vault),
+        &git,
+        &FAST,
+    );
+    assert!(report.complete(), "{report:?}");
+    assert!(
+        !folder.join("clones").exists(),
+        "app-owned clone recovery journals must be removed"
+    );
+    assert!(!vault.has(&index));
+    assert_eq!(
+        std::fs::read_to_string(folder.join("my-notes.txt")).unwrap(),
+        "unrelated custom-root file"
+    );
+    for (destination, head) in &destinations {
+        assert_eq!(fixture_git(destination, &["rev-parse", "HEAD"]), *head);
+        assert_eq!(
+            std::fs::read_to_string(destination.join("README.md")).unwrap(),
+            "project\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(destination.join("untracked-note.txt")).unwrap(),
+            "keep user work"
+        );
+        assert!(destination.join(".git").is_dir());
+    }
+    let mut again = plan(&targets, &git);
+    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
+    assert!(again.is_empty());
+    let second = execute(
+        &again,
+        &WorktreeChoice::KeepUnsaved,
+        Some(&vault),
+        &git,
+        &FAST,
+    );
+    assert!(second.complete() && second.removed.is_empty());
+    for (destination, head) in &destinations {
+        assert_eq!(fixture_git(destination, &["rev-parse", "HEAD"]), *head);
+        assert!(destination.join("untracked-note.txt").exists());
+    }
 }
 
 #[test]
@@ -674,4 +798,12 @@ fn a_running_profile_is_detected_without_creating_locks() {
     assert_eq!(busy, [root.join("profiles").join("local")]);
     drop(lock);
     assert!(in_use(std::slice::from_ref(&root)).is_empty());
+}
+
+fn bundle() -> Vec<u8> {
+    let mut bytes = b"AURA-ACCOUNT".to_vec();
+    bytes.push(1);
+    bytes.extend([7; 32]);
+    bytes.extend([0, 0, 0]);
+    bytes
 }

@@ -21,6 +21,7 @@ import type {
 } from "../../lib/library/bindings";
 import { pluginsApi as nativePluginsApi, type PluginsApi } from "../../lib/plugins/api";
 import { ago, featureLabel, harnessText, harnessTone, sourceText } from "../../lib/plugins/format";
+import { PluginLibraryLoader } from "../../lib/plugins/loading";
 import { Modal } from "../chat/Modal";
 import { HistoryView, ItemDetail } from "./LibraryItems";
 import { VendorDialog, type VendorPreset } from "./VendorDialog";
@@ -40,7 +41,14 @@ interface MenuItem {
   readonly onSelect: () => void;
 }
 
-/** A row's kebab (Vercel's project menu): plain items; arrows move, Escape closes and returns. */
+/**
+ * A row's kebab (Vercel's project menu): plain items; arrows move, Escape closes and returns.
+ *
+ * The menu is fixed beside its trigger, so it closes once the trigger moves under it (a scroll of
+ * the page, a resized window). A scroll event alone does not close it: one that ends a scroll made
+ * before the menu opened (bringing the row into view, then clicking) arrives a frame later, and
+ * the trigger has not moved since the menu was placed.
+ */
 function RowMenu({
   label,
   items,
@@ -50,6 +58,7 @@ function RowMenu({
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const placedAt = useRef<{ top: number; right: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<CSSProperties>({});
   const close = (focus = true) => {
@@ -60,13 +69,15 @@ function RowMenu({
     if (!open) return;
     const box = trigger.current?.getBoundingClientRect();
     if (!box) return;
+    placedAt.current = { top: box.top, right: box.right };
     const height = menu.current?.offsetHeight ?? 0;
     const below = box.bottom + 4 + height <= window.innerHeight - 8;
     setPlace({
       top: below ? box.bottom + 4 : Math.max(8, box.top - 4 - height),
       right: Math.max(8, window.innerWidth - box.right),
     });
-    menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    // The menu is not placed until the next render: focusing it must not scroll anything.
+    menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
   }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -75,13 +86,24 @@ function RowMenu({
       if (!menu.current?.contains(target) && !trigger.current?.contains(target)) close(false);
     };
     const dismiss = () => close(false);
+    const moved = () => {
+      const box = trigger.current?.getBoundingClientRect();
+      const placed = placedAt.current;
+      if (
+        !box ||
+        !placed ||
+        Math.abs(box.top - placed.top) > 1 ||
+        Math.abs(box.right - placed.right) > 1
+      )
+        close(false);
+    };
     document.addEventListener("pointerdown", outside);
     window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("scroll", moved, true);
     return () => {
       document.removeEventListener("pointerdown", outside);
       window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("scroll", moved, true);
     };
   });
   const move = (event: React.KeyboardEvent) => {
@@ -180,26 +202,29 @@ export function PluginLibraryScreen({
     sources: LibrarySourceStatus[];
   } | null>(null);
   const alive = useRef(true);
+  const loader = useRef(new PluginLibraryLoader());
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      loader.current.cancel();
     };
   }, []);
   const load = async (refresh: boolean) => {
+    if (!alive.current) return;
     if (refresh) setBusy("refresh");
     setError(null);
-    try {
-      const value = await api.snapshot(refresh);
-      if (alive.current) setLibrary(value);
-    } catch (reason) {
-      if (alive.current) setError(errorMessage(reason));
-    } finally {
-      if (alive.current) {
+    await loader.current.load(api, refresh, {
+      value: (value) => {
+        setLibrary(value);
+        setLoading(false);
+      },
+      error: (reason) => setError(errorMessage(reason)),
+      done: () => {
         setLoading(false);
         if (refresh) setBusy(null);
-      }
-    }
+      },
+    });
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: the first read only; Refresh reruns it.
   useEffect(() => {
@@ -454,9 +479,11 @@ export function AgentSection({
             {agent.version ? " · " : null}
             {agent.updated_at !== null
               ? `Updated ${ago(agent.updated_at, now())}`
-              : agent.installed
-                ? "Read from its files"
-                : "Not installed here"}
+              : !agent.installed && agent.harness.state === "checking"
+                ? "Checking installation…"
+                : agent.installed
+                  ? "Read from its files"
+                  : "Not installed here"}
           </p>
         </div>
         <div className="plugins-agent-actions">

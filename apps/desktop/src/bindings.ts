@@ -78,7 +78,7 @@ export const commands = {
 	 *  One section per agent. `refresh` is the explicit Refresh: agents are probed again and every
 	 *  listing reruns. Otherwise a listing is reused until its agent's installed version changes.
 	 */
-	pluginLibrarySnapshot: (refresh: boolean) => typedError<PluginLibrary, AppError>(__TAURI_INVOKE("plugin_library_snapshot", { refresh })),
+	pluginLibrarySnapshot: (refresh: boolean, channel: Channel<PluginLibrary>) => typedError<PluginLibrary, AppError>(__TAURI_INVOKE("plugin_library_snapshot", { refresh, channel })),
 	/**
 	 *  Turns configuration sync on or off for one agent on this device. Paused agents' items wait
 	 *  unchanged: nothing of theirs is published or applied until sync is on again.
@@ -179,6 +179,11 @@ export const commands = {
 	 *  seconds), so the window follows the clone without polling.
 	 */
 	cloneStatus: (id: string, after: number | null) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id, after })),
+	cloneRecoveryList: () => typedError<CloneRecovery[], AppError>(__TAURI_INVOKE("clone_recovery_list")),
+	/**  Revalidates the stored destination before handing it to the normal project form. */
+	cloneRecoveryReady: (id: string) => typedError<CloneRecovery, AppError>(__TAURI_INVOKE("clone_recovery_ready", { id })),
+	cloneRecoveryOpen: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("clone_recovery_open", { id })),
+	cloneRecoveryDismiss: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("clone_recovery_dismiss", { id })),
 	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
 	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
 	chatDebugBundle: (chatId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_debug_bundle", { chatId })),
@@ -235,6 +240,7 @@ export const commands = {
 	worktreeSetupCommandPreview: (chatId: string, worktreeId: string) => typedError<WorktreeSetupPreview, AppError>(__TAURI_INVOKE("worktree_setup_command_preview", { chatId, worktreeId })),
 	worktreeSetupApply: (chatId: string, token: string) => typedError<WorktreeSetupResult, AppError>(__TAURI_INVOKE("worktree_setup_apply", { chatId, token })),
 	worktreeSetupStart: (chatId: string, token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_start", { chatId, token, terminalId, rows, cols })),
+	worktreeSetupReserve: (chatId: string, token: string) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_reserve", { chatId, token })),
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
@@ -247,6 +253,11 @@ export const commands = {
 	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
 	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
+	profileWorktrees: (projectId: string | null) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("profile_worktrees", { projectId })),
+	profileWorktreeRecoveryPreview: (worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("profile_worktree_recovery_preview", { worktreeId, action })),
+	profileWorktreeRecreatePreview: (worktreeId: string) => typedError<WorktreeRecreatePreview, AppError>(__TAURI_INVOKE("profile_worktree_recreate_preview", { worktreeId })),
+	profileWorktreeRecoveryApply: (worktreeId: string, token: string, recreate: boolean) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("profile_worktree_recovery_apply", { worktreeId, token, recreate })),
+	profileWorktreeOpenFolder: (worktreeId: string) => typedError<null, AppError>(__TAURI_INVOKE("profile_worktree_open_folder", { worktreeId })),
 	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
 	isolationApply: (chatId: string, token: string) => typedError<IsolationResult, AppError>(__TAURI_INVOKE("isolation_apply", { chatId, token })),
 	worktreeActionPreview: (chatId: string, worktreeId: string, action: WorktreeAction) => typedError<WorktreeActionPreview, AppError>(__TAURI_INVOKE("worktree_action_preview", { chatId, worktreeId, action })),
@@ -726,23 +737,23 @@ export type AppInfo = {
 /**  One normalized event in a chat. */
 export type AuraEvent = 
 /**  The session actor started a turn for the queued prompt `prompt_id`. */
-({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
+({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
 /**  Ended by recovery at startup: auracode quit or crashed while the turn ran. */
-recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; text?: never; thought_id?: never; windows?: never } | 
+recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; text?: never; thought_id?: never; windows?: never } | 
 /**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
-({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
+({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "tool_call",
 } & ToolCall | {
 	type: "tool_update",
 } & ToolUpdate | {
 	type: "permission_requested",
-} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "ui_request",
 } & UiRequest | 
 /**  The answer to a [`UiRequest`]; `None` when it was dismissed, withdrawn or closed. */
-({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "usage_updated",
-} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
+} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
 /**  Live header state; never stored. */
 {
 	type: "session_updated",
@@ -750,9 +761,14 @@ recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?:
 /**  What happened to a queued prompt (the composer's queue); never stored. */
 ({ type: "prompt_lifecycle"; prompt_id: string; state: PromptState; 
 /**  The prompt's first 256 characters, sent with `Queued`. */
-preview: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
+preview: string | null; 
+/**
+ *  Exact hold when queued or when a queued row's hold changes; absent for other states
+ *  and older producers.
+ */
+held?: boolean | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
 /**  More context, such as the agent's redacted stderr tail. */
-detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
+detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
 
 /**  A sign-in command the user runs in a terminal with their own binary. */
 export type AuthCommand = {
@@ -1004,6 +1020,22 @@ export type CloneRecord = {
 	removed: boolean,
 };
 
+/**  A durable clone notice. Invalid journals have no usable destination or remote. */
+export type CloneRecovery = {
+	id: string,
+	state: CloneState,
+	repository: string | null,
+	remote: string | null,
+	destination: string | null,
+	detail: string,
+	/**
+	 *  A completed clone still has its recorded directory identity and a regular Git directory.
+	 *  Adding it uses the normal project validation flow, never automatic project creation.
+	 */
+	can_add: boolean,
+	can_open: boolean,
+};
+
 /**  One startable clone: the exact Git program and arguments that Start runs, and where. */
 export type CloneReview = {
 	id: string,
@@ -1020,7 +1052,9 @@ export type CloneReview = {
 
 export type CloneState = "running" | "ready" | "canceled" | "failed" | 
 /**  Git is being stopped; the unfinished folder waits until the stop is confirmed. */
-"cleanup_pending";
+"cleanup_pending" | 
+/**  A prior process stopped before the clone's lifecycle was settled. Its folder is preserved. */
+"interrupted";
 
 export type ComposerAttachment = {
 	id: string,
@@ -1259,6 +1293,14 @@ export type DataCleanupItemKind =
 /**  Update downloads and other leftovers in the temporary folder. */
 "temporary";
 
+/**  Only opaque secure-store targets and decisions are exposed to the renderer. */
+export type DataCleanupKey = {
+	target: string,
+	kind: string,
+	remove: boolean,
+	reason: string,
+};
+
 /**  What "Delete all auracode data" would remove, for the review. */
 export type DataCleanupReview = {
 	/**  One use, for [`data_cleanup_apply`], within ten minutes. */
@@ -1268,6 +1310,8 @@ export type DataCleanupReview = {
 	worktrees: DataCleanupWorktree[],
 	/**  Where auracode's keys are: "Windows Credential Manager" or "the macOS keychain". */
 	secure_store: string | null,
+	keys: DataCleanupKey[],
+	warnings: string[],
 	/**  macOS: the app bundle "move auracode to the Trash" would move; `None` where it cannot. */
 	app_bundle: string | null,
 };
@@ -2152,8 +2196,15 @@ export type PromptAck = {
 	queued: boolean,
 };
 
+/**  One piece of a prompt. M1a sends `Text` only; M2c adds images and mentions. */
+export type PromptPart = { type: "text"; text: string } | 
+/**  `blob` is the sha256 of the image in the profile's attachments. */
+{ type: "image"; blob: string; mime: string } | { type: "mention"; path: string };
+
 /**  What happened to a queued prompt. */
-export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
+export type PromptState = "queued" | 
+/**  On its way: its folder checkpoint is being saved, and it goes to the agent right after. */
+"sending" | "started" | "completed" | "cancelled" | "failed";
 
 export type PullRequestInput = {
 	title: string,
@@ -2186,10 +2237,10 @@ export type PullRequestResult = {
 };
 
 /**
- *  Why queued prompts wait. The first prompt that is not held goes next; when every prompt is held,
- *  they wait for the person ([`QueueWait::Held`]).
+ *  Why queued prompts wait. Prompts go in order: a held prompt waits for the person to send or
+ *  discard it, and every prompt queued behind it waits too ([`QueueWait::Held`]).
  */
-export type QueueWait = 
+export type QueueWait = { reason: "setup"; state: WorktreeSetupState; detail: string | null } | 
 /**  The agent is starting or resuming its session. */
 { reason: "starting" } | 
 /**  The agent is working on a turn. */
@@ -2218,7 +2269,7 @@ export type QueueWait =
 { reason: "folder_missing" } | 
 /**  The chat's project or folder was removed. */
 { reason: "workspace_removed" } | 
-/**  Every queued prompt is held, since `after`. */
+/**  The next prompt is held, since `after`, and waits for the person with any behind it. */
 { reason: "held"; after: HoldCause };
 
 export type QueuedPrompt = {
@@ -2309,7 +2360,10 @@ export type RevertResult = {
 	applied: string[],
 	/**  A partial failure is explicit; the caller must not report full success. */
 	error: string | null,
-	/**  Original files are preserved here whenever a revert replaces or removes them. */
+	/**
+	 *  Durable recovery groups in the profile's data folder, encrypted for Account profiles.
+	 *  A failed finalization also names any transient working-folder copy that was preserved.
+	 */
 	recovery_paths: string[],
 };
 
@@ -2337,8 +2391,17 @@ export type SearchResults = {
 	projects: ProjectSearchHit[],
 };
 
+/**  The complete persisted prompt currently saving its checkpoint before dispatch. */
+export type SendingPrompt = {
+	prompt_id: string,
+	text: string,
+	parts: PromptPart[],
+	created_at: number,
+};
+
 /**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
 export type SessionInfo = {
+	worktree_setup?: WorktreeSetupAttempt | null,
 	status: SessionStatus,
 	/**  What is happening now: "Starting Hermes", "Stopping the turn; press Esc again to force stop". */
 	detail: string | null,
@@ -2363,6 +2426,12 @@ export type SessionInfo = {
 	 *  prompts queued means the next one is on its way.
 	 */
 	queue_wait: QueueWait | null,
+	/**
+	 *  The prompt on its way to the agent while its folder checkpoint saves: shown as sending in
+	 *  the transcript, not in the queue. `None` once it went, or when a stop or a failed
+	 *  checkpoint put it back in the queue, held.
+	 */
+	sending?: SendingPrompt | null,
 };
 
 /**
@@ -2911,6 +2980,13 @@ export type WorktreeSetup = {
 	input: WorktreeSetupInput,
 };
 
+export type WorktreeSetupAttempt = {
+	worktree_id: string,
+	generation: number,
+	state: WorktreeSetupState,
+	detail: string | null,
+};
+
 export type WorktreeSetupInput = {
 	files: string[],
 	command: SetupCommand | null,
@@ -2932,6 +3008,8 @@ export type WorktreeSetupResult = {
 	command_token: string | null,
 	warning: string | null,
 };
+
+export type WorktreeSetupState = "awaiting" | "running" | "failed" | "interrupted" | "succeeded";
 
 export type WorktreeState = "creating" | "ready" | "merging" | "retiring" | "restoring" | "recovery_required" | "missing" | "retired" | string;
 

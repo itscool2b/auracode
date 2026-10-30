@@ -86,9 +86,15 @@ export async function exerciseApp(driver, folder, save, checks = []) {
   await driver.click("//button[normalize-space(.)='Skip setup']", "xpath");
   await until("new chat form", () => driver.visible(byTest("new-chat")));
   await driver.click(`select[aria-label="Project folder"] option[value="${folderId}"]`);
-  await driver.click(`${byTest("new-chat-agent")} option[value="mock"]`);
-  const selected = await driver.visible(byTest("new-chat-agent"));
-  assert.equal(await driver.element(selected, "GET", "property/value"), "mock");
+  const demo = 'input[type="radio"][value="mock"]';
+  await driver.click(`${byTest("new-chat-agent")} label:has(${demo})`);
+  const radios = await driver.elements(`${byTest("new-chat-agent")} ${demo}`);
+  assert.equal(radios.length, 1, "expected exactly one Demo radio choice");
+  assert.equal(
+    await driver.element(radios[0], "GET", "property/checked"),
+    true,
+    "Demo radio must be selected before creating the chat",
+  );
   await driver.click(byTest("new-chat-create"));
   await until("ready demo session", () =>
     driver.visible(`${byTest("chat-status")}[data-test-status="ready"]`),

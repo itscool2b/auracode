@@ -33,10 +33,30 @@ pub(super) async fn execute_within(
             return;
         }
     };
+    if let Some(journal) = &job.journal
+        && let Err(error) = journal.created(&destination)
+    {
+        // The newly created folder may be the only evidence of this interrupted attempt.
+        // Do not run Git or remove the folder after losing durable lifecycle recording.
+        job.update(|record| {
+            record.state = CloneState::Interrupted;
+            record.detail = error.to_string();
+        });
+        return;
+    }
     let outcome = run(&destination, &job, &spawner, limit).await;
     let canceled = matches!(outcome, Outcome::Canceled);
     let (state, mut detail, keep) = match outcome {
         Outcome::Cloned => {
+            if let Some(journal) = &job.journal
+                && let Err(error) = journal.git_finished(&destination)
+            {
+                job.update(|record| {
+                    record.state = CloneState::Interrupted;
+                    record.detail = error.to_string();
+                });
+                return;
+            }
             let checked = tokio::task::spawn_blocking(move || {
                 let result = files::verify(&destination);
                 (destination, result)

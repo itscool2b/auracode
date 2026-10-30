@@ -26,6 +26,7 @@ pub(super) struct Prepared {
     fingerprint: String,
     expires: Instant,
     command_ready: bool,
+    generation: Option<u32>,
 }
 
 fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -122,10 +123,23 @@ impl GitWorkspaces {
         let token = crate::ids::new_id();
         let preview=WorktreeSetupPreview {token:token.clone(),worktree_id:record.id.clone(),source:record.source.clone(),destination:record.path.clone(),files:files.iter().map(|(path,(fingerprint,_))|SetupFile {path:path.clone(),bytes:fingerprint.bytes}).collect(),command,warnings:vec!["Only the listed files will be copied. Existing destination files are never overwritten.".into(),"Environment files may contain application secrets. Their contents are not shown, logged, or stored in setup settings.".into(),"The command runs only after a separate explicit Start action in the owned terminal. It can modify this worktree and access your normal command environment. Setup stops after ten minutes.".into()],expires_at:crate::time::now_millis()+600_000};
         let mut prepared = lock(&self.setups);
-        prepared.retain(|_, value| value.expires > Instant::now());
-        if prepared.len() >= 64 {
+        // Reclaim this chat's previous review before admission. Keep its bound command until
+        // apply replaces the generation, so expiry still identifies the exact pending attempt.
+        let now = Instant::now();
+        prepared.retain(|_, value| {
+            (value.expires > now || value.generation.is_some())
+                && (value.record.chat_id != chat_id
+                    || (value.command_ready && value.generation.is_some()))
+        });
+        // Each chat has at most its bound command and one replacement review. Bound chat slots
+        // rather than receipts so all 64 admitted chats retain room to retry after expiry.
+        let chats = prepared
+            .values()
+            .map(|value| value.record.chat_id.as_str())
+            .collect::<BTreeSet<_>>();
+        if chats.len() >= 64 && !chats.contains(chat_id) {
             return Err(invalid(
-                "Too many pending setup reviews. Wait for one to expire.",
+                "Too many pending setup reviews. Finish or retry setup in another chat before reviewing more.",
             ));
         }
         prepared.insert(
@@ -141,6 +155,7 @@ impl GitWorkspaces {
                 fingerprint: view.fingerprint,
                 expires: Instant::now() + Duration::from_secs(600),
                 command_ready: false,
+                generation: None,
             },
         );
         Ok(preview)
@@ -154,10 +169,73 @@ impl GitWorkspaces {
             .ok_or_else(|| {
                 invalid("Setup review expired or was already used. Review setup again.")
             })?;
-        Ok(vec![
-            PathBuf::from(&plan.record.source),
-            PathBuf::from(&plan.record.path),
-        ])
+        let mut folders = vec![PathBuf::from(&plan.record.path)];
+        if !plan.command_ready && !plan.input.files.is_empty() {
+            folders.push(PathBuf::from(&plan.record.source));
+        }
+        Ok(folders)
+    }
+
+    pub(crate) fn setup_generation(&self, chat_id: &str, token: &str) -> Result<Option<u32>> {
+        lock(&self.setups)
+            .get(token)
+            .filter(|plan| plan.record.chat_id == chat_id && plan.command_ready)
+            .map(|plan| plan.generation)
+            .ok_or_else(|| invalid("Review setup again before starting this command."))
+    }
+
+    pub(crate) fn setup_review_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<Option<u32>> {
+        lock(&self.setups)
+            .get(token)
+            .filter(|plan| plan.record.chat_id == chat_id && !plan.command_ready)
+            .map(|plan| plan.generation)
+            .ok_or_else(|| invalid("Review setup again before preparing this command."))
+    }
+
+    pub(crate) fn bind_setup_review_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+        generation: u32,
+    ) -> Result<()> {
+        let mut plans = lock(&self.setups);
+        plans.retain(|key, plan| {
+            key == token || plan.record.chat_id != chat_id || plan.command_ready
+        });
+        let plan = plans
+            .get_mut(token)
+            .filter(|plan| plan.record.chat_id == chat_id && !plan.command_ready)
+            .ok_or_else(|| invalid("The setup review is unavailable."))?;
+        plan.generation = Some(generation);
+        Ok(())
+    }
+
+    pub(crate) fn bind_setup_generation(
+        &self,
+        chat_id: &str,
+        token: &str,
+        generation: u32,
+    ) -> Result<()> {
+        let mut plans = lock(&self.setups);
+        plans.retain(|key, plan| {
+            key == token || plan.record.chat_id != chat_id || plan.generation.is_none()
+        });
+        let plan = plans
+            .get_mut(token)
+            .filter(|plan| plan.record.chat_id == chat_id && plan.command_ready)
+            .ok_or_else(|| invalid("The setup command review is unavailable."))?;
+        plan.generation = Some(generation);
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expire_setup_for_test(&self, token: &str) {
+        lock(&self.setups).get_mut(token).unwrap().expires =
+            Instant::now() - Duration::from_secs(1);
     }
 
     fn take_setup(&self, chat_id: &str, token: &str, command_ready: bool) -> Result<Prepared> {
@@ -418,6 +496,101 @@ impl GitWorkspaces {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn full_setup_cache_allows_expired_chat_to_review_and_replace_its_generation() {
+        let rig = super::super::tests::rig().await;
+        let record = super::super::tests::isolated(&rig).await;
+        let input = WorktreeSetupInput {
+            files: vec![],
+            command: Some(SetupCommand {
+                program: std::env::current_exe().unwrap().to_string_lossy().into(),
+                args: vec!["--not-executed".into()],
+            }),
+        };
+        let preview = rig
+            .service
+            .setup_preview("chat", &record.id, input.clone())
+            .await
+            .unwrap();
+        let token = rig
+            .service
+            .setup_apply("chat", &preview.token)
+            .await
+            .unwrap()
+            .command_token
+            .unwrap();
+        rig.service
+            .bind_setup_generation("chat", &token, 1)
+            .unwrap();
+        {
+            let mut plans = lock(&rig.service.setups);
+            let mut expired = plans.get(&token).unwrap().clone();
+            expired.expires = Instant::now() - Duration::from_secs(1);
+            plans.insert(token.clone(), expired.clone());
+            for index in 1..64 {
+                let mut other = expired.clone();
+                other.record.chat_id = format!("other-{index}");
+                plans.insert(format!("other-token-{index}"), other);
+            }
+        }
+        assert!(rig.service.setup_folders("chat", &token).is_err());
+        let expired_review = rig
+            .service
+            .setup_preview("chat", &record.id, input.clone())
+            .await
+            .expect("a full cache must admit an existing chat's retry");
+        rig.service
+            .bind_setup_review_generation("chat", &expired_review.token, 1)
+            .unwrap();
+        rig.service.expire_setup_for_test(&expired_review.token);
+        assert!(
+            rig.service
+                .setup_folders("chat", &expired_review.token)
+                .is_err()
+        );
+        let retry = rig
+            .service
+            .setup_preview("chat", &record.id, input)
+            .await
+            .expect("an expired review must not consume the chat's retry capacity");
+        rig.service
+            .bind_setup_review_generation("chat", &retry.token, 1)
+            .unwrap();
+        assert!(
+            rig.service
+                .setup_review_generation("chat", &expired_review.token)
+                .is_err()
+        );
+        assert_eq!(
+            rig.service.setup_generation("chat", &token).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            rig.service
+                .setup_generation("other-1", "other-token-1")
+                .unwrap(),
+            Some(1),
+            "another chat's expired receipt still identifies its failure owner"
+        );
+        let fresh = rig
+            .service
+            .setup_apply("chat", &retry.token)
+            .await
+            .unwrap()
+            .command_token
+            .unwrap();
+        rig.service
+            .bind_setup_generation("chat", &fresh, 2)
+            .unwrap();
+        assert!(rig.service.setup_generation("chat", &token).is_err());
+        assert_eq!(
+            rig.service.setup_generation("chat", &fresh).unwrap(),
+            Some(2)
+        );
+        assert!(rig.service.setup_command("chat", &fresh).await.is_ok());
+    }
+
     #[tokio::test]
     async fn setup_review_rejects_changed_contents_and_runs_no_implicit_command() {
         let rig = super::super::tests::rig().await;

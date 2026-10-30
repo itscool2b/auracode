@@ -164,6 +164,18 @@ fn listing(name: &str, args: &[String]) -> Result<ExitCode> {
         eprintln!("error: unknown option '{}'", args.join(" "));
         return Ok(ExitCode::from(2));
     };
+    if let Some(delay) = answer["delay_ms"].as_u64() {
+        std::thread::sleep(Duration::from_millis(delay.min(15_000)));
+    }
+    if let Some(release) = answer["wait_for"].as_str() {
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while !Path::new(&home).join(release).exists() {
+            if std::time::Instant::now() >= deadline {
+                return Ok(ExitCode::FAILURE);
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
     if answer["hang"] == true {
         return hang(name);
     }

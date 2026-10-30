@@ -9,12 +9,14 @@ type RowAction = "edit" | "up" | "down";
 /**
  * The prompts waiting behind the running turn (or the start), as one segment over the composer:
  * why they wait (or how many wait), then each message on its own row with its controls. Held
- * ones (queued before a stop, an error or a restart) wait for "Send queued", which shows whenever
- * the session says some are held, or for their own Send.
+ * ones (queued before a stop, an error or a restart) never go on their own, and every message
+ * after a held one waits behind it.
  *
- * The head says in plain words why the next message waits, with the one action that helps: Send
- * now while the agent works or finishes its turn, Start after a failed start, Recreate folder for
- * a missing worktree.
+ * The head says in plain words why the next message waits, with what helps: Send now while the
+ * agent works or finishes its turn, Start after a failed start, Recreate folder for a missing
+ * worktree, and for a held message Send it now or Discard (with Send all when several are held;
+ * each later held row has its own Send). "Send queued" shows whenever the session says some are
+ * held while something else is the reason.
  *
  * A row's words can be edited in place (Enter saves, Esc cancels), and Move up and Move down
  * reorder it from the keyboard as well as the pointer: the controls show under the hand and
@@ -29,6 +31,7 @@ export function QueueList({
   onSendNow,
   onStart,
   onRecreate,
+  onSetup,
   onLoadText,
   onEdit,
   onMove,
@@ -46,6 +49,7 @@ export function QueueList({
   readonly onStart?: () => void;
   /** Reviews recreating this chat's missing worktree folder. */
   readonly onRecreate?: () => void;
+  readonly onSetup?: () => void;
   /** The prompt's words as typed; `null` when it is gone or could not be read. */
   readonly onLoadText?: (promptId: string) => Promise<string | null>;
   /** Saves new words; answers why they were not saved, or `null`. */
@@ -87,6 +91,10 @@ export function QueueList({
   const count = queue.length === 0 ? "Nothing queued" : `${queue.length} queued${heldNote}`;
   const next = queue.find((row) => !row.held)?.prompt_id ?? null;
   const action = wait?.action ?? null;
+  // Held at the head: everything waits behind that message until the person sends or discards it.
+  const heldHead =
+    action === "send_held" ? (queue.find((row) => row.held) ?? queue[0] ?? null) : null;
+  const heldCount = Math.max(1, queue.filter((row) => row.held).length);
   return (
     <section className="chat-queue-list" aria-label="Queued messages" data-testid="queue">
       <div className="chat-queue-head">
@@ -140,7 +148,46 @@ export function QueueList({
               Recreate folder
             </button>
           ) : null}
-          {held ? (
+          {action === "setup" && onSetup ? (
+            <button type="button" className="g-button g-button-24" onClick={onSetup}>
+              Retry setup
+            </button>
+          ) : null}
+          {heldHead !== null ? (
+            <>
+              {onSendNow ? (
+                <button
+                  type="button"
+                  className="g-button g-button-24"
+                  data-testid="queue-send-held"
+                  title="Send the held message now; the messages after it follow"
+                  onClick={() => onSendNow(heldHead.prompt_id)}
+                >
+                  Send it now
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="g-button g-button-ghost g-button-24"
+                data-testid="queue-discard-held"
+                title="Remove the held message; the next one goes"
+                onClick={() => onRemove(heldHead.prompt_id)}
+              >
+                Discard
+              </button>
+              {heldCount > 1 ? (
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-24"
+                  data-testid="send-queued"
+                  title="Send every held message, in order"
+                  onClick={onSendQueued}
+                >
+                  Send all
+                </button>
+              ) : null}
+            </>
+          ) : held ? (
             <button
               type="button"
               className="g-button g-button-24"
@@ -230,7 +277,7 @@ export function QueueList({
                       ) : null}
                     </span>
                   ) : null}
-                  {row.held && onSendNow ? (
+                  {row.held && onSendNow && row !== heldHead ? (
                     <button
                       type="button"
                       className="g-button g-button-ghost g-button-24 chat-queue-send"

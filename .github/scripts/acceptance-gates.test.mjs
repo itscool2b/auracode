@@ -20,8 +20,12 @@ test("every desktop acceptance script runs directly or through a checked aggrega
   function include(file) {
     if (covered.has(file)) return;
     covered.add(file);
-    for (const match of read(`${scripts}/${file}`).matchAll(
-      /from\s+["']\.\/(check-[^"']+\.mjs)["']/gu,
+    const source = read(`${scripts}/${file}`);
+    for (const match of source.matchAll(/from\s+["']\.\/(check-[^"']+\.mjs)["']/gu)) {
+      include(match[1]);
+    }
+    for (const match of source.matchAll(
+      /spawn\(\s*process\.execPath,\s*\[\s*resolve\(app,\s*["']scripts\/(check-[^"']+\.mjs)["']\)/gu,
     )) {
       include(match[1]);
     }
@@ -50,9 +54,10 @@ test("browser gates have explicit deadlines and retain standalone evidence", () 
       )
     )
       continue;
-    assert.match(
-      step,
-      /timeout-minutes: (?:[1-9]|1[0-5])\b/u,
+    const deadline = Number(/timeout-minutes: (\d+)\b/u.exec(step)?.[1]);
+    const maximum = step.includes("node scripts/check-layout.mjs") ? 20 : 15;
+    assert.ok(
+      deadline >= 1 && deadline <= maximum,
       `Browser step needs a bounded deadline: ${step.split("\n")[0]}`,
     );
   }

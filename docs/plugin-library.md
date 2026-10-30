@@ -53,12 +53,42 @@ launch as version probes (`run_helper`): the detected executable (npm shims reso
 the resolved environment, the home folder as its working directory, `NO_COLOR=1`, a 20-second
 timeout that kills the tree, and at most 6 MB of output. A command that fails, times out, prints too
 much or prints something unreadable fails only its own feature: the section says why in one line and
-shows what the agent's files declare instead. Nothing is installed by a listing.
+keeps the last cached rows and the agent's file entries. Nothing is installed by a listing.
 
-Listings are cached per agent with the installed version they were read from. Opening the page reads
-the cache. A different installed version (an update through auracode or any other channel, seen by
+Opening the page first publishes every supported agent section from cached detection, cached listings
+and the file inventory through a typed Tauri channel. These sections are usable before any listing
+starts. Detection still in progress is shown as checking. Listing jobs then publish each completed
+provider independently, with at most two providers working at once. Commands within one provider run
+in sequence, and overlapping requests share that provider's listing work.
+
+Listings are cached per agent with the installed version they were read from. A different installed
+version (an update through auracode or any other channel, seen by
 detection) reads the listings again and the section says "changed from A to B, so its plugins were
-read again". Refresh probes the agents and reruns every listing. The section shows "Updated <time>".
+read again". Refresh keeps the current rows visible while it reprobes the supported providers and
+reruns their listings. A slow provider's detection or listings do not hold up another provider's
+completed section. The section shows "Updated <time>".
+
+If the refreshed provider no longer has an installation, its old CLI listings and timestamp are
+invalidated and the section uses the current file inventory. Reopening keeps that unavailable
+installation state. A failed listing command on an installed provider still retains cached rows
+with its failure warning. An older missing-installation result cannot erase a newer reinstalled
+provider result: admission also validates the provider's detection generations.
+
+A newer refresh generation cancels the previous request. An installation or configuration selection
+change prevents older provider jobs from replacing the current cache. Listing admission validates
+the configuration revision captured before resolving the connection and installation; a selection
+change in that gap retries resolution. Profile switches pause library admission before draining
+their command leases, so even an already admitted command cannot register late helper work. The
+pause lasts through the switch or recovery attempt and reopens the current profile if the attempt
+fails or is abandoned. Successfully retired managers remain shut down. Shutdown cancels owned work.
+The renderer ignores callbacks and replies after a newer request or unmount, including development
+StrictMode remounts. These lifetime checks do not move listing or inventory decisions out of Rust.
+
+A controlled Windows run using temporary homes and fake CLIs measured cold first usable sections
+at 648.9763 ms, the fast provider at 1.1081209 s while Claude remained blocked, and all finished at
+1.2424665 s. Warm first usable sections took 2.5796 ms and all finished took 3.0168 ms. The fixture
+adds a 100 ms delay to Codex and releases Claude only after Codex publishes. These are fixture
+measurements of the core stream, not timings promised for installed vendor CLIs.
 
 ## Harness status
 
@@ -93,12 +123,21 @@ is its own transaction) on the group's heading. Every held item names its reason
 
 ## Checks
 
-- Rust: `cargo test -p aura-agents --lib plugins harness`, `cargo test -p aura-agents --test plugins`
+- Rust: `cargo test -p aura-agents --lib`, `cargo test -p aura-agents --test plugins`
   (fake CLIs that answer only from `fake-listing.json` in the temporary home named by
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`), `cargo test -p aura-config --test
   sync_agents --test extensions`, `cargo test -p aura-core --features account-sync --lib
-  plugin_library`.
-- Vitest: `src/components/library/PluginLibraryScreen.test.tsx`, `src/lib/plugins/format.test.ts`.
+  plugin_library`, `cargo test -p aura-core --test plugin_library -- --nocapture` (controlled delayed
+  fake CLIs measure cold/warm first usable and all finished latency, initial sections before any
+  CLI listing, fast providers before blocked ones, refresh detection, cancellation and explicit
+  unsupported inventory). `aura-agents --test plugins` also verifies the two-provider limit,
+  per-provider singleflight, failed refresh retention and stale installation generations.
+- Vitest: `src/components/library/PluginLibraryScreen.test.tsx`, `src/lib/plugins/format.test.ts`,
+  `src/lib/plugins/loading.test.ts` (progressive updates and request/unmount lifetime).
 - Browser: `node apps/desktop/scripts/check-plugin-library.mjs` (Chromium and WebKit, axe) and the
   layout probe's `plugins`, `plugins-pi`, `plugins-update`, `plugins-failed`, `plugins#plugin-menu`,
   `plugins#plugin-item`, `plugin-sync` and `plugin-sync#plugin-steps` views.
+  The progressive fixture holds completion until the browser releases each provider, then sends
+  callbacks after unmount. The menu probe waits for the actual menu's first item to receive focus.
+  These checks run in the existing manually dispatched CI workflow; Rust integration tests are
+  included by `cargo test --workspace` and frontend tests by the existing Vitest run.

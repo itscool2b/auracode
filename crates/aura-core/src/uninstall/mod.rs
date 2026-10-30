@@ -6,7 +6,7 @@
 //! [`execute`] deletes what the plan found, in this order:
 //!
 //! 1. auracode's secure-store entries ([`vault`]): the index of each data folder and the account
-//!    keys it lists, then (machine scope) every remaining entry in auracode's own service;
+//!    keys used exclusively by deleted roots, retaining shared and uncertain entries;
 //! 2. auracode's worktrees ([`worktrees`]): clean ones, and those with unsaved work the person chose
 //!    to delete, go with their Git registration; the rest stay where they are, unlocked;
 //! 3. the folders and files auracode names after itself ([`Targets`]), around kept worktrees;
@@ -31,17 +31,19 @@ use std::path::{Path, PathBuf};
 
 pub use remove::Retry;
 pub use targets::{Os, PlatformDirs, Targets};
-pub use vault::{AppVault, ORIGINS, VaultReport};
+pub use vault::{
+    AppVault, ORIGINS, VaultApproval, VaultKind, VaultPlan, VaultReport, VaultRow, review_vault,
+};
 pub use worktrees::{GitTool, Worktree};
 
 /// How far a cleanup reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
     /// Everything for this user on this device: the default data folder, the platform's folders
-    /// for auracode, the updater's leftovers and every auracode secure-store entry.
+    /// for auracode, the updater's leftovers and exclusively owned secure-store entries.
     Machine,
     /// One data folder chosen with `AURACODE_DATA_DIR`: only what auracode made in it and its own
-    /// index entry. Account keys stay, since other data folders can use them.
+    /// index entry and exclusive account keys. Shared and orphan account keys stay.
     DataFolder,
 }
 
@@ -72,6 +74,8 @@ pub struct Item {
 /// What a cleanup would remove, read without changing anything.
 #[derive(Debug, Clone)]
 pub struct Plan {
+    pub default_root: Option<PathBuf>,
+    pub vault: VaultPlan,
     pub scope: Scope,
     pub items: Vec<Item>,
     /// Every auracode worktree found in the data folders, clean or not.
@@ -88,7 +92,10 @@ impl Plan {
 
     /// Nothing left to remove (a second run, or a machine auracode never ran on).
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty() && self.worktrees.is_empty()
+        self.items.is_empty()
+            && self.worktrees.is_empty()
+            && self.vault.rows.is_empty()
+            && self.vault.warnings.is_empty()
     }
 }
 
@@ -143,6 +150,7 @@ pub const DATA_ENTRIES: &[&str] = &[
     "agent-executables.json",
     "agent-executables.lock",
     "catalog-releases.json",
+    "clones",
     "instructions",
     "accounts.lock",
     "account-passphrase-vault",
@@ -191,6 +199,8 @@ pub fn plan(targets: &Targets, git: &GitTool) -> Plan {
         .map(|path| git.inspect(&path))
         .collect();
     Plan {
+        default_root: targets.default_root.clone(),
+        vault: VaultPlan::default(),
         scope: targets.scope,
         items,
         worktrees,
@@ -217,10 +227,14 @@ pub fn execute(
                 }
             }
     };
-    // The secure store first: a data folder's index entry is named after the folder's real path,
-    // which can only be resolved while the folder exists.
+    // Replan under the native exclusive lease and never expand the reviewed candidates.
     if let Some(vault) = vault {
-        report.vault = vault::clean(vault, &plan.data_roots, plan.scope);
+        report.vault = vault::clean(
+            vault,
+            &plan.data_roots,
+            plan.default_root.as_deref(),
+            &plan.vault.approvals,
+        );
     }
     let mut kept = Vec::new();
     for worktree in &plan.worktrees {
