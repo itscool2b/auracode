@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { captureDesktopRoutes, captureSiteRoutes } from "./design-capture-extra.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = resolve(web, "../desktop");
@@ -94,7 +95,7 @@ try {
     await page.mouse.move(0, 0);
     const name = `${id}-${theme}.png`;
     await page.screenshot({ path: resolve(output, name), fullPage, animations: "disabled" });
-    entries.push({ id, title, theme, name });
+    entries.push({ id, title, theme, name, viewport: page.viewportSize(), fullPage });
     console.log(name);
   };
   for (const theme of ["light", "dark"]) {
@@ -106,6 +107,10 @@ try {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
+    await context.route("**/*", (route) => {
+      const origin = new URL(route.request().url()).origin;
+      return [siteUrl, desktopUrl].includes(origin) ? route.continue() : route.abort();
+    });
     await page.goto(`${siteUrl}/`);
     await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
     await page
@@ -126,6 +131,7 @@ try {
     await page.reload();
     await save(page, theme, "homepage-mobile", "Homepage, mobile", true);
     await page.setViewportSize({ width: 1440, height: 900 });
+    await captureSiteRoutes(page, theme, save, siteUrl);
     const preview = (mode, extra = "") =>
       `${desktopUrl}/?preview=${mode}&theme=${theme}&agents=lineup${extra}`;
     await page.goto(preview("settled"));
@@ -159,11 +165,14 @@ try {
     await page.goto(preview("settled"));
     await page.getByTestId("composer-input").waitFor();
     await save(page, theme, "desktop-minimum", "Desktop, minimum size");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await captureDesktopRoutes(page, theme, save, desktopUrl);
     await context.close();
   }
   const data = JSON.stringify(entries).replaceAll("<", "\\u003c");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aura visual checkpoint</title><style>body{margin:0;background:#101112;color:#fafafa;font:15px/1.5 system-ui,sans-serif}header{position:sticky;top:0;background:#141516;padding:16px 24px;border-bottom:1px solid #303236;display:flex;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0 auto 0 0}select,a{color:inherit;background:#1c1d1f;border:1px solid #666a70;border-radius:6px;padding:8px}main{max-width:1440px;margin:auto;padding:24px}h2{font-size:16px}img{display:block;max-width:100%;height:auto;border:1px solid #303236}p{color:#a1a1aa}</style></head><body><header><h1>Aura visual checkpoint</h1><label>Theme <select id="theme"><option>light</option><option>dark</option></select></label><label>View <select id="view"></select></label><a href="${siteUrl}/">Live website</a><a href="${desktopUrl}/?preview=settled">Live desktop fixture</a></header><main><h2 id="title"></h2><p>Desktop and website captures use synthetic preview data. Full homepage and mobile views scroll vertically.</p><img id="capture" alt=""></main><script>const items=${data},theme=document.querySelector('#theme'),view=document.querySelector('#view'),image=document.querySelector('#capture'),title=document.querySelector('#title'); for(const item of items.filter(i=>i.theme==='light'))view.add(new Option(item.title,item.id));function update(){const item=items.find(i=>i.theme===theme.value&&i.id===view.value);image.src=item.name;image.alt=item.title+' in '+item.theme;title.textContent=image.alt}theme.onchange=view.onchange=update;update()</script></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aura styling review</title><style>body{margin:0;background:#101112;color:#fafafa;font:15px/1.5 system-ui,sans-serif}header{position:sticky;top:0;background:#141516;padding:16px 24px;border-bottom:1px solid #303236;display:flex;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0 auto 0 0}select,a{color:inherit;background:#1c1d1f;border:1px solid #666a70;border-radius:6px;padding:8px}main{max-width:1440px;margin:auto;padding:24px}h2{font-size:16px}img{display:block;max-width:100%;height:auto;border:1px solid #303236}p{color:#a1a1aa}</style></head><body><header><h1>Aura styling review</h1><label>Theme <select id="theme"><option>light</option><option>dark</option></select></label><label>View <select id="view"></select></label><a href="${siteUrl}/">Live website</a><a href="${desktopUrl}/?preview=settled">Live desktop fixture</a></header><main><h2 id="title"></h2><p>Desktop and website captures use synthetic preview data. Full homepage and mobile views scroll vertically.</p><img id="capture" alt=""></main><script>const items=${data},theme=document.querySelector('#theme'),view=document.querySelector('#view'),image=document.querySelector('#capture'),title=document.querySelector('#title'); for(const item of items.filter(i=>i.theme==='light'))view.add(new Option(item.title,item.id));function update(){const item=items.find(i=>i.theme===theme.value&&i.id===view.value);image.src=item.name;image.alt=item.title+' in '+item.theme;title.textContent=image.alt}theme.onchange=view.onchange=update;update()</script></body></html>`;
   await writeFile(resolve(output, "index.html"), html);
+  await writeFile(resolve(output, "manifest.json"), `${JSON.stringify(entries, null, 2)}\n`);
   console.log(`Gallery: ${output}/index.html`);
   if (serve) {
     console.log(`Live gallery: ${galleryUrl}/  Website: ${siteUrl}/  Desktop: ${desktopUrl}/`);

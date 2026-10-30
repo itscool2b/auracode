@@ -19,8 +19,8 @@ live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) recor
 verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
 
 Visual work follows the paired light and dark [Aura visual system](docs/design/visual-language.md).
-The [implemented checkpoint](docs/design/checkpoint-2026-10-30.md) includes a reproducible review
-gallery and awaits owner approval before broader rollout. Historical Design Lab studies are not
+The [styling review record](docs/design/checkpoint-2026-10-30.md) tracks the full pass and its
+review gallery. Owner visual approval and final verification remain pending. Historical Design Lab studies are not
 the design authority for new product screens.
 
 Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2

@@ -3,11 +3,11 @@
 ## Current authority
 The owner revised the architecture on 2026-10-26: Rust owns backend logic, all application cloud
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
-The proposed Aura visual checkpoint supersedes the older Graphite, Orbit and Shallows directions. See [visual-language.md](design/visual-language.md) for current authority and review status.
+The proposed full Aura styling pass supersedes the older Graphite, Orbit and Shallows directions. See [visual-language.md](design/visual-language.md) for current authority and review status.
 `docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
 The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
-fixes rerun as needed. Visual work follows the proposed light and dark Aura system and the audited references in [visual-language.md](design/visual-language.md). The owner must review the visual checkpoint before its styling is considered approved; full rollout and native release verification remain pending.
+fixes rerun as needed. Visual work follows the proposed light and dark Aura system and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
@@ -150,7 +150,7 @@ auracode/                        Cargo workspace + pnpm workspace
     desktop/src/                 React UI
     web/                         (M6) auracode.si: React Router 7 on Cloudflare Workers
   services/api/                  (M6) Rust Cloudflare Worker: accounts, devices, sync, email delivery
-  packages/ui/                   TS Graphite design system shared by app + site: tokens, marks, motion
+  packages/ui/                   TS Aura design system shared by app + site: tokens, marks, motion
   packages/api-types/            TS types generated from aura-protocol (shared by app, site, API)
   infra/                         Wrangler configs, SQL migrations for D1, release scripts
 ```
@@ -172,7 +172,7 @@ auracode/                        Cargo workspace + pnpm workspace
   similar/diffy, toml_edit + jsonc-parser, keepawake, keyring, tracing. Our own login-shell env resolver.
 - **IPC.** Commands for request/response; `Channel` for streams; token deltas batched per frame into frames
   under 8 KiB; tool output capped (full output on disk).
-- **App UI stack.** React 19.3, Vite, TypeScript, plain CSS on the Graphite tokens, Motion 14, shadcn on Base UI (fully
+- **App UI stack.** React 19.3, Vite, TypeScript, plain CSS on shared semantic tokens, Motion 14, shadcn on Base UI (fully
   restyled), Zustand, react-virtuoso + use-stick-to-bottom (no layout animations inside the virtual list),
   Streamdown 2.7 (sanitized, own reduced-motion handling), Shiki 4 in a worker (finished code blocks only,
   throttled while streaming), @pierre/diffs, xterm.js 6 + WebGL (login terminal), OGL, Lucide, Floating UI.
@@ -190,9 +190,7 @@ auracode/                        Cargo workspace + pnpm workspace
     Development uses local/emulated or separately named resources, never production test data.
   - Structured diagnostics omit codes, tokens, credentials, account emails and plaintext sync data.
 
-- **Engines.** WKWebView (Safari 26/27) on macOS, WebView2 on Windows, WebKitGTK on Linux. Graphite
-  paints every surface opaque and uses no `backdrop-filter`. Repeat the M0 idle-power measurements
-  after migrating production surfaces to Graphite.
+- **Engines.** WKWebView on macOS and WebView2 on Windows are the supported native targets. Repeat the M0 idle-power measurements after visual changes; Linux remains deferred.
 - **Catalog vs drivers.** The catalog is data (per agent: binaries + known dirs per OS, version command,
   channel rules, latest-version source, vendor update command, auth-status command, launch spec, config dir,
   brand, last-verified version). Drivers are per protocol: ACP, Claude stream-json, Codex app-server, Pi RPC

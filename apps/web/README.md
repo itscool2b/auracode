@@ -1,6 +1,6 @@
 # auracode.si
 
-Dark-only React Router 7 interface, prerendered to static HTML. Cloudflare serves `build/client`.
+Light and dark React Router 7 interface, prerendered to static HTML. Cloudflare serves `build/client`.
 `entry.server.tsx` is build-time React rendering only; the server output is removed by `ssr:false`.
 There is no JavaScript application backend. The Rust Worker in `apps/api` owns every account,
 authentication, authorization, email, export and sync operation.
@@ -24,16 +24,11 @@ the skip link and verifies keyboard activation. Real Safari/macOS acceptance rem
 
 React Router 7.18.4 supports TypeScript through version 6 in its peer contract, so this package pins
 TypeScript 6.0.3 locally. The desktop/workspace compiler remains unchanged. The website uses the
-shared Geist font package and the Graphite tokens from `@auracode/ui`.
+shared Geist font package and semantic tokens from `@auracode/ui`.
 
 ## Reference evidence
 
-The site follows the Graphite language in [visual-language.md](../../docs/design/visual-language.md).
-Its section 2 records what each reference contributes and section 5 the site composition. The
-references are the owner's Mobbin and official-site set: SpaceXAI (x.ai), X Money, Harvey, Aside
-and Vercel for organisation, styling and measured motion, and the AI in Design Report 2026 as the
-bar for uniqueness, not copied. Timings come from the live sites, not from static images. No
-third-party reference image, font or script is shipped.
+The full proposed styling pass follows [visual-language.md](../../docs/design/visual-language.md), drawing on Typesafe/Jev, Harvey and Vercel. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it whenever the app changes visibly with
@@ -43,7 +38,7 @@ capabilities panel's views are drawn from tokens after the app's own preview mod
 pending handoff, the Changes panel, the picker, the queue and the sidebar); update them with the
 app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
 logo's own paths. Without JavaScript the site follows the system theme, the capabilities panel shows
-the handoff example and the FAQ opens natively. Reduced motion disables automatic cycling and transitions.
+the default example and the FAQ opens natively. The standalone notices page is script-free and follows the system appearance only. Reduced motion disables automatic cycling and transitions.
 
 ## Deployment prerequisites
 
