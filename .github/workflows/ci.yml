@@ -294,6 +294,7 @@ jobs:
       - name: Install browser test engine
         run: pnpm --filter @auracode/desktop exec playwright install --with-deps ${{ matrix.engine }}
       - name: Check every preview's layout
+        timeout-minutes: 20
         run: >-
           pnpm --filter @auracode/desktop exec node scripts/check-layout.mjs
           --engines ${{ matrix.engine }} --themes ${{ matrix.theme }}
