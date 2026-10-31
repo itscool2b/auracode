@@ -370,6 +370,7 @@ struct OpenTurn {
     text: String,
     prompt_created_at: Millis,
     started: Instant,
+    timing: PromptTiming,
     interrupt_requested: bool,
     reply: ReplyHasher,
 }
@@ -503,6 +504,7 @@ enum Done {
         generation: u64,
         prompt: Prompt,
         turn_id: String,
+        timing: PromptTiming,
         result: Result<
             crate::checkpoints::Result<aura_protocol::changes::CheckpointSummary>,
             JoinError,
@@ -570,6 +572,52 @@ struct Prompt {
     created_at: Millis,
 }
 
+/// Monotonic, process-local latency measurements. These never change the stored turn duration.
+struct PromptTiming {
+    /// Absent for a queued prompt loaded from storage: its original monotonic clock is gone.
+    accepted: Option<Instant>,
+    dispatch_started: Instant,
+    driver_enqueued: Option<Instant>,
+    first_event_seen: bool,
+    first_text_seen: bool,
+}
+
+impl PromptTiming {
+    fn new(accepted: Option<Instant>) -> Self {
+        Self {
+            accepted,
+            dispatch_started: Instant::now(),
+            driver_enqueued: None,
+            first_event_seen: false,
+            first_text_seen: false,
+        }
+    }
+
+    fn trace(
+        &self,
+        chat_id: &str,
+        prompt_id: &str,
+        turn_id: Option<&str>,
+        stage: &'static str,
+        outcome: &'static str,
+        dispatch_eligible: Option<bool>,
+    ) {
+        tracing::info!(
+            chat_id,
+            prompt_id,
+            turn_id,
+            stage,
+            outcome,
+            dispatch_eligible = ?dispatch_eligible,
+            acceptance = if self.accepted.is_some() { "live" } else { "unknown_recovered" },
+            since_acceptance_ms = ?self.accepted.map(elapsed_ms),
+            since_dispatch_attempt_ms = elapsed_ms(self.dispatch_started),
+            since_driver_enqueue_ms = ?self.driver_enqueued.map(elapsed_ms),
+            "prompt timing"
+        );
+    }
+}
+
 /// One chat's actor.
 pub(crate) struct ChatActor {
     setup_reservation: bool,
@@ -591,6 +639,9 @@ pub(crate) struct ChatActor {
     normalizer: Normalizer,
     subscribers: Vec<Subscriber>,
     queue: Vec<QueuedRow>,
+    /// Only queued prompts accepted by this actor. Removed on dispatch or cancellation, so this
+    /// stays bounded by the prompt queue; recovered rows deliberately have no fabricated clock.
+    prompt_accepted: BTreeMap<String, Instant>,
     turn: Option<OpenTurn>,
     /// The turn row of the turn whose `TurnStarted` is not flushed yet.
     begun: Option<TurnRow>,
@@ -721,6 +772,7 @@ impl ChatActor {
             normalizer: Normalizer::default(),
             subscribers: Vec::new(),
             queue,
+            prompt_accepted: BTreeMap::new(),
             turn: None,
             begun: None,
             workspace_turn: None,
@@ -1671,6 +1723,7 @@ impl ChatActor {
         let now = now_millis();
         // A prompt goes at once only with nothing queued before it: held prompts keep their place.
         if self.queue.is_empty() && self.can_dispatch() {
+            self.accept_prompt(&prompt_id, false);
             let queued = self.dispatch(Prompt {
                 id: prompt_id.clone(),
                 parts,
@@ -1683,6 +1736,7 @@ impl ChatActor {
         if self.queue.len() >= max_queue {
             return Err(SessionError::QueueFull(max_queue));
         }
+        self.accept_prompt(&prompt_id, true);
         let row = QueuedRow {
             id: prompt_id.clone(),
             parts,
@@ -1716,6 +1770,18 @@ impl ChatActor {
             prompt_id,
             queued: true,
         })
+    }
+
+    fn accept_prompt(&mut self, prompt_id: &str, queued: bool) {
+        self.prompt_accepted
+            .insert(prompt_id.to_owned(), Instant::now());
+        tracing::info!(
+            chat_id = %self.chat_id,
+            prompt_id,
+            stage = "accepted",
+            queued,
+            "prompt timing"
+        );
     }
 
     /// The queue's head may go now: it is sent when the agent can take it, or the agent starts
@@ -1761,6 +1827,7 @@ impl ChatActor {
             return Err(SessionError::RequestNotPending);
         };
         let removed = self.queue.remove(index);
+        self.prompt_accepted.remove(prompt_id);
         self.queue_op(Op::QueueRemove {
             id: prompt_id.to_owned(),
         });
@@ -2092,6 +2159,15 @@ impl ChatActor {
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
     fn dispatch(&mut self, prompt: Prompt) -> bool {
+        let timing = PromptTiming::new(self.prompt_accepted.get(&prompt.id).copied());
+        timing.trace(
+            &self.chat_id,
+            &prompt.id,
+            None,
+            "dispatch_attempt",
+            "started",
+            None,
+        );
         self.workspace_turn = None;
         let Some(admission) = self.store.begin_workspace_turn(&self.chat_id) else {
             let row = QueuedRow {
@@ -2125,7 +2201,15 @@ impl ChatActor {
         self.workspace_turn = Some(admission);
         let turn_id = new_id();
         let Some(checkpoints) = self.shared.deps.checkpoints.clone() else {
-            self.dispatch_prepared(prompt, turn_id, None);
+            timing.trace(
+                &self.chat_id,
+                &prompt.id,
+                Some(&turn_id),
+                "checkpoint_result",
+                "not_configured",
+                Some(true),
+            );
+            self.dispatch_prepared(prompt, turn_id, None, timing);
             return false;
         };
         // Stored as a queued row while its checkpoint saves, so a crash brings it back (held). It
@@ -2173,6 +2257,7 @@ impl ChatActor {
                     generation,
                     prompt,
                     turn_id,
+                    timing,
                     result: task.await,
                 }
             }
@@ -2191,6 +2276,7 @@ impl ChatActor {
         mut prompt: Prompt,
         turn_id: String,
         checkpoint_ref: Option<String>,
+        timing: PromptTiming,
     ) {
         if self.driver.is_none() {
             return;
@@ -2221,6 +2307,7 @@ impl ChatActor {
         driver.idle_assumed = false;
         self.idle_wait = None;
         self.queue.retain(|row| row.id != prompt.id);
+        self.prompt_accepted.remove(&prompt.id);
         self.remote_history = false;
         self.ordinal = self.ordinal.saturating_add(1);
         let tag: Arc<str> = Arc::from(turn_id.as_str());
@@ -2248,6 +2335,7 @@ impl ChatActor {
             text: prompt.text.clone(),
             prompt_created_at: prompt.created_at,
             started: Instant::now(),
+            timing,
             interrupt_requested: false,
             reply: ReplyHasher::default(),
         });
@@ -2292,10 +2380,30 @@ impl ChatActor {
         self.flush();
         self.publish();
         self.last_activity = Instant::now();
-        let _ = commands.send(DriverCommand::Prompt {
-            turn: TurnRef { turn_id },
-            parts: prompt.parts,
-        });
+        let enqueued_at = Instant::now();
+        let enqueued = commands
+            .send(DriverCommand::Prompt {
+                turn: TurnRef { turn_id },
+                parts: prompt.parts,
+            })
+            .is_ok();
+        if let Some(turn) = &mut self.turn {
+            if enqueued {
+                turn.timing.driver_enqueued = Some(enqueued_at);
+            }
+            turn.timing.trace(
+                &self.chat_id,
+                &turn.prompt_id,
+                Some(&turn.id),
+                "driver_enqueue",
+                if enqueued {
+                    "enqueued"
+                } else {
+                    "channel_closed"
+                },
+                None,
+            );
+        }
     }
 
     fn set_title(&mut self, title: String, source: TitleSource) {
@@ -3284,6 +3392,7 @@ impl ChatActor {
                 generation,
                 prompt,
                 turn_id,
+                timing,
                 result,
             } => {
                 if !self
@@ -3291,6 +3400,14 @@ impl ChatActor {
                     .as_ref()
                     .is_some_and(|(id, _)| *id == prompt.id)
                 {
+                    timing.trace(
+                        &self.chat_id,
+                        &prompt.id,
+                        Some(&turn_id),
+                        "checkpoint_result",
+                        "stale_checkpoint",
+                        Some(false),
+                    );
                     return;
                 }
                 self.checkpointing = None;
@@ -3298,6 +3415,14 @@ impl ChatActor {
                 self.info_dirty = true;
                 self.schedule_flush();
                 if generation != self.generation {
+                    timing.trace(
+                        &self.chat_id,
+                        &prompt.id,
+                        Some(&turn_id),
+                        "checkpoint_result",
+                        "stale_generation",
+                        Some(false),
+                    );
                     return;
                 }
                 if self
@@ -3319,14 +3444,28 @@ impl ChatActor {
                         None,
                     );
                 }
+                let eligible = matches!(&result, Ok(Ok(_)))
+                    && self.can_dispatch()
+                    && self
+                        .queue
+                        .iter()
+                        .any(|row| row.id == prompt.id && !row.held);
+                let outcome = match &result {
+                    Ok(Ok(_)) => "saved",
+                    Err(error) if error.is_cancelled() => "cancelled",
+                    _ => "failed",
+                };
+                timing.trace(
+                    &self.chat_id,
+                    &prompt.id,
+                    Some(&turn_id),
+                    "checkpoint_result",
+                    outcome,
+                    Some(eligible),
+                );
                 match result {
                     Ok(Ok(checkpoint)) => {
-                        if self.can_dispatch()
-                            && self
-                                .queue
-                                .iter()
-                                .any(|row| row.id == prompt.id && !row.held)
-                        {
+                        if eligible {
                             if !checkpoint.warnings.is_empty() {
                                 self.push(
                                     AuraEvent::Notice {
@@ -3339,7 +3478,7 @@ impl ChatActor {
                                     None,
                                 );
                             }
-                            self.dispatch_prepared(prompt, turn_id, Some(checkpoint.id));
+                            self.dispatch_prepared(prompt, turn_id, Some(checkpoint.id), timing);
                         }
                     }
                     Err(error) if error.is_cancelled() => {}
@@ -3555,6 +3694,28 @@ impl ChatActor {
                 if matches!(event, AuraEvent::SteeringStatus { .. }) {
                     return;
                 }
+                // Readiness, usage and empty deltas are not a response to the prompt. Only
+                // correlate actual output with the matching open turn, never background events.
+                let meaningful = match &event {
+                    AuraEvent::MessageDelta { text, .. } | AuraEvent::ThoughtDelta { text, .. } => {
+                        !text.is_empty()
+                    }
+                    AuraEvent::MessageCompleted { .. }
+                    | AuraEvent::ThoughtCompleted { .. }
+                    | AuraEvent::ToolCall(_)
+                    | AuraEvent::ToolUpdate(_)
+                    | AuraEvent::PlanUpdated { .. }
+                    | AuraEvent::Notice { .. }
+                    | AuraEvent::Error { .. } => true,
+                    _ => false,
+                };
+                if meaningful {
+                    self.observe_prompt_output(
+                        turn.as_deref(),
+                        event.kind(),
+                        matches!(&event, AuraEvent::MessageDelta { .. }),
+                    );
+                }
                 let tag = self.open_tag(turn.as_deref());
                 match &event {
                     AuraEvent::MessageDelta { text, .. } => {
@@ -3573,14 +3734,21 @@ impl ChatActor {
                 stop_reason,
                 usage,
                 error,
-            } => self.on_turn_ended(&turn_id, stop_reason, usage, error),
+            } => {
+                self.observe_prompt_output(Some(&turn_id), "turn_ended", false);
+                self.on_turn_ended(&turn_id, stop_reason, usage, error);
+            }
             DriverEvent::Permission { turn, request } => {
+                self.observe_prompt_output(turn.as_deref(), "permission_requested", false);
                 self.on_permission(turn.as_deref(), request)
             }
             DriverEvent::PermissionWithdrawn { request_id } => {
                 self.on_withdrawn(&request_id, false)
             }
-            DriverEvent::UiRequest { turn, request } => self.on_question(turn.as_deref(), request),
+            DriverEvent::UiRequest { turn, request } => {
+                self.observe_prompt_output(turn.as_deref(), "ui_request", false);
+                self.on_question(turn.as_deref(), request);
+            }
             DriverEvent::UiWithdrawn { request_id } => self.on_withdrawn(&request_id, true),
             DriverEvent::Commands(commands) => {
                 self.commands = commands;
@@ -3617,6 +3785,42 @@ impl ChatActor {
             DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
         }
         self.refresh_run_status();
+    }
+
+    fn observe_prompt_output(
+        &mut self,
+        turn_id: Option<&str>,
+        event_kind: &'static str,
+        assistant_text: bool,
+    ) {
+        let Some(turn) = &mut self.turn else {
+            return;
+        };
+        if turn_id != Some(turn.id.as_str()) || turn.timing.driver_enqueued.is_none() {
+            return;
+        }
+        if !turn.timing.first_event_seen {
+            turn.timing.first_event_seen = true;
+            turn.timing.trace(
+                &self.chat_id,
+                &turn.prompt_id,
+                Some(&turn.id),
+                "first_driver_event",
+                event_kind,
+                None,
+            );
+        }
+        if assistant_text && !turn.timing.first_text_seen {
+            turn.timing.first_text_seen = true;
+            turn.timing.trace(
+                &self.chat_id,
+                &turn.prompt_id,
+                Some(&turn.id),
+                "first_assistant_text",
+                event_kind,
+                None,
+            );
+        }
     }
 
     fn on_native_session_id(&mut self, native_id: String) {
@@ -4086,6 +4290,10 @@ impl ChatActor {
         self.refresh_attention();
         if auth {
             // The prompt goes back into the queue, held, keeping its place; the process stops.
+            if let Some(accepted) = turn.timing.accepted {
+                self.prompt_accepted
+                    .insert(turn.prompt_id.clone(), accepted);
+            }
             let row = QueuedRow {
                 id: turn.prompt_id.clone(),
                 parts: turn.parts.clone(),
