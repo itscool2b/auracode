@@ -4,6 +4,7 @@ import type {
   ChatSnapshot,
   HistoryPage,
   PromptAck,
+  QueuedPrompt,
   SendingPrompt,
   SessionLists,
 } from "../../bindings";
@@ -1303,6 +1304,200 @@ describe("prompts and the session", () => {
     gone = true;
     await store.sendNow("p1");
     expect(store.getSnapshot().queue).toEqual([row("p2", "two")]);
+  });
+});
+
+describe("queue action reply ordering", () => {
+  const row = (id: string, preview = id): QueuedPrompt => ({
+    prompt_id: id,
+    preview,
+    held: false,
+    created_at: 1,
+  });
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    let reject: (error: unknown) => void = () => {};
+    const promise = new Promise<T>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("does not restore completed prompts when Send now answers after both turns finish", async () => {
+    const reply = deferred<QueuedPrompt[]>();
+    const fake = new FakeTransport({ sendNow: () => reply.promise });
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      queue: [row("heldAtStop"), row("afterStop")],
+    });
+    const sending = store.sendNow("heldAtStop");
+    const events = [
+      ev.lifecycle("heldAtStop", "started"),
+      ev.turnStarted("t1", "heldAtStop"),
+      ev.message("t1.m1", "held at the stop"),
+      ev.turnEnded("t1"),
+      ev.lifecycle("afterStop", "started"),
+      ev.turnStarted("t2", "afterStop"),
+      ev.message("t2.m1", "typed after the stop"),
+      ev.turnEnded("t2"),
+    ];
+    fake.lastAttach().onFrame(frame(CHAT, 0, events));
+    expect(store.getSnapshot().queue).toEqual([]);
+    expect(messageText(store, "t2.m1")).toBe("typed after the stop");
+    reply.resolve([row("afterStop")]);
+    await sending;
+    expect(store.getSnapshot().queue).toEqual([]);
+    await settled();
+    expect(fake.attaches).toHaveLength(2);
+    fake.lastAttach().resolve(attachResult(CHAT, events.length, historyPage(CHAT, [])));
+    await settled();
+    expect(store.getSnapshot().queue).toEqual([]);
+    store.close();
+  });
+
+  it.each(["editQueued", "moveQueued"] as const)(
+    "%s recovers the saved change without dropping a prompt queued during the request",
+    async (method) => {
+      const reply = deferred<QueuedPrompt[]>();
+      const fake = new FakeTransport({ [method]: () => reply.promise });
+      const store = await opened(fake, historyPage(CHAT, []), 0, {
+        queue: [row("p1"), row("p2")],
+      });
+      const changing =
+        method === "editQueued" ? store.editQueued("p1", "edited") : store.moveQueued("p2", 0);
+      fake.lastAttach().onFrame(frame(CHAT, 0, [ev.lifecycle("p3", "queued", "third")]));
+      const changed =
+        method === "editQueued" ? [row("p1", "edited"), row("p2")] : [row("p2"), row("p1")];
+      reply.resolve(changed);
+      await changing;
+      expect(store.getSnapshot().queue.map((item) => item.prompt_id)).toContain("p3");
+      await settled();
+      expect(fake.attaches).toHaveLength(2);
+      const canonical = [...changed, row("p3", "third")];
+      fake.lastAttach().resolve(attachResult(CHAT, 1, historyPage(CHAT, []), { queue: canonical }));
+      await settled();
+      expect(store.getSnapshot().queue).toEqual(canonical);
+      store.close();
+    },
+  );
+
+  it("refreshes again when a queue reply belongs to a replaced subscription", async () => {
+    const reply = deferred<QueuedPrompt[]>();
+    const fake = new FakeTransport({ moveQueued: () => reply.promise });
+    const initial = [row("p1"), row("p2")];
+    const store = await opened(fake, historyPage(CHAT, []), 0, { queue: initial });
+    const moving = store.moveQueued("p2", 0);
+    const rejoining = store.reattach();
+    await settled();
+    fake.lastAttach().resolve(attachResult(CHAT, 0, historyPage(CHAT, []), { queue: initial }));
+    await rejoining;
+    reply.resolve([row("p2"), row("p1")]);
+    await moving;
+    expect(store.getSnapshot().queue).toEqual(initial);
+    await settled();
+    expect(fake.attaches).toHaveLength(3);
+    const canonical = [row("p2"), row("p1"), row("p3")];
+    fake.lastAttach().resolve(attachResult(CHAT, 1, historyPage(CHAT, []), { queue: canonical }));
+    await settled();
+    expect(store.getSnapshot().queue).toEqual(canonical);
+    store.close();
+  });
+
+  it("resolves overlapping queue replies with a snapshot instead of reverting a later change", async () => {
+    const edit = deferred<QueuedPrompt[]>();
+    const move = deferred<QueuedPrompt[]>();
+    const fake = new FakeTransport({
+      editQueued: () => edit.promise,
+      moveQueued: () => move.promise,
+    });
+    const store = await opened(fake, historyPage(CHAT, []), 0, { queue: [row("p1"), row("p2")] });
+    const editing = store.editQueued("p1", "edited");
+    const moving = store.moveQueued("p2", 0);
+    const canonical = [row("p2"), row("p1", "edited")];
+    move.resolve(canonical);
+    await moving;
+    expect(store.getSnapshot().queue).toEqual(canonical);
+    edit.resolve([row("p1", "edited"), row("p2")]);
+    await editing;
+    expect(store.getSnapshot().queue).toEqual(canonical);
+    await settled();
+    expect(fake.attaches).toHaveLength(2);
+    fake.lastAttach().resolve(attachResult(CHAT, 0, historyPage(CHAT, []), { queue: canonical }));
+    await settled();
+    expect(store.getSnapshot().queue).toEqual(canonical);
+    store.close();
+  });
+
+  it.each(["editQueued", "moveQueued"] as const)(
+    "%s applies its reply without rejoining for unrelated text, usage or session updates",
+    async (method) => {
+      const reply = deferred<QueuedPrompt[]>();
+      const fake = new FakeTransport({ [method]: () => reply.promise });
+      const store = await opened(fake, historyPage(CHAT, []), 0, {
+        queue: [row("p1"), row("p2")],
+      });
+      const changing =
+        method === "editQueued" ? store.editQueued("p1", "edited") : store.moveQueued("p2", 0);
+      fake
+        .lastAttach()
+        .onFrame(frame(CHAT, 0, [ev.message("t1.m1", "text"), ev.usage(1), ev.session()]));
+      const changed =
+        method === "editQueued" ? [row("p1", "edited"), row("p2")] : [row("p2"), row("p1")];
+      reply.resolve(changed);
+      await changing;
+      await settled();
+      expect(store.getSnapshot().queue).toEqual(changed);
+      expect(fake.attaches).toHaveLength(1);
+      store.close();
+    },
+  );
+
+  it.each(["cancelQueued", "queuedText", "editQueued", "moveQueued", "sendNow"] as const)(
+    "%s does not remove a returned prompt using an older request_not_pending reply",
+    async (method) => {
+      const reply = deferred<never>();
+      const fake = new FakeTransport({ [method]: () => reply.promise });
+      const store = await opened(fake, historyPage(CHAT, []), 0, { queue: [row("p1")] });
+      const changing =
+        method === "editQueued"
+          ? store.editQueued("p1", "edited")
+          : method === "moveQueued"
+            ? store.moveQueued("p1", 0)
+            : store[method]("p1");
+      fake
+        .lastAttach()
+        .onFrame(
+          frame(CHAT, 0, [
+            ev.lifecycle("p1", "sending"),
+            ev.lifecycle("p1", "queued", "returned", true),
+          ]),
+        );
+      reply.reject(new CommandError("request_not_pending", "already sending"));
+      await changing;
+      expect(store.getSnapshot().queue[0]?.preview).toBe("returned");
+      await settled();
+      expect(fake.attaches).toHaveLength(2);
+      const canonical = [{ ...row("p1", "returned"), held: true }];
+      fake.lastAttach().resolve(attachResult(CHAT, 2, historyPage(CHAT, []), { queue: canonical }));
+      await settled();
+      expect(store.getSnapshot().queue).toEqual(canonical);
+      store.close();
+    },
+  );
+
+  it("ignores a queue reply after the view closes without attaching again", async () => {
+    const reply = deferred<QueuedPrompt[]>();
+    const fake = new FakeTransport({ sendNow: () => reply.promise });
+    const initial = [row("p1")];
+    const store = await opened(fake, historyPage(CHAT, []), 0, { queue: initial });
+    const sending = store.sendNow("p1");
+    store.close();
+    reply.resolve([]);
+    await sending;
+    await settled();
+    expect(store.getSnapshot().queue).toEqual(initial);
+    expect(fake.attaches).toHaveLength(1);
   });
 });
 
