@@ -98,3 +98,12 @@ and current source on Windows and macOS. It skips unrelated app/UI jobs and uses
 concurrency group, so it does not cancel a normal verification run. Baseline sources, temporary
 profiles, and measurement logs stay outside the measured checkout. Artifacts retain raw logs,
 normalized measurements, source revisions, fixture identities, and toolchain versions.
+Baseline and current builds use separate Cargo target directories. Before timing, the runner
+checks each executable's test list against its source and retains that list with the evidence.
+
+These are native test-profile backend measurements. A cold capture starts with an empty private
+checkpoint store; it does not flush the operating system's disk cache. The baseline runs first.
+The workspace fixture has three unchanged samples, while synthetic fixtures default to one sample
+per scenario. Results describe these runs, not tail latency or statistical significance. The send
+fixture excludes desktop UI/IPC, real harness startup, provider/model latency, and production log
+formatting and writes. It measures Local storage; Account timings come from direct capture.

@@ -23,7 +23,9 @@ explicit workflow inputs.
 
 The runner builds both revisions from source and gives them identical benchmark fixtures. Both
 read the same checkout for the workspace comparison; baseline sources and evidence remain outside
-it. It also measures cold, unchanged, and one-file-edit captures for Local and Account storage and
+it. Separate Cargo target directories prevent one revision from replacing the other's executable;
+the runner checks and retains each executable's test list before timing. It also measures cold,
+unchanged, and one-file-edit captures for Local and Account storage and
 the real actor's send path through a scripted driver. Each runner executes its measurements
 sequentially after builds finish. No real agent or account credentials are needed.
 
@@ -34,7 +36,7 @@ substitute a successful compile or a partial run for a completed comparison. See
 
 ## Recovering generated bindings
 
-The `CI` workflow has one optional boolean, `refresh_bindings`, defaulting to `false`.
+The `CI` workflow's optional `refresh_bindings` boolean defaults to `false`.
 
 - Normal runs generate TypeScript bindings independently on Windows and macOS and fail if the
   result differs from the committed `apps/desktop/src/bindings.ts`.
