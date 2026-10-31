@@ -191,8 +191,8 @@ impl Git {
             "core.longpaths=true".into(),
             "-c".into(),
             // Durable objects and refs outlive the operation; its scratch index does not.
-            // Reset platform defaults so they cannot add disposable index flushes back in.
-            "core.fsync=none,objects,reference".into(),
+            // Exclude index flushes even if platform defaults include them.
+            "core.fsync=objects,reference,-index".into(),
             "-c".into(),
             "core.fsyncMethod=fsync".into(),
             "-c".into(),
