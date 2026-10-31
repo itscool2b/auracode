@@ -10,6 +10,7 @@ mod durability;
 mod encrypted;
 mod git;
 mod plumbing;
+mod quarantine;
 mod recovery;
 mod revert;
 pub(crate) mod scan;

@@ -182,6 +182,8 @@ pub(super) async fn write_tree(
                 "Checkpoint scratch files escaped the operation directory.".into(),
             ));
         }
+        let batch_fsync =
+            super::quarantine::prepare(&operation.repo, operation.context.clone()).await?;
         // Bound each durable object transaction as well as its input bytes. A fresh isolated
         // staging repo supplies Git's upstream batch flush protocol without reading attributes
         // or filters from either the workspace or the actual checkpoint repository.
@@ -206,7 +208,6 @@ pub(super) async fn write_tree(
         let staging_repo = operation.scratch.path().join("staging.git");
         operation.git.init(&staging_repo, directory).await?;
         let objects = operation.repo.join("objects");
-        let batch_fsync = super::durability::supports_batch(&objects);
         tracing::info!(
             batch_fsync,
             file_count = scanned.copies.len(),
