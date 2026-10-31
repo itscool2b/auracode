@@ -445,8 +445,13 @@ mod tests {
         let copies = operation.scratch.path().join("fresh copies");
         std::fs::create_dir(&copies).unwrap();
         let paths: Vec<_> = (0..1025).map(|i| format!("file {i} é.txt")).collect();
-        for path in &paths {
-            std::fs::write(work.join(path), path.as_bytes()).unwrap();
+        for (index, path) in paths.iter().enumerate() {
+            let contents = if index % HASH_RECORD_LIMIT == 0 {
+                b"shared object across concurrent batches\r\n\0".as_slice()
+            } else {
+                path.as_bytes()
+            };
+            std::fs::write(work.join(path), contents).unwrap();
         }
         let scanned = scan::collect(&work, &paths, Some(&copies)).unwrap();
         let before = operation.git.helper_count();
@@ -455,6 +460,13 @@ mod tests {
             .unwrap();
         assert_eq!(operation.git.helper_count() - before, 8);
         assert_eq!(files.len(), 1026);
+        for path in &paths {
+            assert_eq!(files[path].fingerprint, scanned.files[path]);
+        }
+        let shared_oid = &files[&paths[0]].oid;
+        for index in (0..paths.len()).step_by(HASH_RECORD_LIMIT) {
+            assert_eq!(&files[&paths[index]].oid, shared_oid);
+        }
         let listed = operation
             .git
             .run(
