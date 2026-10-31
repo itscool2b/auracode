@@ -29,7 +29,7 @@ on:
       checkpoint_counts:
         description: One to three comma-separated fixture sizes, each from 1 to 20000
         type: string
-        default: 1000,10000,20000
+        default: '1000,10000,20000'
         required: false
       checkpoint_warm_samples:
         description: Unchanged synthetic capture samples per fixture size, from 1 to 10

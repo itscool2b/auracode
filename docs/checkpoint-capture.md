@@ -24,6 +24,10 @@ later corruption. Hints are removed before fallible work and published only afte
 and manifest are durable. Every successful turn still gets a distinct checkpoint, commit, ref,
 and version 1 manifest, even when its tree is unchanged.
 
+Freshly hashed blobs are also verified before publication: Git can report a successful write
+without replacing an already present corrupt object. This keeps a cold retry from bypassing the
+check. Verification helpers read at most 4,096 objects and 16 MiB of output per batch.
+
 Git receives numeric scratch names through `hash-object --no-filters -w --stdin-paths` and literal
 NUL-terminated index records through `update-index -z --index-info`. Inputs are at most 1 MiB.
 Hash batches additionally contain at most 512 files to bound per-object disk flush work inside
@@ -87,3 +91,10 @@ model request. Both fixtures are ignored by ordinary test runs.
 Compare the same fixture and build profile against the base revision, without concurrent builds
 or filesystem-heavy tests. These timings measure checkpoint completion and exclude provider
 latency. See [verification](verification.md) for the Windows/macOS and encrypted-storage gates.
+
+The manual `CI` workflow accepts `checkpoint_benchmarks: true` for a dedicated comparison run.
+This mode runs encrypted verification and then the identical fixtures against the chosen baseline
+and current source on Windows and macOS. It skips unrelated app/UI jobs and uses a separate
+concurrency group, so it does not cancel a normal verification run. Baseline sources, temporary
+profiles, and measurement logs stay outside the measured checkout. Artifacts retain raw logs,
+normalized measurements, source revisions, fixture identities, and toolchain versions.

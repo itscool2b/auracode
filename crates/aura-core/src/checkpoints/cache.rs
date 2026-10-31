@@ -10,6 +10,9 @@ use super::{CheckpointError, Operation, Result, git, scan};
 
 const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 const TREE_LIMIT: usize = 20_000;
+// Loose-object opens also cost time when the contents are tiny. Bound that work independently
+// of stdin/stdout bytes so one verification helper does not inherit a whole 20,000-file scan.
+const OBJECTS_PER_HELPER: usize = 4_096;
 
 /// OID to exact expected Git tree bytes. This includes every subtree independently, so a missing
 /// parent cannot hide corruption in another existing tree during a cold-fallback decision.
@@ -137,7 +140,9 @@ async fn verify_objects(
                 return Err(damaged());
             }
             if end > start
-                && (bytes + cost > OUTPUT_LIMIT || (end - start + 1) * 41 > git::INPUT_LIMIT)
+                && (bytes + cost > OUTPUT_LIMIT
+                    || end - start == OBJECTS_PER_HELPER
+                    || (end - start + 1) * 41 > git::INPUT_LIMIT)
             {
                 break;
             }
