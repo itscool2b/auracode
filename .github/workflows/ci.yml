@@ -590,6 +590,7 @@ jobs:
           CHECKPOINT_BASELINE_REF: ${{ inputs.checkpoint_baseline_ref }}
           AURA_CHECKPOINT_BENCH_COUNTS: ${{ inputs.checkpoint_counts }}
           AURA_CHECKPOINT_BENCH_WARM: ${{ inputs.checkpoint_warm_samples }}
+          AURA_CHECKPOINT_BENCH_DIAGNOSTICS: "1"
         run: bash .github/scripts/checkpoint-performance.sh
       - name: Keep checkpoint performance evidence
         if: ${{ always() && inputs.checkpoint_benchmarks }}
