@@ -271,15 +271,19 @@ impl Checkpoints {
             .unwrap_or_default();
         let verifying = Instant::now();
         let mut reused_tree = None;
+        let mut tree_inventory = None;
         let mut cache_missing = false;
         if let Some(previous) = &previous {
             let blobs_present = cache::verify_blobs(&operation, &root, &retained).await?;
             let unchanged = previous.files == retained && scanned.files.len() == retained.len();
-            if blobs_present
-                && (!unchanged || cache::verify_tree(&operation, &root, previous).await?)
-            {
+            // Check every tree even when a blob is missing. Otherwise a cache miss could hide
+            // a damaged existing tree and turn corruption into an apparently successful retry.
+            let trees_present =
+                !unchanged || cache::verify_tree(&operation, &root, previous).await?;
+            if blobs_present && trees_present {
                 if unchanged {
                     reused_tree = Some(previous.tree.clone());
+                    tree_inventory = Some(Arc::clone(&previous.tree_ids));
                 }
             } else {
                 cache_missing = true;
@@ -312,7 +316,12 @@ impl Checkpoints {
         let writing = Instant::now();
         let (files, tree) = match reused_tree {
             Some(tree) => (retained, tree),
-            None => plumbing::write_tree(&operation, &root, &scanned, Some(&retained)).await?,
+            None => {
+                let (files, tree) =
+                    plumbing::write_tree(&operation, &root, &scanned, Some(&retained)).await?;
+                tree_inventory = cache::inventory(&operation, &root, &files, &tree).await?;
+                (files, tree)
+            }
         };
         tracing::info!(
             chat_id,
@@ -379,10 +388,13 @@ impl Checkpoints {
         )
         .map_err(|error| CheckpointError::Message(error.to_string()))?;
         context.check()?;
-        self.cache
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .publish(folder_id, &root, manifest.files, tree);
+        // A valid capture with an unusually deep layout may exceed the optional cache budget.
+        if let Some(tree_inventory) = tree_inventory {
+            self.cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .publish(folder_id, &root, manifest.files, tree, tree_inventory);
+        }
         tracing::info!(
             chat_id,
             turn_id,
