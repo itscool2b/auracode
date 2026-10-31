@@ -379,7 +379,7 @@ fn parse_inventory(
         for (_, mode, name, child_oid) in entries {
             bytes.extend_from_slice(format!("{mode:o} {name}").as_bytes());
             bytes.push(0);
-            for pair in child_oid.as_bytes().chunks_exact(2) {
+            for pair in child_oid.as_bytes().as_chunks::<2>().0 {
                 let pair = std::str::from_utf8(pair).map_err(|_| damaged())?;
                 bytes.push(u8::from_str_radix(pair, 16).map_err(|_| damaged())?);
             }
