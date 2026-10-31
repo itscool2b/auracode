@@ -12,6 +12,13 @@ struct Batch {
 }
 
 fn batches(records: impl IntoIterator<Item = Result<Vec<u8>>>) -> Result<Vec<Batch>> {
+    bounded_batches(records, usize::MAX)
+}
+
+fn bounded_batches(
+    records: impl IntoIterator<Item = Result<Vec<u8>>>,
+    max_records: usize,
+) -> Result<Vec<Batch>> {
     let mut batches = Vec::new();
     let mut batch = Batch {
         input: Vec::new(),
@@ -24,7 +31,7 @@ fn batches(records: impl IntoIterator<Item = Result<Vec<u8>>>) -> Result<Vec<Bat
                 "A checkpoint Git input record exceeded its safety limit.".into(),
             ));
         }
-        if batch.input.len() + record.len() > git::INPUT_LIMIT {
+        if batch.input.len() + record.len() > git::INPUT_LIMIT || batch.records == max_records {
             batches.push(batch);
             batch = Batch {
                 input: Vec::new(),
@@ -88,21 +95,26 @@ pub(super) async fn write_tree(
                 "Checkpoint scratch files escaped the operation directory.".into(),
             ));
         }
-        let inputs = batches(scanned.copies.iter().map(|(_, copy)| {
-            let name = copy.file_name().and_then(|name| name.to_str());
-            match name {
-                Some(name)
-                    if copy.parent() == Some(directory)
-                        && !name.is_empty()
-                        && name.bytes().all(|byte| byte.is_ascii_digit()) =>
-                {
-                    Ok(format!("{name}\n").into_bytes())
+        // Writing new loose objects fsyncs each one. Keep a cold capture within the helper's
+        // deadline even when thousands of small numeric names fit in a single stdin buffer.
+        let inputs = bounded_batches(
+            scanned.copies.iter().map(|(_, copy)| {
+                let name = copy.file_name().and_then(|name| name.to_str());
+                match name {
+                    Some(name)
+                        if copy.parent() == Some(directory)
+                            && !name.is_empty()
+                            && name.bytes().all(|byte| byte.is_ascii_digit()) =>
+                    {
+                        Ok(format!("{name}\n").into_bytes())
+                    }
+                    _ => Err(CheckpointError::Message(
+                        "Checkpoint scratch files have an invalid identity.".into(),
+                    )),
                 }
-                _ => Err(CheckpointError::Message(
-                    "Checkpoint scratch files have an invalid identity.".into(),
-                )),
-            }
-        }))?;
+            }),
+            512,
+        )?;
         let mut offset = 0;
         for batch in inputs {
             operation.context.check()?;
@@ -182,6 +194,15 @@ mod tests {
     use crate::paths::DataRoot;
     use crate::profile::Profiles;
     use aura_process::{EnvResolver, EnvSource, LeftoverRegistry, ResolvedEnv, process_env};
+
+    #[test]
+    fn cold_hash_batches_also_bound_fsync_work_per_helper() {
+        let result = bounded_batches((0..1025).map(|_| Ok(b"0\n".to_vec())), 512).unwrap();
+        assert_eq!(
+            result.iter().map(|batch| batch.records).collect::<Vec<_>>(),
+            [512, 512, 1]
+        );
+    }
 
     #[test]
     fn input_batches_respect_the_byte_limit_without_splitting_records() {
