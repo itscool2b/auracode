@@ -247,13 +247,22 @@ async fn corrupt_object_is_rejected(corrupt_tree: bool) {
         .join(format!("{}.json", cold.summary.id));
     let saved_manifest = std::fs::read(&manifest).expect("original manifest");
 
-    assert!(
-        rig.service
-            .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
-            .await
-            .is_err(),
-        "corruption must be an error, not an ordinary cache miss"
-    );
+    for attempt in 0..2 {
+        assert!(
+            rig.service
+                .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+                .await
+                .is_err(),
+            "corruption must fail both warm capture and a cold retry after cache invalidation (attempt {attempt})"
+        );
+        assert_eq!(
+            std::fs::read_dir(repository(&rig).join("auracode"))
+                .expect("manifests")
+                .count(),
+            1,
+            "neither the initial failure nor its cold retry may publish a checkpoint"
+        );
+    }
     assert_eq!(std::fs::read(&manifest).expect("manifest"), saved_manifest);
     assert_eq!(
         std::fs::read_dir(repository(&rig).join("auracode"))

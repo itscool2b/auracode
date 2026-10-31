@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::scan::{SavedFile, Scan};
-use super::{CheckpointError, Operation, Result, git, scan};
+use super::{CheckpointError, Operation, Result, cache, git, scan};
 
 struct Batch {
     input: Vec<u8>,
@@ -153,6 +153,27 @@ pub(super) async fn write_tree(
             }
             offset += batch.records;
         }
+        // `hash-object -w` may return the expected ID without reading or replacing an already
+        // existing object. Verify newly hashed copies too, so a cold retry after cache invalidation
+        // cannot publish a manifest that still points at damaged storage.
+        let written = scanned
+            .copies
+            .iter()
+            .map(|(path, _)| {
+                files
+                    .get(path)
+                    .cloned()
+                    .map(|file| (path.clone(), file))
+                    .ok_or_else(|| {
+                        CheckpointError::Message("Checkpoint file metadata was lost.".into())
+                    })
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        if !cache::verify_blobs(operation, root, &written).await? {
+            return Err(CheckpointError::Message(
+                "A newly written checkpoint object is missing. No checkpoint was published.".into(),
+            ));
+        }
     }
     // An empty private index naturally omits deleted files. Retained files and captured files
     // are inserted together, with NUL records preserving spaces, Unicode and literal pathspecs.
@@ -239,7 +260,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn batched_writer_preserves_retained_bytes_and_uses_three_helpers_for_many_files() {
+    async fn batched_writer_preserves_retained_bytes_and_uses_four_helpers_for_many_files() {
         let temp = tempfile::tempdir().unwrap();
         let profile = Profiles::new(DataRoot::at(temp.path().join("data")))
             .open_active()
@@ -286,7 +307,7 @@ mod tests {
         let (files, tree) = write_tree(&operation, &work, &scanned, Some(&retained))
             .await
             .unwrap();
-        assert_eq!(operation.git.helper_count() - before, 3);
+        assert_eq!(operation.git.helper_count() - before, 4);
         assert_eq!(files.len(), 131);
         let listed = operation
             .git
