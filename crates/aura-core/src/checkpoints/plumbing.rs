@@ -277,7 +277,7 @@ mod tests {
                     "ls-tree".into(),
                     "-rz".into(),
                     "--name-only".into(),
-                    tree.into(),
+                    tree.clone().into(),
                 ],
                 16 * 1024,
             )
@@ -290,6 +290,7 @@ mod tests {
             .unwrap();
         assert_eq!(restored, original);
 
+        let before = operation.git.helper_count();
         let result = operation
             .git
             .run_input(
@@ -301,7 +302,10 @@ mod tests {
                 128,
             )
             .await;
-        assert!(result.is_err());
+        assert!(
+            matches!(result, Err(CheckpointError::Message(message)) if message.contains("input exceeded"))
+        );
+        assert_eq!(operation.git.helper_count(), before);
         let result = operation
             .git
             .run_input(
@@ -313,6 +317,34 @@ mod tests {
                 1,
             )
             .await;
-        assert!(result.is_err());
+        assert!(
+            matches!(result, Err(CheckpointError::Message(message)) if message.contains("output exceeded"))
+        );
+
+        // A freshly scanned unchanged workspace can reuse all blob IDs without changing its
+        // tree or creating scratch copies. The fallback writer still preserves retained bytes.
+        let operation = service
+            .operation(&folder, &work, false, owner.context())
+            .await
+            .unwrap();
+        let copies = operation.scratch.path().join("unchanged copies");
+        std::fs::create_dir(&copies).unwrap();
+        let all_paths: Vec<_> = files.keys().cloned().collect();
+        let unchanged = scan::collect_with(
+            &work,
+            &all_paths,
+            Some(&copies),
+            Some(&files),
+            Some(&owner.context()),
+        )
+        .unwrap();
+        assert!(unchanged.copies.is_empty());
+        let before = operation.git.helper_count();
+        let (same_files, same_tree) = write_tree(&operation, &work, &unchanged, Some(&files))
+            .await
+            .unwrap();
+        assert_eq!(operation.git.helper_count() - before, 2);
+        assert_eq!(same_tree, tree);
+        assert_eq!(same_files, files);
     }
 }
