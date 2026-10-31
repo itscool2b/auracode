@@ -77,6 +77,7 @@ pub(super) async fn write_tree(
     scanned: &Scan,
     retained: Option<&BTreeMap<String, SavedFile>>,
 ) -> Result<(BTreeMap<String, SavedFile>, String)> {
+    operation.context.check()?;
     let mut files = retained.cloned().unwrap_or_default();
     if let Some((_, first_copy)) = scanned.copies.first() {
         let directory = first_copy.parent().ok_or_else(|| {
@@ -104,6 +105,7 @@ pub(super) async fn write_tree(
         }))?;
         let mut offset = 0;
         for batch in inputs {
+            operation.context.check()?;
             let output = operation
                 .git
                 .run_input_at(
@@ -143,6 +145,7 @@ pub(super) async fn write_tree(
     // An empty private index naturally omits deleted files. Retained files and captured files
     // are inserted together, with NUL records preserving spaces, Unicode and literal pathspecs.
     for batch in batches(files.iter().map(|(path, file)| index_record(path, file)))? {
+        operation.context.check()?;
         operation
             .git
             .run_input(
@@ -155,6 +158,7 @@ pub(super) async fn write_tree(
             )
             .await?;
     }
+    operation.context.check()?;
     let tree = git::oid(
         &operation
             .git
@@ -174,6 +178,7 @@ pub(super) async fn write_tree(
 mod tests {
     use super::*;
     use crate::checkpoints::Checkpoints;
+    use crate::checkpoints::coordination;
     use crate::paths::DataRoot;
     use crate::profile::Profiles;
     use aura_process::{EnvResolver, EnvSource, LeftoverRegistry, ResolvedEnv, process_env};
@@ -220,6 +225,7 @@ mod tests {
             .unwrap();
         let work = temp.path().join("work with spaces");
         std::fs::create_dir(&work).unwrap();
+        let work = std::fs::canonicalize(work).unwrap();
         let env = EnvResolver::fixed(ResolvedEnv {
             vars: process_env(),
             source: EnvSource::Fallback {
@@ -230,7 +236,13 @@ mod tests {
         });
         let service = Checkpoints::new(&profile, env, LeftoverRegistry::disabled());
         let folder = crate::ids::new_id();
-        let operation = service.operation(&folder, &work, true).await.unwrap();
+        let owner = coordination::acquire(&service.root, &folder, &work)
+            .await
+            .unwrap();
+        let operation = service
+            .operation(&folder, &work, true, owner.context())
+            .await
+            .unwrap();
         let copies = operation.scratch.path().join("original copies");
         std::fs::create_dir(&copies).unwrap();
         let original = b"original\r\n\0\xff";
@@ -238,7 +250,10 @@ mod tests {
         let scanned = scan::collect(&work, &["retained.txt".into()], Some(&copies)).unwrap();
         let (retained, _) = write_tree(&operation, &work, &scanned, None).await.unwrap();
 
-        let operation = service.operation(&folder, &work, false).await.unwrap();
+        let operation = service
+            .operation(&folder, &work, false, owner.context())
+            .await
+            .unwrap();
         let copies = operation.scratch.path().join("fresh copies");
         std::fs::create_dir(&copies).unwrap();
         let paths: Vec<_> = (0..130).map(|i| format!("file {i} é.txt")).collect();
