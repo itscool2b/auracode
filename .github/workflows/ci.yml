@@ -16,12 +16,32 @@ on:
         type: boolean
         default: false
         required: false
+      checkpoint_benchmarks:
+        description: Run only encrypted verification and checkpoint baseline comparisons (skip app and UI jobs)
+        type: boolean
+        default: false
+        required: false
+      checkpoint_baseline_ref:
+        description: Baseline commit or ref for the optional checkpoint comparison
+        type: string
+        default: af499cd05684df8d2f08e48af21d268b522862f7
+        required: false
+      checkpoint_counts:
+        description: One to three comma-separated fixture sizes, each from 1 to 20000
+        type: string
+        default: 1000,10000,20000
+        required: false
+      checkpoint_warm_samples:
+        description: Unchanged synthetic capture samples per fixture size, from 1 to 10
+        type: string
+        default: '1'
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ inputs.checkpoint_benchmarks && '-checkpoint-benchmarks' || '' }}
   cancel-in-progress: true
 
 env:
@@ -37,7 +57,7 @@ defaults:
 jobs:
   bindings:
     name: bootstrap bindings (macOS)
-    if: inputs.refresh_bindings
+    if: inputs.refresh_bindings && !inputs.checkpoint_benchmarks
     runs-on: macos-26-intel
     timeout-minutes: 35
     steps:
@@ -65,7 +85,7 @@ jobs:
   lint:
     name: lint
     needs: bindings
-    if: ${{ !cancelled() && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
+    if: ${{ !cancelled() && !inputs.checkpoint_benchmarks && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
     runs-on: macos-26-intel
     timeout-minutes: 60
     steps:
@@ -263,7 +283,7 @@ jobs:
   layout:
     name: layout (${{ matrix.engine }}, ${{ matrix.theme }})
     needs: bindings
-    if: ${{ !cancelled() && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
+    if: ${{ !cancelled() && !inputs.checkpoint_benchmarks && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
     runs-on: macos-26-intel
     timeout-minutes: 25
     strategy:
@@ -309,6 +329,7 @@ jobs:
           retention-days: 7
   powershell:
     name: powershell (windows-2025)
+    if: ${{ !inputs.checkpoint_benchmarks }}
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
@@ -337,6 +358,7 @@ jobs:
 
   rust:
     name: rust (${{ matrix.os }})
+    if: ${{ !inputs.checkpoint_benchmarks }}
     strategy:
       fail-fast: false
       matrix:
@@ -522,18 +544,19 @@ jobs:
         run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
   encrypted-storage:
     name: encrypted storage (${{ matrix.os }})
-    if: inputs.encrypted_storage
+    if: inputs.encrypted_storage || inputs.checkpoint_benchmarks
     strategy:
       fail-fast: false
       matrix:
         os: [macos-26-intel, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.checkpoint_benchmarks && 90 || 60 }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ inputs.checkpoint_benchmarks && '0' || '1' }}
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
@@ -561,10 +584,25 @@ jobs:
       - name: Clippy core with account sync
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo clippy -p aura-core --features account-sync --all-targets --locked -- -D warnings
+      - name: Compare checkpoint capture and native prompt latency
+        if: ${{ success() && inputs.checkpoint_benchmarks }}
+        env:
+          CHECKPOINT_BASELINE_REF: ${{ inputs.checkpoint_baseline_ref }}
+          AURA_CHECKPOINT_BENCH_COUNTS: ${{ inputs.checkpoint_counts }}
+          AURA_CHECKPOINT_BENCH_WARM: ${{ inputs.checkpoint_warm_samples }}
+        run: bash .github/scripts/checkpoint-performance.sh
+      - name: Keep checkpoint performance evidence
+        if: ${{ always() && inputs.checkpoint_benchmarks }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: checkpoint-performance-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/checkpoint-performance-evidence
+          if-no-files-found: warn
+          retention-days: 14
   bindings-parity:
     name: generated binding parity
     needs: [bindings, rust]
-    if: ${{ !cancelled() && inputs.refresh_bindings && needs.bindings.result == 'success' }}
+    if: ${{ !cancelled() && !inputs.checkpoint_benchmarks && inputs.refresh_bindings && needs.bindings.result == 'success' }}
     runs-on: macos-26-intel
     timeout-minutes: 5
     steps:
