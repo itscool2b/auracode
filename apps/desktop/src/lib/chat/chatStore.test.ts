@@ -1404,6 +1404,38 @@ describe("queue action reply ordering", () => {
     store.close();
   });
 
+  it.each(["reply first", "snapshot first"] as const)(
+    "refreshes an action begun during attachment (%s)",
+    async (order) => {
+      const reply = deferred<QueuedPrompt[]>();
+      const fake = new FakeTransport({ moveQueued: () => reply.promise });
+      const initial = [row("p1"), row("p2")];
+      const store = await opened(fake, historyPage(CHAT, []), 0, { queue: initial });
+      const rejoining = store.reattach();
+      await settled();
+      const olderAttach = fake.lastAttach();
+      const moving = store.moveQueued("p2", 0);
+      const canonical = [row("p2"), row("p1")];
+      const finishOlderAttach = async () => {
+        // An unchanged snapshot may reuse the current queue: attachment itself makes ordering
+        // ambiguous, independently of whether applying the snapshot changes its contents.
+        olderAttach.resolve(attachResult(CHAT, 0, historyPage(CHAT, []), { queue: initial }));
+        await rejoining;
+      };
+      if (order === "snapshot first") await finishOlderAttach();
+      reply.resolve(canonical);
+      await moving;
+      await settled();
+      expect(store.getSnapshot().queue).toEqual(initial);
+      expect(fake.attaches).toHaveLength(3);
+      if (order === "reply first") await finishOlderAttach();
+      fake.lastAttach().resolve(attachResult(CHAT, 0, historyPage(CHAT, []), { queue: canonical }));
+      await settled();
+      expect(store.getSnapshot().queue).toEqual(canonical);
+      store.close();
+    },
+  );
+
   it("resolves overlapping queue replies with a snapshot instead of reverting a later change", async () => {
     const edit = deferred<QueuedPrompt[]>();
     const move = deferred<QueuedPrompt[]>();

@@ -238,6 +238,7 @@ function mayHold(from: SessionStatus, to: SessionStatus): boolean {
 interface QueueRequest {
   readonly generation: number;
   readonly revision: number;
+  readonly attaching: boolean;
 }
 
 export class ChatStore {
@@ -884,7 +885,11 @@ export class ChatStore {
   }
 
   #queueRequest(): QueueRequest {
-    return { generation: this.#generation, revision: this.#queueRevision };
+    return {
+      generation: this.#generation,
+      revision: this.#queueRevision,
+      attaching: this.#attaching,
+    };
   }
 
   /**
@@ -893,7 +898,12 @@ export class ChatStore {
    */
   #queueReplyIsCurrent(request: QueueRequest): boolean {
     if (this.#closed) return false;
-    if (request.generation !== this.#generation || request.revision !== this.#queueRevision) {
+    if (
+      request.attaching ||
+      this.#attaching ||
+      request.generation !== this.#generation ||
+      request.revision !== this.#queueRevision
+    ) {
       this.#rejoinSoon();
       return false;
     }
