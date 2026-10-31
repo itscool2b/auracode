@@ -138,6 +138,7 @@ const setup: SetupApi = {
     }
     if (action.type === "default_model") general.default_model = action.model;
     if (action.type === "default_autonomy") general.default_autonomy = action.value;
+    if (action.type === "automatic_checkpoints") general.automatic_checkpoints = action.enabled;
     if (action.type === "notifications") general.notifications = action.enabled;
     if (action.type === "keep_awake") general.keep_awake = action.enabled;
     if (action.type === "close_to_tray") general.close_to_tray = action.enabled;

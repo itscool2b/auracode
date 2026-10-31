@@ -234,6 +234,13 @@ function mayHold(from: SessionStatus, to: SessionStatus): boolean {
   }
 }
 
+/** The queue and subscription observed before asking the shell to change a queued prompt. */
+interface QueueRequest {
+  readonly generation: number;
+  readonly revision: number;
+  readonly attaching: boolean;
+}
+
 export class ChatStore {
   readonly chatId: string;
   readonly #transport: Transport;
@@ -247,6 +254,8 @@ export class ChatStore {
 
   /** Every attach gets a number; frames, ends and answers of older ones are ignored. */
   #generation = 0;
+  /** Queue changes only; text, usage and unrelated session updates do not invalidate replies. */
+  #queueRevision = 0;
   #subscriptionId: string | null = null;
   /** Frames that arrived while the attach call ran. */
   #buffer: EventBatch[] = [];
@@ -820,15 +829,12 @@ export class ChatStore {
   }
 
   cancelQueued(promptId: string): Promise<void> {
+    const request = this.#queueRequest();
     return this.#act(
       () => this.#transport.cancelQueued(this.chatId, promptId),
       (error) => {
         if (isCode(error, "request_not_pending")) {
-          // It started or was removed meanwhile.
-          this.#set({
-            ...this.#state,
-            queue: this.#state.queue.filter((row) => row.prompt_id !== promptId),
-          });
+          this.#queueActionFailed(promptId, error, request);
           return true;
         }
         return false;
@@ -841,12 +847,13 @@ export class ChatStore {
    * started or was removed meanwhile) or could not be read, which `actionError` then says.
    */
   async queuedText(promptId: string): Promise<string | null> {
+    const request = this.#queueRequest();
     try {
       const text = await this.#transport.queuedText(this.chatId, promptId);
       if (this.#state.actionError !== null) this.#set({ ...this.#state, actionError: null });
       return text;
     } catch (error) {
-      this.#queueActionFailed(promptId, error);
+      this.#queueActionFailed(promptId, error, request);
       return null;
     }
   }
@@ -856,33 +863,68 @@ export class ChatStore {
    * which stays open with the words), or `null` once saved or once the prompt is gone.
    */
   async editQueued(promptId: string, text: string): Promise<string | null> {
+    const request = this.#queueRequest();
     try {
-      this.#queueChanged(await this.#transport.editQueued(this.chatId, promptId, text));
+      this.#queueChanged(await this.#transport.editQueued(this.chatId, promptId, text), request);
       return null;
     } catch (error) {
       if (!isCode(error, "request_not_pending")) return errorMessage(error);
-      this.#queueActionFailed(promptId, error);
+      this.#queueActionFailed(promptId, error, request);
       return null;
     }
   }
 
   /** Moves a queued prompt to `index` (0 goes next). */
   async moveQueued(promptId: string, index: number): Promise<void> {
+    const request = this.#queueRequest();
     try {
-      this.#queueChanged(await this.#transport.moveQueued(this.chatId, promptId, index));
+      this.#queueChanged(await this.#transport.moveQueued(this.chatId, promptId, index), request);
     } catch (error) {
-      this.#queueActionFailed(promptId, error);
+      this.#queueActionFailed(promptId, error, request);
     }
   }
 
-  /** The shell's answer is the whole queue after the change, held marks included: exact. */
-  #queueChanged(queue: readonly QueuedPrompt[]): void {
-    this.#set({ ...this.#state, queue, actionError: null });
+  #queueRequest(): QueueRequest {
+    return {
+      generation: this.#generation,
+      revision: this.#queueRevision,
+      attaching: this.#attaching,
+    };
   }
 
-  #queueActionFailed(promptId: string, error: unknown): void {
+  /**
+   * Queue replies have no event sequence. If frames, another reply or a new subscription changed
+   * the queue meanwhile, only an attach can order the saved edit/move against those changes.
+   */
+  #queueReplyIsCurrent(request: QueueRequest): boolean {
+    if (this.#closed) return false;
+    if (
+      request.attaching ||
+      this.#attaching ||
+      request.generation !== this.#generation ||
+      request.revision !== this.#queueRevision
+    ) {
+      this.#rejoinSoon();
+      return false;
+    }
+    return true;
+  }
+
+  /** The answer is exact when the action ran, but frames can reach the view before it does. */
+  #queueChanged(queue: readonly QueuedPrompt[], request: QueueRequest): void {
+    if (this.#closed) return;
+    this.#set({
+      ...this.#state,
+      queue: this.#queueReplyIsCurrent(request) ? queue : this.#state.queue,
+      actionError: null,
+    });
+  }
+
+  #queueActionFailed(promptId: string, error: unknown, request: QueueRequest): void {
+    if (this.#closed) return;
     if (isCode(error, "request_not_pending")) {
-      // It started or was removed meanwhile.
+      // It was absent when the action ran, but may have returned to the queue since then.
+      if (!this.#queueReplyIsCurrent(request)) return;
       this.#set({
         ...this.#state,
         queue: this.#state.queue.filter((row) => row.prompt_id !== promptId),
@@ -901,10 +943,11 @@ export class ChatStore {
    * first. The shell's answer is the exact queue after the change.
    */
   async sendNow(promptId: string): Promise<void> {
+    const request = this.#queueRequest();
     try {
-      this.#queueChanged(await this.#transport.sendNow(this.chatId, promptId));
+      this.#queueChanged(await this.#transport.sendNow(this.chatId, promptId), request);
     } catch (error) {
-      this.#queueActionFailed(promptId, error);
+      this.#queueActionFailed(promptId, error, request);
     }
   }
 
@@ -1070,6 +1113,7 @@ export class ChatStore {
    * render every frame nobody sees. It renders once, with everything, when the page shows again.
    */
   #set(state: ChatState): void {
+    if (state.queue !== this.#state.queue) this.#queueRevision += 1;
     this.#state = state;
     if (this.#visibility.hidden()) {
       this.#unrendered = true;

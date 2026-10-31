@@ -23,11 +23,12 @@ const agent = (id: string, availability: AgentEntry["availability"] = ready): Ag
 });
 
 describe("Settings' General defaults", () => {
-  it("keeps full auto and every background service on by default", () => {
+  it("keeps full auto and background services on, with automatic checkpoints off", () => {
     expect(DEFAULT_GENERAL).toEqual({
       default_agent: null,
       default_model: null,
       default_autonomy: "full_auto",
+      automatic_checkpoints: false,
       notifications: true,
       keep_awake: true,
       close_to_tray: true,
@@ -60,7 +61,8 @@ describe("Settings' General defaults", () => {
   });
 
   it("says what each autonomy level does in one line", () => {
-    expect(autonomyDetail("full_auto")).toContain("checkpoint");
+    expect(autonomyDetail("full_auto")).toContain("without asking");
+    expect(autonomyDetail("full_auto")).not.toContain("checkpoint");
     for (const level of ["full_auto", "auto_edit", "ask"] as const)
       expect(autonomyDetail(level)).not.toMatch(/\n|\u2014/);
   });
@@ -76,7 +78,7 @@ describe("Settings' General defaults", () => {
     expect(preselectAgent(null, agents, null)).toBeNull();
   });
 
-  it("lays out one control per row: two selects, the autonomy track and three switches", () => {
+  it("keeps checkpoint opt-in separate from new-chat defaults and explains missing file undo", () => {
     const info = { os: "windows", data_dir: "C:/data" } as AppInfo;
     const html = renderToStaticMarkup(
       <GeneralPanel
@@ -96,9 +98,16 @@ describe("Settings' General defaults", () => {
     expect(html).not.toContain('aria-label="Default model"');
     for (const level of ["Ask", "Auto-edit", "Full auto"])
       expect(html).toContain(`>${level}</span>`);
-    expect(html.match(/role="switch"/g)).toHaveLength(3);
-    for (const name of ["Notifications", "Keep awake", "Keep running in the tray"])
+    expect(html.match(/role="switch"/g)).toHaveLength(4);
+    for (const name of [
+      "Automatic checkpoints",
+      "Notifications",
+      "Keep awake",
+      "Keep running in the tray",
+    ])
       expect(html).toContain(`aria-label="${name}"`);
+    expect(html).toContain("per-turn file undo is unavailable for new messages");
+    expect(html).toContain("Saved checkpoints remain available in Changes");
     // Nothing is editable before the saved preferences load.
     expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(5);
   });

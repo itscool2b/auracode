@@ -1454,6 +1454,8 @@ export type GeneralPreferences = {
 	/**  The model new chats with `default_agent` start on. `None`: the agent's own default. */
 	default_model: string | null,
 	default_autonomy: Autonomy,
+	/**  Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled. */
+	automatic_checkpoints: boolean,
 	/**  Notify when a background chat finishes, fails or needs you. */
 	notifications: boolean,
 	/**  Keep the computer from idle sleep while an agent works. */
@@ -2467,7 +2469,7 @@ export type SessionStatus =
 
 export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
 /**  Changing the agent clears the default model, which belongs to the previous agent. */
-{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
+{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
 { type: "config_sync_agent"; agent_id: string; enabled: boolean };
 

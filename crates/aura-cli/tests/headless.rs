@@ -25,6 +25,49 @@ mod setup {
     use crate::common::Machine;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn automatic_checkpoints_follow_the_owned_profile_without_crossing_roots() {
+        use aura_core::onboarding::{OnboardingStore, SetupAction};
+
+        for (saved, services) in [
+            (None, true),
+            (Some(true), true),
+            (Some(false), true),
+            (Some(true), false),
+        ] {
+            let machine = Machine::new();
+            let profile = Profiles::new(DataRoot::at(&machine.profile_root))
+                .open_active()
+                .unwrap();
+            let owner = ProfileOwner::acquire(&profile).unwrap();
+            if let Some(enabled) = saved {
+                OnboardingStore::open(&profile.dir)
+                    .unwrap()
+                    .apply(0, SetupAction::AutomaticCheckpoints { enabled })
+                    .unwrap();
+            }
+            drop(owner);
+            let headless = Headless::start(HeadlessConfig {
+                roots: Roots {
+                    machine: machine.machine_root.clone(),
+                    profile: machine.profile_root.clone(),
+                },
+                env: EnvChoice::Fixed(machine.env(&[])),
+                set_env: Vec::new(),
+                app_version: "0.1.0".into(),
+                checkpoints: services,
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                headless.manager.automatic_checkpoints(),
+                services && saved.unwrap_or(false)
+            );
+            assert!(!machine.machine_root.join("profiles").exists());
+            assert!(headless.shutdown().await.saved);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_profile_is_temporary_and_the_agents_register_in_the_machine_root() {
         let machine = Machine::new();
         let headless = machine.headless(&[]).await;

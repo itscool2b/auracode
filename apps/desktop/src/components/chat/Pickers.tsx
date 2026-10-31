@@ -60,7 +60,7 @@ const AGENT_KEYS: Readonly<Record<string, string>> = {
 
 /**
  * One popover for everything the next turn runs with (Grok's voice popover): the agent and the
- * model as rows, then effort as a segmented row and autonomy as a compact field, with the checkpoint
+ * model as rows, then effort as a segmented row and autonomy as a compact field, with the autonomy
  * note under it. Options are enabled while the agent is ready or working; autonomy always applies
  * when the agent starts. A change on its way (up to 35 s) shows the value asked for, marked
  * "saving", instead of snapping back to the old one.
@@ -308,7 +308,8 @@ export function Pickers({
             <div className="chat-picker-note">
               {chosen === "full_auto" ? (
                 <p>
-                  Full auto. A local checkpoint is saved before each turn. Review files in Changes.
+                  Full auto lets the agent work without asking. Automatic checkpoints are optional
+                  in Settings &gt; General.
                 </p>
               ) : null}
               {lists?.autonomy.note ? <p>{lists.autonomy.note}</p> : null}

@@ -46,11 +46,12 @@ export function preselectAgent(
   return agent?.availability.state === "ready" ? defaultAgent : null;
 }
 
-/** Rust's `GeneralPreferences::default()`: full auto, and every background service on. */
+/** Rust's defaults: full auto, background services on, automatic checkpoints off. */
 export const DEFAULT_GENERAL: GeneralPreferences = {
   default_agent: null,
   default_model: null,
   default_autonomy: "full_auto",
+  automatic_checkpoints: false,
   notifications: true,
   keep_awake: true,
   close_to_tray: true,

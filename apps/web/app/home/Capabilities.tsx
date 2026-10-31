@@ -567,9 +567,7 @@ function AutonomyView() {
                 <Icon name="chevron-down" size={12} />
               </span>
             </p>
-            <p className="m-picker-note">
-              Full auto. A local checkpoint is saved before each turn.
-            </p>
+            <p className="m-picker-note">Full auto. Agents work without asking.</p>
           </div>
         </div>
         <Composer
@@ -762,8 +760,8 @@ const ITEMS: readonly {
   },
   {
     id: "checkpoint",
-    title: "A checkpoint every turn",
-    text: "Before each turn your files are saved to a private shadow Git repository, so any turn can be undone. Your own index and branches stay untouched.",
+    title: "Optional file checkpoints",
+    text: "Turn on automatic checkpoints in Settings to save files before each message and restore selected files later. Saving adds a delay before sending. Your Git index and branches stay untouched.",
     view: () => <CheckpointView />,
   },
   {

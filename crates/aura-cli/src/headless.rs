@@ -82,7 +82,8 @@ pub struct HeadlessConfig {
     pub set_env: Vec<(OsString, OsString)>,
     /// What the agents see as the client's version.
     pub app_version: String,
-    /// Save before-turn checkpoints. Production enables this; isolated protocol fixtures may opt out.
+    /// Provide workspace and checkpoint storage. Automatic snapshots follow the profile's
+    /// explicit opt-in; isolated protocol fixtures may omit these services entirely.
     pub checkpoints: bool,
 }
 
@@ -209,6 +210,16 @@ impl Headless {
             timings: SessionTimings::STANDARD,
             rt,
         });
+        if checkpoints {
+            let enabled = match aura_core::onboarding::OnboardingStore::open(&profile.dir) {
+                Ok(settings) => settings.preferences().general.automatic_checkpoints,
+                Err(error) => {
+                    tracing::warn!(%error, "settings could not be read; automatic checkpoints stay off");
+                    false
+                }
+            };
+            manager.set_automatic_checkpoints(enabled);
+        }
         Ok(Headless {
             manager,
             store,

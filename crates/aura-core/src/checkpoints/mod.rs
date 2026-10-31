@@ -141,6 +141,37 @@ impl Checkpoints {
         })
     }
 
+    /// Settle interrupted file restoration before a prompt even when snapshots are disabled.
+    /// With no interrupted restore, only root directory entries are checked. No Git, recursive
+    /// workspace scan, content hashing or new checkpoint is involved. Actual recovery retains
+    /// its content verification and preservation of the user's files.
+    /// The shared lease is still required: a cancelled recovery worker may still be restoring
+    /// files, and retains that lease until it exits.
+    pub async fn prepare_workspace(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+    ) -> Result<()> {
+        valid_id(chat_id)?;
+        valid_id(folder_id)?;
+        let root = std::fs::canonicalize(folder)?;
+        if !root.is_dir() {
+            return Err(CheckpointError::Message(
+                "The chat folder is unavailable.".into(),
+            ));
+        }
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let context = owner.context();
+        if std::fs::canonicalize(folder)? != root {
+            return Err(CheckpointError::Message(
+                "The chat folder changed while preparing it. Try again.".into(),
+            ));
+        }
+        self.sweep_reverts(&root, chat_id, folder_id, &context)
+            .await
+    }
+
     /// Saves exact bytes before the native prompt is sent. No user index, filters or hooks run.
     pub async fn capture(
         &self,

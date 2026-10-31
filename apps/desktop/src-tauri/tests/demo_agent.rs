@@ -502,10 +502,7 @@ mod end_to_end {
             .send(&chat.id, echo.clone())
             .await
             .expect("the first prompt is taken");
-        assert!(
-            first.queued,
-            "the prompt waits for its before-turn checkpoint"
-        );
+        assert!(first.queued, "the prompt waits for workspace preparation");
         wait_for_ended_turns(&chat.view, 1).await;
         wait_for_status(&chats.manager, &chat.id, SessionStatus::Ready).await;
         let second = chats
@@ -617,7 +614,7 @@ mod end_to_end {
     }
 
     /// A14 with the demo agent's `/background` and a prompt queued behind it: the output the agent
-    /// sends after the turn's reply is stored outside any turn. Depending on checkpoint duration,
+    /// sends after the turn's reply is stored outside any turn. Depending on preparation duration,
     /// the next turn is preparing or running; the request survives that turn and can be answered.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn background_output_is_stored_outside_any_turn() {

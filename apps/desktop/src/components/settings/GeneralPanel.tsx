@@ -24,7 +24,7 @@ import { Row, Switch } from "./SettingsRow";
 export function autonomyDetail(autonomy: Autonomy): string {
   switch (autonomy) {
     case "full_auto":
-      return "Agents work without asking. A checkpoint is saved before each turn.";
+      return "Agents work without asking, within their own rules.";
     case "auto_edit":
       return "Each agent applies it within its own rules and asks for the rest.";
     case "ask":
@@ -246,6 +246,31 @@ export function GeneralPanel({
         </div>
         <p className="settings-footnote">
           Applies to new chats. A project's own model comes first.
+        </p>
+      </section>
+      <section className="settings-section" aria-labelledby="settings-checkpoints">
+        <h2 id="settings-checkpoints">Checkpoints</h2>
+        <div className="settings-group">
+          <Row
+            title="Automatic checkpoints"
+            detail={
+              general.automatic_checkpoints
+                ? "Save workspace files before each message for per-turn file undo in Changes. Saving delays sending."
+                : "Send without saving a checkpoint first. Aura's per-turn file undo is unavailable for new messages."
+            }
+          >
+            <Switch
+              label="Automatic checkpoints"
+              testId="settings-automatic-checkpoints"
+              checked={general.automatic_checkpoints}
+              disabled={disabled}
+              onChange={(enabled) => void change({ type: "automatic_checkpoints", enabled })}
+            />
+          </Row>
+        </div>
+        <p className="settings-footnote">
+          Applies to the next message in this profile. Saved checkpoints remain available in
+          Changes.
         </p>
       </section>
       <section className="settings-section" aria-labelledby="settings-background">
