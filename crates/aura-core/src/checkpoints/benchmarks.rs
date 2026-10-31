@@ -5,6 +5,49 @@ use aura_process::{EnvSource, ResolvedEnv, process_env};
 use std::time::Instant;
 
 #[tokio::test]
+#[ignore = "manual read-only checkpoint measurement of an explicitly selected workspace"]
+async fn checkpoint_workspace_performance() {
+    let work = PathBuf::from(
+        std::env::var_os("AURA_CHECKPOINT_BENCH_WORKSPACE").expect("select a workspace"),
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let profile = Profile {
+        meta: ProfileMeta {
+            id: crate::ids::new_id(),
+            kind: ProfileKind::Local,
+            display_name: "workspace benchmark".into(),
+            created_at: 0,
+        },
+        dir: temp.path().join("profile"),
+    };
+    let env = EnvResolver::fixed(ResolvedEnv {
+        vars: process_env(),
+        source: EnvSource::Fallback {
+            reason: "workspace benchmark".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let service = Checkpoints::new(&profile, env, LeftoverRegistry::disabled());
+    let chat = crate::ids::new_id();
+    let folder = crate::ids::new_id();
+    for attempt in 0..4 {
+        let started = Instant::now();
+        let summary = service
+            .capture(&chat, &folder, &work, &crate::ids::new_id())
+            .await
+            .unwrap();
+        println!(
+            "CHECKPOINT_WORKSPACE storage=local files={} bytes={} scenario={} elapsed_ms={}",
+            summary.file_count,
+            summary.total_bytes,
+            if attempt == 0 { "cold" } else { "unchanged" },
+            started.elapsed().as_millis()
+        );
+    }
+}
+
+#[tokio::test]
 #[ignore = "manual checkpoint performance fixture"]
 async fn checkpoint_performance() {
     let warm_samples = std::env::var("AURA_CHECKPOINT_BENCH_WARM")

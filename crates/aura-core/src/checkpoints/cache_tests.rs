@@ -62,6 +62,8 @@ fn remove_loose_object(rig: &Rig, oid: &str) -> PathBuf {
     #[cfg(windows)]
     {
         let mut permissions = std::fs::metadata(&path).expect("object").permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        // Windows readonly attribute, not Unix mode bits.
         permissions.set_readonly(false);
         std::fs::set_permissions(&path, permissions).expect("writable fixture object");
     }
