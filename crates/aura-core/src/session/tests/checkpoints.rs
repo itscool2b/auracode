@@ -6,6 +6,12 @@ use aura_protocol::NoticeLevel;
 mod benchmarks;
 
 fn enable(rig: &mut Rig, git_available: bool) -> Arc<crate::checkpoints::Checkpoints> {
+    let service = install(rig, git_available);
+    rig.manager.set_automatic_checkpoints(true);
+    service
+}
+
+fn install(rig: &mut Rig, git_available: bool) -> Arc<crate::checkpoints::Checkpoints> {
     let vars = if git_available {
         aura_process::process_env()
     } else {
@@ -30,6 +36,136 @@ fn enable(rig: &mut Rig, git_available: bool) -> Arc<crate::checkpoints::Checkpo
         .deps
         .checkpoints = Some(Arc::clone(&service));
     service
+}
+
+#[tokio::test]
+async fn default_sends_without_git_or_writable_checkpoint_storage() {
+    let (driver, handle) = script();
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    install(&mut rig, false);
+    assert!(!rig.manager.automatic_checkpoints());
+    let storage = rig.profile.checkpoints_dir();
+    std::fs::remove_dir(&storage).expect("empty checkpoint directory");
+    std::fs::write(&storage, b"checkpoint storage deliberately unavailable").unwrap();
+    std::fs::write(rig.folder.join("work.txt"), b"original").unwrap();
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
+    rig.manager.attach(&chat.id, sink.clone()).await.unwrap();
+    rig.manager
+        .send(&chat.id, "send immediately".into())
+        .await
+        .unwrap();
+    handle.wait_for(CommandMatch::Prompt).await;
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let changes = rig.manager.chat_changes(&chat.id, None).await.unwrap();
+    assert!(changes.checkpoint.is_none());
+    assert!(changes.unavailable_reason.is_some());
+    assert_eq!(
+        std::fs::read(&storage).unwrap(),
+        b"checkpoint storage deliberately unavailable"
+    );
+    assert!(!lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|event| {
+        matches!(event, AuraEvent::SessionUpdated(info) if info.detail.as_deref().is_some_and(|detail| detail.contains("Saving checkpoint")))
+    }));
+}
+
+#[tokio::test]
+async fn live_opt_in_is_latched_for_capture_and_old_snapshots_remain_usable_when_off() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("checkpoint-policy"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::EndTurn {
+            stop_reason: StopReason::EndTurn,
+            usage: None,
+            error: None,
+        },
+        Step::Expect(CommandMatch::Prompt),
+        Step::EndTurn {
+            stop_reason: StopReason::EndTurn,
+            usage: None,
+            error: None,
+        },
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let service = install(&mut rig, true);
+    std::fs::write(rig.folder.join("work.txt"), b"original\r\n").unwrap();
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    rig.manager.set_automatic_checkpoints(true);
+    let gate = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
+    rig.manager
+        .send(&chat.id, "protected turn".into())
+        .await
+        .unwrap();
+    status(&rig, &chat.id, SessionStatus::Running).await;
+    rig.manager.set_automatic_checkpoints(false);
+    drop(gate);
+    handle.wait_for(CommandMatch::Prompt).await;
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let saved = rig
+        .manager
+        .chat_changes(&chat.id, None)
+        .await
+        .unwrap()
+        .checkpoint
+        .expect("in-flight capture finishes");
+    rig.manager
+        .send(&chat.id, "without a new snapshot".into())
+        .await
+        .unwrap();
+    eventually("second prompt reaches driver", || {
+        handle
+            .commands()
+            .iter()
+            .filter(|command| matches!(command, LoggedCommand::Prompt { .. }))
+            .count()
+            == 2
+    })
+    .await;
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    assert!(
+        rig.manager
+            .chat_changes(&chat.id, None)
+            .await
+            .unwrap()
+            .checkpoint
+            .is_none()
+    );
+    std::fs::write(rig.folder.join("work.txt"), b"later edit").unwrap();
+    let older = rig
+        .manager
+        .chat_changes(&chat.id, Some(saved.turn_id))
+        .await
+        .unwrap();
+    assert_eq!(older.checkpoint.unwrap().id, saved.id);
+    assert_eq!(older.files.len(), 1);
+    let preview = rig
+        .manager
+        .checkpoint_revert_preview(&chat.id, &saved.id, vec!["work.txt".into()])
+        .await
+        .unwrap();
+    rig.manager.stop(&chat.id).await.unwrap();
+    eventually("stop before reverting", || {
+        !rig.manager.shared().live.contains(&chat.id)
+    })
+    .await;
+    assert!(
+        rig.manager
+            .checkpoint_revert(&chat.id, &preview.token)
+            .await
+            .unwrap()
+            .error
+            .is_none()
+    );
+    assert_eq!(
+        std::fs::read(rig.folder.join("work.txt")).unwrap(),
+        b"original\r\n"
+    );
 }
 
 fn script() -> (ScriptedDriver, aura_drivers::testing::ScriptHandle) {
@@ -145,42 +281,129 @@ async fn checkpoint_failure_holds_the_prompt_without_sending_it_to_an_agent() {
 }
 
 #[tokio::test]
-async fn interrupt_cancels_checkpoint_wait_and_holds_the_unsent_prompt() {
+async fn recovery_failure_holds_an_unsent_prompt_even_with_snapshots_off() {
     let (driver, handle) = ScriptedDriver::new(vec![
-        ready_step("cancel-checkpoint"),
+        ready_step("interrupted-restore"),
         Step::Expect(CommandMatch::Shutdown),
     ]);
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
-    let service = enable(&mut rig, true);
-    let gate = service
-        .hold_for_test(&crate::ids::new_id(), &rig.folder)
-        .await;
-    let chat = rig
-        .manager
-        .create_chat("mock", &rig.folder)
-        .await
-        .expect("chat");
+    let service = install(&mut rig, true);
+    std::fs::write(rig.folder.join("work.txt"), b"original").unwrap();
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     status(&rig, &chat.id, SessionStatus::Ready).await;
+    let (record, _) = rig.store.checkpoint_context(&chat.id, None).await.unwrap();
+    let saved = service
+        .capture(
+            &chat.id,
+            &record.folder_id.unwrap(),
+            &rig.folder,
+            &crate::ids::new_id(),
+        )
+        .await
+        .unwrap();
+    let leftover = rig
+        .folder
+        .join(format!(".auracode-revert-{}", crate::ids::new_id()));
+    std::fs::create_dir(&leftover).unwrap();
+    std::fs::write(leftover.join("original-0"), b"only copy of newer work").unwrap();
+    std::fs::write(leftover.join("recovery.json"), serde_json::to_vec(&serde_json::json!({"version":1,"checkpoint_id":saved.id,"files":[{"path":"work.txt","backup":"original-0"}]})).unwrap()).unwrap();
+    std::fs::write(
+        rig.profile.checkpoints_dir().join("reverts"),
+        b"recovery unavailable",
+    )
+    .unwrap();
+    let sink = Arc::new(Sink::default());
+    rig.manager.attach(&chat.id, sink.clone()).await.unwrap();
     rig.manager
-        .send(&chat.id, "cancel before capture".into())
+        .send(&chat.id, "wait for safe recovery".into())
         .await
-        .expect("send");
-    status(&rig, &chat.id, SessionStatus::Running).await;
-    rig.manager.interrupt(&chat.id).await.expect("interrupt");
-    drop(gate);
-    status(&rig, &chat.id, SessionStatus::Ready).await;
+        .unwrap();
+    eventually("recovery failure shown", || lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|item| matches!(item, AuraEvent::Notice { message, .. } if message.contains("prompt was held")))).await;
     let attached = rig
         .manager
         .attach(&chat.id, Arc::new(Sink::default()))
         .await
-        .expect("state");
+        .unwrap();
+    assert_eq!(attached.snapshot.queue.len(), 1);
     assert!(attached.snapshot.queue[0].held);
+    assert!(
+        attached
+            .snapshot
+            .session
+            .detail
+            .as_deref()
+            .unwrap()
+            .starts_with("Workspace recovery failed")
+    );
     assert!(
         !handle
             .commands()
             .iter()
             .any(|command| matches!(command, LoggedCommand::Prompt { .. }))
     );
+    assert_eq!(
+        std::fs::read(leftover.join("original-0")).unwrap(),
+        b"only copy of newer work"
+    );
+    assert_eq!(
+        std::fs::read(rig.folder.join("work.txt")).unwrap(),
+        b"original"
+    );
+}
+
+#[tokio::test]
+async fn interrupt_cancels_capture_or_recovery_wait_and_holds_the_unsent_prompt() {
+    for automatic in [true, false] {
+        let (driver, handle) = ScriptedDriver::new(vec![
+            ready_step("cancel-checkpoint"),
+            Step::Expect(CommandMatch::Shutdown),
+        ]);
+        let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+        let service = enable(&mut rig, true);
+        rig.manager.set_automatic_checkpoints(automatic);
+        let gate = service
+            .hold_for_test(&crate::ids::new_id(), &rig.folder)
+            .await;
+        let chat = rig
+            .manager
+            .create_chat("mock", &rig.folder)
+            .await
+            .expect("chat");
+        status(&rig, &chat.id, SessionStatus::Ready).await;
+        rig.manager
+            .send(&chat.id, "cancel before capture".into())
+            .await
+            .expect("send");
+        status(&rig, &chat.id, SessionStatus::Running).await;
+        let preparing = rig
+            .manager
+            .attach(&chat.id, Arc::new(Sink::default()))
+            .await
+            .unwrap();
+        assert_eq!(
+            preparing.snapshot.session.detail.as_deref(),
+            Some(if automatic {
+                "Saving checkpoint before sending the prompt"
+            } else {
+                "Preparing workspace before sending the prompt"
+            })
+        );
+        rig.manager.interrupt(&chat.id).await.expect("interrupt");
+        drop(gate);
+        status(&rig, &chat.id, SessionStatus::Ready).await;
+        let attached = rig
+            .manager
+            .attach(&chat.id, Arc::new(Sink::default()))
+            .await
+            .expect("state");
+        assert!(attached.snapshot.queue[0].held);
+        assert!(
+            !handle
+                .commands()
+                .iter()
+                .any(|command| matches!(command, LoggedCommand::Prompt { .. }))
+        );
+    }
 }
 
 /// Every prompt waits for its checkpoint. Meanwhile it is on its way (`sending`), not queued: it

@@ -127,7 +127,7 @@ impl Drop for OwnedWorkDrain<'_> {
 pub struct ManagerDeps {
     pub worktrees: Option<Arc<crate::gitworkspaces::GitWorkspaces>>,
     pub store: Arc<ChatStore>,
-    /// Production enables checkpoints; deterministic driver-only test rigs may omit the service.
+    /// Snapshot/revert storage. Automatic capture is a separate, opt-in profile preference.
     pub checkpoints: Option<Arc<crate::checkpoints::Checkpoints>>,
     pub env: Arc<EnvResolver>,
     /// `aura_process::Spawner`, or `FakeSpawner` in tests.
@@ -324,6 +324,8 @@ pub(crate) struct Shared {
     preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Settings' defaults for chats whose agent has never started.
     pub(crate) new_chat_defaults: Mutex<NewChatDefaults>,
+    /// Read once at dispatch so changing the preference never changes an in-flight capture.
+    pub(crate) automatic_checkpoints: AtomicBool,
     /// The model choices each agent reported in this run, by agent id, for Settings.
     pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
@@ -452,6 +454,7 @@ impl SessionManager {
                     removals: Mutex::new(HashMap::new()),
                     worktree_chats: Mutex::new(HashMap::new()),
                     new_chat_defaults: Mutex::new(NewChatDefaults::default()),
+                    automatic_checkpoints: AtomicBool::new(false),
                     reported_models: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
@@ -1175,6 +1178,18 @@ impl SessionManager {
     /// own saved session, and a project's default model, take precedence.
     pub fn set_new_chat_defaults(&self, defaults: NewChatDefaults) {
         *lock(&self.shared().new_chat_defaults) = defaults;
+    }
+
+    /// Applies the active profile's opt-in to subsequent prompts, including existing chats.
+    /// Existing captures finish with the policy they started under; saved snapshots stay usable.
+    pub fn set_automatic_checkpoints(&self, enabled: bool) {
+        self.shared()
+            .automatic_checkpoints
+            .store(enabled, Ordering::Release);
+    }
+
+    pub fn automatic_checkpoints(&self) -> bool {
+        self.shared().automatic_checkpoints.load(Ordering::Acquire)
     }
 
     /// The model choices `agent_id` reported the last time one of its chats started in this run.

@@ -538,7 +538,8 @@ describe("the pickers", () => {
     const stopped = render("stopped");
     expect(stopped.match(/<button[^>]*data-picker-value[^>]*disabled/g)).toHaveLength(2);
     expect(stopped).toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
-    expect(stopped).toContain("A local checkpoint is saved before each turn.");
+    expect(stopped).toContain("Automatic checkpoints are optional in");
+    expect(stopped).not.toContain("A local checkpoint is saved before each turn.");
     expect(stopped).toContain("(pending: Smart)");
     expect(stopped.indexOf("Model")).toBeLessThan(stopped.indexOf("Fast mode"));
     const ready = render("ready");

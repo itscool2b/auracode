@@ -10,6 +10,7 @@ import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
 import { checkAccountPreservation } from "./check-account-preservation.mjs";
 import { checkAccountVerification } from "./check-account-verification.mjs";
+import { checkAutomaticCheckpoints } from "./check-automatic-checkpoints.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkDataTransfer } from "./check-data-transfer.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
@@ -89,6 +90,7 @@ try {
         await page.goto(`${url}/?preview=settings&theme=system`);
         await page.getByRole("radio", { name: "System", exact: true }).waitFor();
         assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
+        await checkAutomaticCheckpoints(page, out, `${engine}-${theme}`);
       }
       await checkSettingsNavigation(page, url);
       await page.goto(`${url}/?preview=settings`);
@@ -118,6 +120,7 @@ try {
         default_agent: "codex",
         default_model: "gpt-5.5-codex",
         default_autonomy: "ask",
+        automatic_checkpoints: false,
         notifications: false,
         keep_awake: false,
         close_to_tray: false,

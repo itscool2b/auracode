@@ -17,6 +17,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 mod steering;
 #[cfg(feature = "account-sync")]
@@ -505,8 +506,9 @@ enum Done {
         prompt: Prompt,
         turn_id: String,
         timing: PromptTiming,
+        capture: bool,
         result: Result<
-            crate::checkpoints::Result<aura_protocol::changes::CheckpointSummary>,
+            crate::checkpoints::Result<Option<aura_protocol::changes::CheckpointSummary>>,
             JoinError,
         >,
     },
@@ -659,6 +661,7 @@ pub(crate) struct ChatActor {
     steering_pending: bool,
     git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
+    checkpoint_capture: bool,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -787,6 +790,7 @@ impl ChatActor {
             steering_pending: false,
             git_reservation: None,
             checkpointing: None,
+            checkpoint_capture: false,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -2212,7 +2216,7 @@ impl ChatActor {
             self.dispatch_prepared(prompt, turn_id, None, timing);
             return false;
         };
-        // Stored as a queued row while its checkpoint saves, so a crash brings it back (held). It
+        // Stored as a queued row during workspace preparation, so a crash brings it back (held). It
         // is the next to go, so it stands at the head; it is sending, not waiting
         // ([`Self::sending_id`]).
         let row = QueuedRow {
@@ -2239,16 +2243,26 @@ impl ChatActor {
         let folder = self.chat.folder.clone();
         let folder_id = self.chat.folder_id.clone();
         let captured_turn = turn_id.clone();
+        let capture = self.shared.automatic_checkpoints.load(Ordering::Acquire);
         let task = self.shared.deps.rt.spawn(async move {
             let folder_id = folder_id.ok_or_else(|| {
                 crate::checkpoints::CheckpointError::Message(
-                    "Locate this chat's folder before saving a checkpoint.".into(),
+                    "Locate this chat's folder before sending the prompt.".into(),
                 )
             })?;
-            checkpoints
-                .capture(&chat_id, &folder_id, &folder, &captured_turn)
-                .await
+            if capture {
+                checkpoints
+                    .capture(&chat_id, &folder_id, &folder, &captured_turn)
+                    .await
+                    .map(Some)
+            } else {
+                checkpoints
+                    .prepare_workspace(&chat_id, &folder_id, &folder)
+                    .await?;
+                Ok(None)
+            }
         });
+        self.checkpoint_capture = capture;
         self.checkpointing = Some((prompt.id.clone(), task.abort_handle()));
         let generation = self.generation;
         self.in_flight.push(
@@ -2258,6 +2272,7 @@ impl ChatActor {
                     prompt,
                     turn_id,
                     timing,
+                    capture,
                     result: task.await,
                 }
             }
@@ -2265,7 +2280,11 @@ impl ChatActor {
         );
         self.set_status(
             SessionStatus::Running,
-            Some("Saving checkpoint before sending the prompt".into()),
+            Some(if capture {
+                "Saving checkpoint before sending the prompt".into()
+            } else {
+                "Preparing workspace before sending the prompt".into()
+            }),
         );
         self.flush();
         true
@@ -3393,6 +3412,7 @@ impl ChatActor {
                 prompt,
                 turn_id,
                 timing,
+                capture,
                 result,
             } => {
                 if !self
@@ -3451,7 +3471,8 @@ impl ChatActor {
                         .iter()
                         .any(|row| row.id == prompt.id && !row.held);
                 let outcome = match &result {
-                    Ok(Ok(_)) => "saved",
+                    Ok(Ok(Some(_))) => "saved",
+                    Ok(Ok(None)) => "disabled",
                     Err(error) if error.is_cancelled() => "cancelled",
                     _ => "failed",
                 };
@@ -3466,7 +3487,9 @@ impl ChatActor {
                 match result {
                     Ok(Ok(checkpoint)) => {
                         if eligible {
-                            if !checkpoint.warnings.is_empty() {
+                            if let Some(checkpoint) = &checkpoint
+                                && !checkpoint.warnings.is_empty()
+                            {
                                 self.push(
                                     AuraEvent::Notice {
                                         level: NoticeLevel::Warning,
@@ -3478,7 +3501,12 @@ impl ChatActor {
                                     None,
                                 );
                             }
-                            self.dispatch_prepared(prompt, turn_id, Some(checkpoint.id), timing);
+                            self.dispatch_prepared(
+                                prompt,
+                                turn_id,
+                                checkpoint.map(|saved| saved.id),
+                                timing,
+                            );
                         }
                     }
                     Err(error) if error.is_cancelled() => {}
@@ -3486,7 +3514,8 @@ impl ChatActor {
                         self.hold_queue(HoldCause::Error);
                         let message = match failed {
                             Ok(Err(error)) => error.to_string(),
-                            _ => "Saving the checkpoint stopped unexpectedly.".into(),
+                            _ if capture => "Saving the checkpoint stopped unexpectedly.".into(),
+                            _ => "Preparing the workspace stopped unexpectedly.".into(),
                         };
                         self.push(
                             AuraEvent::Notice {
@@ -3497,10 +3526,11 @@ impl ChatActor {
                             },
                             None,
                         );
-                        self.set_detail(Some(
-                            "Checkpoint failed; resolve the problem and resume queued prompts"
-                                .into(),
-                        ));
+                        self.set_detail(Some(if capture {
+                            "Checkpoint failed; resolve the problem and resume queued prompts".into()
+                        } else {
+                            "Workspace recovery failed; resolve the problem and resume queued prompts".into()
+                        }));
                     }
                 }
                 self.dispatch_next();
@@ -5241,7 +5271,11 @@ impl ChatActor {
             SessionStatus::Ready | SessionStatus::Running => {}
         }
         if self.checkpointing.is_some() {
-            return Some(QueueWait::SavingCheckpoint);
+            return Some(if self.checkpoint_capture {
+                QueueWait::SavingCheckpoint
+            } else {
+                QueueWait::ChatChanging
+            });
         }
         let Some(driver) = self.driver.as_ref().filter(|driver| driver.ready) else {
             return Some(QueueWait::Starting);

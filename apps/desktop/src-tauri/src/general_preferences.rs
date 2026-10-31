@@ -11,9 +11,32 @@ use crate::state::AppState;
 /// Applies saved General preferences to the running app.
 pub fn apply(app: &AppHandle, general: &GeneralPreferences) {
     if let Some(chats) = app.try_state::<AppState>().and_then(|state| state.chats()) {
-        chats.manager.set_new_chat_defaults(defaults(general));
+        apply_to_manager(&chats.manager, general);
     }
     crate::native_shell::apply_preferences(app, general);
+}
+
+pub(crate) fn apply_to_manager(
+    manager: &aura_core::session::SessionManager,
+    general: &GeneralPreferences,
+) {
+    manager.set_new_chat_defaults(defaults(general));
+    manager.set_automatic_checkpoints(general.automatic_checkpoints);
+}
+
+/// Initialize before publishing a runtime, so its first actor sees the saved profile policy.
+pub(crate) fn initialize(
+    manager: &aura_core::session::SessionManager,
+    service: &crate::onboarding::SetupService,
+) {
+    let general = match service.preferences() {
+        Ok(preferences) => preferences.general,
+        Err(error) => {
+            tracing::warn!(%error, "settings could not be read; using the defaults");
+            GeneralPreferences::default()
+        }
+    };
+    apply_to_manager(manager, &general);
 }
 
 /// Applies the active profile's saved preferences, or the defaults when there is no readable

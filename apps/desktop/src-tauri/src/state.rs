@@ -168,6 +168,9 @@ impl AppState {
             .as_ref()
             .and(booted.profile_dir.clone())
             .map(|dir| Arc::new(crate::onboarding::SetupService::new(dir)));
+        if let (Some(chats), Some(onboarding)) = (&chats, &onboarding) {
+            crate::general_preferences::initialize(&chats.manager, onboarding);
+        }
         let mut notices = booted.notices;
         notices.extend(launch.notices());
         if crate::updater::staging() {
@@ -373,6 +376,7 @@ impl AppState {
         chats: Arc<ChatRuntime>,
         onboarding: Arc<crate::onboarding::SetupService>,
     ) {
+        crate::general_preferences::initialize(&chats.manager, &onboarding);
         let mut runtime = lock(&self.runtime);
         self.access.generation.fetch_add(1, Ordering::AcqRel);
         runtime.info.profile = booted.profile;
@@ -520,6 +524,38 @@ mod tests {
         state.at_exit();
         drop(state);
         self::state(boot_next(root))
+    }
+
+    #[tokio::test]
+    async fn checkpoint_policy_is_initialized_before_publishing_each_profile() {
+        use aura_core::onboarding::{OnboardingStore, SetupAction};
+        use aura_core::profile::{ProfileKind, Profiles};
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = DataRoot::at(dir.path().join("data"));
+        let first = boot(Ok(root.clone()));
+        OnboardingStore::open(first.profile_dir.as_ref().unwrap())
+            .unwrap()
+            .apply(0, SetupAction::AutomaticCheckpoints { enabled: true })
+            .unwrap();
+        let state = state(first);
+        let previous = state.chats().unwrap();
+        assert!(previous.manager.automatic_checkpoints());
+
+        let next = Profiles::new(root.clone())
+            .create(ProfileKind::Local, "Other profile")
+            .unwrap();
+        let onboarding = Arc::new(crate::onboarding::SetupService::new(next.dir.clone()));
+        let mut booted = crate::boot::boot_profile(root, next, None);
+        let chats = Arc::new(sessions::testing::start(&mut booted).unwrap());
+        // Make the new runtime disagree with its saved preference to prove installation reads
+        // that profile, rather than keeping either manager's previous policy.
+        chats.manager.set_automatic_checkpoints(true);
+        state.install_profile(booted, chats, onboarding);
+        assert!(!state.sessions().unwrap().automatic_checkpoints());
+        assert!(previous.manager.automatic_checkpoints());
+        sessions::exit_last_resort(&Quit::default(), &previous);
+        state.at_exit();
     }
 
     #[tokio::test]

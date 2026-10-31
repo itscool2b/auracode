@@ -67,6 +67,8 @@ pub struct GeneralPreferences {
     /// The model new chats with `default_agent` start on. `None`: the agent's own default.
     pub default_model: Option<String>,
     pub default_autonomy: Autonomy,
+    /// Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled.
+    pub automatic_checkpoints: bool,
     /// Notify when a background chat finishes, fails or needs you.
     pub notifications: bool,
     /// Keep the computer from idle sleep while an agent works.
@@ -83,6 +85,7 @@ impl Default for GeneralPreferences {
             default_agent: None,
             default_model: None,
             default_autonomy: Autonomy::FullAuto,
+            automatic_checkpoints: false,
             notifications: true,
             keep_awake: true,
             close_to_tray: true,
@@ -125,6 +128,9 @@ pub enum SetupAction {
     },
     DefaultAutonomy {
         value: Autonomy,
+    },
+    AutomaticCheckpoints {
+        enabled: bool,
     },
     Notifications {
         enabled: bool,
@@ -395,6 +401,9 @@ impl OnboardingStore {
             SetupAction::DefaultAutonomy { value } => {
                 next.preferences.general.default_autonomy = value;
             }
+            SetupAction::AutomaticCheckpoints { enabled } => {
+                next.preferences.general.automatic_checkpoints = enabled;
+            }
             SetupAction::Notifications { enabled } => {
                 next.preferences.general.notifications = enabled;
             }
@@ -518,6 +527,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn automatic_checkpoints_are_opt_in_for_legacy_and_separate_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut legacy = serde_json::to_value(Record::default()).unwrap();
+        legacy["preferences"]["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("automatic_checkpoints");
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(!store.preferences().general.automatic_checkpoints);
+        store
+            .apply(0, SetupAction::AutomaticCheckpoints { enabled: true })
+            .unwrap();
+        assert!(
+            OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .general
+                .automatic_checkpoints
+        );
+        let separate = tempfile::tempdir().unwrap();
+        assert!(
+            !OnboardingStore::open(separate.path())
+                .unwrap()
+                .preferences()
+                .general
+                .automatic_checkpoints
+        );
+        store
+            .apply(1, SetupAction::AutomaticCheckpoints { enabled: false })
+            .unwrap();
+        assert!(
+            !OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .general
+                .automatic_checkpoints
+        );
+    }
+
+    #[test]
     fn appearance_defaults_migrate_and_changes_survive_reopening() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -637,6 +691,7 @@ mod tests {
         let general = store.preferences().general;
         assert_eq!(general, GeneralPreferences::default());
         assert_eq!(general.default_autonomy, Autonomy::FullAuto);
+        assert!(!general.automatic_checkpoints);
         assert!(general.notifications && general.keep_awake && general.close_to_tray);
         assert_eq!(general.default_agent, None);
         // Reading for the shell is not the interface asking for setup.
@@ -657,6 +712,7 @@ mod tests {
             SetupAction::DefaultAutonomy {
                 value: Autonomy::Ask,
             },
+            SetupAction::AutomaticCheckpoints { enabled: true },
             SetupAction::Notifications { enabled: false },
             SetupAction::KeepAwake { enabled: false },
             SetupAction::CloseToTray { enabled: false },
@@ -686,6 +742,7 @@ mod tests {
                 default_agent: Some("codex".into()),
                 default_model: Some("gpt-5.5-codex".into()),
                 default_autonomy: Autonomy::Ask,
+                automatic_checkpoints: true,
                 notifications: false,
                 keep_awake: false,
                 close_to_tray: false,

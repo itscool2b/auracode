@@ -10,7 +10,7 @@ use aura_core::onboarding::{
 use tauri::{AppHandle, State};
 
 use crate::error::{AppError, AppErrorCode};
-use crate::state::AppState;
+use crate::state::{AppState, ProfileLease};
 
 pub struct SetupService {
     profile_dir: PathBuf,
@@ -89,11 +89,16 @@ fn map_error(error: SetupError) -> AppError {
 async fn run(
     state: &AppState,
     change: Option<(u32, SetupAction)>,
-) -> Result<SetupSnapshot, AppError> {
+) -> Result<(SetupSnapshot, ProfileLease<Arc<SetupService>>), AppError> {
     let service = state.onboarding()?;
-    tauri::async_runtime::spawn_blocking(move || service.run(change))
-        .await
-        .map_err(|_| AppError::new(AppErrorCode::Internal, "Setup could not be loaded."))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let snapshot = service.run(change)?;
+        // A profile switch must wait through applying these preferences to the native runtime,
+        // not just until the file operation finishes.
+        Ok((snapshot, service))
+    })
+    .await
+    .map_err(|_| AppError::new(AppErrorCode::Internal, "Setup could not be loaded."))?
 }
 
 #[tauri::command]
@@ -102,7 +107,7 @@ pub async fn setup_snapshot(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetupSnapshot, AppError> {
-    let snapshot = run(&state, None).await?;
+    let (snapshot, _lease) = run(&state, None).await?;
     crate::general_preferences::apply(&app, &snapshot.preferences.general);
     Ok(snapshot)
 }
@@ -116,11 +121,61 @@ pub async fn setup_apply(
     action: SetupAction,
 ) -> Result<SetupSnapshot, AppError> {
     let appearance_changed = matches!(&action, SetupAction::Appearance { .. });
-    let snapshot = run(&state, Some((revision, action))).await?;
+    let (snapshot, _lease) = run(&state, Some((revision, action))).await?;
     // Settings' switches take effect at once: new chats, notifications, keep-awake, closing.
     crate::general_preferences::apply(&app, &snapshot.preferences.general);
     if appearance_changed {
         crate::appearance::apply(&app, snapshot.preferences.appearance);
     }
     Ok(snapshot)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn setup_result_keeps_profile_switch_waiting_until_runtime_preferences_are_applied() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut booted =
+            crate::boot::boot(Ok(aura_core::paths::DataRoot::at(dir.path().join("data"))));
+        let chats = crate::sessions::testing::start(&mut booted);
+        let state = AppState::new(
+            booted,
+            chats,
+            &crate::os::OsInfo {
+                os: "windows",
+                version: None,
+                display: "test".into(),
+            },
+            crate::glass::GlassEffect::None,
+            crate::launch::LaunchOptions::from_lookup(|_| None),
+            "0.1.0".into(),
+        );
+        let (snapshot, lease) = run(
+            &state,
+            Some((0, SetupAction::AutomaticCheckpoints { enabled: true })),
+        )
+        .await
+        .unwrap();
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(10),
+                state.wait_profile_commands()
+            )
+            .await
+            .is_err()
+        );
+        let manager = state.chats().unwrap().manager.clone();
+        crate::general_preferences::apply_to_manager(&manager, &snapshot.preferences.general);
+        assert!(manager.automatic_checkpoints());
+        drop(lease);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            state.wait_profile_commands(),
+        )
+        .await
+        .unwrap();
+        state.at_exit();
+    }
 }
