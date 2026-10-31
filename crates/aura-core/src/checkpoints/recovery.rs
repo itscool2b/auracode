@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::revert::STAGING_PREFIX;
-use super::{CheckpointError, Checkpoints, Manifest, Result, Storage, scan};
+use super::{CheckpointError, Checkpoints, Manifest, Result, Storage, coordination, scan};
 use scan::Fingerprint;
 
 const JOURNAL_LIMIT: usize = 16 * 1024 * 1024;
@@ -138,9 +138,16 @@ impl Checkpoints {
 
     /// Recovery is scoped to a known checkpoint in this chat, folder and canonical root. Invalid
     /// folders, unrelated names and links stay untouched. A validated migration failure is visible.
-    pub(super) async fn sweep_reverts(&self, root: &Path, chat: &str, folder: &str) -> Result<()> {
+    pub(super) async fn sweep_reverts(
+        &self,
+        root: &Path,
+        chat: &str,
+        folder: &str,
+        context: &coordination::Context,
+    ) -> Result<()> {
         let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
         for entry in directory.entries()? {
+            context.check()?;
             let entry = entry?;
             let name = entry.file_name();
             let Some(token) = name
@@ -193,7 +200,12 @@ impl Checkpoints {
                 .into_string()
                 .map_err(|_| invalid("Invalid recovery name."))?;
             let directory = directory.try_clone()?;
+            let context = context.clone();
             tokio::task::spawn_blocking(move || -> Result<()> {
+                // Once recovery starts it must settle its durable files. Cancellation only
+                // prevents starting another recovery group, and never releases this lease early.
+                let _context = context;
+                _context.check()?;
                 held.verify(&directory, &name)?;
                 let group = store.group(&token)?;
                 // Preserve the exact validated legacy journal and the copy's content catalog.

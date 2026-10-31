@@ -2,6 +2,9 @@ use super::*;
 use aura_drivers::driver::LoggedCommand;
 use aura_protocol::NoticeLevel;
 
+#[path = "checkpoint_benchmarks.rs"]
+mod benchmarks;
+
 fn enable(rig: &mut Rig, git_available: bool) -> Arc<crate::checkpoints::Checkpoints> {
     let vars = if git_available {
         aura_process::process_env()
@@ -149,7 +152,9 @@ async fn interrupt_cancels_checkpoint_wait_and_holds_the_unsent_prompt() {
     ]);
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     let service = enable(&mut rig, true);
-    let gate = service.hold_for_test().await;
+    let gate = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
     let chat = rig
         .manager
         .create_chat("mock", &rig.folder)
@@ -190,7 +195,9 @@ async fn a_saving_checkpoint_says_why_the_prompt_waits() {
     ]);
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     let service = enable(&mut rig, true);
-    let gate = service.hold_for_test().await;
+    let gate = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
     let chat = rig
         .manager
         .create_chat("mock", &rig.folder)
@@ -281,7 +288,9 @@ async fn background_work_started_during_capture_keeps_prompt_queued_until_idle()
     let (driver, handle) = script();
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     let service = enable(&mut rig, true);
-    let gate = service.hold_for_test().await;
+    let gate = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
     let chat = rig
         .manager
         .create_chat("mock", &rig.folder)
@@ -308,8 +317,10 @@ async fn background_work_started_during_capture_keeps_prompt_queued_until_idle()
     });
     eventually("background state observed", || lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|event| matches!(event, AuraEvent::Notice { message, .. } if message == "background marker"))).await;
     drop(gate);
-    // Acquiring the service gate after capture ensures the Git operation has ended.
-    let captured = service.hold_for_test().await;
+    // Acquiring the same workspace lease after capture ensures the Git operation has ended.
+    let captured = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
     drop(captured);
     tokio::task::yield_now().await;
     assert!(
@@ -328,7 +339,9 @@ async fn a_legacy_background_permission_during_capture_does_not_block_the_next_t
     let (driver, handle) = script();
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     let service = enable(&mut rig, true);
-    let gate = service.hold_for_test().await;
+    let gate = service
+        .hold_for_test(&crate::ids::new_id(), &rig.folder)
+        .await;
     let chat = rig
         .manager
         .create_chat("mock", &rig.folder)

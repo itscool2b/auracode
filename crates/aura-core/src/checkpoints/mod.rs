@@ -1,9 +1,16 @@
 //! Byte-preserving checkpoints in private Local Git objects or encrypted Account objects.
 //! User Git state is never written.
 
+#[cfg(test)]
+mod benchmarks;
+mod cache;
+mod coordination;
+mod durability;
 #[cfg(feature = "account-sync")]
 mod encrypted;
 mod git;
+mod plumbing;
+mod quarantine;
 mod recovery;
 mod revert;
 pub(crate) mod scan;
@@ -14,13 +21,13 @@ mod tests;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use aura_process::{EnvResolver, LeftoverRegistry};
 use aura_protocol::changes::{
     ChangeDiff, ChangeKind, ChangedFile, ChangesSnapshot, CheckpointSummary,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 
 use crate::profile::Profile;
 use scan::{Fingerprint, SavedFile};
@@ -43,8 +50,8 @@ pub struct Checkpoints {
     storage: Storage,
     env: Arc<EnvResolver>,
     registry: Arc<LeftoverRegistry>,
-    /// Git refs/index/manifest publication and revert previews serialize for this profile.
-    gate: Mutex<()>,
+    /// Disposable hints. Workspace leases protect mutation; this lock only exchanges entries.
+    cache: std::sync::Mutex<cache::Cache>,
     previews: std::sync::Mutex<std::collections::HashMap<String, revert::Prepared>>,
 }
 
@@ -75,16 +82,44 @@ struct Manifest {
 }
 
 struct Operation {
-    scratch: tempfile::TempDir,
+    scratch: Arc<tempfile::TempDir>,
+    context: coordination::Context,
     git: git::Git,
     repo: PathBuf,
     index: PathBuf,
 }
 
+struct CaptureTiming<'a> {
+    chat_id: &'a str,
+    turn_id: &'a str,
+    started: Instant,
+    outcome: &'static str,
+}
+
+impl Drop for CaptureTiming<'_> {
+    fn drop(&mut self) {
+        tracing::info!(
+            chat_id = self.chat_id,
+            turn_id = self.turn_id,
+            stage = "total",
+            elapsed_ms = self.started.elapsed().as_millis() as u64,
+            outcome = self.outcome,
+            "Checkpoint capture finished"
+        );
+    }
+}
+
 impl Checkpoints {
     #[cfg(test)]
-    pub(crate) async fn hold_for_test(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.gate.lock().await
+    pub(crate) async fn hold_for_test(
+        &self,
+        folder_id: &str,
+        folder: &Path,
+    ) -> coordination::Owner {
+        let root = std::fs::canonicalize(folder).expect("checkpoint test workspace");
+        coordination::acquire(&self.root, folder_id, &root)
+            .await
+            .expect("checkpoint test lease")
     }
     pub fn new(
         profile: &Profile,
@@ -101,7 +136,7 @@ impl Checkpoints {
             },
             env,
             registry,
-            gate: Mutex::new(()),
+            cache: std::sync::Mutex::new(cache::Cache::default()),
             previews: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
@@ -114,32 +149,192 @@ impl Checkpoints {
         folder: &Path,
         turn_id: &str,
     ) -> Result<CheckpointSummary> {
+        let mut timing = CaptureTiming {
+            chat_id,
+            turn_id,
+            started: Instant::now(),
+            outcome: "cancelled",
+        };
+        let result = self
+            .capture_inner(chat_id, folder_id, folder, turn_id)
+            .await;
+        timing.outcome = if result.is_ok() { "success" } else { "failure" };
+        result
+    }
+
+    async fn capture_inner(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+        turn_id: &str,
+    ) -> Result<CheckpointSummary> {
+        let started = Instant::now();
         valid_id(chat_id)?;
         valid_id(folder_id)?;
         valid_id(turn_id)?;
-        let _guard = self.gate.lock().await;
         let root = std::fs::canonicalize(folder)?;
         if !root.is_dir() {
             return Err(CheckpointError::Message(
                 "The checkpoint folder is unavailable.".into(),
             ));
         }
-        let operation = self.operation(folder_id, &root, true).await?;
-        self.sweep_reverts(&root, chat_id, folder_id).await?;
+        let waiting = Instant::now();
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let context = owner.context();
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "wait",
+            elapsed_ms = waiting.elapsed().as_millis() as u64,
+            "Checkpoint stage"
+        );
+        if std::fs::canonicalize(folder)? != root {
+            return Err(CheckpointError::Message(
+                "The checkpoint folder changed while waiting. Try again.".into(),
+            ));
+        }
+        // Removing the hint before any fallible work invalidates it on failure or cancellation.
+        let previous = self
+            .cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take(folder_id, &root);
+        let setup = Instant::now();
+        let operation = self
+            .operation(folder_id, &root, true, context.clone())
+            .await?;
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "setup",
+            elapsed_ms = setup.elapsed().as_millis() as u64,
+            "Checkpoint stage"
+        );
+        let recovery = Instant::now();
+        self.sweep_reverts(&root, chat_id, folder_id, &context)
+            .await?;
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "recovery",
+            elapsed_ms = recovery.elapsed().as_millis() as u64,
+            "Checkpoint stage"
+        );
+        let discovery = Instant::now();
         let paths = self.paths(&operation, &root).await?;
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "discovery",
+            elapsed_ms = discovery.elapsed().as_millis() as u64,
+            file_count = paths.len(),
+            "Checkpoint stage"
+        );
         #[cfg(feature = "account-sync")]
         if let Storage::Encrypted(files) = &self.storage {
-            return encrypted::capture(files.clone(), chat_id, folder_id, root, turn_id, paths)
-                .await;
+            let result = encrypted::capture(
+                files.clone(),
+                chat_id,
+                folder_id,
+                root,
+                turn_id,
+                paths,
+                context,
+            )
+            .await;
+            tracing::info!(
+                chat_id,
+                turn_id,
+                stage = "complete",
+                storage = "account",
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                helper_count = operation.git.helper_count(),
+                success = result.is_ok(),
+                "Checkpoint stage"
+            );
+            return result;
         }
-        let copies = operation.scratch.path().join("blobs");
-        std::fs::create_dir(&copies)?;
-        let root_copy = root.clone();
-        let scanned =
-            tokio::task::spawn_blocking(move || scan::collect(&root_copy, &paths, Some(&copies)))
-                .await
-                .map_err(|_| CheckpointError::Message("Checkpoint scanning failed.".into()))??;
-        let (files, tree) = Self::write_tree(&operation, &root, &scanned, None).await?;
+        let scan_started = Instant::now();
+        let mut scanned =
+            Self::capture_scan(&operation, &root, &paths, previous.clone(), "blobs").await?;
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "scan",
+            elapsed_ms = scan_started.elapsed().as_millis() as u64,
+            file_count = scanned.files.len(),
+            copied_count = scanned.copies.len(),
+            "Checkpoint stage"
+        );
+        let mut retained = previous
+            .as_ref()
+            .map(|entry| cache::retained(entry, &scanned))
+            .unwrap_or_default();
+        let verifying = Instant::now();
+        let mut reused_tree = None;
+        let mut tree_inventory = None;
+        let mut cache_missing = false;
+        if let Some(previous) = &previous {
+            let blobs_present = cache::verify_blobs(&operation, &root, &retained).await?;
+            let unchanged = previous.files == retained && scanned.files.len() == retained.len();
+            // Check every tree even when a blob is missing. Otherwise a cache miss could hide
+            // a damaged existing tree and turn corruption into an apparently successful retry.
+            let trees_present =
+                !unchanged || cache::verify_tree(&operation, &root, previous).await?;
+            if blobs_present && trees_present {
+                if unchanged {
+                    reused_tree = Some(previous.tree.clone());
+                    tree_inventory = Some(Arc::clone(&previous.tree_ids));
+                }
+            } else {
+                cache_missing = true;
+            }
+        }
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "verify",
+            elapsed_ms = verifying.elapsed().as_millis() as u64,
+            reused_count = retained.len(),
+            cache_missing,
+            "Checkpoint stage"
+        );
+        if cache_missing {
+            // Exactly one cold retry for absent objects. Corruption has already returned an error.
+            let rescan = Instant::now();
+            let paths = self.paths(&operation, &root).await?;
+            scanned = Self::capture_scan(&operation, &root, &paths, None, "retry-blobs").await?;
+            retained.clear();
+            tracing::info!(
+                chat_id,
+                turn_id,
+                stage = "rescan",
+                elapsed_ms = rescan.elapsed().as_millis() as u64,
+                file_count = scanned.files.len(),
+                "Checkpoint stage"
+            );
+        }
+        let writing = Instant::now();
+        let (files, tree) = match reused_tree {
+            Some(tree) => (retained, tree),
+            None => {
+                let (files, tree) =
+                    plumbing::write_tree(&operation, &root, &scanned, Some(&retained)).await?;
+                tree_inventory = cache::inventory(&operation, &root, &files, &tree).await?;
+                (files, tree)
+            }
+        };
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "write_tree",
+            elapsed_ms = writing.elapsed().as_millis() as u64,
+            file_count = files.len(),
+            "Checkpoint stage"
+        );
+        context.check()?;
+        let publishing = Instant::now();
         let commit = git::oid(
             &operation
                 .git
@@ -149,14 +344,15 @@ impl Checkpoints {
                     &operation.index,
                     vec![
                         "commit-tree".into(),
-                        tree.into(),
+                        tree.clone().into(),
                         "-m".into(),
-                        "auracode before-turn checkpoint".into(),
+                        format!("auracode before-turn checkpoint {turn_id}").into(),
                     ],
                     128,
                 )
                 .await?,
         )?;
+        context.check()?;
         let summary = CheckpointSummary {
             id: crate::ids::new_id(),
             turn_id: turn_id.into(),
@@ -176,11 +372,12 @@ impl Checkpoints {
                 4096,
             )
             .await?;
+        context.check()?;
         let manifest = Manifest {
             version: 1,
             chat_id: chat_id.into(),
             folder_id: folder_id.into(),
-            root,
+            root: root.clone(),
             commit,
             summary: summary.clone(),
             files,
@@ -192,92 +389,62 @@ impl Checkpoints {
             &manifest,
         )
         .map_err(|error| CheckpointError::Message(error.to_string()))?;
+        context.check()?;
+        // A valid capture with an unusually deep layout may exceed the optional cache budget.
+        if let Some(tree_inventory) = tree_inventory {
+            self.cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .publish(folder_id, &root, manifest.files, tree, tree_inventory);
+        }
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "publish",
+            elapsed_ms = publishing.elapsed().as_millis() as u64,
+            "Checkpoint stage"
+        );
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "complete",
+            storage = "local",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            file_count = summary.file_count,
+            total_bytes = summary.total_bytes,
+            helper_count = operation.git.helper_count(),
+            "Checkpoint stage"
+        );
         Ok(summary)
     }
 
-    async fn write_tree(
+    async fn capture_scan(
         operation: &Operation,
         root: &Path,
-        scanned: &scan::Scan,
-        retained: Option<&BTreeMap<String, SavedFile>>,
-    ) -> Result<(BTreeMap<String, SavedFile>, String)> {
-        let mut files = retained.cloned().unwrap_or_default();
-        // Batches keep Windows' command line below its limit. Paths with long names are allowed,
-        // so index updates are chunked by their actual argument length below.
-        for chunk in scanned.copies.chunks(64) {
-            let mut args = vec![
-                "hash-object".into(),
-                "--no-filters".into(),
-                "-w".into(),
-                "--".into(),
-            ];
-            args.extend(chunk.iter().map(|(_, path)| path.as_os_str().to_owned()));
-            let output = operation
-                .git
-                .run(&operation.repo, root, &operation.index, args, 64 * 42)
-                .await?;
-            let ids = output
-                .split(|byte| *byte == b'\n')
-                .filter(|line| !line.is_empty())
-                .map(git::oid)
-                .collect::<Result<Vec<_>>>()?;
-            if ids.len() != chunk.len() {
-                return Err(CheckpointError::Message(
-                    "Git did not save every checkpoint file.".into(),
-                ));
-            }
-            for ((path, _), oid) in chunk.iter().zip(ids) {
-                let fingerprint = scanned
-                    .files
-                    .get(path)
-                    .ok_or_else(|| {
-                        CheckpointError::Message("Checkpoint file metadata was lost.".into())
-                    })?
-                    .clone();
-                files.insert(path.clone(), SavedFile { fingerprint, oid });
-            }
-        }
-        let mut args = vec!["update-index".into(), "--add".into()];
-        let mut arg_bytes = 0;
-        for (path, file) in &files {
-            let entry = format!("{:o},{},{}", file.fingerprint.mode, file.oid, path);
-            if arg_bytes + entry.len() > 12_000 && args.len() > 2 {
-                operation
-                    .git
-                    .run(
-                        &operation.repo,
-                        root,
-                        &operation.index,
-                        std::mem::replace(&mut args, vec!["update-index".into(), "--add".into()]),
-                        4096,
-                    )
-                    .await?;
-                arg_bytes = 0;
-            }
-            arg_bytes += entry.len() + 16;
-            args.extend(["--cacheinfo".into(), entry.into()]);
-        }
-        if args.len() > 2 {
-            operation
-                .git
-                .run(&operation.repo, root, &operation.index, args, 4096)
-                .await?;
-        }
-        let tree = git::oid(
-            &operation
-                .git
-                .run(
-                    &operation.repo,
-                    root,
-                    &operation.index,
-                    vec!["write-tree".into()],
-                    128,
-                )
-                .await?,
-        )?;
-        Ok((files, tree))
+        paths: &[String],
+        previous: Option<Arc<cache::Entry>>,
+        directory: &str,
+    ) -> Result<scan::Scan> {
+        operation.context.check()?;
+        let scratch = Arc::clone(&operation.scratch);
+        let copies = scratch.path().join(directory);
+        std::fs::create_dir(&copies)?;
+        let root = root.to_owned();
+        let paths = paths.to_owned();
+        let context = operation.context.clone();
+        tokio::task::spawn_blocking(move || {
+            let _scratch = scratch;
+            scan::collect_with(
+                &root,
+                &paths,
+                Some(&copies),
+                previous.as_ref().map(|entry| &entry.files),
+                Some(&context),
+            )
+        })
+        .await
+        .map_err(|_| CheckpointError::Message("Checkpoint scanning failed.".into()))?
     }
-
     /// Local uses Git's stat against private trees; Account uses a labeled byte-size summary to
     /// avoid plaintext Git objects. Neither reads user indexes, filters or credential files.
     pub async fn diff_stat(
@@ -287,9 +454,9 @@ impl Checkpoints {
         folder: &Path,
         checkpoint_id: &str,
     ) -> Result<String> {
-        let _guard = self.gate.lock().await;
-        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
-        let operation = self.operation(folder_id, &manifest.root, false).await?;
+        let (_owner, manifest, operation) = self
+            .checkpoint_operation(chat_id, folder_id, folder, checkpoint_id)
+            .await?;
         #[cfg(feature = "account-sync")]
         if matches!(self.storage, Storage::Encrypted(_)) {
             let current = self.current(&operation, &manifest).await?;
@@ -307,7 +474,7 @@ impl Checkpoints {
             .map(|(path, file)| (path.clone(), file.clone()))
             .collect();
         let (_, tree) =
-            Self::write_tree(&operation, &manifest.root, &current, Some(&retained)).await?;
+            plumbing::write_tree(&operation, &manifest.root, &current, Some(&retained)).await?;
         let bytes = operation
             .git
             .run(
@@ -338,10 +505,10 @@ impl Checkpoints {
         folder: &Path,
         checkpoint_id: &str,
     ) -> Result<ChangesSnapshot> {
-        let _guard = self.gate.lock().await;
-        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
-        let operation = self.operation(folder_id, &manifest.root, false).await?;
-        self.sweep_reverts(&manifest.root, chat_id, folder_id)
+        let (_owner, manifest, operation) = self
+            .checkpoint_operation(chat_id, folder_id, folder, checkpoint_id)
+            .await?;
+        self.sweep_reverts(&manifest.root, chat_id, folder_id, &operation.context)
             .await?;
         let current = self.current(&operation, &manifest).await?;
         let files = changes(&manifest.files, &current.files)
@@ -366,9 +533,9 @@ impl Checkpoints {
         path: &str,
     ) -> Result<ChangeDiff> {
         scan::validate(path)?;
-        let _guard = self.gate.lock().await;
-        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
-        let operation = self.operation(folder_id, &manifest.root, false).await?;
+        let (_owner, manifest, operation) = self
+            .checkpoint_operation(chat_id, folder_id, folder, checkpoint_id)
+            .await?;
         let current = self.current(&operation, &manifest).await?;
         if current.excluded.contains(path)
             || (!manifest.files.contains_key(path) && !current.files.contains_key(path))
@@ -383,10 +550,14 @@ impl Checkpoints {
         };
         let root = manifest.root.clone();
         let relative = path.to_owned();
-        let after = tokio::task::spawn_blocking(move || scan::read(&root, &relative))
-            .await
-            .map_err(|_| CheckpointError::Message("Reading the changed file failed.".into()))??
-            .map(|(_, bytes)| bytes);
+        let context = operation.context.clone();
+        let after = tokio::task::spawn_blocking(move || {
+            context.check()?;
+            scan::read(&root, &relative)
+        })
+        .await
+        .map_err(|_| CheckpointError::Message("Reading the changed file failed.".into()))??
+        .map(|(_, bytes)| bytes);
         let binary = before
             .as_ref()
             .into_iter()
@@ -420,7 +591,35 @@ impl Checkpoints {
         })
     }
 
-    async fn operation(&self, folder_id: &str, folder: &Path, create: bool) -> Result<Operation> {
+    async fn checkpoint_operation(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+        checkpoint_id: &str,
+    ) -> Result<(coordination::Owner, Manifest, Operation)> {
+        let root = std::fs::canonicalize(folder)?;
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
+        if manifest.root != root {
+            return Err(CheckpointError::Message(
+                "The checkpoint folder changed while waiting. Refresh Changes.".into(),
+            ));
+        }
+        let operation = self
+            .operation(folder_id, &root, false, owner.context())
+            .await?;
+        Ok((owner, manifest, operation))
+    }
+
+    async fn operation(
+        &self,
+        folder_id: &str,
+        folder: &Path,
+        create: bool,
+        context: coordination::Context,
+    ) -> Result<Operation> {
+        context.check()?;
         valid_id(folder_id)?;
         if matches!(self.storage, Storage::Locked) {
             return Err(CheckpointError::Message(
@@ -428,9 +627,11 @@ impl Checkpoints {
             ));
         }
         std::fs::create_dir_all(&self.root)?;
-        let scratch = tempfile::Builder::new()
-            .prefix("operation-")
-            .tempdir_in(&self.root)?;
+        let scratch = Arc::new(
+            tempfile::Builder::new()
+                .prefix("operation-")
+                .tempdir_in(&self.root)?,
+        );
         let git = git::Git::new(&self.env, Arc::clone(&self.registry), scratch.path()).await?;
         let repo = match &self.storage {
             #[cfg(feature = "account-sync")]
@@ -452,6 +653,7 @@ impl Checkpoints {
         let index = scratch.path().join("index");
         Ok(Operation {
             scratch,
+            context,
             git,
             repo,
             index,
@@ -459,6 +661,7 @@ impl Checkpoints {
     }
 
     async fn paths(&self, operation: &Operation, root: &Path) -> Result<Vec<String>> {
+        operation.context.check()?;
         let mut args = vec![
             "ls-files".into(),
             "--others".into(),
@@ -586,8 +789,12 @@ impl Checkpoints {
             }
         });
         let root = manifest.root.clone();
+        let context = operation.context.clone();
+        let scratch = Arc::clone(&operation.scratch);
         tokio::task::spawn_blocking(move || {
-            let mut current = scan::collect(&root, &paths, copies.as_deref())?;
+            let _scratch = scratch;
+            let mut current =
+                scan::collect_with(&root, &paths, copies.as_deref(), None, Some(&context))?;
             current.excluded.extend(excluded);
             Ok(current)
         })
@@ -665,6 +872,7 @@ impl Checkpoints {
     }
 
     async fn blob(&self, operation: &Operation, root: &Path, file: &SavedFile) -> Result<Vec<u8>> {
+        operation.context.check()?;
         let bytes = match &self.storage {
             #[cfg(feature = "account-sync")]
             Storage::Encrypted(files) => files.read(&file.oid, scan::FILE_LIMIT)?,

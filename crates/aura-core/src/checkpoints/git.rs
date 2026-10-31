@@ -3,13 +3,24 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use aura_process::{
     EnvResolver, HelperEnv, HelperSpec, LeftoverRegistry, ResolvedEnv, find_exe, run_helper,
+    run_helper_input,
 };
 
 use super::{CheckpointError, Result};
+
+/// Keep checkpoint batches within `aura_process::run_helper_input`'s unlogged input limit.
+pub(super) const INPUT_LIMIT: usize = 1024 * 1024;
+
+#[derive(Clone, Copy)]
+struct ObjectDirectory<'a> {
+    path: &'a Path,
+    batch_fsync: bool,
+}
 
 pub(super) struct Git {
     pub(super) program: PathBuf,
@@ -18,6 +29,7 @@ pub(super) struct Git {
     empty: PathBuf,
     hooks: PathBuf,
     pub(super) protected: Vec<PathBuf>,
+    helpers: AtomicU64,
 }
 
 impl Git {
@@ -79,6 +91,7 @@ impl Git {
             empty,
             hooks,
             protected,
+            helpers: AtomicU64::new(0),
         })
     }
 
@@ -108,10 +121,129 @@ impl Git {
         args: Vec<OsString>,
         max_stdout: usize,
     ) -> Result<Vec<u8>> {
+        self.run_inner(repo, cwd, index, cwd, args, None, max_stdout, None)
+            .await
+    }
+
+    pub(super) fn helper_count(&self) -> u64 {
+        self.helpers.load(Ordering::Relaxed)
+    }
+
+    pub(super) async fn run_input(
+        &self,
+        repo: &Path,
+        worktree: &Path,
+        index: &Path,
+        args: Vec<OsString>,
+        input: Vec<u8>,
+        max_stdout: usize,
+    ) -> Result<Vec<u8>> {
+        self.run_input_at(repo, worktree, index, worktree, args, input, max_stdout)
+            .await
+    }
+
+    /// Relative input names resolve in `cwd`; Git still uses only the explicit private repo,
+    /// index and workspace. Numbered scratch files need no platform-dependent path quoting.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn run_input_at(
+        &self,
+        repo: &Path,
+        worktree: &Path,
+        index: &Path,
+        cwd: &Path,
+        args: Vec<OsString>,
+        input: Vec<u8>,
+        max_stdout: usize,
+    ) -> Result<Vec<u8>> {
+        if input.len() > INPUT_LIMIT {
+            return Err(CheckpointError::Message(
+                "Checkpoint Git input exceeded its safety limit.".into(),
+            ));
+        }
+        self.run_inner(
+            repo,
+            worktree,
+            index,
+            cwd,
+            args,
+            Some(input),
+            max_stdout,
+            None,
+        )
+        .await
+    }
+
+    /// `add` opens an upstream object-database transaction. On supported volumes, Git fully
+    /// flushes the batch before migrating its loose objects into the durable object directory.
+    /// The staging repo, worktree and index are fresh private scratch paths, so no user or
+    /// storage-repository attributes, filters, hooks or indexes participate in this operation.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn write_objects(
+        &self,
+        staging_repo: &Path,
+        copies: &Path,
+        batch_index: &Path,
+        objects: &Path,
+        input: Vec<u8>,
+        max_stdout: usize,
+        batch_fsync: bool,
+    ) -> Result<Vec<u8>> {
+        if input.len() > INPUT_LIMIT {
+            return Err(CheckpointError::Message(
+                "Checkpoint Git input exceeded its safety limit.".into(),
+            ));
+        }
+        let directory = Some(ObjectDirectory {
+            path: objects,
+            batch_fsync,
+        });
+        self.run_inner(
+            staging_repo,
+            copies,
+            batch_index,
+            copies,
+            vec![
+                "add".into(),
+                "--force".into(),
+                "--pathspec-from-file=-".into(),
+                "--pathspec-file-nul".into(),
+            ],
+            Some(input),
+            4096,
+            directory,
+        )
+        .await?;
+        self.run_inner(
+            staging_repo,
+            copies,
+            batch_index,
+            copies,
+            vec!["ls-files".into(), "--stage".into(), "-z".into()],
+            None,
+            max_stdout,
+            directory,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_inner(
+        &self,
+        repo: &Path,
+        worktree: &Path,
+        index: &Path,
+        cwd: &Path,
+        args: Vec<OsString>,
+        input: Option<Vec<u8>>,
+        max_stdout: usize,
+        object_directory: Option<ObjectDirectory<'_>>,
+    ) -> Result<Vec<u8>> {
         let operation = args
             .first()
             .map(|arg| arg.to_string_lossy().into_owned())
             .unwrap_or_default();
+        let mut timing = HelperTiming::new(&operation);
+        self.helpers.fetch_add(1, Ordering::Relaxed);
         let mut command = vec![
             "--no-pager".into(),
             "--literal-pathspecs".into(),
@@ -127,7 +259,15 @@ impl Git {
             // Profile paths plus checkpoint refs can exceed Windows' legacy path limit.
             "core.longpaths=true".into(),
             "-c".into(),
-            "core.fsync=all".into(),
+            // Durable objects and refs outlive the operation; its scratch index does not.
+            // Exclude index flushes even if platform defaults include them.
+            "core.fsync=objects,reference,-index".into(),
+            "-c".into(),
+            if object_directory.is_some_and(|directory| directory.batch_fsync) {
+                "core.fsyncMethod=batch".into()
+            } else {
+                "core.fsyncMethod=fsync".into()
+            },
             "-c".into(),
             "core.quotePath=false".into(),
             "-c".into(),
@@ -135,6 +275,9 @@ impl Git {
             "-c".into(),
             format!("core.attributesFile={}", self.empty.display()).into(),
         ];
+        if object_directory.is_some() {
+            command.extend(["-c".into(), "core.bare=false".into()]);
+        }
         command.extend(args);
         let mut set = vec![
             ("GIT_DIR".into(), repo.as_os_str().to_owned()),
@@ -157,23 +300,30 @@ impl Git {
             ("GIT_COMMITTER_EMAIL".into(), "checkpoint@localhost".into()),
         ];
         if operation != "init" {
-            set.push(("GIT_WORK_TREE".into(), cwd.as_os_str().to_owned()));
+            set.push(("GIT_WORK_TREE".into(), worktree.as_os_str().to_owned()));
         }
-        let output = run_helper(
-            &self.registry,
-            HelperSpec {
-                program: self.program.clone(),
-                args: command,
-                cwd: cwd.to_path_buf(),
-                env: HelperEnv::Resolved(Arc::clone(&self.env)),
-                set,
-                new_session: true,
-                timeout: Duration::from_secs(20),
-                max_stdout,
-            },
-        )
-        .await
-        .map_err(|error| {
+        if let Some(directory) = object_directory {
+            set.push((
+                "GIT_OBJECT_DIRECTORY".into(),
+                directory.path.as_os_str().to_owned(),
+            ));
+        }
+        let spec = HelperSpec {
+            program: self.program.clone(),
+            args: command,
+            cwd: cwd.to_path_buf(),
+            env: HelperEnv::Resolved(Arc::clone(&self.env)),
+            set,
+            new_session: true,
+            timeout: Duration::from_secs(20),
+            max_stdout,
+        };
+        let output = match input {
+            Some(input) => run_helper_input(&self.registry, spec, input).await,
+            None => run_helper(&self.registry, spec).await,
+        };
+        timing.outcome = "failed";
+        let output = output.map_err(|error| {
             CheckpointError::Message(format!("Checkpoint Git helper could not start: {error}"))
         })?;
         if output.timed_out {
@@ -194,7 +344,47 @@ impl Git {
                 "Checkpoint Git {operation} failed. The working folder and user index were left unchanged."
             )));
         }
+        // `cat-file --batch` can exit successfully and print "<oid> missing" after a loose
+        // object fails to inflate, while reporting the corruption only on stderr. A genuine
+        // missing-object response is silent. Never turn diagnostics into a recoverable cache
+        // miss, and never expose Git's potentially content-bearing stderr to the UI or logs.
+        if operation == "cat-file" && !output.stderr_tail.is_empty() {
+            return Err(CheckpointError::Message(
+                "Checkpoint Git could not verify stored objects.".into(),
+            ));
+        }
+        timing.outcome = "success";
         Ok(output.stdout)
+    }
+}
+
+/// Dropping an interrupted helper records cancellation too, without logging paths or content.
+struct HelperTiming<'a> {
+    operation: &'a str,
+    started: Instant,
+    outcome: &'static str,
+}
+
+impl<'a> HelperTiming<'a> {
+    fn new(operation: &'a str) -> Self {
+        Self {
+            operation,
+            started: Instant::now(),
+            outcome: "cancelled",
+        }
+    }
+}
+
+impl Drop for HelperTiming<'_> {
+    fn drop(&mut self) {
+        tracing::debug!(
+            phase = "git_helper",
+            operation = self.operation,
+            elapsed_ms = self.started.elapsed().as_secs_f64() * 1000.0,
+            helper_count = 1,
+            outcome = self.outcome,
+            "checkpoint phase finished"
+        );
     }
 }
 

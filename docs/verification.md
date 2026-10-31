@@ -13,9 +13,30 @@ It fails explicitly if none exists, rather than falling back to Git/MSYS Perl or
 The hosted [Windows runner inventory](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)
 lists Perl; macOS uses the existing CommonCrypto SQLCipher backend.
 
+## Checkpoint performance comparisons
+
+Set `checkpoint_benchmarks: true` when manually dispatching `CI` to run encrypted core verification
+and checkpoint comparisons on Windows and macOS. This mode skips the app/UI jobs and has its own
+concurrency group, so it can run alongside normal final verification. It does not replace that
+verification. The baseline ref, synthetic fixture sizes, and number of unchanged samples are
+explicit workflow inputs.
+
+The runner builds both revisions from source and gives them identical benchmark fixtures. Both
+read the same checkout for the workspace comparison; baseline sources and evidence remain outside
+it. Separate Cargo target directories prevent one revision from replacing the other's executable;
+the runner checks and retains each executable's test list before timing. It also measures cold,
+unchanged, and one-file-edit captures for Local and Account storage and
+the real actor's send path through a scripted driver. Each runner executes its measurements
+sequentially after builds finish. No real agent or account credentials are needed.
+
+Download `checkpoint-performance-<OS>-<SHA>` for source/toolchain metadata, raw logs, and normalized
+timings. Distinguish hosted-runner measurements from measurements on a user's computer. Do not
+substitute a successful compile or a partial run for a completed comparison. See
+[checkpoint capture](checkpoint-capture.md) for local fixture commands and storage guarantees.
+
 ## Recovering generated bindings
 
-The `CI` workflow has one optional boolean, `refresh_bindings`, defaulting to `false`.
+The `CI` workflow's optional `refresh_bindings` boolean defaults to `false`.
 
 - Normal runs generate TypeScript bindings independently on Windows and macOS and fail if the
   result differs from the committed `apps/desktop/src/bindings.ts`.

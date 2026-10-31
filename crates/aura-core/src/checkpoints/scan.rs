@@ -21,7 +21,7 @@ pub(crate) struct Fingerprint {
     pub(super) binary: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct SavedFile {
     pub(super) fingerprint: Fingerprint,
     pub(super) oid: String,
@@ -206,7 +206,19 @@ pub(crate) fn read(root: &Path, relative: &str) -> Result<Option<(Fingerprint, V
     Ok(Some((fingerprint, bytes)))
 }
 
+#[cfg(test)]
 pub(super) fn collect(root: &Path, paths: &[String], copy_to: Option<&Path>) -> Result<Scan> {
+    collect_with(root, paths, copy_to, None, None)
+}
+
+/// Always read and hash current bytes. Metadata alone never authorizes object reuse.
+pub(super) fn collect_with(
+    root: &Path,
+    paths: &[String],
+    copy_to: Option<&Path>,
+    previous: Option<&BTreeMap<String, SavedFile>>,
+    context: Option<&super::coordination::Context>,
+) -> Result<Scan> {
     let mut result = Scan {
         files: BTreeMap::new(),
         copies: Vec::new(),
@@ -216,6 +228,9 @@ pub(super) fn collect(root: &Path, paths: &[String], copy_to: Option<&Path>) -> 
     let mut total = 0usize;
     let mut omitted = 0usize;
     for path in paths {
+        if let Some(context) = context {
+            context.check()?;
+        }
         match read(root, path) {
             Ok(Some((fingerprint, bytes))) => {
                 total += bytes.len();
@@ -224,7 +239,16 @@ pub(super) fn collect(root: &Path, paths: &[String], copy_to: Option<&Path>) -> 
                         "This folder exceeds the 100 MiB checkpoint limit.".into(),
                     ));
                 }
-                if let Some(copy_to) = copy_to {
+                let reused = previous
+                    .and_then(|files| files.get(path))
+                    .is_some_and(|saved| {
+                        saved.fingerprint.sha256 == fingerprint.sha256
+                            && saved.fingerprint.bytes == fingerprint.bytes
+                    });
+                if let Some(copy_to) = copy_to.filter(|_| !reused) {
+                    if let Some(context) = context {
+                        context.check()?;
+                    }
                     let copy = copy_to.join(result.files.len().to_string());
                     fs::write(&copy, bytes)?;
                     result.copies.push((path.clone(), copy));
@@ -240,6 +264,9 @@ pub(super) fn collect(root: &Path, paths: &[String], copy_to: Option<&Path>) -> 
                 }
             }
         }
+    }
+    if let Some(context) = context {
+        context.check()?;
     }
     if omitted > 100 {
         result

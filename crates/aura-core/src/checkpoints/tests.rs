@@ -3,6 +3,9 @@ use crate::paths::DataRoot;
 use crate::profile::Profiles;
 use aura_process::{EnvSource, ResolvedEnv, process_env};
 
+#[path = "cache_tests.rs"]
+mod cache_tests;
+
 struct Rig {
     _dir: tempfile::TempDir,
     work: PathBuf,

@@ -1,0 +1,22 @@
+baseline_commit=af499cd05684df8d2f08e48af21d268b522862f7
+current_commit=05d4e42c533559b88a45e729ea86744148f184fe
+baseline_target=/Users/runner/work/_temp/checkpoint-performance.b7z1iw/baseline-target
+current_target=/Users/runner/work/auracode/auracode/target
+counts=1000,10000,20000
+warm_samples=3
+build_profile=test
+features=account-sync
+started_at_utc=2026-10-31T06:47:37Z
+core_fixture_blob=b95e9b975383ace8b45f7609a636159cbe68aa82
+native_fixture_blob=8f5c97c5aeb5f3d3bfe4c312409454a3729e950b
+git version 2.55.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+binary: rustc
+commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+commit-date: 2026-10-13
+host: x86_64-apple-darwin
+release: 1.99.1
+LLVM version: 23.1.1
+Darwin 25.6.0 Darwin Kernel Version 25.6.0: Sat Jul 11 15:22:40 PDT 2026; root:xnu-12377.161.13~4/RELEASE_X86_64
+completed_at_utc=2026-10-31T07:09:30Z
