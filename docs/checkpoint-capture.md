@@ -30,9 +30,11 @@ check. Verification helpers read at most 4,096 objects and 16 MiB of output per 
 
 Git receives numeric scratch names through `hash-object --no-filters -w --stdin-paths` and literal
 NUL-terminated index records through `update-index -z --index-info`. Inputs are at most 1 MiB.
-Hash batches additionally contain at most 512 files to bound per-object disk flush work inside
-the helper deadline. Durable objects and refs use full fsync; the disposable scratch index does
-not. User indexes, attributes, filters, and hooks remain outside this path.
+Hash batches additionally contain at most 256 files to bound per-object disk flush work inside
+the helper deadline. Up to four independent blob writers run concurrently; verification and
+index/tree/ref publication wait for every writer and remain sequential. Durable objects and refs
+use full fsync; the disposable scratch index does not. User indexes, attributes, filters, and hooks
+remain outside this path.
 
 ## Concurrency and cancellation
 
