@@ -44,6 +44,15 @@ files, with up to four independent writers active. Verification and real-path in
 publication wait for every writer and remain sequential. Objects and refs are durable; disposable
 indexes are not fsynced. User indexes remain outside this path.
 
+Before new blob writers start, a blocking worker under the existing storage lease removes only
+object-store directories named `tmp_objdir-bulk-fsync-` followed by exactly six ASCII alphanumeric
+characters. Traversal uses directory-relative, no-follow handles and rejects links, reparse points,
+and special files. One shared 100,000-entry budget includes the top-level scan, unmatched entries,
+and nested contents; traversal depth is also bounded. Cancellation retains the lease until the
+worker exits. Ordinary objects and unmatched names are preserved; removing quarantine hard links
+does not change surviving object bytes or permissions. If cleanup fails or reaches its limit,
+remaining files are preserved and capture fails before starting new writers.
+
 ## Concurrency and cancellation
 
 A process-wide coordinator reserves both the canonical workspace root and its profile storage

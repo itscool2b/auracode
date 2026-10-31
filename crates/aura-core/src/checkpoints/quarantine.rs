@@ -25,6 +25,13 @@ fn suspicious() -> CheckpointError {
     CheckpointError::Message("An abandoned checkpoint transaction contains an unsafe entry. Its remaining files were preserved.".into())
 }
 
+fn work_limit() -> CheckpointError {
+    CheckpointError::Message(
+        "Checkpoint transaction cleanup exceeded its work limit. Remaining files were preserved."
+            .into(),
+    )
+}
+
 fn is_link(metadata: &Metadata) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
@@ -47,21 +54,7 @@ pub(super) async fn prepare(repository: &Path, context: Context) -> Result<bool>
         context.check()?;
         let objects = Dir::open_ambient_dir(&object_path, cap_std::ambient_authority())?;
         let mut budget = ENTRY_LIMIT;
-        let mut removed = 0usize;
-        for entry in objects.entries()? {
-            context.check()?;
-            let name = entry?.file_name();
-            if !generated_name(&name) {
-                continue;
-            }
-            let metadata = objects.symlink_metadata(&name)?;
-            if is_link(&metadata) || !metadata.is_dir() {
-                return Err(suspicious());
-            }
-            let quarantine = objects.open_dir_nofollow(&name)?;
-            erase(quarantine, &context, 0, &mut budget)?;
-            removed += 1;
-        }
+        let removed = cleanup(&objects, &context, &mut budget)?;
         tracing::debug!(removed, "Abandoned checkpoint transactions removed");
         // Opening/querying a relocated or network volume can block too. Keep it off the async
         // reactor and under the same owned lease, including if cancellation arrives mid-query.
@@ -76,14 +69,36 @@ pub(super) async fn prepare(repository: &Path, context: Context) -> Result<bool>
     })?
 }
 
+fn cleanup(objects: &Dir, context: &Context, budget: &mut usize) -> Result<usize> {
+    let mut removed = 0usize;
+    for entry in objects.entries()? {
+        context.check()?;
+        // Inspection is work even for unmatched entries and empty quarantines. Charge the
+        // outer scan and every recursive entry against one shared operation budget.
+        *budget = budget.checked_sub(1).ok_or_else(work_limit)?;
+        let name = entry?.file_name();
+        if !generated_name(&name) {
+            continue;
+        }
+        let metadata = objects.symlink_metadata(&name)?;
+        if is_link(&metadata) || !metadata.is_dir() {
+            return Err(suspicious());
+        }
+        let quarantine = objects.open_dir_nofollow(&name)?;
+        erase(quarantine, context, 0, budget)?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
 fn erase(directory: Dir, context: &Context, depth: usize, budget: &mut usize) -> Result<()> {
     context.check()?;
     if depth > DEPTH_LIMIT {
-        return Err(suspicious());
+        return Err(work_limit());
     }
     for entry in directory.entries()? {
         context.check()?;
-        *budget = budget.checked_sub(1).ok_or_else(suspicious)?;
+        *budget = budget.checked_sub(1).ok_or_else(work_limit)?;
         let name = entry?.file_name();
         let metadata = directory.symlink_metadata(&name)?;
         if is_link(&metadata) {
@@ -177,6 +192,39 @@ mod tests {
             "pack",
         ] {
             assert!(!generated_name(OsStr::new(name)), "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn top_level_unmatched_entries_and_empty_quarantines_consume_the_work_budget() {
+        for matched in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let repository = temp.path().join("repo.git");
+            let objects = repository.join("objects");
+            std::fs::create_dir_all(&objects).unwrap();
+            for index in 0..3 {
+                let name = if matched {
+                    format!("tmp_objdir-bulk-fsync-{index:06}")
+                } else {
+                    format!("unmatched-{index}")
+                };
+                std::fs::create_dir(objects.join(name)).unwrap();
+            }
+            let folder = crate::ids::new_id();
+            let owner = coordination::acquire(&repository, &folder, temp.path())
+                .await
+                .unwrap();
+            let directory = Dir::open_ambient_dir(&objects, cap_std::ambient_authority()).unwrap();
+            let mut budget = 2;
+            let result = cleanup(&directory, &owner.context(), &mut budget);
+            assert!(
+                matches!(result, Err(CheckpointError::Message(message)) if message.contains("work limit"))
+            );
+            assert_eq!(budget, 0);
+            assert_eq!(
+                std::fs::read_dir(&objects).unwrap().count(),
+                if matched { 1 } else { 3 }
+            );
         }
     }
 
