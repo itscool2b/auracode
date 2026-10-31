@@ -1,10 +1,16 @@
 //! Byte-bounded Git input avoids a process per small group of checkpoint files.
 
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::Path;
+
+use futures::{StreamExt, TryStreamExt, stream};
 
 use super::scan::{SavedFile, Scan};
 use super::{CheckpointError, Operation, Result, cache, git, scan};
+
+const HASH_CONCURRENCY: usize = 4;
+const HASH_RECORD_LIMIT: usize = 256;
 
 struct Batch {
     input: Vec<u8>,
@@ -65,6 +71,29 @@ fn hash_ids(output: &[u8], expected: usize) -> Result<Vec<String>> {
     Ok(ids)
 }
 
+/// Independent object writes can overlap their durable flushes. The futures stay owned by this
+/// call: cancellation or the first error drops all remaining helpers before returning. Retain
+/// each batch's input position because completion order must never change the file/OID mapping.
+async fn hash_batches<F, Fut>(batches: Vec<Batch>, run: F) -> Result<Vec<String>>
+where
+    F: Fn(Batch) -> Fut,
+    Fut: Future<Output = Result<Vec<u8>>>,
+{
+    let completed: BTreeMap<usize, Vec<String>> =
+        stream::iter(batches.into_iter().enumerate().map(|(index, batch)| {
+            let expected = batch.records;
+            let work = run(batch);
+            async move {
+                let output = work.await?;
+                hash_ids(&output, expected).map(|ids| (index, ids))
+            }
+        }))
+        .buffer_unordered(HASH_CONCURRENCY)
+        .try_collect()
+        .await?;
+    Ok(completed.into_values().flatten().collect())
+}
+
 fn index_record(path: &str, file: &SavedFile) -> Result<Vec<u8>> {
     scan::validate(path)?;
     git::oid(file.oid.as_bytes())?;
@@ -113,12 +142,11 @@ pub(super) async fn write_tree(
                     )),
                 }
             }),
-            512,
+            HASH_RECORD_LIMIT,
         )?;
-        let mut offset = 0;
-        for batch in inputs {
+        let ids = hash_batches(inputs, |batch| async move {
             operation.context.check()?;
-            let output = operation
+            operation
                 .git
                 .run_input_at(
                     &operation.repo,
@@ -134,24 +162,20 @@ pub(super) async fn write_tree(
                     batch.input,
                     batch.records * 42,
                 )
-                .await?;
-            let ids = hash_ids(&output, batch.records)?;
-            for ((path, _), oid) in scanned.copies[offset..offset + batch.records]
-                .iter()
-                .zip(ids)
-            {
-                let fingerprint = scanned.files.get(path).ok_or_else(|| {
-                    CheckpointError::Message("Checkpoint file metadata was lost.".into())
-                })?;
-                files.insert(
-                    path.clone(),
-                    SavedFile {
-                        fingerprint: fingerprint.clone(),
-                        oid,
-                    },
-                );
-            }
-            offset += batch.records;
+                .await
+        })
+        .await?;
+        for ((path, _), oid) in scanned.copies.iter().zip(ids) {
+            let fingerprint = scanned.files.get(path).ok_or_else(|| {
+                CheckpointError::Message("Checkpoint file metadata was lost.".into())
+            })?;
+            files.insert(
+                path.clone(),
+                SavedFile {
+                    fingerprint: fingerprint.clone(),
+                    oid,
+                },
+            );
         }
         // `hash-object -w` may return the expected ID without reading or replacing an already
         // existing object. Verify newly hashed copies too, so a cold retry after cache invalidation
@@ -215,13 +239,135 @@ mod tests {
     use crate::paths::DataRoot;
     use crate::profile::Profiles;
     use aura_process::{EnvResolver, EnvSource, LeftoverRegistry, ResolvedEnv, process_env};
+    use futures::FutureExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::oneshot;
+
+    struct ActiveHash(Arc<AtomicUsize>);
+
+    impl Drop for ActiveHash {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    struct HashControls {
+        releases: Vec<Option<oneshot::Sender<bool>>>,
+        active: Arc<AtomicUsize>,
+        started: Arc<AtomicUsize>,
+    }
+
+    impl HashControls {
+        fn release(&mut self, index: usize, success: bool) {
+            self.releases[index].take().unwrap().send(success).unwrap();
+        }
+    }
+
+    fn controlled_hashes(
+        count: usize,
+    ) -> (impl Future<Output = Result<Vec<String>>>, HashControls) {
+        let (releases, waits): (Vec<_>, Vec<_>) = (0..count)
+            .map(|_| {
+                let (release, wait) = oneshot::channel();
+                (Some(release), Some(wait))
+            })
+            .unzip();
+        let active = Arc::new(AtomicUsize::new(0));
+        let started = Arc::new(AtomicUsize::new(0));
+        let controls = HashControls {
+            releases,
+            active: Arc::clone(&active),
+            started: Arc::clone(&started),
+        };
+        let waits = Mutex::new(waits);
+        let inputs = (0..count)
+            .map(|index| Batch {
+                input: vec![index as u8],
+                records: 1,
+            })
+            .collect();
+        let work = hash_batches(inputs, move |batch| {
+            let index = batch.input[0] as usize;
+            let wait = waits.lock().unwrap()[index].take().unwrap();
+            let active = Arc::clone(&active);
+            let started = Arc::clone(&started);
+            async move {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                let _active = ActiveHash(active);
+                assert!(current <= HASH_CONCURRENCY, "too many concurrent hashes");
+                started.fetch_add(1, Ordering::SeqCst);
+                if wait.await.unwrap() {
+                    Ok(format!("{:040x}\n", index + 1).into_bytes())
+                } else {
+                    Err(CheckpointError::Message("injected hash failure".into()))
+                }
+            }
+        });
+        (work, controls)
+    }
+
+    #[tokio::test]
+    async fn concurrent_hashes_preserve_input_order_and_admit_at_most_four_helpers() {
+        let (work, mut controls) = controlled_hashes(6);
+        let mut work = Box::pin(work);
+        assert!(work.as_mut().now_or_never().is_none());
+        assert_eq!(controls.active.load(Ordering::SeqCst), 4);
+        assert_eq!(controls.started.load(Ordering::SeqCst), 4);
+
+        // Later batches finish first. Each freed slot admits just one waiting helper.
+        controls.release(3, true);
+        assert!(work.as_mut().now_or_never().is_none());
+        assert_eq!(controls.active.load(Ordering::SeqCst), 4);
+        assert_eq!(controls.started.load(Ordering::SeqCst), 5);
+        controls.release(4, true);
+        assert!(work.as_mut().now_or_never().is_none());
+        assert_eq!(controls.active.load(Ordering::SeqCst), 4);
+        assert_eq!(controls.started.load(Ordering::SeqCst), 6);
+        for index in [1, 5, 2, 0] {
+            controls.release(index, true);
+        }
+        let ids = work.await.unwrap();
+        assert_eq!(
+            ids,
+            (1..=6)
+                .map(|index| format!("{index:040x}"))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(controls.active.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_or_cancelled_hashing_drops_every_live_helper_and_starts_no_later_batch() {
+        for fail in [false, true] {
+            let (work, mut controls) = controlled_hashes(6);
+            let mut work = Box::pin(work);
+            assert!(work.as_mut().now_or_never().is_none());
+            assert_eq!(controls.started.load(Ordering::SeqCst), 4);
+            if fail {
+                controls.release(2, false);
+                assert!(work.await.is_err());
+            } else {
+                drop(work);
+            }
+            assert_eq!(controls.active.load(Ordering::SeqCst), 0);
+            assert_eq!(controls.started.load(Ordering::SeqCst), 4);
+            for release in controls.releases.into_iter().flatten() {
+                assert!(
+                    release.is_closed(),
+                    "no helper remains detached after return"
+                );
+            }
+        }
+    }
 
     #[test]
     fn cold_hash_batches_also_bound_fsync_work_per_helper() {
-        let result = bounded_batches((0..1025).map(|_| Ok(b"0\n".to_vec())), 512).unwrap();
+        let result =
+            bounded_batches((0..513).map(|_| Ok(b"0\n".to_vec())), HASH_RECORD_LIMIT).unwrap();
         assert_eq!(
             result.iter().map(|batch| batch.records).collect::<Vec<_>>(),
-            [512, 512, 1]
+            [256, 256, 1]
         );
     }
 
@@ -260,7 +406,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn batched_writer_preserves_retained_bytes_and_uses_four_helpers_for_many_files() {
+    async fn concurrent_writer_preserves_retained_bytes_and_file_mapping_across_batches() {
         let temp = tempfile::tempdir().unwrap();
         let profile = Profiles::new(DataRoot::at(temp.path().join("data")))
             .open_active()
@@ -298,7 +444,7 @@ mod tests {
             .unwrap();
         let copies = operation.scratch.path().join("fresh copies");
         std::fs::create_dir(&copies).unwrap();
-        let paths: Vec<_> = (0..130).map(|i| format!("file {i} é.txt")).collect();
+        let paths: Vec<_> = (0..1025).map(|i| format!("file {i} é.txt")).collect();
         for path in &paths {
             std::fs::write(work.join(path), path.as_bytes()).unwrap();
         }
@@ -307,8 +453,8 @@ mod tests {
         let (files, tree) = write_tree(&operation, &work, &scanned, Some(&retained))
             .await
             .unwrap();
-        assert_eq!(operation.git.helper_count() - before, 4);
-        assert_eq!(files.len(), 131);
+        assert_eq!(operation.git.helper_count() - before, 8);
+        assert_eq!(files.len(), 1026);
         let listed = operation
             .git
             .run(
@@ -321,11 +467,11 @@ mod tests {
                     "--name-only".into(),
                     tree.clone().into(),
                 ],
-                16 * 1024,
+                64 * 1024,
             )
             .await
             .unwrap();
-        assert_eq!(listed.iter().filter(|byte| **byte == 0).count(), 131);
+        assert_eq!(listed.iter().filter(|byte| **byte == 0).count(), 1026);
         let restored = service
             .blob(&operation, &work, files.get("retained.txt").unwrap())
             .await
@@ -388,5 +534,21 @@ mod tests {
         assert_eq!(operation.git.helper_count() - before, 2);
         assert_eq!(same_tree, tree);
         assert_eq!(same_files, files);
+
+        // A failed batch must stop the writer before it touches the index, even if other
+        // concurrent batches already succeeded in storing their immutable objects.
+        let operation = service
+            .operation(&folder, &work, false, owner.context())
+            .await
+            .unwrap();
+        let copies = operation.scratch.path().join("failed copies");
+        std::fs::create_dir(&copies).unwrap();
+        let scanned = scan::collect(&work, &all_paths, Some(&copies)).unwrap();
+        std::fs::remove_file(&scanned.copies[HASH_RECORD_LIMIT * 2].1).unwrap();
+        assert!(write_tree(&operation, &work, &scanned, None).await.is_err());
+        assert!(
+            !operation.index.exists(),
+            "no index was published after hash failure"
+        );
     }
 }
