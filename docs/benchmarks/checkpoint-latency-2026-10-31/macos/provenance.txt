@@ -1,0 +1,2 @@
+baseline cache_sentinel_expected=absent cache_sentinel_observed=absent target=/Users/runner/work/_temp/checkpoint-performance.b7z1iw/baseline-target
+current cache_sentinel_expected=present cache_sentinel_observed=present target=/Users/runner/work/auracode/auracode/target

@@ -1,0 +1,830 @@
+# current-checkpoint_workspace_performance.log
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=10
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.875952 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=2
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=62.284551 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=78 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="scan" elapsed_ms=748 file_count=1628 copied_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="verify" elapsed_ms=0 reused_count=0 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.541807 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=978.303626 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.393562 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1003.879457 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1010.164021 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.209033 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.09014 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1073.019529 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.899214 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=289.603093 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.972040999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=734.9429309999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.031098 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=725.0872860000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=10.639745000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=209.93820599999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=144.016943 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=13.185418 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=759.569467 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=27.63005 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="write_tree" elapsed_ms=3110 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=16.704665000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.168644999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="publish" elapsed_ms=56
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=4034 file_count=1628 total_bytes=28343064 helper_count=24
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=4188 outcome="success"
+CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=cold elapsed_ms=4190
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=23.925874 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=37 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="scan" elapsed_ms=321 file_count=1628 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=226.069143 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=148.042138 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=43.204347999999996 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="verify" elapsed_ms=545 reused_count=1628 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=22.191263 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.346912 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="publish" elapsed_ms=62
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=970 file_count=1628 total_bytes=28343064 helper_count=6
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=973 outcome="success"
+CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=973
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=25.927623 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=39 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="scan" elapsed_ms=310 file_count=1628 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=205.285596 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=149.445269 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=42.740424 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="verify" elapsed_ms=524 reused_count=1628 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=16.599026 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.737401 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="publish" elapsed_ms=58
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=935 file_count=1628 total_bytes=28343064 helper_count=6
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=937 outcome="success"
+CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=937
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=26.02272 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=40 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="scan" elapsed_ms=322 file_count=1628 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=218.046052 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=161.451369 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=44.554993 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="verify" elapsed_ms=561 reused_count=1628 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1628
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=18.971734 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.961043 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="publish" elapsed_ms=60
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=988 file_count=1628 total_bytes=28343064 helper_count=6
+CAPTURE_DIAGNOSTIC fixture=workspace storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=991 outcome="success"
+CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=991
+# current-checkpoint_performance.log
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.177509 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=15
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.090459 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=17 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="scan" elapsed_ms=279 file_count=1000 copied_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="verify" elapsed_ms=0 reused_count=0 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.899044000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=902.71964 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=916.639712 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.120114 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=924.751806 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.576169999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=938.912101 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.312128 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.473008 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=193.98281500000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=14.920667 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=59.200816 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=14.764982 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="write_tree" elapsed_ms=1282 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=17.197357 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.160148 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="publish" elapsed_ms=52
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=1649 file_count=1000 total_bytes=262890 helper_count=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=1766 outcome="success"
+CHECKPOINT_BENCH storage=local files=1000 scenario=cold elapsed_ms=1766
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.775008 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=22 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="scan" elapsed_ms=60 file_count=1000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=183.886632 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=12.049293 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="verify" elapsed_ms=203 reused_count=1000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=20.935809 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=18.802283 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="publish" elapsed_ms=56
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=346 file_count=1000 total_bytes=262890 helper_count=5
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=347 outcome="success"
+CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=347
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=3
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.839318000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=18 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="scan" elapsed_ms=60 file_count=1000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=190.003439 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=13.271132 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="verify" elapsed_ms=211 reused_count=1000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=21.398071 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.105777999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="publish" elapsed_ms=54
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=351 file_count=1000 total_bytes=262890 helper_count=5
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=352 outcome="success"
+CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=352
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.868562 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=17 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="scan" elapsed_ms=72 file_count=1000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=179.752694 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=13.947641 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="verify" elapsed_ms=204 reused_count=1000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=17.114547 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=15.978012999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="publish" elapsed_ms=47
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=345 file_count=1000 total_bytes=262890 helper_count=5
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=346 outcome="success"
+CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=346
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.686874 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=16 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="scan" elapsed_ms=56 file_count=1000 copied_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=169.953294 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="verify" elapsed_ms=177 reused_count=999 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=14.119224999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=18.338452 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=11.31305 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=13.103864 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=12.151007 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=30.44228 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=12.773731 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="write_tree" elapsed_ms=124 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=17.061825 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=15.965311999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="publish" elapsed_ms=46
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=426 file_count=1000 total_bytes=262638 helper_count=11
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=429 outcome="success"
+CHECKPOINT_BENCH storage=local files=1000 scenario=one-file elapsed_ms=429
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.050635 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.820054 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=16 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=49 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=7959 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=51 file_count=1000 total_bytes=262890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=8098 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=8099 outcome="success"
+CHECKPOINT_BENCH storage=account files=1000 scenario=cold elapsed_ms=8099
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.497551 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=16
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.614510999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=16 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=57 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=299 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=53 file_count=1000 total_bytes=262890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=445 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=446 outcome="success"
+CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=446
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.975943 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=18
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.948184000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=17 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=62 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=297 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=55 file_count=1000 total_bytes=262890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=453 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=454 outcome="success"
+CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=454
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=16.934962000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.577390000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=17 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=57 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=325 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=53 file_count=1000 total_bytes=262890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=473 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=474 outcome="success"
+CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=474
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.453752 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=15
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=12.947469 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=15 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=57 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=307 file_count=1000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=52 file_count=1000 total_bytes=262638
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=452 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=453 outcome="success"
+CHECKPOINT_BENCH storage=account files=1000 scenario=one-file elapsed_ms=453
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=18.521975 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=18
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=13
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.553111 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=58 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="scan" elapsed_ms=2978 file_count=10000 copied_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="verify" elapsed_ms=0 reused_count=0 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=18.463693 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=854.745395 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=861.389096 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.627961000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=878.5595659999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.986164 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=880.007157 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.309016999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.031058 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=918.812611 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.030536 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=919.773063 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=919.2190529999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.871265999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.392915 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1003.184181 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.355288 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=883.153426 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=861.9116959999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.678239 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=811.716836 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=882.837708 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.205147 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.091528 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.818265 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=910.671855 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=907.212896 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.894849999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.526353 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=939.323843 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=965.8266570000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.227286 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=22.263979 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=886.8497990000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.267629 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=919.114693 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.074652 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=900.5693930000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=917.470148 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.524737 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.451229 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=902.441228 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.717998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=916.827499 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=898.2964039999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=909.221343 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.041854 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.994452 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.136768 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1003.02818 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.969416000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=989.623021 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1005.5581890000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.468723 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.944194 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1186.12929 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.833083000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=941.0712580000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.365273 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=961.7159320000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=974.286174 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=12.421073 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.831527000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1039.6397049999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.072392 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1280.951316 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.13757 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1286.788416 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.076419 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1338.1869140000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=22.220101999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1222.909967 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.659441 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=79.161397 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.276786 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=786.588093 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.461827999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=758.07791 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=887.03416 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.477769 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.616742 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=666.3805990000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=651.971833 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=305.725245 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=20.950798 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=140.68699600000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=22.416018 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="write_tree" elapsed_ms=11744 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=19.207824 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.172317 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="publish" elapsed_ms=139
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=14953 file_count=10000 total_bytes=2638890 helper_count=91
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=16256 outcome="success"
+CHECKPOINT_BENCH storage=local files=10000 scenario=cold elapsed_ms=16256
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=14
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=40.824391 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=69 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="scan" elapsed_ms=706 file_count=10000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=746.848583 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=697.422771 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=308.571927 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=17.415622 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="verify" elapsed_ms=1857 reused_count=10000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=29.795091 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=20.820269 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="publish" elapsed_ms=157
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=2820 file_count=10000 total_bytes=2638890 helper_count=7
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=2830 outcome="success"
+CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=2830
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=15
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=35.813152 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=62 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="scan" elapsed_ms=683 file_count=10000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=702.799533 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=698.4658430000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=304.421166 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=15.371238 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="verify" elapsed_ms=1806 reused_count=10000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=21.692021999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=21.795133 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="publish" elapsed_ms=158
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=2742 file_count=10000 total_bytes=2638890 helper_count=7
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=2750 outcome="success"
+CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=2751
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=15
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=38.446815 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=69 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="scan" elapsed_ms=732 file_count=10000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=712.304309 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=656.640684 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=289.269595 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=14.309412 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="verify" elapsed_ms=1759 reused_count=10000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=16.738073 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.57846 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="publish" elapsed_ms=133
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=2726 file_count=10000 total_bytes=2638890 helper_count=7
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=2733 outcome="success"
+CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=2733
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=12
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.032503 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=55 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="scan" elapsed_ms=592 file_count=10000 copied_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=677.1936 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=669.937432 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=304.494476 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="verify" elapsed_ms=1730 reused_count=9999 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.491559 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=19.106866 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=11.356430000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=12.286003000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=21.404093 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=126.428432 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=19.862775 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="write_tree" elapsed_ms=356 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=18.623725 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=15.89693 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="publish" elapsed_ms=129
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=2892 file_count=10000 total_bytes=2638638 helper_count=13
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=2904 outcome="success"
+CHECKPOINT_BENCH storage=local files=10000 scenario=one-file elapsed_ms=2904
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=28.128305 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=28
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=13
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=35.67914 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=65 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=540 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=83840 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=475 file_count=10000 total_bytes=2638890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=84967 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=84968 outcome="success"
+CHECKPOINT_BENCH storage=account files=10000 scenario=cold elapsed_ms=84968
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.009574999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=12
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=29.63625 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=54 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=587 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=3141 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=493 file_count=10000 total_bytes=2638890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=4312 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=4313 outcome="success"
+CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=4313
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=16.998479 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=14
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.773487 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=56 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=585 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=3052 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=470 file_count=10000 total_bytes=2638890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=4200 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=4201 outcome="success"
+CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=4201
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.732342000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=18
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=13
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.498078000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=55 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=582 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=3217 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=465 file_count=10000 total_bytes=2638890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=4356 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=4357 outcome="success"
+CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=4357
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=18.634831000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=19
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=14
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=33.281985999999996 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=60 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=580 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=3078 file_count=10000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=465 file_count=10000 total_bytes=2638638
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=4221 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=4223 outcome="success"
+CHECKPOINT_BENCH storage=account files=10000 scenario=one-file elapsed_ms=4223
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=16.799431 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=17
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=26
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=50.222052000000005 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=100 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="scan" elapsed_ms=6647 file_count=20000 copied_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="verify" elapsed_ms=0 reused_count=0 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=18.204196999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=944.973705 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=950.138773 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=958.929899 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.543301000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.93683 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.962615 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=981.5054600000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.651307000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=895.739952 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=897.074873 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.091297 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.493769999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=952.9543209999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.752428000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=961.2786719999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.940189 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1060.965712 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1008.779331 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1065.037795 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.200565 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=15.961564000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.333079 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1044.4700460000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.709911 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=955.441515 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=956.970342 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=958.571716 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.639362000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.120314999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.531962 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=933.65721 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.213855 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=921.331411 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.586764 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=956.697727 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=917.1805549999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=961.5074470000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.851042 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.124183 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.987055 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=924.529024 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=896.4698559999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=23.924889 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=906.572446 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=26.731424999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.632965 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=955.891059 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.450125 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=944.755141 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.061202 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1025.6322819999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1041.842365 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.043309 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.306111 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1089.1648679999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.393215 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1539.5598449999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.06422 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1542.366046 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1571.080496 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1582.952233 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.021366 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.452222000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.696934 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1309.814773 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.688937 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1282.4702430000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.79945 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1303.0371830000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.671246 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1443.7742620000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.274962 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1626.0508570000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.569325 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1774.421603 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.286507 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1819.443131 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.015392 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1730.325338 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.964397 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1443.139854 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1397.5500080000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=24.625438 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.406398 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1348.032299 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.256811 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1343.6539169999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.137327000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1331.9280789999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1276.8696360000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.127664 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=21.334806 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1363.6645800000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=21.157511 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1514.364022 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.680806999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1343.670326 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1307.030959 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1342.516975 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=21.412906999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=22.167956999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=31.075552 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1350.7705859999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.399113 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1271.033028 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.859939 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1292.186537 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1325.245598 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=23.617931000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.369921 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1143.256952 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.61629 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1045.531688 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1046.296389 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.614401 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.894564000000003 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1118.582429 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.617034999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1014.3499949999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.809031000000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1104.974627 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1070.402014 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1110.0799260000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=23.773508 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=30.938713999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=22.31192 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1047.0694 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.505941999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1024.544083 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1027.7745810000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.853819 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1037.7379760000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=23.219174 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1010.937341 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=16.896693 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=17.666923 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1177.7790969999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1157.1384 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=19.863338000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.707029 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1261.0037849999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.51423 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1353.1239529999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=22.633484 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1134.2435529999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=20.349885 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1179.496184 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=18.077237 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1148.9416720000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=1088.707395 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.622007 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.262361 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=141.346996 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=21.81309 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=725.937331 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=14.947541 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=724.050818 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=13.537469 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=667.3949719999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=675.56154 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=661.474686 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=674.401641 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=591.1898709999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=25.825058000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=27.726471 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=250.317307 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=26.495941 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="write_tree" elapsed_ms=27511 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=19.320589 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=16.391468999999997 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="publish" elapsed_ms=228
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=34532 file_count=20000 total_bytes=5288890 helper_count=172
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=38061 outcome="success"
+CHECKPOINT_BENCH storage=local files=20000 scenario=cold elapsed_ms=38061
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=30
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=50.844947000000005 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=101 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="scan" elapsed_ms=1240 file_count=20000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=660.6786460000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=682.391838 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=647.138228 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=662.965404 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=587.3437339999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=17.358974 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="verify" elapsed_ms=3425 reused_count=20000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=23.670965 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=18.444637 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="publish" elapsed_ms=240
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=5067 file_count=20000 total_bytes=5288890 helper_count=9
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=5084 outcome="success"
+CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=5084
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=47.854659 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=103 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="scan" elapsed_ms=1190 file_count=20000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=654.170612 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=678.376589 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=665.8331469999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=661.4604840000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=570.7301540000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=16.032009 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="verify" elapsed_ms=3418 reused_count=20000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=18.031338 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.668965 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="publish" elapsed_ms=236
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=5007 file_count=20000 total_bytes=5288890 helper_count=9
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=5020 outcome="success"
+CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=5020
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=50.708368 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=104 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="scan" elapsed_ms=1271 file_count=20000 copied_count=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=676.308238 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=724.1132289999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=642.248548 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=641.8163 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=562.2483560000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=16.538154 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="verify" elapsed_ms=3431 reused_count=20000 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="write_tree" elapsed_ms=0 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=21.77104 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.272795000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="publish" elapsed_ms=228
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=5093 file_count=20000 total_bytes=5288890 helper_count=9
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=5108 outcome="success"
+CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=5108
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=48.193262 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=98 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="scan" elapsed_ms=1180 file_count=20000 copied_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=677.3735250000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=641.8149490000001 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=656.991256 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=643.326426 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=570.800614 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="verify" elapsed_ms=3352 reused_count=19999 cache_missing=false
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::quarantine
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=16.741452 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::plumbing batch_fsync=true file_count=1
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="add" elapsed_ms=18.985358 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=12.51041 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="cat-file" elapsed_ms=13.632323999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=24.730611 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-index" elapsed_ms=22.31166 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="write-tree" elapsed_ms=247.046602 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-tree" elapsed_ms=28.422101 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="write_tree" elapsed_ms=629 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="commit-tree" elapsed_ms=20.764132 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="update-ref" elapsed_ms=17.919346 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="publish" elapsed_ms=227
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="local" elapsed_ms=5547 file_count=20000 total_bytes=5288638 helper_count=16
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=local scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=5568 outcome="success"
+CHECKPOINT_BENCH storage=local files=20000 scenario=one-file elapsed_ms=5568
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=19.848748999999998 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="setup" elapsed_ms=20
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=49.623826 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="discovery" elapsed_ms=99 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=1072 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=179240 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=971 file_count=20000 total_bytes=5288890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=181439 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=cold sample=0 target=aura_core::checkpoints stage="total" elapsed_ms=181441 outcome="success"
+CHECKPOINT_BENCH storage=account files=20000 scenario=cold elapsed_ms=181441
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=20.163942000000002 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="setup" elapsed_ms=20
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=48.522866 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="discovery" elapsed_ms=100 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=1161 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=6008 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=913 file_count=20000 total_bytes=5288890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=8238 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=1 target=aura_core::checkpoints stage="total" elapsed_ms=8239 outcome="success"
+CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=8239
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=16.526881 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="setup" elapsed_ms=16
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=50.46184 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="discovery" elapsed_ms=101 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=1141 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=6116 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=927 file_count=20000 total_bytes=5288890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=8336 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=2 target=aura_core::checkpoints stage="total" elapsed_ms=8338 outcome="success"
+CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=8338
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=17.604387 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="setup" elapsed_ms=18
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="recovery" elapsed_ms=25
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=52.626382 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="discovery" elapsed_ms=106 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=1191 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=6018 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=912 file_count=20000 total_bytes=5288890
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=8280 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=unchanged sample=3 target=aura_core::checkpoints stage="total" elapsed_ms=8281 outcome="success"
+CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=8281
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="wait" elapsed_ms=0
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="init" elapsed_ms=15.963372999999999 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="setup" elapsed_ms=16
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="recovery" elapsed_ms=26
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::git phase="git_helper" operation="ls-files" elapsed_ms=51.3323 helper_count=1 outcome="success"
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="discovery" elapsed_ms=101 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="scan" storage="account" elapsed_ms=1131 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="write_objects" storage="account" elapsed_ms=6017 file_count=20000
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints::encrypted stage="publish" storage="account" elapsed_ms=924 file_count=20000 total_bytes=5288638
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="complete" storage="account" elapsed_ms=8225 helper_count=2 success=true
+CAPTURE_DIAGNOSTIC fixture=synthetic storage=account scenario=one-file sample=4 target=aura_core::checkpoints stage="total" elapsed_ms=8227 outcome="success"
+CHECKPOINT_BENCH storage=account files=20000 scenario=one-file elapsed_ms=8227

@@ -132,3 +132,7 @@ ignored core fixtures; CI comparisons enable it. Collection adds small bounded a
 mutex locking, but formatting and output occur after each elapsed time is frozen. `CAPTURE_DIAGNOSTIC`
 records retain phase/helper timings and durability selection without messages, IDs, paths, or
 contents, and remain separate from normalized measurement rows.
+
+Native measurements, source provenance, and interpretation limits are retained in the
+[2026-10-31 benchmark report](benchmarks/checkpoint-latency-2026-10-31/README.md), including the
+Account cold-capture observations alongside the Local improvements.
