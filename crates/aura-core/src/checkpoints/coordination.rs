@@ -170,11 +170,15 @@ impl Context {
 
 /// The canonical root must be resolved before admission and revalidated by the operation.
 pub(super) async fn acquire(storage: &Path, folder: &str, root: &Path) -> Result<Owner> {
-    super::valid_id(folder)?;
+    // UUID spelling is not a storage identity. In particular, Windows opens upper/lowercase
+    // spellings of the same `<folder>.git` name as one repository. Preserve caller IDs elsewhere.
+    let folder = uuid::Uuid::parse_str(folder)
+        .map_err(|_| CheckpointError::Message("Invalid checkpoint identity.".into()))?
+        .to_string();
     static COORDINATOR: OnceLock<Arc<Coordinator>> = OnceLock::new();
     Ok(COORDINATOR
         .get_or_init(|| Arc::new(Coordinator::default()))
-        .acquire(storage, folder, root)
+        .acquire(storage, &folder, root)
         .await)
 }
 
@@ -354,6 +358,22 @@ mod tests {
         let other_id = crate::ids::new_id();
         let first = acquire(&first_storage, &first_id, root).await.unwrap();
         let mut second = Box::pin(acquire(&other_storage, &other_id, root));
+        assert!(second.as_mut().now_or_never().is_none());
+        drop(first);
+        drop(second.await.unwrap());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_uuid_case_aliases_share_storage_even_for_disjoint_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let storage = temp.path().join("storage");
+        let first_root = temp.path().join("first");
+        let second_root = temp.path().join("second");
+        let folder = "123e4567-e89b-12d3-a456-426614174000";
+        let alias = folder.to_ascii_uppercase();
+        let first = acquire(&storage, folder, &first_root).await.unwrap();
+        let mut second = Box::pin(acquire(&storage, &alias, &second_root));
         assert!(second.as_mut().now_or_never().is_none());
         drop(first);
         drop(second.await.unwrap());
