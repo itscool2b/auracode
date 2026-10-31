@@ -1,0 +1,22 @@
+baseline_commit=af499cd05684df8d2f08e48af21d268b522862f7
+current_commit=05d4e42c533559b88a45e729ea86744148f184fe
+baseline_target=D:\a\_temp\checkpoint-performance.2GBfex\baseline-target
+current_target=D:\a\auracode\auracode\target
+counts=1000,10000,20000
+warm_samples=3
+build_profile=test
+features=account-sync
+started_at_utc=2026-10-31T06:52:27Z
+core_fixture_blob=b95e9b975383ace8b45f7609a636159cbe68aa82
+native_fixture_blob=8f5c97c5aeb5f3d3bfe4c312409454a3729e950b
+git version 2.56.0.windows.2
+cargo 1.99.1 (5f94df478 2026-08-27)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+binary: rustc
+commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+commit-date: 2026-10-13
+host: x86_64-pc-windows-msvc
+release: 1.99.1
+LLVM version: 23.1.1
+MINGW64_NT-10.0-26100 3.6.10-5a1665c8.x86_64 2026-09-28 10:40 UTC
+completed_at_utc=2026-10-31T07:43:39Z

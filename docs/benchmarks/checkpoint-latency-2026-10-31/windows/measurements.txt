@@ -1,0 +1,74 @@
+baseline CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=cold elapsed_ms=18823
+baseline CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=5700
+baseline CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=5937
+baseline CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=5560
+baseline CHECKPOINT_PROMPT files=1000 scenario=cold send_to_driver_ms=9557
+baseline CHECKPOINT_PROMPT files=1000 scenario=unchanged send_to_driver_ms=2936
+baseline CHECKPOINT_PROMPT files=1000 scenario=one-file send_to_driver_ms=3020
+baseline CHECKPOINT_BENCH storage=local files=1000 scenario=cold elapsed_ms=9697
+baseline CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=2932
+baseline CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=3008
+baseline CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=2977
+baseline CHECKPOINT_BENCH storage=local files=1000 scenario=one-file elapsed_ms=3028
+baseline CHECKPOINT_BENCH storage=account files=1000 scenario=cold elapsed_ms=7434
+baseline CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=853
+baseline CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=801
+baseline CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=815
+baseline CHECKPOINT_BENCH storage=account files=1000 scenario=one-file elapsed_ms=831
+baseline CHECKPOINT_BENCH storage=local files=10000 scenario=cold elapsed_ms=94763
+baseline CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=27479
+baseline CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=27824
+baseline CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=27556
+baseline CHECKPOINT_BENCH storage=local files=10000 scenario=one-file elapsed_ms=27605
+baseline CHECKPOINT_BENCH storage=account files=10000 scenario=cold elapsed_ms=81271
+baseline CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7618
+baseline CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7378
+baseline CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7343
+baseline CHECKPOINT_BENCH storage=account files=10000 scenario=one-file elapsed_ms=7436
+baseline CHECKPOINT_BENCH storage=local files=20000 scenario=cold elapsed_ms=188400
+baseline CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=55285
+baseline CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=55746
+baseline CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=55706
+baseline CHECKPOINT_BENCH storage=local files=20000 scenario=one-file elapsed_ms=54472
+baseline CHECKPOINT_BENCH storage=account files=20000 scenario=cold elapsed_ms=150788
+baseline CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=15397
+baseline CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=14195
+baseline CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=14129
+baseline CHECKPOINT_BENCH storage=account files=20000 scenario=one-file elapsed_ms=14215
+current CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=cold elapsed_ms=17138
+current CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=1656
+current CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=1599
+current CHECKPOINT_WORKSPACE storage=local files=1628 bytes=28343064 scenario=unchanged elapsed_ms=1585
+current CHECKPOINT_PROMPT files=1000 scenario=cold send_to_driver_ms=9827
+current CHECKPOINT_PROMPT files=1000 scenario=unchanged send_to_driver_ms=712
+current CHECKPOINT_PROMPT files=1000 scenario=one-file send_to_driver_ms=1109
+current CHECKPOINT_BENCH storage=local files=1000 scenario=cold elapsed_ms=9642
+current CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=725
+current CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=743
+current CHECKPOINT_BENCH storage=local files=1000 scenario=unchanged elapsed_ms=744
+current CHECKPOINT_BENCH storage=local files=1000 scenario=one-file elapsed_ms=1089
+current CHECKPOINT_BENCH storage=account files=1000 scenario=cold elapsed_ms=7551
+current CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=858
+current CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=796
+current CHECKPOINT_BENCH storage=account files=1000 scenario=unchanged elapsed_ms=845
+current CHECKPOINT_BENCH storage=account files=1000 scenario=one-file elapsed_ms=824
+current CHECKPOINT_BENCH storage=local files=10000 scenario=cold elapsed_ms=97140
+current CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=5049
+current CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=4930
+current CHECKPOINT_BENCH storage=local files=10000 scenario=unchanged elapsed_ms=4934
+current CHECKPOINT_BENCH storage=local files=10000 scenario=one-file elapsed_ms=5661
+current CHECKPOINT_BENCH storage=account files=10000 scenario=cold elapsed_ms=76673
+current CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7670
+current CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7349
+current CHECKPOINT_BENCH storage=account files=10000 scenario=unchanged elapsed_ms=7854
+current CHECKPOINT_BENCH storage=account files=10000 scenario=one-file elapsed_ms=7347
+current CHECKPOINT_BENCH storage=local files=20000 scenario=cold elapsed_ms=200372
+current CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=9641
+current CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=9541
+current CHECKPOINT_BENCH storage=local files=20000 scenario=unchanged elapsed_ms=9579
+current CHECKPOINT_BENCH storage=local files=20000 scenario=one-file elapsed_ms=13972
+current CHECKPOINT_BENCH storage=account files=20000 scenario=cold elapsed_ms=156251
+current CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=15233
+current CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=14265
+current CHECKPOINT_BENCH storage=account files=20000 scenario=unchanged elapsed_ms=14422
+current CHECKPOINT_BENCH storage=account files=20000 scenario=one-file elapsed_ms=14388

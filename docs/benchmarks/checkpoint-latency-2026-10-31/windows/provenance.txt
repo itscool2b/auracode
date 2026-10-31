@@ -1,0 +1,2 @@
+baseline cache_sentinel_expected=absent cache_sentinel_observed=absent target=D:\a\_temp\checkpoint-performance.2GBfex\baseline-target
+current cache_sentinel_expected=present cache_sentinel_observed=present target=D:\a\auracode\auracode\target
