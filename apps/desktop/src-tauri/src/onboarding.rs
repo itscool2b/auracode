@@ -60,6 +60,18 @@ impl SetupService {
         self.with_store(|store| Ok(store.preferences()))
     }
 
+    /// Serialize applying runtime settings with writes, and always use the latest saved values.
+    /// Concurrent command replies may resume out of order after their blocking file work.
+    pub(crate) fn apply_current_preferences(
+        &self,
+        apply: impl FnOnce(&SetupPreferences),
+    ) -> Result<(), AppError> {
+        self.with_store(|store| {
+            apply(&store.preferences());
+            Ok(())
+        })
+    }
+
     fn with_store<T>(
         &self,
         run: impl FnOnce(&OnboardingStore) -> Result<T, AppError>,
@@ -107,8 +119,10 @@ pub async fn setup_snapshot(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetupSnapshot, AppError> {
-    let (snapshot, _lease) = run(&state, None).await?;
-    crate::general_preferences::apply(&app, &snapshot.preferences.general);
+    let (snapshot, lease) = run(&state, None).await?;
+    lease.apply_current_preferences(|preferences| {
+        crate::general_preferences::apply(&app, &preferences.general);
+    })?;
     Ok(snapshot)
 }
 
@@ -121,12 +135,14 @@ pub async fn setup_apply(
     action: SetupAction,
 ) -> Result<SetupSnapshot, AppError> {
     let appearance_changed = matches!(&action, SetupAction::Appearance { .. });
-    let (snapshot, _lease) = run(&state, Some((revision, action))).await?;
+    let (snapshot, lease) = run(&state, Some((revision, action))).await?;
     // Settings' switches take effect at once: new chats, notifications, keep-awake, closing.
-    crate::general_preferences::apply(&app, &snapshot.preferences.general);
-    if appearance_changed {
-        crate::appearance::apply(&app, snapshot.preferences.appearance);
-    }
+    lease.apply_current_preferences(|preferences| {
+        crate::general_preferences::apply(&app, &preferences.general);
+        if appearance_changed {
+            crate::appearance::apply(&app, preferences.appearance);
+        }
+    })?;
     Ok(snapshot)
 }
 
@@ -152,7 +168,9 @@ mod tests {
             crate::launch::LaunchOptions::from_lookup(|_| None),
             "0.1.0".into(),
         );
-        let (snapshot, lease) = run(
+        let (older, older_lease) = run(&state, None).await.unwrap();
+        assert!(!older.preferences.general.automatic_checkpoints);
+        let (_, lease) = run(
             &state,
             Some((0, SetupAction::AutomaticCheckpoints { enabled: true })),
         )
@@ -167,8 +185,20 @@ mod tests {
             .is_err()
         );
         let manager = state.chats().unwrap().manager.clone();
-        crate::general_preferences::apply_to_manager(&manager, &snapshot.preferences.general);
+        lease
+            .apply_current_preferences(|preferences| {
+                crate::general_preferences::apply_to_manager(&manager, &preferences.general);
+            })
+            .unwrap();
+        // A snapshot command that read before the toggle may finish after it. It must not
+        // restore the older policy when updating the runtime.
+        older_lease
+            .apply_current_preferences(|preferences| {
+                crate::general_preferences::apply_to_manager(&manager, &preferences.general);
+            })
+            .unwrap();
         assert!(manager.automatic_checkpoints());
+        drop(older_lease);
         drop(lease);
         tokio::time::timeout(
             std::time::Duration::from_secs(1),

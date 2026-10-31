@@ -48,17 +48,15 @@ pub fn refresh(app: &AppHandle) {
     if state.launch.is_smoke() {
         return;
     }
-    let general = state
-        .setup_service()
-        .and_then(|service| match service.preferences() {
-            Ok(preferences) => Some(preferences.general),
+    if let Some(service) = state.setup_service() {
+        match service.apply_current_preferences(|preferences| apply(app, &preferences.general)) {
+            Ok(()) => return,
             Err(error) => {
                 tracing::warn!(%error, "settings could not be read; using the defaults");
-                None
             }
-        })
-        .unwrap_or_default();
-    apply(app, &general);
+        }
+    }
+    apply(app, &GeneralPreferences::default());
 }
 
 fn defaults(general: &GeneralPreferences) -> NewChatDefaults {
