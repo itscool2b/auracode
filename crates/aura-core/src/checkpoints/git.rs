@@ -262,6 +262,15 @@ impl Git {
                 "Checkpoint Git {operation} failed. The working folder and user index were left unchanged."
             )));
         }
+        // `cat-file --batch` can exit successfully and print "<oid> missing" after a loose
+        // object fails to inflate, while reporting the corruption only on stderr. A genuine
+        // missing-object response is silent. Never turn diagnostics into a recoverable cache
+        // miss, and never expose Git's potentially content-bearing stderr to the UI or logs.
+        if operation == "cat-file" && !output.stderr_tail.is_empty() {
+            return Err(CheckpointError::Message(
+                "Checkpoint Git could not verify stored objects.".into(),
+            ));
+        }
         timing.outcome = "success";
         Ok(output.stdout)
     }
