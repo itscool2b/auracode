@@ -16,6 +16,12 @@ use super::{CheckpointError, Result};
 /// Keep checkpoint batches within `aura_process::run_helper_input`'s unlogged input limit.
 pub(super) const INPUT_LIMIT: usize = 1024 * 1024;
 
+#[derive(Clone, Copy)]
+struct ObjectDirectory<'a> {
+    path: &'a Path,
+    batch_fsync: bool,
+}
+
 pub(super) struct Git {
     pub(super) program: PathBuf,
     env: Arc<ResolvedEnv>,
@@ -115,7 +121,7 @@ impl Git {
         args: Vec<OsString>,
         max_stdout: usize,
     ) -> Result<Vec<u8>> {
-        self.run_inner(repo, cwd, index, cwd, args, None, max_stdout)
+        self.run_inner(repo, cwd, index, cwd, args, None, max_stdout, None)
             .await
     }
 
@@ -154,8 +160,70 @@ impl Git {
                 "Checkpoint Git input exceeded its safety limit.".into(),
             ));
         }
-        self.run_inner(repo, worktree, index, cwd, args, Some(input), max_stdout)
-            .await
+        self.run_inner(
+            repo,
+            worktree,
+            index,
+            cwd,
+            args,
+            Some(input),
+            max_stdout,
+            None,
+        )
+        .await
+    }
+
+    /// `add` opens an upstream object-database transaction. On supported volumes, Git fully
+    /// flushes the batch before migrating its loose objects into the durable object directory.
+    /// The staging repo, worktree and index are fresh private scratch paths, so no user or
+    /// storage-repository attributes, filters, hooks or indexes participate in this operation.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn write_objects(
+        &self,
+        staging_repo: &Path,
+        copies: &Path,
+        batch_index: &Path,
+        objects: &Path,
+        input: Vec<u8>,
+        max_stdout: usize,
+        batch_fsync: bool,
+    ) -> Result<Vec<u8>> {
+        if input.len() > INPUT_LIMIT {
+            return Err(CheckpointError::Message(
+                "Checkpoint Git input exceeded its safety limit.".into(),
+            ));
+        }
+        let directory = Some(ObjectDirectory {
+            path: objects,
+            batch_fsync,
+        });
+        self.run_inner(
+            staging_repo,
+            copies,
+            batch_index,
+            copies,
+            vec![
+                "add".into(),
+                "--force".into(),
+                "--pathspec-from-file=-".into(),
+                "--pathspec-file-nul".into(),
+            ],
+            Some(input),
+            4096,
+            directory,
+        )
+        .await?;
+        self.run_inner(
+            staging_repo,
+            copies,
+            batch_index,
+            copies,
+            vec!["ls-files".into(), "--stage".into(), "-z".into()],
+            None,
+            max_stdout,
+            directory,
+        )
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -168,6 +236,7 @@ impl Git {
         args: Vec<OsString>,
         input: Option<Vec<u8>>,
         max_stdout: usize,
+        object_directory: Option<ObjectDirectory<'_>>,
     ) -> Result<Vec<u8>> {
         let operation = args
             .first()
@@ -194,7 +263,11 @@ impl Git {
             // Exclude index flushes even if platform defaults include them.
             "core.fsync=objects,reference,-index".into(),
             "-c".into(),
-            "core.fsyncMethod=fsync".into(),
+            if object_directory.is_some_and(|directory| directory.batch_fsync) {
+                "core.fsyncMethod=batch".into()
+            } else {
+                "core.fsyncMethod=fsync".into()
+            },
             "-c".into(),
             "core.quotePath=false".into(),
             "-c".into(),
@@ -202,6 +275,9 @@ impl Git {
             "-c".into(),
             format!("core.attributesFile={}", self.empty.display()).into(),
         ];
+        if object_directory.is_some() {
+            command.extend(["-c".into(), "core.bare=false".into()]);
+        }
         command.extend(args);
         let mut set = vec![
             ("GIT_DIR".into(), repo.as_os_str().to_owned()),
@@ -225,6 +301,12 @@ impl Git {
         ];
         if operation != "init" {
             set.push(("GIT_WORK_TREE".into(), worktree.as_os_str().to_owned()));
+        }
+        if let Some(directory) = object_directory {
+            set.push((
+                "GIT_OBJECT_DIRECTORY".into(),
+                directory.path.as_os_str().to_owned(),
+            ));
         }
         let spec = HelperSpec {
             program: self.program.clone(),

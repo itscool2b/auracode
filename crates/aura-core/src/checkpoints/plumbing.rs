@@ -9,8 +9,8 @@ use futures::{StreamExt, TryStreamExt, stream};
 use super::scan::{SavedFile, Scan};
 use super::{CheckpointError, Operation, Result, cache, git, scan};
 
-const HASH_CONCURRENCY: usize = 4;
-const HASH_RECORD_LIMIT: usize = 256;
+const WRITE_CONCURRENCY: usize = 4;
+const OBJECTS_PER_BATCH: usize = 256;
 
 struct Batch {
     input: Vec<u8>,
@@ -53,42 +53,100 @@ fn bounded_batches(
     Ok(batches)
 }
 
-fn hash_ids(output: &[u8], expected: usize) -> Result<Vec<String>> {
-    let Some(output) = output.strip_suffix(b"\n") else {
-        return Err(CheckpointError::Message(
-            "Git returned incomplete checkpoint object IDs.".into(),
-        ));
-    };
-    let ids = output
-        .split(|byte| *byte == b'\n')
-        .map(git::oid)
-        .collect::<Result<Vec<_>>>()?;
-    if ids.len() != expected {
-        return Err(CheckpointError::Message(
-            "Git did not save every checkpoint file.".into(),
-        ));
+fn invalid_stage() -> CheckpointError {
+    CheckpointError::Message("Git returned an invalid checkpoint staging index.".into())
+}
+
+fn copy_names(input: &[u8]) -> Result<Vec<String>> {
+    if input.len() > git::INPUT_LIMIT {
+        return Err(invalid_stage());
     }
-    Ok(ids)
+    let input = input.strip_suffix(&[0]).ok_or_else(invalid_stage)?;
+    let names: Vec<_> = input
+        .split(|byte| *byte == 0)
+        .take(OBJECTS_PER_BATCH + 1)
+        .map(|name| {
+            if name.is_empty() || !name.iter().all(u8::is_ascii_digit) {
+                return Err(invalid_stage());
+            }
+            String::from_utf8(name.to_vec()).map_err(|_| invalid_stage())
+        })
+        .collect::<Result<_>>()?;
+    if names.len() > OBJECTS_PER_BATCH {
+        return Err(invalid_stage());
+    }
+    Ok(names)
+}
+
+/// Stage output is sorted by Git's path order, not by the input order. Match every exact numeric
+/// identity once and then restore the copy order; reject conflicts, links and unrelated entries.
+fn stage_ids(output: &[u8], expected: &[String]) -> Result<Vec<String>> {
+    if expected.is_empty()
+        || expected.len() > OBJECTS_PER_BATCH
+        || output.len() > expected.iter().map(|name| name.len() + 65).sum()
+    {
+        return Err(invalid_stage());
+    }
+    let output = output.strip_suffix(&[0]).ok_or_else(invalid_stage)?;
+    let mut ids: BTreeMap<&str, Option<String>> =
+        expected.iter().map(|name| (name.as_str(), None)).collect();
+    if ids.len() != expected.len() {
+        return Err(invalid_stage());
+    }
+    for record in output.split(|byte| *byte == 0) {
+        let tab = record
+            .iter()
+            .position(|byte| *byte == b'\t')
+            .ok_or_else(invalid_stage)?;
+        let header: Vec<_> = record[..tab].split(|byte| *byte == b' ').collect();
+        if header.len() != 3
+            || !matches!(header[0], b"100644" | b"100755")
+            || header[2] != b"0"
+            || header[1].len() != 40
+        {
+            return Err(invalid_stage());
+        }
+        let name = std::str::from_utf8(&record[tab + 1..]).map_err(|_| invalid_stage())?;
+        if name.is_empty() || !name.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(invalid_stage());
+        }
+        let slot = ids.get_mut(name).ok_or_else(invalid_stage)?;
+        if slot.is_some() {
+            return Err(invalid_stage());
+        }
+        *slot = Some(git::oid(header[1])?);
+    }
+    expected
+        .iter()
+        .map(|name| {
+            ids.remove(name.as_str())
+                .flatten()
+                .ok_or_else(invalid_stage)
+        })
+        .collect()
 }
 
 /// Independent object writes can overlap their durable flushes. The futures stay owned by this
 /// call: cancellation or the first error drops all remaining helpers before returning. Retain
 /// each batch's input position because completion order must never change the file/OID mapping.
-async fn hash_batches<F, Fut>(batches: Vec<Batch>, run: F) -> Result<Vec<String>>
+async fn write_batches<F, Fut>(batches: Vec<Batch>, run: F) -> Result<Vec<String>>
 where
-    F: Fn(Batch) -> Fut,
-    Fut: Future<Output = Result<Vec<u8>>>,
+    F: Fn(usize, Batch) -> Fut,
+    Fut: Future<Output = Result<Vec<String>>>,
 {
     let completed: BTreeMap<usize, Vec<String>> =
         stream::iter(batches.into_iter().enumerate().map(|(index, batch)| {
             let expected = batch.records;
-            let work = run(batch);
+            let work = run(index, batch);
             async move {
-                let output = work.await?;
-                hash_ids(&output, expected).map(|ids| (index, ids))
+                let ids = work.await?;
+                if ids.len() != expected {
+                    return Err(invalid_stage());
+                }
+                Ok((index, ids))
             }
         }))
-        .buffer_unordered(HASH_CONCURRENCY)
+        .buffer_unordered(WRITE_CONCURRENCY)
         .try_collect()
         .await?;
     Ok(completed.into_values().flatten().collect())
@@ -124,8 +182,9 @@ pub(super) async fn write_tree(
                 "Checkpoint scratch files escaped the operation directory.".into(),
             ));
         }
-        // Writing new loose objects fsyncs each one. Keep a cold capture within the helper's
-        // deadline even when thousands of small numeric names fit in a single stdin buffer.
+        // Bound each durable object transaction as well as its input bytes. A fresh isolated
+        // staging repo supplies Git's upstream batch flush protocol without reading attributes
+        // or filters from either the workspace or the actual checkpoint repository.
         let inputs = bounded_batches(
             scanned.copies.iter().map(|(_, copy)| {
                 let name = copy.file_name().and_then(|name| name.to_str());
@@ -135,34 +194,50 @@ pub(super) async fn write_tree(
                             && !name.is_empty()
                             && name.bytes().all(|byte| byte.is_ascii_digit()) =>
                     {
-                        Ok(format!("{name}\n").into_bytes())
+                        Ok(format!("{name}\0").into_bytes())
                     }
                     _ => Err(CheckpointError::Message(
                         "Checkpoint scratch files have an invalid identity.".into(),
                     )),
                 }
             }),
-            HASH_RECORD_LIMIT,
+            OBJECTS_PER_BATCH,
         )?;
-        let ids = hash_batches(inputs, |batch| async move {
-            operation.context.check()?;
-            operation
-                .git
-                .run_input_at(
-                    &operation.repo,
-                    root,
-                    &operation.index,
-                    directory,
-                    vec![
-                        "hash-object".into(),
-                        "--no-filters".into(),
-                        "-w".into(),
-                        "--stdin-paths".into(),
-                    ],
-                    batch.input,
-                    batch.records * 42,
-                )
-                .await
+        let staging_repo = operation.scratch.path().join("staging.git");
+        operation.git.init(&staging_repo, directory).await?;
+        let objects = operation.repo.join("objects");
+        let batch_fsync = super::durability::supports_batch(&objects);
+        tracing::info!(
+            batch_fsync,
+            file_count = scanned.copies.len(),
+            batch_count = inputs.len(),
+            "Checkpoint object write strategy"
+        );
+        let ids = write_batches(inputs, |number, batch| {
+            let staging_repo = &staging_repo;
+            let objects = &objects;
+            let batch_index = operation
+                .scratch
+                .path()
+                .join(format!("staging-index-{number}"));
+            async move {
+                operation.context.check()?;
+                let names = copy_names(&batch.input)?;
+                let max_output = batch.input.len() + batch.records * 64;
+                let output = operation
+                    .git
+                    .write_objects(
+                        staging_repo,
+                        directory,
+                        &batch_index,
+                        objects,
+                        batch.input,
+                        max_output,
+                        batch_fsync,
+                    )
+                    .await?;
+                stage_ids(&output, &names)
+            }
         })
         .await?;
         for ((path, _), oid) in scanned.copies.iter().zip(ids) {
@@ -177,8 +252,8 @@ pub(super) async fn write_tree(
                 },
             );
         }
-        // `hash-object -w` may return the expected ID without reading or replacing an already
-        // existing object. Verify newly hashed copies too, so a cold retry after cache invalidation
+        // Git can accept an existing object without reading or replacing it. Verify the newly
+        // written copies too, so a cold retry after cache invalidation
         // cannot publish a manifest that still points at damaged storage.
         let written = scanned
             .copies
@@ -244,29 +319,29 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;
 
-    struct ActiveHash(Arc<AtomicUsize>);
+    struct ActiveWrite(Arc<AtomicUsize>);
 
-    impl Drop for ActiveHash {
+    impl Drop for ActiveWrite {
         fn drop(&mut self) {
             self.0.fetch_sub(1, Ordering::SeqCst);
         }
     }
 
-    struct HashControls {
+    struct WriteControls {
         releases: Vec<Option<oneshot::Sender<bool>>>,
         active: Arc<AtomicUsize>,
         started: Arc<AtomicUsize>,
     }
 
-    impl HashControls {
+    impl WriteControls {
         fn release(&mut self, index: usize, success: bool) {
             self.releases[index].take().unwrap().send(success).unwrap();
         }
     }
 
-    fn controlled_hashes(
+    fn controlled_writes(
         count: usize,
-    ) -> (impl Future<Output = Result<Vec<String>>>, HashControls) {
+    ) -> (impl Future<Output = Result<Vec<String>>>, WriteControls) {
         let (releases, waits): (Vec<_>, Vec<_>) = (0..count)
             .map(|_| {
                 let (release, wait) = oneshot::channel();
@@ -275,7 +350,7 @@ mod tests {
             .unzip();
         let active = Arc::new(AtomicUsize::new(0));
         let started = Arc::new(AtomicUsize::new(0));
-        let controls = HashControls {
+        let controls = WriteControls {
             releases,
             active: Arc::clone(&active),
             started: Arc::clone(&started),
@@ -287,20 +362,20 @@ mod tests {
                 records: 1,
             })
             .collect();
-        let work = hash_batches(inputs, move |batch| {
+        let work = write_batches(inputs, move |_, batch| {
             let index = batch.input[0] as usize;
             let wait = waits.lock().unwrap()[index].take().unwrap();
             let active = Arc::clone(&active);
             let started = Arc::clone(&started);
             async move {
                 let current = active.fetch_add(1, Ordering::SeqCst) + 1;
-                let _active = ActiveHash(active);
-                assert!(current <= HASH_CONCURRENCY, "too many concurrent hashes");
+                let _active = ActiveWrite(active);
+                assert!(current <= WRITE_CONCURRENCY, "too many concurrent writes");
                 started.fetch_add(1, Ordering::SeqCst);
                 if wait.await.unwrap() {
-                    Ok(format!("{:040x}\n", index + 1).into_bytes())
+                    Ok(vec![format!("{:040x}", index + 1)])
                 } else {
-                    Err(CheckpointError::Message("injected hash failure".into()))
+                    Err(CheckpointError::Message("injected write failure".into()))
                 }
             }
         });
@@ -308,8 +383,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn concurrent_hashes_preserve_input_order_and_admit_at_most_four_helpers() {
-        let (work, mut controls) = controlled_hashes(6);
+    async fn concurrent_writes_preserve_input_order_and_admit_at_most_four_helpers() {
+        let (work, mut controls) = controlled_writes(6);
         let mut work = Box::pin(work);
         assert!(work.as_mut().now_or_never().is_none());
         assert_eq!(controls.active.load(Ordering::SeqCst), 4);
@@ -338,9 +413,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_or_cancelled_hashing_drops_every_live_helper_and_starts_no_later_batch() {
+    async fn failed_or_cancelled_writing_drops_every_live_helper_and_starts_no_later_batch() {
         for fail in [false, true] {
-            let (work, mut controls) = controlled_hashes(6);
+            let (work, mut controls) = controlled_writes(6);
             let mut work = Box::pin(work);
             assert!(work.as_mut().now_or_never().is_none());
             assert_eq!(controls.started.load(Ordering::SeqCst), 4);
@@ -362,9 +437,9 @@ mod tests {
     }
 
     #[test]
-    fn cold_hash_batches_also_bound_fsync_work_per_helper() {
+    fn cold_write_batches_also_bound_fsync_work_per_helper() {
         let result =
-            bounded_batches((0..513).map(|_| Ok(b"0\n".to_vec())), HASH_RECORD_LIMIT).unwrap();
+            bounded_batches((0..513).map(|_| Ok(b"0\n".to_vec())), OBJECTS_PER_BATCH).unwrap();
         assert_eq!(
             result.iter().map(|batch| batch.records).collect::<Vec<_>>(),
             [256, 256, 1]
@@ -392,17 +467,39 @@ mod tests {
     }
 
     #[test]
-    fn hash_output_requires_every_complete_valid_object_id() {
-        let id = "0123456789abcdef0123456789abcdef01234567";
+    fn stage_output_maps_numeric_identity_in_input_order_and_rejects_invalid_records() {
+        let first = "0123456789abcdef0123456789abcdef01234567";
+        let second = "abcdef0123456789abcdef0123456789abcdef01";
+        let expected = vec!["2".into(), "10".into()];
+        let output = [
+            format!("100644 {second} 0\t10\0"),
+            format!("100755 {first} 0\t2\0"),
+        ]
+        .concat();
         assert_eq!(
-            hash_ids(format!("{id}\n{id}\r\n").as_bytes(), 2).unwrap(),
-            [id, id]
+            stage_ids(output.as_bytes(), &expected).unwrap(),
+            [first, second]
         );
-        assert!(hash_ids(format!("{id}\n").as_bytes(), 2).is_err());
-        assert!(hash_ids(format!("{id}\n{id}\n").as_bytes(), 1).is_err());
-        assert!(hash_ids(id.as_bytes(), 1).is_err());
-        assert!(hash_ids(format!("{id}\n\n").as_bytes(), 1).is_err());
-        assert!(hash_ids(b"invalid\n", 1).is_err());
+        for bad in [
+            format!("100644 {first} 0\t2\0"),         // Missing file.
+            format!("{output}100644 {first} 0\t2\0"), // Duplicate file.
+            output.replace("\t10\0", "\t11\0"),       // Unrequested file.
+            output.replace(" 0\t", " 1\t"),           // Conflict stage.
+            output.replace("100755", "120000"),       // Symlink.
+            output.replace(first, "not-an-object-id"),
+            output.trim_end_matches('\0').to_owned(),
+            output.replace("\t2\0", "\t../2\0"),
+            format!("{output}\0"),
+        ] {
+            assert!(stage_ids(bad.as_bytes(), &expected).is_err());
+        }
+        assert!(stage_ids(output.as_bytes(), &["2".into(), "2".into()]).is_err());
+        assert_eq!(copy_names(b"2\x0010\0").unwrap(), expected);
+        for bad in [b"2\n".as_slice(), b"2\0\0", b"../2\0", b"2\0a\0", b"\0"] {
+            assert!(copy_names(bad).is_err());
+        }
+        assert!(copy_names(&vec![0; git::INPUT_LIMIT + 1]).is_err());
+        assert!(copy_names(&b"0\0".repeat(OBJECTS_PER_BATCH + 1)).is_err());
     }
 
     #[tokio::test]
@@ -431,6 +528,30 @@ mod tests {
             .operation(&folder, &work, true, owner.context())
             .await
             .unwrap();
+        // Both repositories advertise a required failing filter and forced text conversion.
+        // Private staging must consult neither configuration nor attributes, and the user's
+        // index must remain byte-for-byte untouched even though it is not a valid Git index.
+        std::fs::create_dir_all(operation.repo.join("info")).unwrap();
+        std::fs::write(
+            operation.repo.join("info/attributes"),
+            "* filter=poison text eol=lf\n",
+        )
+        .unwrap();
+        let config = std::fs::read_to_string(operation.repo.join("config")).unwrap();
+        std::fs::write(
+            operation.repo.join("config"),
+            format!("{config}\n[filter \"poison\"]\n\tclean = false\n\trequired = true\n"),
+        )
+        .unwrap();
+        std::fs::create_dir(work.join(".git")).unwrap();
+        std::fs::write(
+            work.join(".git/config"),
+            "[filter \"poison\"]\n\tclean = false\n\trequired = true\n",
+        )
+        .unwrap();
+        std::fs::write(work.join(".gitattributes"), "* filter=poison text eol=lf\n").unwrap();
+        let user_index = b"untouched user index fixture\0";
+        std::fs::write(work.join(".git/index"), user_index).unwrap();
         let copies = operation.scratch.path().join("original copies");
         std::fs::create_dir(&copies).unwrap();
         let original = b"original\r\n\0\xff";
@@ -446,7 +567,7 @@ mod tests {
         std::fs::create_dir(&copies).unwrap();
         let paths: Vec<_> = (0..1025).map(|i| format!("file {i} é.txt")).collect();
         for (index, path) in paths.iter().enumerate() {
-            let contents = if index % HASH_RECORD_LIMIT == 0 {
+            let contents = if index % OBJECTS_PER_BATCH == 0 {
                 b"shared object across concurrent batches\r\n\0".as_slice()
             } else {
                 path.as_bytes()
@@ -458,13 +579,13 @@ mod tests {
         let (files, tree) = write_tree(&operation, &work, &scanned, Some(&retained))
             .await
             .unwrap();
-        assert_eq!(operation.git.helper_count() - before, 8);
+        assert_eq!(operation.git.helper_count() - before, 14);
         assert_eq!(files.len(), 1026);
         for path in &paths {
             assert_eq!(files[path].fingerprint, scanned.files[path]);
         }
         let shared_oid = &files[&paths[0]].oid;
-        for index in (0..paths.len()).step_by(HASH_RECORD_LIMIT) {
+        for index in (0..paths.len()).step_by(OBJECTS_PER_BATCH) {
             assert_eq!(&files[&paths[index]].oid, shared_oid);
         }
         let listed = operation
@@ -489,6 +610,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(restored, original);
+        assert_eq!(std::fs::read(work.join(".git/index")).unwrap(), user_index);
 
         let before = operation.git.helper_count();
         let result = operation
@@ -556,11 +678,11 @@ mod tests {
         let copies = operation.scratch.path().join("failed copies");
         std::fs::create_dir(&copies).unwrap();
         let scanned = scan::collect(&work, &all_paths, Some(&copies)).unwrap();
-        std::fs::remove_file(&scanned.copies[HASH_RECORD_LIMIT * 2].1).unwrap();
+        std::fs::remove_file(&scanned.copies[OBJECTS_PER_BATCH * 2].1).unwrap();
         assert!(write_tree(&operation, &work, &scanned, None).await.is_err());
         assert!(
             !operation.index.exists(),
-            "no index was published after hash failure"
+            "no index was published after object write failure"
         );
     }
 }
