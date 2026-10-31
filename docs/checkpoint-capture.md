@@ -1,9 +1,28 @@
 # Checkpoint capture and prompt latency
 
-Aura saves a checkpoint before dispatching an ordinary queued prompt. This is an application
-feature that provides consistent Changes and selected-file revert across native harnesses.
+Automatic checkpoints are off by default. Settings > General > Automatic checkpoints enables
+them for the active profile, on this device. Existing preferences without this field also default
+to off. The preference applies to subsequent prompts in existing and new chats; a capture already
+in progress keeps its original completion, failure, and cancellation behavior.
+
+With automatic checkpoints off, sending skips workspace snapshot discovery, file hashing, object
+verification, and checkpoint publication. The workspace still goes through recovery admission so
+an interrupted file restore cannot race a new agent turn. Chats, transcripts, and queued prompts
+remain persisted. These turns have no Aura file-undo baseline; native harness recovery is not a
+universal substitute. Earlier saved checkpoints remain available for Changes and selected-file
+revert, and are never presented as the baseline of a later turn that has no checkpoint.
+
+When enabled, Aura saves a checkpoint before dispatching an ordinary queued prompt. This provides
+consistent Changes and selected-file revert across native harnesses, with a delay before sending.
 The harness still owns model execution and its native tools. A failed capture holds the prompt;
 stopping a capture leaves it unsent. Native steering retains its existing separate lifecycle.
+
+The opt-in default addresses the cost that remained after capture optimization. On the owner's
+Windows workspace, post-update checkpoint records showed about 10.5 seconds before publication
+for the first capture and 4.0–4.1 seconds for two repeated captures of 1,637 files (28.7 MB).
+These are local observations inferred from dispatch and checkpoint timestamps, not controlled
+benchmarks or complete response times. Cache reuse still rereads current workspace bytes and
+verifies saved object contents, so it cannot make a mandatory per-message snapshot free.
 
 ## Local capture
 
@@ -21,7 +40,7 @@ skip the cache.
 Missing cached objects trigger one cold retry. Malformed objects and mismatched contents fail
 capture. Verification continues across batches after a missing object so that it cannot hide
 later corruption. Hints are removed before fallible work and published only after the new ref
-and manifest are durable. Every successful turn still gets a distinct checkpoint, commit, ref,
+and manifest are durable. Every successful capture still gets a distinct checkpoint, commit, ref,
 and version 1 manifest, even when its tree is unchanged.
 
 Freshly written blobs are also verified before publication: Git can reuse an existing object
@@ -70,7 +89,8 @@ check cancellation before mutation, then retain ownership through completion or 
 Account capture retains its two-pass scan/read fingerprint comparison and authenticated immutable
 encrypted objects. It creates no plaintext content or manifest scratch copies. It shares the
 workspace coordinator, cancellation rules, and timings, but does not use the Local Git cache.
-No storage format, public API, database migration, or checkpoint setting changes are required.
+Local and Account profiles use the same opt-in policy. Existing checkpoint formats remain readable;
+the preference is stored in setup preferences and requires no database migration.
 
 ## Diagnostics and verification
 
@@ -83,6 +103,8 @@ remain unchanged.
 Capture timings cover lease wait, setup, recovery, discovery, scan, verification, tree writes,
 publication, and total outcome. Git helpers record duration, operation, and outcome at debug level.
 Diagnostics contain IDs, counts, and durations, never prompt text, filenames, or file contents.
+The native app emits these tracing records to stderr; ordinary installed launches do not retain
+them in profile logs. A diagnostic launch must capture stderr to retain phase timings.
 
 Run the focused native regression suite with:
 

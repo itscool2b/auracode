@@ -24,6 +24,11 @@ Design for a 1440 x 900 native window, minimum 960 x 640, with 52px clearance fo
 
 Cover setup and agent discovery, workspace and empty chat, populated and streaming transcripts, picker and composer, permissions and questions, queued messages, error and recovery states, project and worktree management, Git and changes, terminal, plugin library, settings and account/sync, and all menus and dialogs. Settings currently includes General, Instructions, Account, Configuration sync, Shortcuts and About, and entry points to Agents and Plugin library. Rearrangement must retain every capability and accessible route. Preserve underlying Tauri commands, data, keyboard behavior, native focus and ongoing processes when restyling.
 
+Automatic checkpoints are an opt-in, profile-local General setting. Extend the existing settings
+row and switch components. Explain the sending delay and file-undo tradeoff beside the control;
+full-auto autonomy must not imply that checkpoint protection is enabled. Changes must distinguish
+turns without a snapshot from earlier saved checkpoints that remain available.
+
 ## Website composition
 
 The homepage uses two offset chat and handoff planes on a muted coral dither field with technical registration, followed by a framed real desktop screenshot. The capabilities section uses an open six-tab rail, with clear proof tied to each actual capability. The handoff planes are an authored illustration of successive supported chat states, not a screenshot, parallel agents or invented functionality. The full framed product image is a screenshot of the real desktop preview. Use an inverse closing CTA, FAQ and footer. Utility pages use a ruled, organized treatment. Keep headings modest, facts accurate and repetition low. Use a maximum content width of 1200px, 32px desktop and 20px mobile gutters, and 96px desktop and 64px mobile section spacing.

@@ -80,7 +80,7 @@ try {
       assert.equal(await heroStage.locator(".handoff-link").count(), 1);
       assert.equal(
         await page
-          .getByRole("tab", { name: "A checkpoint every turn" })
+          .getByRole("tab", { name: "Optional file checkpoints" })
           .getAttribute("aria-selected"),
         "true",
       );
