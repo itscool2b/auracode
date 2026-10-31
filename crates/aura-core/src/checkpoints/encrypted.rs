@@ -25,12 +25,13 @@ impl Checkpoints {
             storage: Storage::Encrypted(files),
             env,
             registry,
-            gate: Mutex::new(()),
+            cache: std::sync::Mutex::new(cache::Cache::default()),
             previews: std::sync::Mutex::new(Default::default()),
         }))
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn capture(
     files: EncryptedFiles,
     chat_id: &str,
@@ -38,22 +39,47 @@ pub(super) async fn capture(
     root: PathBuf,
     turn_id: &str,
     paths: Vec<String>,
+    context: coordination::Context,
 ) -> Result<CheckpointSummary> {
     let chat_id = chat_id.to_owned();
     let folder_id = folder_id.to_owned();
     let turn_id = turn_id.to_owned();
     tokio::task::spawn_blocking(move || {
-        let scanned = scan::collect(&root, &paths, None)?;
+        context.check()?;
+        let scanning = Instant::now();
+        let scanned = scan::collect_with(&root, &paths, None, None, Some(&context))?;
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "scan",
+            storage = "account",
+            elapsed_ms = scanning.elapsed().as_millis() as u64,
+            file_count = scanned.files.len(),
+            "Checkpoint stage"
+        );
+        let writing = Instant::now();
         let mut saved = BTreeMap::new();
         for (path, expected) in scanned.files {
+            context.check()?;
             let (fingerprint, bytes) = scan::read(&root, &path)?.ok_or_else(|| changed(&path))?;
             if fingerprint != expected {
                 return Err(changed(&path));
             }
             let oid = fingerprint.sha256.clone();
+            context.check()?;
             files.write(&oid, &bytes)?;
             saved.insert(path, SavedFile { fingerprint, oid });
         }
+        tracing::info!(
+            chat_id,
+            turn_id,
+            stage = "write_objects",
+            storage = "account",
+            elapsed_ms = writing.elapsed().as_millis() as u64,
+            file_count = saved.len(),
+            "Checkpoint stage"
+        );
+        let publishing = Instant::now();
         let summary = CheckpointSummary {
             id: crate::ids::new_id(),
             turn_id,
@@ -79,7 +105,19 @@ pub(super) async fn capture(
                 "Checkpoint metadata exceeds its limit.".into(),
             ));
         }
+        context.check()?;
         files.write(&format!("manifest-{}", summary.id), &bytes)?;
+        context.check()?;
+        tracing::info!(
+            chat_id = manifest.chat_id,
+            turn_id = summary.turn_id,
+            stage = "publish",
+            storage = "account",
+            elapsed_ms = publishing.elapsed().as_millis() as u64,
+            file_count = summary.file_count,
+            total_bytes = summary.total_bytes,
+            "Checkpoint stage"
+        );
         Ok(summary)
     })
     .await
