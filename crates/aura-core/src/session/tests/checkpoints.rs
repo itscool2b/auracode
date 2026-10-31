@@ -2,6 +2,9 @@ use super::*;
 use aura_drivers::driver::LoggedCommand;
 use aura_protocol::NoticeLevel;
 
+#[path = "checkpoint_benchmarks.rs"]
+mod benchmarks;
+
 fn enable(rig: &mut Rig, git_available: bool) -> Arc<crate::checkpoints::Checkpoints> {
     let vars = if git_available {
         aura_process::process_env()

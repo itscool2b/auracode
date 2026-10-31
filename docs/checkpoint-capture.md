@@ -77,6 +77,13 @@ both storage modes. `AURA_CHECKPOINT_BENCH_COUNTS` selects comma-separated sizes
 cargo test -p aura-core checkpoint_performance -- --ignored --nocapture
 ```
 
+Set `AURA_CHECKPOINT_BENCH_WORKSPACE` to an explicit workspace and run
+`checkpoint_workspace_performance` to measure its cold capture and three unchanged captures.
+It only reads that workspace; its private checkpoint profile is temporary. The separate
+`checkpoint_prompt_performance` fixture measures manager-send to scripted-driver receipt for
+three 1,000-file turns. It exercises the real actor and checkpoint path without a provider or
+model request. Both fixtures are ignored by ordinary test runs.
+
 Compare the same fixture and build profile against the base revision, without concurrent builds
 or filesystem-heavy tests. These timings measure checkpoint completion and exclude provider
 latency. See [verification](verification.md) for the Windows/macOS and encrypted-storage gates.
