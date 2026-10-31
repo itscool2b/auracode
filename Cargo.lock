@@ -386,6 +386,7 @@ dependencies = [
  "futures",
  "hostname",
  "image",
+ "libc",
  "rusqlite",
  "rusqlite_migration",
  "same-file",

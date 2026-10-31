@@ -24,17 +24,25 @@ later corruption. Hints are removed before fallible work and published only afte
 and manifest are durable. Every successful turn still gets a distinct checkpoint, commit, ref,
 and version 1 manifest, even when its tree is unchanged.
 
-Freshly hashed blobs are also verified before publication: Git can report a successful write
-without replacing an already present corrupt object. This keeps a cold retry from bypassing the
-check. Verification helpers read at most 4,096 objects and 16 MiB of output per batch.
+Freshly written blobs are also verified before publication: Git can reuse an existing object
+without replacing damaged contents. This keeps a cold retry from bypassing the check. Verification
+helpers read at most 4,096 objects and 16 MiB of output per batch.
 
-Git receives numeric scratch names through `hash-object --no-filters -w --stdin-paths` and literal
-NUL-terminated index records through `update-index -z --index-info`. Inputs are at most 1 MiB.
-Hash batches additionally contain at most 256 files to bound per-object disk flush work inside
-the helper deadline. Up to four independent blob writers run concurrently; verification and
-index/tree/ref publication wait for every writer and remain sequential. Durable objects and refs
-use full fsync; the disposable scratch index does not. User indexes, attributes, filters, and hooks
-remain outside this path.
+Blob writes use a fresh bare staging repository whose only worktree contains numeric scratch
+copies. Each batch gets its own temporary index and writes objects only into the private checkpoint
+store. Workspace and checkpoint-store attributes, filters, and hooks cannot participate; the staging
+repository starts empty and global/system configuration remains isolated. Returned stage entries
+must match every numeric identity before their object IDs are mapped back to captured files.
+
+On APFS/HFS+ and NTFS/ReFS, Git's `add` transaction uses its documented `batch` durability strategy:
+object writes share a full disk-flush barrier before becoming visible. Other filesystems and failed
+filesystem detection retain full per-object fsync. Filesystem detection uses a handle to the actual
+object-store directory. See [Git's durability configuration](https://github.com/git/git/blob/v2.55.0/Documentation/config/core.adoc).
+
+NUL-terminated pathspec and final index inputs are at most 1 MiB. Blob batches contain at most 256
+files, with up to four independent writers active. Verification and real-path index/tree/ref
+publication wait for every writer and remain sequential. Objects and refs are durable; disposable
+indexes are not fsynced. User indexes remain outside this path.
 
 ## Concurrency and cancellation
 
@@ -109,3 +117,9 @@ The workspace fixture has three unchanged samples, while synthetic fixtures defa
 per scenario. Results describe these runs, not tail latency or statistical significance. The send
 fixture excludes desktop UI/IPC, real harness startup, provider/model latency, and production log
 formatting and writes. It measures Local storage; Account timings come from direct capture.
+
+`AURA_CHECKPOINT_BENCH_DIAGNOSTICS=1` enables a bounded checkpoint-only event collector in the
+ignored core fixtures; CI comparisons enable it. Collection adds small bounded allocations and
+mutex locking, but formatting and output occur after each elapsed time is frozen. `CAPTURE_DIAGNOSTIC`
+records retain phase/helper timings and durability selection without messages, IDs, paths, or
+contents, and remain separate from normalized measurement rows.

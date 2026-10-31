@@ -5,6 +5,7 @@
 mod benchmarks;
 mod cache;
 mod coordination;
+mod durability;
 #[cfg(feature = "account-sync")]
 mod encrypted;
 mod git;
