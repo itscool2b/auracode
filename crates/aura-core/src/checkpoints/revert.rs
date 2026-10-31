@@ -14,7 +14,7 @@ use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 
-use super::{CheckpointError, Checkpoints, Manifest, Result, changes, scan};
+use super::{CheckpointError, Checkpoints, Manifest, Result, changes, coordination, scan};
 use scan::Fingerprint;
 
 /// The name a revert's working folder takes at the root of the folder it reverts.
@@ -46,10 +46,19 @@ impl Checkpoints {
         }
         paths.sort();
         paths.dedup();
-        let _guard = self.gate.lock().await;
+        let root = std::fs::canonicalize(folder)?;
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let context = owner.context();
         let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
-        let operation = self.operation(folder_id, &manifest.root, false).await?;
-        self.sweep_reverts(&manifest.root, chat_id, folder_id)
+        if manifest.root != root {
+            return Err(CheckpointError::Message(
+                "The checkpoint folder changed while waiting. Refresh Changes.".into(),
+            ));
+        }
+        let operation = self
+            .operation(folder_id, &manifest.root, false, context.clone())
+            .await?;
+        self.sweep_reverts(&manifest.root, chat_id, folder_id, &context)
             .await?;
         let current = self.current(&operation, &manifest).await?;
         let changed = changes(&manifest.files, &current.files);
@@ -125,7 +134,9 @@ impl Checkpoints {
         guard: G,
     ) -> Result<RevertResult> {
         super::valid_id(token)?;
-        let _guard = self.gate.lock().await;
+        let root = std::fs::canonicalize(folder)?;
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let context = owner.context();
         let prepared = self
             .previews
             .lock()
@@ -139,6 +150,7 @@ impl Checkpoints {
         if prepared.expires <= Instant::now()
             || prepared.manifest.chat_id != chat_id
             || prepared.manifest.folder_id != folder_id
+            || prepared.manifest.root != root
             || prepared.manifest.root != std::fs::canonicalize(folder)?
         {
             return Err(CheckpointError::Message(
@@ -146,7 +158,7 @@ impl Checkpoints {
             ));
         }
         let operation = self
-            .operation(folder_id, &prepared.manifest.root, false)
+            .operation(folder_id, &prepared.manifest.root, false, context.clone())
             .await?;
         let mut replacements = BTreeMap::new();
         for path in prepared.current.keys() {
@@ -163,6 +175,10 @@ impl Checkpoints {
         let keep = self.recovery_store()?;
         tokio::task::spawn_blocking(move || {
             let _guard = guard;
+            // Keep both session admission and checkpoint ownership until apply/recovery ends,
+            // even if the caller stops awaiting this blocking task.
+            let _context = context;
+            _context.check()?;
             apply(&prepared, &token, replacements, &keep)
         })
         .await
