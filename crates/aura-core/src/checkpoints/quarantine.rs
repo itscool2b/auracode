@@ -282,7 +282,15 @@ mod tests {
                 .arg(target)
                 .output()
                 .unwrap();
-            assert!(result.status.success(), "fixture junction creation failed");
+            assert!(
+                result.status.success(),
+                "fixture junction creation failed for {} -> {} ({}): stdout: {}; stderr: {}",
+                link.display(),
+                target.display(),
+                result.status,
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
         }
     }
 
@@ -295,7 +303,9 @@ mod tests {
             let outside = temp.path().join("outside");
             std::fs::create_dir(&outside).unwrap();
             std::fs::write(outside.join("keep"), b"outside bytes").unwrap();
-            let stale = repository.join("objects/tmp_objdir-bulk-fsync-aZ019x");
+            let stale = repository
+                .join("objects")
+                .join("tmp_objdir-bulk-fsync-aZ019x");
             let link = if nested {
                 std::fs::create_dir(&stale).unwrap();
                 stale.join("ab")
