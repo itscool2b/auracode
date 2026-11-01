@@ -45,7 +45,10 @@ verdict and is checked again. A cold target folder is therefore a lottery that c
 What works is building against a warm target folder whose build scripts and macros have already
 run, such as the main checkout's: set `CARGO_TARGET_DIR` to it. Cargo names workspace artifacts by
 their path inside the workspace, so a worktree reuses them, and only the final executable and the
-test binaries are new.
+test binaries are new. A workspace crate's build script can still be compiled anew (clippy
+compiles its own copy), and that copy can be blocked. Delete just that unit,
+`target\debug\build\<crate>-<hash>` and `target\debug\.fingerprint\<crate>-<hash>` as the error
+names it, and build again: the rebuilt file is a new file and is checked again.
 
 Sharing has one cost. Cargo decides freshness by comparing source modification times, so after a
 worktree build the shared folder's workspace crates hold the worktree's code while the main
