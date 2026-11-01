@@ -33,10 +33,10 @@
 
 **Interfaces:** Consume current SessionLists plus Task 2 additive session controls; expose Customize sections using Task 3 Plugins & MCP and Task 4 ProjectMemoryPanel.
 
-- [ ] Add meaningful tests for project-prefilled creation/default precedence and supported access controls.
-- [ ] Replace lime with neutral token pairs; split composer control placement; refine searchable picker, compact new-chat form, project plus and instruction choices.
-- [ ] Add Customize navigation with persistent chat state and integrate backend panels.
-- [ ] Run affected frontend tests/typecheck/browser fixtures, then commit exact owned changes.
+- [x] Add meaningful tests for project-prefilled creation/default precedence and supported access controls.
+- [x] Replace lime with neutral token pairs; split composer control placement; refine searchable picker, compact new-chat form, project plus and instruction choices.
+- [x] Add Customize navigation with persistent chat state and integrate backend panels.
+- [x] Run affected frontend tests/typecheck/browser fixtures, then commit exact owned changes.
 
 ### Task 2: Native session controls
 
@@ -44,10 +44,10 @@
 
 **Interfaces:** Add typed SessionControls descriptors/state to session lists and set-control command. Preserve Autonomy/config_json. Send root exact UI API and registration additions early.
 
-- [ ] Add tests for supported access, future effort choices, old serialized records, invalid saved modes and queued transition admission.
-- [ ] Implement versioned per-native-session control persistence and driver-native access/workflow routes, with requested/effective/pending distinction.
-- [ ] Wire Codex/Claude/ACP Plan, including remembered Claude execution access, idle admission and explicit native approval.
-- [ ] Run protocol/driver/core targeted tests and report exact evidence and owned paths for commit.
+- [x] Add tests for supported access, future effort choices, old serialized records, invalid saved modes and queued transition admission.
+- [x] Implement versioned per-native-session control persistence and driver-native access/workflow routes, with requested/effective/pending distinction.
+- [x] Wire Codex/Claude/ACP Plan, including remembered Claude execution access, idle admission and explicit native approval.
+- [x] Run protocol/driver/core targeted tests and report exact evidence and owned paths for commit.
 
 ### Task 3: Plugins and shared MCP
 
@@ -55,11 +55,11 @@
 
 **Interfaces:** Shared MCP resolution yields immutable per-session definitions plus runtime compatibility. Coordinate driver options and core actor attachment hooks with Task 2/root. Root owns central registration and migration list.
 
-- [ ] Test definition resolution, scopes, native collisions, secret omission, transport compatibility and stale profile results.
-- [ ] Implement canonical shared definitions with CRUD/import/export, local secrets, portable sync and revision/conflict handling.
-- [ ] Inject MCP into Codex/Claude/qualified Pi/ACP session lifecycle; preserve native configs and report actual runtime support/status.
-- [ ] Replace renderer provider conditionals with backend capability/actions; extend supported inventory/management and native customization entry points.
-- [ ] Build Plugins & MCP UI with persistent explanation, scope/status/actions/auth/restart states; run targeted suites and report paths.
+- [x] Test definition resolution, scopes, native collisions, secret omission, transport compatibility and stale profile results.
+- [x] Implement canonical shared definitions with CRUD/import/export, local secrets, portable sync and revision/conflict handling.
+- [x] Inject MCP into Codex/Claude/qualified Pi/ACP session lifecycle; preserve native configs and report actual runtime support/status.
+- [x] Replace renderer provider conditionals with backend capability/actions; extend supported inventory/management and native customization entry points.
+- [x] Build Plugins & MCP UI with persistent explanation, scope/status/actions/auth/restart states; run targeted suites and report paths.
 
 ### Task 4: Project memory
 
@@ -67,18 +67,20 @@
 
 **Interfaces:** ProjectMemoryPanel consumes typed read/save/propose/accept/history operations; app-owned service exposes read/propose only. Coordinate actor context hook and internal MCP definition with root/workers.
 
-- [ ] Test revisions, stale proposals, encrypted storage, exact queued context and project/profile isolation.
-- [ ] Implement canonical Markdown/history/proposals with optimistic concurrency, import/export and encrypted sync.
-- [ ] Deliver visible per-generation/revision memory context with real turns using existing text-part contract.
-- [ ] Add session-bound read/propose service, bundled helper/skill and optional MCP bridge; revoke grants with lifecycle and preserve unreachable-host fallback.
-- [ ] Build editor/history/proposal review UI and targeted tests; report owned paths for commit.
+- [x] Test revisions, stale proposals, encrypted storage, exact queued context and project/profile isolation.
+- [x] Implement canonical Markdown/history/proposals with optimistic concurrency, import/export and encrypted sync.
+- [x] Deliver visible per-generation/revision memory context with real turns using existing text-part contract.
+- [x] Add session-bound read/propose service, bundled helper/skill and optional MCP bridge; revoke grants with lifecycle and preserve unreachable-host fallback.
+- [x] Build editor/history/proposal review UI and targeted tests; report owned paths for commit.
 
 ### Task 5: Integration and verification
 
 **Owner:** root and independent reviewers. **Files:** typed command registration/generated bindings, migrations, tests/fixtures/docs and affected integration points.
 
-- [ ] Integrate additions without legacy wire/storage regressions; generate exact Rust bindings.
-- [ ] Review each subsystem for spec compliance and correctness; resolve material findings.
-- [ ] Run pnpm check/build, affected Rust tests, browser checks and visual inspection in both desktop appearances, plus website dark-OS/no-JS regression.
-- [ ] Verify actual installed harness operations and native Windows behavior separately; run supported native CI for platform coverage.
-- [ ] Record evidence/limitations and updated design review. Commit remaining changes, push branch and create a tested non-draft PR.
+- [x] Integrate additions without legacy wire/storage regressions; generate exact Rust bindings.
+- [x] Review each subsystem for spec compliance and correctness; resolve material findings.
+- [x] Run pnpm check/build, affected Rust tests, browser checks and visual inspection in both desktop appearances, plus website dark-OS/no-JS regression.
+- [x] Verify actual installed harness operations and native Windows behavior separately; initiate supported native CI for platform coverage. The owner cancelled the remaining CI on 1 November and deferred further testing; completed checks and outstanding failures are recorded in the styling review.
+- [x] Record evidence/limitations and updated design review. Commit remaining changes and push the branch for the requested non-draft PR and merge.
+
+The owner's final instruction is to stop CI, open the PR and merge based on local verification. Full-CI acceptance and follow-up testing are explicitly deferred, not represented as passing.
