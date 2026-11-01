@@ -183,6 +183,25 @@ try {
         true,
         "cancelling keeps the mode",
       );
+      // New worktree chats get the files Git ignores unless the switch is turned off.
+      const copies = page.getByRole("switch", {
+        name: "Copy instruction files into new worktree chats",
+      });
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="instructions-worktree-copies"]')?.disabled,
+      );
+      assert.equal(await copies.isChecked(), true, "worktree copies are on by default");
+      await page.getByText(/are copied into each new worktree chat/).waitFor();
+      await copies.click();
+      await page
+        .getByText("New worktree chats get only the instruction files committed to Git.", {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(await copies.isChecked(), false, "the switch saves off");
+      await copies.click();
+      await page.getByText(/are copied into each new worktree chat/).waitFor();
+      assert.equal(await copies.isChecked(), true, "and on again");
 
       // Per agent: files as tabs; an untracked file joins new worktree chats or is committed alone.
       await open("instructions-per-agent");

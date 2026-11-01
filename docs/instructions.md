@@ -9,7 +9,7 @@ the Library interface.
 
 Implementation: `aura-config::instructions` (reading, classification, plans, the transaction),
 `aura-core` (`session/instructions.rs`, `gitworkspaces/instructions.rs`: targets, Git facts,
-worktree setup, the single-file commit, owned applies), `apps/desktop/src-tauri/src/instructions_commands.rs`
+worktree setup, worktree copies, the single-file commit, owned applies), `apps/desktop/src-tauri/src/instructions_commands.rs`
 (typed commands), and `apps/desktop/src/components/settings/InstructionsPanel.tsx` with its review
 dialog.
 
@@ -100,6 +100,29 @@ ordinary edits to `CLAUDE.md`, `AGENTS.md` and the other synced files and merges
 Agents read instructions when a session starts; every review and the page say that running chats
 keep what they started with and new sessions read the new files.
 
+## Worktree chats
+
+A worktree checks out only what Git tracks, so a project's instruction files that Git ignores (a
+local `AGENTS.md` or `CLAUDE.md`, say) would be missing from every new worktree chat. By default
+auracode copies them in, from the source folder into the new worktree, before the chat's agent
+starts. This happens for a new worktree chat (after its worktree setup, so a setup copy of the same
+file is kept), for a chat isolated into a worktree, and for a recreated worktree.
+
+- Only the app's own list of project instruction files is copied (`project_paths()`), never a path
+  someone typed, so `.claude/CLAUDE.md` and `.omp/AGENTS.md` qualify while setup copies refuse
+  agent folders. Links are never followed and files over 1 MiB are reported, not copied.
+- Create-only: a file already in the worktree is kept.
+- Only files Git ignores. A file that is only untracked stays out, because in the worktree it would
+  be a new change an agent could commit on the chat's branch; commit it instead.
+- A copy the worktree does not ignore (its rule is in a `.gitignore` change that is not committed
+  yet) is taken back out, so the new worktree never shows changes of its own.
+- A folder ignored whole (`.claude/`) counts for the files inside it.
+
+The switch is Instructions' **Worktree chats** section (Settings and Customize), stored as the
+profile preference `copy_instructions_to_worktrees` and on unless turned off; profiles from before
+it read it as on. A problem copying never fails the chat: a new worktree chat or an isolation shows
+it as a warning, and a recreate logs it.
+
 ## Per-agent table
 
 What each catalog agent reads, as implemented in `instructions/agents.rs`. Unconfirmed vendor
@@ -168,7 +191,8 @@ Each case has defined behaviour and a test (`aura-config` unless named otherwise
 | Not UTF-8, BOM, CRLF, mixed endings | Non-UTF-8 is read-only (copies stay byte-identical); BOM and line endings are kept; mixed endings use the majority and say so | `bom_crlf_non_utf8_and_empty_files_keep_their_bytes`, `text::tests::*` |
 | Empty files | Shown as empty; agents that skip empty files read nothing; saving empty text is allowed and says agents skip it | same |
 | Large files | Per-agent warnings beside the text (Codex 32 KiB or the configured limit, Antigravity 24,000 bytes, Hermes 20,000 characters, Claude 200 and Cursor 500 lines); over 1 MiB is read-only | `large_files_warn_per_agent_and_oversized_ones_are_not_editable`, `a_configured_codex_limit_is_read_and_a_bad_config_falls_back_to_the_default` |
-| Untracked or ignored files | Noted ("new worktree chats won't have it"); offer to copy it into new worktree chats (the folder's worktree setup) or, for an untracked file, to commit it alone; Grok Build skips ignored files | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; aura-core `facts_are_read_only_and_a_commit_takes_exactly_one_new_file`, `setup_settings_are_shared_by_folder...` |
+| Ignored files | Copied into new worktree chats by default (see [Worktree chats](#worktree-chats)) and noted so ("New worktree chats get a copy"); with the switch off, noted ("new worktree chats won't have it") with the offer to copy it through the folder's worktree setup; Grok Build skips ignored files | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; aura-core `ignored_instruction_files_reach_a_new_worktree_without_changing_it`, `new_worktree_chats_get_ignored_instruction_files_unless_turned_off`; desktop `copies ignored files into new worktree chats while the switch is on` |
+| Untracked files | Noted ("new worktree chats won't have it"); offer to copy it through the folder's worktree setup or to commit it alone. Never copied automatically: in a worktree it would be a new change an agent could commit on the chat's branch | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; aura-core `facts_are_read_only_and_a_commit_takes_exactly_one_new_file`, `setup_settings_are_shared_by_folder...` |
 | Nested files in subfolders, files in parent folders | Listed read-only with their readers; a parent `CLAUDE.md` changes what Claude Code reads and one-file mode adds the import it needs | `nested_and_parent_files_are_listed_and_a_parent_claude_md_changes_what_claude_reads` |
 | Path traversal, unknown keys | Only known file keys are accepted | `unknown_keys_traversal_and_links_outside_the_folder_are_refused` |
 | Links outside the folder, linked folders, dangling links | Classified by the OS's own resolution against the canonical folder; outside and dangling links are never followed or written | `link_classification_follows_the_resolved_target_never_the_link_text`, `a_relative_link_through_a_linked_folder_is_classified_by_where_the_os_resolves_it`, `a_dangling_link_reads_as_nothing_and_is_never_written`, `a_linked_agent_folder_pointing_outside_is_never_followed` |
