@@ -175,11 +175,11 @@ try {
       assert.equal((await calls()).filter((call) => call === "apply").length, 1);
       assert.equal(await page.getByRole("dialog").count(), 0);
       // Switching to a file per agent is reviewed too.
-      await page.getByRole("radio", { name: "Per agent" }).click();
+      await page.getByRole("radio", { name: "Agent-specific files" }).click();
       await dialog("Use a file per agent").waitFor();
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
       assert.equal(
-        await page.getByRole("radio", { name: "One file" }).isChecked(),
+        await page.getByRole("radio", { name: "Shared instructions" }).isChecked(),
         true,
         "cancelling keeps the mode",
       );
@@ -235,8 +235,11 @@ try {
       await page.locator('[data-action="remove"]').waitFor();
       await page.getByRole("button", { name: "Apply", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "Saved" }).waitFor();
-      await page.getByRole("radio", { name: "One file" }).isChecked();
-      assert.equal(await page.getByRole("radio", { name: "One file" }).isChecked(), true);
+      await page.getByRole("radio", { name: "Shared instructions" }).isChecked();
+      assert.equal(
+        await page.getByRole("radio", { name: "Shared instructions" }).isChecked(),
+        true,
+      );
 
       // A hand-edited managed copy: restore it after an explicit choice.
       await open("instructions-drift");

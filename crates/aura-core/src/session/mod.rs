@@ -28,6 +28,7 @@ mod live;
 #[cfg(feature = "account-sync")]
 mod local_import;
 mod login;
+mod memory;
 mod normalize;
 mod plugin_library;
 mod policy;
@@ -36,6 +37,7 @@ mod preservation;
 mod project_tools;
 mod repository_publication;
 mod search;
+mod shared_mcp;
 mod spawner;
 #[cfg(feature = "account-sync")]
 mod sync_history;
@@ -1077,6 +1079,20 @@ impl SessionManager {
             reply,
         })
         .await
+    }
+
+    pub async fn set_control(
+        &self,
+        chat_id: &str,
+        change: aura_protocol::session::SessionControlChange,
+    ) -> Result<SessionLists, SessionError> {
+        let asked = self.ask(chat_id, |reply| ChatMsg::SetControl {
+            change: change.clone(),
+            reply,
+        });
+        tokio::time::timeout(OPTION_TIMEOUT, asked)
+            .await
+            .unwrap_or(Err(SessionError::SessionNotReady))
     }
 
     pub async fn set_option(

@@ -3,9 +3,9 @@ import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
+import { CustomizeScreen, type CustomizeSection } from "./components/customize/CustomizeScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
-import { PluginLibraryScreen } from "./components/library/PluginLibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
 import { AccountPanel } from "./components/settings/AccountPanel";
@@ -70,6 +70,14 @@ export function App({
   bootRef.current = boot;
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
+  const [customizeEntry, setCustomizeEntry] = useState<{
+    id: number;
+    section: CustomizeSection;
+    projectId: string | null;
+    target?: InstructionsTarget;
+    chatLabel?: string;
+    activeChatId?: string;
+  }>({ id: 0, section: "plugins", projectId: null });
   const viewRef = useRef(view);
   viewRef.current = view;
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
@@ -402,21 +410,35 @@ export function App({
             onRecoveryDismissed={onRecoveryDismissed}
             onDiagnostics={() => setView("diagnostics")}
             onAgents={() => setView("agents")}
+            onCustomize={(projectId, activeChatId) => {
+              setCustomizeEntry({ id: Date.now(), section: "plugins", projectId, activeChatId });
+              setView("library");
+            }}
             onSettings={() => {
               setSettingsReturn("chats");
               setSettingsEntry({ id: "chats", page: "general", email: "" });
               setView("settings");
             }}
             onInstructions={(target, chatLabel) => {
-              setSettingsReturn("chats");
-              setSettingsEntry({
-                id: `instructions:${Date.now()}`,
-                page: "instructions",
-                email: "",
+              const organization = workspace?.getSnapshot().data;
+              const projectId =
+                target.type === "chat"
+                  ? organization?.chats.find((entry) => entry.chat.id === target.chat_id)
+                      ?.project_id
+                  : target.type === "folder"
+                    ? organization?.projects.find((project) =>
+                        project.folders.some((folder) => folder.id === target.folder_id),
+                      )?.id
+                    : null;
+              setCustomizeEntry({
+                id: Date.now(),
+                section: "instructions",
+                projectId: projectId ?? null,
+                activeChatId: target.type === "chat" ? target.chat_id : undefined,
                 target,
                 chatLabel,
               });
-              setView("settings");
+              setView("library");
             }}
           />
         </div>
@@ -443,7 +465,10 @@ export function App({
             }}
             onBack={() => setView(settingsReturn)}
             onAgents={() => setView("agents")}
-            onLibrary={() => setView("library")}
+            onLibrary={() => {
+              setCustomizeEntry({ id: Date.now(), section: "plugins", projectId: null });
+              setView("library");
+            }}
             onDiagnostics={() => setView("diagnostics")}
             onSetup={() => {
               setRestartSetup(true);
@@ -452,12 +477,17 @@ export function App({
           />
         ) : null}
         {view === "library" ? (
-          <div className="pane-shell g-root">
-            <PluginLibraryScreen
-              onBack={() => setView("settings")}
-              onAgents={() => setView("agents")}
-            />
-          </div>
+          <CustomizeScreen
+            key={customizeEntry.id}
+            workspace={workspace}
+            initialProjectId={customizeEntry.projectId}
+            initialSection={customizeEntry.section}
+            instructionsTarget={customizeEntry.target}
+            chatLabel={customizeEntry.chatLabel}
+            activeChatId={customizeEntry.activeChatId}
+            onBack={() => setView("chats")}
+            onAgents={() => setView("agents")}
+          />
         ) : null}
       </>
     );

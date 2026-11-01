@@ -204,7 +204,7 @@ export function SettingsScreen({
           {onLibrary ? (
             <button type="button" onClick={onLibrary}>
               <Puzzle size={16} aria-hidden="true" />
-              <span className="settings-nav-label">Plugin library</span>
+              <span className="settings-nav-label">Plugins &amp; MCP</span>
               <ArrowUpRight size={14} aria-hidden="true" />
             </button>
           ) : null}

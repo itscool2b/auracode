@@ -8,6 +8,11 @@ pub enum VendorProvider {
     Claude,
     Codex,
     Pi,
+    OpenCode,
+    Hermes,
+    Cursor,
+    Grok,
+    Antigravity,
 }
 impl VendorProvider {
     pub fn agent_id(self) -> &'static str {
@@ -15,6 +20,11 @@ impl VendorProvider {
             Self::Claude => "claude",
             Self::Codex => "codex",
             Self::Pi => "pi",
+            Self::OpenCode => "opencode",
+            Self::Hermes => "hermes",
+            Self::Cursor => "cursor",
+            Self::Grok => "grok",
+            Self::Antigravity => "antigravity",
         }
     }
 }
@@ -24,6 +34,7 @@ pub enum VendorKind {
     Plugin,
     Marketplace,
     Package,
+    Native,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -33,6 +44,7 @@ pub enum VendorAction {
     Remove,
     Enable,
     Disable,
+    Open,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]

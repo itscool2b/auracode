@@ -97,6 +97,7 @@ impl AgentSpawner for Quiet {
 
 fn setup(family: Family) -> SessionSetup {
     SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: "chat".into(),

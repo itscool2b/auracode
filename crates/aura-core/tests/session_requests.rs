@@ -640,22 +640,19 @@ async fn card_before_ready() {
     );
 }
 
-/// A27: switching to Full auto answers the open cards the new state covers, at once; a question
-/// (kind `other`) stays.
+/// Native policy reports update covered open cards; user access changes remain idle-only.
 #[tokio::test(start_paused = true)]
-async fn autonomy_switch_answers_open_cards() {
+async fn native_autonomy_report_answers_open_cards() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         card("edit", Some(ToolKind::Edit)),
         card("question", Some(ToolKind::Other)),
-        Step::Expect(CommandMatch::SetAutonomy),
         Step::Expect(CommandMatch::RespondPermission {
             request_id: Some("edit".into()),
         }),
         Step::Hang,
     ]);
-    handle.set_autonomy_reply(full_auto());
     let h = Harness::new(vec![driver]);
     let chat = h.chat().await;
     let sink = Sink::new("main");
@@ -675,12 +672,11 @@ async fn autonomy_switch_answers_open_cards() {
             == 2
     })
     .await;
-    let lists = h
-        .manager
-        .set_autonomy(&chat.id, Autonomy::FullAuto)
-        .await
-        .expect("autonomy");
-    assert_eq!(lists.autonomy, full_auto());
+    assert!(matches!(
+        h.manager.set_autonomy(&chat.id, Autonomy::FullAuto).await,
+        Err(SessionError::OptionInvalid(_))
+    ));
+    handle.emit(DriverEvent::Autonomy(full_auto()));
     command(
         &handle,
         CommandMatch::RespondPermission {
@@ -714,18 +710,21 @@ async fn autonomy_switch_answers_open_cards() {
     );
 }
 
-/// S19 and A37: a change of autonomy mid-turn applies to the next decision at once; under Full
-/// auto, kind `other` is still asked.
+/// Native policy changes recompute pending decisions; kind other still requires the user.
 #[tokio::test(start_paused = true)]
-async fn autonomy_change_is_immediate() {
+async fn native_autonomy_report_recomputes_pending_decisions() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         card("asked", Some(ToolKind::Execute)),
-        Step::Expect(CommandMatch::SetAutonomy),
         card("auto", Some(ToolKind::Execute)),
         card("other", Some(ToolKind::Other)),
-        Step::Hang,
+        Step::Expect(CommandMatch::RespondPermission {
+            request_id: Some("asked".into()),
+        }),
+        Step::Expect(CommandMatch::RespondPermission {
+            request_id: Some("auto".into()),
+        }),
     ]);
     let h = Harness::new(vec![driver]);
     let chat = h.chat().await;
@@ -740,11 +739,11 @@ async fn autonomy_change_is_immediate() {
         matches!(event, AuraEvent::PermissionRequested(_))
     })
     .await;
-    handle.set_autonomy_reply(full_auto());
-    h.manager
-        .set_autonomy(&chat.id, Autonomy::FullAuto)
-        .await
-        .expect("autonomy");
+    assert!(matches!(
+        h.manager.set_autonomy(&chat.id, Autonomy::FullAuto).await,
+        Err(SessionError::OptionInvalid(_))
+    ));
+    handle.emit(DriverEvent::Autonomy(full_auto()));
     let probe = sink.clone();
     eventually("the third card shows", || {
         probe
@@ -755,6 +754,14 @@ async fn autonomy_change_is_immediate() {
             == 3
     })
     .await;
+    command(
+        &handle,
+        CommandMatch::RespondPermission {
+            request_id: Some("auto".into()),
+        },
+    )
+    .await;
+    sink.wait_for("the native policy auto answer", |event| matches!(event,AuraEvent::PermissionResolved {request_id,by:ResolvedBy::Auto,..} if request_id == "auto")).await;
     let events = sink.events();
     assert_eq!(
         resolution(&events, "auto"),
@@ -886,7 +893,8 @@ fn model_option() -> ConfigOption {
 
 /// S18: an option change during a turn is sent at once; the choice is remembered for the next
 /// start; invalid values and an agent's refusal read as `OptionInvalid`.
-#[tokio::test(start_paused = true)]
+// Memory preparation runs on the profile writer thread before the native Prompt command.
+#[tokio::test]
 async fn option_change_during_turn() {
     let (first, handle) = ScriptedDriver::new(vec![
         Step::Emit(DriverEvent::Options(vec![model_option()])),
@@ -909,6 +917,7 @@ async fn option_change_during_turn() {
         .expect("attach");
     assert_eq!(attach.snapshot.session.model.as_deref(), Some("Fast"));
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    command(&handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Running).await;
     let smart = ConfigValue::Choice {
         value: "smart".into(),
@@ -1102,7 +1111,8 @@ async fn question_round_trip() {
 
 /// A26 through the actor: under Full auto an `execute` request is answered and recorded as
 /// requested and resolved `Auto`; `allow_always` is never chosen.
-#[tokio::test(start_paused = true)]
+// Memory snapshot preparation uses the profile writer thread; keep this acknowledgement deadline on real time.
+#[tokio::test]
 async fn full_auto_records_auto_answers() {
     let (driver, handle) = ScriptedDriver::new(vec![
         Step::Emit(DriverEvent::Autonomy(full_auto())),

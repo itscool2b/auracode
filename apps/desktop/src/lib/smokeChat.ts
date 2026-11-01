@@ -492,6 +492,9 @@ async function waitAttention(chatId: string, want: boolean): Promise<void> {
 async function choose(select: HTMLElement | null, what: string, value: string): Promise<void> {
   const row =
     select?.querySelector<HTMLButtonElement>(`button[data-picker-value="${CSS.escape(value)}"]`) ??
+    select?.querySelector<HTMLButtonElement>(
+      `button[data-legacy-autonomy="${CSS.escape(value)}"]`,
+    ) ??
     select?.querySelector<HTMLInputElement>(`input[type="radio"][value="${CSS.escape(value)}"]`);
   if (row) {
     await waitFor(`${what} to be enabled`, () => !row.disabled);
@@ -644,11 +647,10 @@ async function chatScenario(
     await waitFor("the agent's options in the pickers", () =>
       ["model", "effort", "mode", "fast"].every((id) => pickerOption(id) !== null),
     );
-    const autonomy = one("picker-autonomy");
     await waitFor(
       "autonomy to read Full auto with the agent's full_auto mode",
       () =>
-        (autonomy as HTMLSelectElement | null)?.value === "full_auto" &&
+        attr(one("picker-autonomy"), "requested") === "full_auto" &&
         attr(one("picker-autonomy"), "native-mode") === "full_auto",
     );
     return "Model, Effort, Mode and Fast mode, and autonomy Full auto (agent mode full_auto)";
@@ -1237,12 +1239,21 @@ async function agentScenario(
       },
       AGENT_START_TIMEOUT_MS,
     );
-    // Ask, so the agent acts on nothing without a card; the one prompt needs no action.
-    await choose(one("picker-autonomy"), "the autonomy picker", "ask");
+    // Select the connection's offered approval control through the real UI.
+    const approval = all("picker-access-choice").find(
+      (button) =>
+        button.dataset.legacyAutonomy === "ask" ||
+        button.querySelector("strong")?.textContent === "Ask for approval",
+    );
+    if (!approval)
+      throw new StepError("The native connection does not advertise a reviewed approval setting.");
+    const requestedAccess = approval.dataset.pickerValue;
+    await waitFor("the access picker to be enabled", () => !approval.hasAttribute("disabled"));
+    click(approval, "Ask for approval");
     await waitFor(
       "autonomy to read Ask",
       () =>
-        attr(one("picker-autonomy"), "requested") === "ask" &&
+        attr(one("picker-autonomy"), "effective") === requestedAccess &&
         attr(one("picker-autonomy"), "saving") === "false",
     );
     return `chat ${chatId} started its agent in ${Math.round((Date.now() - started) / 1000)} s, under Ask`;

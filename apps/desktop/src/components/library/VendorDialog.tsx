@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import type { PluginManagement } from "../../bindings";
 import { type VendorApi, vendorApi } from "../../lib/config-vendor/api";
 import type {
   VendorAction,
@@ -14,7 +15,16 @@ import { Modal } from "../chat/Modal";
 import { TerminalSheet } from "../TerminalSheet";
 import "./vendor.css";
 
-const NAMES = { claude: "Claude", codex: "Codex", pi: "Pi" };
+const NAMES: Readonly<Record<string, string>> = {
+  claude: "Claude",
+  codex: "Codex",
+  pi: "Pi",
+  open_code: "OpenCode",
+  hermes: "Hermes",
+  cursor: "Cursor",
+  grok: "Grok Build",
+  antigravity: "Antigravity",
+};
 /** A Plugin library row or step that opens this dialog already filled in. */
 export interface VendorPreset {
   readonly provider: VendorProvider;
@@ -29,6 +39,7 @@ export function VendorDialog({
   onClose,
   onFinished,
   api = vendorApi,
+  capabilities: suppliedCapabilities,
 }: {
   readonly initial?: LibraryItem | null;
   readonly preset?: VendorPreset | null;
@@ -36,6 +47,7 @@ export function VendorDialog({
   /** The reviewed command ended, with its exit code (null when it was stopped). */
   readonly onFinished?: (exitCode: number | null) => void;
   readonly api?: VendorApi;
+  readonly capabilities?: readonly PluginManagement[];
 }) {
   const [provider, setProvider] = useState<VendorProvider>(
     preset?.provider ??
@@ -49,6 +61,30 @@ export function VendorDialog({
   );
   const [target, setTarget] = useState(preset?.target ?? initial?.item.key ?? "");
   const [busy, setBusy] = useState(false);
+  const [capabilities, setCapabilities] = useState<readonly PluginManagement[]>(
+    suppliedCapabilities ?? [],
+  );
+  useEffect(() => {
+    let current = true;
+    if (suppliedCapabilities) {
+      setCapabilities(suppliedCapabilities);
+    } else if (api.capabilities) {
+      void api
+        .capabilities()
+        .then((value) => {
+          if (current) setCapabilities(value);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      current = false;
+    };
+  }, [api, suppliedCapabilities]);
+  const management = capabilities.find(
+    (value) => value.version === 1 && value.provider === provider,
+  );
+  const kinds = management?.actions ?? [];
+  const offeredActions = kinds.find((value) => value.kind === kind)?.actions ?? [action];
   const [error, setError] = useState("");
   const [review, setReview] = useState<{
     value: VendorReview;
@@ -109,7 +145,9 @@ export function VendorDialog({
   return (
     <Modal title="Manage integrations" size="md" onClose={onClose} className="vendor-dialog">
       <p className="vendor-intro">
-        Install or change a personal plugin, marketplace or Pi package with the agent's own command.
+        {kind === "native"
+          ? "Open this agent's native customization interface in a reviewed terminal."
+          : "Install or change a personal integration with the agent's own reviewed command."}
         You review the exact command before it runs.
       </p>
       <form
@@ -124,20 +162,25 @@ export function VendorDialog({
             <select
               className="g-select"
               value={provider}
-              disabled={busy}
+              disabled={busy || kind === "native"}
               onChange={(event) => {
                 const value = event.currentTarget.value as VendorProvider;
                 setProvider(value);
-                setKind(value === "pi" ? "package" : "plugin");
-                setAction("install");
+                const next = capabilities.find((c) => c.provider === value)?.actions[0];
+                if (next) {
+                  setKind(next.kind);
+                  setAction(next.actions[0] ?? "install");
+                }
                 setTarget("");
               }}
             >
-              {Object.entries(NAMES).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {(capabilities.length ? capabilities.map((c) => c.provider) : [provider]).map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {NAMES[value] ?? value}
+                  </option>
+                ),
+              )}
             </select>
           </label>
           <label>
@@ -145,21 +188,20 @@ export function VendorDialog({
             <select
               className="g-select"
               value={kind}
-              disabled={busy || provider === "pi"}
+              disabled={busy || kind === "native"}
               onChange={(event) => {
                 setKind(event.currentTarget.value as VendorKind);
-                setAction("install");
+                setAction(
+                  kinds.find((k) => k.kind === event.currentTarget.value)?.actions[0] ?? "install",
+                );
                 setTarget("");
               }}
             >
-              {provider === "pi" ? (
-                <option value="package">Package</option>
-              ) : (
-                <>
-                  <option value="plugin">Plugin</option>
-                  <option value="marketplace">Marketplace</option>
-                </>
-              )}
+              {(kinds.length && kind !== "native" ? kinds.map((k) => k.kind) : [kind]).map((k) => (
+                <option value={k} key={k}>
+                  {k === "native" ? "Native customization" : k}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -167,32 +209,28 @@ export function VendorDialog({
             <select
               className="g-select"
               value={action}
-              disabled={busy}
+              disabled={busy || kind === "native"}
               onChange={(event) => setAction(event.currentTarget.value as VendorAction)}
             >
-              <option value="install">{kind === "marketplace" ? "Add" : "Install"}</option>
-              {provider !== "codex" || kind === "marketplace" ? (
-                <option value="update">Update</option>
-              ) : null}
-              <option value="remove">Remove</option>
-              {provider === "claude" && kind === "plugin" ? (
-                <>
-                  <option value="enable">Enable</option>
-                  <option value="disable">Disable</option>
-                </>
-              ) : null}
+              {offeredActions.map((value) => (
+                <option key={value} value={value}>
+                  {value === "open" ? "Open" : value}
+                </option>
+              ))}
             </select>
           </label>
         </div>
         <div className="vendor-target">
           <label htmlFor={`${field}-target`}>
-            {kind === "plugin"
-              ? "Plugin and marketplace"
-              : kind === "package"
-                ? "Package source"
-                : action === "install"
-                  ? "GitHub repository"
-                  : "Marketplace name"}
+            {kind === "native"
+              ? "Native customization route"
+              : kind === "plugin"
+                ? "Plugin and marketplace"
+                : kind === "package"
+                  ? "Package source"
+                  : action === "install"
+                    ? "GitHub repository"
+                    : "Marketplace name"}
           </label>
           <input
             id={`${field}-target`}
@@ -204,6 +242,7 @@ export function VendorDialog({
             required
             value={target}
             disabled={busy}
+            readOnly={kind === "native"}
             onChange={(event) => setTarget(event.currentTarget.value)}
             placeholder={
               kind === "plugin"
@@ -216,9 +255,12 @@ export function VendorDialog({
             }
           />
           <small id={`${field}-note`} className="vendor-note">
-            {kind === "package"
-              ? "New packages need an exact npm version or a GitHub tag or commit, as in git:github.com/owner/repository@v1.2.3."
-              : "Use a marketplace you trust: plugins can download and run third-party code."}{" "}
+            {kind === "native"
+              ? (management?.native_routes.find((r) => r.id === target)?.instructions ??
+                "Continue in the agent's native interactive CLI.")
+              : kind === "package"
+                ? "New packages need an exact npm version or a GitHub tag or commit, as in git:github.com/owner/repository@v1.2.3."
+                : "Use a marketplace you trust: plugins can download and run third-party code."}{" "}
             Project configuration stays separate.
           </small>
         </div>

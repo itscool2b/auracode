@@ -23,6 +23,7 @@ pub mod driver;
 pub mod factory;
 pub mod headless;
 pub mod jsonrpc;
+pub mod mcp;
 pub mod mock;
 pub mod mock_driver;
 pub mod pi;
@@ -30,3 +31,5 @@ pub mod pi;
 pub mod replay;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+
+pub mod controls;

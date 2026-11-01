@@ -115,4 +115,12 @@ mod conformance {
         assert!(!approvals.is_valid(&json!({"decision":"allow"})));
         assert!(approvals.is_valid(&json!({"decision":"accept"})));
     }
+    #[test]
+    fn native_plan_collaboration_uses_schema_settings_and_builtin_instructions() {
+        let collaboration = validator("v2/CollaborationMode");
+        for mode in ["plan", "default"] {
+            assert!(collaboration.is_valid(&json!({"mode":mode,"settings":{"model":"gpt-5","reasoning_effort":"high","developer_instructions":null}})));
+        }
+        assert!(!collaboration.is_valid(&json!({"mode":"unknown","settings":{"model":"gpt-5"}})));
+    }
 }

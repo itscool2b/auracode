@@ -788,7 +788,12 @@ impl Detector {
     /// Reprobe one supported provider inside the core's bounded refresh stream. Other catalog
     /// providers cannot delay its listings. Connections of one provider are checked in turn.
     pub async fn refresh_plugin_provider(&self, id: &str) {
-        if crate::plugins::recipes(id).is_empty() && id != "opencode" {
+        if crate::plugins::recipes(id).is_empty()
+            && !matches!(
+                id,
+                "opencode" | "hermes" | "grok" | "cursor" | "antigravity" | "omp"
+            )
+        {
             return;
         }
         match &self.mode {

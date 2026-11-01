@@ -328,19 +328,29 @@ export function InstructionsPanel({
               ))}
             </select>
           </Row>
-          <Row title="Files" detail={snapshot ? modeSentence(snapshot) : "Reading files…"}>
+          <div className="instructions-mode-choice">
+            <h2>How instructions are shared</h2>
+            <p>{snapshot ? modeSentence(snapshot) : "Reading files…"}</p>
             <fieldset
-              className="settings-segmented settings-control"
+              className="instructions-mode-options"
               disabled={!snapshot || pending !== null}
               data-testid="instructions-mode"
             >
-              <legend className="sr-only">Files</legend>
+              <legend className="sr-only">How instructions are shared</legend>
               {(
                 [
-                  ["universal", "One file"],
-                  ["per_agent", "Per agent"],
+                  [
+                    "universal",
+                    "Shared instructions",
+                    "Maintain one shared source. Aura shows how each agent reads it.",
+                  ],
+                  [
+                    "per_agent",
+                    "Agent-specific files",
+                    "Edit native files separately. Some agents may read the same files.",
+                  ],
                 ] as const
-              ).map(([value, label]) => (
+              ).map(([value, label, description]) => (
                 <label key={value}>
                   <input
                     type="radio"
@@ -349,11 +359,14 @@ export function InstructionsPanel({
                     checked={snapshot?.mode === "none" ? view === value : snapshot?.mode === value}
                     onChange={() => switchMode(value)}
                   />
-                  <span>{label}</span>
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{description}</small>
+                  </span>
                 </label>
               ))}
             </fieldset>
-          </Row>
+          </div>
           {snapshot?.agents
             .filter((agent) => agent.status === "drift" && agent.installed)
             .map((agent) => (

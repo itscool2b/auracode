@@ -1,6 +1,7 @@
-# Plugin library
+# Plugins & MCP
 
-The Plugin library (Settings, then Plugin library) has one section per agent. Each section shows
+Customize, below Search and New chat, opens Plugins & MCP. The existing Settings entry remains
+available. Shared MCP has its own section, followed by one section per agent. Each agent section shows
 what that agent supports, read from the agent's own CLI where the CLI has a reviewed,
 machine-readable listing, and from the agent's files where it does not. It also shows the
 harness's update status and the device's sync switch for that agent. Every change runs the
@@ -8,7 +9,49 @@ agent's own reviewed command in a terminal after the person reads it (see
 [vendor-integrations.md](vendor-integrations.md)). Instruction files (`CLAUDE.md`, `AGENTS.md`)
 left this surface for the separate Instructions surface. aura-config keeps their inventory and copy
 code, which configuration sync and other callers still use, but the Plugin library does not list
-them.
+them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
+
+Plugins stay with their agent. Shared MCP applies to compatible agents in the selected scope.
+Server definitions can sync; authentication stays on each device.
+
+## Shared MCP
+
+Aura owns stable server IDs and immutable definition revisions. New definitions default to the selected
+project, covering its folders and worktrees. All-projects definitions are optional. A project definition
+with the same ID replaces the all-projects definition, including when the override is disabled.
+Native server names are inspected before session launch. Conflicting names or an unreadable native
+configuration require review; native files and homes are never rewritten by shared MCP.
+
+CRUD, explicit Aura/native JSON import, portable export, local credential setup, enable/disable,
+connection tests, session status, supported OAuth and idle restart are available from Shared MCP.
+Native imports reject unknown vendor options rather than silently dropping behavior. Definition edits
+use revision preconditions. Concurrent synced edits retain both versions for explicit acceptance or
+keeping the current definition, and the reviewed resolution syncs as an immutable revision too.
+
+Account definitions and local credentials inherit the profile database's encryption. Only portable
+definitions and credential field names enter the existing encrypted account sync pipeline. Actual
+credential values and OAuth tokens stay local. Changing the executable, arguments, endpoint or credential
+requirements clears previous local values. Export never contains credential values.
+
+Each native generation receives an immutable effective snapshot. Codex uses `thread/start` and
+`thread/resume` configuration, with thread-scoped status and OAuth. Claude uses `--mcp-config` alongside
+native configuration, without `--strict-mcp-config`, and exposes native session status. Pi loads a scoped
+extension and must acknowledge actual registration before user-defined shared MCP is considered loaded.
+ACP carries definitions through session new/load/resume, checking advertised remote transports. Codex
+and Pi support stdio and streamable HTTP; Claude additionally supports legacy SSE; ACP remote support
+depends on its initialization capabilities. Restricted text fallbacks and remote hosts do not load
+shared definitions. Unsupported management operations are reported explicitly.
+
+Optional Aura memory tools cannot turn missing transport support into a failed chat. Their omission
+leaves visible reference context available. Reserved internal server names, including normalized aliases,
+cannot be saved as user definitions. A native collision omits the optional helper with a notice.
+
+A connection test performs a bounded MCP initialization handshake, not a tool call. Stdio uses an
+explicit active native chat folder or the project's sole local folder; ambiguous folders require a
+selected chat. Tests do not execute project-relative scripts from the home directory. HTTP redirects
+are refused and matching JSON-RPC responses are required. A direct test is separate from an agent's
+actual session status. Status/auth/restart operations require an idle chat with no queued messages or
+pending approvals. Saved changes apply after restart; native OAuth and headers remain device local.
 
 ## What each agent supports and what feeds it
 
@@ -26,10 +69,21 @@ them.
 | | | Subagents, hooks | `agents/*.toml`, `hooks.json` | No listing command. |
 | Pi | None (packages) | Packages | `pi list --no-approve` with `PI_OFFLINE=1` | Plain text under "User packages:" and "Project packages:"; private sources are shown as "Package N (private source)". |
 | | | Skills, MCP servers, prompt templates | `skills/`, `mcp.json`, `prompts/` in `PI_CODING_AGENT_DIR` | `pi mcp list` starts every server, so it is never run. |
-| OpenCode | Declared in config | Plugins, MCP servers, skills, commands, agents | `opencode.json` or `opencode.jsonc` (`plugin`, `mcp`) and the `plugins/`, `skills/`, `commands/`, `agents/` folders (and their singular forms) in `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode` | OpenCode installs npm plugins with Bun whenever it starts, and `opencode mcp list` checks each server's connection, so no OpenCode command is run. Configuration sync does not cover OpenCode. |
+| OpenCode | Declared in config | Plugins, MCP servers, skills, commands, agents | `opencode.json` or `opencode.jsonc` (`plugin`, `mcp`) and the `plugins/`, `skills/`, `commands/`, `agents/` folders (and their singular forms) in `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode` | OpenCode installs npm plugins with Bun whenever it starts, and `opencode mcp list` checks each server's connection, so no OpenCode command is run for inventory. Configuration sync does not cover OpenCode. |
 
-Cursor, Grok Build, Antigravity and Hermes are not listed: auracode has no reviewed way to read
-their extensions yet, and the page says so.
+Cursor adds reviewed `~/.cursor/mcp.json`, command/agent/hook and skill inventory. Grok Build adds
+reviewed `~/.grok/config.toml` MCP names and skills. Hermes adds documented block-map MCP names from
+`HERMES_HOME/config.yaml` and its skill folders; richer YAML forms require native review. These readers
+retain names and credential field names only and execute no server. Antigravity and oh-my-pi have explicit
+unavailable extension listings where no reader is qualified. The page never treats an unsupported API
+as a successful empty live listing.
+
+The backend publishes versioned management capabilities. The renderer offers only the reviewed
+operations in that response. Claude, Codex and Pi retain their supported plugin/package operations.
+Installed OpenCode, Hermes, Cursor and Grok also have named native customization routes, using a reviewed
+interactive terminal rather than invented common management flags. The available native screens remain
+agent-specific. Native configuration sync continues to cover Claude, Codex and Pi only; shared Aura MCP
+definition sync is separate.
 
 Sources, checked on 2026-10-28 against the installed CLIs' `--help` (Claude Code 2.1.312, Codex
 0.162.1, Pi 1.0.2) run with every config home pointed at a temporary folder, and against the vendors'
@@ -45,6 +99,21 @@ documentation:
 - Pi: `pi --help`, `pi list --help` and `pi mcp --help` (Pi 1.0.2).
 - OpenCode: [CLI](https://opencode.ai/docs/cli/), [Plugins](https://opencode.ai/docs/plugins/) and
   [Config](https://opencode.ai/docs/config/).
+- Shared session setup: [ACP session setup](https://agentclientprotocol.com/protocol/v1/session-setup),
+  [Claude CLI](https://code.claude.com/docs/en/cli-reference), and
+  [Pi 1.0.2 MCP](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/mcp.md).
+- Additional inventory: [Cursor MCP](https://prod.cursor.com/docs/mcp),
+  [Grok MCP configuration](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/07-mcp-servers.md),
+  [Hermes MCP](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/mcp.md)
+  and [Hermes skills](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/skills.md).
+
+`apps/desktop/scripts/check-native-mcp.mjs` records native protocol evidence separately from browser
+fixtures. The isolated Windows run initialized installed Codex 0.162.1 and Claude Code 2.1.312, each
+reporting the local synthetic MCP connected with one tool. Pi 1.0.2 initialized RPC and acknowledged the
+actual scoped extension registration. It used empty temporary native homes, copied no credentials,
+sent no model prompts and performed no OAuth flow. This is protocol qualification, not release or visual
+acceptance. Browser fixture results and light/dark captures are recorded separately by
+`check-shared-mcp.mjs`.
 
 ## How listings run
 

@@ -29,6 +29,7 @@ pub enum Route {
     SetMode,
     /// The untyped `session/set_model` (a synthesized option from the legacy `models`).
     SetModel,
+    NativeControl,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +41,9 @@ struct Entry {
 /// Every option of a session, with current values.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OptionModel {
+    controls_dialect: String,
+    execution_mode: Option<String>,
+    controls: Vec<Entry>,
     real: Vec<Entry>,
     /// The legacy lists, kept so the synthesized options can be rebuilt when the real ones change.
     legacy_modes: Option<LegacyList>,
@@ -52,6 +56,9 @@ pub struct OptionModel {
 impl OptionModel {
     pub fn from_open(reply: &OpenReply) -> OptionModel {
         let mut model = OptionModel {
+            controls_dialect: String::new(),
+            execution_mode: None,
+            controls: Vec::new(),
             real: Vec::new(),
             legacy_modes: reply.modes.clone(),
             legacy_models: reply.models.clone(),
@@ -62,13 +69,111 @@ impl OptionModel {
         model
     }
 
+    /// Only verified adapter mode semantics become the dedicated controls. Unknown modes stay
+    /// in the native options list without being labeled as execution or planning.
+    pub fn enable_native_controls(&mut self, dialect: &str) {
+        self.controls_dialect = dialect.into();
+        self.rebuild_controls();
+    }
+    pub fn remember_execution_access(&mut self, value: &str) {
+        if self.execution_choice(value) && self.offers_mode(value) {
+            self.execution_mode = Some(value.into());
+            self.rebuild_controls();
+        }
+    }
+    fn execution_choice(&self, value: &str) -> bool {
+        match self.controls_dialect.as_str() {
+            "claude-acp" => matches!(value, "default" | "acceptEdits" | "bypassPermissions"),
+            "codex-acp" => matches!(value, "read-only" | "auto" | "full-access"),
+            "opencode" => value == "build",
+            "cursor" => matches!(value, "agent" | "ask"),
+            _ => false,
+        }
+    }
+    fn rebuild_controls(&mut self) {
+        self.controls.clear();
+        let Some(mode) = self.mode().cloned() else {
+            return;
+        };
+        let ConfigKind::Select { current, choices } = mode.kind else {
+            return;
+        };
+        let access: Vec<_> = choices
+            .iter()
+            .filter(|c| self.execution_choice(&c.value))
+            .cloned()
+            .collect();
+        if self.execution_choice(&current) {
+            self.execution_mode = Some(current.clone());
+        }
+        if !access.is_empty() {
+            self.controls.push(Entry {
+                option: crate::controls::select(
+                    crate::controls::ACCESS,
+                    "Access",
+                    self.execution_mode.as_deref().unwrap_or(""),
+                    access.clone(),
+                ),
+                route: Route::NativeControl,
+            });
+        }
+        if self.execution_mode.is_none()
+            && current == "plan"
+            && choices.iter().any(|c| c.value == "plan")
+            && !access.is_empty()
+        {
+            let mut workflow = crate::controls::workflow("plan");
+            if let ConfigKind::Select { choices, .. } = &mut workflow.kind {
+                choices.retain(|c| c.value == "plan");
+            }
+            workflow.description = Some("Native Plan is active. The prior execution access is unknown; use the native harness to choose it explicitly.".into());
+            self.controls.push(Entry {
+                option: workflow,
+                route: Route::NativeControl,
+            });
+        }
+        if self.execution_mode.is_some()
+            && choices.iter().any(|c| c.value == "plan")
+            && !access.is_empty()
+            && (current == "plan" || self.execution_choice(&current))
+        {
+            self.controls.push(Entry {
+                option: crate::controls::workflow(if current == "plan" {
+                    "plan"
+                } else {
+                    "execute"
+                }),
+                route: Route::NativeControl,
+            });
+        }
+    }
+
+    fn native_target(&self, id: &str, value: &ConfigValue) -> Option<(String, ConfigValue)> {
+        let ConfigValue::Choice { value } = value else {
+            return None;
+        };
+        let native = match id {
+            crate::controls::ACCESS if self.execution_choice(value) => value.clone(),
+            crate::controls::WORKFLOW if value == "plan" => "plan".into(),
+            crate::controls::WORKFLOW if value == "execute" => self.execution_mode.clone()?,
+            _ => return None,
+        };
+        Some((
+            self.mode()?.id.clone(),
+            ConfigValue::Choice { value: native },
+        ))
+    }
+
     /// The full list with current values: real options first, then the synthesized ones.
     pub fn options(&self) -> Vec<ConfigOption> {
         self.entries().map(|entry| entry.option.clone()).collect()
     }
 
     fn entries(&self) -> impl Iterator<Item = &Entry> {
-        self.real.iter().chain(self.synthesized.iter())
+        self.real
+            .iter()
+            .chain(self.synthesized.iter())
+            .chain(self.controls.iter())
     }
 
     fn entry(&self, option_id: &str) -> Option<&Entry> {
@@ -79,6 +184,7 @@ impl OptionModel {
         self.real
             .iter_mut()
             .chain(self.synthesized.iter_mut())
+            .chain(self.controls.iter_mut())
             .find(|entry| entry.option.id == option_id)
     }
 
@@ -161,6 +267,9 @@ impl OptionModel {
         option_id: &str,
         value: &ConfigValue,
     ) -> Option<(&'static str, Value)> {
+        if let Some((id, value)) = self.native_target(option_id, value) {
+            return self.request(session_id, &id, &value);
+        }
         let entry = self.entry(option_id)?;
         Some(match (entry.route, value) {
             (Route::ConfigOption, value) => (
@@ -175,7 +284,8 @@ impl OptionModel {
                 methods::SESSION_SET_MODEL,
                 requests::set_model(session_id, value),
             ),
-            (Route::SetMode | Route::SetModel, ConfigValue::Toggle { .. }) => return None,
+            (Route::SetMode | Route::SetModel, ConfigValue::Toggle { .. })
+            | (Route::NativeControl, _) => return None,
         })
     }
 
@@ -183,6 +293,10 @@ impl OptionModel {
     /// replaces the real options, except an empty list from an agent whose open reply had none
     /// (Hermes).
     pub fn applied(&mut self, option_id: &str, value: &ConfigValue, reply: Option<&[Value]>) {
+        if let Some((id, value)) = self.native_target(option_id, value) {
+            self.applied(&id, &value, reply);
+            return;
+        }
         let route = self.entry(option_id).map(|entry| entry.route);
         if route == Some(Route::ConfigOption)
             && let Some(list) = reply
@@ -192,6 +306,7 @@ impl OptionModel {
             return;
         }
         self.set_current(option_id, value);
+        self.rebuild_controls();
     }
 
     /// `config_option_update`: replaces every real option; the synthesized ones stay unless a real
@@ -212,6 +327,7 @@ impl OptionModel {
                 value: mode.to_owned(),
             },
         );
+        self.rebuild_controls();
         before.as_deref() != Some(mode)
     }
 
@@ -243,7 +359,7 @@ impl OptionModel {
         let legacy = match route {
             Route::SetMode => self.legacy_modes.as_mut(),
             Route::SetModel => self.legacy_models.as_mut(),
-            Route::ConfigOption => None,
+            Route::ConfigOption | Route::NativeControl => None,
         };
         if let Some(list) = legacy
             && let ConfigValue::Choice { value } = value
@@ -256,6 +372,12 @@ impl OptionModel {
         self.real = raw
             .iter()
             .filter_map(parse_config_option)
+            .filter(|option| {
+                !matches!(
+                    option.id.as_str(),
+                    crate::controls::ACCESS | crate::controls::WORKFLOW
+                )
+            })
             .take(MAX_OPTIONS)
             .map(|option| Entry {
                 option,
@@ -305,6 +427,7 @@ impl OptionModel {
             }
         }
         self.synthesized = synthesized;
+        self.rebuild_controls();
     }
 
     /// `id`, or a variant no real option uses.
@@ -777,5 +900,70 @@ mod tests {
             "on"
         );
         assert_eq!(current_value(fast), ConfigValue::Toggle { value: false });
+    }
+}
+
+#[cfg(test)]
+mod native_control_tests {
+    use super::*;
+    use serde_json::json;
+    fn model(config: bool) -> OptionModel {
+        let raw = if config {
+            json!({"configOptions":[{"id":"permission","name":"Mode","category":"mode","type":"select","currentValue":"acceptEdits","options":[{"value":"acceptEdits","name":"Accept edits"},{"value":"plan","name":"Plan"},{"value":"future","name":"Unknown"}]}]})
+        } else {
+            json!({"modes":{"currentModeId":"acceptEdits","availableModes":[{"id":"acceptEdits","name":"Accept edits"},{"id":"plan","name":"Plan"}]}})
+        };
+        let mut model = OptionModel::from_open(&OpenReply::parse(&raw));
+        model.enable_native_controls("claude-acp");
+        model
+    }
+    #[test]
+    fn native_plan_keeps_config_and_legacy_routes_and_remembers_execution_access() {
+        for config in [true, false] {
+            let mut model = model(config);
+            let plan = ConfigValue::Choice {
+                value: "plan".into(),
+            };
+            let execute = ConfigValue::Choice {
+                value: "execute".into(),
+            };
+            let (method, params) = model
+                .request("s", crate::controls::WORKFLOW, &plan)
+                .unwrap();
+            assert_eq!(
+                method,
+                if config {
+                    "session/set_config_option"
+                } else {
+                    "session/set_mode"
+                }
+            );
+            assert_eq!(params[if config { "value" } else { "modeId" }], "plan");
+            model.applied(crate::controls::WORKFLOW, &plan, None);
+            let (_, params) = model
+                .request("s", crate::controls::WORKFLOW, &execute)
+                .unwrap();
+            assert_eq!(
+                params[if config { "value" } else { "modeId" }],
+                "acceptEdits"
+            );
+            assert!(
+                model
+                    .validate(
+                        crate::controls::WORKFLOW,
+                        &ConfigValue::Choice {
+                            value: "future".into()
+                        }
+                    )
+                    .is_err()
+            );
+        }
+    }
+    #[test]
+    fn unclassified_generic_modes_do_not_claim_plan_semantics() {
+        let mut model = model(false);
+        model.enable_native_controls("generic");
+        assert!(model.get(crate::controls::WORKFLOW).is_none());
+        assert!(model.mode().is_some());
     }
 }

@@ -574,9 +574,31 @@ impl Session {
                                 }
                             }
                         }
-                        Purpose::Commands => self
-                            .outbox
-                            .push_back(DriverEvent::Commands(metadata::commands(&data))),
+                        Purpose::Commands => {
+                            if !self.setup.mcp_servers.is_empty()
+                                && !data["commands"].as_array().is_some_and(|commands| {
+                                    commands
+                                        .iter()
+                                        .any(|c| c["name"] == "aura-shared-mcp-ready")
+                                })
+                            {
+                                if self
+                                    .setup
+                                    .mcp_servers
+                                    .iter()
+                                    .any(|server| !crate::mcp::managed_memory(server))
+                                {
+                                    self.failure = Some(error(
+                                        "Pi did not load Aura's shared MCP extension. Update Pi to a compatible version and restart; no prompt was sent.",
+                                    ));
+                                } else {
+                                    self.setup.mcp_servers.clear();
+                                    self.notice("Project memory context remains available. Pi did not load the optional memory MCP tools.");
+                                }
+                            }
+                            self.outbox
+                                .push_back(DriverEvent::Commands(metadata::commands(&data)));
+                        }
                         Purpose::Stats => {
                             if self.stats_dirty {
                                 self.stats_dirty = false;
@@ -763,6 +785,10 @@ impl Session {
     fn command(&mut self, command: DriverCommand) {
         log_command(&self.log, &command);
         match command {
+            DriverCommand::McpAction { reply, .. } => crate::mcp::unsupported(
+                reply,
+                "Pi RPC does not expose session MCP status or OAuth controls. Use Pi's /mcp native panel; restart this idle chat to apply shared definitions.",
+            ),
             DriverCommand::Interrupt => self.interrupt(),
             DriverCommand::RespondUi { request_id, answer } => {
                 if let Some(dialog) = self.dialogs.remove(&request_id) {
@@ -953,8 +979,58 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         Ok(id) => id,
         Err(err) => return DriverExit::StartFailed(err),
     };
+    let mut native_launch = launch(&setup, &native_id);
+    let _mcp_extension = if !setup.mcp_servers.is_empty() {
+        use std::io::Write;
+        if setup.mcp_servers.iter().any(|s| {
+            matches!(
+                s.definition.transport,
+                aura_protocol::mcp::McpTransport::Sse { .. }
+            ) || s.definition.name.contains('.')
+        }) {
+            return DriverExit::StartFailed(error(
+                "Pi supports stdio and HTTP MCP with letters, numbers, underscores and hyphens in server names.",
+            ));
+        }
+        let mut file = match tempfile::Builder::new()
+            .prefix("aura-shared-mcp-")
+            .suffix(".ts")
+            .tempfile()
+        {
+            Ok(file) => file,
+            Err(_) => {
+                return DriverExit::StartFailed(error(
+                    "Aura could not prepare Pi's session MCP extension.",
+                ));
+            }
+        };
+        if file.write_all(include_bytes!("shared-mcp.ts")).is_err() {
+            return DriverExit::StartFailed(error(
+                "Aura could not write Pi's session MCP extension.",
+            ));
+        }
+        let servers = crate::mcp::codex(&setup.mcp_servers);
+        let mut servers = servers.as_object().cloned().unwrap_or_default();
+        for server in servers.values_mut() {
+            if let Some(headers) = server
+                .as_object_mut()
+                .and_then(|s| s.remove("http_headers"))
+            {
+                server["headers"] = headers;
+            }
+        }
+        native_launch
+            .args
+            .extend(["--extension".into(), file.path().as_os_str().to_owned()]);
+        native_launch
+            .set_env
+            .push(("AURA_SHARED_MCP".into(), json!(servers).to_string().into()));
+        Some(file)
+    } else {
+        None
+    };
     let spec = SpawnSpec {
-        launch: launch(&setup, &native_id),
+        launch: native_launch,
         folder: setup.folder.clone(),
         env: Arc::clone(&setup.env),
         max_line_bytes: MAX_LINE_BYTES,

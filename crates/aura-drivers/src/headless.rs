@@ -51,6 +51,10 @@ fn autonomy() -> AutonomyState {
 
 fn unsupported(command: DriverCommand) {
     match command {
+        DriverCommand::McpAction { reply, .. } => crate::mcp::unsupported(
+            reply,
+            "This restricted fallback does not support shared MCP or session authentication.",
+        ),
         DriverCommand::SetOption { reply, .. } => {
             let _ = reply.send(Err(failure(
                 "Options cannot be changed through this text fallback. Use ACP.",

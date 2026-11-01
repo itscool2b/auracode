@@ -32,12 +32,12 @@ tokio.workspace = true
 time = { version = "0.3.55", default-features = false, features = ["parsing"] }
 tokio-util = "0.7.20"
 tracing.workspace = true
+tempfile.workspace = true
 # Grapheme boundaries, so a split delta never cuts an emoji sequence or an accent off its letter.
 unicode-segmentation = "1.13.3"
 uuid.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 # The ACP schema, for the conformance tests only: auracode has no runtime dependency on the SDK.
 agent-client-protocol-schema = { version = "=1.12.0", features = ["unstable"] }
 aura-process = { workspace = true, features = ["testing"] }

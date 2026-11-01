@@ -45,6 +45,8 @@ pub mod gitworkspaces;
 pub mod ids;
 #[cfg(feature = "account-sync")]
 pub mod local_import;
+pub mod mcp;
+pub mod memory_service;
 pub mod onboarding;
 pub mod owner;
 pub mod paths;

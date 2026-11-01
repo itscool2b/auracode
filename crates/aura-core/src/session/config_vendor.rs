@@ -134,6 +134,13 @@ impl SessionManager {
 }
 
 fn declaration_revision(plan: &VendorPlan) -> Result<String, SessionError> {
+    if plan.review.request.kind == VendorKind::Native {
+        return Ok(format!(
+            "native:{}:{}",
+            plan.review.request.provider.agent_id(),
+            plan.config.display()
+        ));
+    }
     let (provider, path, format, fields) = match plan.review.request.provider {
         VendorProvider::Claude => (
             Provider::Claude,
@@ -153,6 +160,7 @@ fn declaration_revision(plan: &VendorPlan) -> Result<String, SessionError> {
             ConfigFormat::Json,
             vec!["packages"],
         ),
+        _ => return Err(unavailable()),
     };
     let source = Source {
         id: format!("user:{}", plan.review.request.provider.agent_id()),

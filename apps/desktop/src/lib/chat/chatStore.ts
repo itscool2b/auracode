@@ -11,6 +11,7 @@ import type {
   LimitWindow,
   QueuedPrompt,
   SendingPrompt,
+  SessionControlChange,
   SessionInfo,
   SessionLists,
   SessionStatus,
@@ -106,6 +107,7 @@ export interface ChatState {
   readonly optionsSaving: ReadonlyMap<string, ConfigValue>;
   /** An autonomy change on its way. */
   readonly autonomySaving: Autonomy | null;
+  readonly controlSaving: SessionControlChange | null;
   readonly requests: ReadonlyMap<string, RequestState>;
   readonly blobs: ReadonlyMap<string, BlobState>;
   /** The last failed send, shown under the composer. */
@@ -177,6 +179,7 @@ function initialState(chatId: string): ChatState {
     listsError: null,
     optionsSaving: new Map(),
     autonomySaving: null,
+    controlSaving: null,
     requests: new Map(),
     blobs: new Map(),
     sendError: null,
@@ -278,6 +281,7 @@ export class ChatStore {
   /** The number of each option's newest change, and of the newest autonomy change. */
   #optionRequests = new Map<string, number>();
   #autonomyRequest = 0;
+  #controlRequest = 0;
   #stillTimer: ReturnType<typeof setTimeout> | null = null;
   /** When the last frame arrived or the running turn started. */
   #lastActivity = 0;
@@ -404,7 +408,7 @@ export class ChatStore {
     this.#buffer = [];
     this.#attaching = true;
     this.#endedWhileAttaching = false;
-    this.#set({ ...this.#state, phase: "attaching", attachError: null });
+    this.#set({ ...this.#state, phase: "attaching", attachError: null, controlSaving: null });
     let attached: ChatAttach;
     try {
       attached = await this.#transport.attach(
@@ -737,6 +741,35 @@ export class ChatStore {
     if (this.#closed) return;
     let state = this.#state;
     if (this.#autonomyRequest === request) state = { ...state, autonomySaving: null };
+    this.#set(this.#withAnswer(state, request, answer));
+  }
+
+  /** Native controls keep their requested value visible until the same session acknowledges it. */
+  async setControl(change: SessionControlChange): Promise<void> {
+    if (!this.#transport.setControl) {
+      this.#set({
+        ...this.#state,
+        listsError: "Native session controls are unavailable on this connection.",
+      });
+      return;
+    }
+    const request = ++this.#listsRequest;
+    const generation = this.#generation;
+    const nativeId = this.#state.session?.native_session_id;
+    const agentId = this.#state.chat?.agent_id;
+    this.#controlRequest = request;
+    this.#set({ ...this.#state, controlSaving: change, listsError: null });
+    const answer = await this.#listsAnswer(() => this.#transport.setControl!(this.chatId, change));
+    if (this.#closed || generation !== this.#generation) return;
+    if (
+      nativeId !== this.#state.session?.native_session_id ||
+      agentId !== this.#state.chat?.agent_id
+    ) {
+      if (this.#controlRequest === request) this.#set({ ...this.#state, controlSaving: null });
+      return;
+    }
+    if (this.#controlRequest !== request) return;
+    const state = { ...this.#state, controlSaving: null };
     this.#set(this.#withAnswer(state, request, answer));
   }
 

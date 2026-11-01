@@ -176,7 +176,17 @@ async fn cold_and_warm_sections_arrive_before_blocked_cli_and_fast_provider_publ
             .iter()
             .map(|agent| agent.agent_id.as_str())
             .collect::<Vec<_>>(),
-        ["claude", "codex", "pi", "opencode"]
+        [
+            "claude",
+            "codex",
+            "pi",
+            "opencode",
+            "hermes",
+            "grok",
+            "cursor",
+            "antigravity",
+            "omp"
+        ]
     );
     assert!(has(&initial, "claude", "local-skill"));
     let fast_at = loop {
@@ -277,7 +287,7 @@ async fn profile_drain_rejects_late_registration_and_abandoned_drain_reopens_adm
         .unwrap();
     assert_eq!(
         reopened.agents.len(),
-        4,
+        9,
         "an abandoned switch leaves its current profile usable"
     );
     assert!(!fixture.machine.fake.join("claude.listing.log").exists());
@@ -409,17 +419,25 @@ async fn unsupported_agents_are_explicitly_unavailable_and_opencode_sync_is_not_
     let fixture = Fixture::new();
     let (task, mut rx) = fixture.start(false);
     let (_, initial) = next(&mut rx).await;
-    for name in ["Cursor", "Grok Build", "Antigravity", "Hermes"] {
+    for id in ["cursor", "grok", "antigravity", "hermes"] {
+        let agent = initial
+            .agents
+            .iter()
+            .find(|agent| agent.agent_id == id)
+            .unwrap();
         assert!(
-            initial
-                .notices
-                .iter()
-                .any(|notice| notice.contains(name) && notice.contains("no reviewed way"))
+            agent.features.iter().any(|feature| feature.feature
+                == aura_protocol::plugins::PluginFeature::Plugins
+                && matches!(
+                    feature.state,
+                    aura_protocol::plugins::ListingState::Unavailable { .. }
+                )),
+            "unsupported native plugin APIs must be explicit"
         );
     }
     assert_eq!(
         initial.agents.len(),
-        4,
+        9,
         "unsupported inventory is never represented as a successful empty listing"
     );
     let open = initial

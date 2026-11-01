@@ -447,6 +447,9 @@ export function ChatView({
         error={state.listsError}
         optionsSaving={state.optionsSaving}
         autonomySaving={state.autonomySaving}
+        controlSaving={state.controlSaving}
+        transitionBlocked={state.queue.length > 0 || pendingRequests.length > 0}
+        onSetControl={transport.setControl ? (change) => void store.setControl(change) : undefined}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
       />
@@ -454,6 +457,7 @@ export function ChatView({
     [
       agents,
       transport.conversation,
+      transport.setControl,
       agent,
       state.lists,
       autonomy,
@@ -461,6 +465,9 @@ export function ChatView({
       state.listsError,
       state.optionsSaving,
       state.autonomySaving,
+      state.controlSaving,
+      state.queue.length,
+      pendingRequests.length,
       store,
     ],
   );
@@ -740,7 +747,8 @@ export function ChatView({
                   !handoffLoaded ||
                   canContinueHere ||
                   handoffError !== null ||
-                  state.steeringPending
+                  state.steeringPending ||
+                  state.controlSaving !== null
                 }
                 chatId={chatId}
                 contextApi={transport.composer}

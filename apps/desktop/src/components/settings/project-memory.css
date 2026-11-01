@@ -1,0 +1,100 @@
+.project-memory {
+  display: grid;
+  gap: var(--g-space-16);
+  min-width: 0;
+}
+.project-memory h2,
+.project-memory h3,
+.project-memory p {
+  margin: 0;
+}
+.project-memory p {
+  color: var(--g-fg-2);
+  line-height: var(--g-leading-ui);
+}
+.project-memory-field {
+  display: grid;
+  gap: var(--g-space-8);
+  font-size: var(--g-text-ui);
+  font-weight: var(--g-weight-medium);
+}
+.project-memory-field textarea,
+.project-memory-field input,
+.project-memory-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  color: var(--g-fg-1);
+  background: var(--g-surface-1);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-6);
+  padding: var(--g-space-8) var(--g-space-12);
+  font: inherit;
+}
+.project-memory-field textarea {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+  resize: vertical;
+}
+.project-memory-field :focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+.project-memory-note,
+.project-memory-meta {
+  font-size: var(--g-text-meta);
+  color: var(--g-fg-2);
+  overflow-wrap: anywhere;
+}
+.project-memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+}
+.project-memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-memory-list li {
+  display: flex;
+  gap: var(--g-space-12);
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--g-space-12) 0;
+  border-bottom: 1px solid var(--g-line);
+}
+.project-memory-list li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-memory-list p {
+  font-size: var(--g-text-meta);
+}
+.project-memory p.project-memory-error {
+  color: var(--g-red);
+}
+.project-memory-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--g-space-16);
+}
+.project-memory-comparison pre,
+.project-memory-document {
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--g-space-12);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-6);
+  color: var(--g-fg-1);
+  background: var(--g-surface-1);
+  font: var(--g-text-meta) / var(--g-leading-code) var(--g-mono);
+}
+@media (max-width: 700px) {
+  .project-memory-comparison {
+    grid-template-columns: 1fr;
+  }
+}

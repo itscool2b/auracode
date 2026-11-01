@@ -2,7 +2,7 @@
 
 Status: **full styling pass implemented, awaiting owner visual approval**. This direction covers the light-only production website and the desktop app in both appearances. Local visual and browser verification is recorded in the review record; final remote integration checks and native release acceptance remain separate gates. Do not treat current styling or captures as an approved golden baseline until the owner locks the design. These decisions supersede the old dark-only Graphite, Orbit and Shallows directions. Historical Design Lab screens are studies, not product authority.
 
-The implemented proposal, reproducible review gallery and verification limits are recorded in [checkpoint-2026-10-30.md](checkpoint-2026-10-30.md).
+The current desktop refinement and verification limits are recorded in [checkpoint-2026-11-01.md](checkpoint-2026-11-01.md). The preceding full website and desktop proposal remains documented in [checkpoint-2026-10-30.md](checkpoint-2026-10-30.md).
 
 ## Purpose and boundaries
 
@@ -22,7 +22,9 @@ Desktop appearance defaults to System, with profile-local persisted Light and Da
 
 Design for a 1440 x 900 native window, minimum 960 x 640, with 52px clearance for native title controls. A manually collapsible sidebar is 256px expanded and 56px as a rail. At 1200px and wider, the existing Changes panel can resize from 320 to 560px; below that it overlays at up to 420px. The existing terminal remains persistent and resizable. These are layout targets, not new capabilities. Account for long titles, narrow windows, platform title controls, keyboard and focus order, scrolling and no horizontal overflow.
 
-Cover setup and agent discovery, workspace and empty chat, populated and streaming transcripts, picker and composer, permissions and questions, queued messages, error and recovery states, project and worktree management, Git and changes, terminal, plugin library, settings and account/sync, and all menus and dialogs. Settings currently includes General, Instructions, Account, Configuration sync, Shortcuts and About, and entry points to Agents and Plugin library. Rearrangement must retain every capability and accessible route. Preserve underlying Tauri commands, data, keyboard behavior, native focus and ongoing processes when restyling.
+Cover setup and agent discovery, workspace and empty chat, populated and streaming transcripts, picker and composer, permissions and questions, queued messages, error and recovery states, project and worktree management, Git and changes, terminal, Plugins & MCP, settings and account/sync, and all menus and dialogs. Customize sits below Search and New chat and contains Plugins & MCP, Instructions and Project memory. Existing settings routes remain accessible. Opening Customize preserves the active chat and draft. Preserve underlying Tauri commands, data, keyboard behavior, native focus and ongoing processes when restyling.
+
+The owner-directed 1 November refinement places access and native workflow controls on the composer's left and a searchable agent/model/effort picker on the right. Use compact labels and semantic status instead of decorative autonomy ticks. Project headers offer a visible new-chat plus. The new-chat form is a compact, left-aligned surface at a maximum 640px, with an agent dropdown, folder and existing worktree controls. Instructions offers descriptive Shared instructions and Agent-specific files choices. Keep explanations of MCP scope, authentication and memory review visible at their relevant surfaces.
 
 Automatic checkpoints are an opt-in, profile-local General setting. Extend the existing settings
 row and switch components. Explain the sending delay and file-undo tradeoff beside the control;

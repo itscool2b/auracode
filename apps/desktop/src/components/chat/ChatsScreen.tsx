@@ -2,9 +2,10 @@ import { PanelLeft } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
+import { newChatAgent, projectChatContext } from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
-import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
+import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { Banners } from "./Banners";
@@ -60,6 +61,7 @@ export function ChatsScreen({
   onDiagnostics,
   onAgents,
   onSettings,
+  onCustomize,
   onInstructions,
   active = true,
   workspace,
@@ -74,6 +76,7 @@ export function ChatsScreen({
   readonly onDiagnostics: () => void;
   readonly onAgents?: () => void;
   readonly onSettings?: () => void;
+  readonly onCustomize?: (projectId: string | null, activeChatId?: string) => void;
   /** Opens Settings' Instructions on a scope: global, a project folder, or a chat's folder. */
   readonly onInstructions?: (target: InstructionsTarget, chatLabel?: string) => void;
   readonly active?: boolean;
@@ -146,7 +149,12 @@ export function ChatsScreen({
   const preselected = useRef(new WeakSet<NewChatDraft>());
   useEffect(() => {
     if (selected !== null || defaultAgent === undefined || preselected.current.has(draft)) return;
-    const agent = preselectAgent(defaultAgent, snapshot.agents, draft.getSnapshot().agentId);
+    const agent = newChatAgent(
+      draft.context,
+      defaultAgent,
+      snapshot.agents,
+      draft.getSnapshot().agentId,
+    );
     if (agent === "wait") return;
     preselected.current.add(draft);
     if (agent !== null) draft.chooseAgent(agent);
@@ -207,6 +215,29 @@ export function ChatsScreen({
           archived={archived}
           onShowArchived={workspace ? () => setArchived((value) => !value) : undefined}
           onNewProject={workspace ? () => setProjectDialog({ project: null }) : undefined}
+          onProjectNewChat={
+            workspace
+              ? (project) => {
+                  if (!organization.data) return;
+                  setSelected(null);
+                  setArchived(false);
+                  setDraft(
+                    new NewChatDraft(transport, projectChatContext(project, organization.data)),
+                  );
+                }
+              : undefined
+          }
+          onCustomize={
+            onCustomize
+              ? () =>
+                  onCustomize(
+                    selectedProject?.id ??
+                      (selected === null ? draft.context?.projectId : null) ??
+                      null,
+                    selected ?? undefined,
+                  )
+              : undefined
+          }
           onProjectSettings={workspace ? (project) => setProjectDialog({ project }) : undefined}
           onChatOptions={workspace ? (chat) => setChatOptions(chat.id) : undefined}
           selected={selected}
@@ -230,6 +261,7 @@ export function ChatsScreen({
         />
         {selected === null ? (
           <NewChat
+            key={draft.key}
             workspace={workspace}
             agents={snapshot.agents}
             refreshing={snapshot.agentsRefreshing}

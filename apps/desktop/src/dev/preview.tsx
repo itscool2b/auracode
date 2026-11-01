@@ -596,6 +596,7 @@ function Preview() {
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [projectNew, setProjectNew] = useState(false);
   const [selected, setSelected] = useState<string | null>(
     mode === "new" || scenario ? null : "preview",
   );
@@ -711,6 +712,51 @@ function Preview() {
     let receive: ((batch: EventBatch) => void) | null = null;
     let currentStatus: SessionStatus = status;
     let choices = lists(1, {
+      controls: {
+        version: 1,
+        access: {
+          requested: "default",
+          effective: "default",
+          pending: null,
+          native_mode: "default",
+          note: null,
+          choices: [
+            {
+              value: "default",
+              name: "Ask for approval",
+              description: "Review actions before they run.",
+              legacy_autonomy: null,
+            },
+            {
+              value: "bypassPermissions",
+              name: "Full access",
+              description: "Allow actions without permission prompts.",
+              legacy_autonomy: null,
+            },
+          ],
+        },
+        workflow: {
+          requested: "execute",
+          effective: "execute",
+          pending: null,
+          native_mode: null,
+          note: null,
+          choices: [
+            {
+              value: "execute",
+              name: "Execute",
+              description: "Make changes using the chosen access level.",
+              legacy_autonomy: null,
+            },
+            {
+              value: "plan",
+              name: "Plan",
+              description: "Review the work before implementation.",
+              legacy_autonomy: null,
+            },
+          ],
+        },
+      },
       options: [
         {
           id: "model",
@@ -763,6 +809,29 @@ function Preview() {
     const context = withPreviewContext(
       new FakeTransport({
         lists: async () => choices,
+        setControl: async (_chatId, change) => {
+          if (currentStatus !== "ready" || queue.length > 0)
+            throw new Error("Wait until the agent is idle.");
+          const control = choices.controls?.[change.type];
+          if (!control?.choices?.some((choice) => choice.value === change.value))
+            throw new Error("Unsupported native control.");
+          if (
+            change.type === "workflow" &&
+            control.effective === "plan" &&
+            change.value === "execute" &&
+            !change.implementation_approved
+          )
+            throw new Error("Approve implementation first.");
+          choices = {
+            ...choices,
+            revision: choices.revision + 1,
+            controls: {
+              ...choices.controls,
+              [change.type]: { ...control, requested: change.value, effective: change.value },
+            },
+          };
+          return choices;
+        },
         setOption: async (_chatId, id, value) => {
           choices = {
             ...choices,
@@ -861,6 +930,46 @@ function Preview() {
       <aside className="chat-sidebar" aria-label="Sidebar">
         <SidebarBand collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
         <ChatList
+          onCustomize={() => {
+            location.href = "/?preview=customize";
+          }}
+          onProjectNewChat={() => {
+            setProjectNew(true);
+            setSelected(null);
+          }}
+          organization={{
+            projects: [
+              {
+                id: "project-auracode",
+                name: "auracode",
+                color: null,
+                default_agent: "claude",
+                default_model: null,
+                created_at: 1,
+                updated_at: 1,
+                folders: [
+                  {
+                    id: "folder-auracode",
+                    project_id: "project-auracode",
+                    display_name: "auracode",
+                    path: "/workspace/auracode",
+                    folder_state: "ok",
+                    unavailable_reason: null,
+                    kind: "local",
+                    git_remote_url: null,
+                    git_default_branch: "main",
+                  },
+                ],
+              },
+            ],
+            chats: [chat, chatSummary("older")].map((item) => ({
+              chat: item,
+              project_id: "project-auracode",
+              folder_id: "folder-auracode",
+              pinned: false,
+              archived: false,
+            })),
+          }}
           onSearch={() => setPalette(true)}
           chats={[
             chat,
@@ -874,7 +983,10 @@ function Preview() {
           error={null}
           selected={selected}
           onSelect={() => setSelected("preview")}
-          onNewChat={() => setSelected(null)}
+          onNewChat={() => {
+            setProjectNew(false);
+            setSelected(null);
+          }}
         />
         <SidebarFooter
           profile={{ id: "local", kind: "local", display_name: "Local", created_at: 1 }}
@@ -888,7 +1000,8 @@ function Preview() {
         {selected === null ? (
           <NewChatPreview
             base={AGENT}
-            scenario={scenario}
+            scenario={projectNew ? "worktree" : scenario}
+            projectContext={projectNew}
             onCreated={() => setSelected("preview")}
           />
         ) : (

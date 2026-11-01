@@ -41,6 +41,9 @@ fn u64_at(value: &Value, key: &str) -> Option<u64> {
 /// What `initialize` answered.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InitializeReply {
+    pub mcp_stdio: bool,
+    pub mcp_http: bool,
+    pub mcp_sse: bool,
     /// The raw value, so a mismatch can say what the agent speaks.
     pub protocol_version: Option<Value>,
     pub load_session: bool,
@@ -72,6 +75,15 @@ impl InitializeReply {
             .map(|methods| methods.iter().filter_map(AuthMethod::parse).collect())
             .unwrap_or_default();
         InitializeReply {
+            mcp_stdio: capabilities["mcpCapabilities"]["stdio"]
+                .as_bool()
+                .unwrap_or(true),
+            mcp_http: capabilities["mcpCapabilities"]["http"]
+                .as_bool()
+                .unwrap_or(false),
+            mcp_sse: capabilities["mcpCapabilities"]["sse"]
+                .as_bool()
+                .unwrap_or(false),
             protocol_version: result
                 .get("protocolVersion")
                 .filter(|version| !version.is_null())

@@ -219,6 +219,41 @@ pub(crate) const TABLES: &[Table] = &[
         columns: "chat_id,input_json,updated_at",
         query: "SELECT d.chat_id,d.input_json,d.updated_at FROM composer_drafts d JOIN chats c ON c.id=d.chat_id WHERE c.project_id=?1 AND c.deleted=0 AND ?2 IS NOT NULL ORDER BY d.chat_id",
     },
+    Table {
+        name: "project_memory_revisions",
+        columns: "revision,project_id,parent_revision,markdown,reason,source,created_at",
+        query: "SELECT revision,project_id,parent_revision,markdown,reason,source,created_at FROM project_memory_revisions WHERE project_id=?1 AND ?2 IS NOT NULL ORDER BY created_at,revision",
+    },
+    Table {
+        name: "project_memory",
+        columns: "project_id,revision,markdown,updated_at",
+        query: "SELECT project_id,revision,markdown,updated_at FROM project_memory WHERE project_id=?1 AND ?2 IS NOT NULL ORDER BY project_id",
+    },
+    Table {
+        name: "project_memory_proposals",
+        columns: "id,project_id,base_revision,markdown,reason,chat_id,idempotency_key,state,created_at",
+        query: "SELECT id,project_id,base_revision,markdown,reason,chat_id,idempotency_key,state,created_at FROM project_memory_proposals WHERE project_id=?1 AND ?2 IS NOT NULL ORDER BY created_at,id",
+    },
+    Table {
+        name: "project_memory_snapshots",
+        columns: "prompt_id,chat_id,project_id,revision,markdown,visible_text,created_at",
+        query: "SELECT prompt_id,chat_id,project_id,revision,markdown,visible_text,created_at FROM project_memory_snapshots WHERE project_id=?1 AND chat_id IN (SELECT id FROM chats WHERE deleted=0) AND ?2 IS NOT NULL ORDER BY created_at,prompt_id",
+    },
+    Table {
+        name: "shared_mcp_revisions",
+        columns: "id,parent,scope,server_id,definition_json,conflict,resolved_json",
+        query: "SELECT id,parent,scope,server_id,definition_json,conflict,resolved_json FROM shared_mcp_revisions WHERE scope=?1 AND ?2 IS NOT NULL ORDER BY id",
+    },
+    Table {
+        name: "shared_mcp_heads",
+        columns: "scope,server_id,head",
+        query: "SELECT scope,server_id,head FROM shared_mcp_heads WHERE scope=?1 AND ?2 IS NOT NULL ORDER BY server_id",
+    },
+    Table {
+        name: "shared_mcp",
+        columns: "scope,server_id,revision,definition_json,local_json",
+        query: "SELECT scope,server_id,revision,definition_json,'{\"env\":{},\"headers\":{}}' FROM shared_mcp WHERE scope=?1 AND ?2 IS NOT NULL ORDER BY server_id",
+    },
 ];
 pub(crate) fn visit(
     conn: &Connection,
@@ -227,6 +262,15 @@ pub(crate) fn visit(
     table: &Table,
     mut visitor: impl FnMut(&[Value]) -> Result<()>,
 ) -> Result<u32> {
+    if (table.name.starts_with("project_memory") || table.name.starts_with("shared_mcp"))
+        && !conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?1)",
+            [table.name],
+            |row| row.get::<_, bool>(0),
+        )?
+    {
+        return Ok(0);
+    }
     let mut statement = conn.prepare(table.query)?;
     let columns = statement.column_count();
     let mut rows = statement.query(params![project, device])?;

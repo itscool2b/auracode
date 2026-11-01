@@ -1,5 +1,5 @@
 import { AgentMark, Logo, PixelLoader } from "@auracode/ui/graphite";
-import { Folder, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Folder, RefreshCw, Search } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -21,6 +21,7 @@ import type {
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
+import { projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { errorMessage } from "../../lib/errors";
 import { agentVersion, builtInPath } from "../../lib/format";
@@ -29,6 +30,7 @@ import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
 import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { projectName } from "./ChatList";
+import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { WorktreeRecoveryList } from "./WorktreeRecoveryList";
 import "./new-chat.css";
@@ -157,7 +159,9 @@ export function NewChat({
     workspace?.getSnapshot ?? emptyWorkspace,
   );
   const group = useId();
-  const [folderId, setFolderId] = useState("");
+  // Null keeps automatic project prefill separate from an explicit choice, including clearing it.
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [agentQuery, setAgentQuery] = useState("");
   const [retained, setRetained] = useState<ManagedWorktree[]>([]);
   const [retainedLoaded, setRetainedLoaded] = useState(!workspace);
   const [recoveryRevision, setRecoveryRevision] = useState(0);
@@ -217,10 +221,19 @@ export function NewChat({
   const sourceFolder = (folder: { path: string | null }) =>
     !folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string));
   const folders =
-    organization.data?.projects.flatMap((project) => project.folders).filter(sourceFolder) ?? [];
+    organization.data?.projects
+      .filter((project) => !draft.context || project.id === draft.context.projectId)
+      .flatMap((project) => project.folders)
+      .filter(sourceFolder) ?? [];
   const picked = state.folder ? folders.find((folder) => folder.path === state.folder) : undefined;
+  const automaticFolder = retainedLoaded
+    ? projectSourceFolder(draft.context, organization.data, retained)
+    : draft.context?.folderId;
+  const requestedFolder = folderId ?? (state.folder ? "" : automaticFolder) ?? "";
   const knownFolder =
-    (folders.some((folder) => folder.id === folderId) ? folderId : "") || picked?.id || "";
+    (folders.some((folder) => folder.id === requestedFolder) ? requestedFolder : "") ||
+    picked?.id ||
+    "";
   const managedPicked =
     !knownFolder && state.folder
       ? retained.find((record) => sameFolder(record.path, state.folder as string))
@@ -261,8 +274,9 @@ export function NewChat({
       return;
     adding.current = path;
     void workspace
-      .perform(() =>
-        workspace.api.createProject({
+      .perform(async () => {
+        if (draft.context) return workspace.api.addFolder(draft.context.projectId, path);
+        const project = await workspace.api.createProject({
           project: {
             name: projectName(path),
             color: null,
@@ -270,10 +284,11 @@ export function NewChat({
             default_model: null,
           },
           folder: path,
-        }),
-      )
-      .then((project) => {
-        const id = project?.folders[0]?.id;
+        });
+        return project.folders[0] ?? null;
+      })
+      .then((folder) => {
+        const id = folder?.id;
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
   }, [workspace, state.folder, folderId, loaded, retainedLoaded, managedPicked, picked, draft]);
@@ -306,14 +321,18 @@ export function NewChat({
     selected !== null &&
     (!workspace || retainedLoaded) &&
     !managedPicked &&
-    (state.folder !== null || folderId !== "") &&
+    (state.folder !== null || knownFolder !== "") &&
     !organization.busy &&
     !worktree.creating &&
     !state.creating &&
     state.maintenanceBusy !== "update";
-  const chosenFolder = preview?.folder.path ?? state.folder;
+  const chosenFolder =
+    preview?.folder.path ??
+    folders.find((folder) => folder.id === knownFolder)?.path ??
+    state.folder;
   const projects = workspace
     ? (organization.data?.projects ?? [])
+        .filter((project) => !draft.context || project.id === draft.context.projectId)
         .map((project) => ({ ...project, folders: project.folders.filter(sourceFolder) }))
         .filter((project) => project.folders.length > 0)
     : [];
@@ -350,16 +369,21 @@ export function NewChat({
             let destination = knownFolder;
             let added = false;
             if (!destination && state.folder) {
-              const project = await workspace.api.createProject({
-                project: {
-                  name: projectName(state.folder),
-                  color: null,
-                  default_agent: agentId,
-                  default_model: null,
-                },
-                folder: state.folder,
-              });
-              destination = project.folders[0]?.id ?? "";
+              if (draft.context) {
+                const folder = await workspace.api.addFolder(draft.context.projectId, state.folder);
+                destination = folder.id;
+              } else {
+                const project = await workspace.api.createProject({
+                  project: {
+                    name: projectName(state.folder),
+                    color: null,
+                    default_agent: agentId,
+                    default_model: null,
+                  },
+                  folder: state.folder,
+                });
+                destination = project.folders[0]?.id ?? "";
+              }
               added = true;
               setFolderId(destination);
             }
@@ -394,44 +418,19 @@ export function NewChat({
       }}
     >
       <header className="new-chat-hero">
-        <Logo className="new-chat-logo" size={40} />
-        {/* One display line: the agent and the folder in ink, the connecting words in grey. */}
-        <h1 className="new-chat-title">
-          {!selected ? (
-            <span className="new-chat-ink">What are we working on?</span>
-          ) : selectedState === "detecting" ? (
-            <>
-              Looking for <span className="new-chat-ink">{selected.name}</span>.
-            </>
-          ) : selectedState === "sign-in" ? (
-            <>
-              <span className="new-chat-ink">{selected.name}</span> needs you to sign in.
-            </>
-          ) : (
-            <>
-              <span className="new-chat-ink">{selected.name}</span> is ready
-              {chosenFolder ? (
-                <>
-                  {" "}
-                  in <span className="new-chat-ink">{projectName(chosenFolder)}</span>
-                </>
-              ) : null}
-              .
-            </>
-          )}
-        </h1>
+        <div className="new-chat-heading">
+          <Logo className="new-chat-logo" size={24} />
+          <h1 className="new-chat-title">New chat</h1>
+        </div>
         <p className="new-chat-hint">
-          {!selected
-            ? "Pick an agent, then a folder."
-            : chosenFolder
-              ? worktreeMode
-                ? "Create starts the session in its own worktree."
-                : "Create starts the session in this folder."
-              : "Choose the folder it works in."}
+          {draft.context
+            ? `Start a session in ${draft.context.projectName}.`
+            : "Choose an agent and a folder to work in."}
         </p>
       </header>
       <div className="new-chat-card">
         <div className="new-chat-row">
+          <span className="new-chat-field-label">Agent</span>
           <div className="new-chat-agents" data-testid="new-chat-agent">
             {agents === null ? (
               <span className="new-chat-scan" role="status">
@@ -443,40 +442,82 @@ export function NewChat({
             ) : available.length === 0 ? (
               <span className="new-chat-none">No agent can run here yet.</span>
             ) : (
-              // Native radios: arrow keys, Tab and the accessible group come from the platform.
-              <fieldset className="new-chat-choices">
-                <legend className="sr-only">Agent</legend>
-                {available.map((agent) => {
-                  const checked = agent.id === state.agentId;
-                  const choice = choiceState(agent);
-                  return (
-                    <label
-                      key={agent.id}
-                      className="new-chat-agent"
-                      data-state={choice}
-                      data-found={found.has(agent.id) ? "" : undefined}
-                    >
-                      <input
-                        type="radio"
-                        name={group}
-                        value={agent.id}
-                        checked={checked}
-                        aria-label={`${agent.name}, ${STATE_LABEL[choice]}`}
-                        onChange={() => draft.chooseAgent(agent.id)}
-                      />
-                      {/* Still looked for: the mark waits dimmed inside a soft circular pulse. */}
-                      <span className="new-chat-agent-mark">
-                        <AgentMark
-                          agent={agent.id}
-                          size={24}
-                          state={choice === "sign-in" ? "waiting" : "idle"}
-                        />
-                      </span>
-                      <span className="new-chat-agent-name">{agent.name}</span>
-                    </label>
-                  );
-                })}
-              </fieldset>
+              <Popover
+                label="Choose agent"
+                triggerLabel={`${selected?.name ?? "Select an agent"}. Choose agent`}
+                className="new-chat-agent-picker"
+                trigger={
+                  <>
+                    {selected ? <AgentMark agent={selected.id} size={20} /> : null}
+                    <span className="new-chat-selected-name">
+                      {selected?.name ?? "Select an agent"}
+                    </span>
+                    <ChevronDown size={14} />
+                  </>
+                }
+                onOpenChange={(open) => {
+                  if (!open) setAgentQuery("");
+                }}
+              >
+                <label className="new-chat-agent-search">
+                  <Search size={14} aria-hidden="true" />
+                  <input
+                    className="g-input"
+                    type="search"
+                    aria-label="Search agents"
+                    placeholder="Search agents…"
+                    value={agentQuery}
+                    onChange={(event) => setAgentQuery(event.currentTarget.value)}
+                  />
+                </label>
+                <fieldset className="new-chat-choices">
+                  <legend className="sr-only">Agent</legend>
+                  {available
+                    .filter((agent) => agent.name.toLowerCase().includes(agentQuery.toLowerCase()))
+                    .map((agent) => {
+                      const checked = agent.id === state.agentId;
+                      const choice = choiceState(agent);
+                      return (
+                        <label
+                          key={agent.id}
+                          className="new-chat-agent"
+                          data-state={choice}
+                          data-found={found.has(agent.id) ? "" : undefined}
+                        >
+                          <input
+                            type="radio"
+                            name={group}
+                            value={agent.id}
+                            checked={checked}
+                            aria-label={`${agent.name}, ${STATE_LABEL[choice]}`}
+                            onChange={(event) => {
+                              draft.chooseAgent(agent.id);
+                              const popup = event.currentTarget.closest("details");
+                              closePopover(event.currentTarget);
+                              popup?.querySelector("summary")?.focus();
+                            }}
+                          />
+                          {/* Still looked for: the mark waits dimmed inside a soft circular pulse. */}
+                          <span className="new-chat-agent-mark">
+                            <AgentMark
+                              agent={agent.id}
+                              size={24}
+                              state={choice === "sign-in" ? "waiting" : "idle"}
+                            />
+                          </span>
+                          <span className="new-chat-agent-name">{agent.name}</span>
+                          <small>{STATE_LABEL[choice]}</small>
+                          {checked ? <Check size={14} aria-hidden="true" /> : null}
+                        </label>
+                      );
+                    })}
+                </fieldset>
+                {!available.some((agent) =>
+                  agent.name.toLowerCase().includes(agentQuery.toLowerCase()),
+                ) ? (
+                  <p className="chat-picker-empty">No matching agents.</p>
+                ) : null}
+              </Popover>
             )}
           </div>
           <button
@@ -496,6 +537,7 @@ export function NewChat({
           </button>
         </div>
         <div className="new-chat-folder">
+          <span className="new-chat-field-label">Folder</span>
           <Folder className="new-chat-folder-icon" size={16} aria-hidden="true" />
           <span
             className="new-chat-path"
@@ -522,7 +564,7 @@ export function NewChat({
                   draft.chooseAgent(project.default_agent);
               }}
             >
-              <option value="">Projects</option>
+              <option value="">{draft.context ? "Select folder" : "Projects"}</option>
               {projects.map((project) => (
                 <optgroup key={project.id} label={project.name}>
                   {project.folders.map((folder) => (
@@ -545,19 +587,29 @@ export function NewChat({
             data-testid="new-chat-pick-folder"
             disabled={state.picking}
             onClick={() => {
-              setFolderId("");
-              void draft.chooseFolder();
+              void draft.chooseFolder().then((folder) => {
+                if (folder !== null) setFolderId("");
+              });
             }}
           >
             {state.picking ? "Choosing…" : "Choose folder"}
           </button>
+        </div>
+        <div className="new-chat-submit">
+          <span>
+            {chosenFolder
+              ? worktreeMode
+                ? "Starts in a separate worktree"
+                : "Starts in this folder"
+              : "Select a folder to continue"}
+          </span>
           <button
             type="submit"
             className="g-button g-button-primary"
             data-testid="new-chat-create"
             disabled={!canCreate || (busy && !allowBusy)}
           >
-            {state.creating || worktree.creating ? "Creating…" : "Create"}
+            {state.creating || worktree.creating ? "Starting…" : "Start chat"}
           </button>
         </div>
       </div>

@@ -1,0 +1,107 @@
+.customize-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  color: var(--g-fg-1);
+  background: var(--g-bg);
+}
+.customize-titlebar {
+  flex: none;
+  height: 52px;
+}
+.customize-header {
+  flex: none;
+  padding: 0 var(--g-space-32) var(--g-space-20);
+}
+.customize-header > button {
+  margin-left: calc(-1 * var(--g-space-8));
+}
+.customize-header h1 {
+  margin: var(--g-space-16) 0 var(--g-space-6);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-display);
+}
+.customize-header p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+}
+.customize-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--g-space-24);
+  padding: 0 var(--g-space-32);
+  border-bottom: 1px solid var(--g-line);
+}
+.customize-tabs > button {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 40px;
+  padding: var(--g-space-8) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--g-fg-3);
+  font: inherit;
+  font-size: var(--g-text-ui);
+  cursor: pointer;
+}
+.customize-tabs > button[aria-current="page"] {
+  border-bottom-color: var(--g-fg-1);
+  color: var(--g-fg-1);
+}
+.customize-tabs > button:hover {
+  color: var(--g-fg-1);
+}
+.customize-tabs > button:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+.customize-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.customize-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.customize-pane[hidden] {
+  display: none;
+}
+.customize-document {
+  overflow-y: auto;
+  padding: var(--g-space-24) var(--g-space-32) var(--g-space-40);
+}
+.customize-document > h2 {
+  margin: 0 0 var(--g-space-8);
+  font-size: var(--g-text-title);
+  font-weight: 500;
+}
+.customize-document > .instructions,
+.customize-document > .project-memory {
+  max-width: 880px;
+}
+.customize-plugins .plugins-screen {
+  height: 100%;
+  padding-top: 0;
+}
+.customize-plugins .library-heading {
+  padding-top: var(--g-space-24);
+}
+@media (max-width: 720px) {
+  .customize-tabs {
+    gap: var(--g-space-16);
+    padding-inline: var(--g-space-20);
+  }
+  .customize-header,
+  .customize-document {
+    padding-inline: var(--g-space-20);
+  }
+}

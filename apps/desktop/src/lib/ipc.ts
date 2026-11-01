@@ -19,6 +19,7 @@ import {
   type HistoryPage,
   type PromptAck,
   type QueuedPrompt,
+  type SessionControlChange,
   type SessionLists,
   type SmokeReport,
   type StorageStatus,
@@ -367,6 +368,13 @@ export function chatSetOption(
   value: ConfigValue,
 ): Promise<SessionLists> {
   return settle(commands.chatSetOption(chatId, optionId, value));
+}
+
+export function chatSetControl(
+  chatId: string,
+  change: SessionControlChange,
+): Promise<SessionLists> {
+  return settle(commands.chatSetControl(chatId, change));
 }
 
 export function chatSetAutonomy(chatId: string, autonomy: Autonomy): Promise<SessionLists> {

@@ -250,7 +250,7 @@ pub(crate) fn agent_session_for(
     let agent = aura_agents::agent_of(agent_id);
     let mut statement = conn.prepare_cached(
         "SELECT id, chat_id, agent_id, native_session_id, model, effort, autonomy, config_json, cwd, \
-         created_at, updated_at, host, capabilities_json FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC",
+         created_at, updated_at, host, capabilities_json, controls_json FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC",
     )?;
     let rows = statement.query_map(params![chat_id], |row| {
         let autonomy: Option<String> = row.get(6)?;
@@ -268,6 +268,7 @@ pub(crate) fn agent_session_for(
             effort: row.get(5)?,
             autonomy: autonomy.as_deref().map(parse_autonomy).unwrap_or_default(),
             config_json: row.get(7)?,
+            controls_json: row.get(13)?,
             cwd: PathBuf::from(cwd),
             created_at: row.get(9)?,
             updated_at: row.get(10)?,
@@ -417,7 +418,7 @@ pub(crate) fn insert_agent_session(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, model, effort, autonomy, cwd, \
-         created_at, updated_at, device_id, config_json, host, capabilities_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+         created_at, updated_at, device_id, config_json, host, capabilities_json, controls_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
     )?
     .execute(params![
         row.id,
@@ -434,6 +435,7 @@ pub(crate) fn insert_agent_session(
         row.config_json,
         serde_json::to_string(&row.host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
         row.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        row.controls_json,
     ])?;
     conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.force_fresh',json('false'),'$.resume_source',NULL,'$.connection',NULL,'$.native_start',json('{}')) WHERE chat_id=?1", [&row.chat_id])?;
     Ok(())
@@ -449,7 +451,7 @@ pub(crate) fn update_agent_session(
     conn.prepare_cached(
         "UPDATE agent_sessions SET native_session_id = COALESCE(?2, native_session_id), \
          model = COALESCE(?3, model), effort = COALESCE(?4, effort), autonomy = COALESCE(?5, autonomy), \
-         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8, capabilities_json=COALESCE(?9,capabilities_json) WHERE id = ?1",
+         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8, capabilities_json=COALESCE(?9,capabilities_json), controls_json=COALESCE(?10,controls_json) WHERE id = ?1",
     )?
     .execute(params![
         id,
@@ -461,6 +463,7 @@ pub(crate) fn update_agent_session(
         patch.updated_at,
         device_id,
         patch.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        patch.controls_json,
     ])?;
     Ok(())
 }
@@ -790,6 +793,7 @@ pub(crate) mod tests {
         assert_eq!(empty.agent_session, None);
 
         let session = AgentSessionRow {
+            controls_json: None,
             capabilities: None,
             host: Default::default(),
             id: "s1".into(),
@@ -971,6 +975,7 @@ pub(crate) mod tests {
                 conn,
                 "dev",
                 &AgentSessionRow {
+                    controls_json: None,
                     id: id.into(),
                     chat_id: chat.clone(),
                     agent_id: agent.into(),

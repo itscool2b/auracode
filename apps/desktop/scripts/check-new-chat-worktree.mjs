@@ -115,9 +115,7 @@ async function inspect(engine, launcher) {
     const chip = await chipReady(page, "worktree");
     assert.equal(await chip.getAttribute("data-test-start"), "main");
     assert.equal(await chip.getAttribute("data-test-branch"), "aura/7f3a9c2e");
-    await page
-      .getByText("Create starts the session in its own worktree.", { exact: true })
-      .waitFor();
+    await page.getByText("Starts in a separate worktree", { exact: true }).waitFor();
     assert.equal(
       await chip.locator("summary").getAttribute("aria-label"),
       "Worktree from main on aura/7f3a9c2e. Where this chat works",
@@ -200,7 +198,7 @@ async function inspect(engine, launcher) {
     await page.locator('[data-test-mode-choice="local"]').click();
     await chipReady(page, "local");
     await page.keyboard.press("Escape");
-    await page.getByText("Create starts the session in this folder.", { exact: true }).waitFor();
+    await page.getByText("Starts in this folder", { exact: true }).waitFor();
     await audit(page, "local", engine, scans);
     await page.getByTestId("new-chat-create").click();
     await page.locator('[data-test-phase="live"]').waitFor();
@@ -239,7 +237,7 @@ async function inspect(engine, launcher) {
     await page.waitForFunction(() => window.newChatFixture?.calls().length === 1);
     // "Checking Git" shows while the review runs, then nothing: the chat works in the folder.
     await page.getByTestId("new-chat-worktree").waitFor({ state: "detached" });
-    await page.getByText("Create starts the session in this folder.", { exact: true }).waitFor();
+    await page.getByText("Starts in this folder", { exact: true }).waitFor();
     await audit(page, "plain", engine, scans);
 
     // A saved setup: files copied, the command waits in the owned terminal, then the agent starts.

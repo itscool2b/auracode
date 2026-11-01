@@ -28,6 +28,7 @@ hostname = "0.4.2"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 rusqlite.workspace = true
 rusqlite_migration.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Content addresses of blobs and the hashes of agent replies.
@@ -38,7 +39,7 @@ specta.workspace = true
 # TypeScript exporter rejects `i64` otherwise. Pure Rust, no Tauri.
 specta-typescript.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["net"] }
 tracing.workspace = true
 uuid.workspace = true
 zeroize = { version = "1.8", optional = true }
@@ -79,6 +80,12 @@ tokio = { workspace = true, features = ["test-util"] }
 # The same fake CLI source runs the full core Plugin library path in temporary homes.
 name = "aura-plugin-testbin"
 path = "../aura-agents/src/bin/aura-agents-testbin.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "aura-memory-helper"
+path = "src/bin/aura-memory-helper.rs"
 test = false
 bench = false
 

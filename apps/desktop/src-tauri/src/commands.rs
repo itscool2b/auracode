@@ -562,6 +562,17 @@ pub async fn chat_respond_ui(
         .await?)
 }
 
+/// Apply a supported native access or workflow choice after actor admission.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_set_control(
+    state: State<'_, AppState>,
+    chat_id: String,
+    change: aura_protocol::session::SessionControlChange,
+) -> Result<SessionLists, AppError> {
+    Ok(state.sessions()?.set_control(&chat_id, change).await?)
+}
+
 /// Changes one of the agent's options and returns the lists after the change (35 s at most).
 #[tauri::command]
 #[specta::specta]

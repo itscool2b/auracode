@@ -206,6 +206,11 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
         ("codex", "Codex"),
         ("pi", "Pi"),
         ("opencode", "OpenCode"),
+        ("hermes", "Hermes"),
+        ("grok", "Grok Build"),
+        ("cursor", "Cursor"),
+        ("antigravity", "Antigravity"),
+        ("omp", "oh-my-pi"),
     ] {
         let agent = entry(id);
         let installed =
@@ -366,7 +371,7 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                 ],
                 true,
             ),
-            _ => {
+            "opencode" => {
                 const OPENCODE: &str = "OpenCode installs its plugins and checks its servers whenever it runs, so auracode reads ~/.config/opencode instead.";
                 let servers = extensions
                     .servers
@@ -411,8 +416,50 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                     false,
                 )
             }
+            _ => {
+                let reason = "Read from reviewed native configuration paths. This inventory does not start the agent or connect servers.";
+                let servers = extensions
+                    .servers
+                    .iter()
+                    .map(|s| PluginEntry {
+                        kind: s.kind.clone(),
+                        enabled: s.enabled,
+                        local_fields: s.local_fields.clone(),
+                        ..named(&s.name)
+                    })
+                    .collect();
+                let mut features = vec![
+                    files(PluginFeature::McpServers, reason, servers),
+                    files(
+                        PluginFeature::Skills,
+                        reason,
+                        extensions.skills.iter().map(|s| named(s)).collect(),
+                    ),
+                ];
+                for (feature, names) in [
+                    (PluginFeature::Commands, &extensions.commands),
+                    (PluginFeature::Subagents, &extensions.subagents),
+                    (PluginFeature::Hooks, &extensions.hooks),
+                ] {
+                    if !names.is_empty() {
+                        features.push(files(
+                            feature,
+                            reason,
+                            names.iter().map(|s| named(s)).collect(),
+                        ));
+                    }
+                }
+                features.push(FeatureListing{feature:PluginFeature::Plugins,state:ListingState::Unavailable{reason:"This agent has no qualified structured plugin-management interface in Aura. Open its native customization route for supported plugins, hooks, rules and memory.".into()},command:None,entries:Vec::new(),available:Vec::new(),available_total:0});
+                (
+                    PluginSystem::Declared,
+                    "Native customization capabilities vary by agent and installed version. Reviewed file inventory and named native routes are shown where available.",
+                    features,
+                    false,
+                )
+            }
         };
         library.agents.push(AgentPlugins {
+            management: aura_agents::plugins::management(id, version.as_deref()),
             agent_id: id.into(),
             name: name.into(),
             installed,
@@ -430,14 +477,12 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
     library
         .notices
         .extend(facts.inventory.notices.iter().cloned());
-    library.notices.push(
-        "Cursor, Grok Build, Antigravity and Hermes are not listed: auracode has no reviewed way to read their extensions yet.".into(),
-    );
+    library.notices.push("Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.".into());
     library
 }
 
 /// OpenCode's global folder: `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`, on every OS.
-fn opencode_root(env: &aura_process::EnvMap) -> Option<PathBuf> {
+pub(super) fn opencode_root(env: &aura_process::EnvMap) -> Option<PathBuf> {
     let variable = |key: &str| {
         env.get(&EnvKey::from(key))
             .filter(|value| !value.is_empty())
@@ -542,6 +587,25 @@ impl SessionManager {
         let roots = self.config_library_roots(None).await?;
         let env = self.deps().env.get().await;
         let opencode = opencode_root(&env.vars);
+        let extra_roots = [
+            ("hermes", "HERMES_HOME", ".hermes"),
+            ("cursor", "", ".cursor"),
+            ("grok", "", ".grok"),
+        ]
+        .into_iter()
+        .filter_map(|(id, key, suffix)| {
+            let variable = |name: &str| {
+                env.vars
+                    .get(&EnvKey::from(name))
+                    .map(PathBuf::from)
+                    .filter(|p| p.is_absolute())
+            };
+            let path = if key.is_empty() { None } else { variable(key) }.or_else(|| {
+                variable(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|p| p.join(suffix))
+            })?;
+            Some((id, path))
+        })
+        .collect::<Vec<_>>();
         let (inventory, extensions) = self
             .deps()
             .rt
@@ -571,6 +635,9 @@ impl SessionManager {
                         aura_config::extensions::inspect_opencode(Path::new(&root)),
                     );
                 }
+                for (id, root) in extra_roots {
+                    extensions.insert(id.into(), aura_config::extensions::inspect_extra(id, &root));
+                }
                 (inventory, extensions)
             })
             .await
@@ -592,7 +659,18 @@ impl SessionManager {
         }
         use futures::{StreamExt, stream::FuturesUnordered};
         let detector = self.deps().detector.clone();
-        let mut pending = ["claude", "codex", "pi", "opencode"].into_iter();
+        let mut pending = [
+            "claude",
+            "codex",
+            "pi",
+            "opencode",
+            "hermes",
+            "grok",
+            "cursor",
+            "antigravity",
+            "omp",
+        ]
+        .into_iter();
         let mut jobs = FuturesUnordered::new();
         for id in pending.by_ref().take(2) {
             jobs.push(refresh_provider(detector.clone(), id, refresh));
@@ -735,7 +813,7 @@ mod tests {
             ..Default::default()
         };
         let initial = assemble(&facts);
-        assert_eq!(initial.agents.len(), 4);
+        assert_eq!(initial.agents.len(), 9);
         assert_eq!(initial.agents[0].harness, HarnessStatus::Checking);
         assert!(!initial.agents[0].installed);
         assert!(matches!(&initial.agents[0].features[0].state,
@@ -748,7 +826,7 @@ mod tests {
             initial
                 .notices
                 .iter()
-                .any(|notice| notice.contains("no reviewed way"))
+                .any(|notice| notice.contains("Native plugins"))
         );
     }
 
@@ -819,7 +897,12 @@ mod tests {
                 ("claude", true),
                 ("codex", false),
                 ("pi", false),
-                ("opencode", true)
+                ("opencode", true),
+                ("hermes", false),
+                ("grok", false),
+                ("cursor", false),
+                ("antigravity", false),
+                ("omp", false)
             ]
         );
         assert_eq!(library.agents[0].version.as_deref(), Some("2.1.309"));
@@ -881,7 +964,20 @@ mod tests {
             .iter()
             .map(|agent| agent.agent_id.as_str())
             .collect();
-        assert_eq!(ids, ["claude", "codex", "pi", "opencode"]);
+        assert_eq!(
+            ids,
+            [
+                "claude",
+                "codex",
+                "pi",
+                "opencode",
+                "hermes",
+                "grok",
+                "cursor",
+                "antigravity",
+                "omp"
+            ]
+        );
         let claude = &library.agents[0];
         assert_eq!(claude.updated_at, Some(42));
         assert!(claude.version_change.is_some());

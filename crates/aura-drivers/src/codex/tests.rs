@@ -126,8 +126,58 @@ impl AgentSpawner for Quiet {
             .spawn(spec, ProtocolLog::disabled_with_id("codex-test"))
     }
 }
+#[tokio::test(start_paused = true)]
+async fn shared_mcp_is_immutable_thread_scoped_on_new_and_resumed_sessions_and_oauth() {
+    for resume in [false, true] {
+        let mut setup = setup();
+        setup.mcp_servers = vec![crate::mcp::tests::server()];
+        if resume {
+            setup.resume = Some("thread-1".into());
+        }
+        let mut h = Harness::start_with(setup).await;
+        let init = h.wire().await;
+        h.send(json!({"id":init["id"],"result":{"userAgent":"codex/0.162.1"}}));
+        assert_eq!(h.wire().await["method"], "initialized");
+        let open = h.wire().await;
+        assert_eq!(
+            open["method"],
+            if resume {
+                "thread/resume"
+            } else {
+                "thread/start"
+            }
+        );
+        assert_eq!(
+            open["params"]["config"]["mcp_servers"]["docs"]["url"],
+            "https://example.test/mcp"
+        );
+        assert!(!open.to_string().contains("short"));
+        let models = h.wire().await;
+        h.send(json!({"id":models["id"],"result":{"data":[],"nextCursor":null}}));
+        h.send(json!({"id":open["id"],"result":{"thread":{"id":"thread-1","status":{"type":"idle"},"cliVersion":"0.162.1"},"model":"model-a","approvalPolicy":"untrusted","approvalsReviewer":"user","sandbox":{"type":"readOnly"}}}));
+        while !matches!(h.event().await, DriverEvent::Ready(_)) {}
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        h.tx.send(DriverCommand::McpAction {
+            server_name: "docs".into(),
+            action: aura_protocol::mcp::McpSessionAction::Login,
+            reply,
+        })
+        .unwrap();
+        let login = h.wire().await;
+        assert_eq!(login["method"], "mcpServer/oauth/login");
+        assert_eq!(login["params"]["threadId"], "thread-1");
+        assert_eq!(login["params"]["name"], "docs");
+        h.send(json!({"id":login["id"],"result":{"authorizationUrl":"https://example.test/oauth?state=local"}}));
+        assert_eq!(
+            answer.await.unwrap().unwrap().state,
+            "authorization_required"
+        );
+        h.stop().await;
+    }
+}
 fn setup() -> SessionSetup {
     SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: "chat".into(),
@@ -202,7 +252,9 @@ impl Harness {
             )
             .unwrap();
             assert!(frame.get("jsonrpc").is_none());
-            if frame["method"] == "account/rateLimits/read" {
+            if frame["method"] == "collaborationMode/list" {
+                self.send(json!({"id":frame["id"],"result":{"data":[{"mode":"plan","name":"Plan"},{"mode":"default","name":"Default"}]}}));
+            } else if frame["method"] == "account/rateLimits/read" {
                 self.send(json!({"id":frame["id"],"result":{"rateLimits":{}}}));
             } else {
                 return frame;
@@ -859,3 +911,36 @@ async fn an_unanswered_callback_is_cancelled_before_turn_completion() {
 
 #[path = "tests/model_recovery.rs"]
 mod model_recovery;
+
+#[tokio::test(start_paused = true)]
+async fn native_plan_uses_advertised_collaboration_and_builtin_instructions() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    let list: Value = serde_json::from_str(&h.end.from_client.recv().await.unwrap()).unwrap();
+    assert_eq!(list["method"], "collaborationMode/list");
+    h.send(json!({"id":list["id"],"result":{"data":[{"mode":"plan","name":"Plan"},{"mode":"default","name":"Default"}]}}));
+    loop {
+        if matches!(h.event().await, DriverEvent::Options(ref options) if options.iter().any(|o| o.id == crate::controls::WORKFLOW))
+        {
+            break;
+        }
+    }
+    let (reply, result) = tokio::sync::oneshot::channel();
+    h.tx.send(DriverCommand::SetOption {
+        option_id: crate::controls::WORKFLOW.into(),
+        value: aura_protocol::session::ConfigValue::Choice {
+            value: "plan".into(),
+        },
+        reply,
+    })
+    .unwrap();
+    result.await.unwrap().unwrap();
+    h.prompt();
+    let turn = h.wire().await;
+    assert_eq!(turn["method"], "turn/start");
+    assert_eq!(
+        turn["params"]["collaborationMode"],
+        json!({"mode":"plan","settings":{"model":"model-a","reasoning_effort":"medium","developer_instructions":null}})
+    );
+    h.stop().await;
+}

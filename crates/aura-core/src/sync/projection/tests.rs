@@ -378,3 +378,151 @@ fn malformed_known_row_rolls_back_all_projection_and_cursor_progress() {
         0
     );
 }
+
+#[test]
+fn unresolved_memory_and_mcp_dependencies_rotate_without_starving_unrelated_chat_projection() {
+    use aura_protocol::memory::MemoryRevision;
+    let key = Arc::new(AccountKey::generate().unwrap());
+    let (_a, mut source, source_context) = fixture(key.clone(), "source");
+    let (_b, mut target, target_context) = fixture(key, "target");
+    let now = crate::time::now_millis() as u64;
+    let (project, folder, chat) = seed(&mut source, &source_context, now);
+    pull(
+        &mut target,
+        &target_context,
+        vec![
+            incoming(record(&source, "projects", &project), 1),
+            incoming(record(&source, "projects", &format!("folder-{folder}")), 2),
+        ],
+        now + 1,
+    )
+    .unwrap();
+    let missing_project = crate::ids::new_id();
+    let mut clock = Clock::new("source").unwrap();
+    let tx = target.conn_mut().transaction().unwrap();
+    // Both custom record kinds sort before chats. More than one batch must remain unresolved.
+    for index in 0..260 {
+        let id = crate::ids::new_id();
+        let stamp = clock.tick(now + 2).unwrap();
+        let (entity, prefix, value) = if index % 2 == 0 {
+            (
+                "memory",
+                "memory-",
+                serde_json::to_value(MemoryRevision {
+                    revision: id.clone(),
+                    project_id: missing_project.clone(),
+                    parent_revision: None,
+                    markdown: "Waiting for missing project".into(),
+                    reason: "Dependency fixture".into(),
+                    source: "user".into(),
+                    created_at: now as i64,
+                })
+                .unwrap(),
+            )
+        } else {
+            (
+                "shared_mcp",
+                "mcp-",
+                serde_json::to_value(crate::mcp::Revision {
+                    id: id.clone(),
+                    parent: None,
+                    scope: missing_project.clone(),
+                    server_id: crate::ids::new_id(),
+                    definition: None,
+                    resolved: vec![],
+                })
+                .unwrap(),
+            )
+        };
+        let metadata = Metadata {
+            schema_version: 1,
+            live: Stamped {
+                clock: stamp.clone(),
+                value: true,
+            },
+            fields: BTreeMap::from([
+                (
+                    "entity".into(),
+                    Stamped {
+                        clock: stamp.clone(),
+                        value: FieldValue::Present(serde_json::json!(entity)),
+                    },
+                ),
+                (
+                    "revision".into(),
+                    Stamped {
+                        clock: stamp.clone(),
+                        value: FieldValue::Present(value),
+                    },
+                ),
+            ]),
+        };
+        let record = seal(
+            &source_context.identity,
+            &source_context.key,
+            "projects",
+            &format!("{prefix}{id}"),
+            &stamp,
+            &metadata,
+        )
+        .unwrap();
+        save_head(&tx, &record).unwrap();
+        queue(&tx, &record, &metadata).unwrap();
+    }
+    let chat_record = record(&source, "chats", &chat);
+    let DecodedMetadata::Known(metadata) = open(
+        &source_context.identity,
+        &source_context.key,
+        &chat_record,
+        now + 2,
+    )
+    .unwrap() else {
+        panic!()
+    };
+    save_head(&tx, &chat_record).unwrap();
+    queue(&tx, &chat_record, &metadata).unwrap();
+    tx.commit().unwrap();
+    drain(
+        target.conn(),
+        &target_context.identity,
+        &target_context.key,
+        now + 3,
+    )
+    .unwrap();
+    assert_eq!(
+        target
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM sync_projection WHERE attempt>0",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        256
+    );
+    drain(
+        target.conn(),
+        &target_context.identity,
+        &target_context.key,
+        now + 4,
+    )
+    .unwrap();
+    assert!(
+        target
+            .conn()
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1)",
+                [chat],
+                |r| r.get::<_, bool>(0)
+            )
+            .unwrap()
+    );
+    assert_eq!(
+        target
+            .conn()
+            .query_row("SELECT COUNT(*) FROM sync_projection", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        260
+    );
+}

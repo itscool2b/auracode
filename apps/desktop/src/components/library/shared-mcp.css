@@ -1,0 +1,67 @@
+.shared-mcp-panel {
+  min-width: 0;
+}
+.shared-mcp-toolbar,
+.shared-mcp-toolbar > div,
+.shared-mcp-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+}
+.shared-mcp-toolbar {
+  justify-content: space-between;
+  margin-block: var(--g-space-20);
+}
+.shared-mcp-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+.shared-mcp-toolbar select {
+  max-width: 260px;
+}
+.shared-mcp-row {
+  flex-wrap: wrap;
+}
+.shared-mcp-actions {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+.shared-mcp-form {
+  display: grid;
+  gap: var(--g-space-16);
+}
+.shared-mcp-field {
+  display: grid;
+  gap: var(--g-space-6);
+  min-width: 0;
+  margin-block: var(--g-space-8);
+}
+.shared-mcp-field textarea {
+  resize: vertical;
+  width: 100%;
+  font-family: var(--g-mono);
+}
+.shared-mcp-conflict {
+  border-block: 1px solid var(--g-line);
+  padding-block: var(--g-space-16);
+}
+.shared-mcp-conflict pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plugins-screen[data-embedded] {
+  min-height: 0;
+  height: auto;
+  padding: 0;
+}
+.plugins-screen[data-embedded] .plugins-body {
+  min-height: 0;
+}
+@media (max-width: 1100px) {
+  .shared-mcp-actions {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+}

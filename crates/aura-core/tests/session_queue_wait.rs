@@ -220,6 +220,7 @@ async fn a_missing_idle_report_holds_the_queue_only_for_the_grace() {
     );
     tokio::time::sleep(Duration::from_secs(10)).await;
     assert_eq!(prompts(&handle), ["first"], "still inside the grace");
+    tokio::time::advance(Duration::from_secs(5)).await;
     prompt_turn(&handle).await;
     assert_eq!(prompts(&handle), ["first", "second"]);
     assert!(h.queue(&chat).await.is_empty());
@@ -420,7 +421,7 @@ async fn a_held_prompt_is_sent_by_the_person_alone() {
 /// agent and sends that one.
 #[tokio::test(start_paused = true)]
 async fn a_prompt_held_by_a_restart_is_released_and_starts_the_agent() {
-    let (first, _) = ScriptedDriver::new(vec![
+    let (first, first_handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Hang,
@@ -429,6 +430,7 @@ async fn a_prompt_held_by_a_restart_is_released_and_starts_the_agent() {
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    prompt_turn(&first_handle).await;
     let later = h
         .manager
         .send(&chat.id, "later".into())
@@ -458,7 +460,7 @@ async fn a_prompt_held_by_a_restart_is_released_and_starts_the_agent() {
 /// the held one first, then the new one.
 #[tokio::test(start_paused = true)]
 async fn a_new_prompt_waits_behind_a_prompt_held_by_a_restart() {
-    let (first, _) = ScriptedDriver::new(vec![
+    let (first, first_handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Hang,
@@ -467,6 +469,7 @@ async fn a_new_prompt_waits_behind_a_prompt_held_by_a_restart() {
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    prompt_turn(&first_handle).await;
     let held = h
         .manager
         .send(&chat.id, "older".into())
@@ -517,7 +520,7 @@ async fn a_new_prompt_waits_behind_a_prompt_held_by_a_restart() {
 /// Discarding the held prompt lets the one queued behind it go, starting the agent as a send would.
 #[tokio::test(start_paused = true)]
 async fn discarding_the_held_prompt_lets_the_next_one_go() {
-    let (first, _) = ScriptedDriver::new(vec![
+    let (first, first_handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Hang,
@@ -526,6 +529,7 @@ async fn discarding_the_held_prompt_lets_the_next_one_go() {
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    prompt_turn(&first_handle).await;
     let held = h
         .manager
         .send(&chat.id, "older".into())

@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+mod controls;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
@@ -95,6 +96,11 @@ pub(crate) type FolderContextReply = (
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    McpAction {
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+        reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, SessionError>>,
+    },
     SetupChanged(aura_protocol::worktree_setup::WorktreeSetupAttempt),
     FolderContext {
         reply: oneshot::Sender<Result<FolderContextReply, SessionError>>,
@@ -234,6 +240,10 @@ pub(crate) enum ChatMsg {
         answer: Option<UiAnswer>,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    SetControl {
+        change: aura_protocol::session::SessionControlChange,
+        reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+    },
     SetOption {
         option_id: String,
         value: ConfigValue,
@@ -280,9 +290,12 @@ impl ChatMsg {
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
             ChatMsg::FolderContext { reply } => drop(reply.send(Err(error))),
+            ChatMsg::McpAction { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Send { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Steer { reply, .. } => drop(reply.send(Err(error))),
-            ChatMsg::SetOption { reply, .. } | ChatMsg::SetAutonomy { reply, .. } => {
+            ChatMsg::SetControl { reply, .. }
+            | ChatMsg::SetOption { reply, .. }
+            | ChatMsg::SetAutonomy { reply, .. } => {
                 drop(reply.send(Err(error)));
             }
             ChatMsg::Blob { reply, .. } => drop(reply.send(Err(error))),
@@ -418,6 +431,8 @@ struct Preparing {
 
 /// What a preparation produces.
 struct Prepared {
+    memory_mcp_available: bool,
+    mcp_servers: Vec<aura_protocol::mcp::ResolvedMcpServer>,
     /// The connection the start uses.
     spec: Box<AgentSpec>,
     folder_context: aura_protocol::workspace::ChatFolderContext,
@@ -475,6 +490,17 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    McpAction {
+        generation: u64,
+        reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, SessionError>>,
+        result: Result<
+            Result<
+                Result<aura_protocol::mcp::McpActionResult, DriverError>,
+                oneshot::error::RecvError,
+            >,
+            tokio::time::error::Elapsed,
+        >,
+    },
     #[cfg(feature = "account-sync")]
     SyncImported {
         result: Result<Option<crate::sync::transcript::Imported>, SessionError>,
@@ -500,6 +526,14 @@ enum Done {
     Reverted {
         result: Result<aura_protocol::changes::RevertResult, SessionError>,
         reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    },
+    MemoryPrepared {
+        generation: u64,
+        prompt: Prompt,
+        turn_id: String,
+        checkpoint_ref: Option<String>,
+        timing: PromptTiming,
+        result: Result<Result<crate::chatstore::memory::Reply, StoreError>, JoinError>,
     },
     Checkpointed {
         generation: u64,
@@ -530,6 +564,7 @@ enum Done {
         result: Result<HistoryPage, SessionError>,
     },
     OptionReply {
+        generation: u64,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
         option_id: String,
         value: ConfigValue,
@@ -539,6 +574,7 @@ enum Done {
         >,
     },
     AutonomyReply {
+        generation: u64,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
         autonomy: Autonomy,
         result: Result<
@@ -662,6 +698,8 @@ pub(crate) struct ChatActor {
     git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
     checkpoint_capture: bool,
+    memory_revision: Option<String>,
+    memory_grant: Option<crate::memory_service::MemoryGrant>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -674,6 +712,10 @@ pub(crate) struct ChatActor {
     remote_history: bool,
     autonomy: Autonomy,
     autonomy_state: AutonomyState,
+    controls: aura_protocol::session::SessionControlPreferences,
+    control_pending: Option<(String, ConfigValue)>,
+    mcp_pending: bool,
+    implementation_approved: bool,
     desired: BTreeMap<String, ConfigValue>,
     options: Vec<ConfigOption>,
     commands: Vec<SlashCommand>,
@@ -750,6 +792,7 @@ impl ChatActor {
             .as_ref()
             .map_or(defaults.autonomy, |session| session.autonomy);
         let initial_model = initial_model.or_else(|| defaults.model_for(&chat.agent_id));
+        let controls = controls::preferences(agent_session.as_ref());
         let desired = initial_options(agent_session.as_ref(), initial_model);
         let store = Arc::clone(&shared.deps.store);
         let replay_check = replay_check.filter(|_| {
@@ -791,12 +834,18 @@ impl ChatActor {
             git_reservation: None,
             checkpointing: None,
             checkpoint_capture: false,
+            memory_revision: None,
+            memory_grant: None,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
             agent_session,
             autonomy,
             autonomy_state: stopped_autonomy(autonomy, None),
+            controls,
+            control_pending: None,
+            mcp_pending: false,
+            implementation_approved: false,
             desired,
             options: Vec::new(),
             commands: Vec::new(),
@@ -1251,6 +1300,12 @@ impl ChatActor {
                 let result = self.respond_ui(&request_id, answer);
                 drop(reply.send(result));
             }
+            ChatMsg::SetControl { change, reply } => self.set_control(change, reply),
+            ChatMsg::McpAction {
+                server_name,
+                action,
+                reply,
+            } => self.mcp_action(server_name, action, reply),
             ChatMsg::SetOption {
                 option_id,
                 value,
@@ -1540,6 +1595,8 @@ impl ChatActor {
             self.autonomy = self.agent_session.as_ref().map_or(defaults.autonomy, |session| session.autonomy);
             let initial_model = load.initial_model.or_else(|| defaults.model_for(&self.chat.agent_id));
             self.desired = initial_options(self.agent_session.as_ref(), initial_model);
+            self.controls = controls::preferences(self.agent_session.as_ref());
+            self.control_pending = None;
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
             self.commands.clear();
@@ -1676,12 +1733,16 @@ impl ChatActor {
             options: self.options.clone(),
             commands: self.commands.clone(),
             autonomy: self.autonomy_state.clone(),
+            controls: self.control_lists(),
         }
     }
 
     fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
         self.require_workspace()?;
         self.require_remote_handoff()?;
+        if self.status == SessionStatus::Ready && !self.controls_valid() {
+            return Err(SessionError::OptionInvalid("A saved native control is invalid or unavailable. Choose an offered setting before sending.".into()));
+        }
         if self.organizing && !self.setup_reservation {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
@@ -1813,6 +1874,9 @@ impl ChatActor {
             .is_some_and(|attempt| attempt.blocks_agent())
             && !self.organizing
             && !self.steering_pending
+            && self.control_pending.is_none()
+            && self.controls_valid()
+            && !self.mcp_pending
             && self.checkpointing.is_none()
             && self.status == SessionStatus::Ready
             && self.turn.is_none()
@@ -2292,6 +2356,76 @@ impl ChatActor {
 
     fn dispatch_prepared(
         &mut self,
+        prompt: Prompt,
+        turn_id: String,
+        checkpoint_ref: Option<String>,
+        timing: PromptTiming,
+    ) {
+        if self.driver.is_none() {
+            return;
+        }
+        let row = QueuedRow {
+            id: prompt.id.clone(),
+            chat_id: self.chat_id.clone(),
+            text: prompt.text.clone(),
+            parts: prompt.parts.clone(),
+            held: false,
+            created_at: prompt.created_at,
+        };
+        if !self.queue.iter().any(|row| row.id == prompt.id) {
+            self.queue.insert(0, row.clone());
+            self.queue_op(Op::QueuePut(row));
+        }
+        let store = self.store.clone();
+        let command = crate::chatstore::memory::Command::Snapshot {
+            chat_id: self.chat_id.clone(),
+            prompt_id: prompt.id.clone(),
+            previous: self.memory_revision.clone(),
+            embedded_context: prompt
+                .parts
+                .iter()
+                .skip(1)
+                .rev()
+                .find_map(|part| match part {
+                    PromptPart::Text { text }
+                        if text.starts_with(
+                            "\n\nProject memory (Aura reference context, revision ",
+                        ) =>
+                    {
+                        Some(text.clone())
+                    }
+                    _ => None,
+                }),
+        };
+        let task = self
+            .shared
+            .deps
+            .rt
+            .spawn(async move { store.memory(command).await });
+        self.checkpointing = Some((prompt.id.clone(), task.abort_handle()));
+        let generation = self.generation;
+        self.in_flight.push(
+            async move {
+                Done::MemoryPrepared {
+                    generation,
+                    prompt,
+                    turn_id,
+                    checkpoint_ref,
+                    timing,
+                    result: task.await,
+                }
+            }
+            .boxed(),
+        );
+        self.set_status(
+            SessionStatus::Running,
+            Some("Saving visible project memory context before sending".into()),
+        );
+        self.flush();
+    }
+
+    fn dispatch_memory_ready(
+        &mut self,
         mut prompt: Prompt,
         turn_id: String,
         checkpoint_ref: Option<String>,
@@ -2495,6 +2629,7 @@ impl ChatActor {
     }
 
     fn force_stop(&mut self) {
+        self.memory_grant = None;
         self.cancel_checkpoint();
         if !matches!(
             self.status,
@@ -2548,6 +2683,7 @@ impl ChatActor {
     /// Force stop, step 3 on: drop the event receiver, run the FORCE chain on every recorded
     /// process, end what is still open, and reach `Stopped`.
     fn force_kill(&mut self) {
+        self.memory_grant = None;
         self.force_wait = None;
         self.stop_deadline = None;
         if let Some(mut driver) = self.driver.take() {
@@ -2633,6 +2769,7 @@ impl ChatActor {
     }
 
     fn stop(&mut self) {
+        self.memory_grant = None;
         self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
@@ -2674,6 +2811,7 @@ impl ChatActor {
 
     /// Sends `Shutdown`; a stop not done in time is forced.
     fn graceful_stop(&mut self, plan: StopPlan, auth: bool) {
+        self.memory_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -2856,6 +2994,8 @@ impl ChatActor {
             }
         }
         self.generation += 1;
+        self.control_pending = None;
+        self.implementation_approved = false;
         let generation = self.generation;
         self.starting_fresh = fresh;
         self.last_error = None;
@@ -2953,6 +3093,10 @@ impl ChatActor {
     }
 
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
+        self.mcp_pending = false;
+        if !prepared.memory_mcp_available {
+            self.push(AuraEvent::Notice{level:NoticeLevel::Info,message:"Project memory remains visible reference context. Optional memory tools were omitted because native MCP configuration needs review or uses Aura's reserved server name.".into()},None);
+        }
         // The connection the preparation chose is the one this start runs and its session records.
         let spec = (*prepared.spec).clone();
         self.spec = Some(spec.clone());
@@ -2995,6 +3139,20 @@ impl ChatActor {
             self.start_failed(ErrorKind::Internal, message, None, false);
             return;
         }
+        self.memory_revision = None;
+        self.memory_grant = if matches!(
+            self.chat.agent_host,
+            aura_protocol::agents::AgentHost::Native
+        ) {
+            crate::memory_service::MemoryGrant::start(
+                self.store.clone(),
+                self.chat_id.clone(),
+                &self.shared.deps.rt,
+            )
+            .ok()
+        } else {
+            None
+        };
         let generation = self.generation;
         let deps = &self.shared.deps;
         let (commands, command_rx) = mpsc::unbounded_channel();
@@ -3013,6 +3171,30 @@ impl ChatActor {
             .with_protocol_logging(!deps.store.encrypted()),
         );
         let setup = SessionSetup {
+            mcp_servers: {
+                let mut servers = prepared.mcp_servers;
+                if self.chat.agent_host == aura_protocol::agents::AgentHost::Native
+                    && prepared.memory_mcp_available
+                    && spec.kind != aura_protocol::DriverKind::Headless
+                    && let Some(helper) =
+                        self.memory_grant.as_ref().and_then(|grant| grant.mcp(None))
+                {
+                    servers.push(helper);
+                }
+                deps.redactor.set_secrets(
+                    servers
+                        .iter()
+                        .flat_map(|s| {
+                            s.credentials
+                                .env
+                                .values()
+                                .chain(s.credentials.headers.values())
+                        })
+                        .cloned()
+                        .collect(),
+                );
+                servers
+            },
             attachment_dir: Some(deps.store.attachment_dir().to_path_buf()),
             attachment_reader: deps.store.attachment_reader(),
             chat_id: self.chat_id.clone(),
@@ -3031,7 +3213,7 @@ impl ChatActor {
             resume: resume.clone(),
             native_start,
             autonomy: self.autonomy,
-            desired: self.desired.clone(),
+            desired: self.native_desired(),
             timings: DriverTimings::STANDARD,
             client_version: deps.app_version.clone(),
         };
@@ -3093,6 +3275,12 @@ impl ChatActor {
             }
             None => PermissionDecision::Cancelled,
         };
+        if self.control_lists().workflow.effective.as_deref() == Some("plan")
+            && card.request.kind == Some(aura_protocol::ToolKind::SwitchMode)
+            && matches!(&decision, PermissionDecision::Selected { option_id } if card.request.options.iter().any(|o| &o.option_id == option_id && matches!(o.kind, aura_protocol::PermissionOptionKind::AllowOnce | aura_protocol::PermissionOptionKind::AllowAlways)))
+        {
+            self.implementation_approved = true;
+        }
         let outcome = match &decision {
             PermissionDecision::Selected { option_id } => {
                 PermissionOutcome::Selected(option_id.clone())
@@ -3167,6 +3355,16 @@ impl ChatActor {
         value: ConfigValue,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
     ) {
+        self.set_option_inner(option_id, value, reply, false);
+    }
+
+    fn set_option_inner(
+        &mut self,
+        option_id: String,
+        value: ConfigValue,
+        reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+        native_admitted: bool,
+    ) {
         let live = matches!(
             self.status,
             SessionStatus::Ready | SessionStatus::Running | SessionStatus::Cancelling
@@ -3182,7 +3380,28 @@ impl ChatActor {
             drop(reply.send(Err(error)));
             return;
         }
+        if controls::is_control(&option_id) && !native_admitted {
+            let _ = reply.send(Err(SessionError::OptionInvalid(
+                "Use the reviewed native control command to change this setting.".into(),
+            )));
+            return;
+        }
+        if self
+            .options
+            .iter()
+            .any(|o| o.id == option_id && o.category == ConfigCategory::Mode)
+            && (!self.controls_idle()
+                || self.control_lists().workflow.effective.as_deref() == Some("plan")
+                || self.options.iter().any(|o| {
+                    o.id == option_id
+                        && matches!(&o.kind,ConfigKind::Select { current, .. } if current == "plan")
+                }))
+        {
+            let _ = reply.send(Err(SessionError::OptionInvalid("Change native mode only while idle; leaving Plan requires implementation approval.".into())));
+            return;
+        }
         let (answer, receiver) = oneshot::channel();
+        let generation = self.generation;
         self.send_command(DriverCommand::SetOption {
             option_id: option_id.clone(),
             value: value.clone(),
@@ -3191,9 +3410,45 @@ impl ChatActor {
         self.in_flight.push(
             async move {
                 Done::OptionReply {
+                    generation,
                     reply,
                     option_id,
                     value,
+                    result: tokio::time::timeout(OPTION_REPLY_TIMEOUT, receiver).await,
+                }
+            }
+            .boxed(),
+        );
+    }
+
+    fn mcp_action(
+        &mut self,
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+        reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, SessionError>>,
+    ) {
+        if !self.controls_idle() || self.mcp_pending {
+            let _=reply.send(Err(SessionError::OptionInvalid("Wait until the agent is idle, clear queued messages and answer pending approvals before managing MCP.".into())));
+            return;
+        }
+        if action == aura_protocol::mcp::McpSessionAction::Restart {
+            let result=self.start(false,true).map(|_|aura_protocol::mcp::McpActionResult{state:"restarting".into(),message:"Restart requested. The chat resumes its native session with a new immutable MCP snapshot.".into(),authorization_url:None,servers:Vec::new()});
+            let _ = reply.send(result);
+            return;
+        }
+        let (answer, receiver) = oneshot::channel();
+        let generation = self.generation;
+        self.mcp_pending = true;
+        self.send_command(DriverCommand::McpAction {
+            server_name,
+            action,
+            reply: answer,
+        });
+        self.in_flight.push(
+            async move {
+                Done::McpAction {
+                    generation,
+                    reply,
                     result: tokio::time::timeout(OPTION_REPLY_TIMEOUT, receiver).await,
                 }
             }
@@ -3205,6 +3460,15 @@ impl ChatActor {
         &mut self,
         autonomy: Autonomy,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+    ) {
+        self.set_autonomy_inner(autonomy, reply, false);
+    }
+
+    fn set_autonomy_inner(
+        &mut self,
+        autonomy: Autonomy,
+        reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+        native_admitted: bool,
     ) {
         let live = self
             .driver
@@ -3218,7 +3482,16 @@ impl ChatActor {
             drop(reply.send(Ok(self.lists())));
             return;
         }
+        if !native_admitted && !self.controls_idle() {
+            let _ = reply.send(Err(SessionError::OptionInvalid("Wait until the agent is idle, clear queued messages and answer pending approvals before changing access.".into())));
+            return;
+        }
+        if self.control_lists().workflow.effective.as_deref() == Some("plan") {
+            let _ = reply.send(Err(SessionError::OptionInvalid("Leave Plan with explicit implementation approval before changing execution access.".into())));
+            return;
+        }
         let (answer, receiver) = oneshot::channel();
+        let generation = self.generation;
         self.send_command(DriverCommand::SetAutonomy {
             autonomy,
             reply: answer,
@@ -3226,6 +3499,7 @@ impl ChatActor {
         self.in_flight.push(
             async move {
                 Done::AutonomyReply {
+                    generation,
                     reply,
                     autonomy,
                     result: tokio::time::timeout(OPTION_REPLY_TIMEOUT, receiver).await,
@@ -3239,8 +3513,11 @@ impl ChatActor {
     /// would auto-answer.
     fn store_autonomy(&mut self, autonomy: Autonomy, state: AutonomyState) {
         self.autonomy = autonomy;
+        self.controls.access = None;
+        let controls_json = serde_json::to_string(&self.controls).ok();
         if let Some(session) = &mut self.agent_session {
             session.autonomy = autonomy;
+            session.controls_json = controls_json.clone();
             let id = session.id.clone();
             self.queue_op(Op::UpdateAgentSession {
                 id,
@@ -3251,6 +3528,7 @@ impl ChatActor {
                     effort: None,
                     autonomy: Some(autonomy),
                     config_json: None,
+                    controls_json,
                     updated_at: now_millis(),
                 },
             });
@@ -3295,6 +3573,7 @@ impl ChatActor {
     }
 
     fn shutdown(&mut self, plan: StopPlan, reply: oneshot::Sender<()>) {
+        self.memory_grant = None;
         self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
@@ -3406,6 +3685,58 @@ impl ChatActor {
                     self.flush();
                 }
                 let _ = reply.send(result);
+            }
+            Done::MemoryPrepared {
+                generation,
+                mut prompt,
+                turn_id,
+                checkpoint_ref,
+                timing,
+                result,
+            } => {
+                if generation != self.generation
+                    || !self
+                        .checkpointing
+                        .as_ref()
+                        .is_some_and(|(id, _)| *id == prompt.id)
+                {
+                    return;
+                }
+                self.checkpointing = None;
+                if self
+                    .driver
+                    .as_ref()
+                    .is_some_and(|driver| driver.ready && driver.stop == Stop::None)
+                {
+                    self.set_status(SessionStatus::Ready, None);
+                }
+                let eligible = self.can_dispatch()
+                    && self
+                        .queue
+                        .iter()
+                        .any(|row| row.id == prompt.id && !row.held)
+                    && self.require_workspace().is_ok();
+                match result {
+                    Ok(Ok(crate::chatstore::memory::Reply::Snapshot(snapshot))) if eligible => {
+                        if let Some(snapshot) = snapshot {
+                            self.memory_revision = snapshot.revision;
+                            if !snapshot.already_attached && !snapshot.visible_text.is_empty() {
+                                prompt.text.push_str(&snapshot.visible_text);
+                                prompt.parts.push(PromptPart::Text {
+                                    text: snapshot.visible_text,
+                                });
+                            }
+                        }
+                        self.dispatch_memory_ready(prompt, turn_id, checkpoint_ref, timing);
+                    }
+                    Ok(Ok(_)) => {}
+                    Err(error) if error.is_cancelled() => {}
+                    failed => {
+                        self.hold_queue(HoldCause::Error);
+                        self.set_detail(Some(format!("Project memory context could not be saved. The prompt is held for retry: {}", match failed { Ok(Err(e))=>e.to_string(),_=>"memory preparation stopped".into() })));
+                        self.flush();
+                    }
+                }
             }
             Done::Checkpointed {
                 generation,
@@ -3596,18 +3927,54 @@ impl ChatActor {
                     }
                 }
             }
+            Done::McpAction {
+                generation,
+                reply,
+                result,
+            } => {
+                if generation != self.generation {
+                    let _ = reply.send(Err(SessionError::SessionNotReady));
+                    return;
+                }
+                self.mcp_pending = false;
+                let result=match result {Ok(Ok(result))=>result.map_err(|e|SessionError::OptionInvalid(e.message)),_=>Err(SessionError::OptionInvalid("The agent did not confirm the MCP operation. Refresh its status before retrying.".into()))};
+                let _ = reply.send(result);
+                self.dispatch_next();
+            }
             Done::Prepared { generation, result } => self.on_prepared(generation, result),
             Done::Page { purpose, result } => self.on_page(purpose, result),
             Done::OptionReply {
+                generation,
                 reply,
                 option_id,
                 value,
                 result,
             } => {
+                if generation != self.generation {
+                    let _ = reply.send(Err(SessionError::SessionNotReady));
+                    return;
+                }
+                if controls::is_control(&option_id) {
+                    for _ in 0..aura_drivers::driver::DRIVER_EVENT_CAPACITY {
+                        let Some(event) = self
+                            .driver
+                            .as_mut()
+                            .and_then(|d| d.events.as_mut())
+                            .and_then(|events| events.try_recv().ok())
+                        else {
+                            break;
+                        };
+                        self.on_driver_event(event);
+                    }
+                }
                 let answer = match result {
                     Ok(Ok(Ok(()))) => {
-                        self.desired.insert(option_id, value);
-                        self.persist_desired();
+                        if controls::is_control(&option_id) {
+                            self.control_applied(&option_id, &value);
+                        } else {
+                            self.desired.insert(option_id.clone(), value);
+                            self.persist_desired();
+                        }
                         Ok(self.lists())
                     }
                     Ok(Ok(Err(error))) => {
@@ -3618,13 +3985,25 @@ impl ChatActor {
                         "The agent didn't answer in time; the option is unchanged.".into(),
                     )),
                 };
-                drop(reply.send(answer));
+                if controls::is_control(&option_id) {
+                    self.control_pending = None;
+                    self.revision = self.revision.wrapping_add(1);
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                }
+                drop(reply.send(answer.map(|_| self.lists())));
+                self.dispatch_next();
             }
             Done::AutonomyReply {
+                generation,
                 reply,
                 autonomy,
                 result,
             } => {
+                if generation != self.generation {
+                    let _ = reply.send(Err(SessionError::SessionNotReady));
+                    return;
+                }
                 let state = match result {
                     Ok(Ok(Ok(state))) => state,
                     Ok(Err(_)) => {
@@ -3640,7 +4019,9 @@ impl ChatActor {
                     }
                 };
                 self.store_autonomy(autonomy, state);
+                if self.control_pending.as_ref().is_some_and(|(id,value)| id == aura_drivers::controls::ACCESS && matches!(value,ConfigValue::Choice { value } if value.starts_with("legacy:"))) { self.control_pending = None; self.revision=self.revision.wrapping_add(1);self.info_dirty=true;self.schedule_flush(); }
                 drop(reply.send(Ok(self.lists())));
+                self.dispatch_next();
             }
             Done::DriverJoined { generation, result } => self.on_driver_joined(generation, result),
             Done::Retired(generation) => self.retired_one(generation),
@@ -3692,6 +4073,7 @@ impl ChatActor {
         self.queue_op(Op::UpdateAgentSession {
             id,
             patch: AgentSessionPatch {
+                controls_json: None,
                 capabilities: None,
                 native_session_id: None,
                 model: None,
@@ -3799,6 +4181,7 @@ impl ChatActor {
                     lock(&self.shared.reported_models).insert(self.chat.agent_id.clone(), choices);
                 }
                 self.options = options;
+                self.observe_native_controls();
                 self.revision = self.revision.wrapping_add(1);
                 self.info_dirty = true;
                 self.schedule_flush();
@@ -4086,6 +4469,7 @@ impl ChatActor {
             }
         }
         let config_json = serde_json::to_string(&self.desired).ok();
+        let controls_json = serde_json::to_string(&self.controls).ok();
         let (model, effort) = (
             self.option_value(ConfigCategory::Model),
             self.option_value(ConfigCategory::Effort),
@@ -4095,6 +4479,7 @@ impl ChatActor {
                 session.updated_at = now;
                 session.autonomy = self.autonomy;
                 session.config_json = config_json.clone();
+                session.controls_json = controls_json.clone();
                 session.capabilities = Some(info.capabilities.clone());
                 let id = session.id.clone();
                 self.queue_op(Op::UpdateAgentSession {
@@ -4106,6 +4491,7 @@ impl ChatActor {
                         effort,
                         autonomy: Some(self.autonomy),
                         config_json,
+                        controls_json: controls_json.clone(),
                         updated_at: now,
                     },
                 });
@@ -4122,6 +4508,7 @@ impl ChatActor {
                     effort,
                     autonomy: self.autonomy,
                     config_json,
+                    controls_json: controls_json.clone(),
                     cwd: self.chat.folder.clone(),
                     created_at: now,
                     updated_at: now,
@@ -4461,6 +4848,7 @@ impl ChatActor {
     }
 
     fn on_events_closed(&mut self) {
+        self.memory_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -4482,6 +4870,7 @@ impl ChatActor {
             self.retired_one(generation);
             return;
         }
+        self.memory_grant = None;
         let Some(driver) = self.driver.take() else {
             return;
         };
@@ -4591,6 +4980,7 @@ impl ChatActor {
 
     /// The driver closed as asked.
     fn closed(&mut self, generation: u64, auth: bool) {
+        self.memory_grant = None;
         self.book.clear(generation);
         self.release_if_idle();
         let now = now_millis();
@@ -4652,6 +5042,7 @@ impl ChatActor {
 
     /// The driver ended without being asked (or panicked, or was aborted).
     fn crashed(&mut self, generation: u64, message: String, stderr_tail: Option<String>) {
+        self.memory_grant = None;
         self.kill_generation(generation);
         self.release_if_idle();
         let detail = stderr_tail
@@ -4711,6 +5102,7 @@ impl ChatActor {
     }
 
     fn start_failed_exit(&mut self, generation: u64, error: DriverError) {
+        self.memory_grant = None;
         self.kill_generation(generation);
         if let Some(turn) = self.turn.take() {
             // A driver that reports a failed start mid-turn broke its contract; end the turn anyway.
@@ -4793,6 +5185,7 @@ impl ChatActor {
         detail: Option<String>,
         auth: bool,
     ) {
+        self.memory_grant = None;
         self.release_if_idle();
         let message = self.error_text(&message, false);
         self.last_error = Some(ErrorInfo {
@@ -5780,6 +6173,14 @@ async fn prepare(
         .map_err(unavailable)?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
+    let (mcp_servers, memory_mcp_available) =
+        super::shared_mcp::prepare_launch(&context, &env, &spec, &agent_host)
+            .await
+            .map_err(|message| StartFailure {
+                kind: ErrorKind::AgentUnavailable,
+                message,
+                folder: None,
+            })?;
     let folder_context = super::workspace_folders::resolve(
         context,
         super::workspace_folders::supported(Some(&*spec), &agent_host),
@@ -5792,6 +6193,8 @@ async fn prepare(
         folder: None,
     })?;
     Ok(Prepared {
+        memory_mcp_available,
+        mcp_servers,
         spec,
         folder_context,
         launch,

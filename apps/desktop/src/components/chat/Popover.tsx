@@ -88,8 +88,11 @@ export function Popover({
   );
 }
 
-/** Closes the popover (or menu) that holds `element`, as choosing one of its items should. */
-export function closePopover(element: Element | null): void {
+/** Closes the enclosing popover, optionally returning focus after its selected item is hidden. */
+export function closePopover(element: Element | null, restoreFocus = false): void {
   const details = element?.closest("details");
-  if (details) details.open = false;
+  if (details) {
+    details.open = false;
+    if (restoreFocus) details.querySelector("summary")?.focus();
+  }
 }

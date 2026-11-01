@@ -73,9 +73,16 @@ fn native_version(user_agent: &str) -> Option<String> {
 }
 
 enum Purpose {
+    Mcp {
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+        reply:
+            tokio::sync::oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, DriverError>>,
+    },
     Initialize,
     Open,
     Models,
+    Collaboration,
     Start(String),
     Steer {
         native_turn: String,
@@ -132,6 +139,8 @@ struct Session {
     cursors: BTreeSet<String>,
     model: String,
     effort: Option<String>,
+    workflow: String,
+    collaboration_modes: BTreeSet<String>,
     version: Option<String>,
     limits: BTreeMap<String, Value>,
     limits_dirty: bool,
@@ -222,11 +231,12 @@ impl Session {
         ));
     }
     fn options(&mut self) {
-        self.outbox.push_back(DriverEvent::Options(options::options(
-            &self.models,
-            &self.model,
-            self.effort.as_deref(),
-        )));
+        let mut options = options::options(&self.models, &self.model, self.effort.as_deref());
+        if self.collaboration_modes.contains("plan") && self.collaboration_modes.contains("default")
+        {
+            options.push(crate::controls::workflow(&self.workflow));
+        }
+        self.outbox.push_back(DriverEvent::Options(options));
     }
     fn run_state(&mut self, idle: bool) {
         self.idle = idle;
@@ -274,14 +284,28 @@ impl Session {
                 ..Default::default()
             },
         }));
+        self.request("collaborationMode/list", json!({}), Purpose::Collaboration);
         self.refresh_limits();
         while let Some((method, params)) = self.deferred.pop_front() {
             self.notification(&method, params);
         }
     }
     fn open(&mut self) {
+        if self.setup.mcp_servers.iter().any(|s| {
+            matches!(
+                s.definition.transport,
+                aura_protocol::mcp::McpTransport::Sse { .. }
+            )
+        }) {
+            self.fail(protocol_error("Codex does not support legacy SSE MCP servers. Choose streamable HTTP or stdio before restarting."));
+            return;
+        }
         let (approval, sandbox, _) = options::policies(self.setup.autonomy);
         let mut params = json!({"cwd":self.setup.agent_folder,"approvalPolicy":approval,"approvalsReviewer":"user","sandbox":sandbox});
+        if !self.setup.mcp_servers.is_empty() {
+            params["config"] =
+                json!({"mcp_servers":crate::mcp::codex_session(&self.setup.mcp_servers)});
+        }
         if let Some(ConfigValue::Choice { value }) = self.setup.desired.get("model") {
             params["model"] = json!(value);
         }
@@ -410,6 +434,16 @@ impl Session {
         let Some(pending) = self.pending.remove(&id) else {
             return;
         };
+        if let Purpose::Mcp {
+            server_name,
+            action,
+            reply,
+        } = pending.purpose
+        {
+            let answer=result.map_err(|_|protocol_error("Codex rejected the MCP session operation. Inspect its native MCP diagnostics.")).and_then(|value|crate::mcp::response(&value,action,&server_name,true));
+            let _ = reply.send(answer);
+            return;
+        }
         // Correlate a reply even after settlement or Stop. The native exact-turn precondition
         // prevents late delivery to another turn; local lifecycle changes cannot prove delivery.
         if let Purpose::Steer { native_turn, reply } = pending.purpose {
@@ -449,6 +483,16 @@ impl Session {
                         });
                         self.offer_model_recovery();
                     }
+                    Purpose::Collaboration => {
+                        self.notice(
+                            "Codex could not list native collaboration modes. Plan is unavailable.",
+                        );
+                        if self.setup.desired.contains_key(crate::controls::WORKFLOW) {
+                            self.fail(protocol_error(
+                                "The saved native workflow could not be verified.",
+                            ));
+                        }
+                    }
                     Purpose::Models => {
                         self.models.clear();
                         self.models_done = true;
@@ -484,7 +528,9 @@ impl Session {
             }
         };
         match pending.purpose {
-            Purpose::Steer { .. } => unreachable!("steering replies handled above"),
+            Purpose::Mcp { .. } | Purpose::Steer { .. } => {
+                unreachable!("session replies handled above")
+            }
             Purpose::Initialize => {
                 match serde_json::from_value::<wire::InitializeResponse>(value) {
                     Ok(info) if !info.user_agent.is_empty() => {
@@ -548,6 +594,33 @@ impl Session {
                 }
                 _ => self.fail(protocol_error("Codex returned an invalid thread response.")),
             },
+            Purpose::Collaboration => {
+                self.collaboration_modes = value["data"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| m["mode"].as_str())
+                    .filter(|m| matches!(*m, "plan" | "default"))
+                    .map(str::to_owned)
+                    .collect();
+                if let Some(ConfigValue::Choice { value }) =
+                    self.setup.desired.get(crate::controls::WORKFLOW)
+                {
+                    let native = if value == "execute" {
+                        "default"
+                    } else {
+                        value.as_str()
+                    };
+                    if !matches!(value.as_str(), "plan" | "execute")
+                        || !self.collaboration_modes.contains(native)
+                    {
+                        self.fail(protocol_error("The saved Codex workflow is unavailable. Select an offered native workflow before sending."));
+                        return;
+                    }
+                    self.workflow = value.clone();
+                }
+                self.options();
+            }
             Purpose::Models => match serde_json::from_value::<wire::ModelListResponse>(value) {
                 Ok(page) => {
                     for model in page.data {
@@ -949,6 +1022,55 @@ impl Session {
             return;
         }
         match command {
+            DriverCommand::McpAction {
+                server_name,
+                action,
+                reply,
+            } => {
+                if !self.ready
+                    || !self.idle
+                    || !self
+                        .setup
+                        .mcp_servers
+                        .iter()
+                        .any(|s| s.definition.name == server_name)
+                {
+                    let _ = reply.send(Err(protocol_error(
+                        "Select a shared MCP server loaded in this idle session.",
+                    )));
+                    return;
+                }
+                let Some(thread) = self.thread.clone() else {
+                    let _ = reply.send(Err(protocol_error("The Codex thread is unavailable.")));
+                    return;
+                };
+                let (method, params) = match action {
+                    aura_protocol::mcp::McpSessionAction::Status => (
+                        "mcpServerStatus/list",
+                        json!({"threadId":thread,"serverName":server_name,"limit":1,"detail":"full"}),
+                    ),
+                    aura_protocol::mcp::McpSessionAction::Login => (
+                        "mcpServer/oauth/login",
+                        json!({"threadId":thread,"name":server_name,"timeoutSecs":120}),
+                    ),
+                    _ => {
+                        crate::mcp::unsupported(
+                            reply,
+                            "Restart this idle chat to apply its latest MCP snapshot.",
+                        );
+                        return;
+                    }
+                };
+                self.request(
+                    method,
+                    params,
+                    Purpose::Mcp {
+                        server_name,
+                        action,
+                        reply,
+                    },
+                );
+            }
             DriverCommand::Steer {
                 turn_id,
                 message_id,
@@ -1030,6 +1152,11 @@ impl Session {
                     usage: None,
                 });
                 self.run_state(false);
+                if self.collaboration_modes.contains("plan")
+                    && self.collaboration_modes.contains("default")
+                {
+                    params["collaborationMode"] = json!({"mode": if self.workflow == "plan" { "plan" } else { "default" }, "settings":{"model":self.model,"reasoning_effort":params.get("effort").cloned().unwrap_or(Value::Null),"developer_instructions":null}});
+                }
                 self.request("turn/start", params, Purpose::Start(turn.turn_id));
             }
             DriverCommand::Interrupt => {
@@ -1086,6 +1213,30 @@ impl Session {
                 value,
                 reply,
             } => {
+                if option_id == crate::controls::WORKFLOW {
+                    if let ConfigValue::Choice { value } = &value {
+                        let native = if value == "execute" {
+                            "default"
+                        } else {
+                            value.as_str()
+                        };
+                        if matches!(value.as_str(), "plan" | "execute")
+                            && self.collaboration_modes.contains(native)
+                            && self.idle
+                            && self.active.is_none()
+                            && self.callbacks.is_empty()
+                        {
+                            self.workflow = value.clone();
+                            self.options();
+                            let _ = reply.send(Ok(()));
+                            return;
+                        }
+                    }
+                    let _ = reply.send(Err(protocol_error(
+                        "Codex does not offer that workflow or is busy.",
+                    )));
+                    return;
+                }
                 if options::validate(&self.models, &self.model, &option_id, &value) {
                     let ConfigValue::Choice { value: choice } = &value else {
                         unreachable!()
@@ -1213,12 +1364,14 @@ impl Session {
                 continue;
             };
             match p.purpose {
+                Purpose::Mcp{reply,..}=>{let _=reply.send(Err(protocol_error("Codex did not acknowledge the MCP operation before its deadline.")));},
                 Purpose::Steer { reply, .. } => {
                     let message = "Codex did not acknowledge steering before its deadline. Delivery is unconfirmed.";
                     let _ = reply.send(SteerResult::Unconfirmed { message: message.into() });
                     self.fail(error(ErrorKind::AgentError, message));
                 },
                 Purpose::Models=>{self.models.clear();self.models_done=true;self.notice("Codex did not return its model list before the deadline.");self.offer_model_recovery();self.ready();},
+                Purpose::Collaboration=>{self.notice("Codex did not list collaboration modes before its deadline."); if self.setup.desired.contains_key(crate::controls::WORKFLOW) { self.fail(protocol_error("The saved native workflow could not be verified.")); }},
                 Purpose::Limits=>{self.limits_dirty=false;self.notice("Codex did not refresh usage limits before the deadline.");},
                 _=>self.fail(error(ErrorKind::AgentError,"Codex did not acknowledge an operation before its deadline. The session was stopped to avoid uncertain state.")),
             }
@@ -1255,7 +1408,11 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         ));
     }
     let spec = SpawnSpec {
-        launch: setup.launch.clone(),
+        launch: {
+            let mut launch = setup.launch.clone();
+            crate::mcp::codex_environment(&setup.mcp_servers, &mut launch);
+            launch
+        },
         folder: setup.folder.clone(),
         env: Arc::clone(&setup.env),
         max_line_bytes: MAX_LINE_BYTES,
@@ -1302,6 +1459,8 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         cursors: BTreeSet::new(),
         model: String::new(),
         effort: None,
+        workflow: "execute".into(),
+        collaboration_modes: BTreeSet::new(),
         version: None,
         limits: BTreeMap::new(),
         limits_dirty: false,
@@ -1311,7 +1470,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
     };
     s.outbox
         .push_back(DriverEvent::Status(DriverStatus::Initializing));
-    s.request("initialize",json!({"clientInfo":{"name":"auracode","title":"auracode","version":s.setup.client_version},"capabilities":{"experimentalApi":false}}),Purpose::Initialize);
+    s.request("initialize",json!({"clientInfo":{"name":"auracode","title":"auracode","version":s.setup.client_version},"capabilities":{"experimentalApi":true}}),Purpose::Initialize);
     let control = process.control;
     let mut stdout = process.io.stdout;
     let mut exit = control.exited();
