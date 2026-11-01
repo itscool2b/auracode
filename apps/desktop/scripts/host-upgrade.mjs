@@ -251,7 +251,33 @@ function readSnapshot(stateDir, name) {
   return { dir, ...JSON.parse(readFileSync(join(dir, "snapshot.json"), "utf8")) };
 }
 
-/** Copies the installed app aside, with when and what it was. */
+/**
+ * Moves `from` to `to`, or copies it when they are on different drives. Moving keeps the very
+ * files: Smart App Control checks a copied executable again and may block it, even when it allowed
+ * the original.
+ */
+function move(from, to) {
+  // Windows can hold a just-closed app's files for a moment, so a busy move is tried again.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      renameSync(from, to);
+      return;
+    } catch (error) {
+      if (error.code === "EXDEV") {
+        cpSync(from, to, { recursive: true });
+        rmSync(from, { recursive: true, force: true });
+        return;
+      }
+      if (!["EPERM", "EBUSY", "EACCES"].includes(error.code) || attempt >= 20) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    }
+  }
+}
+
+/**
+ * Keeps the installed app aside, with when and what it was. The original files move into the
+ * snapshot, so a restore puts back files Windows already allowed; the installer updates a copy.
+ */
 export function takeSnapshot(paths, installer, now) {
   if (!isInstall(paths.installDir)) {
     throw new Error(`${paths.installDir} holds no installed auracode to keep.`);
@@ -261,8 +287,19 @@ export function takeSnapshot(paths, installer, now) {
     name = `${stampOf(now)}-${n}`;
   }
   const dir = join(paths.stateDir, "snapshots", name);
-  cpSync(paths.installDir, join(dir, "app"), { recursive: true });
-  const exe = statSync(join(paths.installDir, APP_EXE));
+  const app = join(dir, "app");
+  mkdirSync(dir, { recursive: true });
+  // A file in use stops the move before anything changes.
+  move(paths.installDir, app);
+  try {
+    cpSync(app, paths.installDir, { recursive: true });
+  } catch (error) {
+    rmSync(paths.installDir, { recursive: true, force: true });
+    move(app, paths.installDir);
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
+  const exe = statSync(join(app, APP_EXE));
   const record = {
     name,
     created: now.getTime(),
@@ -276,8 +313,9 @@ export function takeSnapshot(paths, installer, now) {
 }
 
 /**
- * Replaces the installed app with a snapshot's copy. The current files move aside first (a file
- * in use stops the move before anything changes) and come back if the copy fails.
+ * Puts a snapshot's app back in place. The current files move aside first (a file in use stops the
+ * move before anything changes) and come back if the restore fails. The snapshot's files move,
+ * not copy (see `move`), and the snapshot keeps a copy so it can be restored again.
  */
 export function restoreApp(snapshot, installDir, now = new Date()) {
   const app = join(snapshot.dir, "app");
@@ -288,13 +326,14 @@ export function restoreApp(snapshot, installDir, now = new Date()) {
   const aside = `${installDir}.replaced-${now.getTime()}`;
   if (existsSync(installDir)) renameSync(installDir, aside);
   try {
-    cpSync(app, installDir, { recursive: true });
+    move(app, installDir);
   } catch (error) {
     rmSync(installDir, { recursive: true, force: true });
     if (existsSync(aside)) renameSync(aside, installDir);
     throw error;
   }
   rmSync(aside, { recursive: true, force: true });
+  cpSync(installDir, app, { recursive: true });
 }
 
 /** Puts each migrated database back as it was before the migration; the migrated one is kept. */
