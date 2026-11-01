@@ -17,6 +17,7 @@ import type {
   HistoryPage,
   PromptAck,
   QueuedPrompt,
+  SessionControlChange,
   SessionInfo,
   SessionLists,
   StorageStatus,
@@ -145,6 +146,25 @@ export function lists(revision: number, overrides: Partial<SessionLists> = {}): 
     options: [],
     commands: [],
     autonomy: autonomyState(),
+    controls: {
+      version: 1,
+      access: {
+        requested: null,
+        effective: null,
+        pending: null,
+        choices: [],
+        native_mode: null,
+        note: null,
+      },
+      workflow: {
+        requested: null,
+        effective: null,
+        pending: null,
+        choices: [],
+        native_mode: null,
+        note: null,
+      },
+    },
     ...overrides,
   };
 }
@@ -722,6 +742,11 @@ export class FakeTransport implements Transport {
   setOption(chatId: string, optionId: string, value: ConfigValue): Promise<SessionLists> {
     this.#record("setOption", [chatId, optionId, value]);
     return this.handlers.setOption?.(chatId, optionId, value) ?? Promise.resolve(lists(2));
+  }
+
+  setControl(chatId: string, change: SessionControlChange): Promise<SessionLists> {
+    this.#record("setControl", [chatId, change]);
+    return this.handlers.setControl?.(chatId, change) ?? Promise.resolve(lists(2));
   }
 
   setAutonomy(chatId: string, autonomy: Autonomy): Promise<SessionLists> {

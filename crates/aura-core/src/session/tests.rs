@@ -3,9 +3,12 @@
 
 mod checkpoints;
 mod cloning;
+mod controls;
 mod conversation;
+mod customization_queue;
 mod folder_context;
 mod folder_resolution;
+mod memory;
 mod new_chat_defaults;
 mod project_tools;
 mod queue_changes;
@@ -566,7 +569,7 @@ async fn quit_while_paused() {
 /// store; and no actor starts once the quit began. Nothing is lost and nothing is logged as lost.
 #[tokio::test]
 async fn quit_drains_queued_writes_and_refuses_late_work() {
-    let (driver, _handle) = ScriptedDriver::new(vec![
+    let (driver, handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -600,6 +603,7 @@ async fn quit_drains_queued_writes_and_refuses_late_work() {
         .send(&chat.id, "first".into())
         .await
         .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
     status(&rig, &chat.id, SessionStatus::Running).await;
     rig.manager
         .send(&chat.id, "queued one".into())
@@ -917,7 +921,12 @@ async fn a_blob_still_in_the_outbox_reads_as_unsaved_while_paused() {
 #[tokio::test]
 async fn a_blob_read_follows_the_chats_own_put_blob() {
     let (config, _) = tight();
-    let rig = rig(vec![spilling_driver(12)], config, Knobs::STANDARD);
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("blob-memory-admission"),
+        Step::Expect(CommandMatch::Prompt),
+    ]);
+    let rig = rig(vec![driver], config, Knobs::STANDARD);
     let chat = rig
         .manager
         .create_chat("mock", &rig.folder)
@@ -929,15 +938,50 @@ async fn a_blob_read_follows_the_chats_own_put_blob() {
         .attach(&chat.id, sink.clone())
         .await
         .expect("attach");
-    // The writer takes nothing until released: the FIFO fills, then the actor's outbox.
-    let (release, held) = std::sync::mpsc::channel::<()>();
-    rig.store.with_store(move |_| {
-        let _ = held.recv_timeout(Duration::from_secs(30));
-    });
     rig.manager
         .send(&chat.id, "dump it".into())
         .await
         .expect("send");
+    // A real prompt's memory snapshot commits before native delivery. Only then block the writer
+    // and release the scripted output, so this still exercises PutBlob ordering under backpressure.
+    let aura_drivers::driver::LoggedCommand::Prompt { turn_id, .. } =
+        handle.wait_for(CommandMatch::Prompt).await
+    else {
+        panic!("prompt")
+    };
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    let (entered, waiting) = oneshot::channel();
+    rig.store.with_store(move |_| {
+        let _ = entered.send(());
+        let _ = held.recv_timeout(Duration::from_secs(30));
+    });
+    waiting.await.expect("writer is blocked");
+    for index in 0..12 {
+        handle.emit(DriverEvent::Event {
+            turn: Some(turn_id.clone()),
+            event: AuraEvent::MessageDelta {
+                message_id: "blob-output".into(),
+                text: format!("{index:04}{}", "z".repeat(2000)),
+            },
+        });
+    }
+    handle.emit(DriverEvent::Event {
+        turn: Some(turn_id),
+        event: AuraEvent::ToolCall(aura_protocol::ToolCall {
+            tool_call_id: "big".into(),
+            kind: aura_protocol::ToolKind::Execute,
+            title: "Dump".into(),
+            status: aura_protocol::ToolStatus::Completed,
+            locations: Vec::new(),
+            raw_input: None,
+            tool_name: None,
+            content: vec![aura_protocol::ToolContent::Text {
+                text: big_output(),
+                truncated: None,
+            }],
+            truncated: None,
+        }),
+    });
     let probe = Arc::clone(&sink);
     eventually("a frame names the spilled output", || {
         spilled_blob(&probe).is_some()

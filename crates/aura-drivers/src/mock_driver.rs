@@ -543,6 +543,9 @@ impl Mock {
             return;
         };
         match command {
+            DriverCommand::McpAction { reply, .. } => {
+                crate::mcp::unsupported(reply, "The demo agent does not connect MCP servers.")
+            }
             DriverCommand::Shutdown { plan } => self.begin_end(plan.cancel_grace),
             DriverCommand::Prompt { turn, parts } => {
                 if self.ready {
@@ -1523,6 +1526,7 @@ mod tests {
 
     fn setup(autonomy: Autonomy, desired: BTreeMap<String, ConfigValue>) -> SessionSetup {
         SessionSetup {
+            mcp_servers: Vec::new(),
             attachment_dir: None,
             attachment_reader: None,
             chat_id: "chat".into(),

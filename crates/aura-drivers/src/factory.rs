@@ -63,6 +63,7 @@ mod tests {
 
     fn setup(dialect: &str) -> SessionSetup {
         SessionSetup {
+            mcp_servers: Vec::new(),
             attachment_dir: None,
             attachment_reader: None,
             chat_id: "chat".into(),

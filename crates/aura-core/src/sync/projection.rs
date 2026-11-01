@@ -53,7 +53,13 @@ pub(crate) fn queue(
     metadata: &Metadata,
 ) -> Result<()> {
     // Reject malformed known payloads before recording cursor progress, even if a parent is absent.
-    decode(record, metadata)?;
+    if record.id.starts_with("mcp-") {
+        super::shared_mcp::decode(record, metadata)?;
+    } else if record.id.starts_with("memory-") {
+        super::memory::decode(record, metadata)?;
+    } else {
+        decode(record, metadata)?;
+    }
     conn.execute("INSERT INTO sync_projection(collection,id) VALUES(?1,?2) ON CONFLICT(collection,id) DO UPDATE SET attempt=0", params![record.collection, record.id])?;
     Ok(())
 }
@@ -84,6 +90,34 @@ pub(crate) fn drain(
         let DecodedMetadata::Known(metadata) = open(identity, key, &record, now)? else {
             continue;
         };
+        if record.id.starts_with("memory-") {
+            if super::memory::project(conn, &record, &metadata)? {
+                conn.execute(
+                    "DELETE FROM sync_projection WHERE collection=?1 AND id=?2",
+                    params![collection, id],
+                )?;
+            } else {
+                conn.execute(
+                    "UPDATE sync_projection SET attempt=?3 WHERE collection=?1 AND id=?2",
+                    params![collection, id, attempt],
+                )?;
+            }
+            continue;
+        }
+        if record.id.starts_with("mcp-") {
+            if super::shared_mcp::project(conn, &record, &metadata)? {
+                conn.execute(
+                    "DELETE FROM sync_projection WHERE collection=?1 AND id=?2",
+                    params![collection, id],
+                )?;
+            } else {
+                conn.execute(
+                    "UPDATE sync_projection SET attempt=?3 WHERE collection=?1 AND id=?2",
+                    params![collection, id, attempt],
+                )?;
+            }
+            continue;
+        }
         let row = decode(&record, &metadata)?;
         if (metadata.deleted() || matches!(row.table, "chats" | "project_folders"))
             && removal_busy(conn, &row)?

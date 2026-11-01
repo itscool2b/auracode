@@ -8,6 +8,7 @@ import type {
   StorageStatus,
 } from "../../bindings";
 import { errorMessage } from "../errors";
+import type { NewChatContext } from "./newChatContext";
 import type { Transport } from "./transport";
 
 /**
@@ -335,6 +336,9 @@ export interface NewChatState {
 
 /** The New chat screen: an agent, a folder from the picker, and Create. */
 export class NewChatDraft {
+  static #nextKey = 0;
+  readonly key = ++NewChatDraft.#nextKey;
+  readonly context: NewChatContext | null;
   readonly #transport: Transport;
   readonly #listeners = new Set<() => void>();
   #selection = 0;
@@ -351,8 +355,9 @@ export class NewChatDraft {
     maintenanceError: null,
   };
 
-  constructor(transport: Transport) {
+  constructor(transport: Transport, context: NewChatContext | null = null) {
     this.#transport = transport;
+    this.context = context;
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -439,8 +444,8 @@ export class NewChatDraft {
   }
 
   /** The system folder picker; cancelling it changes nothing. */
-  async chooseFolder(): Promise<void> {
-    if (this.#state.picking) return;
+  async chooseFolder(): Promise<string | null> {
+    if (this.#state.picking) return null;
     this.#set({ ...this.#state, picking: true });
     try {
       const folder = await this.#transport.pickFolder();
@@ -450,8 +455,10 @@ export class NewChatDraft {
         folder: folder ?? this.#state.folder,
         error: folder === null ? this.#state.error : null,
       });
+      return folder;
     } catch (error) {
       this.#set({ ...this.#state, picking: false, error: errorMessage(error) });
+      return null;
     }
   }
 

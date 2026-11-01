@@ -584,26 +584,33 @@ pub fn permission(id: &str, kind: Option<ToolKind>) -> PermissionRequest {
 
 /// The turn id of the next prompt the driver received that no earlier call returned.
 pub async fn prompt_turn(handle: &ScriptHandle) -> String {
-    match tokio::time::timeout(
-        PATIENCE,
-        handle.wait_for(aura_drivers::testing::CommandMatch::Prompt),
-    )
-    .await
-    .expect("a prompt reaches the driver")
-    {
+    match command(handle, aura_drivers::testing::CommandMatch::Prompt).await {
         aura_drivers::driver::LoggedCommand::Prompt { turn_id, .. } => turn_id,
         other => panic!("expected a prompt, got {other:?}"),
     }
 }
 
-/// Waits for the driver to receive a command `matcher` matches.
+/// Wait for an external writer/driver handshake without advancing the test's paused clock.
+/// Logical driver waits are advanced explicitly by the test; a timeout must use real time here,
+/// because the profile writer is an OS thread and Tokio cannot observe its outstanding work.
 pub async fn command(
     handle: &ScriptHandle,
     matcher: aura_drivers::testing::CommandMatch,
 ) -> aura_drivers::driver::LoggedCommand {
-    tokio::time::timeout(PATIENCE, handle.wait_for(matcher.clone()))
-        .await
-        .unwrap_or_else(|_| panic!("the driver never received {matcher:?}"))
+    let deadline = std::time::Instant::now() + PATIENCE;
+    let received = handle.wait_for(matcher.clone());
+    tokio::pin!(received);
+    loop {
+        tokio::select! {
+            biased;
+            command=&mut received=>return command,
+            _=tokio::task::yield_now()=>{}
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the driver never received {matcher:?}"
+        );
+    }
 }
 
 /// The events of `kind` in order.

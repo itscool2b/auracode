@@ -13,6 +13,7 @@ import type {
   HistoryPage,
   PromptAck,
   QueuedPrompt,
+  SessionControlChange,
   SessionLists,
   StorageStatus,
   UiAnswer,
@@ -47,6 +48,7 @@ import {
   chatSend,
   chatSendNow,
   chatSetAutonomy,
+  chatSetControl,
   chatSetOption,
   chatStart,
   chatStop,
@@ -120,6 +122,7 @@ export interface Transport {
   respondPermission(chatId: string, requestId: string, optionId: string | null): Promise<void>;
   respondUi(chatId: string, requestId: string, answer: UiAnswer | null): Promise<void>;
   setOption(chatId: string, optionId: string, value: ConfigValue): Promise<SessionLists>;
+  setControl?(chatId: string, change: SessionControlChange): Promise<SessionLists>;
   setAutonomy(chatId: string, autonomy: Autonomy): Promise<SessionLists>;
   blob(chatId: string, sha256: string, offset: number, len: number): Promise<BlobText>;
   revealLog(chatId: string): Promise<void>;
@@ -166,6 +169,7 @@ export const tauriTransport: Transport = {
   respondUi: chatRespondUi,
   setOption: chatSetOption,
   setAutonomy: chatSetAutonomy,
+  setControl: chatSetControl,
   blob: chatBlob,
   revealLog: chatRevealLog,
 };

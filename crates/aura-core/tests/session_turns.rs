@@ -144,8 +144,10 @@ async fn queue_runs_prompts_in_order_after_a_normal_end() {
             .expect("send")
             .queued
     );
+    let first = prompt_text(&command(&handle, CommandMatch::Prompt).await);
+    tokio::time::advance(Duration::from_secs(1)).await;
     let texts = [
-        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        first,
         prompt_text(&command(&handle, CommandMatch::Prompt).await),
         prompt_text(&command(&handle, CommandMatch::Prompt).await),
     ];
@@ -410,6 +412,7 @@ async fn send_while_stopping_restarts() {
         .await
         .expect("send");
     assert!(ack.queued);
+    tokio::time::advance(Duration::from_secs(2)).await;
     assert_eq!(
         prompt_text(&command(&handle, CommandMatch::Prompt).await),
         "after the stop"
@@ -790,7 +793,7 @@ async fn an_unasked_close_counts_as_a_crash() {
 /// error card, `Stopped`.
 #[tokio::test(start_paused = true)]
 async fn driver_panic_kills_processes() {
-    let (driver, _) = ScriptedDriver::new(vec![
+    let (driver, handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -810,6 +813,7 @@ async fn driver_panic_kills_processes() {
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "go".into()).await.expect("send");
+    command(&handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Running).await;
     h.manager.interrupt(&chat.id).await.expect("interrupt");
     h.status(&chat.id, SessionStatus::Stopped).await;
@@ -840,8 +844,8 @@ async fn driver_panic_kills_processes() {
 async fn driver_panic_is_contained() {
     let (first, _) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
-        // The autonomy change below does not match: the driver task panics before `Ready`.
-        Step::Expect(CommandMatch::Prompt),
+        // A turn completion before any Prompt is a driver contract panic, before Ready.
+        end_turn(StopReason::EndTurn),
     ]);
     let (second, _) = ScriptedDriver::new(vec![Step::Spawn(launch()), ready_step("n1")]);
     let options = Options {
@@ -856,10 +860,6 @@ async fn driver_panic_is_contained() {
     let chat = h.chat().await;
     let probe = h.factory.clone();
     eventually("the first driver runs", || probe.setups().len() == 1).await;
-    h.manager
-        .set_autonomy(&chat.id, aura_protocol::Autonomy::Ask)
-        .await
-        .expect("autonomy");
     h.status(&chat.id, SessionStatus::Stopped).await;
     let control = &h.spawner.controls()[0];
     eventually("its process is force-stopped", || {
@@ -1181,7 +1181,7 @@ async fn seq_limit() {
 /// S29: an agent silent for an hour hits no timeout anywhere.
 #[tokio::test(start_paused = true)]
 async fn running_turn_has_no_timeout() {
-    let (driver, _) = ScriptedDriver::new(vec![
+    let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Wait(Duration::from_secs(3600)),
@@ -1195,6 +1195,7 @@ async fn running_turn_has_no_timeout() {
         .send(&chat.id, "think hard".into())
         .await
         .expect("send");
+    command(&handle, CommandMatch::Prompt).await;
     tokio::time::sleep(Duration::from_secs(3590)).await;
     assert_eq!(
         h.statuses.last(&chat.id).map(|update| update.status),
@@ -1414,6 +1415,7 @@ async fn late_events_are_untagged() {
         Step::Wait(Duration::from_secs(1)),
         in_turn(AuraEvent::ToolCall(tool)),
         end_turn(StopReason::EndTurn),
+        Step::Expect(CommandMatch::Prompt),
         Step::Emit(DriverEvent::Event {
             turn: None,
             event: AuraEvent::ToolUpdate(ToolUpdate {
@@ -1432,7 +1434,6 @@ async fn late_events_are_untagged() {
             turn: None,
             request: permission("bg", Some(ToolKind::Other)),
         }),
-        Step::Expect(CommandMatch::Prompt),
         end_turn(StopReason::EndTurn),
     ]);
     let h = Harness::new(vec![driver]);
@@ -1447,6 +1448,7 @@ async fn late_events_are_untagged() {
         .await
         .expect("send");
     command(&handle, CommandMatch::Prompt).await;
+    tokio::time::advance(Duration::from_secs(1)).await;
     command(&handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Ready).await;
     let history = h.history(&chat.id).await;

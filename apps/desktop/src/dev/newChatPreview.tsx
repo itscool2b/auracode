@@ -84,11 +84,13 @@ export function NewChatPreview({
   base,
   onCreated,
   scenario = null,
+  projectContext = false,
 }: {
   readonly base: AgentEntry;
   readonly onCreated: () => void;
   /** A project folder already chosen, with Rust's worktree review imitated (newChatWorktreeFixture). */
   readonly scenario?: NewChatScenario | null;
+  readonly projectContext?: boolean;
 }) {
   const [stage, setStage] = useState(scenario ? 2 : 0);
   const [refreshing, setRefreshing] = useState(false);
@@ -112,8 +114,16 @@ export function NewChatPreview({
           agentAuthStatus: async (id) =>
             id === "codex" ? { state: "sign_in_required" } : { state: "credentials_present" },
         }),
+        projectContext
+          ? {
+              projectId: "project-auracode",
+              projectName: "auracode",
+              folderId: "folder-auracode",
+              defaultAgent: "claude",
+            }
+          : null,
       ),
-    [],
+    [projectContext],
   );
   const fixture = useMemo(() => (scenario ? newChatFixture(scenario) : null), [scenario]);
   const recoveryApi = useMemo(() => ({ ...worktreeRecoveryApi, list: async () => [] }), []);
@@ -122,8 +132,8 @@ export function NewChatPreview({
     Object.assign(window, { newChatFixture: { calls: () => [...fixture.calls] } });
     void fixture.workspace.refresh();
     draft.chooseAgent(base.id);
-    void draft.chooseFolder();
-  }, [fixture, draft, base.id]);
+    if (!projectContext) void draft.chooseFolder();
+  }, [fixture, draft, base.id, projectContext]);
   return (
     <NewChat
       agents={agents(base, stage)}

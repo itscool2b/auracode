@@ -142,6 +142,14 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    SharedMcp {
+        command: crate::mcp::Command,
+        reply: oneshot::Sender<Result<crate::mcp::Reply, StoreError>>,
+    },
+    Memory {
+        command: super::memory::Command,
+        reply: oneshot::Sender<Result<super::memory::Reply, StoreError>>,
+    },
     ReadSetupAttempt {
         chat_id: String,
         reply: oneshot::Sender<
@@ -491,11 +499,13 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
         Op::UpdateAgentSession { patch, .. } => patch
             .config_json
             .as_ref()
-            .map_or(SMALL, |json| json.len().saturating_add(SMALL)),
+            .map_or(SMALL, |json| json.len().saturating_add(SMALL))
+            .saturating_add(patch.controls_json.as_ref().map_or(0, String::len)),
         Op::InsertAgentSession(row) => row
             .config_json
             .as_ref()
-            .map_or(SMALL, |json| json.len().saturating_add(SMALL)),
+            .map_or(SMALL, |json| json.len().saturating_add(SMALL))
+            .saturating_add(row.controls_json.as_ref().map_or(0, String::len)),
         Op::EndTurn(_)
         | Op::CompactTurn { .. }
         | Op::TouchChat { .. }
@@ -510,6 +520,7 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
 
 fn work_bytes(work: &Work) -> usize {
     match work {
+        Work::Request(Request::SharedMcp { command, .. }) => command.bytes(),
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
@@ -519,6 +530,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::WorkspaceRemoval { command, .. }) => command.bytes(),
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
+        Work::Request(Request::Memory { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
         Work::Request(Request::Config { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
@@ -715,6 +727,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
+        Work::Request(Request::SharedMcp { .. }) => "shared_mcp",
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
         Work::Request(Request::SetupAttempt { .. }) => "worktree setup attempt",
@@ -723,6 +736,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::WorkspaceRemoval { .. }) => "workspace removal",
         Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
+        Work::Request(Request::Memory { .. }) => "memory",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
 
         Work::Request(Request::Conversation { .. }) => "conversation",
@@ -1414,6 +1428,21 @@ impl Writer {
                 };
                 let _ = reply.send(result);
             }
+            Request::SharedMcp { command, reply } => {
+                let writes = command.writes();
+                let execute = |conn: &rusqlite::Connection| {
+                    crate::mcp::execute(conn, command)
+                        .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))
+                };
+                let result = if !writes {
+                    self.read(execute)
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(execute)
+                };
+                let _ = reply.send(result);
+            }
             Request::ReadSetupAttempt { chat_id, reply } => {
                 let device = self.device_id.clone();
                 let result = self.read(|conn| super::setup_attempt::read(conn, &device, &chat_id));
@@ -1473,6 +1502,17 @@ impl Writer {
             } => {
                 let _ = reply
                     .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
+            Request::Memory { command, reply } => {
+                let now = now_millis();
+                let result = if command.read_only() {
+                    self.read(|conn| super::memory::execute(conn, command, now))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::memory::execute(conn, command, now))
+                };
+                let _ = reply.send(result);
             }
             Request::Composer { command, reply } => {
                 let dir = self.files.attachments.clone();

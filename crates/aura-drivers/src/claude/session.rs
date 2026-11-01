@@ -259,6 +259,7 @@ fn native_session_id(setup: &SessionSetup) -> Result<String, DriverError> {
 
 pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::LaunchSpec {
     let mut launch = setup.launch.clone();
+    crate::mcp::claude(&setup.mcp_servers, &mut launch);
     // Apply Full auto only after initialize and before any prompt. A policy refusal can then
     // leave acceptEdits in effect without retrying an executed prompt.
     let initial = if setup.autonomy == Autonomy::FullAuto {
@@ -313,6 +314,11 @@ pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::Lau
     launch
 }
 enum Purpose {
+    Mcp {
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+        reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, DriverError>>,
+    },
     Initialize,
     InitialMode,
     InitialEffort,
@@ -386,6 +392,7 @@ struct Session {
     observed_model: Option<String>,
     effort: Option<String>,
     mode: String,
+    execution_mode: String,
     observed_mode: Option<String>,
     init_deadline: Instant,
     commands_due: Option<Instant>,
@@ -447,12 +454,52 @@ impl Session {
         }
     }
     fn options(&mut self) {
-        self.outbox
-            .push_back(DriverEvent::Options(translate::options(
-                &self.init,
-                &self.model,
-                self.effort.as_deref(),
-            )));
+        let mut options = translate::options(&self.init, &self.model, self.effort.as_deref());
+        options.push(crate::controls::select(
+            crate::controls::ACCESS,
+            "Access",
+            &self.execution_mode,
+            vec![
+                crate::controls::choice("default", "Ask for approval"),
+                crate::controls::choice("acceptEdits", "Allow edits"),
+                crate::controls::choice("bypassPermissions", "Full access"),
+            ],
+        ));
+        options.push(crate::controls::workflow(if self.mode == "plan" {
+            "plan"
+        } else {
+            "execute"
+        }));
+        self.outbox.push_back(DriverEvent::Options(options));
+    }
+    fn startup_mode(&self) -> Result<String, DriverError> {
+        let execution = match self.setup.desired.get(crate::controls::ACCESS) {
+            Some(ConfigValue::Choice { value })
+                if matches!(
+                    value.as_str(),
+                    "default" | "acceptEdits" | "bypassPermissions"
+                ) =>
+            {
+                value.clone()
+            }
+            Some(_) => {
+                return Err(error(
+                    ErrorKind::ProtocolError,
+                    "The saved Claude access setting is unavailable.",
+                ));
+            }
+            None => mode(self.setup.autonomy).into(),
+        };
+        match self.setup.desired.get(crate::controls::WORKFLOW) {
+            Some(ConfigValue::Choice { value }) if value == "plan" => Ok("plan".into()),
+            Some(ConfigValue::Choice { value }) if value == "execute" => Ok(execution),
+            Some(_) => Err(error(
+                ErrorKind::ProtocolError,
+                "The saved Claude workflow is unavailable.",
+            )),
+            None if self.mode == "plan" => Ok("plan".into()),
+            None => Ok(execution),
+        }
     }
     fn apply_model(&mut self, model: &str) -> bool {
         if model.is_empty() || self.model == model {
@@ -494,7 +541,11 @@ impl Session {
             self.observed_mode = Some(native.into());
             if self.mode != native {
                 self.mode = native.into();
+                if native != "plan" {
+                    self.execution_mode = native.into();
+                }
                 if self.ready {
+                    self.options();
                     self.outbox
                         .push_back(DriverEvent::Autonomy(autonomy(self.setup.autonomy, native)));
                 }
@@ -678,6 +729,41 @@ impl Session {
     }
     fn dispatch(&mut self, arrived: Instant, command: DriverCommand) {
         match command {
+            DriverCommand::McpAction {
+                server_name,
+                action,
+                reply,
+            } => {
+                if !self.ready
+                    || !self.idle
+                    || !self
+                        .setup
+                        .mcp_servers
+                        .iter()
+                        .any(|s| s.definition.name == server_name)
+                {
+                    let _ = reply.send(Err(error(
+                        ErrorKind::ProtocolError,
+                        "Select a shared MCP server loaded in this idle session.",
+                    )));
+                    return;
+                }
+                if action == aura_protocol::mcp::McpSessionAction::Status {
+                    self.request(
+                        json!({"subtype":"mcp_status"}),
+                        Purpose::Mcp {
+                            server_name,
+                            action,
+                            reply,
+                        },
+                    );
+                } else {
+                    crate::mcp::unsupported(
+                        reply,
+                        "Claude's OAuth flow requires its native MCP panel. Session status and local header credentials remain available here.",
+                    );
+                }
+            }
             DriverCommand::Prompt { turn, parts } => {
                 // An open prompt of ours, or a request waiting for its answer, refuses another.
                 // Claude Code's own work after a result (Stop hooks, background agents) does not:
@@ -836,6 +922,25 @@ impl Session {
                 let request = match (&*option_id, &value) {
                     ("model", ConfigValue::Choice { value: model }) => {
                         Ok(json!({"subtype":"set_model","model":model}))
+                    }
+                    (crate::controls::WORKFLOW, ConfigValue::Choice { value })
+                        if matches!(value.as_str(), "plan" | "execute")
+                            && self.idle
+                            && self.turn.is_none()
+                            && self.approvals.is_empty()
+                            && self.questions.is_empty() =>
+                    {
+                        Ok(
+                            json!({"subtype":"set_permission_mode","mode":if value == "plan" { "plan" } else { &self.execution_mode }}),
+                        )
+                    }
+                    (crate::controls::ACCESS, ConfigValue::Choice { value })
+                        if matches!(
+                            value.as_str(),
+                            "default" | "acceptEdits" | "bypassPermissions"
+                        ) && self.mode != "plan" =>
+                    {
+                        Ok(json!({"subtype":"set_permission_mode","mode":value}))
                     }
                     ("effort", _) => self.effort_request(&value),
                     _ => Err(error(
@@ -1106,6 +1211,21 @@ impl Session {
         });
         let payload = &response["response"];
         match pending.purpose {
+            Purpose::Mcp {
+                server_name,
+                action,
+                reply,
+            } => {
+                let answer = if failure.is_some() {
+                    Err(error(
+                        ErrorKind::AgentError,
+                        "Claude rejected the MCP status request.",
+                    ))
+                } else {
+                    crate::mcp::response(payload, action, &server_name, false)
+                };
+                let _ = reply.send(answer);
+            }
             Purpose::Initialize => {
                 if let Some(err) = failure {
                     self.failure = Some(err);
@@ -1162,9 +1282,20 @@ impl Session {
                         }
                     }
                 }
-                if self.mode != mode(self.setup.autonomy) {
+                let startup_mode = match self.startup_mode() {
+                    Ok(mode) => mode,
+                    Err(err) => {
+                        self.failure = Some(err);
+                        return;
+                    }
+                };
+                self.execution_mode = match self.setup.desired.get(crate::controls::ACCESS) {
+                    Some(ConfigValue::Choice { value }) => value.clone(),
+                    _ => mode(self.setup.autonomy).into(),
+                };
+                if self.mode != startup_mode {
                     self.request(
-                        json!({"subtype":"set_permission_mode","mode":mode(self.setup.autonomy)}),
+                        json!({"subtype":"set_permission_mode","mode":startup_mode}),
                         Purpose::InitialMode,
                     );
                 } else {
@@ -1173,7 +1304,11 @@ impl Session {
             }
             Purpose::InitialMode => {
                 if let Some(err) = failure {
-                    if self.setup.autonomy == Autonomy::FullAuto && self.mode == "acceptEdits" {
+                    if self.setup.autonomy == Autonomy::FullAuto
+                        && self.mode == "acceptEdits"
+                        && !self.setup.desired.contains_key(crate::controls::WORKFLOW)
+                        && !self.setup.desired.contains_key(crate::controls::ACCESS)
+                    {
                         self.notice(format!(
                             "Claude refused Full auto. Auto-edit remains active: {}",
                             err.message
@@ -1185,8 +1320,11 @@ impl Session {
                 } else {
                     self.mode = payload["mode"]
                         .as_str()
-                        .unwrap_or(mode(self.setup.autonomy))
-                        .into();
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| self.startup_mode().unwrap_or_else(|_| "plan".into()));
+                    if self.mode != "plan" {
+                        self.execution_mode = self.mode.clone();
+                    }
                 }
                 self.configure_effort();
             }
@@ -1209,7 +1347,23 @@ impl Session {
                     let _ = reply.send(Err(err));
                 } else {
                     if let ConfigValue::Choice { value } = value {
-                        if id == "model" {
+                        if id == crate::controls::WORKFLOW || id == crate::controls::ACCESS {
+                            let expected = if id == crate::controls::ACCESS {
+                                value.as_str()
+                            } else if value == "plan" {
+                                "plan"
+                            } else {
+                                &self.execution_mode
+                            };
+                            self.mode = payload["mode"].as_str().unwrap_or(expected).into();
+                            if self.mode != "plan" {
+                                self.execution_mode = self.mode.clone();
+                            }
+                            self.outbox.push_back(DriverEvent::Autonomy(autonomy(
+                                self.setup.autonomy,
+                                &self.mode,
+                            )));
+                        } else if id == "model" {
                             self.apply_model(payload["model"].as_str().unwrap_or(&value));
                         } else {
                             self.effort = explicit_effort(&value);
@@ -1225,6 +1379,10 @@ impl Session {
                 } else {
                     self.mode = payload["mode"].as_str().unwrap_or(mode(value)).into();
                     self.setup.autonomy = value;
+                    if self.mode != "plan" {
+                        self.execution_mode = self.mode.clone();
+                    }
+                    self.options();
                     let state = autonomy(value, &self.mode);
                     self.outbox.push_back(DriverEvent::Autonomy(state.clone()));
                     let _ = reply.send(Ok(state));
@@ -1564,6 +1722,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         observed_model: None,
         effort: None,
         mode: "default".into(),
+        execution_mode: "default".into(),
         observed_mode: None,
         init_deadline: Instant::now(),
         commands_due: None,

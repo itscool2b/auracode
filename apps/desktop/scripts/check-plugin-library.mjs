@@ -1,5 +1,5 @@
 /**
- * The Plugin library and per-agent configuration sync in Chromium and WebKit, on synthetic
+ * The Plugins & MCP and per-agent configuration sync in Chromium and WebKit, on synthetic
  * fixtures (?preview=plugins, plugins-update, plugins-failed, plugins-pi, plugin-sync). No agent,
  * CLI or vendor command runs, and no real configuration is read. Every view's axe audit must be
  * clean. Usage: node scripts/check-plugin-library.mjs [--server URL]
@@ -35,7 +35,17 @@ const syncCalls = (page) => page.evaluate(() => window.configSyncCalls);
 async function checkProgressive(page, engine) {
   await page.goto(`${url}/?preview=plugins-progressive`);
   const agents = page.getByRole("navigation", { name: "Agents" });
-  for (const name of ["Claude Code", "Codex", "Pi", "OpenCode"])
+  for (const name of [
+    "Claude Code",
+    "Codex",
+    "Pi",
+    "OpenCode",
+    "Hermes",
+    "Grok Build",
+    "Cursor",
+    "Antigravity",
+    "oh-my-pi",
+  ])
     await agents.getByRole("button", { name, exact: true }).waitFor();
   await page
     .getByText("Reading the agent listing. Cached and file entries are available.")
@@ -53,7 +63,7 @@ async function checkProgressive(page, engine) {
     .getByText("Reading the agent listing. Cached and file entries are available.")
     .first()
     .waitFor();
-  await audit(page, `${engine} progressively loaded Plugin library`);
+  await audit(page, `${engine} progressively loaded Plugins & MCP`);
   await page.evaluate(() => window.pluginsFixture.finishProvider("claude"));
   await page.getByText("From claude plugin list --json --available").waitFor();
   await page.evaluate(() => window.pluginsFixture.unmount());
@@ -61,26 +71,36 @@ async function checkProgressive(page, engine) {
     window.pluginsFixture.finishProvider("pi");
     window.pluginsFixture.finish();
   });
-  assert.equal(await page.getByRole("heading", { name: "Plugin library", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("heading", { name: "Plugins & MCP", exact: true }).count(), 0);
 }
 
 async function checkLibrary(page, engine) {
   await checkProgressive(page, engine);
   await page.goto(`${url}/?preview=plugins`);
-  await page.getByRole("heading", { name: "Plugin library", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Plugins & MCP", exact: true }).waitFor();
   await page
     .getByText(
-      "Cursor, Grok Build, Antigravity and Hermes are not listed: auracode has no reviewed way to read their extensions yet.",
+      "Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.",
     )
     .waitFor();
   const agents = page.getByRole("navigation", { name: "Agents" });
-  for (const name of ["Claude Code", "Codex", "Pi", "OpenCode"])
+  for (const name of [
+    "Claude Code",
+    "Codex",
+    "Pi",
+    "OpenCode",
+    "Hermes",
+    "Grok Build",
+    "Cursor",
+    "Antigravity",
+    "oh-my-pi",
+  ])
     await agents.getByRole("button", { name, exact: true }).waitFor();
   await page.getByText("From claude plugin list --json --available").waitFor();
   assert.equal(await page.getByText("Instructions", { exact: true }).count(), 0);
   // Opening reads the cache (StrictMode mounts twice in development); only Refresh reruns the CLIs.
   assert.ok((await calls(page)).every((call) => call === "snapshot:false"));
-  await audit(page, `${engine} Plugin library`);
+  await audit(page, `${engine} Plugins & MCP`);
   await page.screenshot({ path: resolve(out, `${engine}-plugins.png`) });
   // A row's menu opens the agent's own reviewed command, filled in; nothing runs yet.
   await page.getByRole("button", { name: "tools actions" }).click();
@@ -120,7 +140,19 @@ async function checkLibrary(page, engine) {
   await agents.getByRole("button", { name: "OpenCode", exact: true }).click();
   await page.getByText("Configuration sync covers Claude Code, Codex and Pi.").waitFor();
   assert.equal(await page.getByRole("switch").count(), 0);
-  await page.getByRole("button", { name: "Refresh Plugin library" }).click();
+  await agents.getByRole("button", { name: "Hermes", exact: true }).click();
+  await page.getByText("team_docs", { exact: true }).waitFor();
+  await page
+    .getByText("no qualified structured plugin-management interface", { exact: false })
+    .waitFor();
+  assert.equal(await page.getByRole("button", { name: "Add plugin", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Hermes actions" }).click();
+  await page.getByRole("menuitem", { name: "Open native customization" }).click();
+  await page.getByRole("dialog", { name: "Manage integrations" }).waitFor();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await audit(page, `${engine} reviewed native inventory and customization route`);
+  await page.screenshot({ path: resolve(out, `${engine}-plugins-hermes.png`) });
+  await page.getByRole("button", { name: "Refresh Plugins & MCP" }).click();
   await page.waitForFunction(() => window.pluginsFixture.calls.includes("snapshot:true"));
 
   await page.goto(`${url}/?preview=plugins-update`);
@@ -134,7 +166,7 @@ async function checkLibrary(page, engine) {
 
   for (const mode of ["plugins-failed", "plugins-pi"]) {
     await page.goto(`${url}/?preview=${mode}`);
-    await page.getByRole("heading", { name: "Plugin library", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Plugins & MCP", exact: true }).waitFor();
     await page.locator(".plugins-agent").waitFor();
     await audit(page, `${engine} ${mode}`);
     await page.screenshot({ path: resolve(out, `${engine}-${mode}.png`) });

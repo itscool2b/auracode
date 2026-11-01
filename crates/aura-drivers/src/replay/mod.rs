@@ -200,6 +200,7 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
         );
     }
     Ok(SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: "replay".into(),
@@ -468,6 +469,20 @@ fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
             (
                 DriverCommand::SetAutonomy { autonomy, reply },
                 Some(ReplyWait::Autonomy(autonomy, wait)),
+            )
+        }
+        LoggedCommand::McpAction {
+            server_name,
+            action,
+        } => {
+            let (reply, _wait) = oneshot::channel();
+            (
+                DriverCommand::McpAction {
+                    server_name,
+                    action,
+                    reply,
+                },
+                None,
             )
         }
         LoggedCommand::RewindFiles {

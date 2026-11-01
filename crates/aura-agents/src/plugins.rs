@@ -20,6 +20,69 @@ use aura_process::{
 use aura_protocol::agents::{AgentHost, AgentInstallation};
 use aura_protocol::plugins::{FeatureListing, ListingState, PluginEntry, PluginFeature};
 use serde_json::Value;
+/// Versioned, reviewed management operations. The renderer never selects commands by provider.
+pub fn management(
+    provider: &str,
+    version: Option<&str>,
+) -> Option<aura_protocol::plugins::PluginManagement> {
+    use aura_protocol::{
+        config_vendor::{VendorAction as A, VendorKind as K, VendorProvider as P},
+        plugins::{NativeCustomizationRoute, PluginManagement, PluginManagementAction},
+    };
+    let (provider, floor) = match provider {
+        "claude" => (P::Claude, "2.1.310"),
+        "codex" => (P::Codex, "0.162.1"),
+        "pi" => (P::Pi, "1.0.2"),
+        "opencode" => (P::OpenCode, "1.0.0"),
+        "hermes" => (P::Hermes, "0.0.0"),
+        "cursor" => (P::Cursor, "0.0.0"),
+        "grok" => (P::Grok, "1.0.70"),
+        _ => return None,
+    };
+    let version = version?;
+    let mut actions = Vec::new();
+    if crate::version_at_least(version, floor) {
+        match provider {
+            P::Claude => {
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Plugins,
+                    kind: K::Plugin,
+                    actions: vec![A::Install, A::Update, A::Remove, A::Enable, A::Disable],
+                });
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Marketplaces,
+                    kind: K::Marketplace,
+                    actions: vec![A::Install, A::Update, A::Remove],
+                });
+            }
+            P::Codex => {
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Plugins,
+                    kind: K::Plugin,
+                    actions: vec![A::Install, A::Remove],
+                });
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Marketplaces,
+                    kind: K::Marketplace,
+                    actions: vec![A::Install, A::Update, A::Remove],
+                });
+            }
+            P::Pi => actions.push(PluginManagementAction {
+                feature: PluginFeature::Packages,
+                kind: K::Package,
+                actions: vec![A::Install, A::Update, A::Remove],
+            }),
+            _ => {}
+        }
+    }
+    let native_routes=vec![NativeCustomizationRoute{id:"settings".into(),label:"Open native customization".into(),instructions:"Open the agent's interactive CLI to manage its native plugins, skills, hooks, commands, rules, memory and MCP capabilities. The available native screens depend on the agent and installed version.".into()}];
+    Some(PluginManagement {
+        version: 1,
+        provider,
+        actions,
+        native_routes,
+    })
+}
 
 /// A listing command is killed with its tree after this.
 pub const LISTING_TIMEOUT: Duration = Duration::from_secs(20);

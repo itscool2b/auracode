@@ -139,6 +139,8 @@ pub enum AgentSync {
 /// One agent's section of the Plugin library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentPlugins {
+    #[serde(default)]
+    pub management: Option<PluginManagement>,
     /// The provider namespace (`claude`, `codex`, `pi`, `opencode`), not a launch dialect.
     pub agent_id: String,
     pub name: String,
@@ -154,6 +156,25 @@ pub struct AgentPlugins {
     pub version_change: Option<VersionChange>,
     pub sync: AgentSync,
     pub notices: Vec<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PluginManagement {
+    pub version: u32,
+    pub provider: crate::config_vendor::VendorProvider,
+    pub actions: Vec<PluginManagementAction>,
+    pub native_routes: Vec<NativeCustomizationRoute>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PluginManagementAction {
+    pub feature: PluginFeature,
+    pub kind: crate::config_vendor::VendorKind,
+    pub actions: Vec<crate::config_vendor::VendorAction>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct NativeCustomizationRoute {
+    pub id: String,
+    pub label: String,
+    pub instructions: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]

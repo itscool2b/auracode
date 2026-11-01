@@ -1,5 +1,14 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
-import { ChevronDown, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Ellipsis,
+  Pin,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  SquarePen,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
@@ -112,6 +121,8 @@ export function ChatList({
   onNewChat,
   organization,
   onNewProject,
+  onProjectNewChat,
+  onCustomize,
   onProjectSettings,
   onChatOptions,
   archived = false,
@@ -126,6 +137,8 @@ export function ChatList({
   readonly onNewChat: () => void;
   readonly organization?: WorkspaceSnapshot | null;
   readonly onNewProject?: () => void;
+  readonly onProjectNewChat?: (project: ProjectSummary) => void;
+  readonly onCustomize?: () => void;
   readonly onProjectSettings?: (project: ProjectSummary) => void;
   readonly onChatOptions?: (chat: ChatSummary) => void;
   readonly archived?: boolean;
@@ -227,6 +240,17 @@ export function ChatList({
           <span>New chat</span>
           <Keys keys={[commandKey(), "N"]} />
         </button>
+        {onCustomize ? (
+          <button
+            type="button"
+            className="chat-nav-action"
+            onClick={onCustomize}
+            data-testid="customize-button"
+          >
+            <SlidersHorizontal size={16} />
+            <span>Customize</span>
+          </button>
+        ) : null}
         {searching ? (
           <input
             ref={search}
@@ -340,6 +364,20 @@ export function ChatList({
                           <span>{project.name}</span>
                           {open ? null : <FoldedState chats={project.chats} />}
                         </button>
+                        {onProjectNewChat && project.project && !archived ? (
+                          <button
+                            type="button"
+                            className="g-button g-button-ghost g-button-icon g-button-24 chat-project-new"
+                            aria-label={`New chat in ${project.name}`}
+                            title={`New chat in ${project.name}`}
+                            data-testid="project-new-chat"
+                            onClick={() => {
+                              if (project.project) onProjectNewChat(project.project);
+                            }}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        ) : null}
                         {onProjectSettings && project.project ? (
                           <button
                             type="button"

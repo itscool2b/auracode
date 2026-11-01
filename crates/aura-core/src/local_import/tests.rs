@@ -355,3 +355,172 @@ fn local_destination_is_never_a_plaintext_fallback() {
         Err(ImportError::AccountRequired)
     ));
 }
+
+#[test]
+fn project_memory_history_proposals_and_exact_prompt_snapshots_survive_encrypted_local_import() {
+    use crate::chatstore::memory::{Command as MemoryCommand, Reply as MemoryReply};
+    use aura_protocol::memory::{ProposeProjectMemory, SaveProjectMemory};
+    let mut f = fixture();
+    let (project, chat, _) = seed(&f, false);
+    let MemoryReply::Memory(memory) = crate::chatstore::memory::execute(
+        f.source.conn(),
+        MemoryCommand::Save(SaveProjectMemory {
+            project_id: project.clone(),
+            expected_revision: None,
+            markdown: "Local project memory copied with account import".into(),
+            reason: "Reviewed durable fact".into(),
+        }),
+        10,
+    )
+    .unwrap() else {
+        panic!()
+    };
+    crate::chatstore::memory::execute(
+        f.source.conn(),
+        MemoryCommand::Propose(ProposeProjectMemory {
+            project_id: project.clone(),
+            base_revision: memory.revision.clone(),
+            markdown: "Pending proposal".into(),
+            reason: "Review after import".into(),
+            chat_id: Some(chat.clone()),
+            idempotency_key: "local-proposal".into(),
+        }),
+        11,
+    )
+    .unwrap();
+    crate::chatstore::memory::execute(
+        f.source.conn(),
+        MemoryCommand::Snapshot {
+            chat_id: chat,
+            prompt_id: crate::ids::new_id(),
+            previous: None,
+            embedded_context: None,
+        },
+        12,
+    )
+    .unwrap();
+    let selection = reviewed(&f);
+    apply(&mut f, selection).unwrap();
+    assert_eq!(
+        crate::chatstore::memory::read(f.target.conn(), &project).unwrap(),
+        memory
+    );
+    for table in [
+        "project_memory_revisions",
+        "project_memory_proposals",
+        "project_memory_snapshots",
+    ] {
+        assert_eq!(
+            f.target
+                .conn()
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE project_id=?1"),
+                    [&project],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+    }
+    let encrypted = std::fs::read(f.target.path()).unwrap();
+    assert!(
+        !encrypted
+            .windows(b"Local project memory".len())
+            .any(|v| v == b"Local project memory")
+    );
+}
+#[test]
+fn project_mcp_definitions_history_and_heads_import_without_global_settings_or_local_credentials() {
+    use crate::mcp::{Command as McpCommand, Reply as McpReply};
+    let mut f = fixture();
+    let (project, _, _) = seed(&f, false);
+    let mut definition = crate::mcp::tests::definition();
+    definition.project_id = Some(project.clone());
+    definition.env_keys = vec!["TOKEN".into()];
+    crate::mcp::execute(
+        f.source.conn(),
+        McpCommand::Save {
+            expected: 0,
+            definition: definition.clone(),
+        },
+    )
+    .unwrap();
+    crate::mcp::execute(
+        f.source.conn(),
+        McpCommand::Credentials {
+            expected: 1,
+            id: definition.id.clone(),
+            project_id: definition.project_id.clone(),
+            credentials: aura_protocol::mcp::McpCredentials {
+                env: std::collections::BTreeMap::from([(
+                    "TOKEN".into(),
+                    "source-profile-only-auth".into(),
+                )]),
+                headers: std::collections::BTreeMap::new(),
+            },
+        },
+    )
+    .unwrap();
+    let mut global = crate::mcp::tests::definition();
+    global.id = crate::ids::new_id();
+    global.name = "global_not_imported".into();
+    crate::mcp::execute(
+        f.source.conn(),
+        McpCommand::Save {
+            expected: 2,
+            definition: global,
+        },
+    )
+    .unwrap();
+    let selected = reviewed(&f);
+    apply(&mut f, selected).unwrap();
+    let McpReply::Snapshot(snapshot) =
+        crate::mcp::execute(f.target.conn(), McpCommand::Snapshot).unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(snapshot.revision, 1);
+    assert_eq!(snapshot.servers.len(), 1);
+    assert_eq!(snapshot.servers[0].definition, definition);
+    assert_eq!(snapshot.servers[0].missing_credentials, ["env/TOKEN"]);
+    for table in ["shared_mcp_revisions", "shared_mcp_heads"] {
+        assert_eq!(
+            f.target
+                .conn()
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE scope=?1"),
+                    [&project],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+    }
+    let source_auth: String = f
+        .source
+        .conn()
+        .query_row(
+            "SELECT local_json FROM shared_mcp WHERE scope=?1",
+            [project],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(source_auth.contains("source-profile-only-auth"));
+    assert!(f.target.is_encrypted());
+    let encrypted = std::fs::read(f.target.path()).unwrap();
+    assert!(
+        !encrypted
+            .windows(b"source-profile-only-auth".len())
+            .any(|v| v == b"source-profile-only-auth")
+    );
+    let outbox = f
+        .target
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM sync_outbox WHERE id LIKE 'mcp-%'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap();
+    assert_eq!(outbox, 1);
+}

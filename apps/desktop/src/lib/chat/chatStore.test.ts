@@ -1759,3 +1759,67 @@ describe("still working", () => {
     store.close();
   });
 });
+
+describe("native controls", () => {
+  it("keeps requested and effective state distinct and reports native rejection", async () => {
+    let answer!: (value: SessionLists) => void;
+    const fake = new FakeTransport({
+      setControl: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    const store = await opened(fake);
+    const change = { type: "workflow", value: "plan", implementation_approved: false } as const;
+    const pending = store.setControl(change);
+    expect(store.getSnapshot().controlSaving).toEqual(change);
+    answer(lists(8));
+    await pending;
+    expect(store.getSnapshot()).toMatchObject({
+      controlSaving: null,
+      listsError: null,
+      lists: { revision: 8 },
+    });
+    fake.handlers.setControl = () =>
+      Promise.reject(new CommandError("option_invalid", "The native mode is unavailable."));
+    await store.setControl(change);
+    expect(store.getSnapshot()).toMatchObject({
+      controlSaving: null,
+      listsError: "The native mode is unavailable.",
+      lists: { revision: 8 },
+    });
+  });
+  it("ignores a late native control reply after a fresh subscription", async () => {
+    let answer!: (value: SessionLists) => void;
+    const fake = new FakeTransport({
+      setControl: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    const store = await opened(fake);
+    const pending = store.setControl({ type: "access", value: "native-custom-access" });
+    const joining = store.reattach();
+    await settled();
+    fake.lastAttach().resolve(attachResult(CHAT, 0, historyPage(CHAT, [])));
+    await joining;
+    answer(lists(100));
+    await pending;
+    expect(store.getSnapshot().lists?.revision).not.toBe(100);
+    expect(store.getSnapshot().controlSaving).toBeNull();
+  });
+  it("keeps the newer control reply when older work finishes last", async () => {
+    const answers = new Map<string, (value: SessionLists) => void>();
+    const fake = new FakeTransport({
+      setControl: (_chat, change) => new Promise((resolve) => answers.set(change.value, resolve)),
+    });
+    const store = await opened(fake);
+    const older = store.setControl({ type: "access", value: "older" });
+    const newer = store.setControl({ type: "access", value: "newer" });
+    answers.get("newer")!(lists(20));
+    await newer;
+    answers.get("older")!(lists(10));
+    await older;
+    expect(store.getSnapshot()).toMatchObject({ controlSaving: null, lists: { revision: 20 } });
+  });
+});

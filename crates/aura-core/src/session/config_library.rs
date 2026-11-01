@@ -185,7 +185,7 @@ fn config_error(error: aura_config::Error) -> SessionError {
     SessionError::Organization(error.to_string())
 }
 
-fn roots(env: &EnvMap, folder: Option<(&str, &Path)>) -> LibraryRoots {
+pub(super) fn roots(env: &EnvMap, folder: Option<(&str, &Path)>) -> LibraryRoots {
     // Consult only these named configuration paths. Do not enumerate/export the login environment.
     let variable = |key: &str| {
         env.get(&EnvKey::from(key))

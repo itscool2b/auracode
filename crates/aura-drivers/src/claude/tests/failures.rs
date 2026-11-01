@@ -442,3 +442,25 @@ async fn unsupported_dialogs_reply_with_an_error_including_initialize_redelivery
         h.stop().await;
     }
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_failed_saved_plan_restore_never_uses_the_legacy_full_auto_downgrade() {
+    let mut settings = setup();
+    settings.autonomy = Autonomy::FullAuto;
+    settings.desired.insert(
+        crate::controls::WORKFLOW.into(),
+        ConfigValue::Choice {
+            value: "plan".into(),
+        },
+    );
+    let mut h = Harness::start_with(settings).await;
+    let initialize = h.wire().await;
+    reply(&h, &initialize, initialized("acceptEdits")).await;
+    let change = h.wire().await;
+    assert_eq!(
+        change["request"],
+        json!({"subtype":"set_permission_mode","mode":"plan"})
+    );
+    rejected(&h, &change).await;
+    assert_eq!(start_failed(h).await.kind, ErrorKind::AgentError);
+}

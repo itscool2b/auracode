@@ -34,6 +34,7 @@ pub(crate) mod folder_resolution;
 pub(crate) mod history;
 #[cfg(feature = "account-sync")]
 mod journal;
+pub(crate) mod memory;
 pub(crate) mod organization;
 #[cfg(feature = "account-sync")]
 mod preservation;
@@ -103,6 +104,53 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub async fn shared_mcp(
+        &self,
+        command: crate::mcp::Command,
+    ) -> Result<crate::mcp::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::SharedMcp { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::SharedMcp { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn memory(
+        &self,
+        command: memory::Command,
+    ) -> Result<memory::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.read_only() {
+            return self
+                .request(Request::Memory { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Memory { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+
     pub(crate) async fn setup_attempt(
         &self,
         command: setup_attempt::Command,
@@ -948,6 +996,7 @@ pub struct AgentSessionRow {
     pub autonomy: Autonomy,
     /// The user's explicit option choices, JSON `{option_id: ConfigValue}`.
     pub config_json: Option<String>,
+    pub controls_json: Option<String>,
     pub cwd: PathBuf,
     pub created_at: Millis,
     pub updated_at: Millis,
@@ -962,6 +1011,7 @@ pub struct AgentSessionPatch {
     pub effort: Option<String>,
     pub autonomy: Option<Autonomy>,
     pub config_json: Option<String>,
+    pub controls_json: Option<String>,
     pub updated_at: Millis,
 }
 

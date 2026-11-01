@@ -8,7 +8,6 @@ import type {
   PluginEntry,
   PluginLibrary,
   VendorAction,
-  VendorKind,
   VendorProvider,
 } from "../../bindings";
 import { vendorApi as nativeVendorApi, type VendorApi } from "../../lib/config-vendor/api";
@@ -22,18 +21,14 @@ import type {
 import { pluginsApi as nativePluginsApi, type PluginsApi } from "../../lib/plugins/api";
 import { ago, featureLabel, harnessText, harnessTone, sourceText } from "../../lib/plugins/format";
 import { PluginLibraryLoader } from "../../lib/plugins/loading";
+import type { SharedMcpApi } from "../../lib/sharedMcp";
 import { Modal } from "../chat/Modal";
 import { HistoryView, ItemDetail } from "./LibraryItems";
+import { type McpProject, SharedMcpPanel } from "./SharedMcpPanel";
 import { VendorDialog, type VendorPreset } from "./VendorDialog";
 import "./library.css";
 import "./plugin-library.css";
 
-/** Agents whose plugins and packages auracode can manage through their own reviewed commands. */
-const MANAGED: Readonly<Record<string, VendorProvider>> = {
-  claude: "claude",
-  codex: "codex",
-  pi: "pi",
-};
 const AVAILABLE_SHOWN = 20;
 
 interface MenuItem {
@@ -164,7 +159,7 @@ function RowMenu({
 }
 
 /**
- * The Plugin library (Vercel's project pages): the agents on the left, and for the chosen agent
+ * The Plugins & MCP (Vercel's project pages): the agents on the left, and for the chosen agent
  * its harness status, its sync switch and what it supports, each feature as rows on hairlines with
  * where they came from. Rows read from the agent's own CLI where it lists them; the rest come from
  * its files. Every change runs the agent's own reviewed command in a terminal first.
@@ -177,6 +172,11 @@ export function PluginLibraryScreen({
   libraryApi = nativeLibraryApi,
   vendorApi = nativeVendorApi,
   now = Date.now,
+  embedded = false,
+  initialProjectId = null,
+  projects = [],
+  mcpApi,
+  activeChatId,
 }: {
   readonly onBack: () => void;
   readonly onAgents?: () => void;
@@ -185,6 +185,11 @@ export function PluginLibraryScreen({
   readonly libraryApi?: LibraryApi;
   readonly vendorApi?: VendorApi;
   readonly now?: () => number;
+  readonly embedded?: boolean;
+  readonly initialProjectId?: string | null;
+  readonly projects?: readonly McpProject[];
+  readonly mcpApi?: SharedMcpApi;
+  readonly activeChatId?: string | null;
 }) {
   const [library, setLibrary] = useState<PluginLibrary | null>(null);
   const [selected, setSelected] = useState(initialAgent);
@@ -243,7 +248,7 @@ export function PluginLibraryScreen({
           candidate.item.kind === ref.kind &&
           candidate.item.key === ref.key,
       );
-      if (!item) throw new Error("This item changed. Refresh the Plugin library and try again.");
+      if (!item) throw new Error("This item changed. Refresh the Plugins & MCP and try again.");
       if (alive.current) setPreview({ item, sources: inventory.sources });
     } catch (reason) {
       if (alive.current) setError(errorMessage(reason));
@@ -287,24 +292,35 @@ export function PluginLibraryScreen({
       if (alive.current) setBusy(null);
     }
   };
+  const Container = embedded ? "section" : "main";
   return (
-    <main className="library-screen plugins-screen g-root">
-      <div className="library-drag" data-tauri-drag-region="" />
-      <header className="library-topbar">
-        <button type="button" className="g-button g-button-ghost g-button-28" onClick={onBack}>
-          <ArrowLeft size={14} aria-hidden="true" /> Back
-        </button>
-      </header>
+    <Container
+      className="library-screen plugins-screen g-root"
+      data-embedded={embedded || undefined}
+    >
+      {!embedded ? (
+        <>
+          <div className="library-drag" data-tauri-drag-region="" />
+          <header className="library-topbar">
+            <button type="button" className="g-button g-button-ghost g-button-28" onClick={onBack}>
+              <ArrowLeft size={14} aria-hidden="true" /> Back
+            </button>
+          </header>
+        </>
+      ) : null}
       <div className="library-heading">
         <div>
-          <h1>Plugin library</h1>
-          <p>What each agent can use, read from the agent itself.</p>
+          <h1>Plugins & MCP</h1>
+          <p>
+            Plugins stay with their agent. Shared MCP applies to compatible agents in the selected
+            scope. Server definitions can sync; authentication stays on each device.
+          </p>
         </div>
         <div className="library-heading-actions">
           <button
             type="button"
             className="g-button g-button-ghost g-button-icon"
-            aria-label="Refresh Plugin library"
+            aria-label="Refresh Plugins & MCP"
             title="Refresh"
             onClick={() => void load(true)}
             disabled={loading || busy !== null}
@@ -325,6 +341,13 @@ export function PluginLibraryScreen({
       ) : null}
       <div className="plugins-body">
         <nav className="plugins-agents" aria-label="Agents">
+          <button
+            type="button"
+            aria-current={selected === "shared" ? "page" : undefined}
+            onClick={() => setSelected("shared")}
+          >
+            Shared MCP
+          </button>
           {(library?.agents ?? []).map((entry) => (
             <button
               type="button"
@@ -347,8 +370,15 @@ export function PluginLibraryScreen({
             <p className="plugins-agents-note">{library.notices[library.notices.length - 1]}</p>
           ) : null}
         </nav>
-        <section className="plugins-main" aria-label={agent ? agent.name : "Plugin library"}>
-          {loading ? (
+        <section className="plugins-main" aria-label={agent ? agent.name : "Plugins & MCP"}>
+          {selected === "shared" ? (
+            <SharedMcpPanel
+              projects={projects}
+              initialProjectId={initialProjectId}
+              api={mcpApi}
+              activeChatId={activeChatId}
+            />
+          ) : loading ? (
             <p className="plugins-empty" role="status">
               Reading what your agents use…
             </p>
@@ -378,6 +408,9 @@ export function PluginLibraryScreen({
         <VendorDialog
           api={vendorApi}
           preset={vendor}
+          capabilities={library?.agents.flatMap((agent) =>
+            agent.management ? [agent.management] : [],
+          )}
           onClose={() => {
             setVendor(null);
             void load(true);
@@ -424,7 +457,7 @@ export function PluginLibraryScreen({
           />
         </Modal>
       ) : null}
-    </main>
+    </Container>
   );
 }
 
@@ -451,21 +484,32 @@ export function AgentSection({
   readonly onRefresh: () => void;
   readonly onAgents?: () => void;
 }) {
-  const provider = MANAGED[agent.agent_id];
+  const management = agent.management?.version === 1 ? agent.management : null;
+  const provider = management?.provider;
   const tone = harnessTone(agent.harness);
-  const install: VendorKind | null = provider
-    ? agent.system === "packages"
-      ? "package"
-      : "plugin"
-    : null;
+  const install =
+    management?.actions.find(
+      (action) => action.kind !== "marketplace" && action.actions.includes("install"),
+    )?.kind ?? null;
   const menu: MenuItem[] = [{ label: "Refresh listings", onSelect: onRefresh }];
-  if (provider && agent.system === "marketplace")
+  if (
+    provider &&
+    management?.actions.some(
+      (action) => action.kind === "marketplace" && action.actions.includes("install"),
+    )
+  )
     menu.push({
       label: "Add marketplace…",
       onSelect: () => onVendor({ provider, kind: "marketplace", action: "install", target: "" }),
     });
   menu.push({ label: "Copy history", onSelect: onHistory });
   if (onAgents) menu.push({ label: "Open Agents", onSelect: onAgents });
+  if (provider)
+    for (const route of management?.native_routes ?? [])
+      menu.push({
+        label: route.label,
+        onSelect: () => onVendor({ provider, kind: "native", action: "open", target: route.id }),
+      });
   return (
     <div className="plugins-agent">
       <header className="plugins-agent-head">
@@ -676,28 +720,26 @@ function Row({
   readonly onVendor: (preset: VendorPreset) => void;
   readonly onOpen: (entry: PluginEntry) => void;
 }) {
-  const kind: VendorKind | null =
-    feature.feature === "plugins"
-      ? "plugin"
-      : feature.feature === "marketplaces"
-        ? "marketplace"
-        : feature.feature === "packages"
-          ? "package"
-          : null;
+  const capability =
+    agent.management?.version === 1
+      ? agent.management.actions.find((action) => action.feature === feature.feature)
+      : null;
+  const kind = capability?.kind ?? null;
   const vendor = (action: VendorAction) => () =>
     provider && kind ? onVendor({ provider, kind, action, target: entry.key }) : undefined;
   const items: MenuItem[] = [];
   if (entry.library) items.push({ label: "Preview and copy…", onSelect: () => onOpen(entry) });
   if (provider && kind && entry.installed && agent.installed) {
-    if (provider === "claude" && kind === "plugin")
+    if (capability?.actions.includes("enable") && capability.actions.includes("disable"))
       items.push(
         entry.enabled === false
           ? { label: "Enable…", onSelect: vendor("enable") }
           : { label: "Disable…", onSelect: vendor("disable") },
       );
-    if (provider !== "codex" || kind === "marketplace")
+    if (capability?.actions.includes("update"))
       items.push({ label: "Update…", onSelect: vendor("update") });
-    items.push({ label: "Remove…", onSelect: vendor("remove") });
+    if (capability?.actions.includes("remove"))
+      items.push({ label: "Remove…", onSelect: vendor("remove") });
   }
   const facts = [
     entry.marketplace && entry.label !== entry.key ? entry.marketplace : null,
@@ -722,7 +764,11 @@ function Row({
           {entry.enabled ? "Enabled" : "Disabled"}
         </span>
       ) : null}
-      {!entry.installed && provider && kind && agent.installed ? (
+      {!entry.installed &&
+      provider &&
+      kind &&
+      agent.installed &&
+      capability?.actions.includes("install") ? (
         <button
           type="button"
           className="g-button g-button-outline g-button-28"

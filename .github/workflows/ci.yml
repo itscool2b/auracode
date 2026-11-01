@@ -184,6 +184,11 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-new-chat-worktree.mjs
 
+      - name: Check Customize, native controls, project memory and shared MCP fixtures
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop check:customization
+
       - name: Check the docked terminal panel
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
@@ -224,6 +229,9 @@ jobs:
             target/setup-actions-browser
             target/sidebar-footer-browser
             target/chat-auth-browser
+            target/customization-browser
+            target/project-memory-browser
+            target/shared-mcp-browser
             target/web-checks
             target/release-preview-*/*.png
           retention-days: 7

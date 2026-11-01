@@ -73,12 +73,78 @@ pub enum ConfigValue {
 /// [`SessionInfo::revision`] changes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SessionLists {
+    #[serde(default)]
+    pub controls: SessionControls,
     pub revision: u32,
     /// `None` until the agent has started once.
     pub capabilities: Option<Capabilities>,
     pub options: Vec<ConfigOption>,
     pub commands: Vec<SlashCommand>,
     pub autonomy: AutonomyState,
+}
+
+/// Runtime native control choices, independent from legacy autonomy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct SessionControls {
+    pub version: u32,
+    pub access: SessionControl,
+    pub workflow: SessionControl,
+}
+impl Default for SessionControls {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            access: SessionControl::default(),
+            workflow: SessionControl::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct SessionControl {
+    pub requested: Option<String>,
+    pub effective: Option<String>,
+    pub pending: Option<String>,
+    pub choices: Vec<SessionControlChoice>,
+    pub native_mode: Option<String>,
+    pub note: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SessionControlChoice {
+    pub value: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub legacy_autonomy: Option<crate::Autonomy>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SessionControlChange {
+    Access {
+        value: String,
+    },
+    Workflow {
+        value: String,
+        #[serde(default)]
+        implementation_approved: bool,
+    },
+}
+/// Persisted separately for each native session; unknown versions fail closed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionControlPreferences {
+    pub version: u32,
+    pub access: Option<String>,
+    pub workflow: Option<String>,
+}
+impl Default for SessionControlPreferences {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            access: None,
+            workflow: None,
+        }
+    }
 }
 
 /// Whether a chat's folder can be used on this machine.
@@ -403,6 +469,7 @@ mod tests {
     #[test]
     fn options_and_lists_round_trip() {
         let lists = SessionLists {
+            controls: Default::default(),
             revision: 3,
             capabilities: Some(Capabilities {
                 interrupt: true,
@@ -665,5 +732,22 @@ mod tests {
             serde_json::to_value(FolderState::NotAllowed).expect("serialize"),
             json!("not_allowed")
         );
+    }
+}
+
+#[cfg(test)]
+mod native_controls_compatibility_tests {
+    use super::*;
+    #[test]
+    fn old_lists_and_preferences_default_without_widening_native_modes() {
+        let lists: SessionLists = serde_json::from_value(serde_json::json!({"revision":0,"capabilities":null,"options":[],"commands":[],"autonomy":{"requested":"ask","native_mode":null,"auto_answer":{"type":"never"},"note":null}})).unwrap();
+        assert_eq!(lists.controls, SessionControls::default());
+        let preferences: SessionControlPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(preferences.version, 1);
+        assert_eq!(preferences.workflow, None);
+        let future: SessionControlPreferences =
+            serde_json::from_str(r#"{"version":7,"workflow":"future-mode"}"#).unwrap();
+        assert_eq!(future.version, 7);
+        assert_eq!(future.workflow.as_deref(), Some("future-mode"));
     }
 }

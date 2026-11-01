@@ -59,7 +59,11 @@ pub(crate) fn pending(conn: &Connection, context: &SyncContext, now: u64) -> Res
         } else {
             "projects"
         };
-        let wire_id = if entity == "folder" {
+        let wire_id = if entity == "shared_mcp" {
+            format!("mcp-{id}")
+        } else if entity == "memory" {
+            format!("memory-{id}")
+        } else if entity == "folder" {
             format!("folder-{id}")
         } else {
             id.clone()
@@ -165,6 +169,12 @@ fn clear(conn: &Connection, entity: &str, id: &str) -> Result<()> {
 
 type Snapshot = (bool, BTreeMap<String, FieldValue>);
 fn snapshot(conn: &Connection, entity: &str, id: &str) -> Result<Option<Snapshot>> {
+    if entity == "shared_mcp" {
+        return super::shared_mcp::snapshot(conn, id);
+    }
+    if entity == "memory" {
+        return super::memory::snapshot(conn, id);
+    }
     let (table, fields): (&str, &[&str]) = match entity {
         "project" => (
             "projects",

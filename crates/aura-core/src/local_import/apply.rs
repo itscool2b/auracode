@@ -52,6 +52,7 @@ pub(crate) fn execute(
                 .conn_mut()
                 .transaction_with_behavior(TransactionBehavior::Immediate)?;
             let mut result = LocalImportResult::default();
+            let mut mcp_changed = false;
             for selected in selected {
                 let imported:bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM local_imports WHERE project_id=?1 AND source_profile=?2)",params![selected.project_id,profile.meta.id],|row|row.get(0))?;
                 if imported {
@@ -80,7 +81,7 @@ pub(crate) fn execute(
                         "INSERT INTO {}({}) VALUES({parameters})",
                         table.name, table.columns
                     ))?;
-                    visit(&source.conn, device, &selected.project_id, table, |row| {
+                    let count = visit(&source.conn, device, &selected.project_id, table, |row| {
                         if table.name == "chats"
                             && let Value::Text(id) = &row[0]
                         {
@@ -100,6 +101,7 @@ pub(crate) fn execute(
                             })?;
                         Ok(())
                     })?;
+                    mcp_changed |= table.name.starts_with("shared_mcp") && count > 0;
                 }
                 for hash in hashes {
                     if !copy_attachment(&source.conn, &tx, &profile, files, &hash)? {
@@ -127,6 +129,12 @@ pub(crate) fn execute(
                     .turns
                     .checked_add(current.turns)
                     .ok_or(ImportError::Invalid)?;
+            }
+            if mcp_changed {
+                tx.execute(
+                    "UPDATE shared_mcp_settings SET revision=revision+1 WHERE id=1",
+                    [],
+                )?;
             }
             crate::sync::capture::finish(&tx, context, crate::time::now_millis())?;
             tx.commit()?;

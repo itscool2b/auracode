@@ -116,7 +116,7 @@ describe("New chat", () => {
     );
     expect(html).toMatch(/data-test-unavailable="hermes".*hermes --version failed\./);
     // Nothing chosen yet: Create waits for an agent and a folder.
-    expect(buttons(html).find((b) => b.label === "Create")?.disabled).toBe(true);
+    expect(buttons(html).find((b) => b.label === "Start chat")?.disabled).toBe(true);
     expect(buttons(html).find((b) => b.label === "Refresh agents")?.disabled).toBe(false);
   });
 
@@ -499,6 +499,27 @@ describe("the header", () => {
 });
 
 describe("the pickers", () => {
+  const accessLists = (revision: number, overrides: Partial<ReturnType<typeof lists>> = {}) =>
+    lists(revision, {
+      capabilities: {
+        images: false,
+        steer: false,
+        interrupt: true,
+        resume: true,
+        fork: false,
+        rewind: false,
+        set_model: true,
+        set_effort: true,
+        permissions: true,
+        plans: false,
+        usage: false,
+        limits: false,
+        slash_commands: false,
+        add_dirs: false,
+        autonomy_levels: ["ask", "auto_edit", "full_auto"],
+      },
+      ...overrides,
+    });
   const model: ConfigOption = {
     id: "model",
     name: "Model",
@@ -549,7 +570,7 @@ describe("the pickers", () => {
   it("show the value a change on its way asked for, marked, instead of the old one", () => {
     const html = renderToStaticMarkup(
       <Pickers
-        lists={lists(1, { options: [toggle, { ...model, pending: null }] })}
+        lists={accessLists(1, { options: [toggle, { ...model, pending: null }] })}
         autonomy="full_auto"
         status="ready"
         error={null}
@@ -564,10 +585,11 @@ describe("the pickers", () => {
         onSetOption={noop}
       />,
     );
-    expect(html).toContain('<option value="ask" selected="">Ask</option>');
+    expect(html).toContain('aria-label="Ask for approval. Access level"');
+    expect(html).toContain('class="chat-control-pending">Saving…');
     expect(html).toMatch(/data-picker-value="smart" aria-pressed="true"/);
     expect(html).not.toMatch(/<input[^>]*checked/);
-    expect(html.match(/\(saving…\)/g)).toHaveLength(3);
+    expect(html.match(/\(saving…\)/g)).toHaveLength(2);
     // Nothing on its way: the lists' own values.
     const settledHtml = renderToStaticMarkup(
       <Pickers
@@ -587,7 +609,7 @@ describe("the pickers", () => {
   it("show the autonomy note and the agent mode in effect", () => {
     const html = renderToStaticMarkup(
       <Pickers
-        lists={lists(2, {
+        lists={accessLists(2, {
           autonomy: {
             requested: "ask",
             native_mode: "acceptEdits",
@@ -602,10 +624,10 @@ describe("the pickers", () => {
         onSetOption={noop}
       />,
     );
-    expect(html).toContain('<option value="ask" selected="">Ask</option>');
+    expect(html).toContain('aria-label="Ask for approval. Access level"');
     expect(html).not.toContain("changes are not checkpointed yet");
     expect(html).toContain("Applies when the agent starts.");
-    expect(html).toContain("Agent mode: acceptEdits");
+    expect(html).toContain("Native setting: acceptEdits");
     expect(html).toContain("The agent refused that model.");
   });
 });

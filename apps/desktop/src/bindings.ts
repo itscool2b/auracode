@@ -79,11 +79,31 @@ export const commands = {
 	 *  listing reruns. Otherwise a listing is reused until its agent's installed version changes.
 	 */
 	pluginLibrarySnapshot: (refresh: boolean, channel: Channel<PluginLibrary>) => typedError<PluginLibrary, AppError>(__TAURI_INVOKE("plugin_library_snapshot", { refresh, channel })),
+	pluginManagementCapabilities: () => typedError<PluginManagement[], AppError>(__TAURI_INVOKE("plugin_management_capabilities")),
 	/**
 	 *  Turns configuration sync on or off for one agent on this device. Paused agents' items wait
 	 *  unchanged: nothing of theirs is published or applied until sync is on again.
 	 */
 	pluginSyncSet: (agentId: string, enabled: boolean) => typedError<string[], AppError>(__TAURI_INVOKE("plugin_sync_set", { agentId, enabled })),
+	sharedMcpSnapshot: () => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_snapshot")),
+	sharedMcpTest: (expected: number, id: string, projectId: string | null, chatId: string | null) => typedError<McpTestResult, AppError>(__TAURI_INVOKE("shared_mcp_test", { expected, id, projectId, chatId })),
+	sharedMcpSessionAction: (chatId: string, serverName: string, action: McpSessionAction) => typedError<McpActionResult, AppError>(__TAURI_INVOKE("shared_mcp_session_action", { chatId, serverName, action })),
+	sharedMcpSave: (expected: number, definition: McpDefinition) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_save", { expected, definition })),
+	sharedMcpDelete: (expected: number, id: string, projectId: string | null) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_delete", { expected, id, projectId })),
+	sharedMcpCredentials: (expected: number, id: string, projectId: string | null, credentials: McpCredentials) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_credentials", { expected, id, projectId, credentials })),
+	sharedMcpImport: (expected: number, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import", { expected, document })),
+	sharedMcpImportNative: (expected: number, projectId: string | null, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import_native", { expected, projectId, document })),
+	sharedMcpExport: () => typedError<string, AppError>(__TAURI_INVOKE("shared_mcp_export")),
+	sharedMcpConflict: (expected: number, revision: string, accept: boolean) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_conflict", { expected, revision, accept })),
+	readProjectMemory: (projectId: string) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("read_project_memory", { projectId })),
+	saveProjectMemory: (input: SaveProjectMemory) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("save_project_memory", { input })),
+	proposeProjectMemory: (input: ProposeProjectMemory) => typedError<MemoryProposal, AppError>(__TAURI_INVOKE("propose_project_memory", { input })),
+	acceptMemoryProposal: (input: AcceptMemoryProposal) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("accept_memory_proposal", { input })),
+	rejectMemoryProposal: (projectId: string, proposalId: string) => typedError<MemoryProposal[], AppError>(__TAURI_INVOKE("reject_memory_proposal", { projectId, proposalId })),
+	projectMemoryHistory: (projectId: string) => typedError<MemoryRevision[], AppError>(__TAURI_INVOKE("project_memory_history", { projectId })),
+	projectMemoryProposals: (projectId: string) => typedError<MemoryProposal[], AppError>(__TAURI_INVOKE("project_memory_proposals", { projectId })),
+	exportProjectMemory: (projectId: string) => typedError<ProjectMemoryBundle, AppError>(__TAURI_INVOKE("export_project_memory", { projectId })),
+	importProjectMemory: (input: ImportProjectMemory) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("import_project_memory", { input })),
 	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
 	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
 	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
@@ -365,6 +385,8 @@ export const commands = {
 	 *  the agent is stopped: it applies when the agent starts.
 	 */
 	chatSetAutonomy: (chatId: string, autonomy: Autonomy) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_set_autonomy", { chatId, autonomy })),
+	/**  Apply a supported native access or workflow choice after actor admission. */
+	chatSetControl: (chatId: string, change: SessionControlChange) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_set_control", { chatId, change })),
 	/**
 	 *  One page of a full output: at most `len` bytes (up to 256 KiB) from `offset`, ending on a
 	 *  character boundary; continue from `next_offset`. `sha256` is the 64 lowercase hex digits of a
@@ -398,6 +420,12 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
+export type AcceptMemoryProposal = {
+	project_id: string,
+	proposal_id: string,
+	expected_revision: string | null,
+};
+
 export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "invite_required" | "deleted";
 
 export type AccountConfiguration = {
@@ -607,6 +635,7 @@ export type AgentMaintenance = {
 
 /**  One agent's section of the Plugin library. */
 export type AgentPlugins = {
+	management?: PluginManagement | null,
 	/**  The provider namespace (`claude`, `codex`, `pi`, `opencode`), not a launch dialect. */
 	agent_id: string,
 	name: string,
@@ -1550,6 +1579,11 @@ export type HoldCause =
 /**  The chat's project or folder was removed. */
 "workspace_removed";
 
+export type ImportProjectMemory = {
+	bundle: ProjectMemoryBundle,
+	expected_revision: string | null,
+};
+
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
 export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
 
@@ -1986,9 +2020,97 @@ export type ManagedWorktree = {
 	created_at: number,
 };
 
+export type McpActionResult = {
+	state: string,
+	message: string,
+	authorization_url: string | null,
+	servers: McpRuntimeServer[],
+};
+
+export type McpConflict = {
+	revision: string,
+	id: string,
+	project_id: string | null,
+	incoming: McpDefinition | null,
+};
+
+/**  This type never enters UI snapshots, sync or protocol logs. */
+export type McpCredentials = {
+	env: { [key in string]: string },
+	headers: { [key in string]: string },
+};
+
+export type McpDefinition = {
+	/**  Stable Aura ID, shared by an all-project definition and its project override. */
+	id: string,
+	name: string,
+	/**  None means all projects. A project UUID means every folder and worktree in that project. */
+	project_id: string | null,
+	enabled: boolean,
+	transport: McpTransport,
+	env_keys: string[],
+	header_keys: string[],
+};
+
+export type McpRecord = {
+	definition: McpDefinition,
+	revision: number,
+	missing_credentials: string[],
+};
+
+export type McpRuntimeServer = {
+	name: string,
+	state: string,
+	authentication: string,
+	tool_count: number,
+};
+
+export type McpSessionAction = "status" | "login" | "restart";
+
+export type McpSnapshot = {
+	revision: number,
+	servers: McpRecord[],
+	conflicts: McpConflict[],
+};
+
+export type McpTestResult = {
+	state: string,
+	message: string,
+};
+
+export type McpTransport = { type: "stdio"; command: string; args: string[] } | { type: "http"; url: string } | { type: "sse"; url: string };
+
+export type MemoryProposal = {
+	id: string,
+	project_id: string,
+	base_revision: string | null,
+	markdown: string,
+	reason: string,
+	chat_id: string | null,
+	idempotency_key: string,
+	state: string,
+	created_at: number,
+};
+
+export type MemoryRevision = {
+	revision: string,
+	parent_revision: string | null,
+	project_id: string,
+	markdown: string,
+	reason: string,
+	source: string,
+	created_at: number,
+};
+
 export type MotionPreference = 
 /**  Full motion still honors the operating system's reduced-motion setting. */
 "full" | "reduced" | "off";
+
+export type NativeCustomizationRoute = {
+	id: string,
+	label: string,
+	instructions: string,
+};
 
 export type NoticeLevel = "info" | "warning" | "error";
 
@@ -2092,6 +2214,19 @@ export type PluginLibraryRef = {
 	revision: string,
 };
 
+export type PluginManagement = {
+	version: number,
+	provider: VendorProvider,
+	actions: PluginManagementAction[],
+	native_routes: NativeCustomizationRoute[],
+};
+
+export type PluginManagementAction = {
+	feature: PluginFeature,
+	kind: VendorKind,
+	actions: VendorAction[],
+};
+
 /**  Whether the agent has a plugin system of its own. */
 export type PluginSystem = 
 /**  Plugins installed from marketplaces. */
@@ -2162,6 +2297,21 @@ export type ProjectInput = {
 	default_model: string | null,
 };
 
+export type ProjectMemory = {
+	project_id: string,
+	revision: string | null,
+	markdown: string,
+	updated_at: number,
+};
+
+export type ProjectMemoryBundle = {
+	schema_version: number,
+	project_id: string,
+	current: ProjectMemory,
+	history: MemoryRevision[],
+	proposals: MemoryProposal[],
+};
+
 export type ProjectSearchHit = {
 	id: string,
 	name: string,
@@ -2210,6 +2360,15 @@ export type PromptPart = { type: "text"; text: string } |
 export type PromptState = "queued" | 
 /**  On its way: its folder checkpoint is being saved, and it goes to the agent right after. */
 "sending" | "started" | "completed" | "cancelled" | "failed";
+
+export type ProposeProjectMemory = {
+	project_id: string,
+	base_revision: string | null,
+	markdown: string,
+	reason: string,
+	chat_id: string | null,
+	idempotency_key: string,
+};
 
 export type PullRequestInput = {
 	title: string,
@@ -2391,6 +2550,13 @@ export type Salvage =
 /**  Nothing could be read, so the new database started out empty. */
 { type: "nothing" };
 
+export type SaveProjectMemory = {
+	project_id: string,
+	expected_revision: string | null,
+	markdown: string,
+	reason: string,
+};
+
 export type SearchResults = {
 	chats: ChatSearchHit[],
 	projects: ProjectSearchHit[],
@@ -2402,6 +2568,31 @@ export type SendingPrompt = {
 	text: string,
 	parts: PromptPart[],
 	created_at: number,
+};
+
+export type SessionControl = {
+	requested?: string | null,
+	effective?: string | null,
+	pending?: string | null,
+	choices?: SessionControlChoice[],
+	native_mode?: string | null,
+	note?: string | null,
+};
+
+export type SessionControlChange = { type: "access"; value: string } | { type: "workflow"; value: string; implementation_approved?: boolean };
+
+export type SessionControlChoice = {
+	value: string,
+	name: string,
+	description: string | null,
+	legacy_autonomy: Autonomy | null,
+};
+
+/**  Runtime native control choices, independent from legacy autonomy. */
+export type SessionControls = {
+	version?: number,
+	access?: SessionControl,
+	workflow?: SessionControl,
 };
 
 /**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
@@ -2444,6 +2635,7 @@ export type SessionInfo = {
  *  [`SessionInfo::revision`] changes.
  */
 export type SessionLists = {
+	controls?: SessionControls,
 	revision: number,
 	/**  `None` until the agent has started once. */
 	capabilities: Capabilities | null,
@@ -2793,11 +2985,11 @@ export type UsageScope =
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
 
-export type VendorAction = "install" | "update" | "remove" | "enable" | "disable";
+export type VendorAction = "install" | "update" | "remove" | "enable" | "disable" | "open";
 
-export type VendorKind = "plugin" | "marketplace" | "package";
+export type VendorKind = "plugin" | "marketplace" | "package" | "native";
 
-export type VendorProvider = "claude" | "codex" | "pi";
+export type VendorProvider = "claude" | "codex" | "pi" | "open_code" | "hermes" | "cursor" | "grok" | "antigravity";
 
 export type VendorRequest = {
 	provider: VendorProvider,

@@ -4,6 +4,24 @@ use aura_protocol::plugins::PluginLibrary;
 use tauri::{State, ipc::Channel};
 
 use crate::{error::AppError, state::AppState};
+#[tauri::command]
+#[specta::specta]
+pub async fn plugin_management_capabilities(
+    state: State<'_, AppState>,
+) -> Result<Vec<aura_protocol::plugins::PluginManagement>, AppError> {
+    let sessions = state.sessions()?;
+    Ok(sessions
+        .agents(false)
+        .await
+        .into_iter()
+        .filter_map(|agent| {
+            aura_agents::plugins::management(
+                &agent.id,
+                agent.installation.as_ref().map(|i| i.version.as_str()),
+            )
+        })
+        .collect())
+}
 
 /// Agents whose configuration sync is off on this device, from the profile's preferences.
 pub(crate) fn paused_agents(state: &AppState) -> Vec<String> {

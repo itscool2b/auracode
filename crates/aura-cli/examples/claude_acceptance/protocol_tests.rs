@@ -8,6 +8,7 @@ const NATIVE: &str = "019a0000-0000-7000-8000-000000000001";
 
 fn setup(folder: &Path) -> SessionSetup {
     SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: new_id(),

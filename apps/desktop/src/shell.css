@@ -776,9 +776,16 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-project-toggle {
-  padding-right: var(--g-space-32);
+  padding-right: var(--g-space-64);
   color: var(--g-fg-1);
   font-weight: 500;
+}
+
+.chat-project-new {
+  position: absolute;
+  top: 4px;
+  right: 32px;
+  color: var(--g-fg-3);
 }
 
 .chat-project-toggle > span:nth-child(2) {

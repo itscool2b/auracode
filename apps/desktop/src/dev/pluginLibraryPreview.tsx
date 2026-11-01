@@ -1,5 +1,5 @@
 /**
- * Development-only Plugin library fixtures. They read no native configuration, run no agent and
+ * Development-only Plugins & MCP fixtures. They read no native configuration, run no agent and
  * no CLI. Modes: `plugins` (Claude Code's live listings), `plugins-pi` (an agent without a plugin
  * system), `plugins-update` (an update is available and the version changed), `plugins-failed`
  * (Codex's CLI listing failed and its files answer instead).
@@ -10,11 +10,20 @@ import "../chat.css";
 import "../shell.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import type { AgentPlugins, FeatureListing, PluginEntry, PluginLibrary } from "../bindings";
+import type {
+  AgentPlugins,
+  FeatureListing,
+  McpDefinition,
+  McpSnapshot,
+  PluginEntry,
+  PluginLibrary,
+  PluginManagement,
+} from "../bindings";
 import { PluginLibraryScreen } from "../components/library/PluginLibraryScreen";
 import type { LibraryApi } from "../lib/library/api";
 import type { LibraryItem } from "../lib/library/bindings";
 import type { PluginsApi } from "../lib/plugins/api";
+import type { SharedMcpApi } from "../lib/sharedMcp";
 import { syntheticVendor } from "./configSyncPreview";
 
 declare global {
@@ -23,6 +32,7 @@ declare global {
       calls: string[];
       finishProvider?: (agentId: string) => void;
       finish?: () => void;
+      supplyProjects?: () => void;
       unmount?: () => void;
     };
   }
@@ -60,6 +70,37 @@ const files = (
 
 const SKILLS = "No CLI lists skills, so these come from the agent's skills folder.";
 const FOLDER = "The CLI has no listing for these, so they come from the agent's folder.";
+function recordedManagement(provider: "claude" | "codex" | "pi"): PluginManagement {
+  return {
+    version: 1,
+    provider,
+    actions:
+      provider === "pi"
+        ? [{ feature: "packages", kind: "package", actions: ["install", "update", "remove"] }]
+        : [
+            {
+              feature: "plugins",
+              kind: "plugin",
+              actions:
+                provider === "claude"
+                  ? ["install", "update", "remove", "enable", "disable"]
+                  : ["install", "remove"],
+            },
+            {
+              feature: "marketplaces",
+              kind: "marketplace",
+              actions: ["install", "update", "remove"],
+            },
+          ],
+    native_routes: [
+      {
+        id: "settings",
+        label: "Open native customization",
+        instructions: "Synthetic native route. No process is started.",
+      },
+    ],
+  };
+}
 
 export function pluginFixture(mode: string): PluginLibrary {
   const available = [
@@ -75,6 +116,7 @@ export function pluginFixture(mode: string): PluginLibrary {
     }),
   );
   const claude: AgentPlugins = {
+    management: recordedManagement("claude"),
     agent_id: "claude",
     name: "Claude Code",
     installed: true,
@@ -137,6 +179,7 @@ export function pluginFixture(mode: string): PluginLibrary {
     ],
   };
   const codex: AgentPlugins = {
+    management: recordedManagement("codex"),
     agent_id: "codex",
     name: "Codex",
     installed: true,
@@ -194,6 +237,7 @@ export function pluginFixture(mode: string): PluginLibrary {
     ],
   };
   const pi: AgentPlugins = {
+    management: recordedManagement("pi"),
     agent_id: "pi",
     name: "Pi",
     installed: true,
@@ -233,6 +277,7 @@ export function pluginFixture(mode: string): PluginLibrary {
     ],
   };
   const opencode: AgentPlugins = {
+    management: null,
     agent_id: "opencode",
     name: "OpenCode",
     installed: false,
@@ -253,10 +298,78 @@ export function pluginFixture(mode: string): PluginLibrary {
       ),
     ],
   };
+  const nativeAgent = (
+    agent_id: string,
+    name: string,
+    reviewed: boolean,
+    management: PluginManagement | null = null,
+  ): AgentPlugins => ({
+    agent_id,
+    name,
+    installed: management !== null,
+    version: management ? "0.5.0" : null,
+    management,
+    system: "declared",
+    summary:
+      "Native customization capabilities vary by agent and installed version. Reviewed file inventory and named native routes are shown where available.",
+    harness: management
+      ? { state: "unknown", version: "0.5.0", reason: "Synthetic installed-agent fixture." }
+      : { state: "not_installed" },
+    updated_at: null,
+    version_change: null,
+    sync: { state: "unsupported", reason: "Configuration sync covers Claude Code, Codex and Pi." },
+    notices: [],
+    features: [
+      ...(reviewed
+        ? [
+            files(
+              "mcp_servers",
+              "Read from reviewed native configuration paths. This inventory does not start the agent or connect servers.",
+              management ? [entry("team_docs", { kind: "stdio" })] : [],
+            ),
+            files("skills", "Read from the agent's native skills folder.", []),
+          ]
+        : []),
+      {
+        feature: "plugins",
+        state: {
+          state: "unavailable",
+          reason:
+            "This agent has no qualified structured plugin-management interface in Aura. Use its native customization where available.",
+        },
+        command: null,
+        entries: [],
+        available: [],
+        available_total: 0,
+      },
+    ],
+  });
+  const hermes = nativeAgent("hermes", "Hermes", true, {
+    version: 1,
+    provider: "hermes",
+    actions: [],
+    native_routes: [
+      {
+        id: "settings",
+        label: "Open native customization",
+        instructions: "Synthetic native route. No process is started.",
+      },
+    ],
+  });
   return {
-    agents: [claude, codex, pi, opencode],
+    agents: [
+      claude,
+      codex,
+      pi,
+      opencode,
+      hermes,
+      nativeAgent("grok", "Grok Build", true),
+      nativeAgent("cursor", "Cursor", true),
+      nativeAgent("antigravity", "Antigravity", false),
+      nativeAgent("omp", "oh-my-pi", false),
+    ],
     notices: [
-      "Cursor, Grok Build, Antigravity and Hermes are not listed: auracode has no reviewed way to read their extensions yet.",
+      "Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.",
     ],
   };
 }
@@ -264,6 +377,109 @@ export function pluginFixture(mode: string): PluginLibrary {
 export function mountPluginLibraryPreview(container: HTMLElement, mode: string) {
   window.pluginsFixture = { calls: [] };
   const calls = window.pluginsFixture.calls;
+  let mcp: McpSnapshot = {
+    revision: 1,
+    servers: [
+      {
+        definition: {
+          id: "6a83dedb-b8d1-4a0d-98d2-7f058ac6f737",
+          name: "project_docs",
+          project_id: "7cc769fb-ae40-44c1-8baa-fc2210f3bebe",
+          enabled: true,
+          transport: { type: "http", url: "https://mcp.example.test" },
+          env_keys: [],
+          header_keys: ["Authorization"],
+        },
+        revision: 1,
+        missing_credentials: ["headers/Authorization"],
+      },
+    ],
+    conflicts: [],
+  };
+  function mutate(expected: number, work: () => void) {
+    if (expected !== mcp.revision)
+      throw new Error("Shared MCP changed elsewhere. Refresh and review.");
+    work();
+    mcp = { ...mcp, revision: mcp.revision + 1 };
+    return structuredClone(mcp);
+  }
+  const mcpApi: SharedMcpApi = {
+    snapshot: async () => structuredClone(mcp),
+    save: async (expected, definition) =>
+      mutate(expected, () => {
+        calls.push(`mcp:save:${definition.name}`);
+        const at = mcp.servers.findIndex(
+          (s) =>
+            s.definition.id === definition.id && s.definition.project_id === definition.project_id,
+        );
+        const record = {
+          definition,
+          revision: at < 0 ? 1 : (mcp.servers[at]?.revision ?? 0) + 1,
+          missing_credentials: definition.header_keys
+            .map((k) => `headers/${k}`)
+            .concat(definition.env_keys.map((k) => `env/${k}`)),
+        };
+        if (at < 0) mcp.servers.push(record);
+        else mcp.servers[at] = record;
+      }),
+    remove: async (expected, definition) =>
+      mutate(expected, () => {
+        mcp.servers = mcp.servers.filter(
+          (s) =>
+            s.definition.id !== definition.id || s.definition.project_id !== definition.project_id,
+        );
+        calls.push("mcp:remove");
+      }),
+    credentials: async (expected, definition, credentials) =>
+      mutate(expected, () => {
+        calls.push("mcp:credentials");
+        const row = mcp.servers.find((s) => s.definition.id === definition.id);
+        if (row)
+          row.missing_credentials = definition.header_keys
+            .filter((k) => !credentials.headers[k])
+            .map((k) => `headers/${k}`)
+            .concat(definition.env_keys.filter((k) => !credentials.env[k]).map((k) => `env/${k}`));
+      }),
+    import: async (expected, text) =>
+      mutate(expected, () => {
+        const doc = JSON.parse(text) as { definitions: McpDefinition[] };
+        mcp.servers = doc.definitions.map((definition) => ({
+          definition,
+          revision: 1,
+          missing_credentials: [],
+        }));
+        calls.push("mcp:import");
+      }),
+    importNative: async (_expected, projectId) => {
+      calls.push(`mcp:import-native:${projectId ?? "all"}`);
+      throw new Error("Synthetic native import review. No real files are read.");
+    },
+    export: async () =>
+      JSON.stringify({ version: 1, definitions: mcp.servers.map((s) => s.definition) }, null, 2),
+    conflict: async (expected) =>
+      mutate(expected, () => {
+        mcp.conflicts = [];
+      }),
+    test: async () => {
+      calls.push("mcp:test");
+      return {
+        state: "connected",
+        message: "Synthetic MCP initialization succeeded. No native process was started.",
+      };
+    },
+    sessionAction: async (_chat, name, action) => {
+      calls.push(`mcp:session:${action}`);
+      return {
+        state: action === "restart" ? "restarting" : "observed",
+        message: "Synthetic session response. No native process was started.",
+        authorization_url: null,
+        servers:
+          action === "status"
+            ? [{ name, state: "connected", authentication: "oauth", tool_count: 2 }]
+            : [],
+      };
+    },
+  };
   const complete = pluginFixture(mode);
   let library = complete;
   const pending: {
@@ -385,22 +601,55 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
       throw new Error("Synthetic fixture.");
     },
   };
-  const initial = mode === "plugins-pi" ? "pi" : mode === "plugins-failed" ? "codex" : "claude";
+  const initial =
+    mode === "plugins-mcp"
+      ? "shared"
+      : mode === "plugins-pi"
+        ? "pi"
+        : mode === "plugins-failed"
+          ? "codex"
+          : "claude";
   const root = createRoot(container);
   window.pluginsFixture.unmount = () => root.unmount();
-  root.render(
-    <StrictMode>
-      <div className="pane-shell g-root">
-        <PluginLibraryScreen
-          initialAgent={initial}
-          api={api}
-          libraryApi={libraryApi}
-          vendorApi={syntheticVendor}
-          now={() => NOW}
-          onBack={() => calls.push("back")}
-          onAgents={() => calls.push("agents")}
-        />
-      </div>
-    </StrictMode>,
-  );
+  const delayedProjects = new URLSearchParams(window.location.search).has("delayedProjects");
+  const fixtureProjects = [{ id: "7cc769fb-ae40-44c1-8baa-fc2210f3bebe", name: "Aura project" }];
+  let projects = delayedProjects ? [] : fixtureProjects;
+  window.pluginsFixture.supplyProjects = () => {
+    projects = fixtureProjects;
+    render();
+  };
+  const render = () =>
+    root.render(
+      <StrictMode>
+        <div className="pane-shell g-root">
+          <PluginLibraryScreen
+            initialAgent={initial}
+            api={api}
+            libraryApi={libraryApi}
+            vendorApi={{
+              ...syntheticVendor,
+              review: async (request) => {
+                const review = await syntheticVendor.review(request);
+                return request.kind === "native"
+                  ? {
+                      ...review,
+                      program: `C:/fixture/${request.provider}.exe`,
+                      arguments: request.provider === "hermes" ? ["chat"] : [],
+                      config_directory: `C:/fixture/.${request.provider}`,
+                    }
+                  : review;
+              },
+            }}
+            mcpApi={mcpApi}
+            projects={projects}
+            initialProjectId={delayedProjects ? null : fixtureProjects[0]?.id}
+            activeChatId="synthetic-chat"
+            now={() => NOW}
+            onBack={() => calls.push("back")}
+            onAgents={() => calls.push("agents")}
+          />
+        </div>
+      </StrictMode>,
+    );
+  render();
 }

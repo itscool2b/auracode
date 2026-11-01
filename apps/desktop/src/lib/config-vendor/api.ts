@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PluginManagement } from "../../bindings";
 import { toCommandError } from "../ipc";
 import { type TerminalTransport, terminalTransport } from "../terminal";
 import type { VendorRequest, VendorReview } from "./bindings";
@@ -11,11 +12,13 @@ async function call<T>(command: string, args: Record<string, unknown>): Promise<
   }
 }
 export interface VendorApi {
+  capabilities?(): Promise<PluginManagement[]>;
   review(request: VendorRequest): Promise<VendorReview>;
   cancel(token: string): Promise<void>;
   terminal(review: VendorReview): TerminalTransport;
 }
 export const vendorApi: VendorApi = {
+  capabilities: () => call("plugin_management_capabilities", {}),
   review: (request) => call("config_vendor_review", { request }),
   cancel: (token) => call("config_vendor_cancel", { token }),
   terminal: (review) => ({

@@ -981,6 +981,10 @@ impl Session {
         };
         log_command(&self.log, &command);
         match command {
+            DriverCommand::McpAction { reply, .. } => crate::mcp::unsupported(
+                reply,
+                "ACP does not advertise MCP status or OAuth management. Use this agent's native customization route; restart an idle chat to reconnect its configured MCP servers.",
+            ),
             DriverCommand::Shutdown { plan } => self.begin_close(End::Closed, plan),
             DriverCommand::Prompt { turn, parts } => self.on_prompt(turn.turn_id, &parts),
             DriverCommand::Interrupt => {
@@ -1352,11 +1356,36 @@ impl Session {
 
     fn send_open(&mut self, kind: OpenKind) {
         let cwd = self.setup.agent_folder.clone();
-        let (method, params) = match &kind {
+        let (method, mut params) = match &kind {
             OpenKind::New { .. } => (methods::SESSION_NEW, requests::new_session(&cwd)),
             OpenKind::Resume(id) => (methods::SESSION_RESUME, requests::resume_session(id, &cwd)),
             OpenKind::Load(id) => (methods::SESSION_LOAD, requests::load_session(id, &cwd)),
         };
+        match crate::mcp::acp_session(
+            &self.setup.mcp_servers,
+            self.init.mcp_stdio,
+            self.init.mcp_http,
+            self.init.mcp_sse,
+        ) {
+            Ok((servers, omitted)) => {
+                params["mcpServers"] = servers;
+                if omitted {
+                    self.push_notice(NoticeLevel::Info,"Project memory context remains available. This agent does not support Aura's optional memory MCP tools.".into());
+                }
+            }
+            Err(message) => {
+                self.fail_start(
+                    DriverError {
+                        kind: ErrorKind::ProtocolError,
+                        message: message.into(),
+                        detail: None,
+                    },
+                    false,
+                    ShutdownPlan::STANDARD,
+                );
+                return;
+            }
+        }
         self.replay = match kind {
             OpenKind::Resume(_) | OpenKind::Load(_)
                 if self.dialect.replay_may_hold_unseen_work() =>
@@ -1482,7 +1511,35 @@ impl Session {
         }
         self.outbox
             .push(DriverEvent::Status(DriverStatus::Configuring));
-        let model = OptionModel::from_open(reply);
+        let mut model = OptionModel::from_open(reply);
+        model.enable_native_controls(self.dialect.id());
+        let restored_plan = model.current_mode() == Some("plan")
+            && !matches!(self.setup.desired.get(crate::controls::WORKFLOW),Some(ConfigValue::Choice { value }) if value == "execute");
+        if restored_plan
+            && let Some(ConfigValue::Choice { value }) =
+                self.setup.desired.get(crate::controls::ACCESS)
+        {
+            model.remember_execution_access(value);
+        }
+        for (id, value) in self.setup.desired.iter().filter(|(id, _)| {
+            matches!(
+                id.as_str(),
+                crate::controls::ACCESS | crate::controls::WORKFLOW | "mode" | "legacy-mode"
+            ) || model
+                .get(id)
+                .is_some_and(|option| option.category == ConfigCategory::Mode)
+        }) {
+            if let Err(message) = model.validate(id, value) {
+                self.fail_start(
+                    protocol_error(format!(
+                        "The saved native control is unavailable: {message}"
+                    )),
+                    false,
+                    ShutdownPlan::STANDARD,
+                );
+                return;
+            }
+        }
         self.outbox.push(DriverEvent::Options(model.options()));
         self.options = Some(model);
         // Updates that arrived before the session had a name.
@@ -1490,15 +1547,31 @@ impl Session {
         for params in std::mem::take(&mut self.early) {
             self.on_update(&params);
         }
-        self.ops.push_back(Op::Autonomy(AutonomyOp::new(
-            self.setup.autonomy,
-            self.dialect.as_ref(),
-            None,
-            false,
-            self.autonomy_generation,
-        )));
-        self.autonomy_settling = true;
+        let preserve_plan = self.current_mode().as_deref() == Some("plan")
+            && !matches!(self.setup.desired.get(crate::controls::WORKFLOW), Some(ConfigValue::Choice { value }) if value == "execute");
+        if !preserve_plan {
+            self.ops.push_back(Op::Autonomy(AutonomyOp::new(
+                self.setup.autonomy,
+                self.dialect.as_ref(),
+                None,
+                false,
+                self.autonomy_generation,
+            )));
+            self.autonomy_settling = true;
+        } else {
+            self.outbox.push(DriverEvent::Autonomy(AutonomyState {
+                requested: self.setup.autonomy,
+                native_mode: Some("plan".into()),
+                auto_answer: AutoAnswer::Never,
+                note: Some(
+                    "Native Plan remains active. Implementation requires your approval.".into(),
+                ),
+            }));
+        }
         for (option_id, value) in self.setup.desired.clone() {
+            if restored_plan && option_id == crate::controls::ACCESS {
+                continue;
+            }
             self.ops.push_back(Op::SetOption(SetOptionOp {
                 option_id,
                 value,
@@ -2180,6 +2253,22 @@ impl Session {
     }
 
     fn start_set_option(&mut self, op: SetOptionOp) {
+        if matches!(
+            op.option_id.as_str(),
+            crate::controls::ACCESS | crate::controls::WORKFLOW
+        ) && (self.prompt.is_some()
+            || !self.permissions.is_empty()
+            || !self.ui_requests.is_empty())
+        {
+            send(
+                op.reply,
+                Err(protocol_error(
+                    "Native control changes require idle with no pending approvals or questions."
+                        .into(),
+                )),
+            );
+            return;
+        }
         let Some(options) = &self.options else {
             send(op.reply, Err(internal("The agent isn't ready yet.")));
             return;
@@ -2202,7 +2291,11 @@ impl Session {
             return;
         }
         let already = options.is_current(&op.option_id, &op.value);
-        let is_mode = self.mode_option_id().as_deref() == Some(op.option_id.as_str());
+        let is_mode = self.mode_option_id().as_deref() == Some(op.option_id.as_str())
+            || matches!(
+                op.option_id.as_str(),
+                crate::controls::ACCESS | crate::controls::WORKFLOW
+            );
         if already {
             if is_mode {
                 // The latest pick wins: a mode change parked for the turn's end goes.

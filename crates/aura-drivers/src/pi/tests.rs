@@ -21,6 +21,7 @@ impl AgentSpawner for Quiet {
 }
 pub(super) fn setup() -> SessionSetup {
     SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: "chat".into(),
@@ -201,6 +202,29 @@ async fn prompt_acceptance_and_agent_end_are_not_completion() {
     }
     assert_eq!(ends, 1);
     h.stop().await;
+}
+#[tokio::test(start_paused = true)]
+async fn missing_mcp_extension_api_omits_only_optional_memory_tools_without_failing_session() {
+    let mut setup = setup();
+    setup.mcp_servers = vec![crate::mcp::tests::memory()];
+    let mut h = Harness::start_with(setup).await;
+    h.ready().await;
+    h.stop().await;
+}
+#[tokio::test(start_paused = true)]
+async fn missing_mcp_extension_api_refuses_real_shared_definitions_before_ready() {
+    let mut setup = setup();
+    setup.mcp_servers = vec![crate::mcp::tests::server()];
+    let mut h = Harness::start_with(setup).await;
+    for _ in 0..4 {
+        h.answer_query().await;
+    }
+    let mut ready = false;
+    while let Some(event) = h.events.recv().await {
+        ready |= matches!(event, DriverEvent::Ready(_));
+    }
+    assert!(!ready);
+    assert!(matches!(h.run.await.unwrap(), DriverExit::StartFailed(_)));
 }
 #[tokio::test(start_paused = true)]
 async fn interrupt_clears_queue_before_abort_and_withdraws_dialogs() {

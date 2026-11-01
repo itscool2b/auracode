@@ -41,7 +41,8 @@ pub fn prepare(
     request: &VendorRequest,
 ) -> Result<VendorPlan, VendorError> {
     if installation.host != AgentHost::Native
-        || installation.agent_id != request.provider.agent_id()
+        || crate::installation::provider_namespace(&installation.agent_id)
+            != request.provider.agent_id()
     {
         return Err(VendorError::Unsupported);
     }
@@ -49,8 +50,9 @@ pub fn prepare(
         P::Claude => "2.1.310",
         P::Codex => "0.162.1",
         P::Pi => "1.0.2",
+        _ => "0.0.0",
     };
-    if !crate::version_at_least(&installation.version, minimum) {
+    if request.kind != K::Native && !crate::version_at_least(&installation.version, minimum) {
         return Err(VendorError::Unsupported);
     }
     let command = arguments(request)?;
@@ -107,6 +109,9 @@ pub fn prepare(
         "Closing the terminal or reaching ten minutes stops this owned command. Partial vendor changes are retained; refresh the Library before retrying. There is no automatic rollback of downloaded code.".into(),
         "Terminal output is not logged or synchronized. auracode does not inspect vendor credentials. Refresh the Library after completion to verify the result.".into(),
     ];
+    if request.kind == K::Native {
+        notices=vec![format!("Opens this agent's native interactive CLI. Use its {} customization screen or command. No slash command is typed automatically.",request.target),"Native changes belong to this agent and device. They do not become Aura shared MCP definitions. The terminal is not logged or synchronized.".into(),"Closing the terminal stops this owned process. Existing native homes and configuration locations are preserved.".into()];
+    }
     if request.kind == K::Marketplace && request.action == A::Remove {
         notices.push("Removing this marketplace can uninstall its plugins and delete their vendor-managed data, options and secrets. This cannot be undone by Library copy history.".into());
     }
@@ -129,11 +134,13 @@ pub fn prepare(
     };
     // Pin both home spellings and the provider override so vendor cwd-dependent defaults cannot
     // disagree with the reviewed personal realm. These are paths only, never credential values.
-    let set_env = vec![
+    let mut set_env = vec![
         ("HOME".into(), folder.as_os_str().into()),
         ("USERPROFILE".into(), folder.as_os_str().into()),
-        (key.into(), config.as_os_str().into()),
     ];
+    if !key.is_empty() && request.kind != K::Native {
+        set_env.push((key.into(), config.as_os_str().into()));
+    }
     Ok(VendorPlan {
         review,
         program,
@@ -149,6 +156,11 @@ pub fn config_path(provider: P) -> (&'static str, &'static str) {
         P::Claude => ("CLAUDE_CONFIG_DIR", ".claude"),
         P::Codex => ("CODEX_HOME", ".codex"),
         P::Pi => ("PI_CODING_AGENT_DIR", ".pi/agent"),
+        P::OpenCode => ("OPENCODE_CONFIG_DIR", ".config/opencode"),
+        P::Hermes => ("HERMES_HOME", ".hermes"),
+        P::Cursor => ("", ".cursor"),
+        P::Grok => ("", ".grok"),
+        P::Antigravity => ("", ".gemini"),
     }
 }
 fn text(path: &Path) -> Result<String, VendorError> {
@@ -239,6 +251,29 @@ fn package(value: &str, pinned: bool) -> bool {
     false
 }
 pub fn arguments(request: &VendorRequest) -> Result<Vec<String>, VendorError> {
+    if request.kind == K::Native {
+        if request.action != A::Open
+            || !matches!(
+                request.target.as_str(),
+                "plugins"
+                    | "skills"
+                    | "mcp"
+                    | "hooks"
+                    | "commands"
+                    | "agents"
+                    | "rules"
+                    | "memory"
+                    | "settings"
+            )
+        {
+            return Err(VendorError::Unsupported);
+        }
+        return Ok(if request.provider == P::Hermes {
+            vec!["chat".into()]
+        } else {
+            Vec::new()
+        });
+    }
     if request.target.len() > 320
         || request.item_revision.as_ref().is_some_and(|value| {
             value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -256,6 +291,7 @@ pub fn arguments(request: &VendorRequest) -> Result<Vec<String>, VendorError> {
                 A::Remove => "uninstall",
                 A::Enable => "enable",
                 A::Disable => "disable",
+                A::Open => return Err(VendorError::Unsupported),
             };
             let mut values = vec!["plugin", command, t, "--scope", "user"];
             if action == A::Remove {

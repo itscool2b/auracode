@@ -27,6 +27,7 @@ impl AgentSpawner for Quiet {
 }
 fn setup() -> SessionSetup {
     SessionSetup {
+        mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
         chat_id: "019a0000-0000-7000-8000-000000000001".into(),
@@ -806,4 +807,51 @@ async fn authentication_failure_exposes_vendor_sign_in_but_policy_forbidden_does
         }
         h.stop().await;
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn native_plan_restores_the_previous_execution_access() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    for (id, value, native) in [
+        (crate::controls::ACCESS, "acceptEdits", "acceptEdits"),
+        (crate::controls::WORKFLOW, "plan", "plan"),
+        (crate::controls::WORKFLOW, "execute", "acceptEdits"),
+    ] {
+        let (reply, result) = tokio::sync::oneshot::channel();
+        h.tx.send(DriverCommand::SetOption {
+            option_id: id.into(),
+            value: aura_protocol::session::ConfigValue::Choice {
+                value: value.into(),
+            },
+            reply,
+        })
+        .unwrap();
+        let request = h.wire().await;
+        assert_eq!(
+            request["request"],
+            json!({"subtype":"set_permission_mode","mode":native})
+        );
+        h.send(json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":{"mode":native}}})).await;
+        result.await.unwrap().unwrap();
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn invalid_saved_native_workflow_never_opens_an_execution_session() {
+    let mut setup = setup();
+    setup.desired.insert(
+        crate::controls::WORKFLOW.into(),
+        aura_protocol::session::ConfigValue::Choice {
+            value: "future-unknown".into(),
+        },
+    );
+    let mut h = Harness::start_with(setup).await;
+    let init = h.wire().await;
+    h.send(json!({"type":"control_response","response":{"subtype":"success","request_id":init["request_id"],"response":{"session_state":"idle","current_permission_mode":"default"}}})).await;
+    while let Some(event) = h.events.recv().await {
+        assert!(!matches!(event, DriverEvent::Ready(_)));
+    }
+    assert!(matches!(h.run.await.unwrap(), DriverExit::StartFailed(_)));
 }

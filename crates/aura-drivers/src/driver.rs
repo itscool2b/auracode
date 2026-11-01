@@ -122,6 +122,8 @@ fn is_false(value: &bool) -> bool {
 /// How the session wants the agent started.
 #[derive(Debug, Clone)]
 pub struct SessionSetup {
+    /// Immutable launch snapshot. Values are never included in the start note.
+    pub mcp_servers: Vec<aura_protocol::mcp::ResolvedMcpServer>,
     /// Private, app-owned blob directory. Never an arbitrary source file or agent credential path.
     pub attachment_dir: Option<PathBuf>,
     /// Account profiles resolve encrypted bytes in memory. An installed reader is authoritative:
@@ -239,6 +241,11 @@ pub enum SteerResult {
 /// What the session actor asks of a driver.
 #[derive(Debug)]
 pub enum DriverCommand {
+    McpAction {
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+        reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, DriverError>>,
+    },
     /// Sent only in Ready with no turn running; answered by exactly one [`DriverEvent::TurnEnded`].
     /// A part the driver does not support ends the turn at once with `Error` and
     /// [`ErrorKind::Internal`] (the actor checks first).
@@ -515,6 +522,11 @@ pub struct EventReceiver {
 }
 
 impl EventReceiver {
+    /// Read an already queued event, preserving the driver's authoritative option updates before acknowledgements.
+    pub fn try_recv(&mut self) -> Result<DriverEvent, tokio::sync::mpsc::error::TryRecvError> {
+        self.rx.try_recv().map(|(event, _bytes)| event)
+    }
+
     /// The next event, releasing its bytes; `None` once the driver dropped its sender.
     pub async fn recv(&mut self) -> Option<DriverEvent> {
         self.rx.recv().await.map(|(event, _bytes)| event)
@@ -538,6 +550,10 @@ pub struct ChannelClosed;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LoggedCommand {
+    McpAction {
+        server_name: String,
+        action: aura_protocol::mcp::McpSessionAction,
+    },
     Prompt {
         turn_id: String,
         parts: Vec<PromptPart>,
@@ -574,6 +590,14 @@ pub enum LoggedCommand {
 impl From<&DriverCommand> for LoggedCommand {
     fn from(command: &DriverCommand) -> LoggedCommand {
         match command {
+            DriverCommand::McpAction {
+                server_name,
+                action,
+                ..
+            } => LoggedCommand::McpAction {
+                server_name: server_name.clone(),
+                action: *action,
+            },
             DriverCommand::Prompt { turn, parts } => LoggedCommand::Prompt {
                 turn_id: turn.turn_id.clone(),
                 parts: parts.clone(),
@@ -870,6 +894,7 @@ mod tests {
         let mut vars = EnvMap::new();
         vars.insert("ANTHROPIC_API_KEY".into(), "sk-ant-secret".into());
         let mut setup = SessionSetup {
+            mcp_servers: Vec::new(),
             attachment_dir: None,
             attachment_reader: None,
             chat_id: "c".into(),

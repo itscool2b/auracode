@@ -1,11 +1,4 @@
-/*
- * New chat, after Grok's start screen (docs/design/visual-language.md, 6.13): the logo, one display
- * line, one quiet hint, and one composer card. Agents are pills whose mark carries their state:
- * the walking loader while auracode looks for them, their code once found (settling in once), the
- * volt dot while one waits on a sign-in. One alignment axis runs through the card: the agent
- * marks, the folder icon and every line under the card start 16px in (12px padding + 4px), and
- * the agent names and the path share the next column.
- */
+/* Compact session setup uses the production desktop controls and shared semantic surfaces. */
 
 /*
  * The page fills the pane below the drag band, so the worktree popover has the window's room
@@ -18,14 +11,14 @@
   flex-direction: column;
   box-sizing: border-box;
   width: 100%;
-  max-width: 720px;
+  max-width: 640px;
   min-height: 0;
   margin: 0 auto;
   /*
    * Anchored, not centred: opening a disclosure grows the page downward and the card stays put.
-   * The 18vh drop snaps down to the 4px grid, so any window height keeps the card on it.
+   * The top offset snaps to the spacing grid at each window height.
    */
-  padding: max(var(--g-space-40), round(down, 18vh, var(--g-space-4))) var(--g-space-24)
+  padding: max(var(--g-space-40), round(down, 12vh, var(--g-space-4))) var(--g-space-24)
     var(--g-space-64);
   overflow-y: auto;
 }
@@ -35,20 +28,25 @@
 .new-chat-hero {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--g-space-24);
-  text-align: center;
+  text-align: left;
+}
+
+.new-chat-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
 }
 
 .new-chat-logo {
-  margin-bottom: var(--g-space-20);
   color: var(--g-fg-1);
 }
 
 /* Two tones at one size and weight: the agent and folder in ink, the connecting words in grey. */
 .new-chat-title {
   margin: 0;
-  color: var(--g-fg-3);
+  color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
   font-weight: 500;
@@ -60,7 +58,7 @@
   color: var(--g-fg-1);
 }
 
-/* 6px under the 38px display line, so the hero (40 + 20 + 38 + 6 + 24) is 128px, on the grid. */
+/* Keep the description close to its heading. */
 .new-chat-hint {
   margin: var(--g-space-6) 0 0;
   color: var(--g-fg-3);
@@ -70,10 +68,7 @@
 
 /* ---------------------------------------------------------------------------- card */
 
-/*
- * The card floats over the lit water (Shallows): opaque surface-2, a soft rim that lights along its
- * top edge, and one long shadow under it. A keyboard inside it brightens the rim a step.
- */
+/* Use the same surface and focus treatment as the composer. */
 .new-chat-card {
   display: flex;
   flex-direction: column;
@@ -88,10 +83,17 @@
 }
 
 .new-chat-row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--g-space-8);
-  padding: var(--g-space-12);
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: var(--g-space-12);
+  padding: var(--g-space-16);
+}
+
+.new-chat-field-label {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  font-weight: 500;
 }
 
 .new-chat-agents {
@@ -101,8 +103,8 @@
 
 .new-chat-choices {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--g-space-8);
+  flex-direction: column;
+  gap: var(--g-space-2);
   min-inline-size: 0;
   margin: 0;
   padding: 0;
@@ -115,16 +117,16 @@
  */
 .new-chat-agent {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--g-space-8);
   box-sizing: border-box;
-  height: 32px;
-  padding: 0 var(--g-space-12) 0 var(--g-space-4);
+  min-height: 40px;
+  padding: var(--g-space-8);
   border: 0;
   border-radius: var(--g-radius-6);
   background-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  box-shadow: none;
   color: var(--g-fg-2);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
@@ -147,7 +149,7 @@
 @media (hover: hover) {
   .new-chat-agent:hover {
     background-color: var(--g-surface-3);
-    box-shadow: inset 0 0 0 1px var(--g-fg-4);
+    box-shadow: none;
     color: var(--g-fg-1);
   }
 }
@@ -176,8 +178,8 @@
 }
 
 .new-chat-agent:has(> input:checked) {
-  background-color: var(--g-surface-4);
-  box-shadow: inset 0 0 0 1px var(--g-fg-3);
+  background-color: var(--g-surface-3);
+  box-shadow: none;
   color: var(--g-fg-1);
 }
 
@@ -227,19 +229,90 @@
 
 /* The hairline is an inset shadow, so the row stays 56px and its buttons 12px in. */
 .new-chat-folder {
-  display: flex;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--g-space-8);
-  padding: var(--g-space-12);
+  gap: var(--g-space-8) var(--g-space-12);
+  padding: var(--g-space-16);
   box-shadow: inset 0 1px var(--g-line);
 }
 
 /* The folder icon takes an agent mark's 24px slot, 4px in, so names and the path share a column. */
 .new-chat-folder-icon {
-  flex: none;
-  box-sizing: content-box;
-  padding: 0 var(--g-space-4) 0 var(--g-space-8);
+  display: none;
+}
+
+.new-chat-folder > .new-chat-field-label {
+  grid-column: 1;
+  grid-row: 1;
+}
+.new-chat-folder > .new-chat-path {
+  grid-column: 2;
+  grid-row: 1;
+}
+.new-chat-folder > .new-chat-projects {
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+}
+.new-chat-folder > button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+.new-chat-submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+  padding: var(--g-space-16);
+  border-top: 1px solid var(--g-line);
+}
+
+.new-chat-submit > span {
   color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+}
+
+.new-chat-agent-picker {
+  width: 100%;
+}
+.new-chat-agent-picker > summary {
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--g-space-8) var(--g-space-12);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+}
+.new-chat-agent-picker .new-chat-selected-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.new-chat-agent-picker > .chat-popover-panel {
+  width: max(280px, 100%);
+  max-width: 100%;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: var(--g-space-8);
+}
+.new-chat-agent-search {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  padding: 0 var(--g-space-8) var(--g-space-8);
+  color: var(--g-fg-3);
+}
+.new-chat-agent-search > input {
+  min-width: 0;
+  width: 100%;
+}
+.new-chat-agent > small {
+  margin-left: auto;
+  font-size: var(--g-text-meta);
+  color: var(--g-fg-3);
+  font-weight: 400;
 }
 
 .new-chat-path {

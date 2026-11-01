@@ -17,8 +17,10 @@ pub mod engine;
 pub mod exchange;
 pub mod journal;
 pub mod managed_config;
+pub(crate) mod memory;
 mod projection;
 pub(crate) mod rebind;
+mod shared_mcp;
 pub(crate) mod transcript;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
@@ -31,6 +33,8 @@ impl SyncContext {
     pub(crate) fn initialize(&self, store: &mut Store) -> Result<()> {
         let _ = SyncLedger::new(store, self.identity.clone(), &self.key)?;
         capture::install(store.conn())?;
+        shared_mcp::install(store.conn())?;
+        memory::install(store.conn())?;
         transcript::install(store.conn())?;
         // Existing encrypted profiles may predate writer integration. Seed bounded transactions;
         // this reads portable metadata rows only, never the transcript or native credential files.

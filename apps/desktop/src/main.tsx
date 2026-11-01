@@ -47,6 +47,18 @@ void appearanceReady.then(() => {
         void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
           mountConfigSyncPreview(container, mode),
         );
+      else if (mode === "project-chat")
+        void import("./dev/projectChatPreview").then(({ mountProjectChatPreview }) =>
+          mountProjectChatPreview(container),
+        );
+      else if (mode === "customize")
+        void import("./dev/customizePreview").then(({ mountCustomizePreview }) =>
+          mountCustomizePreview(container),
+        );
+      else if (mode === "project-memory")
+        void import("./dev/projectMemoryPreview").then(({ mountProjectMemoryPreview }) =>
+          mountProjectMemoryPreview(container),
+        );
       else if (mode === "header-labels")
         void import("./dev/headerLabelsPreview").then(({ mountHeaderLabelsPreview }) =>
           mountHeaderLabelsPreview(container),
@@ -57,6 +69,7 @@ void appearanceReady.then(() => {
         );
       else if (
         mode === "plugins" ||
+        mode === "plugins-mcp" ||
         mode === "plugins-pi" ||
         mode === "plugins-update" ||
         mode === "plugins-failed" ||

@@ -510,6 +510,9 @@ impl Runner {
         let logged = LoggedCommand::from(&command);
         self.shared.record(logged.clone());
         match command {
+            DriverCommand::McpAction { reply, .. } => {
+                crate::mcp::unsupported(reply, "The scripted agent does not connect MCP servers.")
+            }
             DriverCommand::Steer { reply, .. } => {
                 let _ = reply.send(lock(&self.shared.steer_reply).clone());
             }
@@ -782,6 +785,7 @@ mod tests {
 
     fn setup() -> SessionSetup {
         SessionSetup {
+            mcp_servers: Vec::new(),
             attachment_dir: None,
             attachment_reader: None,
             chat_id: "chat".into(),

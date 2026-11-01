@@ -795,8 +795,9 @@ pub fn options(
         let mut choices = levels
             .iter()
             .filter_map(Value::as_str)
-            .filter(|value| matches!(*value, "low" | "medium" | "high" | "xhigh" | "max"))
+            .filter(|value| !value.is_empty() && value.len() <= 128 && *value != DEFAULT_EFFORT)
             .filter(|value| seen.insert((*value).to_owned()))
+            .take(MAX_CHOICES.saturating_sub(1))
             .map(|value| ConfigChoice {
                 value: value.to_owned(),
                 name: value.to_owned(),
@@ -1400,7 +1401,7 @@ mod tests {
             matches!(&choices[0].kind, ConfigKind::Select { current, .. } if current == "haiku")
         );
         assert!(
-            matches!(&choices[1].kind, ConfigKind::Select { choices, .. } if choices.len() == 2)
+            matches!(&choices[1].kind, ConfigKind::Select { choices, .. } if choices.len() == 3 && choices.iter().any(|c| c.value == "future"))
         );
         let limits = rate_limits(
             &json!({"unifiedWindows":{"five_hour":{"utilization":1.5,"resetsAt":i64::MAX},"seven_day":{"utilization":-0.1,"resetsAt":42}}}),

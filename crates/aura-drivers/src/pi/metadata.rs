@@ -12,7 +12,6 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 const MAX_MODELS: usize = 500;
-const LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Model {
@@ -66,17 +65,21 @@ impl Metadata {
         let Some(levels) = data["levels"].as_array() else {
             return false;
         };
-        self.levels = LEVELS
+        let mut seen = std::collections::BTreeSet::new();
+        self.levels = levels
             .iter()
-            .filter(|s| levels.iter().any(|v| v.as_str() == Some(**s)))
-            .map(|s| (*s).into())
+            .filter_map(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= 128)
+            .filter(|s| seen.insert((*s).to_owned()))
+            .take(100)
+            .map(str::to_owned)
             .collect();
         true
     }
     pub fn state(&mut self, state: &Value) {
         self.model = Model::parse(&state["model"]);
         self.level = text(state, "thinkingLevel")
-            .filter(|s| LEVELS.contains(s))
+            .filter(|s| !s.is_empty() && s.len() <= 128)
             .map(str::to_owned);
     }
     pub fn options(&self) -> Vec<ConfigOption> {
@@ -267,6 +270,29 @@ mod tests {
             metadata
                 .request("auto_compaction", &ConfigValue::Toggle { value: false })
                 .is_none()
+        );
+    }
+}
+
+#[cfg(test)]
+mod future_effort_tests {
+    use super::*;
+    #[test]
+    fn future_advertised_effort_reaches_the_native_request() {
+        let mut metadata = Metadata::default();
+        metadata.levels(&json!({"levels":["future-effort", "high"]}));
+        metadata.state(&json!({"thinkingLevel":"future-effort"}));
+        assert_eq!(
+            metadata.request(
+                "effort",
+                &ConfigValue::Choice {
+                    value: "future-effort".into()
+                }
+            ),
+            Some(json!({"type":"set_thinking_level","level":"future-effort"}))
+        );
+        assert!(
+            matches!(&metadata.options()[0].kind, ConfigKind::Select {current,choices} if current == "future-effort" && choices.iter().any(|c|c.value=="future-effort"))
         );
     }
 }

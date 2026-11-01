@@ -2118,7 +2118,7 @@
 
 .chat-pickers {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--g-space-2);
   min-width: 0;
@@ -2134,7 +2134,7 @@
   max-width: 100%;
   height: 32px;
   padding: 0 var(--g-space-12) 0 var(--g-space-8);
-  border-radius: var(--g-radius-pill);
+  border-radius: var(--g-radius-6);
 }
 
 .chat-pickers summary > svg {
@@ -2143,14 +2143,14 @@
 }
 
 .chat-pickers summary strong {
-  flex: none;
+  flex: 0 1 auto;
   color: var(--g-fg-1);
   font-weight: 500;
 }
 
 .chat-pill-model {
   min-width: 0;
-  max-width: 160px;
+  max-width: 200px;
   overflow: hidden;
   color: var(--g-fg-2);
   text-overflow: ellipsis;
@@ -2184,12 +2184,80 @@
 /* Agent, model, effort and autonomy choices share a compact menu. */
 .chat-model-popover > .chat-popover-panel {
   bottom: calc(100% + 8px);
-  left: 0;
-  width: min(400px, calc(100vw - 48px));
+  left: auto;
+  right: 0;
+  width: min(460px, calc(100vw - 80px));
   max-height: min(560px, 72vh);
   padding: var(--g-space-4);
   gap: 0;
   border-radius: var(--g-radius-8);
+}
+
+.chat-model-popover {
+  margin-left: auto;
+}
+.chat-access-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-2);
+  min-width: 0;
+}
+.chat-access-controls summary {
+  height: 32px;
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-6);
+  font-size: var(--g-text-meta);
+  gap: var(--g-space-6);
+}
+.chat-access-controls summary > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-access-controls .chat-popover-panel {
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(320px, calc(100vw - 80px));
+  padding: var(--g-space-8);
+}
+.chat-control-heading {
+  padding: var(--g-space-8);
+}
+.chat-control-heading > strong {
+  font-size: var(--g-text-ui);
+  font-weight: 500;
+}
+.chat-control-heading > p {
+  margin: var(--g-space-4) 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+.chat-control-pending,
+.chat-pill-effort {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  white-space: nowrap;
+}
+.chat-picker-search {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  padding: var(--g-space-8);
+  border-bottom: 1px solid var(--g-line);
+  color: var(--g-fg-3);
+}
+.chat-picker-search > input {
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .chat-pill-effort {
+    display: none;
+  }
+  .chat-pill-model {
+    max-width: 140px;
+  }
 }
 
 .chat-model-columns {

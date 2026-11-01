@@ -2,6 +2,8 @@
 
 Status: reference observations support the proposed full styling pass, awaiting owner review. The owner subsequently chose a permanently light website; desktop retains light and dark appearances. They do not establish visual approval or complete product parity.
 
+The 1 November owner-requested desktop refinement uses the same audited Devin structure with neutral accents, separate access/model controls, compact project chat creation, and Customize. No fresh live Devin inspection is claimed for this increment. See the current [desktop refinement review](checkpoint-2026-11-01.md); its captures remain proposals until explicitly locked by the owner.
+
 | Reference | Observed contribution | Intended adaptation |
 | --- | --- | --- |
 | [Vercel hero](https://mobbin.com/sites/sections/42b13454-50c5-40ec-bd46-c7c1ea521873) | Restrained hierarchy and sparse hero composition | Restrained hierarchy, modest heading scale, real product imagery and the light-only website |
