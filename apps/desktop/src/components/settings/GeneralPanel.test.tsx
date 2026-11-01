@@ -23,7 +23,7 @@ const agent = (id: string, availability: AgentEntry["availability"] = ready): Ag
 });
 
 describe("Settings' General defaults", () => {
-  it("keeps full auto, background services and worktree instruction copies on, with automatic checkpoints off", () => {
+  it("keeps full auto, background services, worktree instruction copies and agents' memory edits on, with automatic checkpoints off", () => {
     expect(DEFAULT_GENERAL).toEqual({
       default_agent: null,
       default_model: null,
@@ -34,6 +34,7 @@ describe("Settings' General defaults", () => {
       close_to_tray: true,
       config_sync_paused: [],
       copy_instructions_to_worktrees: true,
+      agent_memory_writes: true,
     });
   });
 

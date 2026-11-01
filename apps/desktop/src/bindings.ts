@@ -674,6 +674,13 @@ export type AgentMaintenance = {
 	update_unavailable: string | null,
 };
 
+/**  An agent's direct edit: the revision it added, the one it replaced, and the chat it came from. */
+export type AgentMemoryEdit = {
+	revision: string,
+	parent_revision: string | null,
+	chat_id: string,
+};
+
 /**  One agent's section of the Plugin library. */
 export type AgentPlugins = {
 	management?: PluginManagement | null,
@@ -1542,6 +1549,12 @@ export type GeneralPreferences = {
 	 *  person turns it off in Instructions.
 	 */
 	copy_instructions_to_worktrees: boolean,
+	/**
+	 *  Agents edit project memory directly; every edit is a revision the person can restore. Off:
+	 *  agents propose updates for review. On unless the person turns it off in Project memory
+	 *  (the owner reversed the earlier review-only decision on 1 November 2026).
+	 */
+	agent_memory_writes: boolean,
 };
 
 export type GitFileState = {
@@ -2363,6 +2376,14 @@ export type ProjectMemoryBundle = {
 	proposals: MemoryProposal[],
 };
 
+/**  What the window hears after a committed change to a project's memory, history or proposals. */
+export type ProjectMemoryChanged = {
+	/**  Empty when changes were missed: every open project should be read again. */
+	project_id: string | null,
+	/**  Set only when an agent's direct edit added a revision. */
+	agent_edit: AgentMemoryEdit | null,
+};
+
 export type ProjectSearchHit = {
 	id: string,
 	name: string,
@@ -2726,7 +2747,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns configuration sync on or off for one agent on this device. */
 { type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
-{ type: "copy_instructions_to_worktrees"; enabled: boolean };
+{ type: "copy_instructions_to_worktrees"; enabled: boolean } | 
+/**  Turns on or off agents' direct edits to project memory. Off keeps review-only proposals. */
+{ type: "agent_memory_writes"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,

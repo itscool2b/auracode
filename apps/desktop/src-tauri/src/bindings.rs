@@ -49,6 +49,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::WorktreeRecoveryPreview>()
         .typ::<aura_protocol::git::WorktreeRelocationPreview>()
         .typ::<aura_protocol::git::PullRequestPreview>()
+        // The payload of `auracode-project-memory-changed` (memory_commands::MEMORY_CHANGED).
+        .typ::<aura_protocol::memory::ProjectMemoryChanged>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             crate::deep_links::sign_in_link_pending,

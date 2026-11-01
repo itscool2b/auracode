@@ -86,8 +86,9 @@ impl WriterConfig {
 /// What the store and the writer share.
 pub(crate) struct Shared {
     pub(crate) workspace_activity: Arc<super::workspace_activity::Activity>,
-    /// The project of each committed memory write, from the editor or an agent's grant alike.
-    pub(crate) memory_changes: tokio::sync::broadcast::Sender<String>,
+    /// Each committed memory write, from the editor or an agent's grant alike.
+    pub(crate) memory_changes:
+        tokio::sync::broadcast::Sender<aura_protocol::memory::ProjectMemoryChanged>,
     queue: Mutex<Queue>,
     wake: Condvar,
     pub(crate) count: Arc<Semaphore>,
@@ -1508,20 +1509,21 @@ impl Writer {
             }
             Request::Memory { command, reply } => {
                 let now = now_millis();
-                let changed = command.changed_project();
                 let result = if command.read_only() {
                     self.read(|conn| super::memory::execute(conn, command, now))
                 } else if matches!(self.mode, Mode::Damaged) {
                     Err(StoreError::Damaged(DAMAGED.into()))
                 } else {
-                    self.write_tx(|conn| super::memory::execute(conn, command, now))
+                    // Committed before it is announced, so an open editor can re-read, even if
+                    // this caller stopped waiting.
+                    self.write_tx(|conn| super::memory::execute_tracked(conn, command, now))
+                        .map(|(reply, changed)| {
+                            if let Some(changed) = changed {
+                                let _ = self.shared.memory_changes.send(changed);
+                            }
+                            reply
+                        })
                 };
-                // Committed, so an open editor can re-read, even if this caller stopped waiting.
-                if result.is_ok()
-                    && let Some(project) = changed
-                {
-                    let _ = self.shared.memory_changes.send(project);
-                }
                 let _ = reply.send(result);
             }
             Request::Composer { command, reply } => {

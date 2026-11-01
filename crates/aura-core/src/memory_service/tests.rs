@@ -125,8 +125,18 @@ async fn direct_writes_follow_the_profile_switch_mid_grant_and_still_need_the_to
     let revision = first["result"]["revision"].clone();
     assert!(revision.is_string());
     let project = first["result"]["project_id"].as_str().unwrap().to_owned();
-    // The open editor hears about the agent's edit.
-    assert_eq!(changes.recv().await.unwrap(), project);
+    // The window hears about the agent's edit, with what its notice needs to undo it.
+    assert_eq!(
+        changes.recv().await.unwrap(),
+        aura_protocol::memory::ProjectMemoryChanged {
+            project_id: Some(project.clone()),
+            agent_edit: Some(aura_protocol::memory::AgentMemoryEdit {
+                revision: revision.as_str().unwrap().to_owned(),
+                parent_revision: None,
+                chat_id: chat.clone(),
+            }),
+        }
+    );
     let Reply::History(history) = store
         .memory(Command::History(project.clone()))
         .await
@@ -144,6 +154,8 @@ async fn direct_writes_follow_the_profile_switch_mid_grant_and_still_need_the_to
     )
     .await;
     assert_eq!(retried["result"]["revision"], revision);
+    // The retry added nothing, so it names no edit for a notice.
+    assert_eq!(changes.recv().await.unwrap().agent_edit, None);
     // A different edit from a stale base is refused with the way forward.
     let stale = call(
         &endpoint,

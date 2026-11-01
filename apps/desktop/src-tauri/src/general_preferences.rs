@@ -1,7 +1,7 @@
-//! Settings' General page reaches Rust here: the defaults for new chats, automatic checkpoints and
-//! Instructions' worktree copies go to the session manager, and the notification, keep-awake and
-//! close-to-tray switches to the native shell. The values live in the profile's setup preferences
-//! (`aura_core::onboarding`).
+//! Settings' General page reaches Rust here: the defaults for new chats, automatic checkpoints,
+//! Instructions' worktree copies and Project memory's agent edits go to the session manager, and
+//! the notification, keep-awake and close-to-tray switches to the native shell. The values live in
+//! the profile's setup preferences (`aura_core::onboarding`).
 
 use aura_core::onboarding::GeneralPreferences;
 use aura_core::session::NewChatDefaults;
@@ -24,6 +24,7 @@ pub(crate) fn apply_to_manager(
     manager.set_new_chat_defaults(defaults(general));
     manager.set_automatic_checkpoints(general.automatic_checkpoints);
     manager.set_worktree_instruction_copies(general.copy_instructions_to_worktrees);
+    manager.set_agent_memory_writes(general.agent_memory_writes);
 }
 
 /// Initialize before publishing a runtime, so its first actor sees the saved profile policy.
@@ -90,5 +91,28 @@ mod tests {
         assert_eq!(chosen.autonomy, Autonomy::AutoEdit);
         assert_eq!(chosen.agent.as_deref(), Some("codex"));
         assert_eq!(chosen.model.as_deref(), Some("gpt-5.5-codex"));
+    }
+
+    #[tokio::test]
+    async fn project_memory_switch_reaches_running_sessions_through_the_manager() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut booted =
+            crate::boot::boot(Ok(aura_core::paths::DataRoot::at(dir.path().join("data"))));
+        let chats = crate::sessions::testing::start(&mut booted).unwrap();
+        assert!(chats.manager.agent_memory_writes(), "on by default");
+        apply_to_manager(
+            &chats.manager,
+            &GeneralPreferences {
+                agent_memory_writes: false,
+                ..GeneralPreferences::default()
+            },
+        );
+        assert!(!chats.manager.agent_memory_writes());
+        apply_to_manager(&chats.manager, &GeneralPreferences::default());
+        assert!(chats.manager.agent_memory_writes());
+        chats
+            .store
+            .shutdown(std::time::Duration::from_secs(5))
+            .await;
     }
 }

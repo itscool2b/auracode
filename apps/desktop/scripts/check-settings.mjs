@@ -126,6 +126,7 @@ try {
         close_to_tray: false,
         config_sync_paused: [],
         copy_instructions_to_worktrees: true,
+        agent_memory_writes: true,
       });
       // Another agent clears the model, which belonged to Codex; it has not listed its own.
       await page.getByLabel("Default agent").selectOption("claude");

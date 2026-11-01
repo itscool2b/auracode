@@ -290,6 +290,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
             }
         };
         crate::account_sync::attach(&app).await;
+        crate::memory_commands::forward_changes(&app);
         if let Some(library) = app.try_state::<Arc<crate::config_library::LibraryService>>() {
             library.reset_profile();
         }

@@ -253,6 +253,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     native_shell::setup(app.handle());
     general_preferences::refresh(app.handle());
     appearance::refresh(app.handle());
+    memory_commands::forward_changes(app.handle());
     if accept_sign_in_links {
         deep_links::setup(app.handle());
     }
