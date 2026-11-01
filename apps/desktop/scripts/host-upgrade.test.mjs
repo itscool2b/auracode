@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -433,6 +434,35 @@ test("a rollback restores the app and, when asked, the migrated databases", asyn
   assert.deepEqual(system.calls.at(-1).slice(0, 1), ["launch"]);
 
   assert.equal(await rollback(options({ snapshot: "nope" }), paths, system, log), EXIT.usage);
+});
+
+/**
+ * Smart App Control checks a copied executable again and may block it, so a copy of an approved
+ * app could fail to start after a rollback. The snapshot keeps, and a restore puts back, the very
+ * files that were installed.
+ */
+test("the snapshot and the restore keep the original files, not copies", async () => {
+  const { paths, installer } = machine();
+  const id = (path) => statSync(path, { bigint: true }).ino;
+  const original = id(join(paths.installDir, "auracode.exe"));
+  assert.ok(original > 0n, "the file system reports file ids");
+  const system = fakeSystem(paths, { staysUp: false });
+  assert.equal(await install(options({ installer }), paths, system, recorder()), EXIT.failed);
+  assert.equal(id(join(paths.installDir, "auracode.exe")), original, "the restored file");
+  const [name] = readdirSync(join(paths.stateDir, "snapshots"));
+  const kept = join(paths.stateDir, "snapshots", name, "app", "auracode.exe");
+  assert.equal(readFileSync(kept, "utf8"), "old", "the snapshot can be restored again");
+
+  const again = machine();
+  const before = id(join(again.paths.installDir, "auracode.exe"));
+  await install(
+    options({ installer: again.installer }),
+    again.paths,
+    fakeSystem(again.paths),
+    recorder(),
+  );
+  const [taken] = readdirSync(join(again.paths.stateDir, "snapshots"));
+  assert.equal(id(join(again.paths.stateDir, "snapshots", taken, "app", "auracode.exe")), before);
 });
 
 test("a rollback never deletes a folder that is not an install", () => {

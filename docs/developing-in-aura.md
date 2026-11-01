@@ -100,10 +100,13 @@ and keeps the previous one. It runs from the repository root as
    It returns at once. The waiter runs outside the app's job (started through WMI), from copies of
    the script and the installer in `%LOCALAPPDATA%\auracode-upgrades`. It waits up to 30 minutes
    (`--wait`) for auracode to quit.
-4. Quit auracode. The waiter copies `%LOCALAPPDATA%\auracode` to a snapshot and runs the
-   installer in update mode (`/P /UPDATE`, as the updater does), which keeps the data folder
-   (`src-tauri/windows/hooks.nsh`). Then it starts auracode again. If the new build is not running
-   20 seconds later, the waiter restores the snapshot and starts that.
+4. Quit auracode. The waiter moves the installed files in `%LOCALAPPDATA%\auracode` into a
+   snapshot and leaves a copy for the installer to update. Smart App Control checks a copied
+   executable again and may block it, so the snapshot keeps the very files it already allowed, and
+   a restore moves them back. The waiter runs the installer in update mode (`/P /UPDATE`, as the
+   updater does), which keeps the data folder (`src-tauri/windows/hooks.nsh`). Then it starts
+   auracode again. If the new build is not running 20 seconds later (it crashed, or Smart App
+   Control blocked it), the waiter restores the snapshot and starts that.
 5. In the reopened app, chats that were running show their interrupted turn and Resume. An agent
    that keeps its own sessions, such as Claude Code, continues the same conversation, because its
    driver resumes by session id. Then check whatever only the installed app can show, such as the
@@ -154,4 +157,5 @@ The development build was built from this branch against the main checkout's war
 | An agent's own processes are in the app's job; a process started through WMI is not (its parent is `WmiPrvSE.exe`) | pass |
 | `host-upgrade` against the real install while it runs: `status` reports it, `install` refuses, `rollback` finds no snapshot, nothing changes | pass |
 | `host-upgrade install --after-exit` against a stand-in install: the WMI waiter polls, proceeds when the stand-in quits, snapshots it, runs the installer, restores the snapshot when the installer fails, starts the app and removes its record; `cancel` stops an armed waiter | pass |
+| The snapshot holds, and a restore puts back, the installed files themselves (same file ids), not copies | pass |
 | Running a real installer over the installed app and reopening it | pending: needs the owner to quit auracode |
