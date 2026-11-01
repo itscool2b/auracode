@@ -7,7 +7,7 @@
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "cf65e90a273584134dfb49b6f96da6e744dd2e945285f939a16c10ff12e0d2dd",
+    "apps/desktop/package.json": "6ad64681499caec08ff33821d6100a7f9de453fc456143a77c0ec64b91c4e0dc",
     "apps/desktop/src-tauri/Cargo.toml": "1ae7923eabc09a0d2a2e4e18b742084d4332c56837d245c6073d5aa46dc0ae25",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
