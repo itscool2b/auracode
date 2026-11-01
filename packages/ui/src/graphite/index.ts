@@ -6,7 +6,7 @@
  */
 
 export { createFrameClock, type FrameClock, type FrameHost, frameClock } from "../frameClock";
-export { AgentLogo, type AgentLogoProps } from "./AgentLogo";
+export { AgentLogo, type AgentLogoProps, LogoSymbol, logoViewBox } from "./AgentLogo";
 export { AgentMark, type AgentMarkProps, agentCode, logoSide } from "./AgentMark";
 export { AGENT_LOGOS, type AgentLogo as AgentLogoData, agentLogo } from "./agentLogos";
 export { CopyButton, type CopyButtonProps } from "./CopyButton";

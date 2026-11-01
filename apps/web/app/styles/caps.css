@@ -1,0 +1,501 @@
+/*
+ * Capabilities on the night band. Light product windows float on the dark like product shots on
+ * a dark stage; the band's light changes colour with the row (--caps-glow, a brand glow).
+ */
+.caps {
+  overflow: hidden;
+  transition: --caps-glow 1400ms var(--s-swift);
+}
+
+.caps-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.caps-sky::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 68% 52%, #000, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 68% 52%, #000, transparent 75%);
+}
+
+.caps-sky::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--s-grain);
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+}
+
+.caps-glow {
+  position: absolute;
+  top: 18%;
+  right: -12%;
+  width: 78%;
+  aspect-ratio: 1.25 / 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      closest-side,
+      color-mix(in oklab, var(--caps-glow) 46%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 30% 70%,
+      color-mix(in oklab, var(--caps-glow) 22%, transparent),
+      transparent
+    );
+  filter: blur(30px);
+  opacity: 0.6;
+  animation: halo-drift 20s ease-in-out infinite alternate;
+}
+
+.caps .wrap {
+  position: relative;
+}
+
+.caps-frame {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+  margin-top: 72px;
+}
+
+.caps-side {
+  display: grid;
+  gap: 24px;
+}
+
+.caps-tabs {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The glass capsule that glides to the active row. */
+.caps-glider {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 60px;
+  border-radius: 18px;
+  background-color: rgb(255 255 255 / 0.075);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.11),
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 16px 40px -18px color-mix(in oklab, var(--caps-glow) 55%, transparent);
+  transform: translateY(calc(var(--active) * 64px));
+  transition:
+    transform 640ms var(--s-glide),
+    box-shadow 1400ms var(--s-swift);
+}
+
+.caps-tab {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  height: 60px;
+  padding: 0 20px 0 16px;
+  border: 0;
+  border-radius: 18px;
+  background: none;
+  color: var(--g-fg-3);
+  font-family: var(--g-sans);
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 300ms var(--s-swift);
+}
+
+.caps-tab:hover,
+.caps-tab[aria-selected="true"] {
+  color: var(--g-fg-1);
+}
+
+.caps-tab:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: -2px;
+}
+
+.caps-tab-index {
+  display: grid;
+  place-items: center;
+}
+
+.caps-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: rgb(255 255 255 / 0.22);
+  transition:
+    background-color 400ms var(--s-swift),
+    box-shadow 400ms var(--s-swift),
+    scale 500ms var(--s-glide);
+}
+
+.caps-tab[aria-selected="true"] .caps-tab-dot {
+  background-color: var(--caps-glow);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--caps-glow) 22%, transparent);
+  scale: 1.2;
+}
+
+.caps-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The timer fills the bottom of the active row; when it is full, the next row takes over. */
+.caps-track {
+  position: absolute;
+  right: 20px;
+  bottom: 9px;
+  left: 46px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.caps-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background-color: color-mix(in oklab, var(--caps-glow) 70%, #ffffff);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.caps-frame[data-auto] .caps-tab[aria-selected="true"] .caps-fill {
+  animation: caps-timer 6500ms linear both;
+  animation-play-state: paused;
+}
+
+.caps-frame[data-running] .caps-tab[aria-selected="true"] .caps-fill {
+  animation-play-state: running;
+}
+
+@keyframes caps-timer {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.caps-notes {
+  padding-left: 16px;
+}
+
+.caps-note {
+  display: none;
+}
+
+.caps-note.is-active {
+  display: grid;
+  gap: 20px;
+  animation: note-in 700ms var(--s-expo) both;
+}
+
+.caps-note p {
+  max-width: 380px;
+  color: var(--g-fg-2);
+  font-size: 16px;
+  line-height: 26px;
+  text-wrap: pretty;
+}
+
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.caps-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.caps-agents li {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background-color: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  transition:
+    transform 400ms var(--s-glide),
+    box-shadow 400ms var(--s-swift);
+}
+
+.caps-agents li:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.18),
+    0 10px 30px -8px color-mix(in oklab, var(--glow) 80%, transparent);
+}
+
+/* The view: one scene at a time, each rising in from a soft blur. */
+.caps-view {
+  position: relative;
+  height: 560px;
+  border-radius: 20px;
+}
+
+.m-scene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(18px) scale(0.985);
+  transition:
+    opacity 520ms var(--s-swift),
+    transform 800ms var(--s-expo),
+    visibility 0s linear 520ms;
+}
+
+.m-scene.is-active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+
+/* Scene choreography: each view plays its moment when it is shown. */
+.m-scene.is-active :is(.m-body > *, .m-turn > *) {
+  animation: scene-in 700ms var(--s-expo) both;
+}
+
+.m-scene.is-active .m-body > :nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.m-scene.is-active .m-turn > :nth-child(2) {
+  animation-delay: 220ms;
+}
+
+.m-scene.is-active .m-turn > :nth-child(3) {
+  animation-delay: 320ms;
+}
+
+.m-scene.is-active .m-turn > :nth-child(4) {
+  animation-delay: 420ms;
+}
+
+.m-scene.is-active .m-turn > :nth-child(5) {
+  animation-delay: 520ms;
+}
+
+.m-scene.is-active :is(.m-pill, .m-file, .m-diff-line, .m-row) {
+  animation: scene-in 700ms var(--s-expo) both;
+  animation-delay: calc(var(--n, 0) * 70ms + 200ms);
+}
+
+.m-scene.is-active :is(.m-picker, .m-queue) {
+  animation: pop-up 700ms var(--s-expo) 360ms both;
+  transform-origin: 80% 100%;
+}
+
+.m-scene.is-active .handoff-next {
+  animation: plane-in 900ms var(--s-expo) 260ms both;
+}
+
+.m-scene.is-active .m-handoff {
+  animation: scene-in 700ms var(--s-expo) 620ms both;
+}
+
+.m-scene.is-active .m-diff-line:is(.is-add, .is-del) {
+  animation-name: line-lit;
+  animation-duration: 1200ms;
+}
+
+.m-scene.is-active .m-segments > .is-on {
+  animation: segment-glide 800ms var(--s-glide) 700ms both;
+}
+
+.m-scene.is-active .m-steer {
+  animation: steer-pulse 2400ms var(--s-swift) 900ms infinite;
+}
+
+@keyframes scene-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+}
+
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    filter: blur(6px);
+  }
+}
+
+@keyframes plane-in {
+  from {
+    opacity: 0;
+    transform: translate(24px, 30px) scale(0.96);
+  }
+}
+
+@keyframes line-lit {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  40% {
+    opacity: 1;
+    transform: none;
+    filter: brightness(0.92);
+  }
+}
+
+@keyframes segment-glide {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes steer-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgb(10 10 11 / 0.05),
+      0 0 0 5px color-mix(in oklab, var(--caps-glow) 26%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caps,
+  .caps-glider,
+  .m-scene {
+    transition: none;
+  }
+
+  .caps-glow,
+  .caps-note.is-active {
+    animation: none;
+  }
+
+  /* As specific as the choreography above, so every part of a scene simply stands. */
+  .m-scene.is-active
+    :is(
+      .m-body > *,
+      .m-turn > *,
+      .m-pill,
+      .m-file,
+      .m-diff-line,
+      .m-row,
+      .m-picker,
+      .m-queue,
+      .handoff-next,
+      .m-handoff,
+      .m-steer,
+      .m-segments > .is-on
+    ) {
+    animation: none;
+  }
+}
+
+@media (max-width: 899px) {
+  .caps-frame {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    margin-top: 48px;
+  }
+
+  .caps-tabs {
+    flex-direction: row;
+    gap: 6px;
+    margin: 0 calc(-1 * var(--s-gutter));
+    padding: 2px var(--s-gutter) 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .caps-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .caps-glider,
+  .caps-tab-index {
+    display: none;
+  }
+
+  .caps-tab {
+    flex: none;
+    grid-template-columns: auto;
+    height: 44px;
+    padding: 0 18px;
+    border-radius: 999px;
+    background-color: rgb(255 255 255 / 0.06);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+    font-size: 15px;
+  }
+
+  .caps-tab[aria-selected="true"] {
+    background-color: rgb(255 255 255 / 0.14);
+  }
+
+  .caps-track {
+    right: 16px;
+    bottom: 5px;
+    left: 16px;
+  }
+
+  .caps-notes {
+    padding-left: 0;
+  }
+
+  .caps-view {
+    height: 480px;
+  }
+
+  .m-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .m-split-chat {
+    display: none;
+  }
+
+  .m-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .m-shell-pane {
+    display: none;
+  }
+
+  .caps .handoff-prior {
+    margin-right: 0;
+  }
+
+  .caps .handoff-next {
+    width: 94%;
+  }
+}

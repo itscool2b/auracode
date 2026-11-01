@@ -1,0 +1,8 @@
+/* Halo for auracode.si, in the order the page is built: system, chrome, the app in miniature,
+   the home page, its night band, and the inner pages. */
+@import "./base.css";
+@import "./chrome.css";
+@import "./mock.css";
+@import "./home.css";
+@import "./caps.css";
+@import "./pages.css";

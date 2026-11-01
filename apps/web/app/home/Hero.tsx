@@ -1,61 +1,61 @@
-import { AGENT_NAMES } from "../agents";
-import { HandoffView } from "./Capabilities";
-import { RotatingAgent } from "./RotatingAgent";
+import { AGENT_BRANDS } from "@auracode/ui";
+import { type CSSProperties, useRef } from "react";
+import { Arrow } from "../ui";
+import { AgentRoll } from "./AgentRoll";
+import { HeroWindow, useHandoffLoop, workingAgent } from "./HeroWindow";
+import { Marquee } from "./Marquee";
 
+/**
+ * "One window for" the agent at work. The glass window below replays one session handed from
+ * agent to agent; the name in the headline and the halo behind the window follow it.
+ */
 export function Hero() {
+  const stage = useRef<HTMLDivElement>(null);
+  const state = useHandoffLoop(stage);
+  const agent = AGENT_BRANDS[workingAgent(state)];
+  const halo = {
+    "--halo-a": agent.glow,
+    "--halo-b": agent.palette[2],
+  } as CSSProperties;
+
   return (
-    <section className="hero" aria-labelledby="hero-title">
-      <div className="hero-layout">
-        <div className="hero-copy">
-          <h1 id="hero-title" className="hero-title" aria-label="One window for your coding agents">
-            <span className="hero-line">One window for</span>
-            <span className="hero-line">
-              <RotatingAgent names={AGENT_NAMES} />
-            </span>
-          </h1>
-          <p className="hero-lead">
-            The coding agents you already use, together in one chat on your machine. Free, with
-            nothing to sign up for.
-          </p>
-          <div className="hero-actions">
-            <a className="g-button g-button-primary g-button-44" href="/download">
-              Download
-            </a>
+    <section className="hero" aria-labelledby="hero-title" style={halo} data-zone="">
+      <div className="halo" aria-hidden="true">
+        <span className="halo-core" />
+        <span className="halo-bloom" />
+        <span className="halo-rays" />
+      </div>
+      <div className="hero-copy wrap">
+        <h1 id="hero-title" className="hero-title" aria-label="One window for your coding agents">
+          <span className="hero-line" aria-hidden="true">
+            One window for
+          </span>
+          <span className="hero-line hero-line-agent" aria-hidden="true">
+            <AgentRoll name={agent.name} />
+          </span>
+        </h1>
+        <p className="hero-lead">
+          The coding agents you already use, together in one chat on your machine. Free, with
+          nothing to sign up for.
+        </p>
+        <div className="hero-actions">
+          <a className="cta cta-ink" href="/download" data-magnetic="">
+            Download
+            <Arrow direction="down" />
+          </a>
+          <a className="cta cta-glass" href="#capabilities">
+            See it work
+          </a>
+        </div>
+      </div>
+      <div className="hero-stage" ref={stage}>
+        <div className="hero-detail" aria-hidden="true" data-glint="">
+          <div className="hero-tilt">
+            <HeroWindow state={state} />
           </div>
         </div>
-        <div className="hero-detail" aria-hidden="true">
-          <span className="stage-label">AURACODE / HANDOFF</span>
-          <HandoffView />
-        </div>
-        <p className="hero-aside">
-          YOUR AGENTS
-          <br />
-          YOUR MACHINE
-          <br />
-          ONE CHAT
-        </p>
       </div>
-      <div className="product-stage">
-        <div className="product-stage-heading">
-          <span>THE LOCAL WORKSPACE</span>
-          <span>YOUR AGENTS / ONE WINDOW</span>
-        </div>
-        <figure className="product-frame">
-          <picture>
-            <source
-              type="image/webp"
-              srcSet="/images/desktop-light-480.webp 480w, /images/desktop-light-960.webp 960w, /images/desktop-light-1440.webp 1440w, /images/desktop-light-2240.webp 2240w"
-              sizes="(max-width: 1240px) calc(100vw - 40px), 1200px"
-            />
-            <img
-              src="/images/desktop-light.png"
-              width="1440"
-              height="760"
-              alt="The auracode desktop: project navigation, an agent response with code, and a composer with agent and autonomy controls."
-            />
-          </picture>
-        </figure>
-      </div>
+      <Marquee />
     </section>
   );
 }

@@ -1,14 +1,11 @@
-import { AGENT_BRAND_IDS, type AgentBrandId } from "@auracode/ui";
 import { useEffect, useRef } from "react";
 import { AGENT_NAMES } from "../agents";
 import { useReducedMotion } from "../motion";
+import { Words } from "../reveal";
 import { Arrow } from "../ui";
-import { AgentStrip } from "./AgentStrip";
+import { AGENTS, SpriteMark } from "./Sprite";
 
 const agentList = `${AGENT_NAMES.slice(0, -1).join(", ")} and ${AGENT_NAMES.at(-1) ?? ""}`;
-
-/** Every agent auracode runs, in the order the answer names them. */
-const AGENTS: readonly AgentBrandId[] = AGENT_BRAND_IDS.filter((id) => id !== "generic");
 
 const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }[] = [
   {
@@ -43,12 +40,12 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
   },
 ];
 
-/** How long an answer takes to close; it opens over the same 300ms (--g-dur-panel). */
+/** How long an answer takes to close; it opens over the same 300ms. */
 const CLOSE = 300;
 
 /**
- * Vercel's FAQ, clean: the two-tone heading and a quiet link at left, six questions on hairlines
- * at right, one open at a time. Built on <details>, so every answer opens without JavaScript; the
+ * Questions as glass rows: the heading and a quiet link at left, six questions at right, one open
+ * at a time; the plus turns into a minus as its answer slides open. Built on <details>, so every answer opens without JavaScript; the
  * script adds the eased open and close and keeps one row open.
  */
 export function Faq() {
@@ -114,11 +111,14 @@ export function Faq() {
   }, [reduced]);
 
   return (
-    <section className="section faq" aria-labelledby="faq-title">
+    <section className="section faq" id="faq" aria-labelledby="faq-title">
       <div className="wrap faq-grid">
-        <div className="faq-head" data-reveal="">
+        <div className="faq-head">
           <h2 id="faq-title" className="title">
-            Questions, answered. <span>Before you install.</span>
+            <Words text="Questions, answered." />{" "}
+            <span className="title-soft serif">
+              <Words text="Before you install." offset={2} />
+            </span>
           </h2>
           <a className="text-link faq-link" href="/privacy">
             Privacy notice <Arrow />
@@ -138,7 +138,13 @@ export function Faq() {
                 <div className="faq-answer">
                   <p>{item.answer}</p>
                   {/* The answer names every agent; the marks beside it are decorative. */}
-                  {item.agents ? <AgentStrip agents={AGENTS} /> : null}
+                  {item.agents ? (
+                    <span className="faq-agents" aria-hidden="true">
+                      {AGENTS.map((agent) => (
+                        <SpriteMark key={agent} agent={agent} size={22} />
+                      ))}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </details>
