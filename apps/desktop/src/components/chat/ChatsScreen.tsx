@@ -5,6 +5,13 @@ import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import { newChatAgent, projectChatContext } from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
+import {
+  agentEditText,
+  memoryChats,
+  type ProjectMemoryApi,
+  projectMemoryApi,
+  useAgentMemoryEdits,
+} from "../../lib/projectMemory";
 import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
@@ -67,6 +74,8 @@ export function ChatsScreen({
   workspace,
   openChatRequest,
   setup = setupApi,
+  memory = projectMemoryApi,
+  onReviewMemory,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -84,8 +93,13 @@ export function ChatsScreen({
   readonly openChatRequest?: { id: string };
   /** Settings' saved preferences: New chat starts with the default agent selected. */
   readonly setup?: SetupApi;
+  /** Project memory: an agent's direct edit shows a banner with Review and Undo. */
+  readonly memory?: ProjectMemoryApi;
+  /** Opens Customize > Project memory on a revision, with its changes. */
+  readonly onReviewMemory?: (projectId: string, revision: string) => void;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
+  const memoryEdits = useAgentMemoryEdits(memory);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
   // Settings' default agent, read again whenever the chats come back into view (from Settings).
@@ -137,6 +151,28 @@ export function ChatsScreen({
         .filter((entry) => entry.archived === archived)
         .map((entry) => liveById.get(entry.chat.id) ?? entry.chat)
     : snapshot.chats;
+  // Saved chats first, then the live list, so a chat's current title names its agent's edits.
+  const knownChats = memoryChats([
+    ...(organization.data?.chats.map((entry) => entry.chat) ?? []),
+    ...(snapshot.chats ?? []),
+  ]);
+  const memoryBanners = memoryEdits.notices.map((notice) => ({
+    key: `${notice.projectId}:${notice.revision}`,
+    text: agentEditText(
+      notice,
+      knownChats,
+      organization.data?.projects.find((project) => project.id === notice.projectId)?.name ?? null,
+    ),
+    state: notice.state,
+    onReview: onReviewMemory
+      ? () => {
+          memoryEdits.dismiss(notice);
+          onReviewMemory(notice.projectId, notice.revision);
+        }
+      : undefined,
+    onUndo: () => void memoryEdits.undo(notice, knownChats),
+    onDismiss: () => memoryEdits.dismiss(notice),
+  }));
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
   const selectedEntry = organization.data?.chats.find((entry) => entry.chat.id === selected);
   const selectedProject =
@@ -258,6 +294,7 @@ export function ChatsScreen({
           recoveryNotice={info.recovery_notice}
           onRecoveryDismissed={onRecoveryDismissed}
           notices={info.notices}
+          memoryEdits={memoryBanners}
         />
         {selected === null ? (
           <NewChat

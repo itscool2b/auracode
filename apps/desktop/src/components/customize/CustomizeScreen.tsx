@@ -1,6 +1,7 @@
 import { ArrowLeft, BookOpen, FileText, Puzzle } from "lucide-react";
-import { type ComponentProps, useEffect, useState, useSyncExternalStore } from "react";
+import { type ComponentProps, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { InstructionsTarget } from "../../bindings";
+import { memoryChats } from "../../lib/projectMemory";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { PluginLibraryScreen } from "../library/PluginLibraryScreen";
 import { InstructionsPanel } from "../settings/InstructionsPanel";
@@ -15,7 +16,7 @@ export interface CustomizeServices {
     "api" | "libraryApi" | "vendorApi" | "mcpApi"
   >;
   readonly instructions?: ComponentProps<typeof InstructionsPanel>["api"];
-  /** The profile's preferences, for Instructions' worktree switch. */
+  /** The profile's preferences, for Instructions' worktree switch and memory's agent edits. */
   readonly setup?: ComponentProps<typeof InstructionsPanel>["setup"];
   readonly memory?: ComponentProps<typeof ProjectMemoryPanel>["api"];
 }
@@ -35,6 +36,7 @@ export function CustomizeScreen({
   instructionsTarget,
   chatLabel,
   activeChatId,
+  initialMemoryRevision,
   onBack,
   onAgents,
   services,
@@ -45,6 +47,8 @@ export function CustomizeScreen({
   readonly instructionsTarget?: InstructionsTarget;
   readonly chatLabel?: string;
   readonly activeChatId?: string;
+  /** Project memory opens this revision with its changes (an agent edit's Review). */
+  readonly initialMemoryRevision?: string;
   readonly onBack: () => void;
   readonly onAgents: () => void;
   readonly services?: CustomizeServices;
@@ -57,6 +61,11 @@ export function CustomizeScreen({
   const [section, setSection] = useState<CustomizeSection>(initialSection);
   const [visited, setVisited] = useState<ReadonlySet<CustomizeSection>>(new Set([initialSection]));
   const projects = organization.data?.projects ?? NO_PROJECTS;
+  const savedChats = organization.data?.chats;
+  const chats = useMemo(
+    () => memoryChats(savedChats?.map((entry) => entry.chat) ?? []),
+    [savedChats],
+  );
   const [target, setTarget] = useState<InstructionsTarget | null>(instructionsTarget ?? null);
   useEffect(() => {
     if (target || (initialProjectId && !organization.data)) return;
@@ -143,8 +152,11 @@ export function CustomizeScreen({
           >
             <ProjectMemoryPanel
               api={services?.memory}
+              setup={services?.setup}
+              chats={chats}
               projects={projects}
               initialProjectId={initialProjectId ?? undefined}
+              initialRevision={initialMemoryRevision}
             />
           </section>
         ) : null}

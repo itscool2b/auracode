@@ -1,7 +1,20 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { EnvStatus, StorageStatus } from "../../bindings";
 import { type DismissState, SHOWN } from "../../lib/dismiss";
+import type { AgentEditState } from "../../lib/projectMemory";
 import { dismissRecovery } from "../RecoveryNotice";
+
+/** An agent's direct edit to project memory, as the window's banner shows it. */
+export interface MemoryEditBanner {
+  readonly key: string;
+  /** "Claude Code in Fix the login flow updated project memory for auracode." */
+  readonly text: string;
+  readonly state: AgentEditState;
+  /** Opens Customize > Project memory on the edit, with its changes. */
+  readonly onReview?: () => void;
+  readonly onUndo: () => void;
+  readonly onDismiss: () => void;
+}
 
 /** The sentence a storage problem shows, or `null` while saving runs. */
 export function storageBanner(storage: StorageStatus | null): string | null {
@@ -26,7 +39,8 @@ export function envBanner(env: EnvStatus | null): string | null {
 
 /**
  * The window's banners: saving paused or failed, the environment fallback with Retry, the
- * database repair notice (dismissable for good), and startup notices (dismissable for now).
+ * database repair notice (dismissable for good), startup notices (dismissable for now), and
+ * agents' direct edits to project memory, with Review and Undo.
  */
 export function Banners({
   storage,
@@ -35,6 +49,7 @@ export function Banners({
   recoveryNotice,
   onRecoveryDismissed,
   notices,
+  memoryEdits = [],
 }: {
   readonly storage: StorageStatus | null;
   readonly env: EnvStatus | null;
@@ -42,12 +57,19 @@ export function Banners({
   readonly recoveryNotice: string | null;
   readonly onRecoveryDismissed: () => void;
   readonly notices: readonly string[];
+  readonly memoryEdits?: readonly MemoryEditBanner[];
 }) {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const storageText = storageBanner(storage);
   const envText = envBanner(env);
   const shown = notices.filter((notice) => !dismissed.has(notice));
-  if (storageText === null && envText === null && recoveryNotice === null && shown.length === 0) {
+  if (
+    storageText === null &&
+    envText === null &&
+    recoveryNotice === null &&
+    shown.length === 0 &&
+    memoryEdits.length === 0
+  ) {
     return null;
   }
   return (
@@ -83,7 +105,63 @@ export function Banners({
           </button>
         </li>
       ))}
+      {memoryEdits.map((edit) => (
+        <MemoryEditBannerView key={edit.key} edit={edit} />
+      ))}
     </ul>
+  );
+}
+
+/**
+ * An agent's direct edit to project memory: a calm notice that never blocks the chat. Review opens
+ * the edit's changes; Undo restores what it replaced as a new revision of the person's.
+ */
+export function MemoryEditBannerView({ edit }: { readonly edit: MemoryEditBanner }) {
+  const text = useId();
+  const { state } = edit;
+  return (
+    <li className="chat-banner" data-testid="memory-edit-banner">
+      <span id={text} role="status">
+        {edit.text}
+        {state.status === "failed" ? (
+          <span role="alert" className="ui-error">
+            {" "}
+            {state.message}
+          </span>
+        ) : null}
+      </span>
+      {edit.onReview && state.status !== "undone" ? (
+        <button
+          type="button"
+          className="g-button g-button-28"
+          aria-describedby={text}
+          disabled={state.status === "undoing"}
+          onClick={edit.onReview}
+        >
+          Review
+        </button>
+      ) : null}
+      {state.status === "shown" || state.status === "undoing" ? (
+        <button
+          type="button"
+          className="g-button g-button-28"
+          aria-describedby={text}
+          disabled={state.status === "undoing"}
+          onClick={edit.onUndo}
+        >
+          {state.status === "undoing" ? "Undoing…" : "Undo"}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="g-button g-button-ghost g-button-28"
+        aria-describedby={text}
+        disabled={state.status === "undoing"}
+        onClick={edit.onDismiss}
+      >
+        Dismiss
+      </button>
+    </li>
   );
 }
 

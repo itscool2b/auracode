@@ -63,6 +63,23 @@
   flex-wrap: wrap;
   gap: var(--g-space-8);
 }
+/* The agents switch is the settings row of the other pages; the panel's grid spaces it. */
+.project-memory > .settings-group {
+  margin: 0;
+}
+/* A newer saved version beside a draft: the window's calm notice, never a blocking dialog. */
+.project-memory-newer > span {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+.project-memory-row-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--g-space-8);
+}
 .project-memory-list {
   list-style: none;
   margin: 0;
