@@ -3,6 +3,11 @@ use aura_protocol::memory::*;
 use rusqlite::{Connection, OptionalExtension, params};
 
 pub(crate) const MAX_MARKDOWN: usize = 16 * 1024;
+/// The longest revision source a synced record may carry.
+pub(crate) const MAX_SOURCE: usize = 128;
+/// A revision an agent saved directly names its chat: `agent:<chat id>`, well within
+/// [`MAX_SOURCE`].
+pub(crate) const AGENT_SOURCE: &str = "agent:";
 pub(crate) enum Command {
     ReadChat(String),
     Read(String),
@@ -10,6 +15,12 @@ pub(crate) enum Command {
     Proposals(String),
     Export(String),
     Save(SaveProjectMemory),
+    /// An agent's direct edit through its chat's memory grant. The chat comes from the grant,
+    /// never from the agent.
+    AgentSave {
+        input: SaveProjectMemory,
+        chat_id: String,
+    },
     Propose(ProposeProjectMemory),
     Accept(AcceptMemoryProposal),
     Reject {
@@ -54,15 +65,33 @@ impl Command {
             Self::Snapshot {
                 embedded_context, ..
             } => embedded_context.as_ref().map_or(0, String::len),
-            Self::Save(v) => v.markdown.len(),
+            Self::Save(v) | Self::AgentSave { input: v, .. } => v.markdown.len(),
             Self::Propose(v) => v.markdown.len(),
             Self::Import(v) => serde_json::to_vec(v).map_or(MAX_MARKDOWN, |v| v.len()),
             _ => 0,
         }
     }
+    /// The project whose memory, history or proposals this write changes, for open editors.
+    /// Prompt snapshots change none of them.
+    pub(crate) fn changed_project(&self) -> Option<String> {
+        match self {
+            Self::Save(v) | Self::AgentSave { input: v, .. } => Some(v.project_id.clone()),
+            Self::Propose(v) => Some(v.project_id.clone()),
+            Self::Accept(v) => Some(v.project_id.clone()),
+            Self::Reject { project_id, .. } => Some(project_id.clone()),
+            Self::Import(v) => Some(v.bundle.project_id.clone()),
+            Self::ReadChat(_)
+            | Self::Read(_)
+            | Self::History(_)
+            | Self::Proposals(_)
+            | Self::Export(_)
+            | Self::Snapshot { .. } => None,
+        }
+    }
 }
+/// A refusal whose text is the whole message: the editor and agents read it as written.
 fn invalid(message: &str) -> rusqlite::Error {
-    rusqlite::Error::InvalidParameterName(message.into())
+    rusqlite::Error::ToSqlConversionFailure(message.into())
 }
 fn check_markdown(markdown: &str, reason: &str) -> rusqlite::Result<()> {
     if markdown.len() > MAX_MARKDOWN
@@ -159,6 +188,44 @@ fn save(
     conn.execute("INSERT INTO project_memory(project_id,revision,markdown,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(project_id) DO UPDATE SET revision=excluded.revision,markdown=excluded.markdown,updated_at=excluded.updated_at",params![input.project_id,revision,input.markdown,now])?;
     read(conn, &input.project_id)
 }
+fn chat_in_project(conn: &Connection, chat: &str, project: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND project_id=?2 AND deleted=0)",
+        params![chat, project],
+        |r| r.get::<_, bool>(0),
+    )
+}
+/// An agent's direct edit: a normal revision whose source names the chat. Retrying an edit that
+/// already landed answers the current revision instead of failing or adding a duplicate.
+fn agent_save(
+    conn: &Connection,
+    input: SaveProjectMemory,
+    chat_id: &str,
+    now: i64,
+) -> rusqlite::Result<ProjectMemory> {
+    check_markdown(&input.markdown, &input.reason)?;
+    let current = read(conn, &input.project_id)?;
+    // The source must stay within what a synced revision may carry.
+    if chat_id.is_empty()
+        || AGENT_SOURCE.len() + chat_id.len() > MAX_SOURCE
+        || !chat_in_project(conn, chat_id, &input.project_id)?
+    {
+        return Err(invalid(
+            "This chat does not belong to the memory's project.",
+        ));
+    }
+    if current.markdown == input.markdown {
+        return Ok(current);
+    }
+    if current.revision != input.expected_revision {
+        return Err(invalid(&format!(
+            "Project memory changed since revision {}. It is now revision {}. Read it again, apply your edit to the current Markdown, and write with the new base revision.",
+            input.expected_revision.as_deref().unwrap_or("empty"),
+            current.revision.as_deref().unwrap_or("empty"),
+        )));
+    }
+    save(conn, input, now, &format!("{AGENT_SOURCE}{chat_id}"))
+}
 fn propose(
     conn: &Connection,
     input: ProposeProjectMemory,
@@ -172,11 +239,7 @@ fn propose(
         ));
     }
     if let Some(chat) = &input.chat_id
-        && !conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND project_id=?2 AND deleted=0)",
-            params![chat, input.project_id],
-            |r| r.get::<_, bool>(0),
-        )?
+        && !chat_in_project(conn, chat, &input.project_id)?
     {
         return Err(invalid(
             "This chat does not belong to the proposal's project.",
@@ -225,6 +288,9 @@ pub(crate) fn execute(conn: &Connection, command: Command, now: i64) -> rusqlite
             Ok(Reply::Proposals(proposals(conn, &id)?))
         }
         Command::Save(v) => Ok(Reply::Memory(save(conn, v, now, "user")?)),
+        Command::AgentSave { input, chat_id } => {
+            Ok(Reply::Memory(agent_save(conn, input, &chat_id, now)?))
+        }
         Command::Propose(v) => Ok(Reply::Proposal(propose(conn, v, now)?)),
         Command::Accept(v) => {
             let p=conn.query_row("SELECT id,project_id,base_revision,markdown,reason,chat_id,idempotency_key,state,created_at FROM project_memory_proposals WHERE id=?1 AND project_id=?2",params![v.proposal_id,v.project_id],proposal)?;
@@ -345,7 +411,7 @@ pub(crate) fn execute(conn: &Connection, command: Command, now: i64) -> rusqlite
 }
 pub(crate) fn visible_context(memory: &ProjectMemory) -> String {
     format!(
-        "\n\nProject memory (Aura reference context, revision {})\nUse this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. To suggest an update, use the Aura project-memory read/propose tools when available; proposals require user review. If the helper is absent or unreachable on this host, proposals are unavailable here; use Aura's Project memory editor.\n\n{}\n",
+        "\n\nProject memory (Aura reference context, revision {})\nUse this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. You can read and edit this memory with the Aura project-memory tools when they are available: read it first, then write the complete updated Markdown. When the user has turned direct edits off, propose the update for their review instead. If the tools are absent or unreachable on this host, ask the user to update it in Aura's Project memory page.\n\n{}\n",
         memory.revision.as_deref().unwrap_or("empty"),
         if memory.markdown.is_empty() {
             "(Project memory is empty.)"
@@ -385,6 +451,170 @@ mod tests {
             panic!("memory reply")
         };
         v
+    }
+    fn agent(
+        conn: &Connection,
+        id: &str,
+        chat: &str,
+        base: Option<String>,
+        markdown: &str,
+    ) -> rusqlite::Result<ProjectMemory> {
+        match execute(
+            conn,
+            Command::AgentSave {
+                input: SaveProjectMemory {
+                    project_id: id.into(),
+                    expected_revision: base,
+                    markdown: markdown.into(),
+                    reason: "Learned a durable project fact".into(),
+                },
+                chat_id: chat.into(),
+            },
+            20,
+        )? {
+            Reply::Memory(v) => Ok(v),
+            _ => panic!("memory reply"),
+        }
+    }
+    #[test]
+    fn agent_edits_are_revisions_named_for_their_chat_and_retries_never_duplicate() {
+        let (db, id, chat) = fixture();
+        let first = saved(db.conn(), &id, None, "Owner notes");
+        let edited = agent(
+            db.conn(),
+            &id,
+            &chat,
+            first.revision.clone(),
+            "Owner notes\n\nRun the Rust checks before committing.",
+        )
+        .unwrap();
+        assert_ne!(edited.revision, first.revision);
+        let latest = &history(db.conn(), &id).unwrap()[0];
+        assert_eq!(latest.source, format!("agent:{chat}"));
+        assert_eq!(latest.parent_revision, first.revision);
+        assert_eq!(latest.reason, "Learned a durable project fact");
+        assert_eq!(read(db.conn(), &id).unwrap(), edited);
+        // A retry of a write that already landed answers the current revision, whatever its base.
+        for base in [first.revision.clone(), edited.revision.clone(), None] {
+            let retried = agent(
+                db.conn(),
+                &id,
+                &chat,
+                base,
+                "Owner notes\n\nRun the Rust checks before committing.",
+            )
+            .unwrap();
+            assert_eq!(retried, edited);
+        }
+        assert_eq!(history(db.conn(), &id).unwrap().len(), 2);
+        // A different edit from the old base is stale and tells the agent to read again.
+        let stale = agent(db.conn(), &id, &chat, first.revision.clone(), "Lost edit")
+            .unwrap_err()
+            .to_string();
+        assert!(stale.starts_with("Project memory changed since revision"));
+        assert!(stale.contains(edited.revision.as_deref().unwrap()));
+        assert!(stale.contains("Read it again"));
+        assert_eq!(read(db.conn(), &id).unwrap(), edited);
+        assert_eq!(history(db.conn(), &id).unwrap().len(), 2);
+        // The editor's own saves still name the user, and still compare their base.
+        let user = saved(db.conn(), &id, edited.revision.clone(), "Owner rewrite");
+        let revisions = history(db.conn(), &id).unwrap();
+        let mine = revisions
+            .iter()
+            .find(|revision| Some(&revision.revision) == user.revision.as_ref())
+            .unwrap();
+        assert_eq!(mine.source, "user");
+        assert_eq!(mine.parent_revision, edited.revision);
+    }
+    #[test]
+    fn agent_edits_keep_memory_limits_and_their_chats_project() {
+        let (db, id, chat) = fixture();
+        assert!(agent(db.conn(), &id, &chat, None, &"x".repeat(MAX_MARKDOWN + 1)).is_err());
+        assert!(agent(db.conn(), &id, &chat, None, "bad\u{1}").is_err());
+        let Err(missing_reason) = execute(
+            db.conn(),
+            Command::AgentSave {
+                input: SaveProjectMemory {
+                    project_id: id.clone(),
+                    expected_revision: None,
+                    markdown: "No reason".into(),
+                    reason: " ".into(),
+                },
+                chat_id: chat.clone(),
+            },
+            1,
+        ) else {
+            panic!("a reason is required")
+        };
+        assert_eq!(
+            missing_reason.to_string(),
+            "Memory must be at most 16 KiB and include a reason of at most 2 KiB."
+        );
+        // A chat of another project, a missing chat or a deleted one cannot edit this memory.
+        let foreign = db.chat("/memory-other");
+        assert!(agent(db.conn(), &id, &foreign, None, "x").is_err());
+        assert!(agent(db.conn(), &id, "missing-chat", None, "x").is_err());
+        assert!(agent(db.conn(), &id, &"c".repeat(MAX_SOURCE), None, "x").is_err());
+        assert!(history(db.conn(), &id).unwrap().is_empty());
+        // The largest memory an editor may save is also the largest an agent may write.
+        assert!(agent(db.conn(), &id, &chat, None, &"x".repeat(MAX_MARKDOWN)).is_ok());
+        db.conn()
+            .execute("UPDATE chats SET deleted=1 WHERE id=?1", [&chat])
+            .unwrap();
+        assert!(agent(db.conn(), &id, &chat, None, "after deletion").is_err());
+        assert_eq!(history(db.conn(), &id).unwrap().len(), 1);
+    }
+    #[test]
+    fn writes_name_the_project_they_change_and_refusals_read_as_written() {
+        let save = SaveProjectMemory {
+            project_id: "project".into(),
+            expected_revision: None,
+            markdown: String::new(),
+            reason: "r".into(),
+        };
+        assert_eq!(
+            Command::AgentSave {
+                input: save.clone(),
+                chat_id: "chat".into()
+            }
+            .changed_project()
+            .as_deref(),
+            Some("project")
+        );
+        assert_eq!(
+            Command::Save(save).changed_project().as_deref(),
+            Some("project")
+        );
+        assert!(
+            Command::Snapshot {
+                chat_id: "chat".into(),
+                prompt_id: "prompt".into(),
+                previous: None,
+                embedded_context: None,
+            }
+            .changed_project()
+            .is_none()
+        );
+        assert!(Command::Read("project".into()).changed_project().is_none());
+        let (db, id, _) = fixture();
+        let first = saved(db.conn(), &id, None, "First");
+        saved(db.conn(), &id, first.revision.clone(), "Second");
+        let Err(stale) = execute(
+            db.conn(),
+            Command::Save(SaveProjectMemory {
+                project_id: id,
+                expected_revision: first.revision,
+                markdown: "Third".into(),
+                reason: "stale".into(),
+            }),
+            12,
+        ) else {
+            panic!("stale")
+        };
+        assert_eq!(
+            stale.to_string(),
+            "Project memory changed. Review the current revision before saving."
+        );
     }
     #[test]
     fn revisions_compare_base_and_stale_proposals_never_overwrite_new_user_edits() {

@@ -48,7 +48,7 @@ pub(crate) fn decode(record: &EncryptedRecord, metadata: &Metadata) -> Result<Me
             .is_some_and(|id| !transcript_uuid(id))
         || revision.markdown.len() > crate::chatstore::memory::MAX_MARKDOWN
         || revision.reason.len() > 2048
-        || revision.source.len() > 128
+        || revision.source.len() > crate::chatstore::memory::MAX_SOURCE
         || revision.created_at < 0
     {
         return Err(SyncError::Invalid);
@@ -343,6 +343,93 @@ mod tests {
                 ))
                 .unwrap(),
             0
+        );
+    }
+    #[test]
+    fn agent_revisions_sync_naming_the_chat_that_wrote_them() {
+        let key = Arc::new(AccountKey::generate().unwrap());
+        let (_a, mut source, source_context) = fixture(key.clone(), "source");
+        let (_b, mut target, target_context) = fixture(key, "target");
+        let now = crate::time::now_millis() as u64;
+        let (project, chat) = {
+            let tx = source.conn_mut().transaction().unwrap();
+            let chat = crate::chatstore::rows::create_chat(
+                &tx,
+                &crate::chatstore::NewChat {
+                    folder: "/synced-agent-memory".into(),
+                    agent_id: "mock".into(),
+                    agent_host: Default::default(),
+                    device_id: "source".into(),
+                    now: 1,
+                },
+            )
+            .unwrap()
+            .id;
+            let project: String = tx
+                .query_row("SELECT project_id FROM chats WHERE id=?1", [&chat], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            capture::finish(&tx, &source_context, now as i64).unwrap();
+            tx.commit().unwrap();
+            (project, chat)
+        };
+        let revision = {
+            let tx = source.conn_mut().transaction().unwrap();
+            let MemoryReply::Memory(memory) = crate::chatstore::memory::execute(
+                &tx,
+                MemoryCommand::AgentSave {
+                    input: SaveProjectMemory {
+                        project_id: project.clone(),
+                        expected_revision: None,
+                        markdown: "Agent-written durable fact".into(),
+                        reason: "Learned while working".into(),
+                    },
+                    chat_id: chat.clone(),
+                },
+                now as i64 + 1,
+            )
+            .unwrap() else {
+                panic!()
+            };
+            capture::finish(&tx, &source_context, now as i64 + 1).unwrap();
+            tx.commit().unwrap();
+            memory.revision.unwrap()
+        };
+        let record = memory_head(&source, &revision);
+        let DecodedMetadata::Known(metadata) =
+            open(&source_context.identity, &source_context.key, &record, now).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(
+            decode(&record, &metadata).unwrap().source,
+            format!("agent:{chat}")
+        );
+        let project_record = head(source.conn(), "projects", &project).unwrap().unwrap();
+        pull(
+            &mut target,
+            &target_context,
+            vec![change(project_record, 1), change(record, 2)],
+            now + 2,
+        )
+        .unwrap();
+        assert_eq!(
+            target
+                .conn()
+                .query_row(
+                    "SELECT source FROM project_memory_revisions WHERE revision=?1",
+                    [&revision],
+                    |r| r.get::<_, String>(0)
+                )
+                .unwrap(),
+            format!("agent:{chat}")
+        );
+        assert_eq!(
+            crate::chatstore::memory::read(target.conn(), &project)
+                .unwrap()
+                .markdown,
+            "Agent-written durable fact"
         );
     }
     #[test]

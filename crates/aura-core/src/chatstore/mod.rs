@@ -209,6 +209,11 @@ impl ChatStore {
     pub(crate) fn workspace_changes(&self) -> watch::Receiver<u64> {
         self.shared.workspace_activity.subscribe()
     }
+    /// The project id of every committed change to a project's memory, history or proposals,
+    /// whether the editor or an agent made it. A lagging receiver should re-read everything.
+    pub fn memory_changes(&self) -> tokio::sync::broadcast::Receiver<String> {
+        self.shared.memory_changes.subscribe()
+    }
     #[cfg(test)]
     pub(crate) fn remove_workspace_before_begin(&self, chat: &str) {
         self.shared.workspace_activity.remove_before_begin(chat);

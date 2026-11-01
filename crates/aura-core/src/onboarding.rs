@@ -81,6 +81,10 @@ pub struct GeneralPreferences {
     /// `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
     /// person turns it off in Instructions.
     pub copy_instructions_to_worktrees: bool,
+    /// Agents edit project memory directly; every edit is a revision the person can restore. Off:
+    /// agents propose updates for review. On unless the person turns it off in Project memory
+    /// (the owner reversed the earlier review-only decision on 1 November 2026).
+    pub agent_memory_writes: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -95,6 +99,7 @@ impl Default for GeneralPreferences {
             close_to_tray: true,
             config_sync_paused: Vec::new(),
             copy_instructions_to_worktrees: true,
+            agent_memory_writes: true,
         }
     }
 }
@@ -153,6 +158,10 @@ pub enum SetupAction {
     },
     /// Turns on or off copying Git-ignored instruction files into new worktree chats.
     CopyInstructionsToWorktrees {
+        enabled: bool,
+    },
+    /// Turns on or off agents' direct edits to project memory. Off keeps review-only proposals.
+    AgentMemoryWrites {
         enabled: bool,
     },
 }
@@ -436,6 +445,9 @@ impl OnboardingStore {
             SetupAction::CopyInstructionsToWorktrees { enabled } => {
                 next.preferences.general.copy_instructions_to_worktrees = enabled;
             }
+            SetupAction::AgentMemoryWrites { enabled } => {
+                next.preferences.general.agent_memory_writes = enabled;
+            }
         }
         next.preferences.revision = revision
             .checked_add(1)
@@ -610,6 +622,47 @@ mod tests {
                 .preferences()
                 .general
                 .copy_instructions_to_worktrees
+        );
+    }
+
+    #[test]
+    fn agent_memory_writes_are_on_for_legacy_profiles_and_can_be_turned_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut legacy = serde_json::to_value(Record::default()).unwrap();
+        legacy["preferences"]["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("agent_memory_writes");
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(store.snapshot().unwrap().notice.is_none());
+        assert!(store.preferences().general.agent_memory_writes);
+        store
+            .apply(0, SetupAction::AgentMemoryWrites { enabled: false })
+            .unwrap();
+        let reopened = OnboardingStore::open(dir.path()).unwrap();
+        assert!(!reopened.preferences().general.agent_memory_writes);
+        // Turning it off keeps every other preference.
+        assert_eq!(
+            reopened.preferences().general,
+            GeneralPreferences {
+                agent_memory_writes: false,
+                ..GeneralPreferences::default()
+            }
+        );
+        reopened
+            .apply(1, SetupAction::AgentMemoryWrites { enabled: true })
+            .unwrap();
+        assert!(
+            OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .general
+                .agent_memory_writes
         );
     }
 
@@ -790,6 +843,7 @@ mod tests {
                 close_to_tray: false,
                 config_sync_paused: vec!["codex".into()],
                 copy_instructions_to_worktrees: true,
+                agent_memory_writes: true,
             }
         );
         assert!(

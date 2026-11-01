@@ -170,6 +170,81 @@ async fn stopping_native_generation_revokes_its_memory_helper_service() {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
+async fn call_memory(
+    endpoint: &str,
+    token: &str,
+    mut value: serde_json::Value,
+) -> serde_json::Value {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(endpoint).await.unwrap();
+    value["token"] = serde_json::json!(token);
+    let mut bytes = serde_json::to_vec(&value).unwrap();
+    bytes.push(b'\n');
+    stream.write_all(&bytes).await.unwrap();
+    let mut line = String::new();
+    tokio::io::BufReader::new(stream)
+        .read_line(&mut line)
+        .await
+        .unwrap();
+    serde_json::from_str(&line).unwrap()
+}
+
+#[tokio::test]
+async fn the_profile_switch_reaches_a_running_generations_memory_writes_at_once() {
+    let (driver, _) = ScriptedDriver::new(vec![
+        ready_step("memory-switch"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let seen = Arc::new(Mutex::new(None));
+    let rig = rig_with(
+        Arc::new(OneDriver(Mutex::new(Some(Box::new(ObserveMemoryGrant {
+            inner: driver,
+            seen: seen.clone(),
+        }))))),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let project = project_for(&rig, &chat.id).await;
+    let (endpoint, token) = lock(&seen).clone().unwrap();
+    assert!(rig.manager.agent_memory_writes(), "on by default");
+    let written = call_memory(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"write","base_revision":null,"markdown":"Agent fact","reason":"Learned it"}),
+    )
+    .await;
+    assert_eq!(written["result"]["markdown"], "Agent fact");
+    let history = rig.manager.project_memory_history(&project).await.unwrap();
+    assert_eq!(history[0].source, format!("agent:{}", chat.id));
+    rig.manager.set_agent_memory_writes(false);
+    let refused = call_memory(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"write","base_revision":written["result"]["revision"],"markdown":"Second","reason":"Off now"}),
+    )
+    .await;
+    assert!(
+        refused["error"]
+            .as_str()
+            .unwrap()
+            .contains("aura_memory_propose")
+    );
+    assert_eq!(
+        rig.manager
+            .read_project_memory(&project)
+            .await
+            .unwrap()
+            .markdown,
+        "Agent fact"
+    );
+    rig.manager.stop(&chat.id).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Stopped).await;
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn crashing_and_failed_native_generations_revoke_memory_credentials() {
     for (exit, wanted) in [

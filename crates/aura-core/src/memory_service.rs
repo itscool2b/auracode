@@ -6,10 +6,16 @@ use crate::chatstore::{
 };
 use aura_protocol::{
     mcp::{McpCredentials, McpDefinition, McpTransport, ResolvedMcpServer},
-    memory::ProposeProjectMemory,
+    memory::{ProposeProjectMemory, SaveProjectMemory},
 };
 use serde::Deserialize;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
@@ -38,17 +44,23 @@ struct Request {
     operation: String,
     #[serde(default)]
     base_revision: Option<String>,
+    /// Absent is not empty: a write must name its whole replacement, even an empty one.
     #[serde(default)]
-    markdown: String,
+    markdown: Option<String>,
     #[serde(default)]
-    reason: String,
+    reason: Option<String>,
     #[serde(default)]
     idempotency_key: String,
 }
+/// What an agent reads when the profile keeps memory review-only.
+pub(crate) const REVIEW_ONLY: &str = "Direct memory edits are off: the user reviews every update in Aura. Use aura_memory_propose to propose this change instead.";
 impl MemoryGrant {
+    /// `direct_writes` is the profile's switch, read on every request, so turning it off or on
+    /// applies to running chats at once.
     pub(crate) fn start(
         store: Arc<ChatStore>,
         chat_id: String,
+        direct_writes: Arc<AtomicBool>,
         rt: &tokio::runtime::Handle,
     ) -> std::io::Result<Self> {
         let socket = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
@@ -81,8 +93,13 @@ impl MemoryGrant {
                     // Scope is derived from the app-owned chat, never a client supplied project ID.
                     let command=match request.operation.as_str(){
                         "read"=>Command::Read(project),
-                        "propose"=>Command::Propose(ProposeProjectMemory{project_id:project,base_revision:request.base_revision,markdown:request.markdown,reason:request.reason,chat_id:Some(chat_id.clone()),idempotency_key:request.idempotency_key}),
-                        _=>return Ok(serde_json::json!({"error":"Only read and propose are supported. User review is required to save memory."}))
+                        "write"=>{
+                            if !direct_writes.load(Ordering::Acquire){return Ok(serde_json::json!({"error":REVIEW_ONLY}));}
+                            let (Some(markdown),Some(reason))=(request.markdown,request.reason) else {return Ok(serde_json::json!({"error":"A memory write needs the complete replacement Markdown, its base revision and a reason."}));};
+                            Command::AgentSave{input:SaveProjectMemory{project_id:project,expected_revision:request.base_revision,markdown,reason},chat_id:chat_id.clone()}
+                        }
+                        "propose"=>Command::Propose(ProposeProjectMemory{project_id:project,base_revision:request.base_revision,markdown:request.markdown.unwrap_or_default(),reason:request.reason.unwrap_or_default(),chat_id:Some(chat_id.clone()),idempotency_key:request.idempotency_key}),
+                        _=>return Ok(serde_json::json!({"error":"Unsupported memory operation. Use read, write or propose."}))
                     };
                     Ok(match store.memory(command).await {Ok(Reply::Memory(v))=>serde_json::json!({"result":v}),Ok(Reply::Proposal(v))=>serde_json::json!({"result":v}),Ok(_)=>serde_json::json!({"error":"Unexpected memory response."}),Err(error)=>serde_json::json!({"error":error.to_string()})})
                 }).await;

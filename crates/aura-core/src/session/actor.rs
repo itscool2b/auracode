@@ -3212,6 +3212,7 @@ impl ChatActor {
             crate::memory_service::MemoryGrant::start(
                 self.store.clone(),
                 self.chat_id.clone(),
+                Arc::clone(&self.shared.agent_memory_writes),
                 &self.shared.deps.rt,
             )
             .ok()
