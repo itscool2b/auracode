@@ -809,6 +809,46 @@ async fn authentication_failure_exposes_vendor_sign_in_but_policy_forbidden_does
     }
 }
 
+/// What Claude Code 2.1.316 sent when a real 5-hour limit was hit, trimmed: the synthetic error
+/// message of a subagent and of the main thread, then the turn's result.
+#[tokio::test(start_paused = true)]
+async fn a_usage_limit_is_reported_with_its_reset_and_ends_the_turn_as_one() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    h.wire().await;
+    let words = "You've hit your 5-hour limit · resets 5:30pm (America/New_York)";
+    let error_message = |parent: Value| json!({"type":"assistant","message":{"id":"limit","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":words}]},"parent_tool_use_id":parent,"error":"rate_limit","is_api_error_message":true,"api_error_status":429,"api_error":"usage_limit_reached","api_error_params":{"rate_limit_info":{"status":"rejected","resetsAt":1793572200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"out_of_credits","isUsingOverage":false}}});
+    h.send(error_message(json!("toolu_subagent"))).await;
+    h.send(error_message(Value::Null)).await;
+    h.send(json!({"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":429,"api_error":"usage_limit_reached","result":words,"user_message_uuid":"t1"})).await;
+    let mut reports = Vec::new();
+    let ended = loop {
+        match h.event().await {
+            DriverEvent::UsageLimit(limit) => reports.push(limit),
+            DriverEvent::AuthRequired(_) => panic!("a limit is not a sign-in"),
+            DriverEvent::Event {
+                event: aura_protocol::AuraEvent::MessageDelta { text, .. },
+                ..
+            } => panic!("Claude Code's limit message is not the model's reply: {text}"),
+            DriverEvent::TurnEnded {
+                stop_reason, error, ..
+            } => break (stop_reason, error),
+            _ => {}
+        }
+    };
+    let expected = aura_protocol::UsageLimit {
+        message: words.into(),
+        resets_at: Some(1_793_572_200_000),
+    };
+    assert_eq!(reports, [expected.clone(), expected]);
+    assert_eq!(ended.0, aura_protocol::StopReason::Error);
+    let error = ended.1.expect("the turn failed");
+    assert_eq!(error.kind, aura_protocol::ErrorKind::UsageLimit);
+    assert_eq!(error.message, words);
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn native_plan_restores_the_previous_execution_access() {
     let mut h = Harness::start().await;

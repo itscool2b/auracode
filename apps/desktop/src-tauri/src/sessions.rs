@@ -496,6 +496,17 @@ pub(crate) fn start_profile_chats(
         timings: SessionTimings::STANDARD,
         rt: rt.clone(),
     });
+    // Added agent accounts keep their tokens in secure storage and their names in a plain file,
+    // so an account profile, whose files are all encrypted, does not take them yet.
+    let tokens = if file_key.is_some() {
+        Err("Added agent accounts are available in local profiles.".to_owned())
+    } else {
+        crate::agent_account_commands::ProfileTokens::open()
+            .map(|tokens| Arc::new(tokens) as Arc<dyn aura_core::agent_accounts::TokenVault>)
+    };
+    manager.set_agent_accounts(Some(Arc::new(
+        aura_core::agent_accounts::AgentAccountsStore::open(&profile.dir, tokens),
+    )));
     Some(ChatRuntime {
         store,
         manager,

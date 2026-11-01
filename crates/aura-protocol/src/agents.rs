@@ -159,6 +159,29 @@ pub struct LatestRelease {
     pub stale: bool,
 }
 
+/// A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
+/// computer's secure storage and never becomes chat or account metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentAccount {
+    pub id: String,
+    /// The person's name for it ("Work").
+    pub name: String,
+    pub added_at: crate::Millis,
+}
+
+/// The accounts one agent can run on here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentAccounts {
+    pub agent_id: String,
+    /// Oldest first.
+    pub accounts: Vec<AgentAccount>,
+    /// The account agents start on from now; `None`: the agent's own sign-in. A running agent
+    /// keeps the account it started on until it starts again.
+    pub active: Option<String>,
+    /// Why accounts cannot be added for this agent here, when they cannot.
+    pub unavailable: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

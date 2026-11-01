@@ -45,6 +45,8 @@ function heldText(after: HoldCause, agent: string): string {
       return `Held until you sign in to ${agent}`;
     case "workspace_removed":
       return "Held while this project or folder is removed";
+    case "usage_limit":
+      return `Held at ${agent}'s usage limit`;
   }
 }
 

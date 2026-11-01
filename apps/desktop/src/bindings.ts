@@ -173,6 +173,17 @@ export const commands = {
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
 	agentInstallations: (agentId: string) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_installations", { agentId })),
 	agentSelectInstallation: (agentId: string, path: string | null) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_select_installation", { agentId, path })),
+	agentAccounts: (agentId: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_accounts", { agentId })),
+	/**  Adds an account from the token `claude setup-token` printed. The account is not used yet. */
+	agentAccountAdd: (agentId: string, name: string, token: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_account_add", { agentId, name, token })),
+	agentAccountRemove: (agentId: string, accountId: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_account_remove", { agentId, accountId })),
+	/**  The account the agent's next starts sign in with; `None`: its own sign-in. */
+	agentAccountUse: (agentId: string, accountId: string | null) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_account_use", { agentId, accountId })),
+	/**
+	 *  "Continue with ...": the account for the agent, then this chat starts again on it, resuming
+	 *  its session, and sends what was held.
+	 */
+	chatSwitchAccount: (chatId: string, agentId: string, accountId: string | null) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("chat_switch_account", { chatId, agentId, accountId })),
 	/**  Reviewed capabilities for the detected install, without running authentication or updates. */
 	agentMaintenance: (agentId: string) => typedError<AgentMaintenance, AppError>(__TAURI_INVOKE("agent_maintenance", { agentId })),
 	/**  Ask the vendor CLI for local auth status, retaining no account details or raw output. */
@@ -187,6 +198,11 @@ export const commands = {
 	agentSetConnection: (agentId: string, connection: string | null) => typedError<AgentEntry[], AppError>(__TAURI_INVOKE("agent_set_connection", { agentId, connection })),
 	terminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("terminal_reserve")),
 	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
+	/**
+	 *  `claude setup-token` in the terminal sheet, for Add account: the vendor's browser sign-in that
+	 *  prints the token the person pastes. Like the sign-in, only the sheet's Start runs it.
+	 */
+	agentTokenStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_token_start", { terminalId, agentId, rows, cols })),
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
 	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
 	/**  Reads the clone form. A complete form comes back with the exact command Start will run. */
@@ -516,6 +532,31 @@ export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlo
 export type AccountVaultStatus = {
 	mode: AccountVaultMode,
 	can_create: boolean,
+};
+
+/**
+ *  A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
+ *  computer's secure storage and never becomes chat or account metadata.
+ */
+export type AgentAccount = {
+	id: string,
+	/**  The person's name for it ("Work"). */
+	name: string,
+	added_at: number,
+};
+
+/**  The accounts one agent can run on here. */
+export type AgentAccounts = {
+	agent_id: string,
+	/**  Oldest first. */
+	accounts: AgentAccount[],
+	/**
+	 *  The account agents start on from now; `None`: the agent's own sign-in. A running agent
+	 *  keeps the account it started on until it starts again.
+	 */
+	active: string | null,
+	/**  Why accounts cannot be added for this agent here, when they cannot. */
+	unavailable: string | null,
 };
 
 /**  The vendor's own local authentication check. This does not promise a successful paid request. */
@@ -1419,7 +1460,9 @@ export type ErrorInfo = {
 };
 
 /**  What kind of failure an [`AuraEvent::Error`] reports, which decides the error card's actions. */
-export type ErrorKind = "agent_unavailable" | "folder_missing" | "folder_not_allowed" | "spawn_failed" | "start_timeout" | "protocol_mismatch" | "auth_required" | "agent_error" | "agent_exited" | "protocol_error" | "storage" | "internal" | "other";
+export type ErrorKind = "agent_unavailable" | "folder_missing" | "folder_not_allowed" | "spawn_failed" | "start_timeout" | "protocol_mismatch" | "auth_required" | 
+/**  The account the agent runs on reached its usage limit. */
+"usage_limit" | "agent_error" | "agent_exited" | "protocol_error" | "storage" | "internal" | "other";
 
 /**
  *  A frame of events for one chat, sent from the core to the UI over a Tauri channel.
@@ -1583,7 +1626,9 @@ export type HoldCause =
 /**  The agent asked for its own sign-in. */
 "sign_in" | 
 /**  The chat's project or folder was removed. */
-"workspace_removed";
+"workspace_removed" | 
+/**  The agent reached its usage limit. Another account, or the reset, continues the chat. */
+"usage_limit";
 
 export type ImportProjectMemory = {
 	bundle: ProjectMemoryBundle,
@@ -2634,6 +2679,16 @@ export type SessionInfo = {
 	 *  checkpoint put it back in the queue, held.
 	 */
 	sending?: SendingPrompt | null,
+	/**
+	 *  The added account ([`agents::AgentAccount`]) the current or last start signed in with.
+	 *  `None`: the agent's own sign-in, or no start yet.
+	 */
+	account_id?: string | null,
+	/**
+	 *  The agent said its usage limit is reached. Cleared when a turn completes or the agent
+	 *  starts again, on another account or after the reset.
+	 */
+	usage_limit?: UsageLimit | null,
 };
 
 /**
@@ -2982,6 +3037,13 @@ export type UsageInfo = {
 	context_size: number | null,
 	/**  The session's cumulative cost. */
 	cost: Cost | null,
+};
+
+/**  An agent's own report that its account's usage limit is reached. */
+export type UsageLimit = {
+	/**  The agent's own words ("You've hit your 5-hour limit · resets 5:30pm (America/New_York)"). */
+	message: string,
+	resets_at: number | null,
 };
 
 /**  What a [`TokenUsage`] counts. */

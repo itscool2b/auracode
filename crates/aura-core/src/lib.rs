@@ -34,6 +34,7 @@
 pub mod account_preservation;
 #[cfg(feature = "account-sync")]
 pub mod accounts;
+pub mod agent_accounts;
 pub mod chatstore;
 pub mod checkpoints;
 pub mod cloning;

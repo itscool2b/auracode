@@ -12,6 +12,26 @@ import { openXterm } from "./xterm";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalSheet.css";
 
+/** `claude setup-token` for Add account: it signs in, prints the token and saves nothing. */
+function tokenStatus(state: TerminalState | { state: "idle" }): string {
+  switch (state.state) {
+    case "idle":
+      return "Ready to get a token.";
+    case "starting":
+      return "Opening the vendor sign-in flow…";
+    case "running":
+      return "Approve it in the browser, then copy the token it prints.";
+    case "failed":
+      return state.message;
+    case "finished":
+      return state.exitCode === 0
+        ? "Copy the token above, then paste it into Add account."
+        : state.exitCode === null
+          ? "The terminal closed without an exit status."
+          : `The vendor command exited with code ${state.exitCode}.`;
+  }
+}
+
 /** The caller opens this sheet; only its Start button launches a vendor command. No theme or
  * command picker is exposed. Keep it mounted until onClose to retain the terminal's local view. */
 export function TerminalSheet({
@@ -28,7 +48,7 @@ export function TerminalSheet({
   readonly onClose: () => void;
   readonly onFinished?: (exitCode: number | null) => void;
   readonly transport?: TerminalTransport;
-  readonly purpose?: "sign-in" | "installation" | "setup" | "project";
+  readonly purpose?: "sign-in" | "installation" | "setup" | "project" | "token";
   readonly review?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -117,41 +137,43 @@ export function TerminalSheet({
     callbacks.current.onClose();
   };
   const status =
-    state.state === "idle"
-      ? purpose === "installation"
-        ? "Review the installation before starting."
-        : purpose === "setup"
-          ? "Review the command before starting."
-          : purpose === "project"
-            ? "Review the folder and shell before starting."
-            : "Ready to sign in."
-      : state.state === "starting"
+    purpose === "token"
+      ? tokenStatus(state)
+      : state.state === "idle"
         ? purpose === "installation"
-          ? "Checking the reviewed installer…"
+          ? "Review the installation before starting."
           : purpose === "setup"
-            ? "Checking the reviewed setup…"
+            ? "Review the command before starting."
             : purpose === "project"
-              ? "Checking the reviewed project folder…"
-              : "Opening the vendor sign-in flow…"
-        : state.state === "running"
-          ? purpose === "setup"
-            ? "The setup command is running."
-            : purpose === "project"
-              ? "The project shell is running."
-              : "Follow the vendor's prompts below."
-          : state.state === "failed"
-            ? state.message
-            : state.exitCode === 0
-              ? purpose === "installation"
-                ? "The installer finished. Refresh agents to verify the installation."
-                : purpose === "setup"
-                  ? "The setup command finished."
-                  : purpose === "project"
-                    ? "The project shell finished."
-                    : "The vendor command finished. Check sign-in status to confirm."
-              : state.exitCode === null
-                ? "The terminal closed without an exit status."
-                : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
+              ? "Review the folder and shell before starting."
+              : "Ready to sign in."
+        : state.state === "starting"
+          ? purpose === "installation"
+            ? "Checking the reviewed installer…"
+            : purpose === "setup"
+              ? "Checking the reviewed setup…"
+              : purpose === "project"
+                ? "Checking the reviewed project folder…"
+                : "Opening the vendor sign-in flow…"
+          : state.state === "running"
+            ? purpose === "setup"
+              ? "The setup command is running."
+              : purpose === "project"
+                ? "The project shell is running."
+                : "Follow the vendor's prompts below."
+            : state.state === "failed"
+              ? state.message
+              : state.exitCode === 0
+                ? purpose === "installation"
+                  ? "The installer finished. Refresh agents to verify the installation."
+                  : purpose === "setup"
+                    ? "The setup command finished."
+                    : purpose === "project"
+                      ? "The project shell finished."
+                      : "The vendor command finished. Check sign-in status to confirm."
+                : state.exitCode === null
+                  ? "The terminal closed without an exit status."
+                  : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
 
   const outcome =
     state.state === "failed" || (state.state === "finished" && state.exitCode !== 0)
@@ -176,22 +198,26 @@ export function TerminalSheet({
       <header className="g-dialog-header terminal-sheet__header">
         <div>
           <h2 id={title} className="g-dialog-title">
-            {purpose === "installation"
-              ? `Install ${agentName}`
-              : purpose === "setup"
-                ? `Setup ${agentName}`
-                : purpose === "project"
-                  ? `${agentName} terminal`
-                  : `Sign in to ${agentName}`}
+            {purpose === "token"
+              ? `Get a ${agentName} token`
+              : purpose === "installation"
+                ? `Install ${agentName}`
+                : purpose === "setup"
+                  ? `Setup ${agentName}`
+                  : purpose === "project"
+                    ? `${agentName} terminal`
+                    : `Sign in to ${agentName}`}
           </h2>
           <p id={description}>
-            {purpose === "installation"
-              ? "Runs the package manager below. Closing stops it."
-              : purpose === "setup"
-                ? "Runs the reviewed command. Closing stops it."
-                : purpose === "project"
-                  ? "Opens a shell in the reviewed project folder. Closing stops it."
-                  : "Runs the agent's own sign-in. Closing stops it."}{" "}
+            {purpose === "token"
+              ? "Runs claude setup-token, the agent's own sign-in, which prints a token and saves nothing. Closing stops it."
+              : purpose === "installation"
+                ? "Runs the package manager below. Closing stops it."
+                : purpose === "setup"
+                  ? "Runs the reviewed command. Closing stops it."
+                  : purpose === "project"
+                    ? "Opens a shell in the reviewed project folder. Closing stops it."
+                    : "Runs the agent's own sign-in. Closing stops it."}{" "}
             Terminal output is not saved.
           </p>
         </div>
@@ -249,13 +275,15 @@ export function TerminalSheet({
             if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
           }}
         >
-          {purpose === "installation"
-            ? "Start installation"
-            : purpose === "setup"
-              ? "Start setup"
-              : purpose === "project"
-                ? "Start project terminal"
-                : "Start sign-in"}
+          {purpose === "token"
+            ? "Get token"
+            : purpose === "installation"
+              ? "Start installation"
+              : purpose === "setup"
+                ? "Start setup"
+                : purpose === "project"
+                  ? "Start project terminal"
+                  : "Start sign-in"}
         </button>
       </footer>
     </dialog>

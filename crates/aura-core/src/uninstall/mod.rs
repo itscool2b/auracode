@@ -275,6 +275,23 @@ pub fn execute(
     report
 }
 
+/// The added agent accounts ([`crate::agent_accounts`]) listed by every profile the plan removes,
+/// by id, so their tokens leave secure storage with the profiles. Read before anything is removed.
+pub fn agent_account_ids(plan: &Plan) -> Vec<String> {
+    let mut ids: Vec<String> = plan
+        .items
+        .iter()
+        .filter(|item| item.path.file_name().is_some_and(|name| name == "profiles"))
+        .filter_map(|item| std::fs::read_dir(&item.path).ok())
+        .flat_map(|entries| entries.filter_map(|entry| entry.ok()))
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .flat_map(|entry| crate::agent_accounts::AgentAccountsStore::stored_ids(&entry.path()))
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
 /// The entries auracode made directly in `root`, by [`DATA_ENTRIES`].
 pub fn data_entries(root: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(root) else {

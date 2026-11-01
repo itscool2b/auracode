@@ -96,6 +96,19 @@ pub fn login_command(
     }
 }
 
+/// The vendor command that prints a long-lived sign-in token for an account added in auracode
+/// (docs/agent-accounts.md). Only Claude Code has one: `claude setup-token` runs the same browser
+/// sign-in as `/login`, prints a one-year token and saves nothing (Claude Code authentication
+/// docs, "Generate a long-lived token", checked 2026-11-01).
+pub fn token_command(
+    installation: &AgentInstallation,
+) -> Result<MaintenanceCommand, MaintenanceError> {
+    match native(installation)? {
+        "claude" => Ok(vendor(installation, &["setup-token"])),
+        _ => Err(MaintenanceError::Unsupported),
+    }
+}
+
 /// Preserve channel ownership. A local package dependency is never converted to a global update.
 pub fn update_command(
     installation: &AgentInstallation,

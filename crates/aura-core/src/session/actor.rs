@@ -230,6 +230,12 @@ pub(crate) enum ChatMsg {
     Stop {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// The account switch: the agent of `agent` starts again on the account it starts on now,
+    /// resuming the same session, and the held prompts go once it is ready.
+    RestartOnAccount {
+        agent: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     RespondPermission {
         request_id: String,
         option_id: Option<String>,
@@ -311,6 +317,7 @@ impl ChatMsg {
             | ChatMsg::ForceStop { reply }
             | ChatMsg::Start { reply, .. }
             | ChatMsg::Stop { reply }
+            | ChatMsg::RestartOnAccount { reply, .. }
             | ChatMsg::RespondPermission { reply, .. }
             | ChatMsg::RespondUi { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Shutdown { reply, .. } => {
@@ -439,6 +446,8 @@ struct Prepared {
     folder_key: PathBuf,
     launch: LaunchSpec,
     env: Arc<ResolvedEnv>,
+    /// The added account the start signs in with; `None`: the agent's own sign-in.
+    account: Option<crate::agent_accounts::AccountLaunch>,
 }
 
 /// Which connection a start uses: a saved session resumes through the connection that made it; a
@@ -729,6 +738,12 @@ pub(crate) struct ChatActor {
     limits: Option<Vec<LimitWindow>>,
     last_error: Option<ErrorInfo>,
     auth: Option<AuthPrompt>,
+    /// The added account (id, name) the current or last start signed in with, so a stopped chat
+    /// still says which account a refusal or a limit belongs to.
+    account: Option<(String, String)>,
+    /// The agent's last report that its usage limit is reached, until a turn completes or it
+    /// starts again.
+    usage_limit: Option<aura_protocol::UsageLimit>,
     folder_state: FolderState,
     replay_check: Option<ReplayCheck>,
     needs_attention: bool,
@@ -858,6 +873,8 @@ impl ChatActor {
             limits: None,
             last_error: None,
             auth: None,
+            account: None,
+            usage_limit: None,
             folder_state: FolderState::Ok,
             replay_check,
             needs_attention: false,
@@ -1276,6 +1293,10 @@ impl ChatActor {
                 reply,
             } => {
                 let result = self.start(fresh, explicit);
+                drop(reply.send(result));
+            }
+            ChatMsg::RestartOnAccount { agent, reply } => {
+                let result = self.restart_on_account(&agent);
                 drop(reply.send(result));
             }
             ChatMsg::Stop { reply } => {
@@ -2855,6 +2876,43 @@ impl ChatActor {
     }
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
+    /// Starts the agent again so it signs in with the account its agent starts on now, resuming the
+    /// same session, then releases the held prompts: they go once it is ready. A turn in progress
+    /// is never cut short for a switch.
+    fn restart_on_account(&mut self, agent: &str) -> Result<(), SessionError> {
+        if aura_agents::agent_of(&self.chat.agent_id) != agent {
+            return Err(SessionError::OptionInvalid(
+                "This chat runs another agent now.".into(),
+            ));
+        }
+        if self.turn.is_some()
+            || matches!(
+                self.status,
+                SessionStatus::Running | SessionStatus::Cancelling
+            )
+        {
+            return Err(SessionError::OptionInvalid(format!(
+                "Wait for {} to finish this turn, or stop it, before switching accounts.",
+                self.agent_label()
+            )));
+        }
+        self.usage_limit = None;
+        self.info_dirty = true;
+        if self.status == SessionStatus::Starting {
+            // The start under way may have read the earlier account: begin it again.
+            self.stop();
+            if self.status == SessionStatus::Stopping {
+                self.pending_start = Some(false);
+            } else {
+                self.start(false, true)?;
+            }
+        } else {
+            self.start(false, true)?;
+        }
+        self.resume_queue();
+        Ok(())
+    }
+
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
         if let Some(attempt) = self
             .worktree_setup
@@ -3014,6 +3072,7 @@ impl ChatActor {
             connection,
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
+            self.shared.agent_accounts(),
             progress,
             winding_down,
         ));
@@ -3100,6 +3159,12 @@ impl ChatActor {
         // The connection the preparation chose is the one this start runs and its session records.
         let spec = (*prepared.spec).clone();
         self.spec = Some(spec.clone());
+        // A new process: its own account, and no limit until it reports one.
+        let account = prepared.account.clone();
+        self.account = account
+            .as_ref()
+            .map(|account| (account.account_id.clone(), account.name.clone()));
+        self.usage_limit = None;
         let native_start = self
             .continuation
             .as_ref()
@@ -3191,6 +3256,7 @@ impl ChatActor {
                                 .chain(s.credentials.headers.values())
                         })
                         .cloned()
+                        .chain(account.as_ref().map(|account| account.token.clone()))
                         .collect(),
                 );
                 servers
@@ -4195,7 +4261,25 @@ impl ChatActor {
                     self.set_title(title, TitleSource::Agent);
                 }
             }
-            DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
+            DriverEvent::AuthRequired(mut prompt) => {
+                // An added account's token was refused. The vendor's sign-in would sign in the
+                // agent's own account, so it is not offered; another account, or a new token, is.
+                if let Some((_, name)) = &self.account {
+                    prompt.message = format!(
+                        "{} refused the {name} account's token. Tokens last a year and can be revoked. Continue on another account, or remove {name} and add it again.",
+                        self.agent_label()
+                    );
+                    prompt.commands.clear();
+                }
+                self.auth = Some(prompt);
+            }
+            DriverEvent::UsageLimit(limit) => {
+                if self.usage_limit.as_ref() != Some(&limit) {
+                    self.usage_limit = Some(limit);
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                }
+            }
         }
         self.refresh_run_status();
     }
@@ -4637,6 +4721,20 @@ impl ChatActor {
         let auth = error
             .as_ref()
             .is_some_and(|error| error.kind == ErrorKind::AuthRequired);
+        let limited = error
+            .as_ref()
+            .is_some_and(|error| error.kind == ErrorKind::UsageLimit);
+        if let Some(error) = error
+            .as_ref()
+            .filter(|_| limited && self.usage_limit.is_none())
+        {
+            // The agent's own limit report usually came first; this covers one that did not.
+            self.usage_limit = Some(aura_protocol::UsageLimit {
+                message: self.error_text(&error.message, false),
+                resets_at: None,
+            });
+            self.info_dirty = true;
+        }
         if let Some(error) = &error {
             let message = self.error_text(&error.message, false);
             let detail = error
@@ -4677,6 +4775,10 @@ impl ChatActor {
             | StopReason::Refusal
             | StopReason::Other => PromptState::Completed,
         };
+        // A completed turn shows the limit no longer applies (it reset, or extra usage took over).
+        if state == PromptState::Completed && self.usage_limit.take().is_some() {
+            self.info_dirty = true;
+        }
         self.push_normalized(
             AuraEvent::PromptLifecycle {
                 prompt_id: turn.prompt_id.clone(),
@@ -4705,8 +4807,9 @@ impl ChatActor {
             );
         }
         self.refresh_attention();
-        if auth {
-            // The prompt goes back into the queue, held, keeping its place; the process stops.
+        if auth || limited {
+            // The prompt goes back into the queue, held, keeping its place. After a sign-in the
+            // process stops; at a usage limit it keeps running, for an account switch or the reset.
             if let Some(accepted) = turn.timing.accepted {
                 self.prompt_accepted
                     .insert(turn.prompt_id.clone(), accepted);
@@ -4726,16 +4829,23 @@ impl ChatActor {
                 .unwrap_or(self.queue.len());
             self.queue.insert(at, row.clone());
             self.queue_op(Op::QueuePut(row));
-            self.hold_queue(HoldCause::SignIn);
-            self.hold_cause = HoldCause::SignIn;
-            self.graceful_stop(
-                StopPlan {
-                    cancel_grace: Duration::ZERO,
-                    process: ShutdownPlan::STANDARD,
-                },
-                true,
-            );
-            return;
+            let cause = if auth {
+                HoldCause::SignIn
+            } else {
+                HoldCause::UsageLimit
+            };
+            self.hold_queue(cause);
+            self.hold_cause = cause;
+            if auth {
+                self.graceful_stop(
+                    StopPlan {
+                        cancel_grace: Duration::ZERO,
+                        process: ShutdownPlan::STANDARD,
+                    },
+                    true,
+                );
+                return;
+            }
         }
         if self.force_wait.is_some() {
             self.force_kill();
@@ -5769,6 +5879,8 @@ impl ChatActor {
             revision: self.revision,
             queue_wait: self.compute_queue_wait(),
             sending: self.sending(),
+            account_id: self.account.as_ref().map(|(id, _)| id.clone()),
+            usage_limit: self.usage_limit.clone(),
         }
     }
 
@@ -6085,12 +6197,14 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// task, so dropping it (Esc, force stop, Stop, quit) kills a running install or probe. It begins
 /// once no earlier generation of the chat winds down: a process still being killed holds its native
 /// session, which this start may resume.
+#[allow(clippy::too_many_arguments)]
 async fn prepare(
     context: super::workspace_folders::LaunchFolders,
     agent_host: aura_protocol::agents::AgentHost,
     connection: StartConnection,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
+    accounts: Option<Arc<crate::agent_accounts::AgentAccountsStore>>,
     progress: mpsc::UnboundedSender<String>,
     mut winding_down: watch::Receiver<usize>,
 ) -> Result<Prepared, StartFailure> {
@@ -6173,6 +6287,8 @@ async fn prepare(
         .map_err(unavailable)?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
+    let account = start_account(accounts, &spec, &progress).await?;
+    let (env, launch) = with_account(env, launch, account.as_ref());
     let (mcp_servers, memory_mcp_available) =
         super::shared_mcp::prepare_launch(&context, &env, &spec, &agent_host)
             .await
@@ -6200,7 +6316,63 @@ async fn prepare(
         launch,
         env,
         folder_key,
+        account,
     })
+}
+
+/// The account a start of `spec` signs in with, read from secure storage on a blocking worker. A
+/// chosen account that cannot be read fails the start: it never quietly runs on another account.
+async fn start_account(
+    accounts: Option<Arc<crate::agent_accounts::AgentAccountsStore>>,
+    spec: &AgentSpec,
+    progress: &mpsc::UnboundedSender<String>,
+) -> Result<Option<crate::agent_accounts::AccountLaunch>, StartFailure> {
+    let agent = aura_agents::agent_of(spec.id);
+    let Some(accounts) = accounts.filter(|_| crate::agent_accounts::SUPPORTED.contains(&agent))
+    else {
+        return Ok(None);
+    };
+    let agent = agent.to_owned();
+    let _ = progress.send("Reading the account's sign-in".into());
+    tokio::task::spawn_blocking(move || accounts.launch(&agent))
+        .await
+        .map_err(|_| StartFailure {
+            kind: ErrorKind::Internal,
+            message: "Reading the account's sign-in failed.".into(),
+            folder: None,
+        })?
+        .map_err(|error| StartFailure {
+            kind: ErrorKind::AgentUnavailable,
+            message: error.to_string(),
+            folder: None,
+        })
+}
+
+/// The env and launch of a start on an added account: Claude Code reads the account's token, and
+/// the credentials it would prefer over that token are left out.
+fn with_account(
+    env: Arc<ResolvedEnv>,
+    mut launch: LaunchSpec,
+    account: Option<&crate::agent_accounts::AccountLaunch>,
+) -> (Arc<ResolvedEnv>, LaunchSpec) {
+    use crate::agent_accounts::{CLAUDE_OUTRANKING, CLAUDE_TOKEN_VARIABLE};
+    let Some(account) = account else {
+        return (env, launch);
+    };
+    let replaced = |name: &std::ffi::OsStr| {
+        let key = aura_process::EnvKey::from(name);
+        key == aura_process::EnvKey::from(CLAUDE_TOKEN_VARIABLE)
+            || CLAUDE_OUTRANKING
+                .iter()
+                .any(|outranking| key == aura_process::EnvKey::from(*outranking))
+    };
+    let mut env = (*env).clone();
+    env.vars.retain(|name, _| !replaced(name.as_os_str()));
+    launch.set_env.retain(|(name, _)| !replaced(name));
+    launch
+        .set_env
+        .push((CLAUDE_TOKEN_VARIABLE.into(), account.token.clone().into()));
+    (Arc::new(env), launch)
 }
 
 /// Missing or not a folder: `FolderMissing`; refused by the OS (macOS privacy, no read

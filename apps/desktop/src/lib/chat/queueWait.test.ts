@@ -78,6 +78,11 @@ describe("why queued messages wait, in words", () => {
     expect(held("error")?.text).toBe("Held after an error");
     expect(held("sign_in")?.text).toBe("Held until you sign in to Claude Code");
     expect(held("workspace_removed")?.text).toBe("Held while this project or folder is removed");
+    expect(held("usage_limit")).toEqual({
+      text: "Held at Claude Code's usage limit",
+      action: "send_held",
+      failed: false,
+    });
   });
 
   it("offers Send now only to an agent that can interrupt, Recreate only for its own worktree", () => {

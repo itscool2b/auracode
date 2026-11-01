@@ -125,6 +125,45 @@ pub async fn agent_login_start(
     Ok(ticket.start(&spawner, spec, size).await?)
 }
 
+/// `claude setup-token` in the terminal sheet, for Add account: the vendor's browser sign-in that
+/// prints the token the person pastes. Like the sign-in, only the sheet's Start runs it.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_token_start(
+    webview: Webview,
+    state: State<'_, AppState>,
+    terminal_id: String,
+    agent_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<String, AppError> {
+    if state.quit.is_quitting() {
+        return Err(AppError::new(
+            AppErrorCode::ShuttingDown,
+            "auracode is quitting.",
+        ));
+    }
+    let owner = webview.label();
+    let page = state.pages.for_view(owner);
+    if !page.is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let size = PtySize { rows, cols }
+        .validate()
+        .map_err(|_| TerminalError::Resize)?;
+    let ticket = state.terminals.claim(owner, &terminal_id)?;
+    let spec = state.sessions()?.prepare_account_token(&agent_id).await?;
+    if !page.is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let chats = state.chats().ok_or(TerminalError::Closed)?;
+    let spawner = Spawner::new(
+        chats.registry.clone(),
+        tauri::async_runtime::handle().inner().clone(),
+    );
+    Ok(ticket.start(&spawner, spec, size).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn terminal_read(

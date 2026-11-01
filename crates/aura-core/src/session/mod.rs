@@ -12,6 +12,7 @@
 //! chat reads `Stopped`.
 
 mod actor;
+mod agent_accounts;
 mod agent_installations;
 mod changes;
 mod cloning;
@@ -331,6 +332,8 @@ pub(crate) struct Shared {
     /// Copy the source folder's Git-ignored instruction files into each new worktree. On by
     /// default, as the profile preference is.
     pub(crate) worktree_instruction_copies: AtomicBool,
+    /// The profile's added agent accounts. `None` (tests, the CLI): agents use their own sign-in.
+    pub(crate) agent_accounts: Mutex<Option<Arc<crate::agent_accounts::AgentAccountsStore>>>,
     /// The model choices each agent reported in this run, by agent id, for Settings.
     pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
@@ -342,6 +345,10 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    pub(crate) fn agent_accounts(&self) -> Option<Arc<crate::agent_accounts::AgentAccountsStore>> {
+        lock(&self.agent_accounts).clone()
+    }
+
     pub(crate) fn is_shutting_down(&self) -> bool {
         self.shutting_down.load(Ordering::Acquire)
     }
@@ -461,6 +468,7 @@ impl SessionManager {
                     new_chat_defaults: Mutex::new(NewChatDefaults::default()),
                     automatic_checkpoints: AtomicBool::new(false),
                     worktree_instruction_copies: AtomicBool::new(true),
+                    agent_accounts: Mutex::new(None),
                     reported_models: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),

@@ -191,6 +191,9 @@ impl Translator {
         }
         match family {
             "stream_event" => self.stream(frame, &mut events),
+            // Claude Code's own usage-limit message is not the model speaking: the driver reports
+            // it as the limit, and the failed turn's error card carries its words.
+            "assistant" if frame["api_error"] == "usage_limit_reached" => {}
             "assistant" => self.assistant(frame, &mut events),
             "user" => self.tool_results(frame, &mut events),
             "rate_limit_event" => {

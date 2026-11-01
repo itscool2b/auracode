@@ -18,6 +18,7 @@ import type {
   StorageStatus,
   UiAnswer,
 } from "../../bindings";
+import { type AgentAccountsApi, agentAccountsApi } from "../agentAccounts";
 import { changesApi } from "../changes";
 import { type ComposerTransport, composerApi } from "../composer";
 import { type ConversationTransport, conversationApi } from "../conversation";
@@ -77,6 +78,8 @@ export interface Transport {
   readonly composer?: ComposerTransport;
   /** Reviewed project shells and editors for a saved chat's folder (the docked terminal panel). */
   readonly projectTools?: ProjectToolsApi;
+  /** Added agent accounts, for continuing a chat past a usage limit on another one. */
+  readonly accounts?: AgentAccountsApi;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -137,6 +140,7 @@ export const tauriTransport: Transport = {
   composer: composerApi,
   projectTools: projectToolsApi,
   setup: worktreeSetupApi,
+  accounts: agentAccountsApi,
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,

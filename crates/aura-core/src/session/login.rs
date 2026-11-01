@@ -1,7 +1,10 @@
 //! Explicit vendor login preparation. No authentication command runs while inspecting this plan.
 use super::{SessionError, SessionManager};
-use aura_agents::maintenance::{check_unchanged, login_command};
+use aura_agents::maintenance::{
+    MaintenanceCommand, MaintenanceError, check_unchanged, login_command, token_command,
+};
 use aura_process::{LaunchSpec, ProcessCwd, SpawnSpec};
+use aura_protocol::agents::AgentInstallation;
 use aura_protocol::session::Availability;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -10,6 +13,23 @@ impl SessionManager {
     /// Resolve only the already-detected native installation. The terminal owner must invoke this
     /// for an explicit user action, then launch the returned argv without shell interpolation.
     pub async fn prepare_login(&self, agent_id: &str) -> Result<SpawnSpec, SessionError> {
+        self.prepare_vendor_terminal(agent_id, "sign-in", login_command)
+            .await
+    }
+
+    /// `claude setup-token` for an account added in auracode: the browser sign-in that prints the
+    /// token the person pastes into Add account. Like the sign-in, only an explicit Start runs it.
+    pub async fn prepare_account_token(&self, agent_id: &str) -> Result<SpawnSpec, SessionError> {
+        self.prepare_vendor_terminal(agent_id, "account token", token_command)
+            .await
+    }
+
+    async fn prepare_vendor_terminal(
+        &self,
+        agent_id: &str,
+        purpose: &str,
+        command: fn(&AgentInstallation) -> Result<MaintenanceCommand, MaintenanceError>,
+    ) -> Result<SpawnSpec, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -30,7 +50,7 @@ impl SessionManager {
                 "This installation has no verified login command.".into(),
             )
         })?;
-        let command = login_command(&installation)
+        let command = command(&installation)
             .map_err(|error| SessionError::AgentUnavailable(error.to_string()))?;
         let env = self.deps().env.get().await;
         let folder = env
@@ -46,7 +66,7 @@ impl SessionManager {
             .map_err(|error| SessionError::AgentUnavailable(error.to_string()))?;
         Ok(SpawnSpec {
             launch: LaunchSpec {
-                label: format!("{} sign-in", agent.name),
+                label: format!("{} {purpose}", agent.name),
                 program: command.program,
                 args: command.args,
                 cwd: ProcessCwd::Fixed(folder.clone()),

@@ -236,7 +236,14 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
         plan.vault.approvals = approved.clone();
     }
     let vault = native.as_ref().ok().map(|store| store as &dyn AppVault);
+    // Added agent accounts' tokens go with the profiles that list them, read before those go.
+    let kept_tokens = remove_agent_tokens(&uninstall::agent_account_ids(&plan));
     let mut report = uninstall::execute(&plan, &choice, vault, &git, &Retry::PATIENT);
+    if kept_tokens > 0 {
+        report.notes.push(format!(
+            "{kept_tokens} agent account token(s) could not be removed from secure storage. Remove the entries named auracode.agents.v1 in Credential Manager or Keychain Access."
+        ));
+    }
     if native.is_err() && cfg!(any(windows, target_os = "macos")) {
         report.vault.warnings = uninstall::VaultPlan::unavailable().warnings;
         report.vault.error = Some(report.vault.warnings.join(" "));
@@ -268,6 +275,25 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
 }
 
 /// A data folder from `AURACODE_DATA_DIR`, by the rule aura-core resolves it with.
+/// Removes each account's token from secure storage; answers how many stayed. With no secure
+/// storage there were never any tokens to remove.
+fn remove_agent_tokens(ids: &[String]) -> usize {
+    use aura_sync::vault::{NativeTokens, TokenEntry, TokenStore};
+    if ids.is_empty() {
+        return 0;
+    }
+    let Ok(store) = NativeTokens::new() else {
+        return 0;
+    };
+    ids.iter()
+        .filter(|id| {
+            TokenEntry::new(id)
+                .and_then(|entry| store.remove(&entry))
+                .is_err()
+        })
+        .count()
+}
+
 fn environment_root() -> Option<PathBuf> {
     let value = std::env::var_os(aura_core::paths::DATA_DIR_ENV)?;
     if value.to_str().is_some_and(|text| text.trim().is_empty()) || value.is_empty() {

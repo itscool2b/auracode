@@ -73,6 +73,10 @@ auracode offers no Sign in for them and says nothing it cannot run. Status check
 stay limited to Claude Code and Codex, whose status commands report a coarse state without
 account data.
 
+Add account, for Claude Code's added accounts, runs `claude setup-token` the same way: the same
+owned sheet and separate Start. It prints a token the person pastes into the dialog, which goes to
+secure storage. [Agent accounts](agent-accounts.md) has the rest.
+
 Fresh Node/npm installation and vendor authentication are separate user actions. Development tests
 use synthetic packages, fake browser replies and a harmless local terminal child, never a real
 sign-in command.
