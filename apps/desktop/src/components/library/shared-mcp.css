@@ -44,7 +44,7 @@
   font-family: var(--g-mono);
 }
 .shared-mcp-conflict {
-  border-block: 1px solid var(--g-line);
+  border-block: 1px solid var(--g-glass-rim);
   padding-block: var(--g-space-16);
 }
 .shared-mcp-conflict pre {

@@ -12,6 +12,17 @@
   color: var(--g-fg-2);
   line-height: var(--g-leading-ui);
 }
+/* The panel's title reads like Instructions' and Plugins & MCP's beside it in Customize. */
+.project-memory > .settings-section-heading > h2 {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+.project-memory > .settings-section-heading > p {
+  margin-top: var(--g-space-4);
+}
 .project-memory-field {
   display: grid;
   gap: var(--g-space-8);
@@ -27,7 +38,7 @@
   color: var(--g-fg-1);
   background: var(--g-surface-1);
   border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-10);
   padding: var(--g-space-8) var(--g-space-12);
   font: inherit;
 }
@@ -63,7 +74,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--g-space-12) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 .project-memory-list li > div {
   min-width: 0;
@@ -88,7 +99,7 @@
   overflow-wrap: anywhere;
   padding: var(--g-space-12);
   border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-12);
   color: var(--g-fg-1);
   background: var(--g-surface-1);
   font: var(--g-text-meta) / var(--g-leading-code) var(--g-mono);

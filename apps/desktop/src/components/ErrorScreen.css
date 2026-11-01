@@ -14,7 +14,7 @@
   overflow: auto;
 }
 
-:root .error-screen {
+:root.g-root .error-screen {
   background-color: transparent;
 }
 

@@ -12,7 +12,7 @@
 }
 
 /* As on the startup error, the page is the window's own colour or material, not a nested root's. */
-:root .configuration-recovery {
+:root.g-root .configuration-recovery {
   background-color: transparent;
 }
 

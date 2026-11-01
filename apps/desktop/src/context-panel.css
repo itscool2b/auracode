@@ -200,11 +200,15 @@
   min-height: 32px;
   padding: 0 var(--g-space-4) 0 var(--g-space-8);
   border-radius: var(--g-radius-10);
-  transition: background-color var(--g-dur-micro) var(--g-ease);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease);
 }
 
+/* The file shown below: a rimmed capsule with no fill, so its red and green status letters keep
+   4.5:1 on the frosted sheet, where any lighter fill would take that away. */
 .changes-file-list > div[data-selected="true"] {
-  background-color: var(--g-glass-control-active);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .changes-file-list button {
@@ -746,4 +750,9 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
+}
+
+/* On the raised tab the count takes the tab's own ink: grey on the lit thumb falls under 4.5:1. */
+.context-panel-tabs button[aria-selected="true"] small {
+  color: inherit;
 }

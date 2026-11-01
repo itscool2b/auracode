@@ -637,6 +637,11 @@
   color: var(--g-fg-3);
 }
 
+/* Open, the chip is lit, and its connectives step up a tone to keep their contrast. */
+.new-chat-worktree-popover[open] > summary .new-chat-worktree-word {
+  color: var(--g-fg-2);
+}
+
 /* A branch name: machine data in mono, one line that ellipsizes rather than wraps. */
 .new-chat-branch {
   min-width: 0;
@@ -1026,4 +1031,16 @@
   .new-chat-path {
     flex-basis: calc(100% - 48px);
   }
+}
+
+/* On a lit row the meta steps up to keep 4.5:1 on the glass fill: a tone under the hand, the
+   row's own ink once chosen or pressed. */
+@media (hover: hover) {
+  .new-chat-agent:hover > small {
+    color: var(--g-fg-2);
+  }
+}
+
+.new-chat-agent:is(:active, :has(> input:checked)) > small {
+  color: var(--g-fg-1);
 }

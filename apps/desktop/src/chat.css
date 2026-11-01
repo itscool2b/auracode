@@ -2623,3 +2623,14 @@
 :root:is([data-motion="reduced"], [data-motion="off"]) .chat-sticky-prompt {
   animation: none;
 }
+
+/* On a lit row the grey details step up a tone, so they keep 4.5:1 on the fill. */
+@media (hover: hover) {
+  :is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:hover:not(:disabled) small {
+    color: var(--g-fg-2);
+  }
+}
+
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:focus-visible small {
+  color: var(--g-fg-2);
+}

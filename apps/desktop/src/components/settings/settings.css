@@ -11,7 +11,7 @@
 }
 
 /* The navigation sits on the window's own colour or material, as the chat sidebar does. */
-:root .settings-shell {
+:root.g-root .settings-shell {
   background-color: transparent;
 }
 

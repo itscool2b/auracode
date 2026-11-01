@@ -84,13 +84,13 @@
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .vendor-command :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .vendor-command dt {
