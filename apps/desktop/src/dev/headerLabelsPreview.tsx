@@ -18,7 +18,7 @@ import { worktreeRecoveryApi } from "../lib/worktreeRecovery";
 import { withPreviewContext } from "./previewContext";
 
 const SOURCE =
-  "C:/Users/Example/Work/Customer Platforms/October Delivery/Client Portal/desktop-and-web-application";
+  "C:/Users/Example/Work/Customer Platforms/October Delivery/Shared Engineering Workspaces/Client Portal/desktop-and-web-application";
 const TREE = "C:/Users/Example/AppData/Local/auracode/profiles/local/worktrees/9d6cd062e86e";
 const folder = (id: string, project: string, name: string, path: string): ProjectFolder => ({
   id,

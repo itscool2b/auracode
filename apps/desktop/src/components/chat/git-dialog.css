@@ -1,12 +1,13 @@
 /* The Git workspace dialog: the large dialog (shell.css, `.g-dialog`), its parts as glass wells. */
 
 .git-repository,
+/* Rimmed, with no fill of their own: on the frosted dialog any fill takes red error text under
+   4.5:1. */
 .git-review,
 .git-result {
   padding: var(--g-space-16);
   border-radius: var(--g-radius-12);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .git-branch {
