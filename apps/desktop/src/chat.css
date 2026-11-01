@@ -1835,8 +1835,13 @@
   box-shadow: var(--ui-composer-shadow-keyboard);
 }
 
+/*
+ * While the halo owns the box-shadow, the composer's own transition on it is off: a transition
+ * started under a running animation never advances in WebKit, so the page would never settle.
+ */
 .chat-composer[data-working]:not(:has(.g-textarea:focus-visible)) {
   animation: composer-halo var(--g-dur-bloom) var(--g-ease-in-out) infinite alternate;
+  transition: none;
 }
 
 @keyframes composer-halo {
