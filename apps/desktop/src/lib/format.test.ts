@@ -19,6 +19,7 @@ describe("labels", () => {
     expect(fileManagerName("windows")).toBe("Explorer");
     expect(fileManagerName("linux")).toBe("file manager");
     expect(glassLabel("liquid_glass")).toBe("Liquid Glass");
+    expect(glassLabel("acrylic")).toBe("Acrylic");
     expect(glassLabel("none")).toBe("None (opaque)");
   });
 

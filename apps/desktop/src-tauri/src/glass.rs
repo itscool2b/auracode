@@ -4,13 +4,19 @@
 //! |---|---|---|
 //! | macOS 26+ | Liquid Glass (regular), vibrancy listed as Tauri's fallback | transparent |
 //! | macOS 13.3 (the oldest the bundle installs on) to 15 | vibrancy (`UnderWindowBackground`, following system appearance) | transparent |
-//! | Windows 11 (build 22000+) | Mica (following system appearance) | transparent |
-//! | Windows 10, Linux, anything else | none: the UI paints its opaque Graphite frame | opaque |
+//! | Windows 11 22H2 and later (build 22523+) | Acrylic, the system backdrop (following the window's appearance) | transparent |
+//! | Windows 11 (builds 22000 to 22522) | Mica (following system appearance) | transparent |
+//! | Windows 10, Linux, anything else | none: the UI paints its opaque frame | opaque |
 //! | `AURACODE_NO_GLASS=1` | none (the power spike's baseline) | opaque |
 //!
 //! Opaque is the fallback because a transparent window with no material behind it shows whatever
-//! is on the desktop, and on Windows 10 Tauri drops Mica's "unsupported" error silently. Acrylic and
-//! blur are never used: Tauri documents bad resize and drag performance for both.
+//! is on the desktop, and on Windows 10 Tauri drops Mica's "unsupported" error silently.
+//!
+//! Acrylic is see-through glass: the desktop and the windows behind blur through it, which is the
+//! Halo look (docs/design/visual-language.md). From build 22523 window-vibrancy applies it as a
+//! DWM system backdrop (`DWMSBT_TRANSIENTWINDOW`), composited by DWM like Mica. The resize and
+//! drag lag Tauri documents belongs to the older blur-behind path, which builds before 22523 would
+//! take; those keep Mica, and the legacy `Blur` effect is never used.
 //! See docs/spikes/windows-titlebar.md for the Windows reasoning.
 
 use serde::Serialize;
@@ -25,6 +31,8 @@ pub const LIQUID_GLASS_MACOS: u32 = 26;
 pub const LIQUID_GLASS_MACOS_COMPAT: u32 = 16;
 /// The first Windows 11 build; Mica needs it.
 pub const MICA_WINDOWS_BUILD: u32 = 22_000;
+/// The first build with system backdrops (`DWMWA_SYSTEMBACKDROP_TYPE`), where Acrylic is DWM's.
+pub const ACRYLIC_WINDOWS_BUILD: u32 = 22_523;
 
 /// The material the window got, reported to the UI in `app_info`. `none` tells the UI to paint
 /// its own opaque background.
@@ -34,6 +42,7 @@ pub enum GlassEffect {
     LiquidGlass,
     Vibrancy,
     Mica,
+    Acrylic,
     None,
 }
 
@@ -95,6 +104,9 @@ pub fn plan(os: &str, version: Option<OsVersion>, disabled: bool) -> GlassPlan {
             _ => GlassPlan::with(GlassEffect::Vibrancy, vec![Effect::UnderWindowBackground]),
         },
         "windows" => match version {
+            Some(v) if v.major >= 10 && v.patch >= ACRYLIC_WINDOWS_BUILD => {
+                GlassPlan::with(GlassEffect::Acrylic, vec![Effect::Acrylic])
+            }
             Some(v) if v.major >= 10 && v.patch >= MICA_WINDOWS_BUILD => {
                 GlassPlan::with(GlassEffect::Mica, vec![Effect::Mica])
             }
@@ -144,10 +156,25 @@ mod tests {
     }
 
     #[test]
-    fn windows_11_gets_system_appearance_mica() {
-        for version in [v(10, 0, 22000), v(10, 0, 22631), v(10, 0, 26100)] {
+    fn windows_11_with_system_backdrops_gets_acrylic() {
+        for version in [
+            v(10, 0, 22523),
+            v(10, 0, 22631),
+            v(10, 0, 26100),
+            v(10, 0, 26300),
+        ] {
             let plan = plan("windows", version, false);
-            assert_eq!(plan.effect, GlassEffect::Mica);
+            assert_eq!(plan.effect, GlassEffect::Acrylic, "{version:?}");
+            assert!(plan.transparent);
+            assert_eq!(plan.effects, vec![Effect::Acrylic]);
+        }
+    }
+
+    #[test]
+    fn early_windows_11_keeps_system_appearance_mica() {
+        for version in [v(10, 0, 22000), v(10, 0, 22522)] {
+            let plan = plan("windows", version, false);
+            assert_eq!(plan.effect, GlassEffect::Mica, "{version:?}");
             assert!(plan.transparent);
             assert_eq!(plan.effects, vec![Effect::Mica]);
         }
@@ -202,8 +229,8 @@ mod tests {
     fn a_missing_webview_runtime_is_not_retried() {
         // The retry would fail the same way, and in a Windows release build Tauri shows its
         // "Could not find the WebView2 Runtime" dialog on every attempt.
-        let mica = plan("windows", v(10, 0, 22631), false);
-        assert_eq!(mica.opaque_fallback(false), None);
+        let glass = plan("windows", v(10, 0, 22631), false);
+        assert_eq!(glass.opaque_fallback(false), None);
     }
 
     #[test]
@@ -222,6 +249,10 @@ mod tests {
         assert_eq!(
             serde_json::to_value(GlassEffect::LiquidGlass).expect("serialize"),
             "liquid_glass"
+        );
+        assert_eq!(
+            serde_json::to_value(GlassEffect::Acrylic).expect("serialize"),
+            "acrylic"
         );
         assert_eq!(
             serde_json::to_value(GlassEffect::None).expect("serialize"),

@@ -99,8 +99,12 @@ pub const MAIN_WINDOW: &str = "main";
 /// How long the page gets to report its first paint before the window is shown regardless.
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
-/// Graphite's `--g-bg` (pure black), behind opaque windows (and the webview before it paints).
-pub const BASE_COLOR: Color = Color(250, 250, 250, 255);
+/// The light `--g-window`, behind opaque windows (and the webview before it paints). Halo lays its
+/// panes on this window colour, so the frame and the page start as one surface.
+pub const BASE_COLOR: Color = Color(239, 239, 241, 255);
+
+/// The dark `--g-window`, for opaque windows in the dark appearance.
+const BASE_COLOR_DARK: Color = Color(11, 11, 12, 255);
 
 /// What the window-state plugin restores: size, position, maximized, fullscreen. Never visibility
 /// (that would show the window before first paint) and never decorations (code owns the chrome).
@@ -224,12 +228,12 @@ pub fn create_main(
     Ok(window)
 }
 
-/// Window background and secondary text as Windows COLORREFs (0x00BBGGRR).
+/// The window colour (`--g-window`) and secondary text as Windows COLORREFs (0x00BBGGRR).
 #[cfg(any(windows, test))]
 fn caption_colors(theme: tauri::Theme) -> [u32; 2] {
     match theme {
-        tauri::Theme::Dark => [0x0012_1110, 0x00aa_a1a1],
-        _ => [0x00fa_fafa, 0x005b_5252],
+        tauri::Theme::Dark => [0x000c_0b0b, 0x00aa_a1a1],
+        _ => [0x00f1_efef, 0x005b_5252],
     }
 }
 
@@ -237,7 +241,7 @@ fn caption_colors(theme: tauri::Theme) -> [u32; 2] {
 pub fn paint_appearance(window: &WebviewWindow, theme: tauri::Theme, opaque: bool) {
     if opaque {
         let color = if theme == tauri::Theme::Dark {
-            Color(16, 17, 18, 255)
+            BASE_COLOR_DARK
         } else {
             BASE_COLOR
         };
@@ -247,13 +251,29 @@ pub fn paint_appearance(window: &WebviewWindow, theme: tauri::Theme, opaque: boo
     }
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
-        caption::paint(hwnd.0, theme);
+        caption::paint(hwnd.0, caption_paint(theme, opaque));
     }
 }
 
+/// The caption's colours: solid on an opaque window, to match the page painted under it; on a
+/// glass window the system's own, so the window's material runs up through the title bar and the
+/// two read as one sheet of glass.
+#[cfg(any(windows, test))]
+fn caption_paint(theme: tauri::Theme, opaque: bool) -> [u32; 2] {
+    if opaque {
+        caption_colors(theme)
+    } else {
+        [SYSTEM_COLOR; 2]
+    }
+}
+
+/// `DWMWA_COLOR_DEFAULT`: hands a caption colour back to the system.
+#[cfg(any(windows, test))]
+const SYSTEM_COLOR: u32 = 0xFFFF_FFFF;
+
 /// Windows keeps its native title bar and caption buttons, including Snap Layouts. DWM paints
-/// the caption to match the resolved app appearance. Windows 10
-/// ignores both attributes and keeps its own caption.
+/// the caption to match the resolved app appearance, or leaves it to the window's material.
+/// Windows 10 ignores both attributes and keeps its own caption.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod caption {
@@ -261,8 +281,7 @@ mod caption {
         DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DwmSetWindowAttribute,
     };
 
-    pub fn paint(hwnd: *mut core::ffi::c_void, theme: tauri::Theme) {
-        let [caption, text] = super::caption_colors(theme);
+    pub fn paint(hwnd: *mut core::ffi::c_void, [caption, text]: [u32; 2]) {
         for (attribute, color) in [(DWMWA_CAPTION_COLOR, caption), (DWMWA_TEXT_COLOR, text)] {
             // SAFETY: `hwnd` is this process's live main window, and DWM copies the 4-byte value
             // before returning; an older Windows answers with an error and nothing changes.
@@ -501,7 +520,36 @@ mod tests {
         for (theme, palette) in [(tauri::Theme::Dark, tokens), (tauri::Theme::Light, light)] {
             assert_eq!(
                 super::caption_colors(theme),
-                [colorref(palette, "--g-bg"), colorref(palette, "--g-fg-2")]
+                [
+                    colorref(palette, "--g-window"),
+                    colorref(palette, "--g-fg-2")
+                ]
+            );
+            // Opaque windows paint the same colour behind the page.
+            let base = if theme == tauri::Theme::Dark {
+                super::BASE_COLOR_DARK
+            } else {
+                super::BASE_COLOR
+            };
+            let [caption, _] = super::caption_colors(theme);
+            assert_eq!(
+                u32::from(base.0) | (u32::from(base.1) << 8) | (u32::from(base.2) << 16),
+                caption
+            );
+        }
+    }
+
+    /// A glass window gives its caption back to the system, so the material runs through it.
+    #[test]
+    fn a_glass_caption_is_the_systems_and_an_opaque_one_is_painted() {
+        for theme in [tauri::Theme::Dark, tauri::Theme::Light] {
+            assert_eq!(
+                super::caption_paint(theme, true),
+                super::caption_colors(theme)
+            );
+            assert_eq!(
+                super::caption_paint(theme, false),
+                [super::SYSTEM_COLOR, super::SYSTEM_COLOR]
             );
         }
     }
