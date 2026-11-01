@@ -8,6 +8,7 @@ repository root:
 | `pnpm dev` | The app with hot reload (Vite for the UI, Cargo for the shell). |
 | `pnpm bundle` | Release bundles (`tauri build`), signed on macOS as described below. Extra arguments go to `tauri build`. |
 | `pnpm signing create` / `pnpm signing status` | The local macOS signing identity (below). |
+| `pnpm --filter @auracode/desktop host-upgrade <command>` | Windows: installs a local build over the installed app with a snapshot to roll back to, also from a chat inside the app (`install --after-exit`). See [docs/developing-in-aura.md](../../docs/developing-in-aura.md). |
 | `pnpm --filter @auracode/desktop test` | UI tests (Vitest). |
 | `cargo test -p auracode-desktop` | Shell tests; also regenerates `src/bindings.ts`. |
 
