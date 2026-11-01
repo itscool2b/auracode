@@ -119,3 +119,15 @@ for (const [name, css, expected] of [
       assert.match(result.stderr, /apps\/desktop\/src\/components\/a\.css:1: 10px/);
   });
 }
+
+test("eyebrows fail wherever they hide", async () => {
+  const { lintEyebrows } = await import("./check-styles.mjs");
+  const eyebrows = (text) => lintEyebrows(text, "x.css").map((found) => found.problem);
+  assert.equal(eyebrows(".a {\n  text-transform: uppercase;\n}").length, 1);
+  assert.equal(eyebrows(".section-kicker {\n  color: red;\n}").length, 1);
+  assert.equal(eyebrows('<p className="hero-eyebrow">Work</p>').length, 1);
+  assert.equal(eyebrows('.page-head::before {\n  content: "AURACODE / INFORMATION";\n}').length, 1);
+  assert.deepEqual(eyebrows(".cmd::first-letter {\n  text-transform: uppercase;\n}"), []);
+  assert.deepEqual(eyebrows('.a::after {\n  content: "+";\n}'), []);
+  assert.deepEqual(eyebrows(".title {\n  text-transform: none;\n}"), []);
+});

@@ -1,0 +1,373 @@
+/* ------------------------------------------------------------------------------- header */
+
+/*
+ * A floating glass capsule. The bar itself is transparent and lets clicks through; only the
+ * capsule takes them. It keeps its place across page navigations (view transitions).
+ */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--s-nav);
+  padding: 12px var(--s-gutter) 0;
+  pointer-events: none;
+  view-transition-name: site-nav;
+}
+
+.nav-capsule {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: min(100%, 780px);
+  height: 52px;
+  padding: 0 7px 0 20px;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.56);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.07),
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px rgb(10 10 11 / 0.04),
+    0 10px 30px -14px rgb(10 10 11 / 0.14);
+  pointer-events: auto;
+  transition:
+    background-color 400ms var(--s-swift),
+    box-shadow 400ms var(--s-swift);
+}
+
+.site-nav[data-scrolled] .nav-capsule {
+  background-color: rgb(255 255 255 / 0.8);
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    0 1px 2px rgb(10 10 11 / 0.05),
+    0 18px 40px -16px rgb(10 10 11 / 0.22);
+}
+
+.site-nav[data-night] .nav-capsule {
+  --g-fg-1: #f5f5f6;
+  --g-fg-2: #b4b4bd;
+  --g-primary: #fafafa;
+  --g-primary-hover: #e4e4e7;
+  --g-primary-active: #d4d4d8;
+  --g-on-light: #18181b;
+  --g-shadow-primary: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 -1px 0 rgb(0 0 0 / 0.14);
+  background-color: rgb(24 25 28 / 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 14px 36px -14px rgb(0 0 0 / 0.6);
+}
+
+.nav-home {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  margin-right: auto;
+  color: var(--g-fg-1);
+  text-decoration: none;
+}
+
+.nav-links {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-links a {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 999px;
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 200ms var(--s-swift);
+}
+
+.nav-links a:hover,
+.nav-links a:focus-visible {
+  color: var(--g-fg-1);
+}
+
+/* The lit pill that glides to the link under the pointer. */
+.nav-pill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: var(--pill-w, 0);
+  height: 38px;
+  border-radius: 999px;
+  background-color: rgb(10 10 11 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.04);
+  opacity: 0;
+  transform: translate(var(--pill-x, 0), -50%);
+  transition:
+    transform 420ms var(--s-glide),
+    width 420ms var(--s-glide),
+    opacity 240ms var(--s-swift);
+}
+
+.nav-links[data-pill] .nav-pill {
+  opacity: 1;
+}
+
+.site-nav[data-night] .nav-pill {
+  background-color: rgb(255 255 255 / 0.1);
+  box-shadow: none;
+}
+
+.nav-cta {
+  --g-button-h: 38px;
+  margin-left: 6px;
+  padding: 0 18px;
+  font-size: 14px;
+  transform: translate(var(--mx, 0), var(--my, 0));
+  transition:
+    transform 500ms var(--s-glide),
+    background-color 200ms var(--s-swift);
+}
+
+.nav-cta[data-pulled] {
+  transition-duration: 160ms, 200ms;
+}
+
+.nav-menu {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .nav-capsule {
+    padding-left: 16px;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .nav-menu {
+    position: relative;
+    display: block;
+    margin-left: 4px;
+  }
+
+  .nav-menu-button {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    color: var(--g-fg-1);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .nav-menu-button::-webkit-details-marker {
+    display: none;
+  }
+
+  .nav-menu-bar {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transform-origin: 8px 8px;
+    transition: transform 400ms var(--s-glide);
+  }
+
+  .nav-menu[open] .nav-menu-bar:first-child {
+    transform: translateY(2.5px) rotate(45deg);
+  }
+
+  .nav-menu[open] .nav-menu-bar:last-child {
+    transform: translateY(-2.5px) rotate(-45deg);
+  }
+
+  .nav-sheet {
+    position: absolute;
+    top: calc(100% + 14px);
+    right: -7px;
+    display: grid;
+    gap: 2px;
+    min-width: 220px;
+    padding: 8px;
+    border-radius: 22px;
+    background-color: rgb(255 255 255 / 0.86);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      inset 0 0 0 1px rgb(10 10 11 / 0.07),
+      0 24px 60px -20px rgb(10 10 11 / 0.3);
+    animation: sheet-in 420ms var(--s-expo) both;
+    transform-origin: top right;
+  }
+
+  .nav-sheet a {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 14px;
+    border-radius: 14px;
+    color: var(--g-fg-1);
+    font-size: 16px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .nav-sheet a:hover {
+    background-color: rgb(10 10 11 / 0.05);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+/* ------------------------------------------------------------------------------- footer */
+
+.site-footer {
+  position: relative;
+  overflow: hidden;
+  padding: 104px 0 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 56px;
+  align-items: start;
+}
+
+.footer-home a {
+  display: inline-flex;
+  color: var(--g-fg-1);
+  text-decoration: none;
+}
+
+.footer-statement {
+  margin-top: 22px;
+  color: var(--g-fg-2);
+  font-family: var(--s-serif);
+  font-size: 34px;
+  line-height: 36px;
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+
+/* The home page's finale has just said it, in larger type. */
+.home ~ .site-footer .footer-statement {
+  display: none;
+}
+
+.footer-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, auto));
+  gap: 32px 72px;
+}
+
+.footer-heading {
+  margin-bottom: 14px;
+  color: var(--g-fg-3);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.footer-col ul {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.footer-col a {
+  color: var(--g-fg-1);
+  font-size: 15px;
+  line-height: 22px;
+  text-decoration: none;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  transition: background-size 400ms var(--s-expo);
+}
+
+.footer-col a:hover {
+  background-size: 100% 1px;
+}
+
+/* The name, as large as the page allows, cut off by the page's end. */
+.footer-giant {
+  display: flex;
+  justify-content: center;
+  margin: 112px 0 0;
+  padding: 0 var(--s-gutter);
+  font-size: clamp(56px, 21.5vw, 330px);
+  line-height: 0.78;
+  font-weight: 600;
+  letter-spacing: -0.07em;
+  white-space: nowrap;
+  user-select: none;
+  transform: translateY(16%);
+}
+
+.footer-giant span {
+  display: inline-block;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.02) 82%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transition:
+    transform 1400ms var(--s-expo),
+    opacity 1400ms var(--s-expo);
+  transition-delay: calc(var(--n) * 55ms);
+}
+
+html.js .footer-giant:not([data-revealed]) span {
+  opacity: 0;
+  transform: translateY(45%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.js .footer-giant:not([data-revealed]) span {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .site-footer {
+    padding-top: 72px;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .footer-links {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 32px 24px;
+  }
+
+  .footer-giant {
+    margin-top: 72px;
+  }
+}
+
+/* The verification page lives in a 190px frame inside the desktop: no header, footer or skip. */
+body:has(> main.device-verification) > :is(.site-nav, .site-footer, .skip) {
+  display: none;
+}

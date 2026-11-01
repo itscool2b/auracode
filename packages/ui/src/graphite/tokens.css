@@ -91,6 +91,36 @@
   --g-shallows-radius-compact: 12px;
   --g-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
 
+  /*
+   * Halo glass. Translucent layers sit over the native window material (Mica, Acrylic, vibrancy,
+   * Liquid Glass) or, with no material, over the opaque --g-window. Text sits on a layer, on the
+   * window tint, or on an opaque surface, never on bare material.
+   */
+  --g-window: #0b0b0c;
+  --g-window-tint: rgb(14 15 16 / 0.45);
+  --g-glass-layer: rgb(24 25 28 / 0.72);
+  --g-glass-bar: rgb(20 21 24 / 0.66);
+  --g-glass-pop: rgb(34 35 39 / 0.88);
+  --g-glass-raised: rgb(255 255 255 / 0.1);
+  --g-glass-card: rgb(255 255 255 / 0.04);
+  --g-glass-control: rgb(255 255 255 / 0.06);
+  --g-glass-control-hover: rgb(255 255 255 / 0.1);
+  --g-glass-control-active: rgb(255 255 255 / 0.14);
+  --g-glass-selected: rgb(255 255 255 / 0.09);
+  --g-glass-rim: rgb(255 255 255 / 0.08);
+  --g-glass-rim-strong: rgb(255 255 255 / 0.14);
+  --g-glass-highlight: rgb(255 255 255 / 0.07);
+  --g-switch-knob: #ffffff;
+  --g-blur-bar: blur(20px) saturate(150%);
+  --g-blur-pop: blur(28px) saturate(170%);
+  --g-blur-scrim: blur(6px);
+  --g-shadow-control: 0 1px 2px rgb(0 0 0 / 0.32);
+  --g-shadow-primary: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 -1px 0 rgb(0 0 0 / 0.14);
+  --g-shadow-layer: 0 0 0 1px rgb(0 0 0 / 0.3), 0 16px 40px -20px rgb(0 0 0 / 0.6);
+  --g-shadow-pop:
+    0 0 0 1px rgb(0 0 0 / 0.34), 0 6px 16px -6px rgb(0 0 0 / 0.4),
+    0 24px 56px -16px rgb(0 0 0 / 0.6);
+
   /* Type. Integer weights only: 400, 500, 600. */
   --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --g-mono:
@@ -159,12 +189,19 @@
   --g-space-128: 128px;
   --g-space-160: 160px;
 
-  /* Radii: 0 for pixels and markers, small for content, pills for controls */
+  /*
+   * Radii: pills for every control, then a concentric family for containers. A shape nested in
+   * another takes the outer radius minus the gap between them (18 > 14 > 10 > 6).
+   */
   --g-radius-4: 4px;
   --g-radius-6: 6px;
   --g-radius-8: 8px;
+  --g-radius-10: 10px;
   --g-radius-12: 12px;
+  --g-radius-14: 14px;
   --g-radius-16: 16px;
+  --g-radius-18: 18px;
+  --g-radius-22: 22px;
   --g-radius-pill: 999px;
 
   /* Layout */
@@ -186,6 +223,13 @@
   --g-ease-in-out: cubic-bezier(0.2, 0, 0, 1);
   --g-ease-reveal: cubic-bezier(0.2, 0, 0, 1);
   --g-ease-in: cubic-bezier(0.2, 0, 0, 1);
+  /* Glide: indicators and capsules that travel and settle without a bounce. */
+  --g-ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Expo: entrances that arrive fast and land softly. */
+  --g-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --g-dur-glide: 240ms;
+  /* One breath of the live halo around a working agent's composer. */
+  --g-dur-bloom: 2400ms;
   --g-dur-micro: 80ms;
   --g-dur-fast: 120ms;
   --g-dur-base: 160ms;
@@ -295,6 +339,28 @@
   --g-shallows-radius: 12px;
   --g-shallows-radius-compact: 12px;
   --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
+  --g-window: #efeff1;
+  --g-window-tint: rgb(250 250 250 / 0.5);
+  --g-glass-layer: rgb(255 255 255 / 0.76);
+  --g-glass-bar: rgb(255 255 255 / 0.68);
+  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-glass-raised: #ffffff;
+  --g-glass-card: #ffffff;
+  --g-glass-control: rgb(24 24 27 / 0.05);
+  --g-glass-control-hover: rgb(24 24 27 / 0.08);
+  --g-glass-control-active: rgb(24 24 27 / 0.12);
+  --g-glass-selected: rgb(255 255 255 / 0.92);
+  --g-glass-rim: rgb(24 24 27 / 0.08);
+  --g-glass-rim-strong: rgb(24 24 27 / 0.14);
+  --g-glass-highlight: rgb(255 255 255 / 0.9);
+  --g-shadow-control: 0 1px 2px rgb(24 24 27 / 0.08);
+  --g-shadow-primary: 0 1px 2px rgb(24 24 27 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.16);
+  --g-shadow-layer:
+    0 0 0 1px rgb(24 24 27 / 0.04), 0 1px 2px rgb(24 24 27 / 0.04),
+    0 16px 40px -24px rgb(24 24 27 / 0.18);
+  --g-shadow-pop:
+    0 0 0 1px rgb(24 24 27 / 0.05), 0 6px 16px -6px rgb(24 24 27 / 0.1),
+    0 24px 56px -16px rgb(24 24 27 / 0.2);
 }
 
 /* No JavaScript is needed to follow the system appearance. */
@@ -385,6 +451,28 @@
     --g-shallows-radius: 12px;
     --g-shallows-radius-compact: 12px;
     --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
+    --g-window: #efeff1;
+    --g-window-tint: rgb(250 250 250 / 0.5);
+    --g-glass-layer: rgb(255 255 255 / 0.76);
+    --g-glass-bar: rgb(255 255 255 / 0.68);
+    --g-glass-pop: rgb(255 255 255 / 0.9);
+    --g-glass-raised: #ffffff;
+    --g-glass-card: #ffffff;
+    --g-glass-control: rgb(24 24 27 / 0.05);
+    --g-glass-control-hover: rgb(24 24 27 / 0.08);
+    --g-glass-control-active: rgb(24 24 27 / 0.12);
+    --g-glass-selected: rgb(255 255 255 / 0.92);
+    --g-glass-rim: rgb(24 24 27 / 0.08);
+    --g-glass-rim-strong: rgb(24 24 27 / 0.14);
+    --g-glass-highlight: rgb(255 255 255 / 0.9);
+    --g-shadow-control: 0 1px 2px rgb(24 24 27 / 0.08);
+    --g-shadow-primary: 0 1px 2px rgb(24 24 27 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.16);
+    --g-shadow-layer:
+      0 0 0 1px rgb(24 24 27 / 0.04), 0 1px 2px rgb(24 24 27 / 0.04),
+      0 16px 40px -24px rgb(24 24 27 / 0.18);
+    --g-shadow-pop:
+      0 0 0 1px rgb(24 24 27 / 0.05), 0 6px 16px -6px rgb(24 24 27 / 0.1),
+      0 24px 56px -16px rgb(24 24 27 / 0.2);
   }
 }
 
@@ -398,6 +486,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --g-dur-glide: 0ms;
+    --g-dur-bloom: 0ms;
     --g-dur-micro: 0ms;
     --g-dur-fast: 0ms;
     --g-dur-base: 0ms;
@@ -421,6 +511,8 @@
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) {
+  --g-dur-glide: 0ms;
+  --g-dur-bloom: 0ms;
   --g-dur-micro: 0ms;
   --g-dur-fast: 0ms;
   --g-dur-base: 0ms;

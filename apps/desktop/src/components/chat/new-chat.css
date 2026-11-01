@@ -68,12 +68,15 @@
 
 /* ---------------------------------------------------------------------------- card */
 
-/* Use the same surface and focus treatment as the composer. */
+/*
+ * The composer's glass and focus treatment. No blur of its own: only the pane sits behind the
+ * card, and the agent picker inside it keeps its own frost.
+ */
 .new-chat-card {
   display: flex;
   flex-direction: column;
   border-radius: var(--ui-card-radius);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-pop);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
@@ -124,7 +127,7 @@
   min-height: 40px;
   padding: var(--g-space-8);
   border: 0;
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-10);
   background-color: transparent;
   box-shadow: none;
   color: var(--g-fg-2);
@@ -148,7 +151,7 @@
 
 @media (hover: hover) {
   .new-chat-agent:hover {
-    background-color: var(--g-surface-3);
+    background-color: var(--g-glass-control-hover);
     box-shadow: none;
     color: var(--g-fg-1);
   }
@@ -162,13 +165,13 @@
   height: 100%;
   margin: 0;
   border: 0;
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-10);
   opacity: 0;
   cursor: pointer;
 }
 
 .new-chat-agent:active {
-  background-color: var(--g-surface-4);
+  background-color: var(--g-glass-control-active);
   transition-duration: 0ms;
 }
 
@@ -178,7 +181,7 @@
 }
 
 .new-chat-agent:has(> input:checked) {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-control-active);
   box-shadow: none;
   color: var(--g-fg-1);
 }
@@ -234,7 +237,7 @@
   align-items: center;
   gap: var(--g-space-8) var(--g-space-12);
   padding: var(--g-space-16);
-  box-shadow: inset 0 1px var(--g-line);
+  box-shadow: inset 0 1px var(--g-glass-rim);
 }
 
 /* The folder icon takes an agent mark's 24px slot, 4px in, so names and the path share a column. */
@@ -266,7 +269,7 @@
   justify-content: space-between;
   gap: var(--g-space-16);
   padding: var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .new-chat-submit > span {
@@ -277,12 +280,15 @@
 .new-chat-agent-picker {
   width: 100%;
 }
+/* A select on glass: the composer chips' fill and rim, at a field's radius. */
 .new-chat-agent-picker > summary {
   width: 100%;
   justify-content: flex-start;
   padding: var(--g-space-8) var(--g-space-12);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
+  border: 0;
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 .new-chat-agent-picker .new-chat-selected-name {
   flex: 1;
@@ -374,9 +380,9 @@
   flex-direction: column;
   gap: var(--g-space-4);
   padding: var(--g-space-12) var(--new-chat-axis);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -610,6 +616,8 @@
   height: 32px;
   padding: 0 var(--g-space-12) 0 var(--g-space-8);
   border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   white-space: nowrap;
 }
 
@@ -627,6 +635,11 @@
 .new-chat-worktree-word {
   flex: none;
   color: var(--g-fg-3);
+}
+
+/* Open, the chip is lit, and its connectives step up a tone to keep their contrast. */
+.new-chat-worktree-popover[open] > summary .new-chat-worktree-word {
+  color: var(--g-fg-2);
 }
 
 /* A branch name: machine data in mono, one line that ellipsizes rather than wraps. */
@@ -713,7 +726,7 @@
   max-height: min(560px, var(--new-chat-worktree-room, 480px));
   padding: var(--g-space-4);
   gap: 0;
-  border-radius: var(--g-radius-16);
+  border-radius: var(--g-radius-14);
 }
 
 .new-chat-worktree[data-side="bottom"] .new-chat-worktree-popover > .chat-popover-panel {
@@ -749,7 +762,7 @@
 }
 
 .new-chat-worktree-panel > section + section {
-  box-shadow: inset 0 1px var(--g-line);
+  box-shadow: inset 0 1px var(--g-glass-rim);
 }
 
 /* Worktree or Local: the strong segmented control, its two halves sharing the width. */
@@ -846,7 +859,7 @@
   justify-content: space-between;
   gap: var(--g-space-12);
   padding: var(--g-space-8);
-  border-radius: var(--g-radius-12);
+  border-radius: var(--g-radius-10);
   color: var(--g-fg-1);
   cursor: pointer;
   transition: background-color var(--g-dur-micro) var(--g-ease);
@@ -871,7 +884,7 @@
 
 @media (hover: hover) {
   .new-chat-worktree-switch:hover:not(:has(> input:disabled)) {
-    background-color: var(--g-surface-3);
+    background-color: var(--g-glass-control-hover);
   }
 }
 
@@ -901,9 +914,9 @@
   flex-direction: column;
   gap: var(--g-space-4);
   padding: var(--g-space-12) var(--new-chat-axis);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -928,14 +941,14 @@
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   margin: 0 0 var(--g-space-16);
-  box-shadow: inset 0 1px var(--g-line);
+  box-shadow: inset 0 1px var(--g-glass-rim);
 }
 
 /* The hairlines are inset shadows, so each row stays on the grid. */
 .new-chat-setup-review > :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  box-shadow: inset 0 -1px var(--g-line);
+  box-shadow: inset 0 -1px var(--g-glass-rim);
 }
 
 .new-chat-setup-review > dt {
@@ -963,10 +976,12 @@
 
 /*
  * Arriving: the hero, the card and what sits under it rise in three soft steps (Aside's rows), once
- * per New chat. Transform and opacity only, and the last frame is the resting one.
+ * per New chat. Transform and opacity only, and the last frame is the resting one, so the fill is
+ * backwards only: a held final frame would keep a layer that stops the popovers inside from frosting
+ * what is behind them.
  */
 .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below) {
-  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
+  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) backwards;
 }
 
 .new-chat > .new-chat-card {
@@ -1016,4 +1031,16 @@
   .new-chat-path {
     flex-basis: calc(100% - 48px);
   }
+}
+
+/* On a lit row the meta steps up to keep 4.5:1 on the glass fill: a tone under the hand, the
+   row's own ink once chosen or pressed. */
+@media (hover: hover) {
+  .new-chat-agent:hover > small {
+    color: var(--g-fg-2);
+  }
+}
+
+.new-chat-agent:is(:active, :has(> input:checked)) > small {
+  color: var(--g-fg-1);
 }

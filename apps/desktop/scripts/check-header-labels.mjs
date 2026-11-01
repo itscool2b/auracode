@@ -29,7 +29,7 @@ const cases = [
     id: "header-tree",
     title: "Review release checklist",
     label:
-      "Client portal · aura/9d6cd062 (worktree from C:/Users/Example/Work/Customer Platforms/October Delivery/Client Portal/desktop-and-web-application)",
+      "Client portal · aura/9d6cd062 (worktree from C:/Users/Example/Work/Customer Platforms/October Delivery/Shared Engineering Workspaces/Client Portal/desktop-and-web-application)",
     visible: "Client portal · aura/9d6cd062",
     path: "C:/Users/Example/AppData/Local/auracode/profiles/local/worktrees/9d6cd062e86e",
   },
@@ -38,7 +38,7 @@ const cases = [
     title: "Local source folder",
     label: "Client portal · portal-source",
     visible: "Client portal · portal-source",
-    path: "C:/Users/Example/Work/Customer Platforms/October Delivery/Client Portal/desktop-and-web-application",
+    path: "C:/Users/Example/Work/Customer Platforms/October Delivery/Shared Engineering Workspaces/Client Portal/desktop-and-web-application",
   },
   {
     id: "header-documents",

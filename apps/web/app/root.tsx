@@ -9,7 +9,9 @@ import {
   useRouteError,
 } from "react-router";
 import "@auracode/ui/graphite.css";
-import "./site.css";
+// Instrument Serif, for the accent phrases (Geist comes with Graphite).
+import "@auracode/ui/fonts.css";
+import "./styles/index.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
 import { SiteFooter } from "./footer";
 import { SiteHeader } from "./header";

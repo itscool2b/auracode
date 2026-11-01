@@ -1,7 +1,7 @@
 /*
- * Startup failure replaces the app (visual-language.md 6.21): a black window, a centred 600px
- * column, the logo, a calm title over aura-core's own words, the data folder in a well that can be
- * copied, and one line on what to do. Nothing here moves.
+ * Startup failure replaces the app (visual-language.md 6.21): the window's own colour or material,
+ * a centred 600px column, the logo, a calm title over aura-core's own words, the data folder in a
+ * glass well that can be copied, and one line on what to do. Nothing here moves.
  */
 
 .error-screen {
@@ -12,6 +12,10 @@
   min-height: 100%;
   padding: var(--g-space-64) var(--g-space-24);
   overflow: auto;
+}
+
+:root.g-root .error-screen {
+  background-color: transparent;
 }
 
 .error-drag {
@@ -51,9 +55,11 @@
 
 .error-well {
   overflow: hidden;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-layer);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .error-well-head {
@@ -63,7 +69,7 @@
   gap: var(--g-space-12);
   height: 36px;
   padding: 0 var(--g-space-6) 0 var(--g-space-16);
-  border-bottom: 1px solid var(--g-line-faint);
+  border-bottom: 1px solid var(--g-glass-rim);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

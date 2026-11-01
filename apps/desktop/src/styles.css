@@ -198,12 +198,13 @@
 
   :root[data-glass="liquid_glass"] body,
   :root[data-glass="vibrancy"] body,
-  :root[data-glass="mica"] body {
+  :root[data-glass="mica"] body,
+  :root[data-glass="acrylic"] body {
     background: var(--ui-window-tint);
   }
 
   :root[data-glass="none"] body {
-    background: var(--g-bg);
+    background: var(--g-window);
   }
 
   ::selection {
@@ -283,7 +284,7 @@
     width: 100%;
     height: 32px;
     padding: 0 var(--g-space-8);
-    border-radius: var(--g-radius-8);
+    border-radius: var(--g-radius-10);
     color: var(--g-fg-2);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
@@ -298,7 +299,7 @@
   }
 
   .nav-item:hover {
-    background: var(--g-surface-2);
+    background: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 
@@ -307,9 +308,11 @@
     align-items: center;
     gap: var(--g-space-12);
     padding: var(--g-space-12);
-    border-radius: var(--g-radius-12);
-    background: var(--g-surface-1);
-    box-shadow: inset 0 0 0 1px var(--g-line);
+    border-radius: var(--g-radius-14);
+    background: var(--g-glass-card);
+    box-shadow:
+      var(--g-shadow-control),
+      inset 0 0 0 1px var(--g-glass-rim-strong);
   }
 
   .agent-chip-text {
@@ -996,5 +999,42 @@
       color: var(--g-fg-2);
       background: none;
     }
+  }
+
+  /* ---------- Scrollbars (Windows) ---------- */
+
+  /*
+   * WebView2 draws even thin scrollbars with arrow buttons, which sit badly in the glass panes, so
+   * on Windows a rounded thumb with no arrows replaces them. Chromium honours these pseudo-elements
+   * only while scrollbar-width and scrollbar-color are auto, so both are reset here. macOS keeps
+   * its overlay scrollbars.
+   */
+  :root[data-os="windows"] * {
+    /* biome-ignore lint/complexity/noImportantStyles: The screens set these unlayered; Windows resets them all. */
+    scrollbar-width: auto !important;
+    /* biome-ignore lint/complexity/noImportantStyles: The screens set these unlayered; Windows resets them all. */
+    scrollbar-color: auto !important;
+  }
+
+  :root[data-os="windows"] ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background-color: transparent;
+  }
+
+  :root[data-os="windows"] ::-webkit-scrollbar-thumb {
+    border: 4px solid transparent;
+    border-radius: var(--g-radius-pill);
+    background-clip: padding-box;
+    background-color: var(--g-line-strong);
+  }
+
+  :root[data-os="windows"] ::-webkit-scrollbar-thumb:hover {
+    border-width: 3px;
+    background-color: var(--g-fg-3);
+  }
+
+  :root[data-os="windows"] ::-webkit-scrollbar-corner {
+    background-color: transparent;
   }
 }

@@ -1,6 +1,8 @@
-/* Desktop chrome follows the inspected Devin reference; code shares Aura's mono family. */
-@import "@fontsource-variable/inter";
-
+/*
+ * Halo sets the desktop in Geist, the website's face, so the app and auracode.si read as one
+ * brand. Graphite already bundles Geist and Geist Mono; this file keeps the desktop's font
+ * entry point so the app's import order stays the same.
+ */
 :root {
-  --g-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }

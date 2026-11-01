@@ -13,6 +13,14 @@
   overflow: hidden;
 }
 
+/*
+ * In Customize the library is clear on Customize's pane; standalone, the pane is its own (shell.css,
+ * .pane-shell). More specific than Graphite's .g-root, which would paint the page colour over it.
+ */
+.library-screen[data-embedded] {
+  background-color: transparent;
+}
+
 .library-screen *,
 .library-review * {
   scrollbar-width: thin;
@@ -113,9 +121,9 @@
   flex: none;
   margin: 0 var(--g-space-32) var(--g-space-12);
   padding: var(--g-space-12) var(--g-space-16);
-  border-left: 2px solid var(--g-fg-3);
-  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--g-surface-1);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -123,13 +131,13 @@
 }
 
 .library-feedback[role="alert"] {
-  border-left-color: var(--g-red);
+  background-color: var(--g-red-tint);
 }
 
-/* -------------------------------------------------- the frame: three hairline panes */
+/* ------------------------------------------------------ the frame: three panes on a card */
 
 /*
- * The frame's ring and the panes' dividers are drawn inset, never as borders or gaps, so every
+ * The card's rim and the panes' dividers are drawn inset, never as borders or gaps, so every
  * pane starts on the page's 32px column and the grid. The views and the items are fixed widths
  * and the preview takes the rest, so no column is a fraction of a pixel.
  */
@@ -141,8 +149,9 @@
   min-height: 0;
   margin: 0 var(--g-space-32) var(--g-space-24);
   overflow: hidden;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-bg);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow: var(--g-shadow-control);
 }
 
 .library-body::after {
@@ -150,14 +159,14 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   pointer-events: none;
 }
 
 .library-body > * {
   min-width: 0;
   min-height: 0;
-  background-color: var(--g-bg);
+  background-color: transparent;
 }
 
 .library-body > * + * {
@@ -165,7 +174,7 @@
 }
 
 /*
- * The views: plain rows, the current one filled (Vercel's sidebar), one divider before history. The
+ * The views: plain rows, the current one a lit capsule, one divider before history. The
  * rows sit 4px apart, as in the chat and settings sidebars.
  */
 .library-categories {
@@ -185,7 +194,7 @@
   height: 32px;
   padding: 0 var(--g-space-8);
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
   background-color: transparent;
   color: var(--g-fg-2);
   font: inherit;
@@ -195,23 +204,27 @@
   cursor: pointer;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
 }
 
 @media (hover: hover) {
   .library-categories > button:hover {
-    background-color: var(--g-surface-2);
+    background-color: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 }
 
 .library-categories > button:active {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-control-active);
   transition-duration: 0ms;
 }
 
 .library-categories > button[aria-current] {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-selected);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   font-weight: 500;
 }
@@ -331,17 +344,17 @@
 
 @media (hover: hover) {
   .library-items li button:hover {
-    background-color: var(--g-surface-1);
+    background-color: var(--g-glass-control);
   }
 }
 
 .library-items li button:active {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control-hover);
   transition-duration: 0ms;
 }
 
 .library-items li button[aria-pressed="true"] {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control-hover);
 }
 
 .library-items li button[aria-pressed="true"]::before {
@@ -456,10 +469,11 @@
   flex: none;
 }
 
-/* The file, in a well: a 36px head with its name and size, then the text. The ring is inset. */
+/* The file, in a solid code well: a 36px head with its name and size, then the text. The ring is
+   inset. */
 .library-well {
   overflow: hidden;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
   box-shadow: inset 0 0 0 1px var(--g-line);
 }
@@ -544,7 +558,7 @@
   gap: var(--g-space-12);
   margin-top: var(--g-space-24);
   padding-top: var(--g-space-20);
-  box-shadow: inset 0 1px 0 var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-glass-rim);
 }
 
 .library-copy-controls > p {
@@ -638,12 +652,12 @@
 }
 
 .library-history > .library-empty {
-  border: 1px dashed var(--g-line-strong);
-  border-radius: var(--g-radius-12);
+  border: 1px dashed var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-14);
 }
 
 .library-history > ul {
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .library-history :where(ul > li) {
@@ -652,7 +666,7 @@
   gap: var(--g-space-16);
   min-height: 56px;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .library-history li > div {
@@ -711,7 +725,7 @@
   gap: 1px;
   overflow: hidden;
   border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-12);
   background-color: var(--g-line);
 }
 
@@ -761,7 +775,7 @@
 .library-restore-files {
   margin: var(--g-space-8) 0 0;
   padding: 0;
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
   list-style: none;
 }
 
@@ -772,7 +786,7 @@
   justify-content: space-between;
   gap: var(--g-space-12);
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .library-review-files li span {

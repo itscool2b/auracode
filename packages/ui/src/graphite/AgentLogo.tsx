@@ -93,6 +93,24 @@ export function LogoDrawing({
 }
 
 /**
+ * A logo as a reusable `<symbol>` for an SVG sprite, drawn exactly as LogoDrawing draws it. A page
+ * that shows the same marks many times defines each once and points `<use href="#id">` at it.
+ */
+export function LogoSymbol({ logo, id }: { readonly logo: AgentLogoData; readonly id: string }) {
+  return (
+    <symbol id={id} viewBox={logoViewBox(logo)}>
+      {logo.turn ? (
+        <g transform={turnTransform(logo.viewBox, logo.turn.angle)}>
+          {logo.shapes.map(shapeElement)}
+        </g>
+      ) : (
+        logo.shapes.map(shapeElement)
+      )}
+    </symbol>
+  );
+}
+
+/**
  * An agent's own published mark, alone (third-party/brand-marks.md): its shapes and colours as the
  * vendor publishes them, centred at its optical scale. Null for an agent without one; AgentMark is
  * the tile that always shows something.

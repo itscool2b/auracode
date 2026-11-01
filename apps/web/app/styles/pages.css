@@ -1,0 +1,817 @@
+/*
+ * Inner pages: one glass sheet over a soft halo. The title is two-tone (ink, then the grey serif)
+ * and stands on its own; nothing sits above it.
+ */
+.page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 88px 0 152px;
+}
+
+.page::before {
+  content: "";
+  position: absolute;
+  top: -260px;
+  left: 50%;
+  z-index: -1;
+  width: min(1300px, 140%);
+  aspect-ratio: 2.2 / 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side at 34% 50%, rgb(240 140 100 / 0.2), transparent),
+    radial-gradient(closest-side at 66% 46%, rgb(111 139 255 / 0.18), transparent),
+    radial-gradient(closest-side at 50% 70%, rgb(71 245 138 / 0.1), transparent);
+  filter: blur(30px);
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.frame {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--s-max) + 2 * var(--s-gutter));
+  margin: 0 auto;
+  padding: 0 var(--s-gutter);
+}
+
+.page-column {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.page-column-wide {
+  max-width: 1040px;
+}
+
+.page-head {
+  display: grid;
+  gap: 22px;
+  margin-bottom: 56px;
+}
+
+.page-title {
+  color: var(--g-fg-1);
+  font-size: clamp(42px, 6vw, 76px);
+  line-height: 1;
+  font-weight: 560;
+  letter-spacing: -0.048em;
+  text-wrap: balance;
+}
+
+.page-title > span {
+  color: var(--g-fg-3);
+  font-family: var(--s-serif);
+  font-size: 1.06em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+
+.page-lead {
+  max-width: 600px;
+  color: var(--g-fg-2);
+  font-size: 19px;
+  line-height: 29px;
+}
+
+/* A glass sheet: the one surface inner pages put content on. */
+.download-cell,
+.auth-panel,
+.account-block,
+.release-entry,
+.prose-section,
+.account-signed-out,
+.error-panel {
+  border-radius: 24px;
+  background-color: rgb(255 255 255 / 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.07),
+    inset 0 1px 0 #ffffff,
+    0 1px 2px rgb(10 10 11 / 0.03),
+    0 30px 60px -40px rgb(10 10 11 / 0.3);
+}
+
+/* -------------------------------------------------------------------------------- prose */
+
+.prose {
+  color: var(--g-fg-2);
+  font-size: 16px;
+  line-height: 27px;
+}
+
+.prose > * + * {
+  margin-top: 16px;
+}
+
+.prose h2 {
+  margin-top: 40px;
+  color: var(--g-fg-1);
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 560;
+  letter-spacing: -0.025em;
+}
+
+.prose h2:first-child {
+  margin-top: 0;
+}
+
+.prose h3 {
+  margin-top: 28px;
+  color: var(--g-fg-1);
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 560;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 20px;
+}
+
+.prose li + li {
+  margin-top: 6px;
+}
+
+.prose a:not(.text-link) {
+  color: var(--g-fg-1);
+  text-decoration-color: var(--g-fg-4);
+  text-underline-offset: 3px;
+}
+
+.prose strong {
+  color: var(--g-fg-1);
+  font-weight: 560;
+}
+
+.prose code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background-color: rgb(10 10 11 / 0.05);
+  font-family: var(--g-mono);
+  font-size: 0.88em;
+}
+
+.page-column > .prose {
+  padding: 40px 44px;
+  border-radius: 24px;
+  background-color: rgb(255 255 255 / 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.07),
+    inset 0 1px 0 #ffffff,
+    0 30px 60px -40px rgb(10 10 11 / 0.3);
+}
+
+.prose-sections {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.prose-section {
+  padding: 32px 36px;
+}
+
+/* ----------------------------------------------------------------------------- download */
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.download-cell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 28px;
+  padding: 32px;
+  transition:
+    transform 500ms var(--s-glide),
+    box-shadow 500ms var(--s-swift);
+}
+
+.download-cell:hover {
+  transform: translateY(-3px);
+}
+
+.download-name {
+  color: var(--g-fg-1);
+  font-size: 34px;
+  line-height: 38px;
+  font-weight: 560;
+  letter-spacing: -0.035em;
+}
+
+.download-sub {
+  margin-top: 6px;
+  color: var(--g-fg-3);
+  font-size: 15px;
+}
+
+.data-rows {
+  display: grid;
+}
+
+.data-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid rgb(10 10 11 / 0.07);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.data-row dt {
+  color: var(--g-fg-3);
+}
+
+.data-row dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--g-fg-1);
+}
+
+.download-action .g-button {
+  width: 100%;
+}
+
+.download-status {
+  margin-bottom: 16px;
+}
+
+.release-notes {
+  white-space: pre-line;
+}
+
+/* --------------------------------------------------------------------------------- auth */
+
+.auth-column {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.auth-shell {
+  display: grid;
+  gap: 28px;
+}
+
+.auth-head {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-head .page-title {
+  font-size: clamp(40px, 5.4vw, 60px);
+}
+
+.auth-intro {
+  color: var(--g-fg-2);
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.auth-inline-link {
+  color: var(--g-fg-1);
+  text-decoration-color: var(--g-fg-4);
+  text-underline-offset: 3px;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 22px;
+  padding: 30px;
+}
+
+.auth-panel-title {
+  color: var(--g-fg-1);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+}
+
+.auth-panel-copy {
+  margin-top: 8px;
+  color: var(--g-fg-2);
+}
+
+.auth-actions,
+.button-row,
+.error-actions,
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-terms {
+  color: var(--g-fg-3);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.auth-terms a {
+  color: var(--g-fg-2);
+  text-underline-offset: 3px;
+}
+
+.code-form {
+  display: grid;
+  gap: 18px;
+}
+
+.code-form > .g-button {
+  width: 100%;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  color: var(--g-fg-1);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.field-help,
+.field-meta {
+  color: var(--g-fg-3);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.field-input {
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 15px;
+}
+
+.code-input {
+  font-family: var(--g-mono);
+  font-size: 22px;
+  letter-spacing: 0.4em;
+}
+
+/* ------------------------------------------------------------------------------ account */
+
+.account {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.account-nav {
+  position: sticky;
+  top: 104px;
+  display: grid;
+  gap: 2px;
+}
+
+.account-nav :is(a, button) {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--g-fg-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 200ms var(--s-swift),
+    color 200ms var(--s-swift);
+}
+
+.account-nav :is(a, button):hover {
+  background-color: rgb(10 10 11 / 0.05);
+  color: var(--g-fg-1);
+}
+
+.account-nav button:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
+.account-blocks {
+  display: grid;
+  gap: 16px;
+}
+
+.account-block {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 28px;
+  padding: 30px;
+  scroll-margin-top: 104px;
+}
+
+.account-block-head h2 {
+  color: var(--g-fg-1);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+}
+
+.account-block-head p {
+  margin-top: 8px;
+  color: var(--g-fg-3);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.account-block-body {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  justify-items: start;
+}
+
+.account-email {
+  color: var(--g-fg-1);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.account-signed-out {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+  padding: 32px;
+}
+
+.account-signed-out h2 {
+  color: var(--g-fg-1);
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 560;
+  letter-spacing: -0.025em;
+}
+
+.account-signed-out p {
+  color: var(--g-fg-2);
+}
+
+.inline-form {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.device-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background-color: rgb(10 10 11 / 0.035);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+}
+
+.device-main {
+  flex: 1;
+  min-width: 160px;
+}
+
+.device-name {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.device-meta {
+  color: var(--g-fg-3);
+  font-size: 13px;
+}
+
+.device-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--g-fg-2);
+  font-size: 13px;
+}
+
+.device-status .g-status-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.empty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  color: var(--g-fg-2);
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.meter-block {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background-color: rgb(10 10 11 / 0.035);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+}
+
+.meter-label {
+  color: var(--g-fg-3);
+  font-size: 13px;
+}
+
+.meter-value {
+  color: var(--g-fg-1);
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-value small {
+  color: var(--g-fg-3);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.meter-block meter {
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(10 10 11 / 0.08);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.meter-block meter::-webkit-meter-bar {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(10 10 11 / 0.08);
+}
+
+.meter-block meter::-webkit-meter-optimum-value {
+  border-radius: 999px;
+  background: var(--s-ink);
+}
+
+.meter-block meter::-moz-meter-bar {
+  border-radius: 999px;
+  background: var(--s-ink);
+}
+
+.security-rows {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.security-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background-color: rgb(10 10 11 / 0.035);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+}
+
+.security-row h3 {
+  color: var(--g-fg-1);
+  font-size: 15px;
+  font-weight: 560;
+}
+
+.security-row p {
+  max-width: 420px;
+  margin-top: 4px;
+  color: var(--g-fg-3);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 16px;
+}
+
+.confirm-dialog:not([open]) {
+  display: none;
+}
+
+.confirm-dialog h2 {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+}
+
+.confirm-dialog p {
+  color: var(--g-fg-2);
+}
+
+.confirm-field {
+  display: grid;
+  gap: 8px;
+}
+
+.confirm-field label {
+  color: var(--g-fg-2);
+  font-size: 13px;
+}
+
+.confirm-actions {
+  justify-content: flex-end;
+}
+
+/* ---------------------------------------------------------------------------- changelog */
+
+.release-entry {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 36px;
+  padding: 40px;
+}
+
+.release-meta {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  color: var(--g-fg-3);
+  font-size: 14px;
+}
+
+.release-meta time {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.release-body .text-link {
+  margin-top: 24px;
+}
+
+/* -------------------------------------------------------------------------------- error */
+
+.error-page {
+  min-height: 60vh;
+}
+
+.error-panel {
+  display: grid;
+  gap: 24px;
+  justify-items: start;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px;
+}
+
+.error-code {
+  font-size: clamp(120px, 18vw, 220px);
+  line-height: 0.82;
+  font-weight: 300;
+  letter-spacing: -0.08em;
+  background: linear-gradient(180deg, var(--s-ink) 35%, #8b8d94 115%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.error-title {
+  color: var(--g-fg-1);
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.05;
+  font-weight: 560;
+  letter-spacing: -0.04em;
+}
+
+.error-title span {
+  color: var(--g-fg-3);
+  font-family: var(--s-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ---------------------------------------------------------------------- device verification */
+
+.device-verification {
+  display: grid;
+  gap: 12px;
+  place-content: center;
+  min-height: 100vh;
+  padding: 16px;
+  text-align: center;
+}
+
+.device-verification h1 {
+  color: var(--g-fg-1);
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 560;
+}
+
+.device-verification p {
+  color: var(--g-fg-2);
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------------------- responsive */
+
+@media (max-width: 899px) {
+  .account {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .account-nav {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .account-block,
+  .release-entry {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 56px 0 104px;
+  }
+
+  .download-grid,
+  .meters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .download-cell,
+  .auth-panel,
+  .account-block,
+  .release-entry,
+  .account-signed-out,
+  .prose-section,
+  .error-panel {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+
+  .page-column > .prose {
+    padding: 28px 22px;
+  }
+
+  .data-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :is(
+    .download-cell,
+    .auth-panel,
+    .account-block,
+    .release-entry,
+    .prose-section,
+    .account-signed-out,
+    .error-panel,
+    .page-column > .prose
+  ) {
+    background-color: #ffffff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

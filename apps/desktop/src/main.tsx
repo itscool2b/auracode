@@ -41,6 +41,8 @@ void appearanceReady.then(() => {
   if (container) {
     if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
       const mode = new URLSearchParams(location.search).get("preview");
+      if (new URLSearchParams(location.search).has("glass"))
+        void import("./dev/glassPreview").then(({ emulateGlass }) => emulateGlass());
       if (new URLSearchParams(location.search).has("quit"))
         void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
       if (mode === "config-sync" || mode === "plugin-sync")

@@ -8,9 +8,17 @@
   height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
-  background-color: var(--g-bg);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
+}
+
+/*
+ * The window's own colour or material shows around setup's card. More specific than Graphite's
+ * .g-root, which would paint the page colour over it; the Agents page is a pane (shell.css). A
+ * fixture page without the window's root keeps the page colour.
+ */
+:root.g-root .setup-shell:not(.agents-screen) {
+  background-color: transparent;
 }
 
 .setup-drag {
@@ -61,9 +69,12 @@
   box-shadow: var(--ui-card-shadow);
 }
 
-/* A short entrance makes the handoff from the intro clear. */
+/*
+ * A short entrance makes the handoff from the intro clear. It ends on the card's own resting state
+ * and keeps no fill, so the card is no backdrop root and glass inside it frosts what is behind.
+ */
 .setup-shell:not([data-cinematic]) .setup-column {
-  animation: setup-card-in var(--g-dur-headline) var(--g-ease-quint) var(--ui-card-in-at) both;
+  animation: setup-card-in var(--g-dur-headline) var(--g-ease-quint) var(--ui-card-in-at) backwards;
 }
 
 @keyframes setup-card-in {
@@ -145,8 +156,9 @@
   }
 }
 
+/* No fill after the entrance, as the card's: the roster and its glass sit in here. */
 .setup-content {
-  animation: setup-open var(--g-dur-panel) var(--g-ease-quint) both;
+  animation: setup-open var(--g-dur-panel) var(--g-ease-quint) backwards;
 }
 
 @keyframes setup-open {
@@ -242,7 +254,7 @@
   min-height: 96px;
   padding: var(--g-space-16) var(--g-space-24);
   border: 1px dashed var(--g-line-strong);
-  border-radius: var(--g-radius-12);
+  border-radius: var(--g-radius-14);
   background-color: transparent;
   color: var(--g-fg-3);
   text-align: left;
@@ -250,26 +262,29 @@
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
     border-color var(--g-dur-fast) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease),
     color var(--g-dur-fast) var(--g-ease);
 }
 
 @media (hover: hover) {
   .setup-folder:hover:not(:disabled) {
     border-color: var(--g-fg-4);
-    background-color: var(--g-surface-2);
+    background-color: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 }
 
 .setup-folder:active:not(:disabled) {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-control-active);
   transition-duration: 0ms;
 }
 
+/* The chosen folder settles into a card with a hairline rim, as a settings group does. */
 .setup-folder[data-chosen] {
   border-style: solid;
-  border-color: var(--g-line-strong);
-  background-color: var(--g-surface-2);
+  border-color: var(--g-glass-rim-strong);
+  background-color: var(--g-glass-card);
+  box-shadow: var(--g-shadow-control);
   color: var(--g-fg-1);
 }
 
@@ -367,13 +382,13 @@
   max-width: 220px;
 }
 
-/* A failed save: a well with a red edge, the reason and what to do (6.8). */
+/* A failed save: a red-tinted well, the reason and what to do (6.8), as Settings shows one. */
 .setup-error {
   margin: var(--g-space-20) 0 0;
   padding: var(--g-space-12) var(--g-space-16);
-  border-left: 2px solid var(--g-red);
-  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--g-surface-2);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-red-tint);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -410,11 +425,12 @@
 
 /* ------------------------------------------------------ the first-launch intro */
 
+/* Clear, like the shell: the mark plays over the window itself while setup's card is hidden. */
 .setup-intro {
   position: fixed;
   inset: 0;
   z-index: 30;
-  background-color: var(--g-bg);
+  background-color: transparent;
   transition: opacity var(--g-dur-reveal) var(--g-ease-out);
 }
 
@@ -502,16 +518,29 @@
   }
 }
 
-/* Over the water: a quiet pill with the Escape keycap, at the window's foot. */
+/* Over the intro: a frosted pill with the Escape keycap, at the window's foot. */
 .setup-skip-intro {
   position: fixed;
   right: 32px;
   bottom: 32px;
   z-index: 31;
   gap: var(--g-space-8);
-  border-color: var(--g-line-strong);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-pop);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
+  box-shadow:
+    inset 0 0 0 1px var(--g-glass-rim),
+    var(--g-shadow-pop);
   color: var(--g-fg-2);
+}
+
+@media (hover: hover) {
+  .setup-skip-intro:hover {
+    box-shadow:
+      inset 0 0 0 1px var(--g-glass-rim-strong),
+      var(--g-shadow-pop);
+    color: var(--g-fg-1);
+  }
 }
 
 /* ---------------------------------------------------------- dialogs and rows */
@@ -529,13 +558,13 @@
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .setup-rows :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-12) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
   line-height: var(--g-leading-ui);
 }
 
@@ -646,7 +675,7 @@
   height: 36px;
   padding: 0 var(--g-space-12);
   border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
   background-color: var(--g-surface-1);
   color: var(--g-fg-1);
   font: inherit;
@@ -708,16 +737,13 @@
   gap: var(--g-space-8);
 }
 
-/* The exact command in a code well (4.8): one step below the column or the dialog. */
+/* The exact command in a glass well (4.8), as Settings keeps machine data: one step below the
+   column or the dialog. */
 .clone-command {
   padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
-}
-
-:is(.setup-clone-dialog, .setup-column) .clone-command {
-  background-color: var(--g-bg);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .clone-command-text {
@@ -839,13 +865,13 @@
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   margin: 0;
-  box-shadow: inset 0 1px 0 var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-glass-rim);
 }
 
 .setup-install-review :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  box-shadow: inset 0 -1px 0 var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-glass-rim);
 }
 
 .setup-install-review dt {
@@ -947,14 +973,19 @@
   font-weight: 400;
 }
 
+/*
+ * Each installation is a clear card on a hairline rim inside the details' well; the hand fills it
+ * and the chosen one takes a strong ring. No fill marks the choice, so the paths and versions in
+ * fg-3 keep their contrast on the glass.
+ */
 .setup-executable {
   display: flex;
   align-items: flex-start;
   gap: var(--g-space-12);
   padding: var(--g-space-12);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-bg);
+  border: 1px solid var(--g-glass-rim);
+  border-radius: var(--g-radius-12);
+  background-color: transparent;
   cursor: pointer;
   transition:
     border-color var(--g-dur-micro) var(--g-ease),
@@ -968,12 +999,12 @@
 @media (hover: hover) {
   .setup-executable:hover:not([data-unavailable]) {
     border-color: var(--g-line-strong);
+    background-color: var(--g-glass-control);
   }
 }
 
 .setup-executable:has(input:checked) {
   border-color: var(--g-fg-3);
-  background-color: var(--g-surface-2);
 }
 
 .setup-executable[data-unavailable] {
@@ -1018,9 +1049,10 @@
   flex: none;
   align-items: center;
   height: 20px;
-  padding: 0 var(--g-space-6);
-  border-radius: var(--g-radius-4);
-  background-color: var(--g-surface-4);
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   color: var(--g-fg-1);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

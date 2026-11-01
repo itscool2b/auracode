@@ -2,5 +2,5 @@
 .keep-local-consent {
   margin-top: var(--g-space-16);
   padding-top: var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }

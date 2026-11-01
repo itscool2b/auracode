@@ -363,6 +363,9 @@ const { values } = parseArgs({
     modes: { type: "string" },
     sizes: { type: "string", default: "1440x900,1024x700" },
     "focus-steps": { type: "string", default: "120" },
+    // Halo glass: each view over an emulated window material (dev/glassPreview.ts). "worst" paints
+    // the darkest light material and the lightest dark one, so contrast is checked at its limit.
+    glass: { type: "string" },
   },
 });
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -798,7 +801,7 @@ try {
             await page.goto(
               preview.split("?")[0].endsWith(".html")
                 ? `${url}/${preview}`
-                : `${url}/?preview=${preview}&theme=${theme}`,
+                : `${url}/?preview=${preview}&theme=${theme}${values.glass ? `&glass=acrylic&backdrop=${values.glass}` : ""}`,
             );
             await page.waitForLoadState("networkidle").catch(() => {});
             await page.evaluate(() => document.fonts.ready);

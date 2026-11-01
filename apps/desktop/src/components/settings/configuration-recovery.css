@@ -11,6 +11,11 @@
   overflow: auto;
 }
 
+/* As on the startup error, the page is the window's own colour or material, not a nested root's. */
+:root.g-root .configuration-recovery {
+  background-color: transparent;
+}
+
 .configuration-recovery-drag {
   position: absolute;
   inset: 0 0 auto;
@@ -75,7 +80,7 @@
 .configuration-recovery details {
   margin-top: var(--g-space-32);
   padding-top: var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
   color: var(--g-fg-2);
 }
 

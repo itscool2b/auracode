@@ -13,9 +13,12 @@
   height: var(--terminal-panel-height);
   min-height: 0;
   padding: 0 var(--g-space-8) var(--g-space-8);
-  /* The hairline is inset, so the header starts on the grid. */
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 1px var(--g-line);
+  /*
+   * The hairline is inset, so the header starts on the grid. The panel keeps the opaque surface
+   * xterm paints, so the shell sits flush on it and its text reads the same over any glass.
+   */
+  background-color: var(--g-terminal-bg);
+  box-shadow: inset 0 1px var(--g-glass-rim);
 }
 
 /* The top edge resizes the panel; a 2px line shows under the hand and the keyboard. */
@@ -69,7 +72,7 @@
   scrollbar-width: none;
 }
 
-/* Quiet tabs share the workspace panel's selected state. */
+/* Quiet pills; with no track behind them, the open tab takes the active glass fill. */
 .terminal-panel-tab {
   display: inline-flex;
   flex: none;
@@ -79,7 +82,7 @@
   height: 28px;
   padding: 0 var(--g-space-6) 0 var(--g-space-12);
   border: 0;
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-pill);
   background-color: transparent;
   color: var(--g-fg-2);
   font: inherit;
@@ -98,7 +101,7 @@
 }
 
 .terminal-panel-tab[aria-selected="true"] {
-  background-color: var(--g-selected);
+  background-color: var(--g-glass-control-active);
   color: var(--g-fg-1);
 }
 
@@ -130,11 +133,12 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: var(--g-radius-4);
+  border-radius: var(--g-radius-pill);
   color: var(--g-fg-3);
   opacity: 0;
   transition:
     opacity var(--g-dur-fast) var(--g-ease),
+    background-color var(--g-dur-fast) var(--g-ease),
     color var(--g-dur-fast) var(--g-ease);
 }
 
@@ -149,7 +153,7 @@
   }
 
   .terminal-panel-tab-close:hover {
-    background-color: var(--g-surface-4);
+    background-color: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 }
@@ -164,7 +168,7 @@
   justify-content: center;
   width: 28px;
   padding: 0;
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-pill);
   color: var(--g-fg-3);
 }
 
@@ -246,7 +250,7 @@
   height: 100%;
 }
 
-/* xterm paints its viewport black by default; the panel is surface-1 to its edge. */
+/* xterm paints its viewport black by default; the panel is the terminal's surface to its edge. */
 .terminal-panel-host .xterm-viewport {
-  background-color: var(--g-surface-1);
+  background-color: var(--g-terminal-bg);
 }

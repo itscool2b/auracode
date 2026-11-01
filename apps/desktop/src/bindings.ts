@@ -1524,7 +1524,7 @@ export type GitWorkspace = {
  *  The material the window got, reported to the UI in `app_info`. `none` tells the UI to paint
  *  its own opaque background.
  */
-export type GlassEffect = "liquid_glass" | "vibrancy" | "mica" | "none";
+export type GlassEffect = "liquid_glass" | "vibrancy" | "mica" | "acrylic" | "none";
 
 /**  The installed harness against its latest known release. */
 export type HarnessStatus = { state: "not_installed" } | 

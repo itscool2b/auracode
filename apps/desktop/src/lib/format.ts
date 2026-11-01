@@ -35,6 +35,8 @@ export function glassLabel(glass: GlassEffect): string {
       return "Vibrancy";
     case "mica":
       return "Mica";
+    case "acrylic":
+      return "Acrylic";
     case "none":
       return "None (opaque)";
   }

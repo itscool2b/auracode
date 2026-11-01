@@ -74,15 +74,18 @@
 /* ----------------------------------------------------------------------- the list */
 
 /*
- * The frame and the hairlines between rows are drawn over the rows (a ring and 1px lines), not as
- * borders, so every row is exactly 60px and starts on the 4px grid.
+ * The list is a card, as a settings group is. Its rim and the hairlines between rows are drawn over
+ * the rows (a ring and 1px lines), not as borders, so every row is exactly 60px and starts on the
+ * 4px grid.
  */
 .agent-list {
   position: relative;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border-radius: var(--g-radius-12);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow: var(--g-shadow-control);
   list-style: none;
 }
 
@@ -91,7 +94,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   pointer-events: none;
 }
 
@@ -120,24 +123,25 @@
   transition: background-color var(--g-dur-micro) var(--g-ease);
 }
 
+/* The hand and an open row lay a quiet glass fill over the card; it reads the same on setup's. */
 @media (hover: hover) {
   .agent-row-main:hover {
-    background-color: var(--g-surface-1);
+    background-color: var(--g-glass-control);
   }
 }
 
 .agent-row[data-open] .agent-row-main {
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-control);
 }
 
 /* The focused row takes the list's focus: a lifted fill and a 2px rail (3.7). */
 .agent-row-main:has(.agent-row-toggle:focus-visible) {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control-hover);
   box-shadow: inset 2px 0 0 var(--g-fg-1);
 }
 
 .agent-row-main:has(.agent-row-toggle:active) {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control-hover);
   transition-duration: 0ms;
 }
 
@@ -281,8 +285,9 @@
   color: var(--g-fg-3);
 }
 
+/* The open menu's trigger stays pressed in, as the chat header's does. */
 .agent-menu-trigger[aria-expanded="true"] {
-  background-color: var(--g-surface-4);
+  background-color: var(--g-glass-control-active);
   color: var(--g-fg-1);
 }
 
@@ -310,11 +315,11 @@
 }
 
 .agent-row[data-open] .agent-row-update {
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-control);
 }
 
 .agent-row[data-open] .agent-row-note {
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-control);
 }
 
 .agent-row-note[data-error] {
@@ -327,8 +332,10 @@
   align-items: center;
   gap: var(--g-space-12);
   padding: var(--g-space-64) var(--g-space-24);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-12);
+  border: 1px solid var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow: var(--g-shadow-control);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -348,7 +355,7 @@
  */
 .agent-detail {
   padding: 0 var(--g-space-16) var(--g-space-16) var(--g-space-64);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-control);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -467,10 +474,13 @@
 
 /* --------------------------------------------------------- setup's compact roster */
 
-/* Open at the sides: only the top and bottom hairlines, drawn over the rows like the frame. */
+/* Open at the sides on setup's card: no card of its own, only the top and bottom hairlines, drawn
+   over the rows like the frame. */
 .agent-list[data-compact] {
   overflow: visible;
   border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
 }
 
 .agent-list[data-compact]::after {
@@ -482,7 +492,7 @@
 .agent-list[data-compact] .agent-row-main {
   margin: 0 calc(var(--g-space-8) * -1);
   padding-right: var(--g-space-8);
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
 }
 
 /* 52px, so a 28px action sits 12px in on the grid. */
@@ -497,7 +507,7 @@
 }
 
 .agent-list[data-compact] .agent-row[data-open] .agent-row-main {
-  border-radius: var(--g-radius-8) var(--g-radius-8) 0 0;
+  border-radius: var(--g-radius-10) var(--g-radius-10) 0 0;
 }
 
 .agent-list[data-compact] .agent-detail,
@@ -510,32 +520,7 @@
 .agent-list[data-compact] .agent-detail {
   margin-bottom: var(--g-space-8);
   padding-bottom: var(--g-space-16);
-  border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
-}
-
-/*
- * On setup's card (water-low), the row's hand and open fills step up one surface, so they still
- * read against the card the way surface-1 reads against the black page.
- */
-@media (hover: hover) {
-  .agent-list[data-compact] .agent-row-main:hover,
-  .agent-list[data-compact] .agent-list-more button:hover {
-    background-color: var(--g-surface-2);
-  }
-}
-
-.agent-list[data-compact] :is(.agent-row[data-open] .agent-row-main, .agent-detail),
-.agent-list[data-compact] .agent-row[data-open] .agent-row-note {
-  background-color: var(--g-surface-2);
-}
-
-.agent-list[data-compact]
-  :is(
-    .agent-row-main:has(.agent-row-toggle:active),
-    .agent-row-main:has(.agent-row-toggle:focus-visible),
-    .agent-list-more button:active
-  ) {
-  background-color: var(--g-surface-3);
+  border-radius: 0 0 var(--g-radius-10) var(--g-radius-10);
 }
 
 .agent-list[data-compact] .agent-fact {
@@ -552,7 +537,7 @@
   margin: 0 calc(var(--g-space-8) * -1);
   padding: 0 var(--g-space-8) 0 calc(var(--g-space-8) + var(--g-space-24) + var(--g-space-12));
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
   background: none;
   color: var(--g-fg-2);
   font: inherit;
@@ -566,13 +551,13 @@
 
 @media (hover: hover) {
   .agent-list-more button:hover {
-    background-color: var(--g-surface-1);
+    background-color: var(--g-glass-control);
     color: var(--g-fg-1);
   }
 }
 
 .agent-list-more button:active {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control-hover);
   transition-duration: 0ms;
 }
 

@@ -19,6 +19,7 @@
   transition:
     background-color var(--g-dur-settle) var(--g-ease-settle),
     border-color var(--g-dur-settle) var(--g-ease-settle),
+    box-shadow var(--g-dur-settle) var(--g-ease-settle),
     color var(--g-dur-settle) var(--g-ease-settle),
     transform var(--g-dur-fast) var(--g-ease-out),
     translate var(--g-dur-panel) var(--g-ease-out);
@@ -225,11 +226,12 @@
 
 /*
  * New chat's agent pills (new-chat.css eases them back) and the composer's chips give under the
- * hand like the buttons do.
+ * hand like the buttons do. Their glass rims cross-fade with the fill.
  */
 .chat-popover > summary {
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease),
     transform var(--g-dur-fast) var(--g-ease-out);
 }
@@ -261,7 +263,7 @@
 @media (prefers-reduced-motion: reduce) {
   .g-button,
   :is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
-    transition-property: background-color, border-color, color, opacity;
+    transition-property: background-color, border-color, box-shadow, color, opacity;
   }
 
   .g-button:active:not(:disabled, [aria-disabled="true"]),

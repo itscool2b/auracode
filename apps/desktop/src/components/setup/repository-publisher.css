@@ -34,13 +34,13 @@
 .repository-publisher dl {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .repository-publisher :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .repository-publisher dt {

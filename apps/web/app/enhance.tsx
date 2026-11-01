@@ -8,31 +8,132 @@ import { useEffect } from "react";
 export const BOOT_SCRIPT =
   '(function(){var d=document.documentElement;if(!("IntersectionObserver"in window))return;d.classList.add("js");setTimeout(function(){if(!d.hasAttribute("data-ready"))d.classList.remove("js")},4000)})();';
 
+const REDUCED = "(prefers-reduced-motion: reduce)";
+const FINE = "(hover: hover) and (pointer: fine)";
+
 /**
- * Marks the page hydrated and reveals blocks as they enter. Reduced motion renders them in place.
+ * The page-wide motion layer, all of it off under reduced motion:
+ * - reveals: blocks marked [data-reveal] arrive once as they enter, their children staggered;
+ * - glint: [data-glint] glass catches the light where the pointer is;
+ * - magnetic: [data-magnetic] buttons lean a few pixels toward the pointer;
+ * - follow: a [data-follow] section's halo drifts toward the pointer.
+ * One pointer listener serves the last three, and it does nothing on touch.
  */
 export function Enhancements() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-ready", "");
-    const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-    if (typeof IntersectionObserver === "undefined") {
-      for (const target of targets) target.setAttribute("data-revealed", "");
-      return;
+
+    // Stagger each block's direct children by their position.
+    for (const block of document.querySelectorAll<HTMLElement>("[data-reveal-stagger]")) {
+      Array.from(block.children).forEach((child, i) => {
+        (child as HTMLElement).style.setProperty("--i", String(i));
+      });
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.setAttribute("data-revealed", "");
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
-    );
-    for (const target of targets) observer.observe(target);
+
+    const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver === "undefined" || matchMedia(REDUCED).matches) {
+      for (const target of targets) target.setAttribute("data-revealed", "");
+    } else {
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.setAttribute("data-revealed", "");
+            observer?.unobserve(entry.target);
+          }
+        },
+        { threshold: 0.14, rootMargin: "0px 0px -8% 0px" },
+      );
+      for (const target of targets) observer.observe(target);
+    }
+
+    // Zones with ambient motion (the hero's halo, the night bands) hold it while offscreen.
+    let zones: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      zones = new IntersectionObserver((entries) => {
+        for (const entry of entries)
+          entry.target.toggleAttribute("data-off", !entry.isIntersecting);
+      });
+      for (const zone of document.querySelectorAll("[data-zone]")) zones.observe(zone);
+    }
+
+    // Pointer effects: only for a fine pointer with motion allowed.
+    let frame = 0;
+    let last: PointerEvent | null = null;
+    let magnet: HTMLElement | null = null;
+    const release = () => {
+      if (!magnet) return;
+      magnet.style.removeProperty("--mx");
+      magnet.style.removeProperty("--my");
+      magnet.removeAttribute("data-pulled");
+      magnet = null;
+    };
+    const paint = () => {
+      frame = 0;
+      const event = last;
+      if (!event || !(event.target instanceof Element)) return;
+      const glint = event.target.closest<HTMLElement>("[data-glint]");
+      if (glint) {
+        const box = glint.getBoundingClientRect();
+        glint.style.setProperty(
+          "--gx",
+          `${(((event.clientX - box.left) / box.width) * 100).toFixed(1)}%`,
+        );
+        glint.style.setProperty(
+          "--gy",
+          `${(((event.clientY - box.top) / box.height) * 100).toFixed(1)}%`,
+        );
+      }
+      const follow = event.target.closest<HTMLElement>("[data-follow]");
+      if (follow) {
+        const box = follow.getBoundingClientRect();
+        follow.style.setProperty("--fx", `${(event.clientX - box.left).toFixed(0)}px`);
+        follow.style.setProperty("--fy", `${(event.clientY - box.top).toFixed(0)}px`);
+      }
+      const pull = event.target.closest<HTMLElement>("[data-magnetic]");
+      if (pull !== magnet) release();
+      if (pull) {
+        const box = pull.getBoundingClientRect();
+        const dx = (event.clientX - (box.left + box.width / 2)) / (box.width / 2);
+        const dy = (event.clientY - (box.top + box.height / 2)) / (box.height / 2);
+        pull.style.setProperty("--mx", `${(dx * 4).toFixed(2)}px`);
+        pull.style.setProperty("--my", `${(dy * 3).toFixed(2)}px`);
+        pull.setAttribute("data-pulled", "");
+        magnet = pull;
+      }
+    };
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      last = event;
+      if (!frame) frame = requestAnimationFrame(paint);
+    };
+    const pointer = matchMedia(FINE);
+    const reduced = matchMedia(REDUCED);
+    let listening = false;
+    const sync = () => {
+      const want = pointer.matches && !reduced.matches;
+      if (want && !listening) document.addEventListener("pointermove", onMove, { passive: true });
+      if (!want && listening) {
+        document.removeEventListener("pointermove", onMove);
+        release();
+      }
+      listening = want;
+    };
+    sync();
+    pointer.addEventListener("change", sync);
+    reduced.addEventListener("change", sync);
+    document.addEventListener("pointerleave", release);
+
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
+      zones?.disconnect();
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerleave", release);
+      pointer.removeEventListener("change", sync);
+      reduced.removeEventListener("change", sync);
+      if (frame) cancelAnimationFrame(frame);
     };
   }, []);
   return null;

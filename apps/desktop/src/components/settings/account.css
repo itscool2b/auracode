@@ -69,8 +69,8 @@ textarea.account-secret {
   width: 32px;
   height: 32px;
   border-radius: var(--g-radius-pill);
-  background-color: var(--g-surface-3);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  background-color: var(--g-glass-control-hover);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   color: var(--g-fg-1);
 }
 
@@ -84,9 +84,9 @@ textarea.account-secret {
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .account-sublist li {
@@ -127,9 +127,9 @@ textarea.account-secret {
   justify-items: start;
   gap: var(--g-space-12);
   padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .account-subsection p:not(.settings-note) {
@@ -165,13 +165,13 @@ textarea.account-secret {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .account-facts :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .account-facts dt {
@@ -193,7 +193,8 @@ textarea.account-secret {
 
 /* ----------------------------------------------------------------- verification */
 
-/* Turnstile's widget, framed by the website: its own height in a well, then one status line. */
+/* Turnstile's widget, framed by the website: its own height in a solid well (the frame paints its
+   own page), then one status line. */
 .account-verification {
   display: grid;
   gap: var(--g-space-8);
@@ -201,7 +202,7 @@ textarea.account-secret {
 }
 
 .account-verification-well {
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
   /* Outside the frame: an inset ring would sit under the iframe. */
   box-shadow: 0 0 0 1px var(--g-line);
@@ -213,7 +214,7 @@ textarea.account-secret {
   width: 100%;
   height: 192px;
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-12);
   color-scheme: var(--g-color-scheme);
 }
 
@@ -265,14 +266,19 @@ textarea.account-secret {
 
 /* ------------------------------------------------------ profile switch and lock */
 
-/* lib/profiles.ts covers the window with this while drafts save and a profile opens. */
+/*
+ * lib/profiles.ts covers the window with this while drafts save and a profile opens: frosted
+ * glass, heavy enough that the app under it never reads through.
+ */
 .profile-transition {
   position: fixed;
   inset: 0;
   z-index: 10000;
   display: grid;
   place-items: center;
-  background-color: var(--g-bg);
+  background-color: var(--ui-pane-fill);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
   color: var(--g-fg-2);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
@@ -285,6 +291,12 @@ textarea.account-secret {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
+}
+
+/* A locked workspace replaces the app, like a startup error: the window's own colour or material.
+   More specific than Graphite's .g-root, which would paint the page colour over it. */
+:root.g-root .locked-profile {
+  background-color: transparent;
 }
 
 .locked-profile > main {

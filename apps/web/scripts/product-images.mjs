@@ -4,8 +4,10 @@
  * through Chromium's canvas into WebP at 480, 960, 1440 and 2240 wide and a 1440 PNG fallback in
  * public/images. Run it whenever the app changes visibly.
  *
- * Usage: node apps/web/scripts/product-images.mjs [--server http://127.0.0.1:1426]
+ * Usage: node apps/web/scripts/product-images.mjs [--server http://127.0.0.1:1426] [--no-glass]
  * Without --server it starts the desktop's Vite on 127.0.0.1:1426 (strictPort) and stops it after.
+ * The window is shown as it is on Windows 11 and macOS, glass over a desktop (?glass=acrylic, the
+ * development stand-in for the native material); --no-glass shows the opaque fallback instead.
  */
 import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
@@ -15,7 +17,9 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 
-const { values } = parseArgs({ options: { server: { type: "string" } } });
+const { values } = parseArgs({
+  options: { server: { type: "string" }, "no-glass": { type: "boolean", default: false } },
+});
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = resolve(web, "../desktop");
 const images = resolve(web, "public/images");
@@ -67,7 +71,8 @@ try {
     colorScheme: theme,
   });
   const page = await context.newPage();
-  await page.goto(`${url}/?preview=settled&theme=${theme}&agents=lineup`);
+  const glass = values["no-glass"] ? "" : "&glass=acrylic";
+  await page.goto(`${url}/?preview=settled&theme=${theme}&agents=lineup${glass}`);
   await page.getByTestId("composer-input").waitFor();
   await page.evaluate(() => document.fonts.ready);
   // Nothing under the hand: no hover fill, no tooltip.

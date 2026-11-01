@@ -1,10 +1,10 @@
 /*
- * Diagnostics and the stress view, consistent with Graphite: the sidebar on black, a surface-1 pane
- * inset 8px like the chat, and surface-2 panels inside it. No glass, no glow.
+ * Diagnostics and the stress view, consistent with Halo: the sidebar on the window, a glass pane
+ * inset 8px like the chat, and glass cards inside it. No glow.
  */
 
 .diagnostics-shell {
-  background: var(--g-bg);
+  background: transparent;
   color: var(--g-fg-1);
   font-family: var(--g-sans);
 }
@@ -12,10 +12,8 @@
 .diagnostics-shell .main {
   margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
   border-radius: var(--ui-pane-radius);
-  background: var(--g-surface-1);
-  box-shadow:
-    0 0 0 1px var(--ui-pane-rim),
-    inset 0 1px 0 var(--ui-pane-rim-top);
+  background: var(--ui-pane-fill);
+  box-shadow: var(--ui-pane-shadow);
 }
 
 .diagnostics-shell .main-scroll {
@@ -43,8 +41,11 @@
 }
 
 .diagnostics-panel {
-  border-radius: var(--g-radius-12);
-  background: var(--g-surface-2);
+  border-radius: var(--g-radius-14);
+  background: var(--g-glass-card);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .diagnostics-alert {

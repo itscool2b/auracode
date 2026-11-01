@@ -1,5 +1,14 @@
+import { getBrand } from "@auracode/ui";
 import { ArrowUp, Paperclip, Square } from "lucide-react";
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
 import { composerPlaceholder } from "../../lib/chat/queueWait";
@@ -24,6 +33,7 @@ export function Composer({
   onForceStop,
   controls,
   agentName = "the agent",
+  agentId,
   chatId,
   contextApi,
   blocked = false,
@@ -38,6 +48,8 @@ export function Composer({
   readonly onForceStop: () => void;
   readonly controls?: ReactNode;
   readonly agentName?: string;
+  /** The chat's agent: its brand glow lights the composer's rim while it works. */
+  readonly agentId?: string;
   readonly chatId?: string;
   readonly contextApi?: ComposerTransport;
   readonly blocked?: boolean;
@@ -125,7 +137,11 @@ export function Composer({
   };
 
   return (
-    <div className="chat-composer">
+    <div
+      className="chat-composer"
+      data-working={working ? "" : undefined}
+      style={agentId ? ({ "--agent-glow": getBrand(agentId).glow } as CSSProperties) : undefined}
+    >
       <ContextChips context={context} />
       {mentionOpen ? (
         <MentionMenu

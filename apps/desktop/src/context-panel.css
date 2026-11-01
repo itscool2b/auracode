@@ -1,7 +1,7 @@
 /*
  * The right panel (docs/design/visual-language.md, 6.14): Changes, Files, Plan and Session behind a
- * strong segmented control. On a wide window it is its own pane 8px from the chat (the split is in
- * shell.css, with the panes); narrower, it floats over the chat with the one shadow.
+ * glass segmented control. On a wide window it is its own pane 8px from the chat (the split is in
+ * shell.css, with the panes); narrower, it floats over the chat as a frosted sheet.
  */
 
 .changes-panel {
@@ -15,8 +15,8 @@
   max-width: 560px;
   min-height: 0;
   /* The edge is an inset hairline, so the panel's rows start on the grid. */
-  background-color: var(--g-surface-1);
-  box-shadow: inset 1px 0 var(--g-line);
+  background-color: var(--ui-pane-fill);
+  box-shadow: inset 1px 0 var(--g-glass-rim);
 }
 
 @media (max-width: 1199px) {
@@ -26,9 +26,13 @@
     z-index: 25;
     width: min(100%, 420px);
     max-width: 100%;
+    border-radius: var(--ui-pane-radius);
+    background-color: var(--g-glass-pop);
+    -webkit-backdrop-filter: var(--g-blur-pop);
+    backdrop-filter: var(--g-blur-pop);
     box-shadow:
-      inset 1px 0 var(--g-line),
-      var(--g-shadow);
+      inset 0 0 0 1px var(--g-glass-rim),
+      var(--g-shadow-pop);
   }
 
   .changes-resizer {
@@ -67,7 +71,7 @@
   gap: var(--g-space-4);
   height: var(--g-app-header);
   padding: 0 var(--g-space-8);
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .changes-panel-header > .g-button-icon:first-of-type {
@@ -75,7 +79,7 @@
 }
 
 /*
- * Workspace tabs use a quiet fill to identify the active view.
+ * Workspace tabs sit in a glass track; the active view is a raised, lit pill.
  */
 .context-panel-tabs {
   display: inline-flex;
@@ -85,6 +89,10 @@
   min-width: 0;
   height: 32px;
   box-sizing: border-box;
+  padding: var(--g-space-2);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .context-panel-tabs button {
@@ -93,12 +101,13 @@
   gap: var(--g-space-6);
   height: 28px;
   padding: 0 var(--g-space-12);
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-pill);
   color: var(--g-fg-2);
   font-weight: 500;
   white-space: nowrap;
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease),
     color var(--g-dur-fast) var(--g-ease);
 }
 
@@ -109,7 +118,10 @@
 }
 
 .context-panel-tabs button[aria-selected="true"] {
-  background-color: var(--g-selected);
+  background-color: var(--g-glass-raised);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
 }
 
@@ -187,12 +199,16 @@
   gap: var(--g-space-8);
   min-height: 32px;
   padding: 0 var(--g-space-4) 0 var(--g-space-8);
-  border-radius: var(--g-radius-8);
-  transition: background-color var(--g-dur-micro) var(--g-ease);
+  border-radius: var(--g-radius-10);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease);
 }
 
+/* The file shown below: a rimmed capsule with no fill, so its red and green status letters keep
+   4.5:1 on the frosted sheet, where any lighter fill would take that away. */
 .changes-file-list > div[data-selected="true"] {
-  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .changes-file-list button {
@@ -298,7 +314,7 @@
   gap: var(--g-space-8);
   min-height: 44px;
   padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-12);
-  box-shadow: inset 0 1px var(--g-line);
+  box-shadow: inset 0 1px var(--g-glass-rim);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -316,9 +332,9 @@
   padding: var(--g-space-4) var(--g-space-12);
   overflow: auto;
   list-style: none;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .changes-confirm-files li {
@@ -331,7 +347,7 @@
 }
 
 .changes-confirm-files li + li {
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
 }
 
 .changes-confirm-files code {
@@ -412,7 +428,7 @@
   width: 100%;
   height: 28px;
   padding: 0 var(--g-space-8);
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-8);
   color: var(--g-fg-2);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
@@ -430,7 +446,7 @@
 }
 
 .context-file-row[aria-pressed="true"] {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-control-active);
   color: var(--g-fg-1);
 }
 
@@ -494,9 +510,10 @@
   margin: var(--g-space-4) 0 var(--g-space-16);
   padding: var(--g-space-12);
   overflow: auto;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-bg);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  /* Code keeps an opaque well, as the chat's diffs do, so it reads over any glass. */
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
@@ -559,7 +576,7 @@
   align-items: flex-start;
   gap: var(--g-space-12);
   padding: var(--g-space-8) 0;
-  box-shadow: inset 0 1px var(--g-line);
+  box-shadow: inset 0 1px var(--g-glass-rim);
   color: var(--g-fg-2);
 }
 
@@ -622,7 +639,7 @@
   gap: var(--g-space-8);
   min-height: 32px;
   padding: var(--g-space-6) 0;
-  box-shadow: inset 0 -1px var(--g-line);
+  box-shadow: inset 0 -1px var(--g-glass-rim);
 }
 
 .context-properties dt {
@@ -664,9 +681,11 @@
 .context-usage-tiles > div {
   min-width: 0;
   padding: var(--g-space-16);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .context-usage-tiles span {
@@ -731,4 +750,9 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
+}
+
+/* On the raised tab the count takes the tab's own ink: grey on the lit thumb falls under 4.5:1. */
+.context-panel-tabs button[aria-selected="true"] small {
+  color: inherit;
 }

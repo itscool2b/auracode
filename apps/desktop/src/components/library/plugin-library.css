@@ -25,7 +25,7 @@
   overflow-y: auto;
   padding-bottom: var(--g-space-24);
   padding-right: var(--g-space-16);
-  border-right: 1px solid var(--g-line);
+  border-right: 1px solid var(--g-glass-rim);
 }
 
 .plugins-agents > button {
@@ -37,7 +37,7 @@
   height: 32px;
   padding: 0 var(--g-space-8);
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
   background-color: transparent;
   color: var(--g-fg-2);
   font: inherit;
@@ -47,30 +47,29 @@
   cursor: pointer;
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease),
     color var(--g-dur-fast) var(--g-ease);
 }
 
 @media (hover: hover) {
   .plugins-agents > button:hover {
-    background-color: var(--g-hover);
+    background-color: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 }
 
-.plugins-agents > button[aria-current="page"] {
-  position: relative;
-  background-color: var(--g-selected);
-  color: var(--g-fg-1);
+.plugins-agents > button:active {
+  background-color: var(--g-glass-control-active);
+  transition-duration: 0ms;
 }
 
-.plugins-agents > button[aria-current="page"]::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  width: 2px;
-  height: 12px;
-  background-color: var(--g-volt);
+/* The open agent: a lit glass capsule, as the open settings page is. */
+.plugins-agents > button[aria-current="page"] {
+  background-color: var(--g-glass-selected);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-1);
 }
 
 .plugins-agents > button:focus-visible {
@@ -172,7 +171,7 @@
   gap: var(--g-space-8);
   min-height: 20px;
   padding: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-12);
   background-color: transparent;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
@@ -187,7 +186,8 @@
 .plugins-harness[data-tone] {
   min-height: 44px;
   padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
-  background-color: var(--g-surface-2);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
 }
 
@@ -203,7 +203,7 @@
   color: var(--g-fg-3);
 }
 
-/* Sync: one settings row, the words at left and the switch at right, on a hairline frame. */
+/* Sync: one settings row, the words at left and the switch at right, on a settings group's card. */
 .plugins-sync {
   display: flex;
   align-items: center;
@@ -211,8 +211,11 @@
   gap: var(--g-space-16);
   min-height: 60px;
   padding: var(--g-space-8) var(--g-space-16);
-  border-radius: var(--g-radius-8);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .plugins-sync > div {
@@ -286,13 +289,13 @@
   gap: var(--g-space-12);
   min-height: 60px;
   padding: var(--g-space-8);
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-10);
   contain: layout style;
 }
 
 @media (hover: hover) {
   .plugins-row:hover {
-    background-color: var(--g-hover);
+    background-color: var(--g-glass-control);
   }
 }
 
@@ -395,14 +398,10 @@
   margin: 0;
 }
 
-/* The ring is drawn inset, so the items sit 4px in, on the grid. */
+/* Placed by its trigger; the frosted surface and its inset rim are the shared menu's (.g-menu). */
 .plugins-menu {
   position: fixed;
   z-index: 50;
-  border: 0;
-  box-shadow:
-    var(--g-shadow),
-    inset 0 0 0 1px var(--g-line-strong);
 }
 
 /* An item's preview and copy, and the copy history, open as one large dialog each. */

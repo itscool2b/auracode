@@ -133,7 +133,7 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(new URL(page.url()).hash, "#main");
       await page.evaluate(() => document.activeElement?.blur());
-      // Shallows: no dither canvas anywhere and no film Pause button.
+      // No canvas anywhere (the halo and the window are CSS) and no film Pause button.
       assert.equal(await page.locator("canvas").count(), 0);
       assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
       // The capabilities panel: six tabs, each view clean under axe once shown.
@@ -409,6 +409,51 @@ try {
         fullPage: true,
       });
       assert.deepEqual(failures, []);
+      // Full motion: the hero's handoff loop, the reveals, the wheel and the night bands run
+      // without errors or sideways scrolling, and the loop leaves its printed first frame.
+      const moving = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        reducedMotion: "no-preference",
+        colorScheme: "light",
+      });
+      const motion = await moving.newPage();
+      const motionFailures = [];
+      motion.on("pageerror", (error) => motionFailures.push(error.message));
+      motion.on("console", (message) => {
+        if (message.type() === "error") motionFailures.push(message.text());
+      });
+      await motion.route("**/*", (route) =>
+        route.request().url().startsWith(base) ? route.continue() : route.abort(),
+      );
+      await motion.goto(base);
+      await motion.waitForFunction(
+        () => !document.querySelector(".hw")?.hasAttribute("data-settled"),
+        null,
+        {
+          timeout: 10000,
+        },
+      );
+      await motion.waitForTimeout(1200);
+      await motion.screenshot({ path: join(artifacts, `${name}-motion-hero.png`) });
+      for (const top of [1100, 2500, 3600, 4800, 5600, 6400, 7600, 1e6]) {
+        await motion.evaluate((y) => window.scrollTo(0, y), top);
+        await motion.waitForTimeout(600);
+        assert.ok(
+          await motion.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          `the moving home page scrolls sideways at ${top}`,
+        );
+      }
+      await motion.screenshot({ path: join(artifacts, `${name}-motion-end.png`) });
+      await motion.setViewportSize({ width: 390, height: 844 });
+      await motion.evaluate(() => window.scrollTo(0, 0));
+      await motion.waitForTimeout(600);
+      await motion.screenshot({ path: join(artifacts, `${name}-motion-mobile.png`) });
+      assert.ok(
+        await motion.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        "the moving home page scrolls sideways at 390px",
+      );
+      assert.deepEqual(motionFailures, []);
+      await moving.close();
       const nojs = await browser.newContext({ javaScriptEnabled: false, colorScheme: "dark" });
       const staticPage = await nojs.newPage();
       await staticPage.goto(`${base}/download`);

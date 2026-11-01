@@ -30,8 +30,9 @@ none of them:
 
 | Platform | Title bar | Material |
 |---|---|---|
-| Windows 11 (build 22000+) | native decorations: the system title bar and caption buttons | Mica (`micaDark`) on a transparent window |
-| Windows 10 | native decorations | none: an opaque near-black window |
+| Windows 11 (build 22523+) | native decorations: the system title bar and caption buttons | Acrylic, the system's transient-window backdrop, on a transparent window (Halo, 1 November 2026) |
+| Windows 11 (builds 22000 to 22522) | native decorations | Mica on a transparent window |
+| Windows 10 | native decorations | none: an opaque window in the resolved appearance |
 | macOS | `titleBarStyle: "Overlay"`, `hiddenTitle: true`, `trafficLightPosition` | Liquid Glass with a vibrancy fallback (plan) |
 | Linux | native decorations from the window manager | none from Tauri; CSS translucency (plan) |
 
@@ -80,9 +81,18 @@ none of them:
   when the material is missing. All values (`GlassEffect`): `liquid_glass`, `vibrancy`, `mica`, `none`.
   On Windows it is `mica` on Windows 11 and `none` on Windows 10, which is the plan's edge case
   "Windows 10 (no Mica: fallback theme)".
-- Never `acrylic` or `blur`: tauri-utils documents poor resize and drag performance for acrylic
-  (Windows 10 1903+ and Windows 11 build 22000) and for blur (Windows 11 build 22621), and the plan
-  already rules them out.
+- Never `blur`: tauri-utils documents poor resize and drag performance for it (Windows 11 build
+  22621).
+- Acrylic only from build 22523 (`ACRYLIC_WINDOWS_BUILD`). The Halo restyle wants a see-through
+  window, and Mica only tints with the wallpaper. tauri-utils documents poor resize and drag
+  performance for the old acrylic, Windows 10 1903+ and Windows 11 build 22000. That is the
+  accent-policy blur (`SetWindowCompositionAttribute`), which window-vibrancy 0.8.1 still uses
+  below build 22523. From 22523 on, `apply_acrylic` sets `DWMWA_SYSTEMBACKDROP_TYPE` to
+  `DWMSBT_TRANSIENTWINDOW`, the same system backdrop path as Mica, so `glass::plan` picks
+  `Effect::Acrylic` there and Mica on builds 22000 to 22522. `app_info().glass` reports `acrylic`.
+- A glass window hands its caption colours back to the system (`DWMWA_CAPTION_COLOR` and
+  `DWMWA_TEXT_COLOR` set to `DWMWA_COLOR_DEFAULT`), so the caption shows the same material as the
+  page. An opaque window still paints the caption in the window's base colour (`window.rs`).
 
 ## macOS
 

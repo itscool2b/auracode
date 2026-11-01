@@ -1,9 +1,9 @@
 /*
- * The chat shell's frame (docs/design/visual-language.md, sections 4 and 6.1 to 6.3, 6.15): the
- * window and its panes, the sidebar, the chat header, the shared controls, popovers, banners,
- * dialogs and the command palette. The conversation itself is in chat.css and the right panel in
- * context-panel.css. Colours are Graphite tokens; nothing here is translucent, and only colour,
- * opacity and transform ever transition.
+ * The chat shell's frame (docs/design/visual-language.md): the window and its glass layers, the
+ * sidebar, the chat header, the shared controls, popovers, banners, dialogs and the command
+ * palette. The conversation itself is in chat.css and the right panel in context-panel.css. The
+ * sidebar sits on the window's material; the work sits on translucent layers floating over it.
+ * Colours are tokens, and only colour, opacity and transform ever transition.
  *
  * The shell's stylesheets are unlayered, like Graphite's, and load after it: at equal specificity a
  * rule here wins over a Graphite primitive (the global focus ring, a keycap), while the reset and
@@ -17,7 +17,7 @@
   display: grid;
   grid-template-columns: var(--ui-sidebar-width) minmax(0, 1fr);
   height: 100%;
-  background-color: var(--g-bg);
+  background-color: transparent;
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
@@ -37,8 +37,9 @@
 }
 
 /*
- * The main pane is a flat, opaque work surface beside the sidebar. Chat and New chat share it;
- * Settings and Diagnostics use the same paired surface tokens and native title-control clearance.
+ * The main pane is a glass layer floating beside the sidebar, 8px in from the window's edges, with
+ * a hairline rim and a lit top edge. Chat and New chat share it; Settings and Diagnostics use the
+ * same layer tokens and native title-control clearance.
  */
 .chat-main {
   position: relative;
@@ -50,9 +51,8 @@
   margin: var(--ui-pane-inset) var(--ui-pane-inset) var(--ui-pane-inset) 0;
   overflow: hidden;
   border-radius: var(--ui-pane-radius);
-  background-color: var(--g-surface-1);
-  border-left: 1px solid var(--g-line);
-  box-shadow: none;
+  background-color: var(--ui-pane-fill);
+  box-shadow: var(--ui-pane-shadow);
 }
 
 /* The light: painted under the pane's content, never over a word. */
@@ -116,7 +116,7 @@
     grid-column: 1;
     grid-row: 1;
     border-radius: var(--ui-pane-radius) var(--ui-pane-radius) 0 0;
-    background-color: var(--g-surface-1);
+    background-color: var(--ui-pane-fill);
     box-shadow:
       inset 1px 0 var(--ui-pane-rim),
       inset -1px 0 var(--ui-pane-rim),
@@ -132,19 +132,20 @@
     grid-row: 2;
     overflow: hidden;
     border-radius: 0 0 var(--ui-pane-radius) var(--ui-pane-radius);
-    background-color: var(--g-surface-1);
+    background-color: var(--ui-pane-fill);
     box-shadow:
       inset 1px 0 var(--ui-pane-rim),
       inset -1px 0 var(--ui-pane-rim),
-      inset 0 -1px var(--ui-pane-rim);
+      inset 0 -1px var(--ui-pane-rim),
+      var(--g-shadow-layer);
   }
 
   .chat-main:has(.changes-panel) .changes-panel {
     grid-column: 2;
     grid-row: 1 / span 2;
-    border-left: 1px solid var(--g-line);
     border-radius: var(--ui-pane-radius);
-    box-shadow: none;
+    background-color: var(--ui-pane-fill);
+    box-shadow: var(--ui-pane-shadow);
   }
 
   /* The panel's drag handle fills the gutter between the two panes. */
@@ -155,17 +156,17 @@
 }
 
 /*
- * Pages that stand alone, Agents and the Plugin library, sit in the same inset pane (6.17a, 6.18):
- * the black window around it, the pane 8px in from every edge with no sidebar beside it, its calm
- * rim, lit top edge and faint light. The page scrolls inside the pane. Their content keeps its
- * place in the window: the pane's inset comes off the top padding that clears the titlebar.
+ * Pages that stand alone, Agents and the Plugin library, sit in the same inset glass pane: the
+ * window's material around it, the pane 8px in from every edge with no sidebar beside it, its rim
+ * and lit top edge. The page scrolls inside the pane. Their content keeps its place in the window:
+ * the pane's inset comes off the top padding that clears the titlebar.
  */
 .pane-shell {
   display: flex;
   box-sizing: border-box;
   height: 100%;
   padding: var(--ui-pane-inset);
-  background-color: var(--g-bg);
+  background-color: transparent;
 }
 
 .pane-shell > :is(.agents-screen, .plugins-screen) {
@@ -175,8 +176,8 @@
   min-width: 0;
   height: auto;
   border-radius: var(--ui-pane-radius);
-  background-color: var(--g-surface-1);
-  box-shadow: none;
+  background-color: var(--ui-pane-fill);
+  box-shadow: var(--ui-pane-shadow);
 }
 
 /* The pane's light, as the chat's: under the content, never over a word. */
@@ -190,36 +191,6 @@
 
 .pane-shell .library-topbar {
   padding-top: calc(var(--ui-titlebar-height) + var(--g-space-4) - var(--ui-pane-inset));
-}
-
-/*
- * Fills these pages drew one step above the black window step up one surface on the pane, as the
- * roster does on setup's card, so the hand, an open row and a quiet well still read against it.
- * Container rules only: the rows keep their own styles.
- */
-@media (hover: hover) {
-  .pane-shell .agent-row-main:hover {
-    background-color: var(--g-surface-2);
-  }
-}
-
-.pane-shell
-  :is(
-    .agent-row[data-open] .agent-row-main,
-    .agent-row[data-open] .agent-row-update,
-    .agent-row[data-open] .agent-row-note,
-    .agent-detail,
-    .library-feedback
-  ) {
-  background-color: var(--g-surface-2);
-}
-
-.pane-shell
-  :is(
-    .agent-row-main:has(.agent-row-toggle:focus-visible),
-    .agent-row-main:has(.agent-row-toggle:active)
-  ) {
-  background-color: var(--g-surface-3);
 }
 
 .chat-centered {
@@ -514,10 +485,10 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * One row style for every sidebar action: fg-2 at rest, a surface-2 fill and fg-1 under the hand.
- * The fill is a layer under the words that fades in and grows from 96% (Shallows' small-space
- * motion), so the hand lands softly and moving down the list ripples nothing; pressed, it steps to
- * surface-3 at once, and the open chat keeps it.
+ * One row style for every sidebar action: fg-2 at rest, a translucent fill and fg-1 under the
+ * hand. The fill is a layer under the words that fades in, so the hand lands softly and moving
+ * down the list ripples nothing; pressed, it deepens at once. The open chat is a lit glass capsule
+ * raised off the window.
  */
 .chat-nav-action,
 .chat-attention-row,
@@ -532,7 +503,7 @@ details.setup-install-review[open] > summary::before {
   width: 100%;
   height: 32px;
   padding: 0 var(--g-space-8);
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-10);
   color: var(--g-fg-2);
   text-align: left;
   transition: color var(--g-dur-micro) var(--g-ease);
@@ -544,14 +515,15 @@ details.setup-install-review[open] > summary::before {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background-color: var(--g-hover);
+  background-color: var(--g-glass-control-hover);
   opacity: 0;
   transform: none;
   pointer-events: none;
   transition:
     opacity var(--g-dur-fast) var(--g-ease),
     transform var(--g-dur-panel) var(--g-ease-quint),
-    background-color var(--g-dur-micro) var(--g-ease);
+    background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease);
 }
 
 .chat-nav-action > svg {
@@ -588,7 +560,7 @@ details.setup-install-review[open] > summary::before {
 }
 
 :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active::before {
-  background-color: var(--g-selected);
+  background-color: var(--g-glass-control-active);
   opacity: 1;
   transform: none;
   transition-duration: 0ms;
@@ -622,8 +594,8 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-nav-action .g-keycap {
-  background-color: var(--g-surface-3);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   color: var(--g-fg-2);
 }
 
@@ -871,27 +843,20 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * The open chat is one surface step up, like Grok's selected row: a fill and no ring. The fill
- * settles in under the row it moves to and eases out of the one it leaves.
+ * The open chat is a lit glass capsule raised off the window: a near-opaque fill, a soft shadow
+ * and a hairline. It settles in under the row it moves to and eases out of the one it leaves.
  */
 .chat-row[aria-current="true"] {
   color: var(--g-fg-1);
 }
 
 .chat-row[aria-current="true"]::before {
-  background-color: var(--g-selected);
+  background-color: var(--g-glass-selected);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim);
   opacity: 1;
   transform: none;
-}
-
-.chat-row[aria-current="true"]::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  width: 2px;
-  height: 12px;
-  background-color: var(--g-volt);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -921,7 +886,7 @@ details.setup-install-review[open] > summary::before {
   position: absolute;
   top: 4px;
   right: 4px;
-  background-color: var(--g-surface-2);
+  background-color: transparent;
   opacity: 0;
   transition:
     opacity var(--g-dur-micro) var(--g-ease),
@@ -931,7 +896,7 @@ details.setup-install-review[open] > summary::before {
 
 @media (hover: hover) {
   .chat-row-menu:hover:not(:disabled) {
-    background-color: var(--g-surface-4);
+    background-color: var(--g-glass-control-active);
     color: var(--g-fg-1);
   }
 }
@@ -941,9 +906,17 @@ details.setup-install-review[open] > summary::before {
   opacity: 1;
 }
 
-/* On the open chat the menu button takes the row's fill, so the title ends cleanly. */
+/* On the open chat the menu button sits on the capsule's own fill. */
 .chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--g-selected);
+  background-color: transparent;
+}
+
+/*
+ * The fills are glass, so the menu cannot hide the words under it; while it shows, the title
+ * ends before it instead.
+ */
+.chat-row-container:is(:hover, :focus-within):has(> .chat-row-menu) > .chat-row {
+  padding-right: var(--g-space-40);
 }
 
 .chat-row-status {
@@ -1010,7 +983,7 @@ details.setup-install-review[open] > summary::before {
   height: 6px;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-fg-1);
-  box-shadow: 0 0 0 2px var(--g-bg);
+  box-shadow: 0 0 0 2px var(--g-window);
 }
 
 /* Graphite's tooltip (4.6) in place of the platform's: 500ms of hover, then a 150ms fade. */
@@ -1029,10 +1002,14 @@ details.setup-install-review[open] > summary::before {
   max-width: 240px;
   padding: var(--g-space-4) var(--g-space-8);
   overflow: hidden;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-6);
-  background-color: var(--g-surface-3);
-  box-shadow: var(--g-shadow);
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-glass-pop);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
+  box-shadow:
+    var(--g-shadow-pop),
+    inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-meta);
@@ -1122,7 +1099,7 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-8);
   height: var(--g-app-header);
   padding: 0 var(--g-space-8) 0 var(--g-space-16);
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .chat-header-who {
@@ -1227,16 +1204,16 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-header .g-button-icon[aria-expanded="true"] {
-  background-color: var(--g-surface-3);
+  background-color: var(--g-glass-control-active);
   color: var(--g-fg-1);
 }
 
-/* The menu trigger matches the ghost icon button beside it. */
+/* The menu trigger matches the round ghost icon button beside it. */
 .chat-popover.chat-header-menu > summary {
   justify-content: center;
   width: 28px;
   padding: 0;
-  border-radius: var(--g-radius-6);
+  border-radius: var(--g-radius-pill);
   color: var(--g-fg-3);
 }
 
@@ -1360,14 +1337,15 @@ details.setup-install-review[open] > summary::before {
   align-items: center;
   gap: var(--g-space-6);
   height: 28px;
-  padding: 0 var(--g-space-8);
-  border-radius: var(--g-radius-8);
+  padding: 0 var(--g-space-12);
+  border-radius: var(--g-radius-pill);
   color: var(--g-fg-2);
   list-style: none;
   cursor: pointer;
   user-select: none;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
 }
 
@@ -1377,24 +1355,27 @@ details.setup-install-review[open] > summary::before {
 
 @media (hover: hover) {
   .chat-popover > summary:hover {
-    background-color: var(--g-surface-3);
+    background-color: var(--g-glass-control-hover);
     color: var(--g-fg-1);
   }
 }
 
-/* Pressed: one step further, at once (press never scales, 3.8). */
+/* Pressed: one step further, at once. */
 .chat-popover:not(.chat-agent-popover) > summary:active {
-  background-color: var(--g-surface-4);
+  background-color: var(--g-glass-control-active);
   transition-duration: 0ms;
 }
 
-/* Open: the fill steps up with a strong ring (surface-4 would drop grey text under 4.5:1). */
+/* Open: the pill lights up, raised with a hairline rim. */
 .chat-popover[open] > summary {
-  background-color: var(--g-surface-3);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  background-color: var(--g-glass-raised);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
   color: var(--g-fg-1);
 }
 
+/* Popovers are frosted glass: radius 14, a hairline rim and a soft, deep shadow. */
 .chat-popover-panel {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1408,13 +1389,15 @@ details.setup-install-review[open] > summary::before {
   max-height: min(480px, 65vh);
   padding: var(--g-space-16);
   overflow: auto;
-  /* The ring is an inset hairline, so the panel's content starts on the grid (4.6, 3.6). */
+  /* The ring is an inset hairline, so the panel's content starts on the grid. */
   border: 0;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-2);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-pop);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
   box-shadow:
-    inset 0 0 0 1px var(--g-line),
-    var(--g-shadow);
+    inset 0 0 0 1px var(--g-glass-rim),
+    var(--g-shadow-pop);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -1457,8 +1440,10 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-12);
   min-height: 40px;
   padding: var(--g-space-6) var(--g-space-6) var(--g-space-6) var(--g-space-12);
-  border: 1px dashed var(--g-line-strong);
-  border-radius: var(--g-radius-8);
+  border: 0;
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-2);
 }
 
@@ -1481,12 +1466,8 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-banner[data-level="error"] {
-  border: 0;
-  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--g-bg);
-  box-shadow:
-    inset 2px 0 var(--g-red),
-    inset 0 0 0 1px var(--g-line);
+  background-color: var(--g-red-tint);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .chat-banner[data-level="error"]::before {
@@ -1496,10 +1477,10 @@ details.setup-install-review[open] > summary::before {
 /* ---------- Dialogs (4.6, 6.19) ---------- */
 
 /*
- * Every dialog is Graphite's .g-dialog: sm 440 (the base), .g-dialog-md 560, .g-dialog-lg 760, a
- * 16px viewport margin on every side, the title and close button in .g-dialog-header. Long content
- * scrolls the whole dialog. The 1px line-strong ring is inset, as the palette's is, so the content
- * starts 24px in, on the grid.
+ * Every dialog is the shared .g-dialog, frosted glass: sm 440 (the base), .g-dialog-md 560,
+ * .g-dialog-lg 760, a 16px viewport margin on every side, the title and close button in
+ * .g-dialog-header. Long content scrolls the whole dialog. The rim is an inset hairline, so the
+ * content starts 24px in, on the grid.
  */
 .g-dialog {
   max-height: calc(100dvh - var(--g-space-32));
@@ -1507,8 +1488,8 @@ details.setup-install-review[open] > summary::before {
   overflow: auto;
   border: 0;
   box-shadow:
-    inset 0 0 0 1px var(--g-line-strong),
-    var(--g-shadow);
+    inset 0 0 0 1px var(--g-glass-rim-strong),
+    var(--g-shadow-pop);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }

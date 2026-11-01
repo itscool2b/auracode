@@ -219,6 +219,12 @@ export function App({
     if (glass !== null) document.documentElement.dataset.glass = glass;
   }, [glass]);
 
+  // The platform, for what only one draws differently (Windows' scrollbars, styles.css).
+  const os = boot.status === "ready" ? boot.info.os : null;
+  useEffect(() => {
+    if (os !== null) document.documentElement.dataset.os = os;
+  }, [os]);
+
   // Once real content has painted, show the window; in smoke mode, then run the check. A ref, not
   // the effect's cleanup, guards this: StrictMode re-runs effects in development.
   const started = useRef(false);
