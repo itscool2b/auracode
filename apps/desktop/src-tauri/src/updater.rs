@@ -142,6 +142,13 @@ fn available(state: &AppState) -> Result<&'static str, UpdateError> {
             "Application updates are unavailable for this launch.",
         ));
     }
+    // An update installs over the installed app and closes it first: a development build must
+    // never replace the app that may be running the session that built it.
+    if aura_core::paths::DEVELOPMENT_BUILD {
+        return Err(error(
+            "Application updates are unavailable for a development build.",
+        ));
+    }
     public_key().ok_or_else(|| error("This build has no configured update signing key."))
 }
 

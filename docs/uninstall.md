@@ -83,6 +83,10 @@ auracode adds no login item, Run key or launch agent, so there is none to remove
   fresh install, sign in and use your recovery key.
 - **Shared system components.** The WebView2 runtime, Git, Node.js and npm stay, because other
   apps use them.
+- **Developer files.** A development build's data folder (`si.auracode.desktop.dev` next to the
+  data folder) and `host-upgrade`'s snapshots and log (`%LOCALAPPDATA%\auracode-upgrades`) were
+  made by tools for working on auracode, not by the installed app. Delete them by hand; see
+  [developing-in-aura.md](developing-in-aura.md).
 
 ## Secure-store scope
 

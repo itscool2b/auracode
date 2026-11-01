@@ -1,0 +1,617 @@
+// `pnpm host-upgrade`: replaces the installed auracode on this Windows machine with a local build,
+// and puts the previous build back when the new one does not work.
+//
+// The installed app is often the one running the agent session that built the new one, so the
+// install cannot happen while it runs, and an agent cannot wait for it to close: everything an
+// agent starts is in the app's job object and ends with it. `install --after-exit` therefore
+// starts a waiter through WMI, outside the job, and returns. When the person quits auracode, the
+// waiter snapshots the installed app, runs the installer in update mode (which keeps the data
+// folder; see src-tauri/windows/hooks.nsh), starts auracode again, and restores the snapshot if
+// the new build does not stay up. `rollback` restores a snapshot by hand and, with
+// `--restore-database`, the databases a newer schema migrated (aura-core backs each one up first).
+// See docs/developing-in-aura.md.
+
+import { spawn, spawnSync } from "node:child_process";
+import {
+  appendFileSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const REPO = resolve(dirname(SCRIPT), "..", "..", "..");
+const APP_EXE = "auracode.exe";
+const UNINSTALLER = "uninstall.exe";
+const HELPER_FLAG = "--aura-memory-helper";
+const SIDECARS = ["", "-wal", "-shm", "-journal"];
+const BACKUP = /^(?<db>.+)\.v(?<from>\d+)-(?<at>\d+)\.bak$/u;
+
+export const EXIT = { done: 0, usage: 2, running: 3, failed: 4 };
+
+const USAGE = `Usage: node apps/desktop/scripts/host-upgrade.mjs <command> [options]
+
+  install [--installer <setup.exe>] [--after-exit [--wait <minutes>]]
+      Installs a local build over the installed auracode, after a snapshot of the installed app.
+      --after-exit arms it instead: it runs once auracode quits (default wait 30 minutes).
+  rollback [--snapshot <name>] [--restore-database]
+      Puts a snapshot back (the newest by default). --restore-database also restores each
+      database a newer build migrated since that snapshot, from aura-core's pre-migration backup.
+  status    What is installed, running, armed and kept.
+  cancel    Stops an armed install.
+
+  --install-dir, --data-dir and --state-dir override %LOCALAPPDATA%\\auracode,
+  %LOCALAPPDATA%\\si.auracode.desktop and %LOCALAPPDATA%\\auracode-upgrades.`;
+
+/** The folders the commands work on, from `%LOCALAPPDATA%` unless overridden. */
+export function folders(env, overrides = {}) {
+  const local = env.LOCALAPPDATA;
+  if (!local && !(overrides.installDir && overrides.dataDir && overrides.stateDir)) {
+    throw new Error("LOCALAPPDATA is not set, so the installed app cannot be found.");
+  }
+  return {
+    installDir: resolve(overrides.installDir ?? join(local, "auracode")),
+    dataDir: resolve(overrides.dataDir ?? join(local, "si.auracode.desktop")),
+    stateDir: resolve(overrides.stateDir ?? join(local, "auracode-upgrades")),
+  };
+}
+
+function inside(path, folder) {
+  const a = resolve(path).toLowerCase();
+  const b = resolve(folder).toLowerCase();
+  return a.startsWith(b.endsWith(sep) ? b : b + sep);
+}
+
+/**
+ * The installed app's processes among `processes` (`{ ProcessId, ExecutablePath, CommandLine }`):
+ * `app` for the app and its cleanup, `helpers` for the project-memory helpers agents start, which
+ * end with their agent.
+ */
+export function hostProcesses(processes, installDir) {
+  const host = processes.filter(
+    (process) => process.ExecutablePath && inside(process.ExecutablePath, installDir),
+  );
+  const helper = (process) => (process.CommandLine ?? "").includes(HELPER_FLAG);
+  return { app: host.filter((p) => !helper(p)), helpers: host.filter(helper) };
+}
+
+/** The newest NSIS installer in `roots` (`<root>[/<target triple>]/release/bundle/nsis`). */
+export function newestInstaller(roots) {
+  const found = [];
+  for (const root of roots.filter(Boolean)) {
+    if (!existsSync(root)) continue;
+    const releases = [join(root, "release")];
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (entry.isDirectory()) releases.push(join(root, entry.name, "release"));
+    }
+    for (const release of releases) {
+      const nsis = join(release, "bundle", "nsis");
+      if (!existsSync(nsis)) continue;
+      for (const name of readdirSync(nsis)) {
+        if (name.endsWith("-setup.exe")) {
+          const path = join(nsis, name);
+          found.push({ path, at: statSync(path).mtimeMs });
+        }
+      }
+    }
+  }
+  found.sort((a, b) => b.at - a.at);
+  return found[0]?.path;
+}
+
+/** A sortable name for a snapshot taken at `date`, in local time. */
+export function stampOf(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(
+    date.getHours(),
+  )}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+/** Snapshot names to delete so the newest `keep` stay. */
+export function toPrune(names, keep) {
+  return [...names].sort().reverse().slice(keep);
+}
+
+/**
+ * For each database in `profilesDir/<profile>/`, the first pre-migration backup aura-core made
+ * after `sinceMs`: the database as it was before a newer build first migrated it.
+ */
+export function backupsSince(profilesDir, sinceMs) {
+  const restores = [];
+  if (!existsSync(profilesDir)) return restores;
+  for (const profile of readdirSync(profilesDir, { withFileTypes: true })) {
+    if (!profile.isDirectory()) continue;
+    const backups = join(profilesDir, profile.name, "backups");
+    if (!existsSync(backups)) continue;
+    const first = new Map();
+    for (const name of readdirSync(backups)) {
+      const match = BACKUP.exec(name);
+      if (!match) continue;
+      const at = Number(match.groups.at);
+      if (at <= sinceMs) continue;
+      const known = first.get(match.groups.db);
+      if (!known || at < known.at) {
+        first.set(match.groups.db, { at, from: Number(match.groups.from), name });
+      }
+    }
+    for (const [db, backup] of first) {
+      restores.push({
+        profile: profile.name,
+        database: join(profilesDir, profile.name, db),
+        backup: join(backups, backup.name),
+        schema: backup.from,
+      });
+    }
+  }
+  return restores;
+}
+
+/** `env` without the variables an agent session or a development launch sets. */
+export function cleanEnv(env) {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) => !/^(AURACODE_|AURA_MCP_|CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$)/iu.test(name),
+    ),
+  );
+}
+
+/** The command line for the armed waiter, every argument quoted for CreateProcess. */
+export function waiterCommandLine(node, script, args) {
+  for (const arg of [node, script, ...args]) {
+    if (arg.includes('"')) throw new Error(`An argument contains a quote: ${arg}`);
+  }
+  return [node, script, ...args].map((arg) => `"${arg}"`).join(" ");
+}
+
+function powershell(script) {
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const run = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+    { encoding: "utf8", windowsHide: true },
+  );
+  if (run.status !== 0) {
+    throw new Error(`PowerShell failed: ${(run.stderr || run.stdout || "").trim()}`);
+  }
+  return run.stdout.trim();
+}
+
+const quoted = (text) => `'${text.replaceAll("'", "''")}'`;
+
+/** The real machine: processes, the installer, launches. Tests pass their own. */
+export const windows = {
+  processes() {
+    const json = powershell(
+      "@(Get-CimInstance Win32_Process -Filter \"Name='auracode.exe' OR Name='node.exe'\" | Select-Object ProcessId, ExecutablePath, CommandLine) | ConvertTo-Json -Compress",
+    );
+    if (!json) return [];
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  },
+  stop(pid) {
+    spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true });
+  },
+  install(installer) {
+    // What the updater runs (tauri.conf.json: plugins > updater > windows > installMode).
+    const run = spawnSync(installer, ["/P", "/UPDATE"], { stdio: "inherit" });
+    return run.error ? -1 : (run.status ?? -1);
+  },
+  launch(exe) {
+    spawn(exe, [], { detached: true, stdio: "ignore", env: cleanEnv(process.env) }).unref();
+  },
+  /** Starts `commandLine` through WMI, so it is outside this process's job, with no window. */
+  startOutsideJob(commandLine, cwd) {
+    const out = powershell(
+      [
+        "$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }",
+        `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${quoted(commandLine)}; CurrentDirectory = ${quoted(cwd)}; ProcessStartupInformation = $startup }`,
+        '"$($r.ReturnValue) $($r.ProcessId)"',
+      ].join("; "),
+    );
+    const [code, pid] = out.split(/\s+/u).map(Number);
+    if (code !== 0) throw new Error(`WMI could not start the waiter (code ${code}).`);
+    return pid;
+  },
+  sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+  now: () => new Date(),
+};
+
+function logger(stateDir, print = console.log) {
+  return (message) => {
+    print(message);
+    mkdirSync(stateDir, { recursive: true });
+    appendFileSync(join(stateDir, "upgrade.log"), `${new Date().toISOString()} ${message}\n`);
+  };
+}
+
+function isInstall(dir) {
+  return existsSync(join(dir, APP_EXE)) && existsSync(join(dir, UNINSTALLER));
+}
+
+function snapshots(stateDir) {
+  const root = join(stateDir, "snapshots");
+  if (!existsSync(root)) return [];
+  return readdirSync(root)
+    .filter((name) => existsSync(join(root, name, "snapshot.json")))
+    .sort();
+}
+
+function readSnapshot(stateDir, name) {
+  const dir = join(stateDir, "snapshots", name);
+  return { dir, ...JSON.parse(readFileSync(join(dir, "snapshot.json"), "utf8")) };
+}
+
+/** Copies the installed app aside, with when and what it was. */
+export function takeSnapshot(paths, installer, now) {
+  if (!isInstall(paths.installDir)) {
+    throw new Error(`${paths.installDir} holds no installed auracode to keep.`);
+  }
+  let name = stampOf(now);
+  for (let n = 2; existsSync(join(paths.stateDir, "snapshots", name)); n++) {
+    name = `${stampOf(now)}-${n}`;
+  }
+  const dir = join(paths.stateDir, "snapshots", name);
+  cpSync(paths.installDir, join(dir, "app"), { recursive: true });
+  const exe = statSync(join(paths.installDir, APP_EXE));
+  const record = {
+    name,
+    created: now.getTime(),
+    installDir: paths.installDir,
+    dataDir: paths.dataDir,
+    replacedBy: installer,
+    app: { bytes: exe.size, modified: exe.mtime.toISOString() },
+  };
+  writeFileSync(join(dir, "snapshot.json"), `${JSON.stringify(record, null, 2)}\n`);
+  return { dir, ...record };
+}
+
+/**
+ * Replaces the installed app with a snapshot's copy. The current files move aside first (a file
+ * in use stops the move before anything changes) and come back if the copy fails.
+ */
+export function restoreApp(snapshot, installDir, now = new Date()) {
+  const app = join(snapshot.dir, "app");
+  if (!isInstall(app)) throw new Error(`${snapshot.dir} holds no copy of the app.`);
+  if (existsSync(installDir) && !isInstall(installDir)) {
+    throw new Error(`${installDir} is not an auracode install; nothing was changed.`);
+  }
+  const aside = `${installDir}.replaced-${now.getTime()}`;
+  if (existsSync(installDir)) renameSync(installDir, aside);
+  try {
+    cpSync(app, installDir, { recursive: true });
+  } catch (error) {
+    rmSync(installDir, { recursive: true, force: true });
+    if (existsSync(aside)) renameSync(aside, installDir);
+    throw error;
+  }
+  rmSync(aside, { recursive: true, force: true });
+}
+
+/** Puts each migrated database back as it was before the migration; the migrated one is kept. */
+export function restoreDatabases(dataDir, sinceMs, now) {
+  const restores = backupsSince(join(dataDir, "profiles"), sinceMs);
+  for (const restore of restores) {
+    const aside = join(
+      dirname(restore.backup),
+      `${basename(restore.database)}.rolled-back-${now.getTime()}`,
+    );
+    for (const suffix of SIDECARS) {
+      if (existsSync(restore.database + suffix)) {
+        renameSync(restore.database + suffix, aside + suffix);
+      }
+    }
+    copyFileSync(restore.backup, restore.database);
+    restore.kept = aside;
+  }
+  return restores;
+}
+
+async function waitForExit(system, paths, minutes, log) {
+  const deadline = Date.now() + minutes * 60_000;
+  let announced = false;
+  for (;;) {
+    const { app, helpers } = hostProcesses(system.processes(), paths.installDir);
+    if (app.length === 0) {
+      if (helpers.length === 0) return true;
+      // Helpers end with their agent; one left behind would keep the exe locked.
+      await system.sleep(5_000);
+      for (const helper of hostProcesses(system.processes(), paths.installDir).helpers) {
+        log(`Stopping a project-memory helper left behind (PID ${helper.ProcessId}).`);
+        system.stop(helper.ProcessId);
+      }
+      return true;
+    }
+    if (Date.now() >= deadline) return false;
+    if (!announced && minutes > 0) {
+      log(`Waiting up to ${minutes} minutes for auracode to quit.`);
+      announced = true;
+    }
+    if (minutes === 0) return false;
+    await system.sleep(2_000);
+  }
+}
+
+async function healthy(system, installDir, seconds) {
+  await system.sleep(seconds * 1000);
+  return hostProcesses(system.processes(), installDir).app.length > 0;
+}
+
+function prune(stateDir, keep, log) {
+  for (const name of toPrune(snapshots(stateDir), keep)) {
+    rmSync(join(stateDir, "snapshots", name), { recursive: true, force: true });
+    log(`Removed the old snapshot ${name}.`);
+  }
+}
+
+function armedRecord(stateDir) {
+  const path = join(stateDir, "armed.json");
+  return existsSync(path) ? { path, ...JSON.parse(readFileSync(path, "utf8")) } : undefined;
+}
+
+function armedAlive(system, record) {
+  return system
+    .processes()
+    .some(
+      (process) =>
+        process.ProcessId === record.pid && (process.CommandLine ?? "").includes(basename(SCRIPT)),
+    );
+}
+
+export async function install(options, paths, system, log) {
+  const installer = options.installer
+    ? resolve(options.installer)
+    : newestInstaller([process.env.CARGO_TARGET_DIR, join(REPO, "target")]);
+  if (!installer || !existsSync(installer)) {
+    log(
+      installer
+        ? `There is no installer at ${installer}.`
+        : "No installer was found under target\\**\\release\\bundle\\nsis; build one with `pnpm bundle` or pass --installer.",
+    );
+    return EXIT.usage;
+  }
+  const keep = options.keep;
+
+  if (options.afterExit) {
+    const armed = armedRecord(paths.stateDir);
+    if (armed && armedAlive(system, armed)) {
+      log(`An install is already armed (PID ${armed.pid}); run cancel first.`);
+      return EXIT.running;
+    }
+    // A later bundle build, or the removal of the worktree this runs from, must not change what
+    // gets installed or stop the waiter: both run from copies. The script needs only Node.
+    const pending = join(paths.stateDir, "pending");
+    mkdirSync(pending, { recursive: true });
+    const staged = join(pending, `${stampOf(system.now())}-${basename(installer)}`);
+    copyFileSync(installer, staged);
+    const runner = join(paths.stateDir, basename(SCRIPT));
+    copyFileSync(SCRIPT, runner);
+    const args = [
+      "install",
+      "--installer",
+      staged,
+      "--wait",
+      String(options.wait),
+      "--keep",
+      String(keep),
+      "--install-dir",
+      paths.installDir,
+      "--data-dir",
+      paths.dataDir,
+      "--state-dir",
+      paths.stateDir,
+    ];
+    const pid = system.startOutsideJob(
+      waiterCommandLine(process.execPath, runner, args),
+      paths.stateDir,
+    );
+    writeFileSync(
+      join(paths.stateDir, "armed.json"),
+      `${JSON.stringify({ pid, installer: staged, armed: system.now().toISOString() }, null, 2)}\n`,
+    );
+    log(
+      `Armed (PID ${pid}): ${basename(installer)} installs when auracode quits, within ${options.wait} minutes. Quit auracode to start it; it opens again by itself. Log: ${join(paths.stateDir, "upgrade.log")}`,
+    );
+    return EXIT.done;
+  }
+
+  if (!(await waitForExit(system, paths, options.wait, log))) {
+    log(
+      options.wait > 0
+        ? `auracode did not quit within ${options.wait} minutes; nothing was installed.`
+        : "auracode is running. Quit it first, or arm the install with --after-exit.",
+    );
+    return EXIT.running;
+  }
+  const snapshot = takeSnapshot(paths, installer, system.now());
+  log(`Kept the installed app as snapshot ${snapshot.name}.`);
+  log(`Installing ${installer}.`);
+  const code = system.install(installer);
+  const exe = join(paths.installDir, APP_EXE);
+  if (code !== 0) {
+    log(`The installer exited with code ${code}; restoring snapshot ${snapshot.name}.`);
+    restoreApp(snapshot, paths.installDir, system.now());
+    system.launch(exe);
+    return EXIT.failed;
+  }
+  system.launch(exe);
+  if (!(await healthy(system, paths.installDir, options.healthSeconds))) {
+    log(
+      `The new build did not stay up for ${options.healthSeconds} seconds; restoring snapshot ${snapshot.name}. If the restored app reports a newer database, run: rollback --snapshot ${snapshot.name} --restore-database`,
+    );
+    restoreApp(snapshot, paths.installDir, system.now());
+    system.launch(exe);
+    return EXIT.failed;
+  }
+  log(`Installed and running. Undo with: rollback --snapshot ${snapshot.name}`);
+  prune(paths.stateDir, keep, log);
+  return EXIT.done;
+}
+
+export async function rollback(options, paths, system, log) {
+  const names = snapshots(paths.stateDir);
+  const name = options.snapshot ?? names.at(-1);
+  if (!name || !names.includes(name)) {
+    log(name ? `There is no snapshot named ${name}.` : "There is no snapshot to restore.");
+    return EXIT.usage;
+  }
+  if (hostProcesses(system.processes(), paths.installDir).app.length > 0) {
+    log("auracode is running. Quit it first; nothing was changed.");
+    return EXIT.running;
+  }
+  const snapshot = readSnapshot(paths.stateDir, name);
+  restoreApp(snapshot, paths.installDir, system.now());
+  log(`Restored the app from snapshot ${name}.`);
+  if (options.restoreDatabase) {
+    const restored = restoreDatabases(paths.dataDir, snapshot.created, system.now());
+    if (restored.length === 0) {
+      log("No database was migrated since that snapshot; the data is unchanged.");
+    }
+    for (const restore of restored) {
+      log(
+        `Restored ${restore.database} to schema ${restore.schema}; the migrated copy is kept as ${restore.kept}.`,
+      );
+    }
+  }
+  system.launch(join(paths.installDir, APP_EXE));
+  return EXIT.done;
+}
+
+export function status(paths, system, print = console.log) {
+  const { app, helpers } = hostProcesses(system.processes(), paths.installDir);
+  const exe = join(paths.installDir, APP_EXE);
+  print(`Installed app: ${existsSync(exe) ? exe : "none"}`);
+  if (existsSync(exe)) {
+    const info = statSync(exe);
+    print(`  built ${info.mtime.toISOString()}, ${info.size} bytes`);
+  }
+  print(
+    `Running: ${app.length ? app.map((p) => p.ProcessId).join(", ") : "no"}${helpers.length ? ` (and ${helpers.length} project-memory helpers)` : ""}`,
+  );
+  const armed = armedRecord(paths.stateDir);
+  print(
+    `Armed install: ${armed && armedAlive(system, armed) ? `PID ${armed.pid}, ${armed.installer}` : "none"}`,
+  );
+  const kept = snapshots(paths.stateDir);
+  print(`Snapshots: ${kept.length ? kept.join(", ") : "none"}`);
+  const log = join(paths.stateDir, "upgrade.log");
+  if (existsSync(log)) {
+    print("Last log lines:");
+    for (const line of readFileSync(log, "utf8").trimEnd().split("\n").slice(-8)) {
+      print(`  ${line}`);
+    }
+  }
+  return EXIT.done;
+}
+
+export function cancel(paths, system, log) {
+  const armed = armedRecord(paths.stateDir);
+  if (!armed || !armedAlive(system, armed)) {
+    log("No install is armed.");
+    if (armed) rmSync(armed.path, { force: true });
+    return EXIT.done;
+  }
+  system.stop(armed.pid);
+  rmSync(armed.path, { force: true });
+  log(`Cancelled the armed install (PID ${armed.pid}).`);
+  return EXIT.done;
+}
+
+export async function main(argv, env = process.env, system = windows) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        installer: { type: "string" },
+        "after-exit": { type: "boolean", default: false },
+        wait: { type: "string" },
+        keep: { type: "string", default: "3" },
+        "health-seconds": { type: "string", default: "20" },
+        snapshot: { type: "string" },
+        "restore-database": { type: "boolean", default: false },
+        "install-dir": { type: "string" },
+        "data-dir": { type: "string" },
+        "state-dir": { type: "string" },
+        help: { type: "boolean", default: false },
+      },
+    });
+  } catch (error) {
+    console.error(`${error.message}\n\n${USAGE}`);
+    return EXIT.usage;
+  }
+  const { values, positionals } = parsed;
+  const command = positionals[0];
+  if (values.help || !command || positionals.length > 1) {
+    console.log(USAGE);
+    return values.help ? EXIT.done : EXIT.usage;
+  }
+  if (process.platform !== "win32" && system === windows) {
+    console.error("host-upgrade replaces an NSIS install, so it runs on Windows only.");
+    return EXIT.usage;
+  }
+  const number = (text, name) => {
+    const value = Number(text);
+    if (!Number.isInteger(value) || value < 0) throw new Error(`--${name} must be a whole number.`);
+    return value;
+  };
+  let paths;
+  let options;
+  try {
+    paths = folders(env, {
+      installDir: values["install-dir"],
+      dataDir: values["data-dir"],
+      stateDir: values["state-dir"],
+    });
+    options = {
+      installer: values.installer,
+      afterExit: values["after-exit"],
+      wait: number(values.wait ?? (values["after-exit"] ? "30" : "0"), "wait"),
+      keep: Math.max(1, number(values.keep, "keep")),
+      healthSeconds: number(values["health-seconds"], "health-seconds"),
+      snapshot: values.snapshot,
+      restoreDatabase: values["restore-database"],
+    };
+  } catch (error) {
+    console.error(error.message);
+    return EXIT.usage;
+  }
+  const log = logger(paths.stateDir);
+  try {
+    switch (command) {
+      case "install":
+        return await install(options, paths, system, log);
+      case "rollback":
+        return await rollback(options, paths, system, log);
+      case "status":
+        return status(paths, system);
+      case "cancel":
+        return cancel(paths, system, log);
+      default:
+        console.error(`Unknown command ${command}.\n\n${USAGE}`);
+        return EXIT.usage;
+    }
+  } catch (error) {
+    log(`Failed: ${error.message}`);
+    return EXIT.failed;
+  } finally {
+    if (command === "install" && !options.afterExit) {
+      const armed = armedRecord(paths.stateDir);
+      if (armed && armed.pid === process.pid) rmSync(armed.path, { force: true });
+    }
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === SCRIPT) {
+  process.exitCode = await main(process.argv.slice(2));
+}

@@ -6,14 +6,16 @@
 //! The frontend learns the outcome through `app_info` (`LaunchMode`), never by reading the
 //! environment itself.
 //!
-//! `AURACODE_DATA_DIR` is aura-core's: it moves the data folder. This module only notes whether it
-//! does, because a launch with its own data folder is its own instance
-//! ([`LaunchOptions::single_instance`]).
+//! `AURACODE_DATA_DIR` is aura-core's: it moves the data folder. This module only notes whether the
+//! launch opens a folder other than the installed app's, because such a launch is its own instance
+//! ([`LaunchOptions::single_instance`]). A development build always does: without
+//! `AURACODE_DATA_DIR` it opens aura-core's development folder (`aura_core::paths`). A smoke run
+//! must name its folder ([`SMOKE_NEEDS_DATA_DIR`]).
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-use aura_core::paths::DATA_DIR_ENV;
+use aura_core::paths::{DATA_DIR_ENV, DEVELOPMENT_BUILD};
 use serde::{Deserialize, Serialize};
 
 use crate::smoke::SmokeScenario;
@@ -40,6 +42,11 @@ pub const STRESS_ENV: &str = "AURACODE_STRESS";
 pub const NO_GLASS_ENV: &str = "AURACODE_NO_GLASS";
 /// The webview profile folder inside a data folder, the name WebView2 and Tauri use by default.
 pub const WEBVIEW_DATA_FOLDER: &str = "EBWebView";
+/// Why a smoke run without `AURACODE_DATA_DIR` does not run. A smoke run skips the single-instance
+/// hand-over, so without a folder of its own it would open the default one beside a running app:
+/// for an installed build, the installed app's chats, which the run's quit flow and any newer
+/// schema would then change.
+pub const SMOKE_NEEDS_DATA_DIR: &str = "a smoke run needs AURACODE_DATA_DIR: a data folder of its own, so it never opens the installed app's data.";
 
 /// Bounds for [`StressConfig`], shared with the stress view's controls.
 pub const MIN_ORBS: u32 = 1;
@@ -374,8 +381,9 @@ pub struct LaunchOptions {
     pub smoke: Option<Result<SmokePlan, SmokeSetupError>>,
     pub smoke_exit: bool,
     pub no_glass: bool,
-    /// `AURACODE_DATA_DIR` gives this launch its own data folder: a second dev instance, a portable
-    /// install.
+    /// This launch opens a data folder other than the installed app's: `AURACODE_DATA_DIR` names
+    /// one (a second dev instance, a portable install), or this is a development build, whose
+    /// default folder is its own.
     pub own_data_dir: bool,
     /// `None` when `AURACODE_STRESS` is unset, blank (like `AURACODE_DATA_DIR`, an exported but
     /// empty variable must not change behaviour), or an explicit off (`0`, `false`, `no`, `off`).
@@ -392,19 +400,41 @@ impl LaunchOptions {
     /// honours an `AURACODE_DATA_DIR` that is not valid Unicode, so this must see it too. The
     /// other switches treat such a value as unset.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> LaunchOptions {
+        LaunchOptions::from_lookup_in(DEVELOPMENT_BUILD, lookup)
+    }
+
+    /// [`LaunchOptions::from_lookup`] for a development build or an installed one, so tests cover
+    /// both from one test binary.
+    pub fn from_lookup_in(
+        development: bool,
+        lookup: impl Fn(&str) -> Option<OsString>,
+    ) -> LaunchOptions {
         let text = |name: &str| lookup(name).and_then(|value| value.into_string().ok());
         let in_ci = CI_ENVS.iter().any(|name| env_flag(text(name).as_deref()));
+        let names_data_dir = lookup(DATA_DIR_ENV).is_some_and(|value| moves_data_root(&value));
         let smoke = parse_smoke(
             text(SMOKE_ENV).as_deref(),
             lookup(SMOKE_FOLDER_ENV),
             text(SMOKE_AGENT_ENV).as_deref(),
             in_ci,
-        );
+        )
+        .map(|smoke| {
+            smoke.and_then(|plan| {
+                if names_data_dir {
+                    Ok(plan)
+                } else {
+                    Err(SmokeSetupError::new(
+                        Some(plan.scenario),
+                        SMOKE_NEEDS_DATA_DIR.to_owned(),
+                    ))
+                }
+            })
+        });
         LaunchOptions {
             smoke_exit: smoke.is_some() && env_flag(text(SMOKE_EXIT_ENV).as_deref()),
             smoke,
             no_glass: env_flag(text(NO_GLASS_ENV).as_deref()),
-            own_data_dir: lookup(DATA_DIR_ENV).is_some_and(|value| moves_data_root(&value)),
+            own_data_dir: development || names_data_dir,
             stress: text(STRESS_ENV)
                 .filter(|value| !value.trim().is_empty() && !is_falsy(value.trim()))
                 .map(|value| parse_stress_config(&value)),
@@ -614,12 +644,27 @@ mod tests {
         );
     }
 
+    /// An installed (release) build's options. The test binary is a development build, which
+    /// [`development_options`] covers.
     fn options(vars: &[(&str, &str)]) -> LaunchOptions {
+        options_in(false, vars)
+    }
+
+    fn development_options(vars: &[(&str, &str)]) -> LaunchOptions {
+        options_in(true, vars)
+    }
+
+    fn options_in(development: bool, vars: &[(&str, &str)]) -> LaunchOptions {
         let map: HashMap<String, OsString> = vars
             .iter()
             .map(|(k, v)| (k.to_string(), OsString::from(v)))
             .collect();
-        LaunchOptions::from_lookup(|name| map.get(name).cloned())
+        LaunchOptions::from_lookup_in(development, |name| map.get(name).cloned())
+    }
+
+    /// A smoke run's own data folder, which every runnable smoke run names.
+    fn smoke_data() -> String {
+        absolute("smoke data")
     }
 
     #[test]
@@ -666,10 +711,12 @@ mod tests {
 
     #[test]
     fn smoke_wins_over_stress_and_exit_needs_smoke() {
+        let data = smoke_data();
         let both = options(&[
             (SMOKE_ENV, "1"),
             (SMOKE_EXIT_ENV, "1"),
             (STRESS_ENV, "orbs=3"),
+            (DATA_DIR_ENV, &data),
         ]);
         assert_eq!(
             both.mode(),
@@ -862,11 +909,13 @@ mod tests {
             ]);
             assert!(matches!(refused.smoke, Some(Err(_))), "{ci}");
         }
+        let data = smoke_data();
         let local = options(&[
             (SMOKE_ENV, "chat"),
             (SMOKE_FOLDER_ENV, &folder),
             (SMOKE_AGENT_ENV, "claude-acp"),
             ("CI", "false"),
+            (DATA_DIR_ENV, &data),
         ]);
         assert_eq!(
             local.smoke_plan().map(|plan| plan.scenario),
@@ -902,9 +951,18 @@ mod tests {
     #[test]
     fn the_folder_picker_answers_only_a_chat_scenario_folder() {
         let folder = absolute("picked");
-        let chat = options(&[(SMOKE_ENV, "chat"), (SMOKE_FOLDER_ENV, &folder)]);
+        let data = smoke_data();
+        let chat = options(&[
+            (SMOKE_ENV, "chat"),
+            (SMOKE_FOLDER_ENV, &folder),
+            (DATA_DIR_ENV, &data),
+        ]);
         assert_eq!(chat.smoke_folder(), Some(folder.as_str()));
-        let stream = options(&[(SMOKE_ENV, "1"), (SMOKE_FOLDER_ENV, &folder)]);
+        let stream = options(&[
+            (SMOKE_ENV, "1"),
+            (SMOKE_FOLDER_ENV, &folder),
+            (DATA_DIR_ENV, &data),
+        ]);
         assert_eq!(stream.smoke_folder(), None);
         let plain = options(&[(SMOKE_FOLDER_ENV, &folder)]);
         assert_eq!(plain.smoke_folder(), None);
@@ -995,6 +1053,99 @@ mod tests {
         }
     }
 
+    /// A build from a working copy shared the installed app's instance and data: launched beside
+    /// it, it handed over and exited; launched alone, it opened (and with a newer schema migrated)
+    /// the installed app's chats; its cleanup and quit request reached the installed app.
+    #[test]
+    fn a_development_build_is_always_its_own_instance() {
+        let root = Path::new("scratch").join("data");
+        for vars in [
+            &[][..],
+            &[(DATA_DIR_ENV, "")][..],
+            &[(DATA_DIR_ENV, "   ")][..],
+            &[(DATA_DIR_ENV, "scratch/data")][..],
+        ] {
+            let development = development_options(vars);
+            assert!(development.own_data_dir, "{vars:?}");
+            assert!(!development.single_instance(), "{vars:?}");
+            assert!(!development.remembers_window_geometry(), "{vars:?}");
+            assert_eq!(
+                development.webview_data_dir(Some(&root)),
+                Some(root.join(WEBVIEW_DATA_FOLDER)),
+                "{vars:?}"
+            );
+            assert!(development.notices().is_empty(), "{vars:?}");
+        }
+        // An installed build keeps the hand-over and the default webview profile.
+        let installed = options(&[]);
+        assert!(!installed.own_data_dir);
+        assert!(installed.single_instance());
+        assert_eq!(installed.webview_data_dir(Some(&root)), None);
+    }
+
+    /// A smoke run skips the hand-over, so without a folder of its own it opened the default
+    /// one beside the running app: the installed app's chats, for an installed build.
+    #[test]
+    fn a_smoke_run_needs_its_own_data_folder() {
+        let folder = absolute("smoke chat");
+        let data = smoke_data();
+        for development in [false, true] {
+            for (scenario, extra) in [
+                (SmokeScenario::Stream, None),
+                (SmokeScenario::Chat, Some("chat")),
+                (SmokeScenario::ChatReopen, Some("chat-reopen")),
+            ] {
+                let value = extra.unwrap_or("1");
+                for blank in [None, Some(""), Some("  ")] {
+                    let mut vars = vec![
+                        (SMOKE_ENV, value),
+                        (SMOKE_EXIT_ENV, "1"),
+                        (SMOKE_FOLDER_ENV, folder.as_str()),
+                    ];
+                    if let Some(blank) = blank {
+                        vars.push((DATA_DIR_ENV, blank));
+                    }
+                    let refused = options_in(development, &vars);
+                    assert_eq!(
+                        refused.smoke,
+                        Some(Err(setup_error(Some(scenario), SMOKE_NEEDS_DATA_DIR))),
+                        "{development} {value} {blank:?}"
+                    );
+                    assert!(refused.is_smoke() && refused.smoke_exit);
+                    assert!(!refused.single_instance(), "never hands over either");
+                    assert_eq!(refused.mode(), LaunchMode::Normal);
+                    assert_eq!(
+                        refused.notices(),
+                        vec![format!(
+                            "AURACODE_SMOKE was ignored: {SMOKE_NEEDS_DATA_DIR}"
+                        )]
+                    );
+                }
+                let runs = options_in(
+                    development,
+                    &[
+                        (SMOKE_ENV, value),
+                        (SMOKE_FOLDER_ENV, &folder),
+                        (DATA_DIR_ENV, &data),
+                    ],
+                );
+                assert_eq!(
+                    runs.smoke_plan().map(|plan| plan.scenario),
+                    Some(scenario),
+                    "{development} {value}"
+                );
+            }
+        }
+        // A switch that cannot run says its own reason first.
+        assert_eq!(
+            options(&[(SMOKE_ENV, "chat")]).notices(),
+            vec![
+                "AURACODE_SMOKE was ignored: AURACODE_SMOKE=chat needs AURACODE_SMOKE_FOLDER: an absolute path to the folder its chat opens in."
+                    .to_string()
+            ]
+        );
+    }
+
     /// `prefix` followed by a folder name that is not valid Unicode, which the OS allows in a
     /// variable: invalid UTF-8 on Unix, a lone surrogate on Windows.
     #[cfg(unix)]
@@ -1019,12 +1170,15 @@ mod tests {
     fn a_data_folder_that_is_not_unicode_still_counts() {
         let folder = not_unicode(OsStr::new("data"));
         assert_eq!(folder.to_str(), None);
-        let own = LaunchOptions::from_lookup(|name| (name == DATA_DIR_ENV).then(|| folder.clone()));
+        // An installed build's options: a development build is its own instance anyway.
+        let own = LaunchOptions::from_lookup_in(false, |name| {
+            (name == DATA_DIR_ENV).then(|| folder.clone())
+        });
         assert!(own.own_data_dir, "aura-core moves the data there");
         assert!(!own.single_instance());
 
         // The other switches read such a value as unset, as they always have.
-        let garbled = LaunchOptions::from_lookup(|name| {
+        let garbled = LaunchOptions::from_lookup_in(false, |name| {
             (name != DATA_DIR_ENV).then(|| not_unicode(OsStr::new("1")))
         });
         assert!(garbled.smoke.is_none() && !garbled.no_glass && !garbled.own_data_dir);
@@ -1038,8 +1192,9 @@ mod tests {
     /// If the two drifted apart, a launch on the default folder would skip the single-instance
     /// plugin, or one with its own folder would hand over and exit. So for each value a child
     /// process (this process's environment must not change) checks that `own_data_dir` holds
-    /// exactly when aura-core resolves a folder other than its default, the only one named
-    /// `si.auracode.desktop`. Resolving only computes the path; nothing is created.
+    /// exactly when aura-core resolves a folder other than the installed app's, the only one
+    /// named `si.auracode.desktop`. The test binary is a development build, so that is every
+    /// value, blank ones included. Resolving only computes the path; nothing is created.
     #[test]
     fn own_data_dir_agrees_with_where_aura_core_puts_the_data() {
         if std::env::var_os(CHILD_CHECKS_DATA_DIR).is_some() {

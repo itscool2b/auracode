@@ -157,6 +157,12 @@ App data lives in a folder named `si.auracode.desktop` inside the local (never r
 Uninstalling deletes it, with everything else auracode keeps, and Settings can do the same
 without uninstalling; [docs/uninstall.md](docs/uninstall.md) lists what goes and what stays.
 
+A development build (`pnpm dev`, `cargo run`, `tauri build --debug`) uses `si.auracode.desktop.dev`
+next to it instead, runs as its own instance beside the installed app, and cleans up only its own
+folder, so working on auracode from a chat inside auracode never touches the app running that
+chat. [docs/developing-in-aura.md](docs/developing-in-aura.md) covers building, testing and
+installing a change from inside the app, and recovering from a broken build.
+
 ### aura-cli
 
 `aura-cli` runs agents without the app, through the same session manager, on a temporary profile
@@ -171,8 +177,9 @@ cargo run -p aura-cli -- replay <fixture>                     # against its gold
 ```
 
 A probe or smoke run keeps its folder (protocol logs, database, chat folder) and ends with the
-`aura-cli fixture` command for each log it left. Its agent processes register in the real data
-folder's `run/`, so the app's next start cleans up after a crashed run, and it shares the app's
+`aura-cli fixture` command for each log it left. Its agent processes register in the data folder's
+`run/` (for a development build, its own folder), so the next app start on that folder cleans up
+after a crashed run, and it shares that folder's
 downloaded adapters. `--data-dir <dir>` runs on that data folder's own profile instead, and is refused
 while the app runs on it. `aura-cli help` lists every option; `RUST_LOG` shows its logs on stderr
 (default: warnings only).
@@ -235,10 +242,10 @@ For development and automation; the app reads them once at startup. On/off switc
 
 | Variable | Effect |
 |---|---|
-| `AURACODE_DATA_DIR` | Keeps all app data in this folder instead of the OS default, for example a throwaway folder to test a first launch. On Windows that includes the webview profile (`EBWebView`); such a launch does not remember the window size and position, so it never touches the installed app's. Blank values are ignored; a relative path is resolved against the current folder. |
+| `AURACODE_DATA_DIR` | Keeps all app data in this folder instead of the OS default (`si.auracode.desktop`, or `si.auracode.desktop.dev` for a development build), for example a throwaway folder to test a first launch. Such a launch runs as its own instance beside a running app. On Windows that includes the webview profile (`EBWebView`); such a launch does not remember the window size and position, so it never touches the installed app's. Blank values are ignored; a relative path is resolved against the current folder. |
 | `AURACODE_NO_GLASS` | Opaque window without the native glass (Liquid Glass, vibrancy, Mica): the baseline of the power spike. |
 | `AURACODE_STRESS` | Opens straight into the stress view. Comma-separated `orbs` (1 to 24), `rate` (1 to 5000 tokens/s), `aura` (1 or 0), and `seconds` (0 to 86400, 0 streams until the window closes); missing keys default to `orbs=6,rate=200,aura=1,seconds=0`, and `1` alone means all defaults. An invalid value is ignored and the app shows a notice. See [docs/spikes/render-power.md](docs/spikes/render-power.md). |
-| `AURACODE_SMOKE` | Runs a scripted smoke check through the real UI and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported in time (120 seconds; 300 for `chat`, 900 with `AURACODE_SMOKE_AGENT`). `1` (or `stream`): a demo turn, a cancelled turn, a short stress burst. `chat`: the chat screens against the demo agent, every block, card and queue path, ending with the quit flow while a turn runs; `chat-reopen`: the same data folder started again, checking the stored history, the interrupted turn and Resume. Each chat check is in the result. `0`, `false`, `no` and `off` are off; any other value that names no check prints a failing result. Takes precedence over `AURACODE_STRESS`. Smoke runs keep running while the window is hidden or the screen is locked (macOS 14 and later). |
+| `AURACODE_SMOKE` | Runs a scripted smoke check through the real UI and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported in time (120 seconds; 300 for `chat`, 900 with `AURACODE_SMOKE_AGENT`). `1` (or `stream`): a demo turn, a cancelled turn, a short stress burst. `chat`: the chat screens against the demo agent, every block, card and queue path, ending with the quit flow while a turn runs; `chat-reopen`: the same data folder started again, checking the stored history, the interrupted turn and Resume. Each chat check is in the result. `0`, `false`, `no` and `off` are off; any other value that names no check prints a failing result. Takes precedence over `AURACODE_STRESS`. Every smoke run needs `AURACODE_DATA_DIR`, a data folder of its own; without it the run prints a failing result and opens nothing, so it can never change the installed app's chats. Smoke runs keep running while the window is hidden or the screen is locked (macOS 14 and later). |
 | `AURACODE_SMOKE_EXIT` | With `AURACODE_SMOKE`, exits after the result, through the quit flow: code 0 if the check passed, 1 otherwise. |
 | `AURACODE_SMOKE_FOLDER` | With `AURACODE_SMOKE=chat` or `chat-reopen`, the chat's folder (an absolute path), which the folder picker answers without a dialog. Required for those. |
 | `AURACODE_SMOKE_AGENT` | With `AURACODE_SMOKE=chat`, one minimal chat with this agent (`hermes`, `claude`, `codex`) or connection (`claude-acp`, `codex-acp`: the run first sets that agent's Connection to it, in the run's own data folder) instead of the demo agent's run: under Ask it sends "Reply with exactly: ok" and passes when the reply is ok (`mock`, the demo agent, gets `/echo ok`). `run-smoke.sh` passes it on and then runs that one launch. A real agent spends your quota, so this is for local runs only: the app and `run-smoke.sh` refuse it while `CI` or `GITHUB_ACTIONS` is set. A first start may download the agent's adapter, hence the longer watchdog. |
