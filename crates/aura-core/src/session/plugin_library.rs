@@ -554,7 +554,7 @@ impl SessionManager {
             }
         });
         let generation = generation.ok_or_else(|| {
-            SessionError::Internal("The Plugin library is paused during a profile change.".into())
+            SessionError::Internal("Plugins & MCP is paused during a profile change.".into())
         })?;
         let mut publish_current = |library| {
             let current = updates.borrow();
@@ -565,12 +565,12 @@ impl SessionManager {
         };
         if cancelled.borrow_and_update().generation != generation {
             return Err(SessionError::Internal(
-                "The Plugin library refresh was replaced.".into(),
+                "The Plugins & MCP refresh was replaced.".into(),
             ));
         }
         tokio::select! {
             biased;
-            _ = cancelled.changed() => Err(SessionError::Internal("The Plugin library refresh was replaced.".into())),
+            _ = cancelled.changed() => Err(SessionError::Internal("The Plugins & MCP refresh was replaced.".into())),
             result = self.plugin_library_read(refresh, sync_available, paused, &mut publish_current) => result,
         }
     }
@@ -641,7 +641,7 @@ impl SessionManager {
                 (inventory, extensions)
             })
             .await
-            .map_err(|_| SessionError::Internal("The Plugin library could not be read.".into()))?;
+            .map_err(|_| SessionError::Internal("Plugins & MCP could not be read.".into()))?;
         let mut facts = PluginFacts {
             agents,
             listings,
