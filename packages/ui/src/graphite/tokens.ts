@@ -78,6 +78,7 @@ export const GRAPHITE_COLORS = {
   "terminal-cursor": "#fafafa",
   "terminal-cursor-text": "#141516",
   "terminal-selection": "#333333",
+  window: "#0b0b0c",
 } as const;
 
 /** Light counterpart, with the same semantic keys. */
@@ -154,6 +155,7 @@ export const GRAPHITE_LIGHT_COLORS = {
   "terminal-cursor": "#18181b",
   "terminal-cursor-text": "#f4f4f5",
   "terminal-selection": "#dde2ea",
+  window: "#efeff1",
 } as const;
 
 export const GRAPHITE_THEMES = { dark: GRAPHITE_COLORS, light: GRAPHITE_LIGHT_COLORS } as const;
@@ -162,6 +164,8 @@ export type GraphiteColor = keyof typeof GRAPHITE_COLORS;
 
 /** Durations in ms, mirroring `--g-dur-*` (authored; see docs/design/visual-language.md). */
 export const GRAPHITE_DURATIONS = {
+  glide: 240,
+  bloom: 2400,
   micro: 80,
   fast: 120,
   base: 160,
@@ -197,6 +201,8 @@ export const GRAPHITE_EASINGS = {
   "in-out": [0.2, 0, 0, 1],
   reveal: [0.2, 0, 0, 1],
   in: [0.2, 0, 0, 1],
+  glide: [0.32, 0.72, 0, 1],
+  expo: [0.16, 1, 0.3, 1],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
 function channel(value: number): number {

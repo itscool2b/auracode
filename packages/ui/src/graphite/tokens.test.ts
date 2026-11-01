@@ -42,6 +42,34 @@ function token(name: string): string {
 
 const SURFACES = ["bg", "surface-1", "surface-2", "surface-3"] as const;
 
+function channels(value: string): readonly [number, number, number, number] {
+  const hex = /^#([0-9a-f]{6})$/i.exec(value);
+  if (hex?.[1]) {
+    const n = Number.parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
+  }
+  const rgb = /^rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\)$/.exec(value);
+  if (!rgb) throw new Error(`not a #rrggbb or rgb(r g b / a) colour: ${value}`);
+  return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), Number(rgb[4])];
+}
+
+/** `top` composited over the opaque `under`, as `#rrggbb`. */
+function over(top: string, under: string): string {
+  const [r, g, b, a] = channels(top);
+  const [ur, ug, ub] = channels(under);
+  return `#${[
+    [r, ur],
+    [g, ug],
+    [b, ub],
+  ]
+    .map(([t = 0, u = 0]) =>
+      Math.round(t * a + u * (1 - a))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
 describe("Graphite colour tokens", () => {
   it("declares every colour the TypeScript mirror knows, with the same value", () => {
     for (const [name, hex] of Object.entries(GRAPHITE_COLORS)) {
@@ -146,6 +174,39 @@ describe("Graphite colour tokens", () => {
     expect(lum("fg-3")).toBeGreaterThan(lum("fg-4"));
   });
 
+  it("keeps text readable on Halo glass over the worst plausible window material", () => {
+    // A light Acrylic or Mica window is darkest over a black desktop, a dark one lightest over a
+    // white desktop. The window tint, a layer and a popover stack on top of that, in that order.
+    const cases = [
+      { name: "light", palette: GRAPHITE_LIGHT_COLORS, tokens: light, material: "#d4d4d4" },
+      { name: "dark", palette: GRAPHITE_COLORS, tokens: root, material: "#3a3a3a" },
+    ] as const;
+    for (const { name, palette, tokens, material } of cases) {
+      const glass = (token: string) => {
+        const value = tokens.get(`--g-${token}`);
+        if (value === undefined) throw new Error(`--g-${token} is missing for ${name}`);
+        return value;
+      };
+      const tinted = over(glass("window-tint"), material);
+      const layer = over(glass("glass-layer"), tinted);
+      const bases = {
+        tinted,
+        layer,
+        bar: over(glass("glass-bar"), layer),
+        pop: over(glass("glass-pop"), layer),
+        opaque: over(glass("glass-layer"), glass("window")),
+      };
+      for (const [baseName, base] of Object.entries(bases)) {
+        for (const fg of ["fg-1", "fg-2", "fg-3"] as const) {
+          expect(
+            contrastRatio(palette[fg], base),
+            `${name} ${fg} on ${baseName}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
   it("measures contrast like WCAG", () => {
     expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 5);
     expect(contrastRatio("#777777", "#777777")).toBe(1);
@@ -219,17 +280,29 @@ describe("Graphite stylesheet rules", () => {
     }
   });
 
-  it("uses no blur, glow or decorative shadow", () => {
-    // The one blur is depth: a far swimmer is softened once, at raster time (4.16).
+  it("blurs and shadows only through the Halo glass tokens", () => {
+    // The one filter blur is depth: a far swimmer is softened once, at raster time (4.16).
     const depth =
       /\.g-swimmer:where\(\[data-far\]\) > \.g-creature \{\s*filter: blur\(calc\(var\(--g-swimmer-depth\) \* [\d.]+px\)\);\s*\}/;
     expect(graphiteCss).toMatch(depth);
-    expect(graphiteCss.replace(depth, "")).not.toMatch(
-      /backdrop-filter|filter:\s*blur|drop-shadow|text-shadow/,
+    const rest = graphiteCss.replace(depth, "");
+    expect(rest).not.toMatch(/[^-]filter:\s*blur|drop-shadow|text-shadow/);
+    const blurs = [...rest.matchAll(/(-webkit-)?backdrop-filter:([^;]+);/g)];
+    expect(blurs.length).toBeGreaterThan(0);
+    for (const [, prefix, value] of blurs) {
+      expect(value?.trim(), `${prefix ?? ""}backdrop-filter`).toMatch(
+        /^(var\(--g-blur-[\w-]+\)|none)$/,
+      );
+    }
+    // Safari 16.4, the oldest WebKit the app supports, needs the prefixed property alongside.
+    expect(blurs.filter(([, prefix]) => prefix).length).toBe(
+      blurs.filter(([, prefix]) => !prefix).length,
     );
-    const shadows = [...graphiteCss.matchAll(/box-shadow:([^;]+);/g)].map((m) => m[1]?.trim());
-    for (const shadow of shadows) {
-      expect(shadow, shadow).toMatch(/^(var\(--g-shadow\)|inset 0 0 0 1px [^,]+|none)$/);
+    const part = /^(var\(--g-shadow(-[\w-]+)?\)|inset 0 0 0 1px [^,]+|inset 0 1px 0 [^,]+|none)$/;
+    for (const match of rest.matchAll(/box-shadow:([^;]+);/g)) {
+      for (const layer of (match[1] ?? "").split(/,(?![^(]*\))/)) {
+        expect(layer.replace(/\s+/g, " ").trim(), match[1]).toMatch(part);
+      }
     }
   });
 
