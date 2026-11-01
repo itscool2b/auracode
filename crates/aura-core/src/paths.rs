@@ -1,7 +1,8 @@
 //! Where auracode keeps its data, and the rules for naming things inside it.
 //!
 //! ```text
-//! <data root>/                 dirs::data_local_dir()/si.auracode.desktop, or $AURACODE_DATA_DIR
+//! <data root>/                 dirs::data_local_dir()/si.auracode.desktop (a development build:
+//!                              si.auracode.desktop.dev), or $AURACODE_DATA_DIR
 //!   device.json                this machine's identity, shared by every profile
 //!   state.json                 which profile is active
 //!   profiles/<profile id>/     one per profile (see crate::profile)
@@ -15,6 +16,14 @@
 //! unreliable, and copy gigabytes of history and checkpoints at every logon. On macOS and Linux both
 //! functions return the same folder. If something ever has to roam, it must be small settings kept
 //! outside `profiles/`, and never `device.json`.
+//!
+//! A development build (debug assertions on: `cargo run`, `tauri dev`, `tauri build --debug`) has a
+//! default folder of its own, [`DEVELOPMENT_FOLDER`], next to the installed app's. A build from a
+//! working copy is newer code than the installed app, and the installed app is often the one running
+//! the session that changes that code. On the installed app's data, a newer schema would migrate
+//! the database, which the installed app then refuses ([`crate::CoreError::SchemaTooNew`]), and the
+//! data cleanup would delete its chats and the worktrees inside its folder. `AURACODE_DATA_DIR`
+//! still points a development build anywhere, the installed app's folder included.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -25,8 +34,27 @@ use crate::fsutil;
 /// The Tauri bundle identifier. Tauri's `app_local_data_dir()` is `dirs::data_local_dir()` joined
 /// with this on macOS, Windows, and Linux, so resolving it here gives the desktop app (which must ask
 /// Tauri for `app_local_data_dir()`, not `app_data_dir()`) and the CLI the same folder without
-/// aura-core depending on Tauri.
+/// aura-core depending on Tauri. It is also the folder name of the installed app's data root.
 pub const APP_IDENTIFIER: &str = "si.auracode.desktop";
+
+/// The folder name of a development build's default data root (see the module docs).
+pub const DEVELOPMENT_FOLDER: &str = "si.auracode.desktop.dev";
+
+/// Whether this is a development build: debug assertions are on, as in the `dev` profile. Its
+/// default data root is [`DEVELOPMENT_FOLDER`], never the installed app's.
+pub const DEVELOPMENT_BUILD: bool = cfg!(debug_assertions);
+
+/// The folder name of this build's default data root, inside the local app data folder.
+pub const DEFAULT_FOLDER: &str = default_folder(DEVELOPMENT_BUILD);
+
+/// The default data root's folder name for a development build or an installed (release) one.
+pub const fn default_folder(development: bool) -> &'static str {
+    if development {
+        DEVELOPMENT_FOLDER
+    } else {
+        APP_IDENTIFIER
+    }
+}
 
 /// Overrides the data root (tests, a second dev instance, a portable install). Blank values are
 /// ignored, so an exported-but-empty variable can't silently move data into the working directory.
@@ -54,26 +82,32 @@ pub struct DataRoot {
 }
 
 impl DataRoot {
-    /// `$AURACODE_DATA_DIR` when set to something non-blank, otherwise the same folder Tauri's
+    /// `$AURACODE_DATA_DIR` when set to something non-blank, otherwise [`DEFAULT_FOLDER`] in the
+    /// local app data folder: for an installed build the same folder Tauri's
     /// `app_local_data_dir()` returns for [`APP_IDENTIFIER`] (see the module docs for why it is the
-    /// local folder). A relative override is made absolute against the current directory now, so a
-    /// later `chdir` can't move the data.
+    /// local folder, and why a development build has its own). A relative override is made
+    /// absolute against the current directory now, so a later `chdir` can't move the data.
     pub fn resolve() -> Result<DataRoot> {
-        Self::resolve_from(std::env::var_os(DATA_DIR_ENV), platform_data_dir())
+        Self::resolve_from(
+            std::env::var_os(DATA_DIR_ENV),
+            platform_data_dir(),
+            DEFAULT_FOLDER,
+        )
     }
 
     /// [`DataRoot::resolve`] with its inputs passed in, so the rules are testable without touching the
-    /// process environment (which is shared by every test thread).
+    /// process environment (which is shared by every test thread), for either kind of build.
     fn resolve_from(
         env_value: Option<OsString>,
         platform_data_dir: Option<PathBuf>,
+        default_folder: &str,
     ) -> Result<DataRoot> {
         if let Some(path) = env_value.as_deref().and_then(override_path) {
             let absolute = std::path::absolute(&path).map_err(CoreError::io(&path))?;
             return Ok(DataRoot::at(absolute));
         }
         platform_data_dir
-            .map(|dir| DataRoot::at(dir.join(APP_IDENTIFIER)))
+            .map(|dir| DataRoot::at(dir.join(default_folder)))
             .ok_or(CoreError::NoDataDir)
     }
 
@@ -186,8 +220,12 @@ mod tests {
     #[test]
     fn env_override_is_honoured() {
         let custom = custom_root();
-        let root = DataRoot::resolve_from(Some(custom.clone().into_os_string()), platform_dir())
-            .expect("resolve");
+        let root = DataRoot::resolve_from(
+            Some(custom.clone().into_os_string()),
+            platform_dir(),
+            APP_IDENTIFIER,
+        )
+        .expect("resolve");
         assert_eq!(root.root(), custom);
     }
 
@@ -195,31 +233,67 @@ mod tests {
     fn env_override_is_trimmed() {
         let custom = custom_root();
         let padded = format!("  {} \n", custom.display());
-        let root = DataRoot::resolve_from(Some(padded.into()), platform_dir()).expect("resolve");
+        let root = DataRoot::resolve_from(Some(padded.into()), platform_dir(), APP_IDENTIFIER)
+            .expect("resolve");
         assert_eq!(root.root(), custom);
     }
 
     #[test]
     fn empty_or_whitespace_env_values_are_ignored() {
         for value in ["", " ", "\t\n "] {
-            let root = DataRoot::resolve_from(Some(value.into()), platform_dir()).expect("resolve");
+            let root = DataRoot::resolve_from(Some(value.into()), platform_dir(), APP_IDENTIFIER)
+                .expect("resolve");
             assert_eq!(
                 root.root(),
                 Path::new("/platform/data").join(APP_IDENTIFIER),
                 "{value:?}"
             );
         }
-        let root = DataRoot::resolve_from(None, platform_dir()).expect("resolve");
+        let root = DataRoot::resolve_from(None, platform_dir(), APP_IDENTIFIER).expect("resolve");
         assert_eq!(
             root.root(),
             Path::new("/platform/data").join(APP_IDENTIFIER)
         );
     }
 
+    /// A build from a working copy opened, migrated and could delete the installed app's data,
+    /// which is often the app running the session that changes that code.
+    #[test]
+    fn a_development_build_defaults_to_its_own_folder() {
+        assert_eq!(default_folder(false), APP_IDENTIFIER);
+        assert_eq!(default_folder(true), DEVELOPMENT_FOLDER);
+        assert_ne!(DEVELOPMENT_FOLDER, APP_IDENTIFIER);
+        assert_eq!(DEVELOPMENT_BUILD, cfg!(debug_assertions));
+        assert_eq!(DEFAULT_FOLDER, default_folder(DEVELOPMENT_BUILD));
+
+        let development =
+            DataRoot::resolve_from(None, platform_dir(), DEVELOPMENT_FOLDER).expect("resolve");
+        assert_eq!(
+            development.root(),
+            Path::new("/platform/data").join(DEVELOPMENT_FOLDER)
+        );
+        assert!(
+            !development.root().ends_with(APP_IDENTIFIER),
+            "a sibling of the installed app's folder, not inside or equal to it"
+        );
+        // The override still wins, the installed app's own folder included.
+        let installed = Path::new("/platform/data").join(APP_IDENTIFIER);
+        let chosen = std::env::temp_dir().join(APP_IDENTIFIER);
+        let root = DataRoot::resolve_from(
+            Some(chosen.clone().into_os_string()),
+            platform_dir(),
+            DEVELOPMENT_FOLDER,
+        )
+        .expect("resolve");
+        assert_eq!(root.root(), chosen);
+        assert_ne!(root.root(), installed);
+    }
+
     #[test]
     fn a_relative_override_becomes_absolute() {
         let root =
-            DataRoot::resolve_from(Some("relative/aura".into()), platform_dir()).expect("resolve");
+            DataRoot::resolve_from(Some("relative/aura".into()), platform_dir(), APP_IDENTIFIER)
+                .expect("resolve");
         assert!(root.root().is_absolute(), "{}", root.root().display());
         let cwd = std::env::current_dir().expect("cwd");
         assert_eq!(root.root(), cwd.join("relative").join("aura"));
@@ -228,11 +302,11 @@ mod tests {
     #[test]
     fn no_platform_dir_and_no_override_is_no_data_dir() {
         assert!(matches!(
-            DataRoot::resolve_from(None, None),
+            DataRoot::resolve_from(None, None, APP_IDENTIFIER),
             Err(CoreError::NoDataDir)
         ));
         assert!(matches!(
-            DataRoot::resolve_from(Some(" ".into()), None),
+            DataRoot::resolve_from(Some(" ".into()), None, APP_IDENTIFIER),
             Err(CoreError::NoDataDir)
         ));
     }
@@ -242,7 +316,8 @@ mod tests {
     fn a_non_utf8_override_is_used_byte_for_byte() {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
         let raw = OsString::from_vec(b"/data/\xff\xfe".to_vec());
-        let root = DataRoot::resolve_from(Some(raw), platform_dir()).expect("resolve");
+        let root =
+            DataRoot::resolve_from(Some(raw), platform_dir(), APP_IDENTIFIER).expect("resolve");
         assert_eq!(root.root().as_os_str().as_bytes(), b"/data/\xff\xfe");
     }
 
@@ -270,8 +345,9 @@ mod tests {
             ),
         ];
         // Spelled out rather than through `platform_data_dir()`, so this pins the local folder too.
+        // The test binary is a development build, so its default is the development folder.
         if let Some(platform) = dirs::data_local_dir() {
-            let default = platform.join(APP_IDENTIFIER);
+            let default = platform.join(DEVELOPMENT_FOLDER);
             cases.push((Some("".into()), default.clone()));
             cases.push((Some("   ".into()), default.clone()));
             cases.push((None, default));
@@ -311,8 +387,9 @@ mod tests {
         let Some(local) = dirs::data_local_dir() else {
             return;
         };
-        let root = DataRoot::resolve_from(None, platform_data_dir()).expect("resolve");
-        assert_eq!(root.root(), local.join(APP_IDENTIFIER));
+        let root =
+            DataRoot::resolve_from(None, platform_data_dir(), DEFAULT_FOLDER).expect("resolve");
+        assert_eq!(root.root(), local.join(DEFAULT_FOLDER));
         #[cfg(windows)]
         {
             let roaming = dirs::data_dir().expect("Roaming AppData");

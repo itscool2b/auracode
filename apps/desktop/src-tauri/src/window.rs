@@ -96,6 +96,21 @@ pub fn set_webview_visible(app: &AppHandle, visible: bool) {
 /// Label of the one window M0 has.
 pub const MAIN_WINDOW: &str = "main";
 
+/// The main window's title in a development build, so it is never taken for the installed app's
+/// window (`auracode`, from tauri.conf.json) by a person, Alt+Tab, or automation that finds
+/// windows by title.
+pub const DEVELOPMENT_TITLE: &str = "auracode dev";
+
+/// The main window's title: tauri.conf.json's for an installed build, [`DEVELOPMENT_TITLE`] for a
+/// development one.
+pub fn main_title(configured: &str, development: bool) -> &str {
+    if development {
+        DEVELOPMENT_TITLE
+    } else {
+        configured
+    }
+}
+
 /// How long the page gets to report its first paint before the window is shown regardless.
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
@@ -165,7 +180,9 @@ pub fn create_main(
     let origin = AppOrigin::current(config.use_https_scheme);
     let handle = app.handle().clone();
 
+    let title = main_title(&config.title, aura_core::paths::DEVELOPMENT_BUILD).to_owned();
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .title(title)
         .theme(None)
         .visible(false)
         .transparent(plan.transparent)
@@ -494,6 +511,17 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
+    /// A development window was titled `auracode` like the installed app's.
+    #[test]
+    fn a_development_window_has_its_own_title() {
+        assert_eq!(super::main_title("auracode", false), "auracode");
+        assert_eq!(
+            super::main_title("auracode", true),
+            super::DEVELOPMENT_TITLE
+        );
+        assert_ne!(super::DEVELOPMENT_TITLE, "auracode");
+    }
+
     /// Native chrome must track both CSS palettes so switching appearance leaves no dark band.
     #[test]
     fn the_caption_matches_both_appearance_palettes() {

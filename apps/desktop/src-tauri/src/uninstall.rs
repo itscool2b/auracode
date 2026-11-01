@@ -129,13 +129,38 @@ pub fn run_from_args() -> Option<i32> {
     }
     attach_console();
     let rest: Vec<OsString> = args.collect();
-    Some(match parse(&rest) {
+    let options = parse(&rest).and_then(|options| {
+        scoped_for_build(options, aura_core::paths::DEVELOPMENT_BUILD, || {
+            aura_core::paths::DataRoot::resolve()
+                .map(|root| root.root().to_path_buf())
+                .map_err(|error| error.to_string())
+        })
+    });
+    Some(match options {
         Ok(options) => run(&options),
         Err(message) => {
             eprintln!("{message}\n\n{USAGE}");
             exit::USAGE
         }
     })
+}
+
+/// A development build cleans up only its own data folder, as if `--data-dir` named it
+/// (`resolve`: the development folder, or `AURACODE_DATA_DIR`'s). The machine scope is the
+/// installed app's: it deletes the installed app's data folder, and asks the installed app to quit
+/// first, which ends every chat it runs.
+fn scoped_for_build(
+    mut options: Options,
+    development: bool,
+    resolve: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<Options, String> {
+    if development && options.data_dir.is_none() {
+        let root = resolve().map_err(|error| {
+            format!("A development build cleans up its own data folder, and {error}")
+        })?;
+        options.data_dir = Some(root);
+    }
+    Ok(options)
 }
 
 /// Whether a second launch's arguments (the single-instance plugin's, the executable first) ask
@@ -766,6 +791,30 @@ mod tests {
             ]))
             .is_err()
         );
+    }
+
+    /// A cleanup from a development build without `--data-dir` planned the installed app's
+    /// whole data folder, and its quit request reached the installed app.
+    #[test]
+    fn a_development_build_cleans_up_only_its_own_folder() {
+        let own = PathBuf::from("/data/si.auracode.desktop.dev");
+        let development = scoped_for_build(Options::default(), true, || Ok(own.clone())).unwrap();
+        assert_eq!(development.data_dir.as_deref(), Some(own.as_path()));
+
+        // A folder named on the command line stays the one cleaned up.
+        let named = parse(&args(&["--data-dir", "/scratch"])).unwrap();
+        let kept = scoped_for_build(named.clone(), true, || panic!("not resolved")).unwrap();
+        assert_eq!(kept, named);
+
+        // No folder to name refuses, rather than falling back to the machine scope.
+        let refused = scoped_for_build(Options::default(), true, || Err("no data folder".into()))
+            .unwrap_err();
+        assert!(refused.contains("no data folder"), "{refused}");
+
+        // An installed build keeps the machine scope.
+        let installed =
+            scoped_for_build(Options::default(), false, || panic!("not resolved")).unwrap();
+        assert_eq!(installed.data_dir, None);
     }
 
     #[test]

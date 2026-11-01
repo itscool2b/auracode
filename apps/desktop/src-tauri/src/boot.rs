@@ -7,13 +7,15 @@
 //! of the app crashing before a window exists.
 //!
 //! The data root is aura-core's [`DataRoot::resolve`] and nothing else ([`startup`]): the folder in
-//! `AURACODE_DATA_DIR`, or `si.auracode.desktop` in the local app data folder. The CLI resolves the
-//! same one, so both always open the same profile. Tauri's path API is not consulted: its
-//! `app_data_dir()` is Roaming AppData on Windows, which managed machines copy between PCs, and
-//! `device.json` and the databases must never travel. Its `app_local_data_dir()` is the same folder
-//! as the default root, because tauri.conf.json's identifier is aura-core's `APP_IDENTIFIER`
-//! (`config_checks.rs` holds them together), so the WebView data Tauri keeps there on Windows and
-//! Linux sits beside ours.
+//! `AURACODE_DATA_DIR`, or `si.auracode.desktop` in the local app data folder
+//! (`si.auracode.desktop.dev` for a development build, so a build from a working copy never opens
+//! the installed app's data). The CLI resolves the same one, so both always open the same profile.
+//! Tauri's path API is not consulted: its `app_data_dir()` is Roaming AppData on Windows, which
+//! managed machines copy between PCs, and `device.json` and the databases must never travel. Its
+//! `app_local_data_dir()` is an installed build's default root, because tauri.conf.json's
+//! identifier is aura-core's `APP_IDENTIFIER` (`config_checks.rs` holds them together), so the
+//! WebView data Tauri keeps there on Windows and Linux sits beside ours. Any other folder gets the
+//! WebView data inside it (`LaunchOptions::webview_data_dir`).
 //!
 //! One process runs a profile's sessions, so startup takes the profile's owner lock
 //! ([`ProfileOwner`]) between opening the profile and opening its database. A second launch with the
@@ -593,8 +595,9 @@ mod tests {
     #[cfg(not(windows))]
     const CHILD_HOME: &str = "AURACODE_DESKTOP_TEST_THROWAWAY_HOME";
 
-    /// Without `AURACODE_DATA_DIR` the app starts in `si.auracode.desktop` in the local app data
-    /// folder, which is also the folder Tauri's `app_local_data_dir()` names. The child gets a
+    /// Without `AURACODE_DATA_DIR` the app starts in its default folder in the local app data
+    /// folder: `si.auracode.desktop`, the folder Tauri's `app_local_data_dir()` names, for an
+    /// installed build, and `si.auracode.desktop.dev` for this development build. The child gets a
     /// throwaway home folder, which is what the local app data folder is built from on macOS and
     /// Linux, so it boots there instead of in the user's real data. Windows looks its known
     /// folders up without the environment, so this cannot run there without touching real data;
@@ -615,7 +618,7 @@ mod tests {
             assert_eq!(booted.fatal, None);
             assert_eq!(
                 booted.data_dir,
-                Some(local_app_data(Path::new(&home)).join(aura_core::paths::APP_IDENTIFIER))
+                Some(local_app_data(Path::new(&home)).join(aura_core::paths::DEFAULT_FOLDER))
             );
             return;
         }
@@ -632,7 +635,7 @@ mod tests {
             },
         );
         assert!(started_in(
-            &local_app_data(home.path()).join(aura_core::paths::APP_IDENTIFIER)
+            &local_app_data(home.path()).join(aura_core::paths::DEFAULT_FOLDER)
         ));
     }
 }
