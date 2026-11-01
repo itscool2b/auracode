@@ -77,6 +77,10 @@ pub struct GeneralPreferences {
     pub close_to_tray: bool,
     /// Agents (`claude`, `codex`, `pi`) whose configuration sync is off on this device.
     pub config_sync_paused: Vec<String>,
+    /// Copy each source folder's Git-ignored instruction files (a local `AGENTS.md` or
+    /// `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
+    /// person turns it off in Instructions.
+    pub copy_instructions_to_worktrees: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -90,6 +94,7 @@ impl Default for GeneralPreferences {
             keep_awake: true,
             close_to_tray: true,
             config_sync_paused: Vec::new(),
+            copy_instructions_to_worktrees: true,
         }
     }
 }
@@ -144,6 +149,10 @@ pub enum SetupAction {
     /// Turns configuration sync on or off for one agent on this device.
     ConfigSyncAgent {
         agent_id: String,
+        enabled: bool,
+    },
+    /// Turns on or off copying Git-ignored instruction files into new worktree chats.
+    CopyInstructionsToWorktrees {
         enabled: bool,
     },
 }
@@ -424,6 +433,9 @@ impl OnboardingStore {
                     paused.sort();
                 }
             }
+            SetupAction::CopyInstructionsToWorktrees { enabled } => {
+                next.preferences.general.copy_instructions_to_worktrees = enabled;
+            }
         }
         next.preferences.revision = revision
             .checked_add(1)
@@ -568,6 +580,36 @@ mod tests {
                 .preferences()
                 .general
                 .automatic_checkpoints
+        );
+    }
+
+    #[test]
+    fn worktree_instruction_copies_are_on_for_legacy_profiles_and_can_be_turned_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut legacy = serde_json::to_value(Record::default()).unwrap();
+        legacy["preferences"]["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("copy_instructions_to_worktrees");
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(store.preferences().general.copy_instructions_to_worktrees);
+        store
+            .apply(
+                0,
+                SetupAction::CopyInstructionsToWorktrees { enabled: false },
+            )
+            .unwrap();
+        assert!(
+            !OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .general
+                .copy_instructions_to_worktrees
         );
     }
 
@@ -747,6 +789,7 @@ mod tests {
                 keep_awake: false,
                 close_to_tray: false,
                 config_sync_paused: vec!["codex".into()],
+                copy_instructions_to_worktrees: true,
             }
         );
         assert!(

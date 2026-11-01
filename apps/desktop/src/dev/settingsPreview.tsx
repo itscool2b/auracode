@@ -142,6 +142,8 @@ const setup: SetupApi = {
     if (action.type === "notifications") general.notifications = action.enabled;
     if (action.type === "keep_awake") general.keep_awake = action.enabled;
     if (action.type === "close_to_tray") general.close_to_tray = action.enabled;
+    if (action.type === "copy_instructions_to_worktrees")
+      general.copy_instructions_to_worktrees = action.enabled;
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },

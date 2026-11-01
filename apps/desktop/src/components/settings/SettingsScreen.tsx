@@ -245,6 +245,7 @@ export function SettingsScreen({
           {page === "instructions" ? (
             <InstructionsPanel
               api={instructions}
+              setup={setup}
               initialTarget={instructionsTarget}
               folders={instructionFolders}
               chatLabel={chatLabel}

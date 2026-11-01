@@ -4,6 +4,7 @@ import { createInstructionsFixture } from "../dev/instructionsFixture";
 import {
   editableFiles,
   fileByKey,
+  fileNote,
   listNames,
   modeSentence,
   parseTargetKey,
@@ -114,6 +115,25 @@ describe("Instructions helpers", () => {
       commit: false,
     });
     expect(worktreeGap(must("project:GEMINI.md"))).toBeNull();
+  });
+
+  it("copies ignored files into new worktree chats while the switch is on, and says so", async () => {
+    const snapshot = await createInstructionsFixture("universal").api.snapshot({ type: "global" });
+    const shared = fileByKey(snapshot, "project:AGENTS.md");
+    const untracked = fileByKey(snapshot, "project:CLAUDE.md");
+    if (!shared || !untracked) throw new Error("fixture files are missing");
+    const ignored = {
+      ...shared,
+      git: "ignored" as const,
+      note: "Ignored by Git, so new worktree chats won't have it.",
+    };
+    expect(worktreeGap(ignored, true)).toBeNull();
+    expect(fileNote(ignored, true)).toBe("Ignored by Git. New worktree chats get a copy.");
+    expect(worktreeGap(ignored, false)).toEqual({ commit: false });
+    expect(fileNote(ignored, false)).toBe(ignored.note);
+    // Untracked files are never copied: in a worktree they would be a change to commit.
+    expect(worktreeGap(untracked, true)).toEqual({ commit: true });
+    expect(fileNote(untracked, true)).toBe(untracked.note);
   });
 });
 

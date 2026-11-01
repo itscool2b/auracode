@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { AppInfo } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
 import { createInstructionsFixture, type InstructionsScenario } from "./instructionsFixture";
+import { createSetupFixture } from "./setupFixture";
 
 const info: AppInfo = {
   app_version: "0.1.0",
@@ -53,6 +54,7 @@ export function mountInstructionsPreview(container: HTMLElement, mode: string): 
         info={info}
         initialPage="instructions"
         instructions={fixture.api}
+        setup={createSetupFixture()}
         instructionsTarget={
           scenario === "drift" ? { type: "global" } : { type: "folder", folder_id: "app" }
         }

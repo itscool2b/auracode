@@ -1,6 +1,7 @@
-//! Settings' General page reaches Rust here: the defaults for new chats go to the session manager,
-//! and the notification, keep-awake and close-to-tray switches to the native shell. The values
-//! live in the profile's setup preferences (`aura_core::onboarding`).
+//! Settings' General page reaches Rust here: the defaults for new chats, automatic checkpoints and
+//! Instructions' worktree copies go to the session manager, and the notification, keep-awake and
+//! close-to-tray switches to the native shell. The values live in the profile's setup preferences
+//! (`aura_core::onboarding`).
 
 use aura_core::onboarding::GeneralPreferences;
 use aura_core::session::NewChatDefaults;
@@ -22,6 +23,7 @@ pub(crate) fn apply_to_manager(
 ) {
     manager.set_new_chat_defaults(defaults(general));
     manager.set_automatic_checkpoints(general.automatic_checkpoints);
+    manager.set_worktree_instruction_copies(general.copy_instructions_to_worktrees);
 }
 
 /// Initialize before publishing a runtime, so its first actor sees the saved profile policy.

@@ -911,3 +911,56 @@ async fn expired_setup_receipts_and_folder_admission_fail_only_their_current_gen
         }
     }
 }
+
+#[tokio::test]
+async fn new_worktree_chats_get_ignored_instruction_files_unless_turned_off() {
+    let mut rig = rig(
+        vec![idle_driver("first"), idle_driver("second")],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    enable_worktree_fixture(&mut rig).await;
+    // info/exclude lives in the shared Git folder, so every worktree ignores CLAUDE.md too.
+    let info = rig.folder.join(".git").join("info");
+    std::fs::create_dir_all(&info).unwrap();
+    std::fs::write(info.join("exclude"), "CLAUDE.md\n").unwrap();
+    std::fs::write(rig.folder.join("CLAUDE.md"), "Local instructions.\n").unwrap();
+    let project = project(&rig, &rig.folder).await;
+    assert!(rig.manager.worktree_instruction_copies(), "on by default");
+    let first = plan(
+        &rig,
+        WorktreeChatInput {
+            title: Some("First".into()),
+            ..input(&project)
+        },
+    )
+    .await;
+    let first = rig
+        .manager
+        .worktree_chat_apply(&first.token)
+        .await
+        .expect("first chat");
+    assert!(first.warnings.is_empty(), "{:?}", first.warnings);
+    assert_eq!(
+        std::fs::read_to_string(Path::new(&first.worktree.path).join("CLAUDE.md")).unwrap(),
+        "Local instructions.\n"
+    );
+    rig.manager.set_worktree_instruction_copies(false);
+    let second = plan(
+        &rig,
+        WorktreeChatInput {
+            title: Some("Second".into()),
+            ..input(&project)
+        },
+    )
+    .await;
+    let second = rig
+        .manager
+        .worktree_chat_apply(&second.token)
+        .await
+        .expect("second chat");
+    assert!(
+        !Path::new(&second.worktree.path).join("CLAUDE.md").exists(),
+        "turned off, a new worktree gets only what Git checks out"
+    );
+}
