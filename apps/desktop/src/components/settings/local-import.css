@@ -51,12 +51,12 @@
   gap: var(--g-space-12);
   min-height: 52px;
   padding: var(--g-space-8) 0;
-  border-top: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-glass-rim);
   cursor: pointer;
 }
 
 .local-import-projects label:last-of-type {
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .local-import-projects span {

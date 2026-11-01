@@ -102,6 +102,7 @@
   --g-glass-bar: rgb(20 21 24 / 0.66);
   --g-glass-pop: rgb(34 35 39 / 0.88);
   --g-glass-raised: rgb(255 255 255 / 0.14);
+  --g-glass-card: rgb(255 255 255 / 0.04);
   --g-glass-control: rgb(255 255 255 / 0.06);
   --g-glass-control-hover: rgb(255 255 255 / 0.1);
   --g-glass-control-active: rgb(255 255 255 / 0.14);
@@ -344,6 +345,7 @@
   --g-glass-bar: rgb(255 255 255 / 0.68);
   --g-glass-pop: rgb(255 255 255 / 0.9);
   --g-glass-raised: #ffffff;
+  --g-glass-card: #ffffff;
   --g-glass-control: rgb(24 24 27 / 0.05);
   --g-glass-control-hover: rgb(24 24 27 / 0.08);
   --g-glass-control-active: rgb(24 24 27 / 0.12);
@@ -455,6 +457,7 @@
     --g-glass-bar: rgb(255 255 255 / 0.68);
     --g-glass-pop: rgb(255 255 255 / 0.9);
     --g-glass-raised: #ffffff;
+    --g-glass-card: #ffffff;
     --g-glass-control: rgb(24 24 27 / 0.05);
     --g-glass-control-hover: rgb(24 24 27 / 0.08);
     --g-glass-control-active: rgb(24 24 27 / 0.12);

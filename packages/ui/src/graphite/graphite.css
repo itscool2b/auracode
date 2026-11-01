@@ -336,7 +336,6 @@
   border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-10);
   background-color: var(--g-surface-1);
-  box-shadow: var(--g-shadow-control);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
@@ -1425,9 +1424,13 @@
   }
 }
 
-/* Rows and cards entering (Aside, measured): 8px rise, 340ms, 70ms apart. Set --g-row-index. */
+/*
+ * Rows and cards entering (Aside, measured): 8px rise, 340ms, 70ms apart. Set --g-row-index.
+ * Backwards, not both: the end state is the row's own, and a held final frame would keep the row
+ * a backdrop root, so a glass menu inside it could not frost what lies behind.
+ */
 .g-enter {
-  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
+  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) backwards;
   animation-delay: calc(var(--g-row-index, 0) * var(--g-stagger-row));
 }
 

@@ -1,7 +1,11 @@
 /*
- * Graphite for the desktop app (docs/design/visual-language.md, section 3). Every colour, type
- * size, space, radius and duration is a --g-* token from @auracode/ui; stylesheets read them
- * directly. The few values below are the app window's own layout, which Graphite does not define.
+ * Halo for the desktop app (docs/design/visual-language.md). Every colour, type size, space,
+ * radius and duration is a --g-* token from @auracode/ui; stylesheets read them directly. The few
+ * values below are the app window's own layout, which the shared tokens do not define.
+ *
+ * The window is glass: the sidebar sits on the window's material (Acrylic, Mica, vibrancy or
+ * Liquid Glass, under a light tint), and the work happens on translucent layers that float 8px in
+ * from its edges. With no material the same layers sit on the opaque --g-window colour.
  */
 @import "@auracode/ui/graphite.css";
 @import "@auracode/ui/desktop-fonts.css";
@@ -10,37 +14,67 @@
   /* Use the desktop font's default glyphs. */
   font-feature-settings: normal;
 
-  /* The window frame (6.1, 6.2). The sidebar narrows to the rail when collapsed. */
+  /* The window frame. The sidebar narrows to the rail when collapsed. */
   --ui-sidebar-width: 256px;
   --ui-rail-width: 56px;
   /* The band that clears the native window controls and drags the window. */
   --ui-titlebar-height: 52px;
-  /* The gap between the window edge and its panes, and between two panes. */
-  --ui-pane-inset: 0px;
+  /* The gap between the window edge and its layers, and between two layers. */
+  --ui-pane-inset: var(--g-space-8);
   /* The transcript's lead column: marks and chevrons centre on x 12, words start at x 24 (6.4). */
   --ui-gutter: 24px;
 
-  /* Over the OS window material (macOS vibrancy, Windows Mica) where a screen leaves it showing. */
-  --ui-window-tint: rgb(7 7 10 / 0.42);
+  /* Over the window's material wherever a screen leaves it showing. */
+  --ui-window-tint: var(--g-window-tint);
 
-  /* Flat workspace panes share quiet dividers. */
-  --ui-pane-radius: 0px;
-  --ui-pane-rim: var(--g-line-faint);
-  --ui-pane-rim-top: var(--g-line);
+  /* The floating layers: radius 14, a hairline rim and a lit top edge. */
+  --ui-pane-radius: var(--g-radius-14);
+  --ui-pane-fill: var(--g-glass-layer);
+  --ui-pane-rim: var(--g-glass-rim);
+  --ui-pane-rim-top: var(--g-glass-highlight);
+  --ui-pane-shadow: var(--g-shadow-layer), inset 0 1px 0 var(--g-glass-highlight);
 
   /* Composer boundaries strengthen for keyboard focus. */
-  --ui-composer-shadow: inset 0 0 0 1px var(--g-line);
-  --ui-composer-shadow-focus: inset 0 0 0 1px var(--g-line-strong);
-  --ui-composer-shadow-keyboard: inset 0 0 0 2px var(--g-focus);
+  --ui-composer-shadow: var(--g-shadow-pop), inset 0 0 0 1px var(--g-glass-rim);
+  --ui-composer-shadow-focus: var(--g-shadow-pop), inset 0 0 0 1px var(--g-glass-rim-strong);
+  --ui-composer-shadow-keyboard: var(--g-shadow-pop), inset 0 0 0 2px var(--g-focus);
 
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
 
-  /* Setup's contained work area. */
-  --ui-card-radius: 12px;
-  --ui-card-fill: var(--g-surface-1);
-  --ui-card-shadow: inset 0 0 0 1px var(--g-line);
+  /* Setup's contained work area, and every card: a layer of its own. */
+  --ui-card-radius: var(--g-radius-18);
+  --ui-card-fill: var(--g-glass-layer);
+  --ui-card-shadow: var(--g-shadow-layer), inset 0 1px 0 var(--g-glass-highlight);
 
   /* The card waits for the intro's mark to clear. */
   --ui-card-in-at: 180ms;
+}
+
+/*
+ * The window: opaque, it is the --g-window colour; on a material it is clear, and the body's tint
+ * (styles.css) keeps text readable over whatever the desktop shows. More specific than Graphite's
+ * .g-root, which would otherwise paint over the glass.
+ */
+:root.g-root {
+  background-color: var(--g-window);
+}
+
+:root.g-root:is(
+  [data-glass="liquid_glass"],
+  [data-glass="vibrancy"],
+  [data-glass="mica"],
+  [data-glass="acrylic"]
+) {
+  background-color: transparent;
+}
+
+/* Reduce transparency: the layers turn solid and the window keeps its opaque colour. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --ui-pane-fill: var(--g-surface-1);
+    --g-glass-layer: var(--g-surface-1);
+    --g-glass-bar: var(--g-surface-1);
+    --g-glass-pop: var(--g-overlay);
+  }
 }

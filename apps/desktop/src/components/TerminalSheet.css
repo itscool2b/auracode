@@ -75,16 +75,20 @@
   height: min(48dvh, 420px);
   min-height: 180px;
   padding: var(--g-space-8) var(--g-space-4) var(--g-space-8) var(--g-space-12);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
+  /*
+   * The output keeps the opaque surface xterm paints, so it reads over the sheet's glass. The edge
+   * stays a 1px border rather than an inset ring, so the terminal's rows and columns do not change.
+   */
+  border: 1px solid var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-12);
   overflow: hidden;
-  background-color: var(--g-surface-1);
+  background-color: var(--g-terminal-bg);
   user-select: text;
 }
 
-/* xterm paints its viewport black by default; the well is surface-1 to its edge. */
+/* xterm paints its viewport black by default; the well is the terminal's surface to its edge. */
 .terminal-sheet__viewport .xterm-viewport {
-  background-color: var(--g-surface-1);
+  background-color: var(--g-terminal-bg);
 }
 
 /* Before Start the well waits small; it opens to full height once the process runs. */

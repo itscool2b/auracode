@@ -22,7 +22,7 @@
 .delete-data-rows {
   display: grid;
   margin: 0;
-  box-shadow: inset 0 1px 0 var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-glass-rim);
 }
 
 .delete-data-rows > div {
@@ -30,7 +30,7 @@
   grid-template-columns: 160px minmax(0, 1fr);
   gap: var(--g-space-16);
   padding: var(--g-space-8) 0;
-  box-shadow: inset 0 -1px 0 var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-glass-rim);
 }
 
 .delete-data-rows dt {
@@ -73,9 +73,11 @@
   display: grid;
   gap: var(--g-space-12);
   padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 2px 0 0 var(--g-red);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow:
+    inset 2px 0 0 var(--g-red),
+    inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .delete-data-worktrees > h3 {
@@ -98,7 +100,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 var(--g-space-16);
   padding: var(--g-space-8) 0;
-  box-shadow: inset 0 1px 0 var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-glass-rim);
 }
 
 .delete-data-worktrees li .delete-data-branch {

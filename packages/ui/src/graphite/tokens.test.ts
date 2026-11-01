@@ -189,9 +189,13 @@ describe("Graphite colour tokens", () => {
       };
       const tinted = over(glass("window-tint"), material);
       const layer = over(glass("glass-layer"), tinted);
+      const card = over(glass("glass-card"), layer);
       const bases = {
         tinted,
         layer,
+        card,
+        // A segmented track or a pill inside a grouped card.
+        "control on card": over(glass("glass-control"), card),
         bar: over(glass("glass-bar"), layer),
         pop: over(glass("glass-pop"), layer),
         opaque: over(glass("glass-layer"), glass("window")),
