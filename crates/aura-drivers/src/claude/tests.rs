@@ -829,6 +829,10 @@ async fn a_usage_limit_is_reported_with_its_reset_and_ends_the_turn_as_one() {
         match h.event().await {
             DriverEvent::UsageLimit(limit) => reports.push(limit),
             DriverEvent::AuthRequired(_) => panic!("a limit is not a sign-in"),
+            DriverEvent::Event {
+                event: aura_protocol::AuraEvent::MessageDelta { text, .. },
+                ..
+            } => panic!("Claude Code's limit message is not the model's reply: {text}"),
             DriverEvent::TurnEnded {
                 stop_reason, error, ..
             } => break (stop_reason, error),

@@ -8,6 +8,7 @@ import type {
   StorageStatus,
   WorktreeRecreatePreview,
 } from "../../bindings";
+import { takesAccounts } from "../../lib/agentAccounts";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { queueWaitView } from "../../lib/chat/queueWait";
@@ -37,6 +38,7 @@ import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
 import { isPanelToggle } from "./terminalRuntime";
+import { UsageLimitCard } from "./UsageLimitCard";
 
 const noSubscribe = () => () => {};
 /** Back to the conversation after the terminal panel hides. */
@@ -658,6 +660,17 @@ export function ChatView({
                 agentName={agent?.name ?? state.chat.agent_name}
                 transport={transport}
                 onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
+              />
+            ) : null}
+            {state.session?.usage_limit ? (
+              <UsageLimitCard
+                key={`${state.chat.agent_id}:${state.session.account_id ?? ""}`}
+                limit={state.session.usage_limit}
+                chatId={chatId}
+                agentId={state.chat.agent_id}
+                agentName={agent?.name ?? state.chat.agent_name}
+                accountId={state.session.account_id ?? null}
+                api={takesAccounts(state.chat.agent_id) ? transport.accounts : undefined}
               />
             ) : null}
             {state.stillWorkingMinutes !== null ? (

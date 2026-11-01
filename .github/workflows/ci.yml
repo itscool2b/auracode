@@ -168,6 +168,7 @@ jobs:
           pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-accounts.mjs
 
       - name: Check explicit installer and clone actions
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}

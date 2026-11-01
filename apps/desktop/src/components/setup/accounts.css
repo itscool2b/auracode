@@ -1,0 +1,118 @@
+/*
+ * Accounts in an agent's details (docs/agent-accounts.md): the Account row as the Connection row
+ * (6.16), the added accounts as 36px rows on the facts' hairline (the name 14/20 fg-1, its date
+ * 12/16 fg-3, Remove at the right edge), then Add account and its one line, on the 4px grid.
+ */
+.agent-accounts > .settings-row {
+  padding-inline: 0;
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-accounts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-account {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-height: 36px;
+  padding: var(--g-space-4) 0;
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-account-name {
+  min-width: 0;
+  color: var(--g-fg-1);
+  overflow-wrap: anywhere;
+}
+
+.agent-account-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.agent-account-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+}
+
+.agent-accounts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-8) var(--g-space-12);
+  padding-top: var(--g-space-12);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-accounts-actions .setup-footnote {
+  flex: 1 1 24ch;
+  margin: 0;
+}
+
+.agent-accounts-note {
+  margin: var(--g-space-8) 0 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.agent-accounts-note[data-error] {
+  color: var(--g-red);
+}
+
+/* Add account: three numbered steps, Get a token, then the two fields and the actions. */
+.add-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-16);
+}
+
+.add-account-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  margin: 0;
+  padding-left: var(--g-space-20);
+  color: var(--g-fg-2);
+  line-height: var(--g-leading-ui);
+  list-style: decimal outside;
+}
+
+.add-account-steps > li {
+  display: list-item;
+  padding-left: var(--g-space-4);
+}
+
+.add-account-steps > li::marker {
+  color: var(--g-fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.add-account-steps code {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+}
+
+.add-account-token {
+  font-family: var(--g-mono);
+  font-variant-ligatures: none;
+}
+
+.add-account-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+}
+
+.add-account-form .g-dialog-actions {
+  margin: 0;
+}

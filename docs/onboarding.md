@@ -57,7 +57,8 @@ after a check found it needed) and a menu for the rest. Opening Agents looks up 
 metadata for installed agents; it never checks sign-in, updates or installs by itself.
 One-click installs are reviewed, version-pinned npm commands for Claude Code, Codex, Pi, OpenCode 1
 and Grok Build. Sign in runs the vendor's own login for Claude Code, Codex, Cursor, Grok Build,
-OpenCode and Hermes. The other agents keep their official guides, each for a stated reason in
+OpenCode and Hermes. Claude Code's details also list the accounts its chats can run on and Add
+account ([Agent accounts](agent-accounts.md)). The other agents keep their official guides, each for a stated reason in
 docs/setup-actions.md:
 
 - [Claude Code](https://code.claude.com/docs/en/setup), [Codex](https://developers.openai.com/codex/cli),

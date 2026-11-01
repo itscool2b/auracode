@@ -25,6 +25,7 @@ import type {
   ToolUpdate,
   UiAnswer,
 } from "../../bindings";
+import type { AgentAccountsApi } from "../agentAccounts";
 import { type EventEntry, UNANNOUNCED_TOOL_TITLE } from "./transcript";
 import type { Transport } from "./transport";
 
@@ -534,9 +535,12 @@ export class FakeTransport implements Transport {
     readonly onEnd: () => void;
   }[] = [];
   handlers: Partial<Transport>;
+  /** Added agent accounts; absent unless a test gives some. */
+  accounts?: AgentAccountsApi;
 
   constructor(handlers: Partial<Transport> = {}) {
     this.handlers = handlers;
+    this.accounts = handlers.accounts;
   }
 
   /** The calls of one method, in order. */

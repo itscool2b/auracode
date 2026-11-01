@@ -24,6 +24,8 @@ import { harnessText } from "../../lib/plugins/format";
 import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
 import "../settings/settings.css";
+import { type AgentAccountsApi, takesAccounts } from "../../lib/agentAccounts";
+import { AgentAccounts } from "./AgentAccounts";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
 
@@ -614,6 +616,7 @@ export function AgentRow({
           agent={agent}
           maintenance={maintenance}
           updateLine={updateLine}
+          accounts={transport.accounts}
           onRefresh={onRefresh}
           onConnection={onConnection}
           onError={setError}
@@ -679,6 +682,7 @@ function AgentDetail({
   agent,
   maintenance,
   updateLine,
+  accounts,
   onRefresh,
   onConnection,
   onError,
@@ -686,6 +690,7 @@ function AgentDetail({
 }: {
   readonly agent: AgentEntry;
   readonly maintenance: AgentMaintenance | null;
+  readonly accounts?: AgentAccountsApi;
   /** The row already says a newer release is available, so Updates keeps only the rest. */
   readonly updateLine: boolean;
   readonly onRefresh: () => void;
@@ -749,6 +754,9 @@ function AgentDetail({
           onConnection={onConnection}
           onError={onError}
         />
+      ) : null}
+      {accounts && takesAccounts(agent.id) ? (
+        <AgentAccounts agentId={agent.id} agentName={agent.name} api={accounts} />
       ) : null}
       {children}
       {agent.id !== "demo" ? <AgentInstallations agentId={agent.id} onChanged={onRefresh} /> : null}

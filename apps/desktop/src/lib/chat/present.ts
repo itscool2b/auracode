@@ -156,6 +156,7 @@ export function isStartFailure(kind: ErrorKind): boolean {
     case "agent_exited":
       return true;
     case "auth_required":
+    case "usage_limit":
     case "agent_error":
     case "protocol_error":
     case "storage":

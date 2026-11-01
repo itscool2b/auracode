@@ -11,6 +11,7 @@ import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 import { InstallApiContext } from "../lib/setup-actions/api";
 import { WorkspaceStore } from "../lib/workspace";
+import { createAccountsFixture } from "./accountsFixture";
 import { cloneFixture } from "./cloneFixture";
 import { installFixture } from "./installFixture";
 
@@ -151,6 +152,8 @@ const detected = (): AgentEntry[] =>
     index < resolved ? agent : { ...agent, availability: { state: "checking" } },
   );
 const transport = new FakeTransport({
+  // Claude Code's details list one added account; nothing here stores or reads a token.
+  accounts: createAccountsFixture(["Work"]),
   agentsList: async () => {
     const value = detected();
     resolved = Math.min(agents.length, resolved + 1);

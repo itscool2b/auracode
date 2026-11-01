@@ -84,6 +84,10 @@ void appearanceReady.then(() => {
         void import("./dev/agentMarksPreview").then(({ mountAgentMarksPreview }) =>
           mountAgentMarksPreview(container),
         );
+      else if (mode === "accounts")
+        void import("./dev/accountsPreview").then(({ mountAccountsPreview }) =>
+          mountAccountsPreview(container),
+        );
       else if (mode === "questions")
         void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
           mountQuestionsPreview(container),
