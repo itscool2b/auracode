@@ -67,10 +67,10 @@ function machine(build = "old") {
  */
 function fakeSystem(
   paths,
-  { running = false, installCode = 0, staysUp = true, helpers = [] } = {},
+  { running = false, installCode = 0, staysUp = true, helpers = [], writes = true } = {},
 ) {
   const calls = [];
-  const state = { running, helpers: [...helpers], times: 0 };
+  const state = { running, helpers: [...helpers], times: 0, emptyAtInstall: undefined };
   const exe = join(paths.installDir, "auracode.exe");
   return {
     calls,
@@ -92,7 +92,11 @@ function fakeSystem(
     },
     install(installer) {
       calls.push(["install", installer]);
+      // The installer gets an empty install folder, as the real one does.
+      state.emptyAtInstall = existsSync(paths.installDir) && !existsSync(exe);
+      if (!writes) return installCode;
       if (installCode === 0) {
+        mkdirSync(join(paths.installDir, "resources"), { recursive: true });
         writeFileSync(exe, "new");
         writeFileSync(join(paths.installDir, "resources", "notices.txt"), "new");
       } else {
@@ -281,7 +285,26 @@ test("an install keeps the old app, installs, starts the new one and keeps it", 
     system.calls.map((call) => call[0]),
     ["install", "launch"],
   );
+  assert.equal(system.state.emptyAtInstall, true, "the installer found an empty folder");
+  assert.match(
+    log.lines.join("\n"),
+    /Installed auracode\.exe: 3 bytes, sha256 [0-9a-f]{16} \(previous [0-9a-f]{16}\)\./u,
+  );
   assert.match(log.lines.at(-1), /Undo with: rollback --snapshot 20261101-130554/u);
+});
+
+/** The installer exited 0 and wrote its uninstaller, yet the previous binary stayed in place. */
+test("an installer that exits 0 without writing the binary is undone", async () => {
+  const { paths, installer } = machine();
+  const system = fakeSystem(paths, { writes: false });
+  const log = recorder();
+  assert.equal(await install(options({ installer }), paths, system, log), EXIT.failed);
+  assert.equal(readFileSync(join(paths.installDir, "auracode.exe"), "utf8"), "old");
+  assert.match(log.lines.join("\n"), /exited with code 0 but left no auracode\.exe/u);
+  assert.deepEqual(
+    system.calls.map((call) => call[0]),
+    ["install", "launch"],
+  );
 });
 
 test("an install never runs while the app runs", async () => {

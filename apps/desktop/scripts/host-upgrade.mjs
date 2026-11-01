@@ -12,6 +12,7 @@
 // See docs/developing-in-aura.md.
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   copyFileSync,
@@ -238,6 +239,17 @@ function isInstall(dir) {
   return existsSync(join(dir, APP_EXE)) && existsSync(join(dir, UNINSTALLER));
 }
 
+/**
+ * Whether a restore may replace `dir`: it is missing, empty (the folder an installer was handed),
+ * or auracode's own, including the partial install a failed installer leaves. A folder with only
+ * other things in it is somebody else's and stays.
+ */
+function replaceable(dir) {
+  if (!existsSync(dir)) return true;
+  const entries = readdirSync(dir).map((name) => name.toLowerCase());
+  return entries.length === 0 || entries.includes(APP_EXE) || entries.includes(UNINSTALLER);
+}
+
 function snapshots(stateDir) {
   const root = join(stateDir, "snapshots");
   if (!existsSync(root)) return [];
@@ -274,9 +286,17 @@ function move(from, to) {
   }
 }
 
+/** The SHA-256 of a file, in hex. */
+function fileHash(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 /**
- * Keeps the installed app aside, with when and what it was. The original files move into the
- * snapshot, so a restore puts back files Windows already allowed; the installer updates a copy.
+ * Keeps the installed app aside, with when and what it was, and leaves an empty install folder
+ * for the installer. The original files move into the snapshot, so a restore puts back files
+ * Windows already allowed. Nothing is copied back first: an installer that finds a binary in
+ * place can leave it there and still exit 0 (seen on 2026-11-01), while one that finds an empty
+ * folder either writes its binary or leaves none, which `install` checks.
  */
 export function takeSnapshot(paths, installer, now) {
   if (!isInstall(paths.installDir)) {
@@ -291,14 +311,7 @@ export function takeSnapshot(paths, installer, now) {
   mkdirSync(dir, { recursive: true });
   // A file in use stops the move before anything changes.
   move(paths.installDir, app);
-  try {
-    cpSync(app, paths.installDir, { recursive: true });
-  } catch (error) {
-    rmSync(paths.installDir, { recursive: true, force: true });
-    move(app, paths.installDir);
-    rmSync(dir, { recursive: true, force: true });
-    throw error;
-  }
+  mkdirSync(paths.installDir, { recursive: true });
   const exe = statSync(join(app, APP_EXE));
   const record = {
     name,
@@ -306,7 +319,11 @@ export function takeSnapshot(paths, installer, now) {
     installDir: paths.installDir,
     dataDir: paths.dataDir,
     replacedBy: installer,
-    app: { bytes: exe.size, modified: exe.mtime.toISOString() },
+    app: {
+      bytes: exe.size,
+      modified: exe.mtime.toISOString(),
+      sha256: fileHash(join(app, APP_EXE)),
+    },
   };
   writeFileSync(join(dir, "snapshot.json"), `${JSON.stringify(record, null, 2)}\n`);
   return { dir, ...record };
@@ -320,7 +337,7 @@ export function takeSnapshot(paths, installer, now) {
 export function restoreApp(snapshot, installDir, now = new Date()) {
   const app = join(snapshot.dir, "app");
   if (!isInstall(app)) throw new Error(`${snapshot.dir} holds no copy of the app.`);
-  if (existsSync(installDir) && !isInstall(installDir)) {
+  if (!replaceable(installDir)) {
     throw new Error(`${installDir} is not an auracode install; nothing was changed.`);
   }
   const aside = `${installDir}.replaced-${now.getTime()}`;
@@ -482,6 +499,20 @@ export async function install(options, paths, system, log) {
     system.launch(exe);
     return EXIT.failed;
   }
+  // The exit code alone is not proof: an installer can exit 0 without writing the binary.
+  if (!existsSync(exe)) {
+    log(
+      `The installer exited with code 0 but left no ${APP_EXE} in ${paths.installDir}; restoring snapshot ${snapshot.name}.`,
+    );
+    restoreApp(snapshot, paths.installDir, system.now());
+    system.launch(exe);
+    return EXIT.failed;
+  }
+  const hash = fileHash(exe);
+  const same = hash === snapshot.app.sha256 ? ", the same build as before" : "";
+  log(
+    `Installed ${APP_EXE}: ${statSync(exe).size} bytes, sha256 ${hash.slice(0, 16)} (previous ${snapshot.app.sha256.slice(0, 16)}${same}).`,
+  );
   system.launch(exe);
   if (!(await healthy(system, paths.installDir, options.healthSeconds))) {
     log(
