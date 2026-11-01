@@ -454,6 +454,24 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     assert!(!lone.exists());
 }
 
+#[test]
+fn the_profiles_a_cleanup_removes_name_their_agent_accounts_for_their_tokens() {
+    let m = machine();
+    let folder = m.home.join("chosen");
+    data_folder(&folder);
+    write(
+        &folder.join("profiles/local/agent-accounts.json"),
+        r#"{"version":1,"agents":{"claude":{"active":"b","accounts":[{"id":"a","name":"Work","added_at":1},{"id":"b","name":"Home","added_at":2}]}}}"#,
+    );
+    write(
+        &folder.join("profiles/second/agent-accounts.json"),
+        r#"{"version":1,"agents":{"claude":{"accounts":[{"id":"c","name":"Spare","added_at":3}]}}}"#,
+    );
+    write(&folder.join("profiles/broken/agent-accounts.json"), "{");
+    let plan = plan(&Targets::data_folder(folder.clone()), &GitTool::from_path());
+    assert_eq!(agent_account_ids(&plan), ["a", "b", "c"]);
+}
+
 #[tokio::test]
 async fn custom_root_cleanup_removes_clone_journals_and_preserves_destination_repositories() {
     let m = machine();

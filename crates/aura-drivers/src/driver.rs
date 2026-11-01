@@ -341,6 +341,8 @@ pub enum DriverEvent {
     Autonomy(AutonomyState),
     Title(Option<String>),
     AuthRequired(AuthPrompt),
+    /// The agent's account reached its usage limit: its own words, and when the limit resets.
+    UsageLimit(aura_protocol::UsageLimit),
 }
 
 impl DriverEvent {

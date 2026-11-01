@@ -54,6 +54,28 @@ fn explicit_effort(value: &str) -> Option<String> {
 fn auth_required(frame: &Value) -> bool {
     frame["type"] == "result" && frame["api_error_status"].as_u64() == Some(401)
 }
+/// Claude Code's own report that the account's usage limit is reached: the synthetic assistant
+/// message and the turn's result carry `"api_error": "usage_limit_reached"` (seen in 2.1.316).
+fn usage_limited(frame: &Value) -> bool {
+    frame["api_error"] == "usage_limit_reached"
+}
+/// The limit in Claude's own words ("You've hit your 5-hour limit · resets 5:30pm (...)") and when
+/// it resets (`api_error_params.rate_limit_info.resetsAt`, in seconds).
+fn usage_limit(frame: &Value) -> aura_protocol::UsageLimit {
+    let text = frame["message"]["content"]
+        .as_array()
+        .and_then(|blocks| blocks.iter().find_map(|block| block["text"].as_str()))
+        .or_else(|| frame["result"].as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .unwrap_or("Claude's usage limit is reached.");
+    aura_protocol::UsageLimit {
+        message: crate::acp::options::truncate(text, 240),
+        resets_at: frame["api_error_params"]["rate_limit_info"]["resetsAt"]
+            .as_i64()
+            .and_then(|seconds| seconds.checked_mul(1000)),
+    }
+}
 fn auth_error() -> DriverError {
     error(
         ErrorKind::AuthRequired,
@@ -1469,6 +1491,12 @@ impl Session {
                 }),
             }
         }
+        // A subagent's request or background work can meet the limit too: the account is limited
+        // either way, so every report counts, with or without an open turn.
+        if frame["type"] == "assistant" && usage_limited(&frame) {
+            self.outbox
+                .push_back(DriverEvent::UsageLimit(usage_limit(&frame)));
+        }
         if frame["type"] == "result" && self.turn.is_some() {
             let needs_auth = auth_required(&frame);
             let reason = result_reason(&frame, self.translator.main_stop_reason());
@@ -1482,6 +1510,9 @@ impl Session {
                     error: failed.then(|| {
                         if needs_auth {
                             return auth_error();
+                        }
+                        if usage_limited(&frame) {
+                            return error(ErrorKind::UsageLimit, usage_limit(&frame).message);
                         }
                         error(
                             ErrorKind::AgentError,

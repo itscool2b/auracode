@@ -22,6 +22,7 @@ pub mod account_preservation_commands;
 mod account_removal;
 pub mod account_sync;
 pub mod accounts;
+pub mod agent_account_commands;
 pub mod agent_installation_commands;
 pub mod appearance;
 pub mod bindings;

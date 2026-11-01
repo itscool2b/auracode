@@ -623,7 +623,8 @@ fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
         | DriverEvent::Options(_)
         | DriverEvent::Autonomy(_)
         | DriverEvent::Title(_)
-        | DriverEvent::AuthRequired(_)) => untagged,
+        | DriverEvent::AuthRequired(_)
+        | DriverEvent::UsageLimit(_)) => untagged,
     }
 }
 

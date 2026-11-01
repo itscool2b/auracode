@@ -588,6 +588,22 @@ pub struct SessionInfo {
     /// checkpoint put it back in the queue, held.
     #[serde(default)]
     pub sending: Option<session::SendingPrompt>,
+    /// The added account ([`agents::AgentAccount`]) the running agent signed in with. `None`: its
+    /// own sign-in, or nothing runs.
+    #[serde(default)]
+    pub account_id: Option<String>,
+    /// The agent said its usage limit is reached. Cleared when a turn completes or the agent
+    /// starts again, on another account or after the reset.
+    #[serde(default)]
+    pub usage_limit: Option<UsageLimit>,
+}
+
+/// An agent's own report that its account's usage limit is reached.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct UsageLimit {
+    /// The agent's own words ("You've hit your 5-hour limit · resets 5:30pm (America/New_York)").
+    pub message: String,
+    pub resets_at: Option<Millis>,
 }
 
 /// Why queued prompts wait. Prompts go in order: a held prompt waits for the person to send or
@@ -646,6 +662,8 @@ pub enum HoldCause {
     SignIn,
     /// The chat's project or folder was removed.
     WorkspaceRemoved,
+    /// The agent reached its usage limit. Another account, or the reset, continues the chat.
+    UsageLimit,
 }
 
 /// Where a chat's agent is in its life.
@@ -712,6 +730,8 @@ lenient_enum! {
         StartTimeout = "start_timeout",
         ProtocolMismatch = "protocol_mismatch",
         AuthRequired = "auth_required",
+        /// The account the agent runs on reached its usage limit.
+        UsageLimit = "usage_limit",
         AgentError = "agent_error",
         AgentExited = "agent_exited",
         ProtocolError = "protocol_error",
