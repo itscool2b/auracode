@@ -46,7 +46,10 @@ export function preselectAgent(
   return agent?.availability.state === "ready" ? defaultAgent : null;
 }
 
-/** Rust's defaults: full auto, background services on, automatic checkpoints off. */
+/**
+ * Rust's defaults: full auto, background services on, automatic checkpoints off, and Git-ignored
+ * instruction files copied into new worktree chats.
+ */
 export const DEFAULT_GENERAL: GeneralPreferences = {
   default_agent: null,
   default_model: null,
@@ -56,4 +59,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   keep_awake: true,
   close_to_tray: true,
   config_sync_paused: [],
+  copy_instructions_to_worktrees: true,
 };

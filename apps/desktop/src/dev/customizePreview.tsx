@@ -6,6 +6,7 @@ import { WorkspaceStore } from "../lib/workspace";
 import { createInstructionsFixture } from "./instructionsFixture";
 import { pluginFixture } from "./pluginLibraryPreview";
 import { createProjectMemoryFixture } from "./projectMemoryPreview";
+import { createSetupFixture } from "./setupFixture";
 
 const unsupported = async (): Promise<never> => {
   throw new Error("This synthetic preview does not run native operations.");
@@ -51,6 +52,7 @@ export function mountCustomizePreview(container: HTMLElement) {
   });
   const services: CustomizeServices = {
     instructions: createInstructionsFixture("universal").api,
+    setup: createSetupFixture(),
     memory: createProjectMemoryFixture(),
     plugins: {
       api: {

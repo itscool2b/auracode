@@ -1493,6 +1493,12 @@ export type GeneralPreferences = {
 	close_to_tray: boolean,
 	/**  Agents (`claude`, `codex`, `pi`) whose configuration sync is off on this device. */
 	config_sync_paused: string[],
+	/**
+	 *  Copy each source folder's Git-ignored instruction files (a local `AGENTS.md` or
+	 *  `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
+	 *  person turns it off in Instructions.
+	 */
+	copy_instructions_to_worktrees: boolean,
 };
 
 export type GitFileState = {
@@ -2663,7 +2669,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Changing the agent clears the default model, which belongs to the previous agent. */
 { type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
-{ type: "config_sync_agent"; agent_id: string; enabled: boolean };
+{ type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
+/**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
+{ type: "copy_instructions_to_worktrees"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,

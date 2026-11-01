@@ -15,6 +15,8 @@ export interface CustomizeServices {
     "api" | "libraryApi" | "vendorApi" | "mcpApi"
   >;
   readonly instructions?: ComponentProps<typeof InstructionsPanel>["api"];
+  /** The profile's preferences, for Instructions' worktree switch. */
+  readonly setup?: ComponentProps<typeof InstructionsPanel>["setup"];
   readonly memory?: ComponentProps<typeof ProjectMemoryPanel>["api"];
 }
 const SECTIONS = [
@@ -123,6 +125,7 @@ export function CustomizeScreen({
             {target ? (
               <InstructionsPanel
                 api={services?.instructions}
+                setup={services?.setup}
                 initialTarget={target}
                 folders={folders}
                 chatLabel={chatLabel}

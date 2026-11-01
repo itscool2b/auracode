@@ -174,10 +174,26 @@ export function readersSentence(snapshot: InstructionsSnapshot, file: Instructio
   return `Read by ${listNames(names)}.`;
 }
 
-/** An instruction file that new worktree chats will not have, and what can be offered for it. */
-export function worktreeGap(file: InstructionsFile): { commit: boolean } | null {
+/**
+ * An instruction file that new worktree chats will not have, and what can be offered for it.
+ * With `copiesIgnored` (Instructions' worktree switch) a file Git ignores is copied in anyway.
+ */
+export function worktreeGap(
+  file: InstructionsFile,
+  copiesIgnored = false,
+): { commit: boolean } | null {
   if (file.kind === "missing") return null;
   if (file.git === "untracked") return { commit: true };
-  if (file.git === "ignored") return { commit: false };
+  if (file.git === "ignored" && !copiesIgnored) return { commit: false };
   return null;
+}
+
+/** Rust's note for a file Git ignores, true while copying into worktree chats is off. */
+const IGNORED_NOTE = "Ignored by Git, so new worktree chats won't have it.";
+
+/** The note shown with a file: an ignored one says it is copied while the switch is on. */
+export function fileNote(file: InstructionsFile, copiesIgnored: boolean): string | null {
+  if (copiesIgnored && file.git === "ignored" && file.note === IGNORED_NOTE)
+    return "Ignored by Git. New worktree chats get a copy.";
+  return file.note;
 }

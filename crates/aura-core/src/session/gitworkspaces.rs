@@ -138,8 +138,52 @@ impl SessionManager {
             let record=service.profile_record(&id).await.map_err(|error|invalid(error.to_string()))?;
             let folders=if recreate {service.recreate_folders(&record.chat_id,&id).await}else{service.recovery_folders(&record.chat_id,&id).await}.map_err(|error|invalid(error.to_string()))?;
             let _reservations=manager.reserve_git_folders(folders).await?;
-            if recreate {service.recreate_apply(&record.chat_id,&id,&token).await}else{service.recovery_apply(&record.chat_id,&id,&token).await}.map_err(|error|invalid(error.to_string()))
+            let result=if recreate {service.recreate_apply(&record.chat_id,&id,&token).await}else{service.recovery_apply(&record.chat_id,&id,&token).await}.map_err(|error|invalid(error.to_string()))?;
+            if recreate && result.error.is_none() {
+                manager.copy_worktree_instructions_quietly(&result.worktree).await;
+            }
+            Ok(result)
         }).await.map_err(|_|invalid("Recovery stopped unexpectedly. The saved record and retained files remain available for review."))?
+    }
+
+    /// With the profile's switch on (Instructions), copies the source folder's Git-ignored
+    /// instruction files into a worktree this app just created or recreated, before its agent
+    /// starts there. Copying never fails the operation; a problem comes back as a sentence to show
+    /// beside its result.
+    pub(super) async fn copy_worktree_instructions(
+        &self,
+        worktree: &ManagedWorktree,
+    ) -> Option<String> {
+        if !self.worktree_instruction_copies()
+            || worktree.state != aura_protocol::git::WorktreeState::Ready
+        {
+            return None;
+        }
+        let service = self.worktrees().ok()?;
+        let copy = service
+            .copy_ignored_instructions(
+                std::path::Path::new(&worktree.source),
+                std::path::Path::new(&worktree.path),
+            )
+            .await;
+        match copy {
+            Ok((_, problems)) if problems.is_empty() => None,
+            Ok((_, problems)) => Some(format!(
+                "These instruction files were not copied into the worktree: {}.",
+                problems.join(", ")
+            )),
+            Err(error) => Some(format!(
+                "Instruction files were not copied into the worktree: {}.",
+                error.to_string().trim_end_matches('.')
+            )),
+        }
+    }
+
+    /// For results with no place for a warning: the problem goes to the log.
+    async fn copy_worktree_instructions_quietly(&self, worktree: &ManagedWorktree) {
+        if let Some(problem) = self.copy_worktree_instructions(worktree).await {
+            tracing::warn!(%problem, "worktree instruction copy");
+        }
     }
     pub async fn worktree_pr_preview(
         &self,
@@ -243,11 +287,18 @@ impl SessionManager {
                 let _organization = manager.shared().organization.lock().await;
                 let chat = manager.git_chat(&chat_id).await?;
                 let _reservations = manager.reserve_git_folders(vec![chat.folder]).await?;
-                manager
+                let mut result = manager
                     .worktrees()?
                     .isolation_apply(&chat_id, &token)
                     .await
-                    .map_err(|error| invalid(error.to_string()))
+                    .map_err(|error| invalid(error.to_string()))?;
+                if let Some(problem) = manager.copy_worktree_instructions(&result.worktree).await {
+                    result.warning = Some(match result.warning.take() {
+                        Some(warning) => format!("{warning} {problem}"),
+                        None => problem,
+                    });
+                }
+                Ok(result)
             })
             .await
             .map_err(|_| {
@@ -461,8 +512,12 @@ impl SessionManager {
             let folders = service.recreate_folders(&chat_id, &worktree_id).await
                 .map_err(|error| invalid(error.to_string()))?;
             let _reservations = manager.reserve_git_folders(folders).await?;
-            service.recreate_apply(&chat_id, &worktree_id, &token).await
-                .map_err(|error| invalid(error.to_string()))
+            let result = service.recreate_apply(&chat_id, &worktree_id, &token).await
+                .map_err(|error| invalid(error.to_string()))?;
+            if result.error.is_none() {
+                manager.copy_worktree_instructions_quietly(&result.worktree).await;
+            }
+            Ok(result)
         }).await.map_err(|_| invalid("The recreate task ended unexpectedly. Its saved state remains available for review."))?
     }
 

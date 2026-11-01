@@ -328,6 +328,9 @@ pub(crate) struct Shared {
     pub(crate) new_chat_defaults: Mutex<NewChatDefaults>,
     /// Read once at dispatch so changing the preference never changes an in-flight capture.
     pub(crate) automatic_checkpoints: AtomicBool,
+    /// Copy the source folder's Git-ignored instruction files into each new worktree. On by
+    /// default, as the profile preference is.
+    pub(crate) worktree_instruction_copies: AtomicBool,
     /// The model choices each agent reported in this run, by agent id, for Settings.
     pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
@@ -457,6 +460,7 @@ impl SessionManager {
                     worktree_chats: Mutex::new(HashMap::new()),
                     new_chat_defaults: Mutex::new(NewChatDefaults::default()),
                     automatic_checkpoints: AtomicBool::new(false),
+                    worktree_instruction_copies: AtomicBool::new(true),
                     reported_models: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
@@ -1206,6 +1210,19 @@ impl SessionManager {
 
     pub fn automatic_checkpoints(&self) -> bool {
         self.shared().automatic_checkpoints.load(Ordering::Acquire)
+    }
+
+    /// Applies the active profile's choice to worktrees created from now on.
+    pub fn set_worktree_instruction_copies(&self, enabled: bool) {
+        self.shared()
+            .worktree_instruction_copies
+            .store(enabled, Ordering::Release);
+    }
+
+    pub fn worktree_instruction_copies(&self) -> bool {
+        self.shared()
+            .worktree_instruction_copies
+            .load(Ordering::Acquire)
     }
 
     /// The model choices `agent_id` reported the last time one of its chats started in this run.

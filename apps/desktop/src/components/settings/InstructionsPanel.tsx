@@ -7,11 +7,13 @@ import type {
   InstructionsFile,
   InstructionsSnapshot,
   InstructionsTarget,
+  SetupSnapshot,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import {
   editableFiles,
   fileByKey,
+  fileNote,
   GLOBAL,
   type InstructionsApi,
   instructionsApi,
@@ -23,9 +25,10 @@ import {
   targetKey,
   worktreeGap,
 } from "../../lib/instructions";
+import { type SetupApi, setupApi } from "../../lib/setup";
 import { Modal } from "../chat/Modal";
 import { type ReviewChoice, ReviewDialog } from "./InstructionsReview";
-import { Row } from "./SettingsRow";
+import { Row, Switch } from "./SettingsRow";
 import "./instructions.css";
 
 export interface InstructionsFolder {
@@ -57,12 +60,15 @@ type Confirm = { readonly kind: "include" | "commit"; readonly file: Instruction
  */
 export function InstructionsPanel({
   api = instructionsApi,
+  setup = setupApi,
   initialTarget = GLOBAL,
   folders = [],
   chatLabel,
   openOnLoad,
 }: {
   readonly api?: InstructionsApi;
+  /** The profile's preferences, for the worktree switch. */
+  readonly setup?: SetupApi;
   readonly initialTarget?: InstructionsTarget;
   readonly folders?: readonly InstructionsFolder[];
   /** The open chat, when the page was opened for one (its worktree). */
@@ -83,6 +89,42 @@ export function InstructionsPanel({
   const [pending, setPending] = useState<Pending | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
+  // The profile's switch for copying Git-ignored files into new worktree chats; on until read.
+  const [preferences, setPreferences] = useState<SetupSnapshot | null>(null);
+  const [savingCopies, setSavingCopies] = useState(false);
+  const [copiesError, setCopiesError] = useState<string | null>(null);
+  const copiesIgnored = preferences?.preferences.general.copy_instructions_to_worktrees ?? true;
+  useEffect(() => {
+    let live = true;
+    setup.snapshot().then(
+      (next) => {
+        if (live) setPreferences(next);
+      },
+      (failure) => {
+        if (live) setCopiesError(errorMessage(failure));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [setup]);
+  const setCopies = async (enabled: boolean) => {
+    if (!preferences || savingCopies) return;
+    setSavingCopies(true);
+    setCopiesError(null);
+    try {
+      setPreferences(
+        await setup.apply(preferences.preferences.revision, {
+          type: "copy_instructions_to_worktrees",
+          enabled,
+        }),
+      );
+    } catch (failure) {
+      setCopiesError(errorMessage(failure));
+    } finally {
+      setSavingCopies(false);
+    }
+  };
   // Drafts survive switching files and scopes while the page is open; keyed by scope and file.
   const drafts = useRef(new Map<string, { text: string; revision: string | null }>());
   const [, setDraftVersion] = useState(0);
@@ -416,6 +458,37 @@ export function InstructionsPanel({
         ) : null}
       </section>
 
+      <section className="settings-section" aria-labelledby="instructions-worktrees">
+        <h2 id="instructions-worktrees">Worktree chats</h2>
+        <div className="settings-group">
+          <Row
+            title="Copy into new worktree chats"
+            detail={
+              copiesIgnored
+                ? "Instruction files Git ignores, like a local AGENTS.md or CLAUDE.md, are copied into each new worktree chat, so its agents read them too. Files already there are kept."
+                : "New worktree chats get only the instruction files committed to Git."
+            }
+          >
+            <Switch
+              label="Copy instruction files into new worktree chats"
+              testId="instructions-worktree-copies"
+              checked={copiesIgnored}
+              disabled={!preferences || savingCopies}
+              onChange={(enabled) => void setCopies(enabled)}
+            />
+          </Row>
+        </div>
+        <p className="settings-footnote">
+          Files that are new but not ignored are not copied, since an agent could commit them on the
+          chat's branch. Commit them instead.
+        </p>
+        {copiesError ? (
+          <p className="settings-footnote instructions-error" role="alert">
+            {copiesError}
+          </p>
+        ) : null}
+      </section>
+
       {snapshot ? (
         <>
           <section className="settings-section" aria-labelledby="instructions-text">
@@ -448,6 +521,7 @@ export function InstructionsPanel({
                 <FileEditor
                   tabs={!universal && files.length > 1}
                   file={file}
+                  copiesIgnored={copiesIgnored}
                   snapshot={snapshot}
                   text={text}
                   dirty={dirty}
@@ -682,8 +756,11 @@ function FileEditor({
   onInclude,
   onCommit,
   tabs,
+  copiesIgnored,
 }: {
   readonly file: InstructionsFile;
+  /** Instructions' worktree switch: a file Git ignores is copied into new worktree chats. */
+  readonly copiesIgnored: boolean;
   readonly snapshot: InstructionsSnapshot;
   readonly text: string;
   readonly dirty: boolean;
@@ -697,11 +774,11 @@ function FileEditor({
   /** The file tabs above already name the file. */
   readonly tabs: boolean;
 }) {
-  const gap = worktreeGap(file);
+  const gap = worktreeGap(file, copiesIgnored);
   const editable = file.editable;
   const notes: { text: string; volt: boolean }[] = [];
-  if (file.note)
-    notes.push({ text: file.note, volt: !editable || gap !== null || !!file.disk_name });
+  const note = fileNote(file, copiesIgnored);
+  if (note) notes.push({ text: note, volt: !editable || gap !== null || !!file.disk_name });
   if (file.managed)
     notes.push({
       text: file.managed.edited

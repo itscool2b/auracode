@@ -58,10 +58,26 @@ impl GitWorkspaces {
         args.extend(paths.iter().map(OsString::from));
         let status = git.run(folder, args, 1024 * 1024).await?;
         let mut files = parse_status(&status, &prefix);
+        // A folder that is ignored whole is listed once ("!! .claude/"), not file by file.
+        let ignored_folders = files
+            .iter()
+            .filter(|(path, state)| path.ends_with('/') && **state == GitState::Ignored)
+            .map(|(path, _)| path.clone())
+            .collect::<Vec<_>>();
+        files.retain(|path, _| !path.ends_with('/'));
         for path in paths {
-            if !files.contains_key(*path) && folder.join(path).is_file() {
-                files.insert((*path).to_owned(), GitState::Tracked);
+            if files.contains_key(*path) || !folder.join(path).is_file() {
+                continue;
             }
+            let state = if ignored_folders
+                .iter()
+                .any(|ignored| path.starts_with(ignored.as_str()))
+            {
+                GitState::Ignored
+            } else {
+                GitState::Tracked
+            };
+            files.insert((*path).to_owned(), state);
         }
         let inspection = super::inspect::inspect(&git, folder).await.ok();
         let worktree_branch = inspection
@@ -117,6 +133,49 @@ impl GitWorkspaces {
             .run(folder, git::args(&["rev-parse", "--short", "HEAD"]), 256)
             .await?;
         git::text(&head)
+    }
+
+    /// Copies `source`'s instruction files that Git ignores into the new worktree at `worktree`,
+    /// so its agents read what they read in the source folder. Files that are only untracked stay
+    /// out: in a worktree they would be new changes an agent could commit on the chat's branch.
+    /// Create-only, so a file already in the worktree (a setup copy, say) is kept. Returns the
+    /// copied paths and, for each file that could not be copied, why.
+    pub async fn copy_ignored_instructions(
+        &self,
+        source: &Path,
+        worktree: &Path,
+    ) -> Result<(Vec<String>, Vec<String>)> {
+        let paths = aura_config::instructions::project_paths();
+        let facts = self.instruction_facts(source, &paths).await?;
+        let ignored = paths
+            .into_iter()
+            .filter(|path| facts.files.get(*path) == Some(&GitState::Ignored))
+            .collect::<Vec<_>>();
+        if ignored.is_empty() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let ignored = ignored.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        let (from, to) = (source.to_path_buf(), worktree.to_path_buf());
+        let (copied, problems) = tokio::task::spawn_blocking(move || {
+            super::setup_files::copy_known(&from, &to, &ignored)
+        })
+        .await
+        .map_err(|_| GitError::Message("The instruction copy stopped unexpectedly.".into()))??;
+        if copied.is_empty() {
+            return Ok((copied, problems));
+        }
+        // A copy the worktree does not ignore (its rule is in a .gitignore change that is not
+        // committed) would be a change on the chat's branch, so it comes back out. This copy
+        // created it moments ago: create-only, nothing was there before.
+        let paths = copied.iter().map(String::as_str).collect::<Vec<_>>();
+        let facts = self.instruction_facts(worktree, &paths).await?;
+        let (kept, stray): (Vec<_>, Vec<_>) = copied
+            .into_iter()
+            .partition(|path| facts.files.get(path) == Some(&GitState::Ignored));
+        for path in stray {
+            std::fs::remove_file(worktree.join(&path))?;
+        }
+        Ok((kept, problems))
     }
 }
 
@@ -213,6 +272,82 @@ mod tests {
             .unwrap();
         assert_eq!(after.files.get("AGENTS.md"), Some(&GitState::Tracked));
         assert_eq!(after.files.get("GEMINI.md"), Some(&GitState::Modified));
+    }
+
+    #[tokio::test]
+    async fn ignored_instruction_files_reach_a_new_worktree_without_changing_it() {
+        let rig = super::super::tests::rig().await;
+        std::fs::write(
+            rig.work.join(".gitignore"),
+            b"CLAUDE.md\nHERMES.md\n.claude/\n",
+        )
+        .unwrap();
+        rig.git
+            .run(&rig.work, git::args(&["add", "--", ".gitignore"]), 4096)
+            .await
+            .unwrap();
+        rig.git
+            .run(
+                &rig.work,
+                git::args(&["-c", "commit.gpgSign=false", "commit", "-q", "-m", "ignore"]),
+                4096,
+            )
+            .await
+            .unwrap();
+        // GEMINI.md is ignored only by a rule that is not committed yet.
+        std::fs::write(
+            rig.work.join(".gitignore"),
+            b"CLAUDE.md\nHERMES.md\n.claude/\nGEMINI.md\n",
+        )
+        .unwrap();
+        std::fs::write(rig.work.join("CLAUDE.md"), b"Personal.\n").unwrap();
+        std::fs::write(rig.work.join("HERMES.md"), b"Local.\n").unwrap();
+        std::fs::create_dir(rig.work.join(".claude")).unwrap();
+        std::fs::write(rig.work.join(".claude").join("CLAUDE.md"), b"Nested.\n").unwrap();
+        std::fs::write(rig.work.join("GEMINI.md"), b"Rule not committed.\n").unwrap();
+        std::fs::write(rig.work.join("AGENTS.md"), b"Untracked.\n").unwrap();
+        let facts = rig
+            .service
+            .instruction_facts(&rig.work, &aura_config::instructions::project_paths())
+            .await
+            .unwrap();
+        assert_eq!(
+            facts.files.get(".claude/CLAUDE.md"),
+            Some(&GitState::Ignored),
+            "a file in a folder ignored whole is ignored"
+        );
+        assert!(facts.files.keys().all(|path| !path.ends_with('/')));
+        let worktree = super::super::tests::isolated(&rig).await;
+        let worktree = Path::new(&worktree.path);
+        std::fs::write(worktree.join("HERMES.md"), b"Already here.\n").unwrap();
+        let (mut copied, problems) = rig
+            .service
+            .copy_ignored_instructions(&rig.work, worktree)
+            .await
+            .unwrap();
+        copied.sort();
+        assert_eq!(copied, [".claude/CLAUDE.md", "CLAUDE.md"]);
+        assert!(problems.is_empty());
+        assert_eq!(
+            std::fs::read(worktree.join(".claude").join("CLAUDE.md")).unwrap(),
+            b"Nested.\n"
+        );
+        assert_eq!(
+            std::fs::read(worktree.join("HERMES.md")).unwrap(),
+            b"Already here.\n",
+            "an existing file is never overwritten"
+        );
+        for skipped in ["AGENTS.md", "GEMINI.md"] {
+            assert!(
+                !worktree.join(skipped).exists(),
+                "{skipped} would become a change on the chat's branch"
+            );
+        }
+        let view = super::super::inspect::inspect(&rig.git, worktree)
+            .await
+            .unwrap()
+            .view;
+        assert!(view.files.is_empty(), "the worktree shows no new changes");
     }
 
     #[tokio::test]

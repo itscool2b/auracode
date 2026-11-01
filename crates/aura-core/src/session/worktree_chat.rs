@@ -288,6 +288,9 @@ impl SessionManager {
                 }
             }
         }
+        // Instruction files Git ignores (a local AGENTS.md or CLAUDE.md) reach the worktree before
+        // its agent starts, and after setup, so a setup copy of the same file is kept.
+        warnings.extend(self.copy_worktree_instructions(&worktree).await);
         // A pending setup command runs first in its owned terminal; the agent then starts explicitly.
         let started = prepared.setup.is_none()
             || setup
