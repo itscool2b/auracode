@@ -105,7 +105,11 @@ mod tests {
         let target = entry.target();
         assert!(target.starts_with("auracode.agents.v1:"), "{target}");
         assert!(!target.contains("01a1982d"), "{target}");
-        assert_eq!(entry, TokenEntry::new(id).unwrap(), "stable for one account");
+        assert_eq!(
+            entry,
+            TokenEntry::new(id).unwrap(),
+            "stable for one account"
+        );
         assert_ne!(
             entry,
             TokenEntry::new("01a1982d-2146-759a-a84c-cc94c4774f77").unwrap()

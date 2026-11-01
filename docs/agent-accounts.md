@@ -106,6 +106,16 @@ A switch never cuts a turn short. Other chats keep their account until they star
 A chosen account whose token cannot be read fails the start, and the error names the account. It
 never falls back to another account.
 
+**When Claude Code refuses an added account's token** (it expired a year after it was made, was
+revoked, or was mistyped), the usual sign-in card would be wrong: its vendor sign-in signs in
+Claude Code's own account. Instead:
+
+- The message names the refused account.
+- The card offers Continue with the other accounts, and Add account.
+- The failed prompt waits, held.
+
+The chat keeps the id of the account its last start used, so this works after the process stops.
+
 ## Not covered
 
 - **Codex.** Codex keeps each sign-in's threads in that sign-in's home (`CODEX_HOME`). This
@@ -122,10 +132,11 @@ never falls back to another account.
   - Token entry names.
   - The cleanup's account ids.
   - The Claude driver on the frames from a real 5-hour limit.
-  - Two session tests on scripted drivers:
+  - Three session tests on scripted drivers:
     - A limited chat holds its prompt, keeps its process, then continues on another account. The
       restart has the token, has no `ANTHROPIC_API_KEY`, resumes the same session and resends the
       prompt.
+    - A refused token names the account and offers no vendor sign-in.
     - A chosen account without its token never starts.
 - **`check-accounts.mjs`** runs the production components in Chromium and WebKit, light and dark,
   with axe:

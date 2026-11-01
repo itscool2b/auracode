@@ -341,8 +341,8 @@ impl AgentAccountsStore {
     }
 
     fn set_aside(&self) -> Result<Record, AccountError> {
-        let moved =
-            quarantine_file(&self.path).map_err(|error| AccountError::Storage(error.to_string()))?;
+        let moved = quarantine_file(&self.path)
+            .map_err(|error| AccountError::Storage(error.to_string()))?;
         tracing::warn!(path = %moved.display(), "set aside an unreadable agent account list");
         Ok(Record {
             version: VERSION,
@@ -373,7 +373,9 @@ fn unsupported(agent: &str) -> AccountError {
 fn check_name(name: &str) -> Result<String, AccountError> {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if name.is_empty() {
-        return Err(AccountError::Invalid("Name the account, such as Work.".into()));
+        return Err(AccountError::Invalid(
+            "Name the account, such as Work.".into(),
+        ));
     }
     if name.chars().count() > MAX_NAME_CHARS || name.chars().any(char::is_control) {
         return Err(AccountError::Invalid(format!(
@@ -447,17 +449,26 @@ mod tests {
     fn an_added_account_keeps_its_token_in_the_vault_and_runs_once_chosen() {
         let dir = tempfile::tempdir().unwrap();
         let (accounts, vault) = store(dir.path());
-        assert_eq!(accounts.launch("claude").unwrap(), None, "own sign-in at first");
+        assert_eq!(
+            accounts.launch("claude").unwrap(),
+            None,
+            "own sign-in at first"
+        );
         // A copy from a terminal can break the token over lines.
         let split = format!("  {}\n{}  ", &TOKEN[..50], &TOKEN[50..]);
-        let added = accounts.add("claude", "  Work   laptop ", &split, 7).unwrap();
+        let added = accounts
+            .add("claude", "  Work   laptop ", &split, 7)
+            .unwrap();
         let work = &added.accounts[0];
         assert_eq!(work.name, "Work laptop");
         assert_eq!(work.added_at, 7);
         assert_eq!(added.active, None, "adding does not switch");
         assert_eq!(vault.tokens.lock().unwrap()[&work.id], TOKEN);
         let file = std::fs::read_to_string(dir.path().join(FILE)).unwrap();
-        assert!(!file.contains("sk-ant"), "the file names accounts only: {file}");
+        assert!(
+            !file.contains("sk-ant"),
+            "the file names accounts only: {file}"
+        );
         assert_eq!(accounts.launch("claude").unwrap(), None);
 
         let chosen = accounts.activate("claude", Some(&work.id)).unwrap();
@@ -466,7 +477,10 @@ mod tests {
         assert_eq!(launch.account_id, work.id);
         assert_eq!(launch.name, "Work laptop");
         assert_eq!(launch.token, TOKEN);
-        assert!(!format!("{launch:?}").contains("sk-ant"), "Debug never prints the token");
+        assert!(
+            !format!("{launch:?}").contains("sk-ant"),
+            "Debug never prints the token"
+        );
 
         // Reopening reads the same choice.
         let shared: Arc<dyn TokenVault> = vault.clone();
@@ -475,8 +489,14 @@ mod tests {
             again.list("claude").unwrap().active.as_deref(),
             Some(work.id.as_str())
         );
-        assert_eq!(again.name("claude", &work.id).as_deref(), Some("Work laptop"));
-        assert_eq!(AgentAccountsStore::stored_ids(dir.path()), [work.id.clone()]);
+        assert_eq!(
+            again.name("claude", &work.id).as_deref(),
+            Some("Work laptop")
+        );
+        assert_eq!(
+            AgentAccountsStore::stored_ids(dir.path()),
+            vec![work.id.clone()]
+        );
 
         assert_eq!(accounts.activate("claude", None).unwrap().active, None);
         assert_eq!(accounts.launch("claude").unwrap(), None);
@@ -495,7 +515,11 @@ mod tests {
             accounts.remove("claude", &id),
             Err(AccountError::Vault(_))
         ));
-        assert_eq!(accounts.list("claude").unwrap().accounts.len(), 1, "kept to retry");
+        assert_eq!(
+            accounts.list("claude").unwrap().accounts.len(),
+            1,
+            "kept to retry"
+        );
         *vault.fail.lock().unwrap() = false;
         let left = accounts.remove("claude", &id).unwrap();
         assert!(left.accounts.is_empty());
@@ -516,16 +540,27 @@ mod tests {
             ("", TOKEN),
             (&"x".repeat(41), TOKEN),
             ("Work", "sk-ant-oat01-short"),
-            ("Work", "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp"),
+            (
+                "Work",
+                "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp",
+            ),
             ("Work", &format!("{TOKEN}!")),
         ] {
             assert!(
-                matches!(accounts.add("claude", name, token, 1), Err(AccountError::Invalid(_))),
+                matches!(
+                    accounts.add("claude", name, token, 1),
+                    Err(AccountError::Invalid(_))
+                ),
                 "{name:?} {token:?}"
             );
         }
         let api = accounts
-            .add("claude", "Work", "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp", 1)
+            .add(
+                "claude",
+                "Work",
+                "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp",
+                1,
+            )
             .unwrap_err()
             .to_string();
         assert!(api.contains("API key"), "{api}");
@@ -563,9 +598,13 @@ mod tests {
         accounts.activate("claude", Some(&id)).unwrap();
         vault.tokens.lock().unwrap().clear();
         let error = accounts.launch("claude").unwrap_err().to_string();
-        assert!(error.contains("Work") && error.contains("missing"), "{error}");
+        assert!(
+            error.contains("Work") && error.contains("missing"),
+            "{error}"
+        );
 
-        let unavailable = AgentAccountsStore::open(dir.path(), Err("No secure storage here.".into()));
+        let unavailable =
+            AgentAccountsStore::open(dir.path(), Err("No secure storage here.".into()));
         assert!(matches!(
             unavailable.launch("claude"),
             Err(AccountError::Unavailable(_))
@@ -587,13 +626,11 @@ mod tests {
         std::fs::write(dir.path().join(FILE), b"{not json").unwrap();
         assert!(accounts.list("claude").unwrap().accounts.is_empty());
         assert!(
-            std::fs::read_dir(dir.path())
+            std::fs::read_dir(dir.path()).unwrap().any(|entry| entry
                 .unwrap()
-                .any(|entry| entry
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("agent-accounts.json.corrupt-")),
+                .file_name()
+                .to_string_lossy()
+                .starts_with("agent-accounts.json.corrupt-")),
             "the damaged file is preserved"
         );
         std::fs::write(dir.path().join(FILE), br#"{"version":2,"agents":{}}"#).unwrap();

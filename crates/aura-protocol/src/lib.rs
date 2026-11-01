@@ -588,8 +588,8 @@ pub struct SessionInfo {
     /// checkpoint put it back in the queue, held.
     #[serde(default)]
     pub sending: Option<session::SendingPrompt>,
-    /// The added account ([`agents::AgentAccount`]) the running agent signed in with. `None`: its
-    /// own sign-in, or nothing runs.
+    /// The added account ([`agents::AgentAccount`]) the current or last start signed in with.
+    /// `None`: the agent's own sign-in, or no start yet.
     #[serde(default)]
     pub account_id: Option<String>,
     /// The agent said its usage limit is reached. Cleared when a turn completes or the agent

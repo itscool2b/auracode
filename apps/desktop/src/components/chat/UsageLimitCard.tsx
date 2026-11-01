@@ -5,9 +5,10 @@ import { errorMessage } from "../../lib/errors";
 import { AddAccountDialog } from "../setup/AddAccountDialog";
 
 /**
- * The agent said its usage limit is reached. Its own words, then the way on: continue on another
- * account, which starts the agent again on it with the same session and sends the held message,
- * or add one first. Waiting for the reset needs nothing here: Send in the queue retries.
+ * The agent said its usage limit is reached, or (`refused`) it refused an added account's token.
+ * Its own words, then the way on: continue on another account, which starts the agent again on it
+ * with the same session and sends the held message, or add one first. Waiting for a limit's reset
+ * needs nothing here: Send in the queue retries.
  */
 export function UsageLimitCard({
   limit,
@@ -16,15 +17,17 @@ export function UsageLimitCard({
   agentName,
   accountId,
   api,
+  refused = false,
 }: {
   readonly limit: UsageLimit;
   readonly chatId: string;
   readonly agentId: string;
   readonly agentName: string;
-  /** The added account the running agent signed in with; `null`: its own sign-in. */
+  /** The added account the agent last started on; `null`: its own sign-in. */
   readonly accountId: string | null;
   /** Absent for an agent that takes no added accounts. */
   readonly api?: AgentAccountsApi;
+  readonly refused?: boolean;
 }) {
   const [accounts, setAccounts] = useState<AgentAccounts | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,7 +59,11 @@ export function UsageLimitCard({
     }
   };
   return (
-    <div className="chat-block" data-kind="usage-limit" data-testid="usage-limit-card">
+    <div
+      className="chat-block"
+      data-kind={refused ? "account-refused" : "usage-limit"}
+      data-testid={refused ? "account-refused-card" : "usage-limit-card"}
+    >
       <div className="chat-block-head">
         <span className="chat-block-title" data-testid="usage-limit-message">
           {limit.message}
@@ -66,7 +73,9 @@ export function UsageLimitCard({
         {resets ? `${resets} ` : ""}
         {switchable
           ? `Your message waits in the queue. Continue on another account and ${agentName} picks up the same conversation.`
-          : "Your message waits in the queue. Send it again once the limit resets."}
+          : refused
+            ? "Your message waits in the queue."
+            : "Your message waits in the queue. Send it again once the limit resets."}
       </p>
       {api ? (
         <div className="ui-row">

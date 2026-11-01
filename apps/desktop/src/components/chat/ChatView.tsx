@@ -652,7 +652,23 @@ export function ChatView({
                 </button>
               </p>
             ) : null}
-            {state.auth !== null ? (
+            {state.auth !== null &&
+            state.session?.account_id &&
+            takesAccounts(state.chat.agent_id) &&
+            transport.accounts ? (
+              // An added account's token was refused: the vendor sign-in would sign in the
+              // agent's own account, so the way on is another account.
+              <UsageLimitCard
+                key={`refused:${state.session.account_id}`}
+                refused
+                limit={{ message: state.auth.message, resets_at: null }}
+                chatId={chatId}
+                agentId={state.chat.agent_id}
+                agentName={agent?.name ?? state.chat.agent_name}
+                accountId={state.session.account_id}
+                api={transport.accounts}
+              />
+            ) : state.auth !== null ? (
               <ChatAuthCard
                 key={state.chat.agent_id}
                 auth={state.auth}

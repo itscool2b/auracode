@@ -818,9 +818,7 @@ async fn a_usage_limit_is_reported_with_its_reset_and_ends_the_turn_as_one() {
     h.prompt();
     h.wire().await;
     let words = "You've hit your 5-hour limit · resets 5:30pm (America/New_York)";
-    let error_message = |parent: Value| {
-        json!({"type":"assistant","message":{"id":"limit","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":words}]},"parent_tool_use_id":parent,"error":"rate_limit","is_api_error_message":true,"api_error_status":429,"api_error":"usage_limit_reached","api_error_params":{"rate_limit_info":{"status":"rejected","resetsAt":1793572200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"out_of_credits","isUsingOverage":false}}})
-    };
+    let error_message = |parent: Value| json!({"type":"assistant","message":{"id":"limit","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":words}]},"parent_tool_use_id":parent,"error":"rate_limit","is_api_error_message":true,"api_error_status":429,"api_error":"usage_limit_reached","api_error_params":{"rate_limit_info":{"status":"rejected","resetsAt":1793572200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"out_of_credits","isUsingOverage":false}}});
     h.send(error_message(json!("toolu_subagent"))).await;
     h.send(error_message(Value::Null)).await;
     h.send(json!({"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":429,"api_error":"usage_limit_reached","result":words,"user_message_uuid":"t1"})).await;

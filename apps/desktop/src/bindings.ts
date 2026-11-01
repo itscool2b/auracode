@@ -2680,8 +2680,8 @@ export type SessionInfo = {
 	 */
 	sending?: SendingPrompt | null,
 	/**
-	 *  The added account ([`agents::AgentAccount`]) the running agent signed in with. `None`: its
-	 *  own sign-in, or nothing runs.
+	 *  The added account ([`agents::AgentAccount`]) the current or last start signed in with.
+	 *  `None`: the agent's own sign-in, or no start yet.
 	 */
 	account_id?: string | null,
 	/**

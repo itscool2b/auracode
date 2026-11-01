@@ -738,8 +738,9 @@ pub(crate) struct ChatActor {
     limits: Option<Vec<LimitWindow>>,
     last_error: Option<ErrorInfo>,
     auth: Option<AuthPrompt>,
-    /// The added account the current or last start signed in with; shown while a driver runs.
-    account_id: Option<String>,
+    /// The added account (id, name) the current or last start signed in with, so a stopped chat
+    /// still says which account a refusal or a limit belongs to.
+    account: Option<(String, String)>,
     /// The agent's last report that its usage limit is reached, until a turn completes or it
     /// starts again.
     usage_limit: Option<aura_protocol::UsageLimit>,
@@ -872,7 +873,7 @@ impl ChatActor {
             limits: None,
             last_error: None,
             auth: None,
-            account_id: None,
+            account: None,
             usage_limit: None,
             folder_state: FolderState::Ok,
             replay_check,
@@ -3160,7 +3161,9 @@ impl ChatActor {
         self.spec = Some(spec.clone());
         // A new process: its own account, and no limit until it reports one.
         let account = prepared.account.clone();
-        self.account_id = account.as_ref().map(|account| account.account_id.clone());
+        self.account = account
+            .as_ref()
+            .map(|account| (account.account_id.clone(), account.name.clone()));
         self.usage_limit = None;
         let native_start = self
             .continuation
@@ -4258,7 +4261,18 @@ impl ChatActor {
                     self.set_title(title, TitleSource::Agent);
                 }
             }
-            DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
+            DriverEvent::AuthRequired(mut prompt) => {
+                // An added account's token was refused. The vendor's sign-in would sign in the
+                // agent's own account, so it is not offered; another account, or a new token, is.
+                if let Some((_, name)) = &self.account {
+                    prompt.message = format!(
+                        "{} refused the {name} account's token. Tokens last a year and can be revoked. Continue on another account, or remove {name} and add it again.",
+                        self.agent_label()
+                    );
+                    prompt.commands.clear();
+                }
+                self.auth = Some(prompt);
+            }
             DriverEvent::UsageLimit(limit) => {
                 if self.usage_limit.as_ref() != Some(&limit) {
                     self.usage_limit = Some(limit);
@@ -4710,7 +4724,10 @@ impl ChatActor {
         let limited = error
             .as_ref()
             .is_some_and(|error| error.kind == ErrorKind::UsageLimit);
-        if let Some(error) = error.as_ref().filter(|_| limited && self.usage_limit.is_none()) {
+        if let Some(error) = error
+            .as_ref()
+            .filter(|_| limited && self.usage_limit.is_none())
+        {
             // The agent's own limit report usually came first; this covers one that did not.
             self.usage_limit = Some(aura_protocol::UsageLimit {
                 message: self.error_text(&error.message, false),
@@ -5862,10 +5879,7 @@ impl ChatActor {
             revision: self.revision,
             queue_wait: self.compute_queue_wait(),
             sending: self.sending(),
-            account_id: self
-                .driver
-                .as_ref()
-                .and_then(|_| self.account_id.clone()),
+            account_id: self.account.as_ref().map(|(id, _)| id.clone()),
             usage_limit: self.usage_limit.clone(),
         }
     }
@@ -6183,6 +6197,7 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// task, so dropping it (Esc, force stop, Stop, quit) kills a running install or probe. It begins
 /// once no earlier generation of the chat winds down: a process still being killed holds its native
 /// session, which this start may resume.
+#[allow(clippy::too_many_arguments)]
 async fn prepare(
     context: super::workspace_folders::LaunchFolders,
     agent_host: aura_protocol::agents::AgentHost,
@@ -6354,10 +6369,9 @@ fn with_account(
     let mut env = (*env).clone();
     env.vars.retain(|name, _| !replaced(name.as_os_str()));
     launch.set_env.retain(|(name, _)| !replaced(name));
-    launch.set_env.push((
-        CLAUDE_TOKEN_VARIABLE.into(),
-        account.token.clone().into(),
-    ));
+    launch
+        .set_env
+        .push((CLAUDE_TOKEN_VARIABLE.into(), account.token.clone().into()));
     (Arc::new(env), launch)
 }
 
