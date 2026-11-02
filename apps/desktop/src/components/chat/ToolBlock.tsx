@@ -115,6 +115,11 @@ export function ToolBlock({
     display,
     display === "failed" || wasBare.current,
   );
+  useEffect(() => {
+    // Opening a single-call group also opens its output. Keep that choice when a second call
+    // joins, and when virtualization or collapsing the group unmounts this row.
+    if (wasBare.current && expanded) setExpanded(true);
+  }, [expanded, setExpanded]);
   const [outputFocused, setOutputFocused] = useState(false);
   const [moving, setMoving] = useState<"open" | "close" | null>(null);
   const open = bare || expanded || outputFocused || moving === "close";
