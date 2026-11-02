@@ -2676,12 +2676,27 @@
   white-space: nowrap;
 }
 
-/* The account chip: which account the agent signs in with, between access and the model. */
+/*
+ * The account chip: which account the agent signs in with, between access and the model. When the
+ * row is short of room it gives way first: its name truncates, down to the icon alone, before the
+ * access and workflow pills do.
+ */
+.chat-pickers > .chat-account-popover {
+  flex: 0 1 auto;
+  min-width: 34px;
+}
+/* Its pills never shrink, so the group itself must not: shrinking it would only overlap them. */
+.chat-pickers > .chat-access-controls {
+  flex-shrink: 0;
+}
 .chat-account-popover > summary {
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--g-text-meta);
   gap: var(--g-space-6);
 }
 .chat-account-name {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 132px;
   overflow: hidden;
