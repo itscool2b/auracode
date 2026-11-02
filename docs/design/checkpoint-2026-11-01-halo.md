@@ -88,6 +88,11 @@ requests, Settings-to-Customize navigation and the complete Customize suite. Rel
 states ran in light and dark. The website's four static tests and browser suites passed again,
 including dark system preference, no JavaScript, mobile reflow and CSP checks. These are browser
 results, not native material or microphone evidence.
+The five website product-image assets were regenerated from the integrated desktop's settled
+preview, retaining the existing capture framing and glass emulation. The updated screenshot
+shows the grouped tools, hidden reasoning rows and current model/thinking labels. The website
+static and Chromium/WebKit suites passed again against those assets; no website deployment was
+performed as part of this desktop verification.
 
 The integrated Windows x64 debug app, with its production frontend embedded, ran in isolated
 data folders beside the installed host. The stream check received 144 events in 132 frames with
