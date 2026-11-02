@@ -1003,8 +1003,11 @@ export type ChatImagePreview = {
 	height: number,
 };
 
-/**  References are resolved by the backend. The renderer never supplies an attachment hash. */
-export type ChatImageSource = { type: "attachment"; id: string } | { type: "message"; context: ChatImageContext; index: number } | { type: "project"; path: string };
+/**
+ *  Every reference, including a stored content hash, is checked against the chat's ownership
+ *  metadata or confined project folder before the backend reads image bytes.
+ */
+export type ChatImageSource = { type: "stored"; sha256: string } | { type: "attachment"; id: string } | { type: "message"; context: ChatImageContext; index: number } | { type: "project"; path: string };
 
 export type ChatMove = {
 	project_id: string,
