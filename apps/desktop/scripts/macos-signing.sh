@@ -128,7 +128,7 @@ sign_dev_build() {
   else
     set -- --force --sign "$identity" --identifier "$id"
   fi
-  if ! output=$(codesign "$@" "$program" 2>&1); then
+  if ! output=$(codesign "$@" --entitlements "$here/../src-tauri/Entitlements.plist" "$program" 2>&1); then
     say "could not sign this dev build ($output); running it anyway."
   fi
   return 0

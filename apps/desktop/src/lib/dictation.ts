@@ -1,0 +1,180 @@
+import { Channel } from "@tauri-apps/api/core";
+import { commands, type DictationEvent, type DictationModel } from "../bindings";
+import { errorMessage } from "./errors";
+import { settle } from "./ipc";
+
+export interface DictationApi {
+  model(): Promise<DictationModel>;
+  download(id: string, event: (event: DictationEvent) => void): Promise<void>;
+  start(id: string, event: (event: DictationEvent) => void): Promise<void>;
+  stop(id: string): Promise<void>;
+  cancel(id: string): Promise<void>;
+}
+export const dictationApi: DictationApi = {
+  model: () => settle(commands.dictationModel()),
+  download: (id, onmessage) => settle(commands.dictationDownload(id, new Channel(onmessage))),
+  start: (id, onmessage) => settle(commands.dictationStart(id, new Channel(onmessage))),
+  stop: async (id) => {
+    await commands.dictationStop(id);
+  },
+  cancel: async (id) => {
+    await commands.dictationCancel(id);
+  },
+};
+
+export type DictationState =
+  | { state: "idle" | "checking" | "needs_model" | "ready" | "cancelling" }
+  | DictationEvent;
+export function dictationBusy(value: DictationState): boolean {
+  return [
+    "checking",
+    "downloading",
+    "preparing",
+    "recording",
+    "transcribing",
+    "cancelling",
+  ].includes(value.state);
+}
+
+/** Owns one recording/download. Late events and invoke completions cannot edit another chat. */
+export class DictationController {
+  #state: DictationState = { state: "idle" };
+  #listeners = new Set<() => void>();
+  #active: string | null = null;
+  #disposed = false;
+  #generation = 0;
+  constructor(
+    readonly api: DictationApi,
+    readonly insert: (text: string) => void,
+  ) {}
+  readonly subscribe = (listener: () => void) => {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  };
+  readonly getSnapshot = () => this.#state;
+  #set(value: DictationState) {
+    if (this.#disposed) return;
+    this.#state = value;
+    for (const listener of this.#listeners) listener();
+  }
+  async open() {
+    if (dictationBusy(this.#state) || this.#disposed) return;
+    const generation = ++this.#generation;
+    this.#set({ state: "checking" });
+    try {
+      const model = await this.api.model();
+      if (this.#disposed || generation !== this.#generation) return;
+      if (model.installed) await this.start();
+      else this.#set({ state: "needs_model" });
+    } catch (error) {
+      if (generation === this.#generation)
+        this.#set({ state: "failed", message: errorMessage(error) });
+    }
+  }
+  async #run(kind: "download" | "start") {
+    if (this.#active || this.#disposed) return;
+    const id = crypto.randomUUID();
+    this.#active = id;
+    this.#set(
+      kind === "download"
+        ? { state: "downloading", received: 0, total: 147951465 }
+        : { state: "preparing" },
+    );
+    try {
+      await this.api[kind](id, (event) => {
+        if (this.#disposed || this.#active !== id) return;
+        if (
+          this.#state.state === "cancelling" &&
+          !["cancelled", "complete", "failed", "model_ready"].includes(event.state)
+        )
+          return;
+        if (["complete", "cancelled", "failed", "model_ready"].includes(event.state)) {
+          this.#active = null;
+          if (this.#state.state === "cancelling") {
+            this.#set({ state: "idle" });
+            return;
+          }
+        }
+        if (event.state === "complete") {
+          if (event.text.trim()) this.insert(event.text.trim());
+          this.#set({ state: "idle" });
+        } else if (event.state === "model_ready") this.#set({ state: "ready" });
+        else if (event.state === "cancelled") this.#set({ state: "idle" });
+        else this.#set(event);
+      });
+      // The user can cancel/unmount while the native command is still being admitted.
+      if (this.#disposed || this.#active !== id || this.#state.state === "cancelling") {
+        await this.api.cancel(id);
+      }
+    } catch (error) {
+      if (this.#active !== id) return;
+      this.#active = null;
+      this.#set(
+        this.#state.state === "cancelling"
+          ? { state: "idle" }
+          : { state: "failed", message: errorMessage(error) },
+      );
+    }
+  }
+  download() {
+    return this.#run("download");
+  }
+  start() {
+    return this.#run("start");
+  }
+  async stop() {
+    if (!this.#active || this.#state.state !== "recording") return;
+    try {
+      await this.api.stop(this.#active);
+    } catch (error) {
+      this.#set({ state: "failed", message: errorMessage(error) });
+      await this.cancel();
+    }
+  }
+  async cancel() {
+    ++this.#generation;
+    const id = this.#active;
+    if (!id) {
+      this.#set({ state: "idle" });
+      return;
+    }
+    this.#set({ state: "cancelling" });
+    try {
+      await this.api.cancel(id);
+    } catch (error) {
+      this.#set({ state: "failed", message: `Could not stop dictation. ${errorMessage(error)}` });
+    }
+  }
+  dispose() {
+    void this.cancel();
+    this.#disposed = true;
+    this.#active = null;
+    this.#listeners.clear();
+  }
+  activate() {
+    if (this.#disposed) {
+      this.#disposed = false;
+      this.#set({ state: "idle" });
+    }
+  }
+}
+
+/** Use the original selection only if typing has not changed the draft in the meantime. */
+export function insertDictation(
+  current: string,
+  transcript: string,
+  original: string,
+  start: number,
+  end: number,
+): string {
+  const text = transcript.trim();
+  if (!text) return current;
+  const unchanged = current === original;
+  const before = unchanged ? current.slice(0, start) : current;
+  const after = unchanged ? current.slice(end) : "";
+  const left = before && !/\s$/.test(before) ? " " : "";
+  const right = after && !/^\s/.test(after) ? " " : "";
+  return `${before}${left}${text}${right}${after}`;
+}

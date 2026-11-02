@@ -82,6 +82,7 @@ pub struct AppState {
     /// Each webview's current page, for the sinks of its channels.
     pub pages: Arc<Pages>,
     pub catalog_refresh: Arc<crate::catalog_refresh::RefreshGate>,
+    pub dictation: Arc<crate::dictation::Dictation>,
     /// Unlogged terminal sessions, owned by the window that explicitly opened them.
     pub terminals: aura_core::terminal::Terminals,
     /// Lazily loaded setup preferences, available only while this process owns the profile.
@@ -218,6 +219,7 @@ impl AppState {
             quit: Arc::default(),
             pages: Arc::default(),
             catalog_refresh: Arc::default(),
+            dictation: Arc::default(),
             terminals: Default::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
@@ -379,6 +381,7 @@ impl AppState {
         crate::general_preferences::initialize(&chats.manager, &onboarding);
         let mut runtime = lock(&self.runtime);
         self.access.generation.fetch_add(1, Ordering::AcqRel);
+        self.dictation.cancel_all();
         runtime.info.profile = booted.profile;
         runtime.info.db = booted.db;
         runtime.info.profile_locked = false;
@@ -439,6 +442,7 @@ impl AppState {
     /// connection folds SQLite's write-ahead log back into the file; a log left behind tells the
     /// next launch this one did not end cleanly.
     pub fn at_exit(&self) {
+        self.dictation.cancel_all();
         self.terminals.stop_all();
         if self.integrity.close() {
             tracing::info!("the integrity check is still running; it ends with the process");

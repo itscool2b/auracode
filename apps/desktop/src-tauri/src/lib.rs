@@ -40,6 +40,7 @@ pub mod conversation_commands;
 pub mod data_cleanup_commands;
 pub mod deep_links;
 pub mod demo;
+pub mod dictation;
 pub mod error;
 pub mod folder_resolution_commands;
 pub mod general_preferences;
@@ -343,6 +344,7 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     };
     let chats = state.chats();
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
+        state.dictation.drop_owner(owner);
         state.terminals.drop_owner(owner);
         if let Some(vendor) = webview.try_state::<Arc<config_vendor::VendorService>>() {
             vendor.drop_owner(owner);
@@ -393,6 +395,9 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } if label == window::MAIN_WINDOW => {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.dictation.cancel_all();
+            }
             if native_shell::close_to_tray(app) {
                 api.prevent_close();
                 return;
@@ -435,6 +440,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
         ExitRequest::Wait => api.prevent_exit(),
         ExitRequest::StartQuit => {
             api.prevent_exit();
+            state.dictation.cancel_all();
             state.terminals.close_non_project();
             if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
                 clones.cancel_all();
