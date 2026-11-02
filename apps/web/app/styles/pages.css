@@ -1,30 +1,12 @@
 /*
- * Inner pages: one glass sheet over a soft halo. The title is two-tone (ink, then the grey serif)
- * and stands on its own; nothing sits above it.
+ * Inner pages: glass sheets on paper. The title is two-tone (ink, then the grey serif) and stands
+ * on its own; nothing sits above it.
  */
 .page {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   padding: 88px 0 152px;
-}
-
-.page::before {
-  content: "";
-  position: absolute;
-  top: -260px;
-  left: 50%;
-  z-index: -1;
-  width: min(1300px, 140%);
-  aspect-ratio: 2.2 / 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side at 34% 50%, rgb(240 140 100 / 0.2), transparent),
-    radial-gradient(closest-side at 66% 46%, rgb(111 139 255 / 0.18), transparent),
-    radial-gradient(closest-side at 50% 70%, rgb(71 245 138 / 0.1), transparent);
-  filter: blur(30px);
-  translate: -50% 0;
-  pointer-events: none;
 }
 
 .frame {

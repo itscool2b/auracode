@@ -22,7 +22,7 @@ import { SpriteMark } from "./Sprite";
 /**
  * One session handed from agent to agent: each turn is a real kind of work (an edit, a test run, a
  * search) and each handoff is the app's own "Next message includes a handoff" flow. The hero's
- * headline and halo follow whichever agent is working.
+ * headline follows whichever agent is working.
  */
 interface Turn {
   readonly agent: AgentBrandId;
@@ -166,7 +166,7 @@ function advance(state: HandoffState): HandoffState {
 
 const turnAt = (k: number): Turn => TURNS[(k + TURNS.length) % TURNS.length] ?? (TURNS[0] as Turn);
 
-/** The agent the headline and the halo follow: the one whose turn is newest in the transcript. */
+/** The agent the headline follows: the one whose turn is newest in the transcript. */
 export function workingAgent(state: HandoffState): AgentBrandId {
   const before = state.phase === "pick" || state.phase === "type";
   return turnAt(before ? state.k - 1 : state.k).agent;

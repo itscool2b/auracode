@@ -1,5 +1,5 @@
 import { AGENT_BRANDS } from "@auracode/ui";
-import { type CSSProperties, useRef } from "react";
+import { useRef } from "react";
 import { Arrow } from "../ui";
 import { AgentRoll } from "./AgentRoll";
 import { HeroWindow, useHandoffLoop, workingAgent } from "./HeroWindow";
@@ -7,24 +7,15 @@ import { Marquee } from "./Marquee";
 
 /**
  * "One window for" the agent at work. The glass window below replays one session handed from
- * agent to agent; the name in the headline and the halo behind the window follow it.
+ * agent to agent; the name in the headline follows it.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
   const state = useHandoffLoop(stage);
   const agent = AGENT_BRANDS[workingAgent(state)];
-  const halo = {
-    "--halo-a": agent.glow,
-    "--halo-b": agent.palette[2],
-  } as CSSProperties;
 
   return (
-    <section className="hero" aria-labelledby="hero-title" style={halo} data-zone="">
-      <div className="halo" aria-hidden="true">
-        <span className="halo-core" />
-        <span className="halo-bloom" />
-        <span className="halo-rays" />
-      </div>
+    <section className="hero" aria-labelledby="hero-title" data-zone="">
       <div className="hero-copy wrap">
         <h1 id="hero-title" className="hero-title" aria-label="One window for your coding agents">
           <span className="hero-line" aria-hidden="true">
@@ -49,7 +40,7 @@ export function Hero() {
         </div>
       </div>
       <div className="hero-stage" ref={stage}>
-        <div className="hero-detail" aria-hidden="true" data-glint="">
+        <div className="hero-detail" aria-hidden="true">
           <div className="hero-tilt">
             <HeroWindow state={state} />
           </div>

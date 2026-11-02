@@ -8,9 +8,6 @@
   position: relative;
   isolation: isolate;
   padding: 64px 0 0;
-  transition:
-    --halo-a 1600ms var(--s-swift),
-    --halo-b 1600ms var(--s-swift);
 }
 
 .hero-copy {
@@ -203,123 +200,6 @@
   }
 }
 
-/*
- * The halo: the working agent's light behind the window, crossfading as agents hand off. It sits
- * behind the whole hero, brightest where the window rises, so the window's glass picks it up.
- */
-.halo {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 0;
-  height: min(1500px, 100%);
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.halo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: var(--s-grain);
-  opacity: 0.28;
-  mix-blend-mode: soft-light;
-  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 45%, #000, transparent 75%);
-  mask-image: radial-gradient(ellipse 60% 55% at 50% 45%, #000, transparent 75%);
-}
-
-.halo-core,
-.halo-bloom,
-.halo-rays {
-  position: absolute;
-  left: 50%;
-  top: 640px;
-  border-radius: 50%;
-  translate: -50% -50%;
-}
-
-.halo-core {
-  width: min(1500px, 130%);
-  aspect-ratio: 1.9 / 1;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--halo-a) 88%, transparent),
-    color-mix(in oklab, var(--halo-a) 46%, transparent) 42%,
-    color-mix(in oklab, var(--halo-a) 12%, transparent) 72%,
-    transparent 100%
-  );
-  animation: halo-drift 16s ease-in-out infinite alternate;
-}
-
-.halo-bloom {
-  top: 760px;
-  width: min(900px, 90%);
-  aspect-ratio: 1.5 / 1;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--halo-b) 70%, transparent),
-    transparent 100%
-  );
-  mix-blend-mode: multiply;
-  opacity: 0.7;
-  animation: halo-sway 22s ease-in-out infinite alternate;
-}
-
-.hero-copy,
-.hero-stage,
-.marquee-block {
-  z-index: 1;
-}
-
-.halo-rays {
-  top: 0;
-  width: 140%;
-  aspect-ratio: 2 / 1;
-  border-radius: 0;
-  translate: -50% -12%;
-  background: conic-gradient(
-    from 180deg at 50% 0%,
-    transparent 0deg,
-    color-mix(in oklab, var(--halo-a) 16%, transparent) 150deg,
-    transparent 166deg,
-    color-mix(in oklab, var(--halo-a) 12%, transparent) 180deg,
-    transparent 196deg,
-    color-mix(in oklab, var(--halo-b) 14%, transparent) 210deg,
-    transparent 360deg
-  );
-  -webkit-mask-image: radial-gradient(ellipse 50% 70% at 50% 0%, #000, transparent 80%);
-  mask-image: radial-gradient(ellipse 50% 70% at 50% 0%, #000, transparent 80%);
-  animation: rays-sway 26s ease-in-out infinite alternate;
-}
-
-@keyframes halo-drift {
-  from {
-    transform: translateX(-3%) scale(1);
-  }
-  to {
-    transform: translateX(3%) scale(1.06);
-  }
-}
-
-@keyframes halo-sway {
-  from {
-    transform: translate(-14%, 10%) scale(1);
-  }
-  to {
-    transform: translate(16%, -6%) scale(1.12);
-  }
-}
-
-@keyframes rays-sway {
-  from {
-    transform: rotate(-4deg);
-  }
-  to {
-    transform: rotate(4deg);
-  }
-}
-
 /* ------------------------------------------------------------------------------- marquee */
 
 .marquee-block {
@@ -378,9 +258,9 @@
 .marquee-item:hover {
   transform: translateY(-3px);
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.06),
+    inset 0 0 0 1px rgb(10 10 11 / 0.08),
     inset 0 1px 0 #ffffff,
-    0 14px 34px -12px color-mix(in oklab, var(--glow) 75%, transparent);
+    0 12px 28px -14px rgb(10 10 11 / 0.3);
 }
 
 .marquee-note {
@@ -411,18 +291,6 @@
   position: relative;
   margin-top: 64px;
   perspective: 2400px;
-}
-
-.product-glow {
-  position: absolute;
-  inset: 8% 8% -10%;
-  z-index: -1;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side at 30% 50%, rgb(240 140 100 / 0.22), transparent),
-    radial-gradient(closest-side at 72% 46%, rgb(111 139 255 / 0.2), transparent),
-    radial-gradient(closest-side at 50% 80%, rgb(71 245 138 / 0.12), transparent);
-  filter: blur(36px);
 }
 
 .product-frame {
@@ -851,24 +719,6 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   text-align: center;
 }
 
-.finale-halo {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1000px;
-  aspect-ratio: 1.6 / 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side at 40% 50%, rgb(240 140 100 / 0.34), transparent),
-    radial-gradient(closest-side at 62% 52%, rgb(111 139 255 / 0.28), transparent),
-    radial-gradient(closest-side at 50% 60%, rgb(255 95 196 / 0.14), transparent);
-  filter: blur(40px);
-  pointer-events: none;
-  translate: calc(var(--fx, 50vw) - 50%) calc(var(--fy, 55%) - 50%);
-  transition: translate 1400ms var(--s-glide);
-  animation: halo-drift 18s ease-in-out infinite alternate;
-}
-
 .finale-inner {
   position: relative;
   display: flex;
@@ -917,12 +767,8 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   .hero-lead,
   .hero-actions,
   .hero-detail,
-  .halo-core,
-  .halo-bloom,
-  .halo-rays,
   .marquee-track,
   .callout-dot::after,
-  .finale-halo,
   .roll-in,
   .roll-out {
     animation: none;
@@ -944,8 +790,6 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     display: none;
   }
 
-  .hero,
-  .finale-halo,
   .roll[data-measured] {
     transition: none;
   }

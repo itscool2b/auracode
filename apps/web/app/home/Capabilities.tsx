@@ -431,7 +431,6 @@ function AgentRow({ onPoint }: { onPoint: (agent: AgentBrandId | null) => void }
       {AGENTS.map((agent) => (
         <li
           key={agent}
-          style={{ "--glow": AGENT_BRANDS[agent].glow } as CSSProperties}
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") onPoint(agent);
           }}
@@ -448,50 +447,42 @@ const ITEMS: readonly {
   id: string;
   title: string;
   text: string;
-  /** The halo colour behind this view: a brand glow, so the band changes light with the row. */
-  glow: string;
   view: (pointed: AgentBrandId | null) => ReactNode;
 }[] = [
   {
     id: "agents",
     title: "Your agents, as they are",
     text: "Claude Code, Codex, Cursor and six more run through their own harnesses and sign-ins, plus any agent that speaks ACP.",
-    glow: AGENT_BRANDS["claude-code"].glow,
     view: (pointed) => <AgentsView pointed={pointed} />,
   },
   {
     id: "handoff",
     title: "Switch agents mid-chat",
     text: "Hand the chat to another agent at any turn. The handoff stays in view, so you always know who did what.",
-    glow: AGENT_BRANDS.codex.glow,
     view: () => <HandoffView />,
   },
   {
     id: "checkpoint",
     title: "Optional file checkpoints",
     text: "Turn on automatic checkpoints in Settings to save files before each message and restore selected files later. Saving adds a delay before sending. Your Git index and branches stay untouched.",
-    glow: AGENT_BRANDS.opencode.glow,
     view: () => <CheckpointView />,
   },
   {
     id: "autonomy",
     title: "Full auto by default",
     text: "Agents edit and run commands without stopping to ask. Switch a chat to Auto-edit or Ask whenever you want a say.",
-    glow: AGENT_BRANDS.antigravity.glow,
     view: () => <AutonomyView />,
   },
   {
     id: "queue",
     title: "Queue and steer",
     text: "Type while a turn runs. Your next message waits in a queue, or steers the turn already under way.",
-    glow: AGENT_BRANDS.hermes.glow,
     view: () => <QueueView />,
   },
   {
     id: "sessions",
     title: "Several chats at once",
     text: "Start a chat for each task and let them run side by side. When one needs you, it waits in the Needs you inbox.",
-    glow: AGENT_BRANDS["oh-my-pi"].glow,
     view: () => <SessionsView />,
   },
 ];
@@ -573,19 +564,14 @@ export function Capabilities() {
     });
   }, [active, reduced]);
 
-  const current = ITEMS[active] ?? ITEMS[0];
-
   return (
     <section
       className="section caps night"
       id="capabilities"
       aria-labelledby="caps-title"
       data-zone=""
-      style={{ "--caps-glow": current?.glow } as CSSProperties}
     >
-      <div className="caps-sky" aria-hidden="true">
-        <span className="caps-glow" />
-      </div>
+      <div className="caps-sky" aria-hidden="true" />
       <div className="wrap">
         <h2 id="caps-title" className="title">
           <Words text="Built for long turns." />{" "}
@@ -665,7 +651,7 @@ export function Capabilities() {
               ))}
             </div>
           </div>
-          <div className="caps-view" aria-hidden="true" data-glint="">
+          <div className="caps-view" aria-hidden="true">
             {ITEMS.map((item, i) => (
               <div key={item.id} className={i === active ? "m-scene is-active" : "m-scene"}>
                 {item.view(pointed)}

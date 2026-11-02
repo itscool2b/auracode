@@ -26,8 +26,7 @@ export function Product() {
         </p>
       </div>
       <div className="product-stage wrap-wide">
-        <div className="product-glow" aria-hidden="true" />
-        <figure className="product-frame" data-reveal="trigger" data-glint="">
+        <figure className="product-frame" data-reveal="trigger">
           <picture>
             <source
               type="image/webp"

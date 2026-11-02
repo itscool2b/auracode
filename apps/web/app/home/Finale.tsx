@@ -2,18 +2,12 @@ import { Words } from "../reveal";
 import { Arrow } from "../ui";
 
 /**
- * The night band's last word before the footer: one line, one action, and a halo that drifts
- * toward the pointer (enhance.tsx). The footer continues the same night below it.
+ * The night band's last word before the footer: one line and one action. The footer continues
+ * the same night below it.
  */
 export function Finale() {
   return (
-    <section
-      className="section finale night"
-      aria-labelledby="finale-title"
-      data-follow=""
-      data-zone=""
-    >
-      <div className="finale-halo" aria-hidden="true" />
+    <section className="section finale night" aria-labelledby="finale-title">
       <div className="wrap finale-inner">
         <h2 id="finale-title" className="finale-title">
           <Words text="Your agents." />{" "}
