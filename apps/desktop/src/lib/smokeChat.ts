@@ -363,6 +363,57 @@ async function send(prompt: string, via: "button" | "enter" = "button"): Promise
   });
 }
 
+/** Exercise the real paste handler, native normalization and chat-owned preview IPC. */
+async function pasteSmokeImage(): Promise<void> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 24;
+  const paint = canvas.getContext("2d");
+  if (!paint) throw new StepError("the smoke image could not be drawn");
+  paint.fillStyle = "#2468ac";
+  paint.fillRect(0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new StepError("no smoke PNG")))),
+  );
+  const clipboard = new DataTransfer();
+  clipboard.items.add(new File([blob], "Smoke image.png", { type: "image/png" }));
+  const input = one("composer-input");
+  if (!input) throw new StepError("the composer is missing before image paste");
+  input.dispatchEvent(
+    new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }),
+  );
+  await checkImagePreview(document, ".composer-context .chat-image-open");
+}
+
+/** Open the thumbnail and confirm that the native full preview decodes and restores focus. */
+async function checkImagePreview(within: ParentNode, selector = ".chat-image-open"): Promise<void> {
+  const trigger = await waitFor("the native image thumbnail to decode", () => {
+    const button = within.querySelector<HTMLButtonElement>(selector);
+    const image = button?.querySelector("img");
+    return image?.complete && image.naturalWidth === 32 && image.naturalHeight === 24
+      ? button
+      : null;
+  });
+  trigger.focus();
+  click(trigger, "the image thumbnail");
+  const dialog = await waitFor("the native full image to decode", () => {
+    const node = document.querySelector<HTMLDialogElement>("dialog.chat-image-dialog[open]");
+    const image = node?.querySelector("img");
+    return image?.complete && image.naturalWidth === 32 && image.naturalHeight === 24 ? node : null;
+  });
+  click(dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]'), "Close image");
+  await waitFor(
+    "the image dialog to close and return focus",
+    () => !dialog.isConnected && document.activeElement === trigger,
+  );
+}
+
+async function checkSentImage(): Promise<void> {
+  const user = await revealTranscriptItem(PROMPTS.echo, "user");
+  await checkImagePreview(user);
+  one("jump-latest")?.click();
+}
+
 /** The newest turn of `prompt`, as the page shows it now. */
 function turnOf(prompt: string): SegmentView | null {
   const turns = readTranscript().filter(
@@ -862,12 +913,14 @@ async function chatScenario(
   });
 
   await checks.run("echo-turn", async () => {
+    await pasteSmokeImage();
     await send(PROMPTS.echo, "enter");
     const ended = await waitTurnEnded(PROMPTS.echo);
     expectSegment(ended, echoTurn(PROMPTS.echo));
     expectReply(ended, echoed(PROMPTS.echo));
     if (one("turn-footer", ended.element) === null) throw new StepError("the turn has no footer");
-    return `Enter sent it; the reply read "${echoed(PROMPTS.echo)}" and the turn ended end_turn`;
+    await checkSentImage();
+    return `Enter sent the pasted image and prompt; native thumbnails and full previews decoded before and after sending; the reply read "${echoed(PROMPTS.echo)}" and the turn ended end_turn`;
   });
 
   await checks.run("demo-turn", async () => {
@@ -1298,7 +1351,9 @@ async function reopenScenario(
 
   await checks.run("reopen-history", async () => {
     await waitFor("the stored history", () => readTranscript().length > 0);
-    return `the stored history renders ${await expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit])}`;
+    const transcript = await expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit]);
+    await checkSentImage();
+    return `the stored history renders ${transcript}; the saved image thumbnail and full preview decode after reopening`;
   });
 
   await checks.run("reopen-interrupted", async () => {
