@@ -2275,6 +2275,12 @@
 .chat-model-popover {
   margin-left: auto;
 }
+
+/* The pill ends the composer's row, so its tip opens from its right edge and stays inside. */
+.chat-model-popover > summary[data-tip]::after {
+  right: 0;
+  left: auto;
+}
 .chat-access-controls {
   display: flex;
   align-items: center;
