@@ -69,18 +69,52 @@ shape rule covers the rest. Commands never return a token, and errors never cont
 
 ## Choosing and switching
 
-**On the Agents page,** Claude Code's details show:
+Claude Code's own sign-in (`/login`) is called **Main account** beside the added ones.
 
-- **Account:** which account chats sign in with when they start.
-- **The added accounts,** each with Remove (it asks once more).
-- **Add account,** which:
-  1. Opens a dialog with three steps.
-  2. Runs `claude setup-token` in the owned terminal sheet after its separate Start.
-  3. Takes a name and the pasted token. The token is checked for the `sk-ant-oat` shape; line
-     breaks a terminal copy adds are removed, and an API key is refused by name.
+**In the composer,** a Claude Code chat shows the account it runs on, between access and the
+model picker. Its menu lists Main account and every added account, each with the usage it last
+reported, then Add account and Manage (the Agents page).
 
-A running chat keeps the account it started on until it starts again. Choosing an account never
-restarts anything.
+- **Choosing another account** starts the chat's agent again on it, resuming the same session, and
+  sends any held messages. A chat without a process only notes it, so its next start uses it.
+- **A running turn** keeps its account: the rows are disabled until it ends or is stopped.
+- **The choice is also the account new chats start on.** auracode keeps one account per agent, not
+  one per chat: chats sync between devices, and accounts and tokens stay on this one. Other chats
+  keep the account they run on until they start again; after a restart they use the new choice.
+
+**On the Agents page,** Claude Code's details list Main account and the added accounts together.
+The one new chats start on says "Used by new chats"; the others have Use. Added accounts have
+Remove (it asks once more). Each row shows the account's usage.
+
+**Add account** (from the composer, the limit card or the Agents page) is one Sign in:
+
+1. The dialog suggests a name ("Account 2") and says that the browser approves whichever Claude
+   account it is signed in to on claude.ai.
+2. Sign in runs `claude setup-token` in the owned terminal sheet straight away.
+3. Once the browser approves it, the token it prints is read off the rendered terminal (its screen
+   and scrollback, so wrapping is already resolved) and goes to Rust and secure storage. The token
+   is checked for the `sk-ant-oat` shape; an API key is refused by name.
+4. Added from a chat, the chat moves to the new account at once.
+
+When the token is not picked up, the dialog opens "Paste a token instead" with the token field; line
+breaks a terminal copy adds are removed.
+
+## Usage per account
+
+Agents report the limit windows of the account they run on: Claude Code's `get_usage` gives its
+session (5 hours), weekly and per-model weeks; Codex reports its primary and secondary windows. The
+session records each report in a usage book per agent and account, with when it came, so every
+account's usage shows, not only the one a chat runs on now.
+
+- A local profile keeps the book in `agent-usage.json`: percentages and reset times only, never a
+  token, name or email. An account profile keeps it in memory.
+- A removed account's usage is removed with it.
+- The composer's account rows show one line of shares ("5 hours 42% · 7 days 81%"). The Agents page
+  shows each window as a meter with its share and reset, and when it was reported. A full window
+  shows in the warning colour. Agents without added accounts, such as Codex, show their own
+  sign-in's usage.
+- An account no chat has run on yet shows no usage until one does. A usage check that starts
+  Claude Code on an idle account is not built.
 
 **When Claude Code reports its usage limit,** the Claude driver passes it on as the limit with its
 reset time. Claude Code 2.1.316 marks both its own limit message and the turn's result with
@@ -91,7 +125,7 @@ reset time. Claude Code 2.1.316 marks both its own limit message and the turn's 
 - **No assistant message.** Claude Code's own limit text does not appear as one; the failed turn's
   error card carries it.
 - **The chat shows a card** with Claude Code's words and:
-  - Continue with each other account, including Claude Code's own sign-in when the chat ran on an
+  - Continue with each other account, including the main account when the chat ran on an
     added one.
   - Add account.
 
@@ -140,10 +174,13 @@ The chat keeps the id of the account its last start used, so this works after th
     - A chosen account without its token never starts.
 - **`check-accounts.mjs`** runs the production components in Chromium and WebKit, light and dark,
   with axe:
-  - Add account, with its token sheet, a refused API key and a token broken over two lines.
-  - The choice, and Remove.
-  - The limit card's switch.
-  - The no-secure-storage case.
-  - The Agents page.
+  - The composer's account picker: switching an idle chat, rows disabled during a turn, and each
+    account's usage line.
+  - Add account from the composer: one Sign in, the wrapped token picked up, the chat moved to it.
+  - The paste fallback: a refused API key and a token broken over two lines.
+  - The Agents page list: usage meters, Use for new chats, and Remove.
+  - The limit card's switch, and the no-secure-storage case.
+- **Unit:** the token reader on wrapped, padded, redrawn and partial output; the shared accounts
+  state; the usage book's per-account records across restarts.
 - **Not covered:** no real token or Claude subscription was used. A real account switch is the
   owner's to try.
