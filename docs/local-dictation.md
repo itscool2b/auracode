@@ -35,13 +35,33 @@ callback bridge avoids whisper-rs 0.16.0's unsafe closure-type cast in its safe 
 its leaked callback allocations. Callback storage lives only for one synchronous inference call;
 cancel intent remains separate from UI errors, so a failed cancel request cannot insert late text.
 
-Building the native dependency adds CMake and LLVM/libclang to the existing C++ toolchain
+Building the native dependency adds CMake 3.15 or newer and LLVM/libclang to the existing C++ toolchain
 requirements. Windows MSVC needs `cmake` on PATH and `LIBCLANG_PATH` pointing to the directory
 containing `libclang.dll`. Visual Studio's Desktop development with C++ and LLVM components provide
 the compiler and libclang. macOS needs CMake and the Xcode command line tools. These tools are
 build dependencies only. The repository's Cargo config disables build-host CPU instruction
-selection so Windows and macOS bundles do not inherit the build machine's AVX requirements.
+selection and explicitly disables AVX, AVX2, BMI2, SSE4.2, FMA, and F16C so Windows and macOS x64
+bundles do not inherit the build machine's instruction requirements.
 Windows x64/ARM64 and universal macOS remain the release targets. Linux/WSL remain deferred.
+
+Windows ARM64 needs a separate native compiler setup before its existing release matrix job can
+build this dependency: whisper.cpp 1.8.3 rejects ARM with MSVC's `cl.exe` and requires Clang.
+The pinned cmake-rs also supplies `-Thost=x64`, so setting `CMAKE_GENERATOR_TOOLSET=ClangCL` alone
+conflicts with that argument. The current matrix has no ARM64 Clang setup. This host has no
+ARM64 MSVC libraries, and neither an ARM64 build nor a macOS build has been verified here;
+no CI run was dispatched for this work. A successful Windows x64 bundle does not close those
+platform checks.
+
+On MSVC, the Cargo config also selects CMake's `CMP0091=NEW` and
+`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded` for whisper.cpp. This statically links its C/C++ runtime
+as well as Whisper/GGML, so the installer needs no Visual C++ Redistributable, Whisper DLL, or
+OpenMP DLL. It does not change Rust's CRT flags. CMake ignores the runtime selection on other
+platforms. A prior warm target may retain Whisper's dynamic-runtime objects because its upstream
+build script does not track these environment values. Move aside only that dependency's build
+output and matching run-build fingerprint directories before the first rebuild after changing
+them, preserving compiled build-script binaries. Check the actual bundled
+executable's imports with `dumpbin /DEPENDENTS`; it must not import `MSVCP*.dll`, `VCRUNTIME*.dll`,
+`VCOMP*.dll`, or Whisper/GGML DLLs. Windows system and Universal CRT API-set DLLs are expected.
 
 macOS bundles include `NSMicrophoneUsageDescription` and the hardened-runtime audio-input
 entitlement. The local signing helper preserves that entitlement. Windows uses the system's
@@ -78,3 +98,14 @@ permission behavior. To repeat it, place the [upstream WAV](https://github.com/g
 in a temporary directory, set `AURACODE_DICTATION_FIXTURE_DIR` to that directory, and run
 `cargo test -p auracode-desktop --lib offline_model_fixture -- --ignored --nocapture`.
 The test downloads the model if absent and reuses the verified local copy on subsequent runs.
+The file must be named `jfk.wav` and retain the upstream 16 kHz mono signed 16-bit PCM format;
+this small test reader is not a general WAV decoder. The model is stored below the fixture root
+at `models/dictation/ggml-base.bin`, separate from the installed app's model. The fixture verifies
+an expected English phrase and cancels a second inference after 250 ms. It does not measure a
+cancellation latency bound, multilingual accuracy, microphone capture, or two-minute recordings.
+
+The Windows runtime fix was checked with a fresh Whisper rebuild, all eight targeted dictation
+unit tests, and the optional pinned-model fixture, which passed in 40.6 seconds on this host.
+The actual debug app rebuilt successfully, and `dumpbin /DEPENDENTS` showed only Windows system
+and Universal CRT API-set DLLs, with no MSVCP, VCRUNTIME, VCOMP, Whisper, or GGML DLL imports.
+The release installer's own payload still needs the same import inspection before distribution.
