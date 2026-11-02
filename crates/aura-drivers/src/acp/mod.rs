@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aura_process::{
-    ExitInfo, LineSource, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProcessControl, ProtocolLog,
+    ExitInfo, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProcessControl, ProtocolLog,
     STDERR_TAIL_BYTES, ShutdownPlan, ShutdownReport, SpawnError, SpawnSpec, SpawnedProcess,
     StdoutItem, TopKeys,
 };
@@ -595,7 +595,7 @@ struct Session {
     dialect: Box<dyn AcpDialect>,
     spawn_id: String,
     rpc: RpcOut,
-    stdout: LineSource,
+    stdout: crate::incoming_images::ImageLineSource,
     stdout_done: bool,
     control: ProcessControl,
     exit_wait: BoxFuture<'static, ExitInfo>,
@@ -781,7 +781,10 @@ impl Session {
             cursor_updates: vendor_updates::CursorUpdates::default(),
             spawn_id,
             rpc: RpcOut::new(io.stdin, true),
-            stdout: io.stdout,
+            stdout: crate::incoming_images::ImageLineSource::new(
+                io.stdout,
+                setup.attachment_writer.clone(),
+            ),
             stdout_done: false,
             control,
             exit_wait,

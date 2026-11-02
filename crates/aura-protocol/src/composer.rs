@@ -57,3 +57,46 @@ pub struct ProjectFilePreview {
     pub text: Option<String>,
     pub truncated: bool,
 }
+
+/// A persisted user message's image references, scoped to its owning chat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatImageContext {
+    Turn { turn_id: String },
+    Steering { message_id: String },
+    Queued { prompt_id: String },
+}
+
+/// Every reference, including a stored content hash, is checked against the chat's ownership
+/// metadata or confined project folder before the backend reads image bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatImageSource {
+    Stored {
+        sha256: String,
+    },
+    Attachment {
+        id: String,
+    },
+    Message {
+        context: ChatImageContext,
+        index: u32,
+    },
+    Project {
+        path: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChatImage {
+    pub source: ChatImageSource,
+    pub name: String,
+}
+
+/// A bounded, decoded and re-encoded PNG. Original metadata and active formats are not exposed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChatImagePreview {
+    pub png_base64: String,
+    pub width: u32,
+    pub height: u32,
+}

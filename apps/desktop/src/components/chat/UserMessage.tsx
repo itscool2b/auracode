@@ -1,6 +1,8 @@
 import { Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
+import type { ChatImageContext } from "../../bindings";
 import { steeringState, type UserItem } from "../../lib/chat/transcript";
+import { MessageImages } from "./ChatImages";
 import { CopyAction } from "./CopyAction";
 import { useDisclosure } from "./DisclosureMemory";
 
@@ -8,10 +10,12 @@ export function UserMessage({
   item,
   onEdit,
   settled = false,
+  images,
 }: {
   readonly item: UserItem;
   readonly onEdit?: () => void;
   readonly settled?: boolean;
+  readonly images?: ChatImageContext;
 }) {
   const delivery = steeringState(item, settled);
   const [expanded, setExpanded] = useDisclosure(item.key, "prompt", false);
@@ -41,6 +45,7 @@ export function UserMessage({
           </button>
         ) : null}
       </div>
+      {images ? <MessageImages context={images} /> : null}
       {delivery ? (
         <div className="chat-steering-status" role="status" data-steering-state={delivery}>
           <span>

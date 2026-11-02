@@ -414,8 +414,101 @@ fn apply_change(
             }
         }
     }
+    if destination != apply.source_chat {
+        let text = std::iter::once(apply.pending.handoff.as_str()).chain(
+            apply.parts.iter().filter_map(|part| {
+                if let PromptPart::Text { text } = part {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            }),
+        );
+        let hashes: std::collections::BTreeSet<_> =
+            text.flat_map(super::image_refs::hashes).collect();
+        for hash in hashes {
+            // A guessed URI is just text. Only metadata already owned by the source chat moves.
+            conn.execute("INSERT INTO composer_attachments (id,chat_id,sha256,display_name,mime,byte_length,created_at) SELECT ?1,?2,sha256,display_name,mime,byte_length,?3 FROM composer_attachments WHERE chat_id=?4 AND sha256=?5 AND mime LIKE 'image/%' LIMIT 1 ON CONFLICT(chat_id,sha256,display_name) DO NOTHING", params![crate::ids::new_id(),destination,now,apply.source_chat,hash])?;
+        }
+    }
     let json = serde_json::to_string(&apply.pending)
         .map_err(|_| invalid("The continuation could not be saved."))?;
     conn.execute("INSERT INTO chat_continuations (chat_id,source_chat_id,source_turn_id,pending_json,created_at,device_id) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(chat_id) DO UPDATE SET source_chat_id=excluded.source_chat_id,source_turn_id=excluded.source_turn_id,pending_json=excluded.pending_json,created_at=excluded.created_at,device_id=excluded.device_id,deleted=0", params![destination,apply.source_chat,apply.source_turn,json,now,device])?;
     Ok(destination.into())
+}
+
+#[cfg(test)]
+mod image_tests {
+    use super::*;
+    use crate::{
+        paths::DataRoot,
+        profile::{ProfileKind, Profiles},
+        store::Store,
+    };
+
+    #[test]
+    fn fork_retains_owned_inline_images_without_adopting_guessed_hashes() {
+        let scratch = tempfile::tempdir().unwrap();
+        let profile = Profiles::new(DataRoot::at(scratch.path()))
+            .create(ProfileKind::Local, "Local")
+            .unwrap();
+        let (store, _) = Store::open(&profile).unwrap();
+        let create = |folder: &str| {
+            rows::create_chat(
+                store.conn(),
+                &super::super::NewChat {
+                    folder: folder.into(),
+                    agent_id: "codex".into(),
+                    agent_host: aura_protocol::agents::AgentHost::Native,
+                    device_id: "device".into(),
+                    now: 1,
+                },
+            )
+            .unwrap()
+        };
+        let source = create("/source");
+        let other = create("/other");
+        let owned = "a".repeat(64);
+        let foreign = "b".repeat(64);
+        for (chat, hash) in [(&source.id, &owned), (&other.id, &foreign)] {
+            store.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',20,1)",params![crate::ids::new_id(),chat,hash]).unwrap();
+        }
+        let destination = crate::ids::new_id();
+        apply_change(
+            store.conn(),
+            "device",
+            2,
+            ApplyContinuation {
+                source_chat: source.id.clone(),
+                source_turn: None,
+                expected_next_seq: 0,
+                expected_updated_at: source.updated_at,
+                expected_folder: source.folder,
+                expected_active_agent: "codex".into(),
+                expected_target_session: None,
+                target_agent: "codex".into(),
+                destination_chat: Some(destination.clone()),
+                destination_folder: None,
+                pending: PendingContinuation {
+                    handoff: format!(
+                        "![Owned](<aura-image:{owned}>) ![Guessed](<aura-image:{foreign}>)"
+                    ),
+                    ..Default::default()
+                },
+                parts: vec![PromptPart::Text {
+                    text: format!("aura-image:{foreign}"),
+                }],
+            },
+        )
+        .unwrap();
+        let hashes: Vec<String> = store
+            .conn()
+            .prepare("SELECT sha256 FROM composer_attachments WHERE chat_id=?1")
+            .unwrap()
+            .query_map([&destination], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(hashes, vec![owned]);
+    }
 }

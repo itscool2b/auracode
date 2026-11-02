@@ -20,6 +20,7 @@ import type {
 } from "../../bindings";
 import { type AgentAccountsApi, agentAccountsApi } from "../agentAccounts";
 import { changesApi } from "../changes";
+import { type ChatImagesApi, chatImagesApi } from "../chatImages";
 import { type ComposerTransport, composerApi } from "../composer";
 import { type ConversationTransport, conversationApi } from "../conversation";
 import { type GitWorkspaceApi, gitWorkspaceApi } from "../gitWorkspace";
@@ -76,6 +77,7 @@ export interface Transport {
   readonly search?: SearchTransport;
   readonly changes?: import("../changes").ChangesTransport;
   readonly composer?: ComposerTransport;
+  readonly images?: ChatImagesApi;
   /** Reviewed project shells and editors for a saved chat's folder (the docked terminal panel). */
   readonly projectTools?: ProjectToolsApi;
   /** Added agent accounts, for continuing a chat past a usage limit on another one. */
@@ -138,6 +140,7 @@ export const tauriTransport: Transport = {
   search: searchApi,
   changes: changesApi,
   composer: composerApi,
+  images: chatImagesApi,
   projectTools: projectToolsApi,
   setup: worktreeSetupApi,
   accounts: agentAccountsApi,

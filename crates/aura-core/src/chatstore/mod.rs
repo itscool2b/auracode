@@ -33,6 +33,7 @@ mod export;
 pub(crate) mod files;
 pub(crate) mod folder_resolution;
 pub(crate) mod history;
+pub(crate) mod image_refs;
 #[cfg(feature = "account-sync")]
 mod journal;
 pub(crate) mod memory;
@@ -384,7 +385,7 @@ impl ChatStore {
     ) -> Result<Vec<composer::StoredAttachment>, StoreError> {
         match self.composer_command(command).await? {
             composer::ComposerReply::Attachments(items) => Ok(items),
-            composer::ComposerReply::Draft(_) => {
+            composer::ComposerReply::Draft(_) | composer::ComposerReply::ImageParts(_) => {
                 Err(StoreError::Other("Unexpected draft response.".into()))
             }
         }

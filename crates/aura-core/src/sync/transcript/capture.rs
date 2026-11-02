@@ -56,7 +56,7 @@ pub(crate) fn capture_one(
             if !entries.is_empty() {
                 break;
             }
-            references(conn, &turn_id, &entry)?;
+            references(conn, attachments, &turn_id, &entry)?;
             conn.execute(
                 "INSERT INTO sync_turn_fragments(turn_id,bytes,next_cursor) VALUES(?1,?2,?3)",
                 params![
@@ -72,7 +72,7 @@ pub(crate) fn capture_one(
             break;
         }
         bytes += encoded.len();
-        references(conn, &turn_id, &entry)?;
+        references(conn, attachments, &turn_id, &entry)?;
         match &entry {
             Entry::File(file) => {
                 let next = file.offset + crypto::decode(&file.bytes, 192 * 1024)?.len() as u64;
@@ -154,8 +154,50 @@ pub(crate) fn capture_one(
     Ok(true)
 }
 
-fn references(conn: &Connection, turn_id: &str, entry: &Entry) -> Result<()> {
-    for hash in referenced(entry) {
+fn references(
+    conn: &Connection,
+    attachments: &Attachments,
+    turn_id: &str,
+    entry: &Entry,
+) -> Result<()> {
+    let mut hashes = referenced(entry);
+    let mut images = inline_images(entry);
+    if let Entry::File(file) = entry
+        && image_reference_text(&file.mime)
+        && file.offset + crypto::decode(&file.bytes, 192 * 1024)?.len() as u64 == file.total
+    {
+        // Discover nested refs only when their containing file is complete. The receiver must
+        // receive and verify that blob before it can authorize any following image file.
+        let scanned: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(a.size),0) FROM sync_turn_files f JOIN attachments a ON a.sha256=f.hash WHERE f.turn_id=?1 AND f.complete=1 AND (a.mime LIKE 'text/%' OR a.mime='application/json')",
+            [turn_id], |row| row.get(0),
+        )?;
+        let limit = (IMAGE_SCAN_BYTES as u64)
+            .saturating_sub(scanned.max(0) as u64)
+            .min(file.total);
+        let mut bytes = Zeroizing::new(Vec::new());
+        while (bytes.len() as u64) < limit {
+            let (total, page) = attachments
+                .sync_range(&file.hash, bytes.len() as u64)
+                .map_err(|_| SyncError::Database)?;
+            if total != file.total || page.is_empty() {
+                return Err(SyncError::Invalid);
+            }
+            let take = page.len().min(limit as usize - bytes.len());
+            bytes.extend_from_slice(&page[..take]);
+        }
+        images.extend(images_in_bytes(&bytes, file.total));
+    }
+    for hash in images {
+        let owned: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM composer_attachments WHERE chat_id=(SELECT chat_id FROM turns WHERE id=?1) AND sha256=?2 AND mime LIKE 'image/%')",
+            params![turn_id, hash], |row| row.get(0),
+        )?;
+        if owned {
+            hashes.push(hash);
+        }
+    }
+    for hash in hashes {
         if !crate::chatstore::blobs::is_sha256(&hash) {
             return Err(SyncError::Invalid);
         }

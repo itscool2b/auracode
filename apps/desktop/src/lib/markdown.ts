@@ -313,9 +313,12 @@ export function parseBlock(source: string): Block[] {
   return blocks;
 }
 
+import { localImagePath } from "./chatImages";
+
 export type Inline =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "code"; readonly text: string }
+  | { readonly kind: "image"; readonly path: string; readonly alt: string }
   | { readonly kind: "strong"; readonly children: readonly Inline[] }
   | { readonly kind: "em"; readonly children: readonly Inline[] }
   | { readonly kind: "link"; readonly href: string; readonly children: readonly Inline[] };
@@ -400,7 +403,25 @@ export function parseInline(text: string, depth = 0): Inline[] {
       }
     }
 
-    if (char === "[") {
+    if (char === "!" && text[index + 1] === "[") {
+      const closeBracket = text.indexOf("](", index + 2);
+      const start = closeBracket + 2;
+      const closeParen =
+        closeBracket === -1 ? -1 : text.indexOf(text[start] === "<" ? ">)" : ")", start);
+      if (closeBracket !== -1 && closeParen !== -1) {
+        const angle = text[start] === "<";
+        const path = localImagePath(text.slice(start, closeParen + (angle ? 1 : 0)));
+        const alt = text.slice(index + 2, closeBracket);
+        if (path && !alt.includes("]")) {
+          pushPlain();
+          nodes.push({ kind: "image", path, alt });
+          index = closeParen + (angle ? 2 : 1);
+          continue;
+        }
+      }
+    }
+
+    if (char === "[" && text[index - 1] !== "!") {
       const closeBracket = text.indexOf("](", index + 1);
       const closeParen = closeBracket === -1 ? -1 : text.indexOf(")", closeBracket + 2);
       if (closeBracket !== -1 && closeParen !== -1) {
@@ -426,7 +447,11 @@ export function parseInline(text: string, depth = 0): Inline[] {
 export function plainText(nodes: readonly Inline[]): string {
   return nodes
     .map((node) =>
-      node.kind === "text" || node.kind === "code" ? node.text : plainText(node.children),
+      node.kind === "text" || node.kind === "code"
+        ? node.text
+        : node.kind === "image"
+          ? node.alt
+          : plainText(node.children),
     )
     .join("");
 }

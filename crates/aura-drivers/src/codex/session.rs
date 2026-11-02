@@ -1472,7 +1472,10 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         .push_back(DriverEvent::Status(DriverStatus::Initializing));
     s.request("initialize",json!({"clientInfo":{"name":"auracode","title":"auracode","version":s.setup.client_version},"capabilities":{"experimentalApi":true}}),Purpose::Initialize);
     let control = process.control;
-    let mut stdout = process.io.stdout;
+    let mut stdout = crate::incoming_images::ImageLineSource::new(
+        process.io.stdout,
+        s.setup.attachment_writer.clone(),
+    );
     let mut exit = control.exited();
     let mut exited = None;
     let mut process_done = false;

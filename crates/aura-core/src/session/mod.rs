@@ -24,6 +24,7 @@ mod conversation;
 mod editors;
 mod folder_resolution;
 mod gitworkspaces;
+mod images;
 mod installer;
 mod instructions;
 mod live;

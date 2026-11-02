@@ -33,6 +33,33 @@ use tauri::{AppHandle, Manager as _, State};
 
 #[tauri::command]
 #[specta::specta]
+pub async fn chat_message_images(
+    state: State<'_, AppState>,
+    chat_id: String,
+    context: aura_protocol::composer::ChatImageContext,
+) -> Result<Vec<aura_protocol::composer::ChatImage>, AppError> {
+    Ok(state
+        .sessions()?
+        .chat_message_images(&chat_id, context)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_image_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    source: aura_protocol::composer::ChatImageSource,
+    full: bool,
+) -> Result<aura_protocol::composer::ChatImagePreview, AppError> {
+    Ok(state
+        .sessions()?
+        .chat_image_preview(&chat_id, source, full)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn composer_steer(
     state: State<'_, AppState>,
     chat_id: String,

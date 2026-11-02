@@ -50,6 +50,7 @@ fn setup(dialect: &str) -> SessionSetup {
         mcp_servers: Vec::new(),
         attachment_dir: None,
         attachment_reader: None,
+        attachment_writer: None,
         chat_id: "chat".into(),
         agent_id: dialect.into(),
         dialect: dialect.into(),
