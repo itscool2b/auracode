@@ -44,12 +44,21 @@ selection and explicitly disables AVX, AVX2, BMI2, SSE4.2, FMA, and F16C so Wind
 bundles do not inherit the build machine's instruction requirements.
 Windows x64/ARM64 and universal macOS remain the release targets. Linux/WSL remain deferred.
 
-Windows ARM64 needs a separate native compiler setup before its existing release matrix job can
-build this dependency: whisper.cpp 1.8.3 rejects ARM with MSVC's `cl.exe` and requires Clang.
-The pinned cmake-rs also supplies `-Thost=x64`, so setting `CMAKE_GENERATOR_TOOLSET=ClangCL` alone
-conflicts with that argument. The current matrix has no ARM64 Clang setup. This host has no
-ARM64 MSVC libraries, and neither an ARM64 build nor a macOS build has been verified here;
-no CI run was dispatched for this work. A successful Windows x64 bundle does not close those
+Windows ARM64's release matrix selects Ninja and `.github/cmake/windows-arm64-clang.cmake` only
+after exporting host bindings. whisper.cpp 1.8.3 rejects ARM with MSVC's `cl.exe`, so the toolchain
+uses `clang-cl` with explicit `aarch64-pc-windows-msvc` C and C++ targets and the runner's MSVC ABI,
+headers, and libraries. Ninja avoids cmake-rs's Visual Studio `-Thost=x64` conflict with a ClangCL
+toolset selection. cmake-rs retains the target-specific MSVC/SDK `LIB`, `INCLUDE`, and `PATH` that
+the `cc` crate discovers and passes them to both configure and build. C++-only `/EHsc` restores
+exception handling that cmake-rs's supplied flags
+otherwise omit. The Windows runner already provides Ninja and LLVM; missing tools fail the setup
+step. The x64 bundle, host binding export, and other Rust/native compiler settings are unchanged.
+
+An isolated local probe compiled the pinned Whisper/GGML static libraries with this toolchain;
+`dumpbin /HEADERS` identified their objects as ARM64. Because this host has no ARM64 MSVC runtime
+libraries, the probe used static-library compiler checks. The release workflow retains normal
+link checks. A full ARM64 app, installer, or on-device inference has not been verified here, nor
+has a macOS build. No CI run was dispatched. A successful Windows x64 bundle does not close those
 platform checks.
 
 On MSVC, the Cargo config also selects CMake's `CMP0091=NEW` and
@@ -108,4 +117,6 @@ The Windows runtime fix was checked with a fresh Whisper rebuild, all eight targ
 unit tests, and the optional pinned-model fixture, which passed in 40.6 seconds on this host.
 The actual debug app rebuilt successfully, and `dumpbin /DEPENDENTS` showed only Windows system
 and Universal CRT API-set DLLs, with no MSVCP, VCRUNTIME, VCOMP, Whisper, or GGML DLL imports.
-The release installer's own payload still needs the same import inspection before distribution.
+The Windows x64 release installer's actual embedded application also passed that import inspection
+and the stream, 33-check chat and eight-check reopen smoke suites in isolated data folders. This
+does not extend the microphone or non-Windows acceptance claims above.

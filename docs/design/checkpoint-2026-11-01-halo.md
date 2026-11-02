@@ -76,3 +76,70 @@ These checks do not cover macOS vibrancy or Liquid Glass, a Mica-only Windows 11
 ## Limits
 
 CI was not run, at the owner's request; the local checks above are the evidence. Browser fixtures and native captures are kept apart. Neither establishes macOS release acceptance.
+
+## Integrated desktop verification, 2 November 2026
+
+The memory, model/thinking picker, transcript, request flow, image previews, Customize navigation,
+agent discovery and local dictation changes extend Halo. This verification does not establish the
+owner's visual lock.
+
+Browser fixtures in Chromium and WebKit passed for chat, model/header controls, images, dictation,
+requests, Settings-to-Customize navigation and the complete Customize suite. Relevant desktop
+states ran in light and dark. The website's four static tests and browser suites passed again,
+including dark system preference, no JavaScript, mobile reflow and CSP checks. These are browser
+results, not native material or microphone evidence.
+The five website product-image assets were regenerated from the integrated desktop's settled
+preview, retaining the existing capture framing and glass emulation. The updated screenshot
+shows the grouped tools, hidden reasoning rows and current model/thinking labels. The website
+static and Chromium/WebKit suites passed again against those assets; no website deployment was
+performed as part of this desktop verification.
+
+The integrated Windows x64 debug app, with its production frontend embedded, ran in isolated
+data folders beside the installed host. The stream check received 144 events in 132 frames with
+zero sequence gaps. All 33 chat checks and all eight reopen checks passed, with clean database
+and runtime-registry shutdown. New native checks cover:
+
+- Paste/import and decoding through the real image IPC, opening and closing the full preview,
+  sending the image, and decoding its saved thumbnail and full preview after relaunch.
+- All three Settings links opening the intended Customize section in both appearances, with
+  destination focus and the original chat, session and unsent draft preserved.
+- Instructions opened from the chat and project folder retaining their exact scope.
+
+A separate manual inspection used the same isolated debug app, selected by its process and window
+handle. The saved-image gallery and dialog, compact composer, Settings and Customize were inspected
+in the native window. Both appearances remained readable without overlapping controls. The model
+picker kept Thinking visible above its scrolling list and showed that stopped-chat choices apply
+on startup. The dictation panel displayed the on-device model download step. The test process was
+then stopped by its own PID; the installed host remained running.
+
+The combined frontend passed 650 unit tests and 35 script tests, production build/typecheck,
+Biome and style checks. Rust formatting and Clippy with warnings denied passed. The broad Rust run
+passed 753 core unit tests, 477 driver unit tests, 198 process unit tests and 244 desktop unit tests.
+The four previously recorded `session_lifecycle` timing failures were traced to fixtures stopping
+before the scripted driver received its prompt. Those tests now await actual command receipt,
+allowing the existing paused-clock startup wait before a restarted daemon turn. Their timing,
+status and count assertions are unchanged. All 28 lifecycle tests then passed, including
+`force_stop_waits_for_daemon_cancel`,
+`a_force_stopped_agent_holds_its_session_until_its_process_is_gone`,
+`queue_survives_a_restart_held` and `shutdown_all_bounded`. This repair changes only test scheduling.
+
+Replay expectations were also refreshed for the earlier native session-controls handshake.
+All 94 driver fixtures passed with their lifecycle and privacy contracts, all three Codex schema
+tests passed, and the CLI's four fixture tests and three replay tests passed. Original recorded
+traffic is preserved, with the derived handshake and full golden comparison documented in the
+[Codex fixture record](../../crates/aura-drivers/tests/fixtures/codex/README.md).
+
+The pinned Whisper model also passed actual CPU inference and cancellation with the upstream JFK
+audio fixture, as detailed in [local dictation](../local-dictation.md). No live microphone capture,
+macOS native execution or Windows ARM64 app execution is claimed by this record.
+
+The Windows x64 NSIS installer was then built from `22e9a4a3`. Its actual embedded application,
+identified by its AMD64 PE header and auracode product metadata, was extracted without running the
+installer. The 65,954,304-byte payload has SHA-256
+`889ff1e27edd831f1ea74bdf1397eb875bc24cbdd7839d017c4cbe6fe54260e2`.
+Dependency and import inspection found only Windows system and Universal CRT libraries, with no
+external C++, OpenMP, Whisper or GGML runtime. That exact payload then passed the stream smoke
+(141 events, 129 frames, zero sequence gaps), all 33 chat checks and all eight reopen checks in
+fresh isolated data folders. Both chat launches closed their databases and runtime registries.
+This is packaged-release evidence; installation into the running host is a separate after-exit
+step and must be confirmed against the installed file's full hash after relaunch.

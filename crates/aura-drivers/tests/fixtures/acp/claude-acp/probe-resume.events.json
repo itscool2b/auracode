@@ -266,6 +266,37 @@
             ]
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -508,6 +539,62 @@
             ]
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -745,6 +832,62 @@
                 "value": "vercel:performance-optimizer",
                 "name": "vercel:performance-optimizer",
                 "description": "Specializes in optimizing Vercel application performance — Core Web Vitals, rendering strategies, caching, image optimization, font loading, edge computing, and bundle size. Use when investigating slow pages, improving Lighthouse scores, or optimizing loading performance.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
                 "group": null
               }
             ]

@@ -167,6 +167,62 @@
             ]
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Ask for approval",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Allow edits",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Full access",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -301,151 +357,6 @@
           }
         }
       }
-    },
-    {
-      "type": "options",
-      "data": [
-        {
-          "id": "model",
-          "name": "Model",
-          "description": null,
-          "category": "model",
-          "kind": {
-            "type": "select",
-            "current": "sonnet",
-            "choices": [
-              {
-                "value": "default",
-                "name": "Default (recommended)",
-                "description": "Opus 5.5 · Best for everyday, complex tasks",
-                "group": null
-              },
-              {
-                "value": "opus",
-                "name": "Opus 5.5",
-                "description": "For complex work and everyday tasks",
-                "group": null
-              },
-              {
-                "value": "fable",
-                "name": "Fable 5.1",
-                "description": "For your toughest challenges",
-                "group": null
-              },
-              {
-                "value": "sonnet",
-                "name": "Sonnet 5.5",
-                "description": "Most efficient for simpler tasks",
-                "group": null
-              },
-              {
-                "value": "haiku",
-                "name": "Haiku 5.5",
-                "description": "Fastest for quick answers",
-                "group": null
-              },
-              {
-                "value": "claude-haiku-4-5-20251001",
-                "name": "Haiku 4.5",
-                "description": "Fastest for quick answers",
-                "group": null
-              },
-              {
-                "value": "claude-sonnet-5",
-                "name": "Sonnet 5",
-                "description": "Efficient for routine tasks",
-                "group": null
-              },
-              {
-                "value": "claude-opus-5",
-                "name": "Opus 5",
-                "description": "Best for everyday, complex tasks",
-                "group": null
-              },
-              {
-                "value": "claude-fable-5",
-                "name": "Fable 5",
-                "description": "Most capable for your hardest and longest-running tasks",
-                "group": null
-              },
-              {
-                "value": "claude-opus-4-8",
-                "name": "Opus 4.8",
-                "description": "Best for everyday, complex tasks",
-                "group": null
-              },
-              {
-                "value": "claude-opus-4-7",
-                "name": "Opus 4.7",
-                "description": "Best for everyday, complex tasks",
-                "group": null
-              },
-              {
-                "value": "claude-opus-4-6",
-                "name": "Opus 4.6",
-                "description": "Best for everyday, complex tasks",
-                "group": null
-              },
-              {
-                "value": "claude-sonnet-4-6",
-                "name": "Sonnet 4.6",
-                "description": "Efficient for routine tasks",
-                "group": null
-              }
-            ]
-          },
-          "pending": null
-        },
-        {
-          "id": "effort",
-          "name": "Effort",
-          "description": null,
-          "category": "effort",
-          "kind": {
-            "type": "select",
-            "current": "medium",
-            "choices": [
-              {
-                "value": "default",
-                "name": "Default",
-                "description": null,
-                "group": null
-              },
-              {
-                "value": "low",
-                "name": "low",
-                "description": null,
-                "group": null
-              },
-              {
-                "value": "medium",
-                "name": "medium",
-                "description": null,
-                "group": null
-              },
-              {
-                "value": "high",
-                "name": "high",
-                "description": null,
-                "group": null
-              },
-              {
-                "value": "xhigh",
-                "name": "xhigh",
-                "description": null,
-                "group": null
-              },
-              {
-                "value": "max",
-                "name": "max",
-                "description": null,
-                "group": null
-              }
-            ]
-          },
-          "pending": null
-        }
-      ]
     },
     {
       "type": "event",

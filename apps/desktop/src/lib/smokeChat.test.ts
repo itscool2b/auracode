@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentEntry, AppInfo, SmokePlan } from "../bindings";
+import type { AgentEntry, AppearancePreference, AppInfo, SmokePlan } from "../bindings";
 import { SMOKE_AGENT_CHECKS, SMOKE_CHAT_CHECKS, SMOKE_CHAT_REOPEN_CHECKS } from "../bindings";
+import { DEFAULT_GENERAL, type SetupApi } from "./setup";
 import {
   AGENT_PROMPT,
   CHAT_TRANSCRIPT,
@@ -12,9 +13,55 @@ import {
   runChatSmoke,
   SEGMENTS,
   smokeAgent,
+  withAppearanceRestored,
 } from "./smokeChat";
 
 const PLAN: SmokePlan = { scenario: "chat", agent_id: "mock", folder: "/tmp/smoke chat" };
+
+describe("native smoke appearance restoration", () => {
+  function fixture() {
+    let appearance: AppearancePreference = "system";
+    let revision = 4;
+    const snapshot: SetupApi["snapshot"] = async () => ({
+      cold_start: false,
+      notice: null,
+      preferences: {
+        revision,
+        appearance,
+        motion: "full",
+        step: "motion",
+        completed: true,
+        first_project_id: null,
+        general: { ...DEFAULT_GENERAL },
+      },
+    });
+    const apply = vi.fn<SetupApi["apply"]>(async (expected, action) => {
+      if (expected !== revision) throw new Error("stale revision");
+      if (action.type === "appearance") appearance = action.value;
+      revision++;
+      return snapshot();
+    });
+    return { api: { snapshot, apply }, apply };
+  }
+
+  it("restores the original native preference using its latest revision after a failed check", async () => {
+    const { api, apply } = fixture();
+    await expect(
+      withAppearanceRestored(api, async () => {
+        await api.apply(4, { type: "appearance", value: "dark" });
+        throw new Error("destination lost focus");
+      }),
+    ).rejects.toThrow("destination lost focus");
+    expect(apply).toHaveBeenLastCalledWith(5, { type: "appearance", value: "system" });
+    expect((await api.snapshot()).preferences.appearance).toBe("system");
+  });
+
+  it("returns the check result and avoids rewriting an unchanged preference", async () => {
+    const { api, apply } = fixture();
+    expect(await withAppearanceRestored(api, async () => "passed")).toBe("passed");
+    expect(apply).not.toHaveBeenCalled();
+  });
+});
 
 function info(fatal: string | null = null): AppInfo {
   return {

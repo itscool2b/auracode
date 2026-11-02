@@ -128,6 +128,62 @@
             "current": false
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept Edits",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass Permissions",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -241,6 +297,62 @@
           "kind": {
             "type": "toggle",
             "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept Edits",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass Permissions",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
           },
           "pending": null
         }
@@ -407,6 +519,62 @@
             "current": false
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept Edits",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass Permissions",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "plan",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -531,6 +699,62 @@
           "kind": {
             "type": "toggle",
             "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept Edits",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass Permissions",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.workflow",
+          "name": "Workflow",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "execute",
+            "choices": [
+              {
+                "value": "execute",
+                "name": "Execute",
+                "description": "Run with the remembered native access setting. Leaving Plan requires implementation approval.",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Use the harness native planning workflow. Access remains separate; implementation requires your approval.",
+                "group": null
+              }
+            ]
           },
           "pending": null
         }

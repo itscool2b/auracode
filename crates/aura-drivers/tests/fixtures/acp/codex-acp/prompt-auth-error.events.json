@@ -122,6 +122,25 @@
             "current": false
           },
           "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "",
+            "choices": [
+              {
+                "value": "read-only",
+                "name": "Read-only",
+                "description": "Requires approval to edit files and access the internet.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
         }
       ]
     },
@@ -229,6 +248,25 @@
           "kind": {
             "type": "toggle",
             "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "aura.access",
+          "name": "Access",
+          "description": null,
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "",
+            "choices": [
+              {
+                "value": "read-only",
+                "name": "Read-only",
+                "description": "Requires approval to edit files and access the internet.",
+                "group": null
+              }
+            ]
           },
           "pending": null
         }

@@ -119,6 +119,61 @@
       }
     },
     {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "model-a",
+            "choices": [
+              {
+                "value": "model-a",
+                "name": "Model A",
+                "description": "Synthetic test model",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balanced",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "High",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
       "type": "run_state",
       "data": {
         "idle": false
