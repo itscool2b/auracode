@@ -82,6 +82,15 @@ jobs:
       - name: Use an ad-hoc signature (macOS)
         if: runner.os == 'macOS'
         run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+      - name: Select Clang for the Windows ARM64 speech engine
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          # Keep host binding generation and the x64 bundle on their existing toolchains.
+          Get-Command ninja.exe, clang-cl.exe -ErrorAction Stop | Out-Null
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE '.github/cmake/windows-arm64-clang.cmake'
+          "CMAKE_TOOLCHAIN_FILE=$($toolchain.Replace('\', '/'))" >> $env:GITHUB_ENV
       - name: Build unsigned bundles
         env:
           BUNDLE_TARGET: ${{ matrix.target }}
