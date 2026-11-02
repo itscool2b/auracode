@@ -202,9 +202,10 @@ export const windows = {
   stop(pid) {
     spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true });
   },
-  install(installer) {
+  install(installer, log = () => {}) {
     // What the updater runs (tauri.conf.json: plugins > updater > windows > installMode).
     const run = spawnSync(installer, ["/P", "/UPDATE"], { stdio: "inherit" });
+    if (run.error) log(`The installer could not start: ${run.error.message}`);
     return run.error ? -1 : (run.status ?? -1);
   },
   launch(exe) {
@@ -491,7 +492,7 @@ export async function install(options, paths, system, log) {
   const snapshot = takeSnapshot(paths, installer, system.now());
   log(`Kept the installed app as snapshot ${snapshot.name}.`);
   log(`Installing ${installer}.`);
-  const code = system.install(installer);
+  const code = system.install(installer, log);
   const exe = join(paths.installDir, APP_EXE);
   if (code !== 0) {
     log(`The installer exited with code ${code}; restoring snapshot ${snapshot.name}.`);

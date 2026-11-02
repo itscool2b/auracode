@@ -163,3 +163,10 @@ The development build was built from this branch against the main checkout's war
 | The snapshot holds, and a restore puts back, the installed files themselves (same file ids), not copies | pass |
 | Running a real installer over the installed app and reopening it | pass, on the second run. The first run failed: the installer exited 0, wrote its uninstaller and registry entries, and left the fresh copy of the previous `auracode.exe` in place (the installer's payload held the new binary; no Code Integrity event; no file lock could be reproduced), and the waiter reported success from the exit code alone. With the emptied folder and the binary check, the second run logged `Installed auracode.exe: 61048320 bytes, sha256 9640fbef… (previous cce195a7…)`, the installed file matches and carries the new build's smoke message (`SMOKE_NEEDS_DATA_DIR`, absent from the previous build; the development-only strings are compiled out of a release build, as expected), and the app reopened with its chats, the project-memory helper and Resume working |
 | The installed binary is the one the bundle carried, not the file left in `target` | pass, with a caveat: `tauri build` rewrote `target\…\release\auracode.exe` once more after `makensis` had read it (the link at 13:40:22 went into the installer; the file on disk is from 13:40:43, same size, different hash). Compare an install against the hash in the upgrade log, not against that file |
+
+A later install attempt on 2 November 2026 at 00:22 UTC returned `-1` and restored the snapshot.
+Windows Code Integrity events 3033 and 3077 at that time identify the staged installer as blocked
+by the machine's signing policy. The previous installed binary remained in place, and no install
+was still armed when checked. The helper now records a process-start error before the exit code
+and rollback message, so a blocked installer is distinguishable from an installer that ran and
+failed. This observation does not establish whether a different future build will be accepted.
