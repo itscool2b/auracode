@@ -163,6 +163,70 @@ fn apply(
 }
 
 #[test]
+fn inline_agent_images_keep_chat_ownership_through_local_import() {
+    let mut f = fixture();
+    let (project, chat, _) = seed(&f, false);
+    let (_, other, _) = seed(&f, false);
+    let owned_bytes = b"owned image fixture";
+    let foreign_bytes = b"private image fixture";
+    let owned = format!("{:x}", Sha256::digest(owned_bytes));
+    let foreign = format!("{:x}", Sha256::digest(foreign_bytes));
+    for (owner, hash, bytes) in [
+        (&chat, &owned, owned_bytes.as_slice()),
+        (&other, &foreign, foreign_bytes.as_slice()),
+    ] {
+        std::fs::write(f.local.attachments_dir().join(hash), bytes).unwrap();
+        f.source
+            .conn()
+            .execute(
+                "INSERT INTO attachments(sha256,mime,size,created_at) VALUES(?1,'image/png',?2,1)",
+                params![hash, bytes.len()],
+            )
+            .unwrap();
+        f.source.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',?4,1)",params![crate::ids::new_id(),owner,hash,bytes.len()]).unwrap();
+    }
+    let event = AuraEvent::MessageDelta {
+        message_id: "assistant".into(),
+        text: format!("![Owned](<aura-image:{owned}>) ![Guessed](<aura-image:{foreign}>)"),
+    };
+    f.source
+        .conn()
+        .execute(
+            "UPDATE events SET payload=?2 WHERE chat_id=?1 AND kind='message_delta'",
+            params![chat, serde_json::to_string(&event).unwrap()],
+        )
+        .unwrap();
+    let selected = reviewed(&f)
+        .into_iter()
+        .filter(|item| item.project_id == project)
+        .collect();
+    assert_eq!(apply(&mut f, selected).unwrap().missing_attachments, 0);
+    let (_, bytes) = f.files.sync_range(&owned, 0).unwrap();
+    assert_eq!(bytes.as_slice(), owned_bytes);
+    let count: usize = f
+        .target
+        .conn()
+        .query_row(
+            "SELECT count(*) FROM composer_attachments WHERE chat_id=?1 AND sha256=?2",
+            params![chat, owned],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    let leaked: bool = f
+        .target
+        .conn()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM composer_attachments WHERE sha256=?1)",
+            [&foreign],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!leaked);
+    assert!(f.files.sync_range(&foreign, 0).is_err());
+}
+
+#[test]
 fn selected_projects_copy_to_ciphertext_preserve_local_and_require_fresh_handoff() {
     let mut f = fixture();
     let (project, chat, hash) = seed(&f, true);

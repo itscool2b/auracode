@@ -369,6 +369,37 @@ fn referenced(entry: &Entry) -> Vec<String> {
     result
 }
 
+/// Unlike explicit image parts, arbitrary text can contain an unavailable or forged private URI.
+/// Keep these optional on import, and require source-chat ownership before exporting any bytes.
+fn inline_images(entry: &Entry) -> std::collections::BTreeSet<String> {
+    let mut result = std::collections::BTreeSet::new();
+    let mut text = |text: &str| {
+        result.extend(crate::chatstore::image_refs::hashes(text).map(str::to_owned));
+    };
+    match entry {
+        Entry::Event(event) => text(&event.payload),
+        Entry::Turn(turn) => {
+            if let Some(prefix) = &turn.continuation_prefix {
+                text(prefix);
+            }
+            for part in &turn.parts {
+                if let PromptPart::Text { text: value } = part {
+                    text(value);
+                }
+            }
+        }
+        Entry::Steering(steer) => {
+            for part in &steer.parts {
+                if let PromptPart::Text { text: value } = part {
+                    text(value);
+                }
+            }
+        }
+        _ => {}
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

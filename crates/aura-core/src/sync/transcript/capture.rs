@@ -155,7 +155,17 @@ pub(crate) fn capture_one(
 }
 
 fn references(conn: &Connection, turn_id: &str, entry: &Entry) -> Result<()> {
-    for hash in referenced(entry) {
+    let mut hashes = referenced(entry);
+    for hash in inline_images(entry) {
+        let owned: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM composer_attachments WHERE chat_id=(SELECT chat_id FROM turns WHERE id=?1) AND sha256=?2 AND mime LIKE 'image/%')",
+            params![turn_id, hash], |row| row.get(0),
+        )?;
+        if owned {
+            hashes.push(hash);
+        }
+    }
+    for hash in hashes {
         if !crate::chatstore::blobs::is_sha256(&hash) {
             return Err(SyncError::Invalid);
         }

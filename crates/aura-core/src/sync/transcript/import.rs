@@ -67,6 +67,7 @@ struct Import<'a> {
     ended: bool,
     started: bool,
     required: BTreeSet<String>,
+    inline_images: BTreeSet<String>,
     file: Option<FileAssembly>,
     fragment: Zeroizing<Vec<u8>>,
     fragment_total: Option<u32>,
@@ -116,6 +117,7 @@ fn import_one(
         ended: false,
         started: false,
         required: BTreeSet::new(),
+        inline_images: BTreeSet::new(),
         file: None,
         fragment: Zeroizing::new(Vec::new()),
         fragment_total: None,
@@ -225,7 +227,8 @@ impl Import<'_> {
             }
             self.required.insert(hash);
         }
-        if self.required.len() > 8192 {
+        self.inline_images.extend(inline_images(&entry));
+        if self.required.len() + self.inline_images.len() > 8192 {
             return Err(SyncError::Invalid);
         }
         match entry {
@@ -298,10 +301,12 @@ impl Import<'_> {
                 if !(1..=3).contains(&self.phase)
                     || !self.ended
                     || self.file.is_some()
-                    || !self.required.remove(&hash)
+                    || !(self.required.contains(&hash) || self.inline_images.contains(&hash))
                 {
                     return Err(SyncError::Invalid);
                 }
+                self.required.remove(&hash);
+                self.inline_images.remove(&hash);
                 self.phase = 3;
             }
             Entry::Fragment { .. } => unreachable!(),
@@ -309,7 +314,10 @@ impl Import<'_> {
         Ok(())
     }
     fn file(&mut self, file: File) -> Result<()> {
-        if !(1..=3).contains(&self.phase) || !self.ended || !self.required.contains(&file.hash) {
+        if !(1..=3).contains(&self.phase)
+            || !self.ended
+            || !(self.required.contains(&file.hash) || self.inline_images.contains(&file.hash))
+        {
             return Err(SyncError::Invalid);
         }
         self.phase = 3;
@@ -349,6 +357,7 @@ impl Import<'_> {
                 self.conn.execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(chat_id,sha256,display_name) DO NOTHING",params![crate::ids::new_id(),self.header.chat_id,file.hash,name,file.mime,file.total as i64,crate::time::now_millis()])?;
             }
             self.required.remove(&file.hash);
+            self.inline_images.remove(&file.hash);
             self.file = None;
         }
         Ok(())

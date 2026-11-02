@@ -33,6 +33,7 @@ mod export;
 pub(crate) mod files;
 pub(crate) mod folder_resolution;
 pub(crate) mod history;
+pub(crate) mod image_refs;
 #[cfg(feature = "account-sync")]
 mod journal;
 pub(crate) mod memory;
