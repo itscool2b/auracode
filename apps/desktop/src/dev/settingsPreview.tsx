@@ -259,7 +259,13 @@ function Preview() {
   return (
     <SettingsScreen
       navigationId={String(entry.id)}
-      initialPage={signInFixture ? "account" : "general"}
+      initialPage={
+        signInFixture
+          ? "account"
+          : new URLSearchParams(location.search).has("legacy-instructions")
+            ? "instructions"
+            : "general"
+      }
       initialEmail={signInFixture ? entry.email : ""}
       info={info}
       setup={setup}
@@ -271,6 +277,9 @@ function Preview() {
       onBack={() => setClosed(true)}
       onAgents={() => {
         calls.push("agents");
+      }}
+      onCustomize={(section) => {
+        calls.push(`customize:${section}`);
       }}
       onSetup={() => {
         calls.push("setup");
