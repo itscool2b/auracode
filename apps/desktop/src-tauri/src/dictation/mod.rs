@@ -1,6 +1,7 @@
 //! App-owned, explicitly started dictation. Audio lives only in memory. The sole network
 //! operation downloads a pinned model; transcription never makes a network request.
 mod audio;
+mod callbacks;
 pub mod commands;
 mod model;
 

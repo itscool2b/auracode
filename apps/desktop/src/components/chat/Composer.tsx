@@ -255,17 +255,17 @@ export function Composer({
           </button>
         ) : null}
         {controls}
-        {contextApi?.dictation ? (
-          <DictationControl
-            api={contextApi.dictation}
-            input={input}
-            text={text}
-            setText={setText}
-            disabled={blocked || sending || !context.ready}
-            onBusy={setDictating}
-          />
-        ) : null}
         <div className="chat-composer-actions" data-running={working ? "" : undefined}>
+          {contextApi?.dictation ? (
+            <DictationControl
+              api={contextApi.dictation}
+              input={input}
+              text={text}
+              setText={setText}
+              disabled={blocked || sending || !context.ready}
+              onBusy={setDictating}
+            />
+          ) : null}
           <StopButton
             status={status}
             onStop={onStop}

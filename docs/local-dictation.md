@@ -6,7 +6,7 @@ work offline. Use the system's default input device, click Finish recording, rev
 send normally. Esc discards a recording or cancels transcription or download. Each recording is
 limited to two minutes, with a visible time and microphone level.
 
-Audio is held in bounded memory and cleared when the operation ends. No audio files, transcript
+Audio is held in bounded memory and discarded when the operation ends. No audio files, transcript
 logs, cloud speech APIs, external executables, Python installation, account, or API key are used.
 The resulting text becomes a normal draft and follows the existing draft persistence behavior.
 Closing the chat, hiding the window, reloading the page, switching profiles, or quitting cancels
@@ -29,6 +29,11 @@ whisper-rs statically links CPU-only whisper.cpp. One operation can run at a tim
 is tied to its webview and profile generation and exposes cancellable progress through typed
 Tauri channels. CPU work runs off the UI/async executor. The microphone closes before recognition.
 No new webview filesystem, network, process, or microphone permission is granted.
+
+Native Whisper/GGML logs are disabled, including token traces emitted by debug builds. The scoped
+callback bridge avoids whisper-rs 0.16.0's unsafe closure-type cast in its safe abort helper and
+its leaked callback allocations. Callback storage lives only for one synchronous inference call;
+cancel intent remains separate from UI errors, so a failed cancel request cannot insert late text.
 
 Building the native dependency adds CMake and LLVM/libclang to the existing C++ toolchain
 requirements. Windows MSVC needs `cmake` on PATH and `LIBCLANG_PATH` pointing to the directory
@@ -58,3 +63,18 @@ scripted transport; it never opens audio hardware or downloads a model. The brow
 download, recording, cancellation, errors, draft insertion, and chat switching in both appearances
 and browser engines. Browser fixtures establish UI behavior only. Live microphone permissions,
 audio quality, and platform-specific packaging still need native verification on each target.
+
+On Windows x64, the desktop Rust suite passed (244 tests, one optional engine fixture ignored),
+Clippy passed with warnings denied, and the full desktop UI suite passed (618 tests, 19 skipped).
+The production frontend build, style checks, Biome, and notice-script tests passed. Biome retains
+the existing context-panel specificity warnings. Chromium and WebKit passed the dictation fixture
+in light and dark appearances, including accessibility checks and retained screenshots.
+
+The optional `dictation::audio::tests::offline_model_fixture` also passed with the actual pinned
+model: production download and integrity verification, multilingual CPU inference of upstream's
+`samples/jfk.wav`, and cancellation during a second inference. Native output contains no decoded
+tokens. This establishes inference behavior; it does not establish microphone capture or OS
+permission behavior. To repeat it, place the [upstream WAV](https://github.com/ggml-org/whisper.cpp/blob/v1.8.3/samples/jfk.wav)
+in a temporary directory, set `AURACODE_DICTATION_FIXTURE_DIR` to that directory, and run
+`cargo test -p auracode-desktop --lib offline_model_fixture -- --ignored --nocapture`.
+The test downloads the model if absent and reuses the verified local copy on subsequent runs.

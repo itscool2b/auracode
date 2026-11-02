@@ -62,12 +62,7 @@ pub fn run(root: &Path, operation: &Operation) -> Result<DictationEvent, String>
     }
     let path = model::path(root);
     model::verify(&path, operation)?;
-    let mut parameters = WhisperContextParameters::default();
-    parameters.use_gpu(false);
-    let context = WhisperContext::new_with_params(&path, parameters).map_err(|_| {
-        "The dictation model could not be loaded. Download it again or free some memory."
-            .to_string()
-    })?;
+    let context = load_context(&path)?;
     if operation.cancelled() {
         return Err("Dictation cancelled.".into());
     }
@@ -84,6 +79,17 @@ pub fn run(root: &Path, operation: &Operation) -> Result<DictationEvent, String>
         return Err("Dictation cancelled.".into());
     }
     transcribe(&context, &audio, operation).map(|text| DictationEvent::Complete { text })
+}
+
+fn load_context(path: &Path) -> Result<WhisperContext, String> {
+    // With no whisper-rs logging backend enabled these hooks discard native logs, including
+    // debug-build token traces. Print flags alone do not prevent transcript text on stderr.
+    whisper_rs::install_logging_hooks();
+    let mut parameters = WhisperContextParameters::default();
+    parameters.use_gpu(false);
+    WhisperContext::new_with_params(path, parameters).map_err(|_| {
+        "The dictation model could not be loaded. Download it again or free some memory.".into()
+    })
 }
 
 fn record(operation: &Operation) -> Result<(Zeroizing<Vec<f32>>, usize), String> {
@@ -245,19 +251,7 @@ fn transcribe(
     parameters.set_print_progress(false);
     parameters.set_print_realtime(false);
     parameters.set_print_timestamps(false);
-    let cancel = operation.cancel.clone();
-    parameters.set_abort_callback_safe(move || cancel.is_cancelled());
-    let sink = operation.sink.clone();
-    let cancel = operation.cancel.clone();
-    parameters.set_progress_callback_safe(move |percent: i32| {
-        if !sink(DictationEvent::Transcribing {
-            percent: percent.clamp(0, 100) as u8,
-        }) {
-            cancel.cancel();
-        }
-    });
-    state
-        .full(parameters, audio)
+    super::callbacks::run(&mut state, parameters, audio, operation)
         .map_err(|_| "Dictation could not transcribe this recording. Try again.".to_string())?;
     if operation.cancelled() {
         return Err("Dictation cancelled.".into());
@@ -305,7 +299,7 @@ mod tests {
     #[test]
     fn silence_and_too_short_audio_are_not_transcribed() {
         assert!(!has_signal(&vec![0.0; SAMPLE_RATE]));
-        assert!(!has_signal(&vec![0.2; 50]));
+        assert!(!has_signal(&[0.2; 50]));
         assert!(has_signal(&vec![0.2; SAMPLE_RATE]));
     }
     #[test]
@@ -349,7 +343,9 @@ mod tests {
         }
         let audio: Vec<f32> = pcm
             .expect("PCM data")
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|sample| f32::from(i16::from_le_bytes([sample[0], sample[1]])) / 32768.0)
             .collect();
         let service = Arc::new(super::super::Dictation::default());
@@ -367,10 +363,7 @@ mod tests {
                 .expect("verified model download");
         }
         model::verify(&model::path(&root), &operation).expect("model digest");
-        let mut parameters = WhisperContextParameters::default();
-        parameters.use_gpu(false);
-        let context =
-            WhisperContext::new_with_params(model::path(&root), parameters).expect("CPU model");
+        let context = load_context(&model::path(&root)).expect("CPU model");
         let result = transcribe(&context, &audio, &operation).expect("offline transcription");
         assert!(
             result
@@ -378,5 +371,15 @@ mod tests {
                 .contains("ask not what your country can do for you"),
             "{result}"
         );
+        // Cancel after inference starts, exercising the native callback bridge, not just the
+        // controller. No text may escape a cancelled operation.
+        let cancel = operation.cancel.clone();
+        std::thread::scope(|scope| {
+            scope.spawn(move || {
+                std::thread::sleep(Duration::from_millis(250));
+                cancel.cancel();
+            });
+            assert!(transcribe(&context, &audio, &operation).is_err());
+        });
     }
 }

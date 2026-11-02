@@ -82,6 +82,30 @@ describe("local dictation", () => {
     expect(f.api.cancel).toHaveBeenCalledTimes(2);
     expect(f.insert).not.toHaveBeenCalled();
   });
+  it.each([false, true])(
+    "discards late completion when cancellation rejects (stop failure: %s)",
+    async (stopFails) => {
+      const f = fixture();
+      f.api.cancel = vi.fn(async () => {
+        throw new Error("Channel unavailable");
+      });
+      await f.controller.open();
+      f.event({ state: "recording", seconds: 1, level: 0.3, limit_seconds: 120 });
+      if (stopFails) {
+        f.api.stop = vi.fn(async () => {
+          throw new Error("Stop failed");
+        });
+        await f.controller.stop();
+      } else await f.controller.cancel();
+      expect(f.controller.getSnapshot().state).toBe("cancelling");
+      expect(dictationBusy(f.controller.getSnapshot())).toBe(true);
+      f.event({ state: "recording", seconds: 2, level: 0.2, limit_seconds: 120 });
+      expect(f.controller.getSnapshot().state).toBe("cancelling");
+      f.event({ state: "complete", text: "Must be discarded" });
+      expect(f.insert).not.toHaveBeenCalled();
+      expect(f.controller.getSnapshot().state).toBe("idle");
+    },
+  );
   it("shows backend failures and allows retry", async () => {
     const f = fixture();
     await f.controller.open();

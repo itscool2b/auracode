@@ -73,7 +73,12 @@ pub fn dictation_start(
     let root = root(&state)?;
     let operation = operation(&webview, &state, id, channel)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let result = audio::run(&root, &operation);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            audio::run(&root, &operation)
+        }))
+        .unwrap_or_else(|_| {
+            Err("Dictation stopped unexpectedly. Your draft is unchanged. Try again.".into())
+        });
         operation.finish(result);
     });
     Ok(())

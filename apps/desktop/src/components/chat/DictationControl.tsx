@@ -107,7 +107,7 @@ export function DictationControl({
               type="button"
               className="g-button g-button-icon"
               aria-label={busy ? "Cancel dictation" : "Close dictation"}
-              disabled={state.state === "cancelling"}
+              disabled={state.state === "cancelling" && !state.message}
               onClick={() => void controller.cancel()}
             >
               <X size={14} />
@@ -157,7 +157,7 @@ export function DictationControl({
               <p role="status">
                 Listening · {state.seconds}s / {state.limit_seconds}s
               </p>
-              <meter aria-label="Microphone level" min={0} max={1} value={state.level} />
+              <meter aria-label="Microphone level" min={0} max={1} value={state.level ?? 0} />
               <button
                 type="button"
                 className="g-button g-button-28"
@@ -174,7 +174,24 @@ export function DictationControl({
               <progress aria-label="Transcription" value={state.percent} max={100} />
             </>
           ) : null}
-          {state.state === "cancelling" ? <p role="status">Stopping dictation…</p> : null}
+          {state.state === "cancelling" ? (
+            state.message ? (
+              <>
+                <p role="alert" className="ui-error">
+                  {state.message}
+                </p>
+                <button
+                  type="button"
+                  className="g-button g-button-28"
+                  onClick={() => void controller.cancel()}
+                >
+                  Try stopping again
+                </button>
+              </>
+            ) : (
+              <p role="status">Stopping dictation…</p>
+            )
+          ) : null}
           {state.state === "failed" ? (
             <>
               <p role="alert" className="ui-error">

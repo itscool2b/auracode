@@ -56,7 +56,14 @@ test("locked catalogue includes complete font notices and explicit native source
     assert.match(catalogue.texts[record.files[0].sha256], /SIL OPEN FONT LICENSE/);
     assert.match(catalogue.texts[record.files[0].sha256], /Copyright/i);
   }
-  assert.equal(catalogue.records.filter((r) => r.ecosystem === "native").length, 2);
+  assert.deepEqual(
+    catalogue.records.filter((r) => r.ecosystem === "native").map((r) => r.name),
+    [
+      "OpenSSL (openssl-src source)",
+      "SQLCipher (libsqlite3-sys source)",
+      "whisper.cpp and ggml (whisper-rs-sys source)",
+    ],
+  );
   for (const name of [
     "@axe-core/playwright",
     "@biomejs/biome",
@@ -80,7 +87,7 @@ test("website output contains frontend notices, not desktop native dependencies"
   const text = renderText(verifiedCatalogue(), "web");
   assert.match(text, /@fontsource-variable\/geist/);
   assert.match(text, /react-router/);
-  assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm/);
+  assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm|whisper-rs/);
 });
 
 test("packaging emits readable plain text and escaped script-free HTML", () => {

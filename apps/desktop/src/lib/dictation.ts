@@ -12,8 +12,12 @@ export interface DictationApi {
 }
 export const dictationApi: DictationApi = {
   model: () => settle(commands.dictationModel()),
-  download: (id, onmessage) => settle(commands.dictationDownload(id, new Channel(onmessage))),
-  start: (id, onmessage) => settle(commands.dictationStart(id, new Channel(onmessage))),
+  download: async (id, onmessage) => {
+    await settle(commands.dictationDownload(id, new Channel(onmessage)));
+  },
+  start: async (id, onmessage) => {
+    await settle(commands.dictationStart(id, new Channel(onmessage)));
+  },
   stop: async (id) => {
     await commands.dictationStop(id);
   },
@@ -23,7 +27,8 @@ export const dictationApi: DictationApi = {
 };
 
 export type DictationState =
-  | { state: "idle" | "checking" | "needs_model" | "ready" | "cancelling" }
+  | { state: "idle" | "checking" | "needs_model" | "ready" }
+  | { state: "cancelling"; message?: string }
   | DictationEvent;
 export function dictationBusy(value: DictationState): boolean {
   return [
@@ -41,6 +46,7 @@ export class DictationController {
   #state: DictationState = { state: "idle" };
   #listeners = new Set<() => void>();
   #active: string | null = null;
+  #cancelled: string | null = null;
   #disposed = false;
   #generation = 0;
   constructor(
@@ -77,6 +83,7 @@ export class DictationController {
     if (this.#active || this.#disposed) return;
     const id = crypto.randomUUID();
     this.#active = id;
+    this.#cancelled = null;
     this.#set(
       kind === "download"
         ? { state: "downloading", received: 0, total: 147951465 }
@@ -86,13 +93,13 @@ export class DictationController {
       await this.api[kind](id, (event) => {
         if (this.#disposed || this.#active !== id) return;
         if (
-          this.#state.state === "cancelling" &&
+          this.#cancelled === id &&
           !["cancelled", "complete", "failed", "model_ready"].includes(event.state)
         )
           return;
         if (["complete", "cancelled", "failed", "model_ready"].includes(event.state)) {
           this.#active = null;
-          if (this.#state.state === "cancelling") {
+          if (this.#cancelled === id) {
             this.#set({ state: "idle" });
             return;
           }
@@ -105,14 +112,14 @@ export class DictationController {
         else this.#set(event);
       });
       // The user can cancel/unmount while the native command is still being admitted.
-      if (this.#disposed || this.#active !== id || this.#state.state === "cancelling") {
+      if (this.#disposed || this.#active !== id) {
         await this.api.cancel(id);
-      }
+      } else if (this.#cancelled === id) await this.cancel();
     } catch (error) {
       if (this.#active !== id) return;
       this.#active = null;
       this.#set(
-        this.#state.state === "cancelling"
+        this.#cancelled === id
           ? { state: "idle" }
           : { state: "failed", message: errorMessage(error) },
       );
@@ -126,9 +133,11 @@ export class DictationController {
   }
   async stop() {
     if (!this.#active || this.#state.state !== "recording") return;
+    const id = this.#active;
     try {
-      await this.api.stop(this.#active);
+      await this.api.stop(id);
     } catch (error) {
+      if (this.#active !== id) return;
       this.#set({ state: "failed", message: errorMessage(error) });
       await this.cancel();
     }
@@ -140,11 +149,16 @@ export class DictationController {
       this.#set({ state: "idle" });
       return;
     }
+    this.#cancelled = id;
     this.#set({ state: "cancelling" });
     try {
       await this.api.cancel(id);
     } catch (error) {
-      this.#set({ state: "failed", message: `Could not stop dictation. ${errorMessage(error)}` });
+      if (this.#active !== id) return;
+      this.#set({
+        state: "cancelling",
+        message: `Could not stop dictation. ${errorMessage(error)}`,
+      });
     }
   }
   dispose() {

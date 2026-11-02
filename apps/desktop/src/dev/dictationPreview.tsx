@@ -65,6 +65,7 @@ function Preview() {
       className="chat-main"
       style={{ height: "100vh", padding: 24, justifyContent: "flex-end" }}
     >
+      <h1>Dictation preview</h1>
       <nav aria-label="Fixture controls" style={{ display: "flex", gap: 8 }}>
         <button type="button" className="g-button" onClick={fixture.complete}>
           Complete transcription
