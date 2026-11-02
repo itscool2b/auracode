@@ -565,8 +565,9 @@ async fn force_stop_waits_for_daemon_cancel() {
 
     // A cancel that never lands: killed after 5 s, with the gateway notice.
     h.manager.send(&chat.id, "more".into()).await.expect("send");
-    command(&silent_handle, CommandMatch::Prompt).await;
+    // Allow retirement/startup timers to advance before the external-writer handshake.
     h.status(&chat.id, SessionStatus::Running).await;
+    command(&silent_handle, CommandMatch::Prompt).await;
     let started = tokio::time::Instant::now();
     h.manager.force_stop(&chat.id).await.expect("force stop");
     h.status(&chat.id, SessionStatus::Stopped).await;
