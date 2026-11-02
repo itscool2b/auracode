@@ -11,7 +11,7 @@ import { createSetupFixture } from "./setupFixture";
 const unsupported = async (): Promise<never> => {
   throw new Error("This synthetic preview does not run native operations.");
 };
-export function mountCustomizePreview(container: HTMLElement) {
+export function createCustomizeFixture() {
   const workspace = new WorkspaceStore({
     snapshot: async () => ({
       projects: [
@@ -91,8 +91,13 @@ export function mountCustomizePreview(container: HTMLElement) {
       },
     },
   };
-  Object.assign(window, { customizeFixture: { refresh: () => workspace.refresh() } });
   void workspace.refresh();
+  return { workspace, services };
+}
+
+export function mountCustomizePreview(container: HTMLElement) {
+  const { workspace, services } = createCustomizeFixture();
+  Object.assign(window, { customizeFixture: { refresh: () => workspace.refresh() } });
   createRoot(container).render(
     <StrictMode>
       <CustomizeScreen
