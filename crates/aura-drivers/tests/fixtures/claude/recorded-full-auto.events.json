@@ -727,7 +727,7 @@
           "type": "tool_update",
           "tool_call_id": "toolu_01GLDJ3zG7NkbC3QxjmsB5pg",
           "status": null,
-          "title": "Write",
+          "title": "Write aura-auto.txt",
           "kind": "edit",
           "locations": [
             {

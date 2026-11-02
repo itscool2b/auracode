@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 interface Choice {
   readonly phase: string;
@@ -13,10 +13,13 @@ export function useDisclosure(key: string, phase: string, initial: boolean) {
   const memory = useContext(DisclosureMemory);
   const [choice, setChoice] = useState(() => memory?.get(key));
   const open = choice?.phase === phase ? choice.open : initial;
-  const setOpen = (value: boolean) => {
-    const next = { phase, open: value };
-    memory?.set(key, next);
-    setChoice(next);
-  };
+  const setOpen = useCallback(
+    (value: boolean) => {
+      const next = { phase, open: value };
+      memory?.set(key, next);
+      setChoice(next);
+    },
+    [key, memory, phase],
+  );
   return [open, setOpen] as const;
 }

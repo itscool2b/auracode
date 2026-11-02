@@ -49,6 +49,8 @@ export const MODES = [
   "recorded-thinking",
   "recorded-tools",
   "questions",
+  "questions&case=mixed#request",
+  "questions&case=group#question-step",
   "steering",
   "config-sync",
   "worktree-setup",
@@ -232,6 +234,16 @@ async function openRowMenu(page, name) {
 
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
+  request: async (page) => {
+    await page.getByRole("button", { name: "Ask question", exact: true }).click();
+    await page.getByRole("region", { name: "Waiting for your response" }).waitFor();
+  },
+  "question-step": async (page) => {
+    await OPENERS.request(page);
+    await page.getByRole("radio", { name: "Unit tests", exact: true }).check();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Failures", exact: true }).waitFor();
+  },
   codex: async (page) => showRow(await openAgent(page, "Codex")),
   "codex-adapter": async (page) => {
     const row = await openAgent(page, "Codex");
