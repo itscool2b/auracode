@@ -107,9 +107,10 @@ and keeps the previous one. It runs from the repository root as
    updater does), which keeps the data folder (`src-tauri/windows/hooks.nsh`); the registration
    stays in the registry, so the installer treats the empty folder as an update. The exit code is
    not taken as proof: the waiter checks that `auracode.exe` was written and logs its size and
-   hash next to the previous build's. Then it starts auracode again. If the binary is missing, or
-   the new build is not running 20 seconds later (it crashed, or Smart App Control blocked it),
-   the waiter restores the snapshot and starts that.
+   hash next to the previous build's. Then it starts auracode again. If the binary is missing,
+   Windows refuses to start it, or it is not running 20 seconds later, the waiter restores the
+   snapshot and starts that. A launch error is logged separately from a build that started and
+   exited. If the restored app also cannot start, its files remain restored and that error is logged.
 5. In the reopened app, chats that were running show their interrupted turn and Resume. An agent
    that keeps its own sessions, such as Claude Code, continues the same conversation, because its
    driver resumes by session id. Then check whatever only the installed app can show, such as the

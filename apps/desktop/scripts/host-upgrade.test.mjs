@@ -27,6 +27,7 @@ import {
   stampOf,
   toPrune,
   waiterCommandLine,
+  windows,
 } from "./host-upgrade.mjs";
 
 const temps = [];
@@ -362,6 +363,77 @@ test("a build that does not stay up is replaced by the snapshot", async () => {
   assert.equal(
     readdirSync(join(paths.installDir, "..")).filter((n) => n.includes(".replaced-")).length,
     0,
+  );
+});
+
+test("the real launcher rejects spawn errors without an unhandled process error", async () => {
+  await assert.rejects(windows.launch(join(temp(), "missing.exe")), { code: "ENOENT" });
+  // Invalid arguments throw synchronously inside spawn, unlike a missing or blocked executable.
+  await assert.rejects(windows.launch(null), { code: "ERR_INVALID_ARG_TYPE" });
+});
+
+for (const failure of ["throw", "reject"]) {
+  test(`a new build launch ${failure} restores and starts the previous app`, async () => {
+    const { paths, installer } = machine();
+    const system = fakeSystem(paths);
+    const originalLaunch = system.launch;
+    system.launch = (path) => {
+      if (readFileSync(path, "utf8") === "old") return originalLaunch(path);
+      system.calls.push(["launch", path, "new"]);
+      const error = new Error("new executable was blocked");
+      if (failure === "throw") throw error;
+      return Promise.reject(error);
+    };
+    const log = recorder();
+    assert.equal(await install(options({ installer }), paths, system, log), EXIT.failed);
+    assert.equal(readFileSync(join(paths.installDir, "auracode.exe"), "utf8"), "old");
+    assert.equal(readFileSync(join(paths.installDir, "resources", "notices.txt"), "utf8"), "old");
+    assert.equal(system.state.running, true);
+    assert.equal(system.state.times, 0, "spawn failure does not wait for a health check");
+    assert.deepEqual(
+      system.calls.filter(([call]) => call === "launch").map((call) => call[2]),
+      ["new", "old"],
+    );
+    assert.match(log.lines.join("\n"), /new build could not start: new executable was blocked/u);
+    assert.match(log.lines.join("\n"), /Restoring snapshot .* after the launch failed/u);
+    assert.ok(!log.lines.some((line) => line.includes("Installed and running")));
+  });
+
+  test(`a restored app launch ${failure} is reported after an upgrade fails`, async () => {
+    const { paths, installer } = machine();
+    const system = fakeSystem(paths, { installCode: 2 });
+    system.launch = (path) => {
+      assert.equal(readFileSync(path, "utf8"), "old", "restore completed before the launch");
+      const error = new Error("restored executable was blocked");
+      if (failure === "throw") throw error;
+      return Promise.reject(error);
+    };
+    const log = recorder();
+    assert.equal(await install(options({ installer }), paths, system, log), EXIT.failed);
+    assert.equal(readFileSync(join(paths.installDir, "auracode.exe"), "utf8"), "old");
+    assert.match(log.lines.join("\n"), /installer exited with code 2/u);
+    assert.match(
+      log.lines.join("\n"),
+      /restored app could not start: restored executable was blocked/u,
+    );
+    assert.ok(!log.lines.some((line) => line.includes("Installed and running")));
+  });
+}
+
+test("manual rollback reports a restored app launch failure", async () => {
+  const { paths, installer } = machine();
+  const system = fakeSystem(paths);
+  await install(options({ installer }), paths, system, recorder());
+  system.state.running = false;
+  system.launch = async () => {
+    throw new Error("restored executable was blocked");
+  };
+  const log = recorder();
+  assert.equal(await rollback(options(), paths, system, log), EXIT.failed);
+  assert.equal(readFileSync(join(paths.installDir, "auracode.exe"), "utf8"), "old");
+  assert.match(
+    log.lines.join("\n"),
+    /restored app could not start: restored executable was blocked/u,
   );
 });
 

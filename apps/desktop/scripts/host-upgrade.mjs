@@ -209,7 +209,16 @@ export const windows = {
     return run.error ? -1 : (run.status ?? -1);
   },
   launch(exe) {
-    spawn(exe, [], { detached: true, stdio: "ignore", env: cleanEnv(process.env) }).unref();
+    // A policy block is an asynchronous spawn error. Await it so the waiter can restore the
+    // snapshot instead of terminating on an unhandled ChildProcess error before the health check.
+    return new Promise((resolve, reject) => {
+      const child = spawn(exe, [], { detached: true, stdio: "ignore", env: cleanEnv(process.env) });
+      child.once("error", reject);
+      child.once("spawn", () => {
+        child.unref();
+        resolve();
+      });
+    });
   },
   /** Starts `commandLine` through WMI, so it is outside this process's job, with no window. */
   startOutsideJob(commandLine, cwd) {
@@ -403,6 +412,16 @@ async function healthy(system, installDir, seconds) {
   return hostProcesses(system.processes(), installDir).app.length > 0;
 }
 
+async function launchApp(system, exe, description, log) {
+  try {
+    await system.launch(exe);
+    return true;
+  } catch (error) {
+    log(`The ${description} could not start: ${error.message}`);
+    return false;
+  }
+}
+
 function prune(stateDir, keep, log) {
   for (const name of toPrune(snapshots(stateDir), keep)) {
     rmSync(join(stateDir, "snapshots", name), { recursive: true, force: true });
@@ -497,7 +516,7 @@ export async function install(options, paths, system, log) {
   if (code !== 0) {
     log(`The installer exited with code ${code}; restoring snapshot ${snapshot.name}.`);
     restoreApp(snapshot, paths.installDir, system.now());
-    system.launch(exe);
+    await launchApp(system, exe, "restored app", log);
     return EXIT.failed;
   }
   // The exit code alone is not proof: an installer can exit 0 without writing the binary.
@@ -506,7 +525,7 @@ export async function install(options, paths, system, log) {
       `The installer exited with code 0 but left no ${APP_EXE} in ${paths.installDir}; restoring snapshot ${snapshot.name}.`,
     );
     restoreApp(snapshot, paths.installDir, system.now());
-    system.launch(exe);
+    await launchApp(system, exe, "restored app", log);
     return EXIT.failed;
   }
   const hash = fileHash(exe);
@@ -514,13 +533,18 @@ export async function install(options, paths, system, log) {
   log(
     `Installed ${APP_EXE}: ${statSync(exe).size} bytes, sha256 ${hash.slice(0, 16)} (previous ${snapshot.app.sha256.slice(0, 16)}${same}).`,
   );
-  system.launch(exe);
+  if (!(await launchApp(system, exe, "new build", log))) {
+    log(`Restoring snapshot ${snapshot.name} after the launch failed.`);
+    restoreApp(snapshot, paths.installDir, system.now());
+    await launchApp(system, exe, "restored app", log);
+    return EXIT.failed;
+  }
   if (!(await healthy(system, paths.installDir, options.healthSeconds))) {
     log(
       `The new build did not stay up for ${options.healthSeconds} seconds; restoring snapshot ${snapshot.name}. If the restored app reports a newer database, run: rollback --snapshot ${snapshot.name} --restore-database`,
     );
     restoreApp(snapshot, paths.installDir, system.now());
-    system.launch(exe);
+    await launchApp(system, exe, "restored app", log);
     return EXIT.failed;
   }
   log(`Installed and running. Undo with: rollback --snapshot ${snapshot.name}`);
@@ -553,8 +577,9 @@ export async function rollback(options, paths, system, log) {
       );
     }
   }
-  system.launch(join(paths.installDir, APP_EXE));
-  return EXIT.done;
+  return (await launchApp(system, join(paths.installDir, APP_EXE), "restored app", log))
+    ? EXIT.done
+    : EXIT.failed;
 }
 
 export function status(paths, system, print = console.log) {
