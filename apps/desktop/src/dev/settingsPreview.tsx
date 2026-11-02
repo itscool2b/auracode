@@ -1,7 +1,14 @@
 /** Development-only settings harness. No native process, updater, keychain or network request. */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AgentEntry, AppInfo, SetupSnapshot, UpdateStatus } from "../bindings";
+import type {
+  AgentEntry,
+  AppInfo,
+  InstructionsTarget,
+  SetupSnapshot,
+  UpdateStatus,
+} from "../bindings";
+import { CustomizeScreen, type CustomizeSection } from "../components/customize/CustomizeScreen";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
 import { accountApi } from "../lib/account/api";
 import type { AccountStatus } from "../lib/account/bindings";
@@ -10,6 +17,7 @@ import { getAppearancePreference } from "../lib/appearance";
 import { profileApi } from "../lib/profiles";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
+import { createCustomizeFixture } from "./customizePreview";
 
 const info: AppInfo = {
   app_version: "0.1.0",
@@ -243,24 +251,36 @@ Object.assign(window, {
   },
 });
 function Preview() {
-  const [closed, setClosed] = useState(false);
+  const params = new URLSearchParams(location.search);
+  const transition = params.has("customize-navigation");
+  const legacy = params.has("legacy-instructions");
+  const [closed, setClosed] = useState(transition && !legacy);
+  const [section, setSection] = useState<CustomizeSection | null>(null);
+  const [customize] = useState(() => (transition ? createCustomizeFixture() : null));
+  const target: InstructionsTarget =
+    params.get("scope") === "chat"
+      ? { type: "chat", chat_id: "fixture-chat" }
+      : params.get("scope") === "folder"
+        ? { type: "folder", folder_id: "fixture-folder" }
+        : { type: "global" };
   const [entry, setEntry] = useState({ id: 0, email: "first@example.com" });
   Object.assign(window, {
     settingsNavigationFixture: {
       open: (email: string) => setEntry((previous) => ({ id: previous.id + 1, email })),
     },
   });
-  if (closed)
+  if (closed && !transition)
     return (
       <main className="g-root">
         <h1>Back to workspace</h1>
       </main>
     );
-  return (
+  const settings = (
     <SettingsScreen
       navigationId={String(entry.id)}
-      initialPage={signInFixture ? "account" : "general"}
+      initialPage={signInFixture ? "account" : legacy ? "instructions" : "general"}
       initialEmail={signInFixture ? entry.email : ""}
+      instructionsTarget={target}
       info={info}
       setup={setup}
       general={general}
@@ -272,6 +292,10 @@ function Preview() {
       onAgents={() => {
         calls.push("agents");
       }}
+      onCustomize={(section) => {
+        calls.push(`customize:${section}`);
+        if (transition) setSection(section);
+      }}
       onSetup={() => {
         calls.push("setup");
       }}
@@ -279,6 +303,36 @@ function Preview() {
         calls.push("diagnostics");
       }}
     />
+  );
+  if (!customize) return settings;
+  return (
+    <>
+      {/* Mirrors App's retained chat view. The uncontrolled draft exposes an accidental remount. */}
+      <main hidden={!closed || section !== null} className="g-root">
+        <h1>Back to workspace</h1>
+        <textarea aria-label="Chat draft" defaultValue="An unsent chat draft" />
+        <button type="button" onClick={() => setClosed(false)}>
+          Open Settings
+        </button>
+      </main>
+      {!closed && section === null ? settings : null}
+      {section ? (
+        <CustomizeScreen
+          workspace={customize.workspace}
+          services={customize.services}
+          initialSection={section}
+          instructionsTarget={target}
+          initialProjectId={target.type === "global" ? null : "fixture-project"}
+          activeChatId={target.type === "chat" ? target.chat_id : undefined}
+          chatLabel="Fixture chat folder"
+          onBack={() => {
+            setSection(null);
+            setClosed(true);
+          }}
+          onAgents={() => calls.push("agents")}
+        />
+      ) : null}
+    </>
   );
 }
 export function mountSettingsPreview(container: HTMLElement): void {
