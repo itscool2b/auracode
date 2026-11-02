@@ -191,6 +191,23 @@ export function collect() {
           files: [file(readFileSync(license, "utf8"), `${source}#sqlcipher/LICENSE`)],
         });
       }
+      if (pkg.name === "whisper-rs-sys") {
+        add({
+          ecosystem: "native",
+          name: "whisper.cpp and ggml (whisper-rs-sys source)",
+          version: pkg.version,
+          license: "MIT",
+          source: `${source}#whisper.cpp`,
+          distributions: ["desktop"],
+          targets: [target],
+          files: [
+            file(
+              readFileSync(join(directory, "whisper.cpp/LICENSE"), "utf8"),
+              `${source}#whisper.cpp/LICENSE`,
+            ),
+          ],
+        });
+      }
     }
     if (target.includes("windows")) {
       // This build dependency contributes compiled native code through SQLCipher's vendored feature.

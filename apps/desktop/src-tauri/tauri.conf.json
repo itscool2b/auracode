@@ -69,7 +69,8 @@
     "homepage": "https://auracode.si",
     "copyright": "Copyright 2026 itscool2b",
     "macOS": {
-      "minimumSystemVersion": "13.3"
+      "minimumSystemVersion": "13.3",
+      "entitlements": "Entitlements.plist"
     },
     "windows": {
       "webviewInstallMode": {

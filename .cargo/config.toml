@@ -1,0 +1,8 @@
+# Release bundles must also run on CPUs older than the build host. Whisper is CPU-only and
+# statically linked; do not let ggml emit host-specific instructions into distributed binaries.
+[env]
+GGML_NATIVE = "OFF"
+GGML_AVX = "OFF"
+GGML_AVX2 = "OFF"
+GGML_FMA = "OFF"
+GGML_F16C = "OFF"

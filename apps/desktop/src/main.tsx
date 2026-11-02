@@ -92,6 +92,10 @@ void appearanceReady.then(() => {
         void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
           mountQuestionsPreview(container),
         );
+      else if (mode === "dictation")
+        void import("./dev/dictationPreview").then(({ mountDictationPreview }) =>
+          mountDictationPreview(container),
+        );
       else if (mode === "steering")
         void import("./dev/steeringPreview").then(({ mountSteeringPreview }) =>
           mountSteeringPreview(container),

@@ -58,6 +58,11 @@ tokio-util = "0.7.20"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tempfile.workspace = true
+sha2.workspace = true
+# Native microphone capture and CPU-only, statically linked offline speech recognition.
+cpal = "=0.18.2"
+rubato = "=0.16.2"
+whisper-rs = { version = "=0.16.0", default-features = false }
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 keepawake = "=0.6.1"
