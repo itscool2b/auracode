@@ -35,11 +35,12 @@ function Preview() {
     let receive: ((value: EventBatch) => void) | null = null;
     let pending: {
       id: string;
-      answer: UiAnswer | null;
+      event: AuraEvent;
       resolve: () => void;
       reject: (error: Error) => void;
     } | null = null;
     const calls: { id: string; answer: UiAnswer | null }[] = [];
+    const permissionCalls: { id: string; optionId: string | null }[] = [];
     let sent = false;
     const publish = (updates: AuraEvent[]) => {
       const start = events.length;
@@ -64,12 +65,18 @@ function Preview() {
         respondUi: async (_chat, id, answer) => {
           calls.push({ id, answer });
           return new Promise<void>((resolve, reject) => {
-            pending = { id, answer, resolve, reject };
+            pending = { id, event: ev.questionResolved(id, answer), resolve, reject };
+          });
+        },
+        respondPermission: async (_chat, id, optionId) => {
+          permissionCalls.push({ id, optionId });
+          return new Promise<void>((resolve, reject) => {
+            pending = { id, event: ev.permissionResolved(id, optionId), resolve, reject };
           });
         },
       }),
     );
-    Object.assign(window, { questionCalls: calls });
+    Object.assign(window, { questionCalls: calls, permissionCalls });
     return {
       chat,
       transport,
@@ -101,6 +108,29 @@ function Preview() {
                   },
                 ],
               };
+        if (scenario === "group" && prompt.type === "questions")
+          prompt.questions.push(
+            {
+              id: "details",
+              header: "Details",
+              question: "Which details should I report?",
+              options: [
+                { label: "Failures", description: "Include failing checks." },
+                { label: "Timing", description: "Include elapsed times." },
+              ],
+              multi_select: true,
+              allow_free_text: true,
+            },
+            {
+              id: "notes",
+              header: "Notes",
+              question: "What else should I know?",
+              options: [],
+              multi_select: false,
+              allow_free_text: true,
+            },
+          );
+        if (scenario === "permission-first") publish([ev.permission("permission-1")]);
         publish([
           { type: "ui_request", request_id: "question-1", prompt },
           {
@@ -113,7 +143,7 @@ function Preview() {
       },
       resolve() {
         if (!pending) return;
-        publish([ev.questionResolved(pending.id, pending.answer)]);
+        publish([pending.event]);
         pending.resolve();
         pending = null;
       },
@@ -123,8 +153,19 @@ function Preview() {
       },
       withdraw() {
         publish([ev.questionResolved("question-1", null, "agent")]);
-        pending?.resolve();
-        pending = null;
+        if (pending?.id === "question-1") {
+          pending.resolve();
+          pending = null;
+        }
+      },
+      askAnother() {
+        publish([
+          {
+            type: "ui_request",
+            request_id: "question-2",
+            prompt: { type: "input", message: "Any final notes?", placeholder: null },
+          },
+        ]);
       },
       update() {
         publish([ev.notice("New background update")]);
@@ -153,6 +194,9 @@ function Preview() {
         </button>
         <button type="button" className="g-button" onClick={fixture.update}>
           Background update
+        </button>
+        <button type="button" className="g-button" onClick={fixture.askAnother}>
+          Ask another question
         </button>
         <button
           type="button"
