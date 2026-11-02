@@ -28,7 +28,7 @@ export async function checkSettingsNavigation(page, url) {
   }
   await page.goto(`${url}/?preview=settings&legacy-instructions`);
   await page.waitForFunction(() =>
-    window.settingsFixture.calls().includes("customize:instructions"),
+    window.settingsFixture?.calls().includes("customize:instructions"),
   );
   assert.equal(
     await page.locator(".instructions-panel").count(),
