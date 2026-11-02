@@ -511,7 +511,7 @@ async fn force_stop_waits_for_daemon_cancel() {
         agents: vec![with_process(hermes.clone())],
         ..Options::default()
     };
-    let (lands, _) = ScriptedDriver::new(vec![
+    let (lands, lands_handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("h1"),
         Step::Expect(CommandMatch::Prompt),
@@ -521,7 +521,7 @@ async fn force_stop_waits_for_daemon_cancel() {
         end_turn(StopReason::Cancelled),
         Step::Hang,
     ]);
-    let (silent, _) = ScriptedDriver::new(vec![
+    let (silent, silent_handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("h1"),
         Step::Expect(CommandMatch::Prompt),
@@ -531,8 +531,11 @@ async fn force_stop_waits_for_daemon_cancel() {
     let chat = h.chat_with("hermes").await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    // Running also covers workspace/memory preparation, before a turn reaches the driver.
+    command(&lands_handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Running).await;
     h.manager.force_stop(&chat.id).await.expect("force stop");
+    command(&lands_handle, CommandMatch::Interrupt).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     assert_ne!(
         h.statuses.last(&chat.id).map(|update| update.status),
@@ -562,6 +565,7 @@ async fn force_stop_waits_for_daemon_cancel() {
 
     // A cancel that never lands: killed after 5 s, with the gateway notice.
     h.manager.send(&chat.id, "more".into()).await.expect("send");
+    command(&silent_handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Running).await;
     let started = tokio::time::Instant::now();
     h.manager.force_stop(&chat.id).await.expect("force stop");
@@ -772,7 +776,7 @@ async fn a_force_stopped_agent_holds_its_session_until_its_process_is_gone() {
         },
         ..Options::default()
     };
-    let (wedged, _) = ScriptedDriver::new(vec![
+    let (wedged, wedged_handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -783,6 +787,7 @@ async fn a_force_stopped_agent_holds_its_session_until_its_process_is_gone() {
     let a = h.chat().await;
     h.status(&a.id, SessionStatus::Ready).await;
     h.manager.send(&a.id, "go".into()).await.expect("send");
+    command(&wedged_handle, CommandMatch::Prompt).await;
     h.status(&a.id, SessionStatus::Running).await;
     h.manager.force_stop(&a.id).await.expect("force stop");
     h.status(&a.id, SessionStatus::Stopped).await;
@@ -1124,7 +1129,7 @@ async fn shutdown_all_bounded() {
         agents: vec![with_process(mock_spec())],
         ..Options::default()
     };
-    let (polite, _) = ScriptedDriver::new(vec![
+    let (polite, polite_handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -1132,7 +1137,7 @@ async fn shutdown_all_bounded() {
         Step::Expect(CommandMatch::Shutdown),
         Step::Exit(DriverExit::Closed),
     ]);
-    let (wedged, _) = ScriptedDriver::new(vec![
+    let (wedged, wedged_handle) = ScriptedDriver::new(vec![
         Step::Spawn(launch()),
         ready_step("n2"),
         Step::Expect(CommandMatch::Prompt),
@@ -1145,6 +1150,8 @@ async fn shutdown_all_bounded() {
     h.status(&b.id, SessionStatus::Ready).await;
     h.manager.send(&a.id, "one".into()).await.expect("send");
     h.manager.send(&b.id, "two".into()).await.expect("send");
+    command(&polite_handle, CommandMatch::Prompt).await;
+    command(&wedged_handle, CommandMatch::Prompt).await;
     h.status(&a.id, SessionStatus::Running).await;
     h.status(&b.id, SessionStatus::Running).await;
     let started = tokio::time::Instant::now();
@@ -1267,7 +1274,7 @@ async fn recovery_after_a_crash() {
 /// S15: queued prompts survive a restart, held; Send queued releases them.
 #[tokio::test(start_paused = true)]
 async fn queue_survives_a_restart_held() {
-    let (first, _) = ScriptedDriver::new(vec![
+    let (first, first_handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Hang,
@@ -1276,6 +1283,7 @@ async fn queue_survives_a_restart_held() {
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    command(&first_handle, CommandMatch::Prompt).await;
     let later = h
         .manager
         .send(&chat.id, "later".into())
