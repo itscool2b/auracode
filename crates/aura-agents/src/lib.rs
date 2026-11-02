@@ -22,6 +22,7 @@ mod candidates;
 pub mod catalog;
 pub mod config_vendor;
 mod connection_choices;
+mod cursor_entry;
 mod detect;
 pub mod harness;
 pub mod hosts;

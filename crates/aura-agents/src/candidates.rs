@@ -150,6 +150,14 @@ pub(crate) fn fingerprint(
             if let Some(entry) = crate::npm_entry::entry(spec.id, &candidate.path) {
                 observe(&entry);
             }
+            if spec.id == "cursor"
+                && let Some((node, entry)) = crate::cursor_entry::command(&candidate.path)
+            {
+                observe(&node);
+                if let Some(folder) = entry.parent() {
+                    observe(&folder.join("package.json"));
+                }
+            }
         }
     }
     hash.finish()
