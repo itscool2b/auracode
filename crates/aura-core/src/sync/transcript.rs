@@ -21,6 +21,24 @@ pub struct Imported {
 pub(super) const PIECE_BYTES: usize = 3 * 1024 * 1024;
 const MAX_ENTRY_BYTES: usize = 16 * 1024 * 1024;
 const MAX_PARTS: u32 = 65_536;
+// One turn can carry many large raw-output blobs. Nested image discovery has one shared budget.
+const IMAGE_SCAN_BYTES: usize = 16 * 1024 * 1024;
+
+fn image_reference_text(mime: &str) -> bool {
+    mime.starts_with("text/") || mime == "application/json"
+}
+
+fn images_in_bytes(bytes: &[u8], total: u64) -> std::collections::BTreeSet<String> {
+    let text = String::from_utf8_lossy(bytes);
+    crate::chatstore::image_refs::hashes(&text)
+        // A clipped prefix is not a URI delimiter: the following byte could extend the hash.
+        .filter(|hash| {
+            bytes.len() as u64 == total
+                || hash.as_ptr() as usize + hash.len() < text.as_ptr() as usize + text.len()
+        })
+        .map(str::to_owned)
+        .collect()
+}
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -364,6 +382,37 @@ fn referenced(entry: &Entry) -> Vec<String> {
             }
             _ => {}
         },
+        _ => {}
+    }
+    result
+}
+
+/// Unlike explicit image parts, arbitrary text can contain an unavailable or forged private URI.
+/// Keep these optional on import, and require source-chat ownership before exporting any bytes.
+fn inline_images(entry: &Entry) -> std::collections::BTreeSet<String> {
+    let mut result = std::collections::BTreeSet::new();
+    let mut text = |text: &str| {
+        result.extend(crate::chatstore::image_refs::hashes(text).map(str::to_owned));
+    };
+    match entry {
+        Entry::Event(event) => text(&event.payload),
+        Entry::Turn(turn) => {
+            if let Some(prefix) = &turn.continuation_prefix {
+                text(prefix);
+            }
+            for part in &turn.parts {
+                if let PromptPart::Text { text: value } = part {
+                    text(value);
+                }
+            }
+        }
+        Entry::Steering(steer) => {
+            for part in &steer.parts {
+                if let PromptPart::Text { text: value } = part {
+                    text(value);
+                }
+            }
+        }
         _ => {}
     }
     result

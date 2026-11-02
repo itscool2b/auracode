@@ -189,6 +189,7 @@ impl Translator {
                         | "dynamicToolCall"
                         | "webSearch"
                         | "imageView"
+                        | "imageGeneration"
                         | "collabAgentToolCall"
                         | "contextCompaction",
                     ) => {
@@ -274,7 +275,8 @@ impl Translator {
                                 title: title.clone(),
                                 status,
                                 locations: Vec::new(),
-                                raw_input: Some(item.clone()),
+                                raw_input: (item["type"] != "imageGeneration")
+                                    .then(|| item.clone()),
                                 tool_name: item["tool"].as_str().map(str::to_owned),
                                 content: content.clone(),
                                 truncated: None,
@@ -422,6 +424,7 @@ fn tool_identity(item: &Value) -> (ToolKind, String) {
         Some("fileChange") => (ToolKind::Edit, "File changes".into()),
         Some("webSearch") => (ToolKind::Search, "Web search".into()),
         Some("imageView") => (ToolKind::Read, "View image".into()),
+        Some("imageGeneration") => (ToolKind::Other, "Generate image".into()),
         Some("contextCompaction") => (ToolKind::Think, "Compact context".into()),
         _ => (
             ToolKind::Other,
@@ -430,6 +433,25 @@ fn tool_identity(item: &Value) -> (ToolKind, String) {
     }
 }
 fn content(item: &Value) -> Vec<ToolContent> {
+    let image_path = match item["type"].as_str() {
+        Some("imageView") => item["path"].as_str(),
+        Some("imageGeneration") => item["savedPath"].as_str(),
+        _ => None,
+    };
+    if let Some(path) = image_path {
+        return vec![ToolContent::Text {
+            text: crate::image_reference("Agent image", path),
+            truncated: None,
+        }];
+    }
+    if item["type"] == "imageGeneration" {
+        // `result` can contain a very large base64 image. This event model carries local
+        // references, not binary payloads; never put those bytes in the text transcript.
+        return vec![ToolContent::Text {
+            text: "Image generation returned no saved image path.".into(),
+            truncated: None,
+        }];
+    }
     if item["type"] == "commandExecution" {
         return item["aggregatedOutput"]
             .as_str()
@@ -479,6 +501,32 @@ fn content(item: &Value) -> Vec<ToolContent> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn native_image_paths_survive_without_base64_in_the_transcript() {
+        for item in [
+            json!({"type":"imageView","path":"C:/work/image (1).png"}),
+            json!({"type":"imageGeneration","savedPath":"C:/work/image (1).png","result":"base64"}),
+        ] {
+            assert_eq!(
+                content(&item),
+                vec![ToolContent::Text {
+                    text: "![Agent image](<C:/work/image (1).png>)".into(),
+                    truncated: None
+                }]
+            );
+        }
+        let mut translator = Translator::new("spawn".into());
+        let output = translator.notification("item/completed", &json!({"item":{"id":"image","type":"imageGeneration","status":"completed","savedPath":"out.png","result":"base64"}}));
+        assert!(output.iter().any(|event| matches!(event, AuraEvent::ToolCall(call) if call.content.len() == 1 && call.raw_input.is_none())));
+        assert!(
+            !format!(
+                "{:?}",
+                content(&json!({"type":"imageGeneration","result":"base64"}))
+            )
+            .contains("base64")
+        );
+    }
 
     #[test]
     fn snapshots_complete_partial_text_without_repeating_it() {

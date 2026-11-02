@@ -258,6 +258,8 @@ export const commands = {
 	continuationPreview: (chatId: string, action: ContinuationAction) => typedError<ContinuationPreview, AppError>(__TAURI_INVOKE("continuation_preview", { chatId, action })),
 	continuationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("continuation_apply", { chatId, token })),
 	composerPick: (chatId: string) => typedError<ComposerAttachment | null, AppError>(__TAURI_INVOKE("composer_pick", { chatId })),
+	chatMessageImages: (chatId: string, context: ChatImageContext) => typedError<ChatImage[], AppError>(__TAURI_INVOKE("chat_message_images", { chatId, context })),
+	chatImagePreview: (chatId: string, source: ChatImageSource, full: boolean) => typedError<ChatImagePreview, AppError>(__TAURI_INVOKE("chat_image_preview", { chatId, source, full })),
 	composerImport: (chatId: string, path: string) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_import", { chatId, path })),
 	composerPaste: (chatId: string, bytes: number[]) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_paste", { chatId, bytes })),
 	composerMentions: (chatId: string, query: string) => typedError<FileMention[], AppError>(__TAURI_INVOKE("composer_mentions", { chatId, query })),
@@ -985,6 +987,24 @@ export type ChatFolderContext = {
 };
 
 export type ChatFolderMode = "direct" | "worktree";
+
+export type ChatImage = {
+	source: ChatImageSource,
+	name: string,
+};
+
+/**  A persisted user message's image references, scoped to its owning chat. */
+export type ChatImageContext = { type: "turn"; turn_id: string } | { type: "steering"; message_id: string } | { type: "queued"; prompt_id: string };
+
+/**  A bounded, decoded and re-encoded PNG. Original metadata and active formats are not exposed. */
+export type ChatImagePreview = {
+	png_base64: string,
+	width: number,
+	height: number,
+};
+
+/**  References are resolved by the backend. The renderer never supplies an attachment hash. */
+export type ChatImageSource = { type: "attachment"; id: string } | { type: "message"; context: ChatImageContext; index: number } | { type: "project"; path: string };
 
 export type ChatMove = {
 	project_id: string,

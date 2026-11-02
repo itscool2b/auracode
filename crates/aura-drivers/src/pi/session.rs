@@ -1111,7 +1111,10 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
     }
     let control = process.control;
     let stdin_observer = s.sink.clone();
-    let mut stdout = process.io.stdout;
+    let mut stdout = crate::incoming_images::ImageLineSource::new(
+        process.io.stdout,
+        s.setup.attachment_writer.clone(),
+    );
     let mut exit = control.exited();
     let mut exited = None;
     let mut process_done = false;

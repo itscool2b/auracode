@@ -33,3 +33,14 @@ pub mod replay;
 pub mod testing;
 
 pub mod controls;
+pub mod incoming_images;
+
+/// Preserve a native image's file reference without transporting its binary payload as text.
+/// The UI accepts local paths only and the session validates the file against its chat root.
+pub(crate) fn image_reference(label: &str, path: &str) -> String {
+    if path.is_empty() || path.len() > 4096 || path.contains(['<', '>', '\n', '\r', '\0']) {
+        return "Image reference unavailable.".into();
+    }
+    let label = label.replace(['[', ']', '\n', '\r'], " ");
+    format!("![{label}](<{path}>)")
+}

@@ -1,11 +1,12 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { File as FileIcon, Folder, ImageIcon, X } from "lucide-react";
+import { File as FileIcon, Folder, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ComposerAttachment, FileMention } from "../../bindings";
 import type { ComposerTransport } from "../../lib/composer";
 import { composerDraft } from "../../lib/composerDraft";
 import { errorMessage } from "../../lib/errors";
+import { ChatImageTile } from "./ChatImages";
 
 export function useComposerContext(chatId: string | undefined, api: ComposerTransport | undefined) {
   const [draft] = useState(() => composerDraft(chatId, api));
@@ -125,23 +126,31 @@ export function ContextChips({
   if (!context.attachments.length && !context.mentions.length && !context.busy) return null;
   return (
     <section className="composer-context" aria-label="Message context">
-      {context.attachments.map((item) => (
-        <span
-          className="composer-context-chip"
-          key={item.id}
-          title={`${item.name} · ${Math.ceil(item.bytes / 1024)} KB`}
-        >
-          {item.image ? <ImageIcon size={14} /> : <FileIcon size={14} />}
-          <span>{item.name}</span>
-          <button
-            type="button"
-            aria-label={`Remove ${item.name}`}
-            onClick={() => context.removeAttachment(item.id)}
+      {context.attachments.map((item) =>
+        item.image ? (
+          <ChatImageTile
+            key={item.id}
+            image={{ name: item.name, source: { type: "attachment", id: item.id } }}
+            onRemove={() => context.removeAttachment(item.id)}
+          />
+        ) : (
+          <span
+            className="composer-context-chip"
+            key={item.id}
+            title={`${item.name} · ${Math.ceil(item.bytes / 1024)} KB`}
           >
-            <X size={12} />
-          </button>
-        </span>
-      ))}
+            <FileIcon size={14} />
+            <span>{item.name}</span>
+            <button
+              type="button"
+              aria-label={`Remove ${item.name}`}
+              onClick={() => context.removeAttachment(item.id)}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ),
+      )}
       {context.mentions.map((path) => (
         <span className="composer-context-chip" key={path} title={path}>
           <span>@{path}</span>

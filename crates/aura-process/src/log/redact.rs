@@ -10,6 +10,9 @@
 //! 3. Every remaining string (object keys included), every raw line and stderr line: the secret
 //!    literals from [`Redactor::set_secrets`] to `<SECRET>`, token shapes (`sk-ant-...`, `ghp_...`,
 //!    JWTs, `Bearer ...`, ...) to `<TOKEN>`, and email addresses to `<EMAIL>`.
+//! 4. Binary image fields in native content blocks become `<IMAGE_DATA>`. The malformed/truncated
+//!    JSON fallback also hides string-valued `data`, `blob` and `result`: an image's type or MIME
+//!    discriminator may occur after the retained prefix. Nested text and metadata remain readable.
 //!
 //! JSON text that does not parse (the head of a line cut before it was queued) gets rules 1 and 2
 //! from a tokenizer that tracks the path of keys, so they reach the same strings as in parsed JSON,
@@ -36,6 +39,8 @@ const TOKEN: &str = "<TOKEN>";
 
 /// What an email address becomes.
 const EMAIL: &str = "<EMAIL>";
+
+const IMAGE_DATA: &str = "<IMAGE_DATA>";
 
 /// Secret literals shorter than this are ignored: they would redact ordinary words.
 const MIN_SECRET_CHARS: usize = 12;
@@ -164,8 +169,8 @@ impl Redactor {
     }
 
     /// Redacts JSON text that could not be parsed, such as the head of a line cut before it was
-    /// queued: rules 1 and 2 by [`blank_by_keys`], which tracks where each string sits as
-    /// [`redact_value`](Self::redact_value) sees it in parsed JSON, then rule 3 over the whole text.
+    /// queued: credential/identity paths and conservative image fields by [`blank_by_keys`],
+    /// then rule 3 over the whole text. Binary discriminators may be beyond the retained prefix.
     pub(crate) fn redact_json_text<'a>(&self, text: &'a str) -> Cow<'a, str> {
         let secrets = self.read();
         match blank_by_keys(text) {
@@ -202,6 +207,8 @@ fn walk(value: &mut Value, blank: bool, secrets: &Secrets) {
         Value::String(text) => {
             if blank {
                 REDACTED.clone_into(text);
+            } else if image_data_url(text) {
+                IMAGE_DATA.clone_into(text);
             } else if let Cow::Owned(redacted) = redact_str(text, secrets) {
                 *text = redacted;
             }
@@ -219,6 +226,7 @@ fn walk(value: &mut Value, blank: bool, secrets: &Secrets) {
 /// An object's fields. `entry` marks a `{ "name", "value" }` entry of an `env` or `headers` array,
 /// whose `value` is blanked (rule 2); its other fields follow the rules as anywhere else.
 fn walk_fields(fields: &mut Map<String, Value>, blank: bool, entry: bool, secrets: &Secrets) {
+    blank_image_fields(fields);
     for (key, field) in fields.iter_mut() {
         if blank {
             walk(field, true, secrets);
@@ -237,6 +245,85 @@ fn walk_fields(fields: &mut Map<String, Value>, blank: bool, entry: bool, secret
         }
     }
     redact_keys(fields, secrets);
+}
+
+fn image_data_url(text: &str) -> bool {
+    text.get(..11)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:image/"))
+}
+
+/// Inspect only the URI prefix of an unfinished JSON string. JSON can escape slashes or any
+/// ASCII letter, so checking its raw bytes alone would miss an encoded `data:image/` prefix.
+fn image_data_url_json(text: &str) -> bool {
+    let mut bytes = text.bytes();
+    for expected in b"data:image/" {
+        let Some(mut actual) = bytes.next() else {
+            return false;
+        };
+        if actual == b'\\' {
+            actual = match bytes.next() {
+                Some(b'/') => b'/',
+                Some(b'u') => {
+                    let mut codepoint = 0u16;
+                    for _ in 0..4 {
+                        let Some(digit) =
+                            bytes.next().and_then(|byte| char::from(byte).to_digit(16))
+                        else {
+                            return false;
+                        };
+                        codepoint = (codepoint << 4) | digit as u16;
+                    }
+                    if codepoint > 127 {
+                        return false;
+                    }
+                    codepoint as u8
+                }
+                _ => return false,
+            };
+        }
+        if actual.to_ascii_lowercase() != *expected {
+            return false;
+        }
+    }
+    true
+}
+
+fn blank_image_string(value: Option<&mut Value>) {
+    if let Some(Value::String(text)) = value {
+        IMAGE_DATA.clone_into(text);
+    }
+}
+
+/// Native ACP/MCP/Pi, Claude source blocks, embedded resources and Codex generated images.
+/// Inspect sibling discriminators before walking fields, so JSON property order cannot matter.
+fn blank_image_fields(fields: &mut Map<String, Value>) {
+    let kind = fields.get("type").and_then(Value::as_str);
+    let image = kind == Some("image");
+    let generation = kind == Some("imageGeneration");
+    let mime = fields
+        .get("mimeType")
+        .or_else(|| fields.get("media_type"))
+        .and_then(Value::as_str)
+        .is_some_and(|mime| mime.starts_with("image/"));
+    if image || mime {
+        blank_image_string(fields.get_mut("data"));
+        blank_image_string(fields.get_mut("blob"));
+    }
+    if image {
+        blank_image_string(
+            fields
+                .get_mut("source")
+                .and_then(Value::as_object_mut)
+                .and_then(|source| source.get_mut("data")),
+        );
+    }
+    if generation {
+        blank_image_string(fields.get_mut("result"));
+    }
+}
+
+fn ambiguous_binary_key(key: &str) -> bool {
+    matches!(key, "data" | "blob" | "result")
 }
 
 /// An `env` or `headers` array: the `value` of each `{ "name", "value" }` entry is blanked, the rest
@@ -319,14 +406,19 @@ impl Frame {
             Frame::Array { blank, .. } => *blank,
         }
     }
+
+    fn image_value(&self) -> bool {
+        matches!(self, Frame::Object { key: Some(key), .. } if ambiguous_binary_key(key))
+    }
 }
 
-/// Rules 1 and 2 over JSON text that does not parse (the head of a cut line, or a malformed line),
+/// Credential/identity and image rules over JSON text that does not parse (a cut or malformed line),
 /// with a tokenizer that tracks the path of keys: every string value at or under a credential,
 /// identity or `env` key becomes `"<REDACTED>"`, and so does the `value` of every object in an
 /// `env` or `headers` array. A string inside an object is a key when a `:` follows it. A blanked
 /// string the text ends inside loses everything after its opening quote. Keys, numbers and the
-/// structure are copied as they are.
+/// structure are copied as they are. Ambiguous binary string keys are hidden without requiring
+/// a sibling type/MIME discriminator, which may occur after the cut.
 fn blank_by_keys(text: &str) -> Cow<'_, str> {
     let bytes = text.as_bytes();
     let mut out = String::new();
@@ -357,10 +449,17 @@ fn blank_by_keys(text: &str) -> Cow<'_, str> {
                         *key_is_value = raw == "value";
                         *key = Some(normalize_key(&raw));
                     }
-                } else if stack.last().is_some_and(Frame::blanks_value) {
+                } else if stack.last().is_some_and(Frame::blanks_value)
+                    || stack.last().is_some_and(Frame::image_value)
+                    || image_data_url_json(text.get(at + 1..end).unwrap_or_default())
+                {
                     out.push_str(text.get(copied..at).unwrap_or_default());
                     out.push('"');
-                    out.push_str(REDACTED);
+                    out.push_str(if stack.last().is_some_and(Frame::blanks_value) {
+                        REDACTED
+                    } else {
+                        IMAGE_DATA
+                    });
                     if closed {
                         out.push('"');
                     }
@@ -889,5 +988,94 @@ mod tests {
             redactor.redact_json_text(r#"[{"headers":[{"value":"h"#),
             r#"[{"headers":[{"value":"<REDACTED>"#
         );
+    }
+    #[test]
+    fn native_image_payloads_are_removed_without_losing_text_or_metadata() {
+        let redactor = Redactor::standard();
+        let mut value = serde_json::json!({
+            "content": [
+                {"data":"ACP_IMAGE_BYTES", "mimeType":"image/png", "type":"image", "width":640},
+                {"type":"image", "source":{"type":"base64", "media_type":"image/jpeg", "data":"CLAUDE_IMAGE_BYTES"}},
+                {"type":"resource", "resource":{"blob":"RESOURCE_IMAGE_BYTES", "mimeType":"image/webp", "uri":"file:///work/result.webp"}},
+                {"type":"text", "text":"Useful tool output", "data":"Ordinary data"},
+                {"type":"resource", "resource":{"mimeType":"text/plain", "blob":"NON_IMAGE_RESOURCE"}},
+                {"type":"image", "url":"data:image/png;base64,URL_IMAGE_BYTES"}
+            ],
+            "item":{"result":"GENERATED_IMAGE_BYTES", "type":"imageGeneration", "savedPath":"output.png", "status":"completed"},
+            "result":{"text":"Normal RPC result", "count":3},
+            "apiKey":"secret-credential"
+        });
+        redactor.redact_value(&mut value);
+        let text = value.to_string();
+        for payload in [
+            "ACP_IMAGE_BYTES",
+            "CLAUDE_IMAGE_BYTES",
+            "RESOURCE_IMAGE_BYTES",
+            "URL_IMAGE_BYTES",
+            "GENERATED_IMAGE_BYTES",
+            "secret-credential",
+        ] {
+            assert!(!text.contains(payload), "{payload} survived");
+        }
+        assert_eq!(value["content"][0]["data"], IMAGE_DATA);
+        assert_eq!(value["content"][0]["width"], 640);
+        assert_eq!(value["content"][1]["source"]["media_type"], "image/jpeg");
+        assert_eq!(
+            value["content"][2]["resource"]["uri"],
+            "file:///work/result.webp"
+        );
+        assert_eq!(value["content"][3]["text"], "Useful tool output");
+        assert_eq!(value["content"][3]["data"], "Ordinary data");
+        assert_eq!(
+            value["content"][4]["resource"]["blob"],
+            "NON_IMAGE_RESOURCE"
+        );
+        assert_eq!(value["item"]["status"], "completed");
+        assert_eq!(value["item"]["savedPath"], "output.png");
+        assert_eq!(value["result"]["text"], "Normal RPC result");
+        assert_eq!(value["apiKey"], REDACTED);
+    }
+
+    #[test]
+    fn cut_image_payloads_hide_every_prefix_even_before_the_type_discriminator() {
+        let redactor = Redactor::standard();
+        for start in [
+            r#"{"data":""#,
+            r#"{"type":"image","source":{"data":""#,
+            r#"{"type":"resource","resource":{"blob":""#,
+            r#"{"item":{"result":""#,
+            r#"{"\u0064ata":""#,
+        ] {
+            let payload = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=";
+            for cut in 1..=payload.len() {
+                let raw = format!("{start}{}", &payload[..cut]);
+                assert_eq!(
+                    redactor.redact_json_text(&raw),
+                    format!("{start}{IMAGE_DATA}")
+                );
+            }
+        }
+        let raw = r#"{"method":"session/update","result":{"text":"keep text","data":"encoded","count":4},"password":"secret","tail":"cut"#;
+        assert_eq!(
+            redactor.redact_json_text(raw),
+            r#"{"method":"session/update","result":{"text":"keep text","data":"<IMAGE_DATA>","count":4},"password":"<REDACTED>","tail":"cut"#
+        );
+        assert_eq!(
+            redactor.redact_json_text(r#"{"url":"data:image/png;base64,encoded"#),
+            r#"{"url":"<IMAGE_DATA>"#
+        );
+        for key in ["uri", "url"] {
+            for prefix in [
+                r"data:image\/",
+                r"data:\u0069mage\u002f",
+                r"\u0064ata:IMAGE/",
+            ] {
+                let raw = format!(r#"{{"{key}":"{prefix}png;base64,encoded"#);
+                assert_eq!(
+                    redactor.redact_json_text(&raw),
+                    format!(r#"{{"{key}":"<IMAGE_DATA>"#)
+                );
+            }
+        }
     }
 }

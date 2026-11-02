@@ -8,6 +8,27 @@ use aura_sync::wire::Blob;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+#[test]
+fn nested_image_scan_keeps_complete_refs_and_rejects_a_clipped_hash_boundary() {
+    let hash = "a".repeat(64);
+    let reference = format!("aura-image:{hash}");
+    assert_eq!(
+        images_in_bytes(reference.as_bytes(), reference.len() as u64)
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![hash.clone()]
+    );
+    assert!(images_in_bytes(reference.as_bytes(), reference.len() as u64 + 1).is_empty());
+    let delimited = format!("{reference}> ignored");
+    assert!(
+        images_in_bytes(
+            &delimited.as_bytes()[..reference.len() + 1],
+            delimited.len() as u64
+        )
+        .contains(&hash)
+    );
+}
+
 fn fixture(
     key: Arc<AccountKey>,
     device: &str,
@@ -216,8 +237,101 @@ fn head_waits_for_all_uploads_and_remote_chain_rejects_rewrite_and_substitution(
     let key = Arc::new(AccountKey::generate().unwrap());
     let (_dir, mut source, context, files) = fixture(key.clone(), "source");
     let (_target_dir, mut target, target_context, target_files) = fixture(key, "target");
-    let (_, turn, _) = seed(&source, &files);
+    let (chat, turn, _) = seed(&source, &files);
+    let owned_bytes = b"owned agent image bytes";
+    let nested_bytes = b"agent image referenced only inside full tool output";
+    let foreign_bytes = b"another chat's private image bytes";
+    let owned = format!("{:x}", Sha256::digest(owned_bytes));
+    let nested = format!("{:x}", Sha256::digest(nested_bytes));
+    let foreign = format!("{:x}", Sha256::digest(foreign_bytes));
+    let other = crate::chatstore::rows::create_chat(
+        source.conn(),
+        &NewChat {
+            folder: "/private/other/project".into(),
+            agent_id: "codex".into(),
+            agent_host: aura_protocol::agents::AgentHost::Native,
+            device_id: "source".into(),
+            now: 1,
+        },
+    )
+    .unwrap();
+    for (owner, hash, bytes) in [
+        (&chat, &owned, owned_bytes.as_slice()),
+        (&chat, &nested, nested_bytes.as_slice()),
+        (&other.id, &foreign, foreign_bytes.as_slice()),
+    ] {
+        files.write(hash, bytes).unwrap();
+        source
+            .conn()
+            .execute(
+                "INSERT INTO attachments(sha256,mime,size,created_at) VALUES(?1,'image/png',?2,1)",
+                params![hash, bytes.len() as i64],
+            )
+            .unwrap();
+        source.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',?4,1)",params![crate::ids::new_id(),owner,hash,bytes.len() as i64]).unwrap();
+    }
+    let event = AuraEvent::MessageDelta {
+        message_id: "message".into(),
+        text: format!(
+            "![Agent image](<aura-image:{owned}>)\n![Guessed image](<aura-image:{foreign}>)"
+        ),
+    };
+    source
+        .conn()
+        .execute(
+            "UPDATE events SET payload=?2 WHERE turn_id=?1 AND seq=1",
+            params![turn, serde_json::to_string(&event).unwrap()],
+        )
+        .unwrap();
+    // The retained inline text omits the image, but its full raw output must carry it to the
+    // other device. It spans multiple file entries and also contains an unowned forged URI.
+    let raw = format!(
+        "{}\n![Nested](<aura-image:{nested}>)\n![Guessed](<aura-image:{foreign}>)",
+        "long output ".repeat(32 * 1024)
+    );
+    let raw_hash = format!("{:x}", Sha256::digest(raw.as_bytes()));
+    files.write(&raw_hash, raw.as_bytes()).unwrap();
+    source
+        .conn()
+        .execute(
+            "INSERT INTO attachments(sha256,mime,size,created_at) VALUES(?1,'text/plain',?2,1)",
+            params![raw_hash, raw.len() as i64],
+        )
+        .unwrap();
+    let update = AuraEvent::ToolUpdate(aura_protocol::ToolUpdate {
+        tool_call_id: "image-tool".into(),
+        status: Some(aura_protocol::ToolStatus::Completed),
+        title: None,
+        kind: None,
+        locations: None,
+        raw_input: None,
+        tool_name: None,
+        content: Some(vec![ToolContent::Text {
+            text: "long output ...".into(),
+            truncated: Some(Truncation {
+                total_bytes: raw.len() as u64,
+                blob: Some(raw_hash),
+            }),
+        }]),
+        truncated: None,
+    });
+    source
+        .conn()
+        .execute(
+            "UPDATE events SET kind=?2,payload=?3 WHERE turn_id=?1 AND seq=2",
+            params![turn, update.kind(), serde_json::to_string(&update).unwrap()],
+        )
+        .unwrap();
     let header = capture(&mut source, &context, &files, &turn);
+    let leaked: bool = source
+        .conn()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sync_turn_files WHERE turn_id=?1 AND hash=?2)",
+            params![turn, foreign],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!leaked, "an inline URI cannot export another chat's image");
     let mut blobs = std::collections::HashMap::new();
     while let Some(upload) = pending(&mut source, &context, &files).upload {
         let blob = Blob {
@@ -354,6 +468,25 @@ fn head_waits_for_all_uploads_and_remote_chain_rejects_rewrite_and_substitution(
     let (size, bytes) = target_files.sync_range(&hash, 0).unwrap();
     assert_eq!(size, 1024 * 1024);
     assert!(bytes.iter().all(|byte| *byte == 0x90));
+    let (_, image) = target_files.sync_range(&owned, 0).unwrap();
+    assert_eq!(image.as_slice(), owned_bytes);
+    let (_, image) = target_files.sync_range(&nested, 0).unwrap();
+    assert_eq!(image.as_slice(), nested_bytes);
+    let names: Vec<String> = target
+        .conn()
+        .prepare("SELECT sha256 FROM composer_attachments WHERE chat_id=?1 ORDER BY sha256")
+        .unwrap()
+        .query_map([&chat], |r| r.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    let mut expected = vec![owned, nested];
+    expected.sort();
+    assert_eq!(
+        names, expected,
+        "import grants only the transferred owned image"
+    );
+    assert!(target_files.sync_range(&foreign, 0).is_err());
     let accepted: String = target
         .conn()
         .query_row(

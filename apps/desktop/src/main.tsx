@@ -2,6 +2,7 @@ import "./styles.css";
 import "./ui-tokens.css";
 import "./shell.css";
 import "./chat.css";
+import "./styles/chat-images.css";
 import "./context-panel.css";
 import "./diagnostics.css";
 import "./motion.css";
@@ -87,6 +88,10 @@ void appearanceReady.then(() => {
       else if (mode === "accounts")
         void import("./dev/accountsPreview").then(({ mountAccountsPreview }) =>
           mountAccountsPreview(container),
+        );
+      else if (mode === "images")
+        void import("./dev/imagesPreview").then(({ mountImagesPreview }) =>
+          mountImagesPreview(container),
         );
       else if (mode === "questions")
         void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
