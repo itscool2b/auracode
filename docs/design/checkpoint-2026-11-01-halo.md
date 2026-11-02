@@ -107,13 +107,22 @@ picker kept Thinking visible above its scrolling list and showed that stopped-ch
 on startup. The dictation panel displayed the on-device model download step. The test process was
 then stopped by its own PID; the installed host remained running.
 
-The combined frontend passed 650 unit tests and 29 script tests, production build/typecheck,
+The combined frontend passed 650 unit tests and 35 script tests, production build/typecheck,
 Biome and style checks. Rust formatting and Clippy with warnings denied passed. The broad Rust run
 passed 753 core unit tests, 477 driver unit tests, 198 process unit tests and 244 desktop unit tests.
-Four previously recorded `session_lifecycle` timing tests still fail on this host:
+The four previously recorded `session_lifecycle` timing failures were traced to fixtures stopping
+before the scripted driver received its prompt. Those tests now await actual command receipt,
+allowing the existing paused-clock startup wait before a restarted daemon turn. Their timing,
+status and count assertions are unchanged. All 28 lifecycle tests then passed, including
 `force_stop_waits_for_daemon_cancel`,
 `a_force_stopped_agent_holds_its_session_until_its_process_is_gone`,
-`queue_survives_a_restart_held` and `shutdown_all_bounded`.
+`queue_survives_a_restart_held` and `shutdown_all_bounded`. This repair changes only test scheduling.
+
+Replay expectations were also refreshed for the earlier native session-controls handshake.
+All 94 driver fixtures passed with their lifecycle and privacy contracts, all three Codex schema
+tests passed, and the CLI's four fixture tests and three replay tests passed. Original recorded
+traffic is preserved, with the derived handshake and full golden comparison documented in the
+[Codex fixture record](../../crates/aura-drivers/tests/fixtures/codex/README.md).
 
 The pinned Whisper model also passed actual CPU inference and cancellation with the upstream JFK
 audio fixture, as detailed in [local dictation](../local-dictation.md). No live microphone capture,
