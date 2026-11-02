@@ -40,18 +40,36 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .locator("img")
         .waitFor();
       await page
-        .getByRole("button", { name: "View Missing output", exact: true })
+        .getByRole("button", { name: "View Image unavailable Missing output", exact: true })
         .getByText("Image unavailable")
         .waitFor();
       assert.equal(await input.inputValue(), "Keep the controls compact");
+      await page
+        .getByRole("button", { name: "View Generated image", exact: true })
+        .locator("img")
+        .waitFor();
+      assert.ok(
+        await page.evaluate(() => window.imageCalls.some((call) => call.source.type === "stored")),
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-draft.png`) });
       const draft = page.getByRole("button", { name: "View Draft screen.png", exact: true });
       await draft.focus();
       await page.keyboard.press("Enter");
       const dialog = page.getByRole("dialog", { name: "Draft screen.png" });
       await dialog.locator("img").waitFor();
       assert.ok(await dialog.locator("img").evaluate((image) => image.naturalWidth > 0));
+      await page.waitForFunction(() =>
+        document
+          .getAnimations()
+          .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-enlarged.png`) });
       await page.keyboard.press("Escape");
       await dialog.waitFor({ state: "hidden" });
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("aria-label") === "View Draft screen.png",
+      );
       assert.equal(await draft.evaluate((node) => node === document.activeElement), true);
       await page.getByRole("button", { name: "Remove Draft screen.png", exact: true }).click();
       assert.equal(await draft.count(), 0);
@@ -85,8 +103,12 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .last()
         .locator("img")
         .waitFor();
-      for (const width of [1280, 390]) {
+      for (const width of [1280, 960, 390]) {
         await page.setViewportSize({ width, height: 900 });
+        // The virtualizer measures wrapped rows over two frames after a width change.
+        await page.evaluate(
+          () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+        );
         await page.waitForFunction(() =>
           document
             .getAnimations()

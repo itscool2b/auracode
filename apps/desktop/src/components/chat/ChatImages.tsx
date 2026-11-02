@@ -1,5 +1,14 @@
 import { ImageOff, RotateCcw, X } from "lucide-react";
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ChatImage, ChatImageContext, ChatImageSource } from "../../bindings";
 import { type ChatImagesApi, ImagePreviews } from "../../lib/chatImages";
 import { errorMessage } from "../../lib/errors";
@@ -32,10 +41,12 @@ function Preview({
   source,
   name,
   full = false,
+  onUnavailable,
 }: {
   readonly source: ChatImageSource;
   readonly name: string;
   readonly full?: boolean;
+  readonly onUnavailable?: (unavailable: boolean) => void;
 }) {
   const context = useContext(Context);
   const [retry, setRetry] = useState(0);
@@ -45,6 +56,7 @@ function Preview({
     height?: number;
     error?: string;
   }>({});
+  useEffect(() => onUnavailable?.(Boolean(state.error)), [onUnavailable, state.error]);
   const key = JSON.stringify(source);
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly invalidates a failed read.
   useEffect(() => {
@@ -70,7 +82,12 @@ function Preview({
   }, [context, key, full, retry]);
   if (state.error)
     return (
-      <span className="chat-image-unavailable" title={state.error} role="status">
+      <span
+        className="chat-image-unavailable"
+        title={state.error}
+        role={full ? "status" : undefined}
+        aria-hidden={full ? undefined : true}
+      >
         <ImageOff size={20} />
         <span>Image unavailable</span>
         {full && context ? (
@@ -83,14 +100,18 @@ function Preview({
     );
   if (!state.url)
     return (
-      <span className="chat-image-loading" role="status">
+      <span
+        className="chat-image-loading"
+        role={full ? "status" : undefined}
+        aria-hidden={full ? undefined : true}
+      >
         Loading image…
       </span>
     );
   return (
     <img
       src={state.url}
-      alt={name}
+      alt={full ? name : ""}
       width={state.width}
       height={state.height}
       decoding="async"
@@ -107,15 +128,23 @@ export function ChatImageTile({
   readonly onRemove?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (wasOpen.current && !open) trigger.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
   return (
     <span className="chat-image" data-draft={Boolean(onRemove)}>
       <button
         type="button"
         className="chat-image-open"
-        aria-label={`View ${image.name}`}
+        ref={trigger}
+        aria-label={`View ${unavailable ? "Image unavailable " : ""}${image.name}`}
         onClick={() => setOpen(true)}
       >
-        <Preview source={image.source} name={image.name} />
+        <Preview source={image.source} name={image.name} onUnavailable={setUnavailable} />{" "}
         <span className="chat-image-name" title={image.name}>
           {image.name}
         </span>
@@ -163,10 +192,12 @@ export function MessageImages({ context: message }: { readonly context: ChatImag
     };
   }, [context, key]);
   return images.length ? (
-    <section className="chat-image-gallery" aria-label="Attached images">
+    <ul className="chat-image-gallery" aria-label="Attached images">
       {images.map((image) => (
-        <ChatImageTile key={JSON.stringify(image.source)} image={image} />
+        <li key={JSON.stringify(image.source)}>
+          <ChatImageTile image={image} />
+        </li>
       ))}
-    </section>
+    </ul>
   ) : null;
 }

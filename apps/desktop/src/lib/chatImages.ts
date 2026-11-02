@@ -17,6 +17,12 @@ export const chatImagesApi: ChatImagesApi = {
   preview: (id, source, full) => settle(commands.chatImagePreview(id, source, full)),
 };
 
+export function imageSource(path: string): ChatImageSource {
+  return /^aura-image:[a-f0-9]{64}$/.test(path)
+    ? { type: "stored", sha256: path.slice("aura-image:".length) }
+    : { type: "project", path };
+}
+
 type Preview = { readonly url: string; readonly width: number; readonly height: number };
 type Entry = { users: number; value?: Preview; promise: Promise<Preview> };
 
@@ -97,6 +103,7 @@ export class ImagePreviews {
 export function localImagePath(raw: string): string | null {
   let path = raw.trim();
   if (path.startsWith("<") && path.endsWith(">")) path = path.slice(1, -1);
+  if (/^aura-image:[a-f0-9]{64}$/.test(path)) return path;
   if (/^file:\/\//i.test(path)) {
     try {
       const url = new URL(path);

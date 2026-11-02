@@ -8,6 +8,10 @@ use rusqlite::{Connection, OptionalExtension as _, params};
 use std::sync::Arc;
 
 pub(crate) enum ComposerCommand {
+    ResolveImage {
+        chat_id: String,
+        sha256: String,
+    },
     ImageParts {
         chat_id: String,
         context: ChatImageContext,
@@ -108,6 +112,7 @@ pub(crate) struct StoredAttachment {
 impl ComposerCommand {
     pub fn bytes(&self) -> usize {
         match self {
+            Self::ResolveImage { .. } => 1024,
             Self::ImageParts { .. } => 1024,
             Self::ReadDraft { .. } => 512,
             Self::SaveDraft { input, .. } => {
@@ -136,6 +141,12 @@ pub(crate) fn execute(
         StoreError::Other(format!("Could not save attachment metadata: {error}"))
     };
     match command {
+        ComposerCommand::ResolveImage { chat_id, sha256 } => {
+            let item = conn.query_row("SELECT id,display_name,mime,byte_length,sha256 FROM composer_attachments WHERE chat_id=?1 AND sha256=?2 AND mime='image/png' LIMIT 1", params![chat_id,sha256], |row| {
+                Ok(StoredAttachment { meta: ComposerAttachment { id: row.get(0)?, name: row.get(1)?, mime: row.get(2)?, bytes: row.get(3)?, image: true }, sha256: row.get(4)? })
+            }).map_err(|_| StoreError::Other("This image is unavailable in this chat.".into()))?;
+            Ok(ComposerReply::Attachments(vec![item]))
+        }
         ComposerCommand::ImageParts { chat_id, context } => {
             let (query, id) = match context {
                 ChatImageContext::Turn { turn_id } => (

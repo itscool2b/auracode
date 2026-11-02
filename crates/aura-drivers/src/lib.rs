@@ -33,6 +33,7 @@ pub mod replay;
 pub mod testing;
 
 pub mod controls;
+pub mod incoming_images;
 
 /// Preserve a native image's file reference without transporting its binary payload as text.
 /// The UI accepts local paths only and the session validates the file against its chat root.

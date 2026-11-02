@@ -1,5 +1,5 @@
 /** Owned image fixture. Uses generated PNGs and an in-memory transport, never native files. */
-import { useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AuraEvent, ChatImageSource, ComposerInput, EventBatch } from "../bindings";
 import { ChatView } from "../components/chat/ChatView";
@@ -41,7 +41,7 @@ function Preview() {
       ev.user("saved.u", "Review the attached screen.\n\n[Image: screen.png]"),
       ev.message(
         "answer",
-        "Here is the revised screen.\n\n![Revised screen](<images/revised (1).png>)\n\n![Missing output](missing.png)\n\n![Remote reference](https://example.invalid/tracker.png)",
+        `Here is the revised screen.\n\n![Revised screen](<images/revised (1).png>)\n\n![Generated image](<aura-image:${"ab".repeat(32)}>)\n\n![Missing output](missing.png)\n\n![Remote reference](https://example.invalid/tracker.png)`,
       ),
       ev.turnEnded("saved"),
     ];
@@ -108,9 +108,10 @@ function Preview() {
         return { prompt_id: "sent-prompt", queued: false };
       },
     };
-    Object.assign(window, { imageCalls: calls, sentImages: sent });
     return {
       chat,
+      calls,
+      sent,
       transport: Object.assign(transport, { images }),
       fail: () => {
         failing = true;
@@ -120,6 +121,9 @@ function Preview() {
       },
     };
   });
+  useEffect(() => {
+    Object.assign(window, { imageCalls: fixture.calls, sentImages: fixture.sent });
+  }, [fixture]);
   return (
     <main className="chat-app" style={{ display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Image preview verification</h1>
@@ -153,5 +157,9 @@ function Preview() {
 }
 
 export function mountImagesPreview(container: HTMLElement) {
-  createRoot(container).render(<Preview />);
+  createRoot(container).render(
+    <StrictMode>
+      <Preview />
+    </StrictMode>,
+  );
 }

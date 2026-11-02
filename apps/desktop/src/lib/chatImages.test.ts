@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ChatImagesApi, ImagePreviews, localImagePath } from "./chatImages";
+import { type ChatImagesApi, ImagePreviews, imageSource, localImagePath } from "./chatImages";
 import { parseInline, plainText } from "./markdown";
 
 afterEach(() => vi.restoreAllMocks());
@@ -25,6 +25,17 @@ describe("local image references", () => {
     ]);
     expect(localImagePath("images/test.png")).toBe("images/test.png");
     expect(localImagePath("./images/test%20one.png")).toBe("./images/test one.png");
+    const hash = "ab".repeat(32);
+    expect(localImagePath(`aura-image:${hash}`)).toBe(`aura-image:${hash}`);
+    expect(imageSource(`aura-image:${hash}`)).toEqual({ type: "stored", sha256: hash });
+    for (const path of [
+      "aura-image:anything",
+      `aura-image:${hash}/../../x`,
+      `aura-image:${hash.toUpperCase()}`,
+      "aura-attachment:id",
+      "blob:123",
+    ])
+      expect(localImagePath(path)).toBeNull();
   });
 });
 

@@ -67,10 +67,14 @@ pub enum ChatImageContext {
     Queued { prompt_id: String },
 }
 
-/// References are resolved by the backend. The renderer never supplies an attachment hash.
+/// Every reference, including a stored content hash, is checked against the chat's ownership
+/// metadata or confined project folder before the backend reads image bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatImageSource {
+    Stored {
+        sha256: String,
+    },
     Attachment {
         id: String,
     },

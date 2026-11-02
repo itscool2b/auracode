@@ -789,6 +789,7 @@ mod tests {
             mcp_servers: Vec::new(),
             attachment_dir: None,
             attachment_reader: None,
+            attachment_writer: None,
             chat_id: "chat".into(),
             agent_id: "mock".into(),
             dialect: "mock".into(),

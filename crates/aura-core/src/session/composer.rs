@@ -404,7 +404,7 @@ fn import_file(path: &Path) -> Result<(String, String, Vec<u8>), SessionError> {
     Ok((name, "text/plain".into(), bytes))
 }
 
-fn normalize_image(bytes: &[u8]) -> Result<Vec<u8>, SessionError> {
+pub(super) fn normalize_image(bytes: &[u8]) -> Result<Vec<u8>, SessionError> {
     if bytes.len() > MAX_IMPORT {
         return Err(invalid("The image exceeds 12 MiB."));
     }
@@ -419,7 +419,11 @@ fn normalize_image(bytes: &[u8]) -> Result<Vec<u8>, SessionError> {
     let decoded = reader
         .decode()
         .map_err(|_| invalid("This image is damaged, too large, or not supported."))?;
-    let resized = decoded.resize(2048, 2048, image::imageops::FilterType::Triangle);
+    let resized = if decoded.width() > 2048 || decoded.height() > 2048 {
+        decoded.resize(2048, 2048, image::imageops::FilterType::Triangle)
+    } else {
+        decoded
+    };
     let mut encoded = Cursor::new(Vec::new());
     resized
         .write_to(&mut encoded, image::ImageFormat::Png)

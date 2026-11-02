@@ -1,5 +1,6 @@
 import { CopyButton } from "@auracode/ui/graphite";
-import { Fragment, memo, type ReactNode, useMemo, useRef } from "react";
+import { createContext, Fragment, memo, type ReactNode, useContext, useMemo, useRef } from "react";
+import { imageSource } from "../lib/chatImages";
 import {
   type Block,
   EMPTY_SPLIT,
@@ -9,6 +10,7 @@ import {
   type SplitCache,
   splitIncremental,
 } from "../lib/markdown";
+import { EMPTY_IMAGE_PATHS, imagePathsIncremental } from "../lib/markdownImages";
 import { ChatImageTile } from "./chat/ChatImages";
 
 /**
@@ -17,21 +19,32 @@ import { ChatImageTile } from "./chat/ChatImages";
  * blocks are memoized, so a new frame only re-renders the block that is still growing. Everything
  * is React elements: agent text cannot inject HTML.
  */
+const ImageLimit = createContext<ReadonlySet<string> | null>(null);
+
 export function Answer({ text }: { readonly text: string }) {
   const cache = useRef<SplitCache>(EMPTY_SPLIT);
+  const imageCache = useRef(EMPTY_IMAGE_PATHS);
   const split = useMemo(() => {
     cache.current = splitIncremental(cache.current, text);
     return cache.current;
   }, [text]);
+  const imagePaths = useMemo(() => {
+    imageCache.current = imagePathsIncremental(imageCache.current, split);
+    return imageCache.current.visible;
+  }, [split]);
 
   return (
-    <div className="answer" data-answer="">
-      {split.stable.map((source, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: blocks only ever append, so an index names the same block for its whole life.
-        <MarkdownBlock key={index} source={source} />
-      ))}
-      {split.tail !== null ? <MarkdownBlock key={split.stable.length} source={split.tail} /> : null}
-    </div>
+    <ImageLimit.Provider value={imagePaths}>
+      <div className="answer" data-answer="">
+        {split.stable.map((source, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: blocks only ever append, so an index names the same block for its whole life.
+          <MarkdownBlock key={index} source={source} />
+        ))}
+        {split.tail !== null ? (
+          <MarkdownBlock key={split.stable.length} source={split.tail} />
+        ) : null}
+      </div>
+    </ImageLimit.Provider>
   );
 }
 
@@ -189,11 +202,7 @@ function inlineNode(node: Inline): ReactNode {
     case "code":
       return <code>{node.text}</code>;
     case "image":
-      return (
-        <ChatImageTile
-          image={{ name: node.alt || "Agent image", source: { type: "project", path: node.path } }}
-        />
-      );
+      return <InlineImage node={node} />;
     case "strong":
       return (
         <strong>
@@ -219,4 +228,13 @@ function inlineNode(node: Inline): ReactNode {
         </a>
       );
   }
+}
+
+function InlineImage({ node }: { readonly node: Extract<Inline, { kind: "image" }> }) {
+  const allowed = useContext(ImageLimit);
+  if (allowed && !allowed.has(node.path))
+    return <span>{node.alt || "Image"} (preview limit reached)</span>;
+  return (
+    <ChatImageTile image={{ name: node.alt || "Agent image", source: imageSource(node.path) }} />
+  );
 }

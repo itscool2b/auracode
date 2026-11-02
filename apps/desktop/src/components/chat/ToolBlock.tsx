@@ -18,6 +18,7 @@ import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import { toolPhrase } from "../../lib/chat/toolWords";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
+import { imageSource } from "../../lib/chatImages";
 import { formatCount } from "../../lib/format";
 import { type Inline, parseInline } from "../../lib/markdown";
 import { ChatImageTile } from "./ChatImages";
@@ -44,17 +45,18 @@ function OutputImages({ text }: { readonly text: string }) {
   };
   visit(parseInline(text));
   return images.length ? (
-    <section className="chat-image-gallery" aria-label="Tool images">
+    <ul className="chat-image-gallery" aria-label="Tool images">
       {images.map((image) => (
-        <ChatImageTile
-          key={image.path}
-          image={{
-            name: image.alt || "Agent image",
-            source: { type: "project", path: image.path },
-          }}
-        />
+        <li key={image.path}>
+          <ChatImageTile
+            image={{
+              name: image.alt || "Agent image",
+              source: imageSource(image.path),
+            }}
+          />
+        </li>
       ))}
-    </section>
+    </ul>
   ) : null;
 }
 

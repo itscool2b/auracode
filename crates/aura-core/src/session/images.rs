@@ -12,6 +12,59 @@ use std::{
 };
 
 const MAX_SOURCE_BYTES: usize = 12 * 1024 * 1024;
+static DECODES: std::sync::LazyLock<Arc<tokio::sync::Semaphore>> =
+    std::sync::LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(2)));
+
+pub(super) struct StoredImages {
+    pub store: Arc<crate::chatstore::ChatStore>,
+    pub chat_id: String,
+    pub rt: tokio::runtime::Handle,
+}
+
+impl std::fmt::Debug for StoredImages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StoredImages")
+    }
+}
+
+impl aura_drivers::incoming_images::AttachmentWriter for StoredImages {
+    fn write(&self, bytes: Vec<u8>) -> futures::future::BoxFuture<'_, Result<String, String>> {
+        Box::pin(async move {
+            use sha2::{Digest as _, Sha256};
+            if bytes.len() > MAX_SOURCE_BYTES {
+                return Err("The image exceeds 12 MiB.".into());
+            }
+            let permit = DECODES
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|_| "Image decoding stopped.")?;
+            let bytes = self
+                .rt
+                .spawn_blocking(move || {
+                    let _permit = permit;
+                    super::composer::normalize_image(&bytes)
+                })
+                .await
+                .map_err(|_| "The image could not be prepared.")?
+                .map_err(|error| error.to_string())?;
+            let sha256 = format!("{:x}", Sha256::digest(&bytes));
+            self.store
+                .composer(ComposerCommand::Import {
+                    chat_id: self.chat_id.clone(),
+                    name: "Agent image.png".into(),
+                    mime: "image/png".into(),
+                    sha256,
+                    bytes: bytes.into(),
+                })
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .map(|item| item.sha256)
+                .ok_or_else(|| "The image could not be saved.".into())
+        })
+    }
+}
 
 fn invalid(message: impl Into<String>) -> SessionError {
     SessionError::OptionInvalid(message.into())
@@ -78,12 +131,34 @@ impl SessionManager {
         full: bool,
     ) -> Result<ChatImagePreview, SessionError> {
         let folder = self.composer_folder(chat_id).await?;
+        let permit = DECODES
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| invalid("Image decoding stopped."))?;
         let blob = match source {
+            ChatImageSource::Stored { sha256 } => {
+                if !crate::chatstore::blobs::is_sha256(&sha256) {
+                    return Err(invalid("The saved image reference is invalid."));
+                }
+                self.deps()
+                    .store
+                    .composer(ComposerCommand::ResolveImage {
+                        chat_id: chat_id.into(),
+                        sha256,
+                    })
+                    .await
+                    .map_err(|error| invalid(error.to_string()))?
+                    .pop()
+                    .ok_or_else(|| invalid("This image is unavailable in this chat."))?
+                    .sha256
+            }
             ChatImageSource::Project { path } => {
                 return self
                     .deps()
                     .rt
                     .spawn_blocking(move || {
+                        let _permit = permit;
                         let bytes = read_project_image(&folder, &path)?;
                         preview(&bytes, full)
                     })
@@ -126,6 +201,7 @@ impl SessionManager {
         self.deps()
             .rt
             .spawn_blocking(move || {
+                let _permit = permit;
                 let bytes = aura_drivers::attachments::read_from(
                     Some(&dir),
                     reader.as_deref(),
@@ -252,6 +328,190 @@ fn read_project_image(folder: &Path, source: &str) -> Result<Vec<u8>, SessionErr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn agent_images_normalize_persist_reopen_and_require_chat_ownership() {
+        use crate::{owner::ProfileOwner, paths::DataRoot, profile::Profiles, store::Store};
+        use aura_drivers::incoming_images::AttachmentWriter;
+        let dir = tempfile::tempdir().unwrap();
+        let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
+            .open_active()
+            .unwrap();
+        let owner = ProfileOwner::acquire(&profile).unwrap();
+        let (store, _) = Store::open(&profile).unwrap();
+        let store = crate::chatstore::ChatStore::start(
+            store,
+            owner,
+            &profile,
+            "dev".into(),
+            tokio::runtime::Handle::current(),
+        )
+        .unwrap();
+        store.recovered().await;
+        let chat = store
+            .create_chat(crate::chatstore::NewChat {
+                agent_host: Default::default(),
+                agent_id: "mock".into(),
+                folder: dir.path().to_path_buf(),
+                device_id: "dev".into(),
+                now: 1,
+            })
+            .await
+            .unwrap();
+        let mut bytes = Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(80, 40)
+            .write_to(&mut bytes, image::ImageFormat::Jpeg)
+            .unwrap();
+        let writer = StoredImages {
+            store: store.clone(),
+            chat_id: chat.id.clone(),
+            rt: tokio::runtime::Handle::current(),
+        };
+        let hash = writer.write(bytes.into_inner()).await.unwrap();
+        assert!(writer.write(b"not an image".to_vec()).await.is_err());
+        assert!(writer.write(vec![0; MAX_SOURCE_BYTES + 1]).await.is_err());
+        assert!(
+            store
+                .composer(ComposerCommand::ResolveImage {
+                    chat_id: "other-chat".into(),
+                    sha256: hash.clone()
+                })
+                .await
+                .is_err()
+        );
+        let saved = aura_drivers::attachments::read_from(
+            Some(store.attachment_dir()),
+            store.attachment_reader().as_deref(),
+            &hash,
+            MAX_SOURCE_BYTES,
+        )
+        .unwrap();
+        assert!(saved.starts_with(b"\x89PNG\r\n\x1a\n"));
+        drop(writer);
+        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
+        drop(store);
+        let owner = ProfileOwner::acquire(&profile).unwrap();
+        let (store, _) = Store::open(&profile).unwrap();
+        let store = crate::chatstore::ChatStore::start(
+            store,
+            owner,
+            &profile,
+            "dev".into(),
+            tokio::runtime::Handle::current(),
+        )
+        .unwrap();
+        store.recovered().await;
+        let resolved = store
+            .composer(ComposerCommand::ResolveImage {
+                chat_id: chat.id,
+                sha256: hash.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(resolved[0].sha256, hash);
+        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
+    }
+
+    #[cfg(feature = "account-sync")]
+    #[tokio::test]
+    async fn agent_images_use_encrypted_profile_storage_without_plaintext_fallback() {
+        use crate::{
+            owner::ProfileOwner,
+            profile::{Profile, ProfileKind, ProfileMeta},
+            store::Store,
+        };
+        use aura_drivers::incoming_images::AttachmentWriter;
+        let dir = tempfile::tempdir().unwrap();
+        let profile = Profile {
+            meta: ProfileMeta {
+                id: "profile".into(),
+                kind: ProfileKind::Account,
+                display_name: "Account".into(),
+                created_at: 0,
+            },
+            dir: dir.path().join("profile"),
+        };
+        std::fs::create_dir_all(&profile.dir).unwrap();
+        let key = aura_sync::crypto::AccountKey::generate().unwrap();
+        let database_key = Arc::new(key.database_key("account", "profile").unwrap());
+        let file_key = Arc::new(key.profile_file_key("account", "profile").unwrap());
+        let owner = ProfileOwner::acquire(&profile).unwrap();
+        let (store, _) = Store::open_encrypted(&profile, database_key.clone()).unwrap();
+        let store = crate::chatstore::ChatStore::start_account(
+            store,
+            owner,
+            &profile,
+            "dev".into(),
+            tokio::runtime::Handle::current(),
+            file_key.clone(),
+        )
+        .unwrap();
+        store.recovered().await;
+        let chat = store
+            .create_chat(crate::chatstore::NewChat {
+                agent_host: Default::default(),
+                agent_id: "mock".into(),
+                folder: dir.path().to_path_buf(),
+                device_id: "dev".into(),
+                now: 1,
+            })
+            .await
+            .unwrap();
+        let mut bytes = Cursor::new(Vec::new());
+        image::DynamicImage::new_rgba8(16, 12)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        let writer = StoredImages {
+            store: store.clone(),
+            chat_id: chat.id.clone(),
+            rt: tokio::runtime::Handle::current(),
+        };
+        let hash = writer.write(bytes.into_inner()).await.unwrap();
+        let saved = aura_drivers::attachments::read_from(
+            Some(store.attachment_dir()),
+            store.attachment_reader().as_deref(),
+            &hash,
+            MAX_SOURCE_BYTES,
+        )
+        .unwrap();
+        assert!(saved.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(!profile.attachments_dir().join(&hash).exists());
+        drop(writer);
+        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
+        drop(store);
+        let owner = ProfileOwner::acquire(&profile).unwrap();
+        let (store, _) = Store::open_encrypted(&profile, database_key).unwrap();
+        let store = crate::chatstore::ChatStore::start_account(
+            store,
+            owner,
+            &profile,
+            "dev".into(),
+            tokio::runtime::Handle::current(),
+            file_key,
+        )
+        .unwrap();
+        store.recovered().await;
+        assert_eq!(
+            store
+                .composer(ComposerCommand::ResolveImage {
+                    chat_id: chat.id,
+                    sha256: hash.clone()
+                })
+                .await
+                .unwrap()[0]
+                .sha256,
+            hash
+        );
+        assert_eq!(
+            store
+                .attachment_reader()
+                .unwrap()
+                .read(&hash, MAX_SOURCE_BYTES)
+                .unwrap(),
+            saved
+        );
+        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
+    }
 
     #[test]
     fn previews_are_bounded_pngs_and_reject_active_or_damaged_formats() {
