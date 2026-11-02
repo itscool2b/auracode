@@ -1044,6 +1044,55 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * A plan waiting for review (Claude Code's ExitPlanMode, owner 2 November 2026): the plan set as
+ * prose on the card, scrolling on its own when long, then Accept plan and Add to the plan. The
+ * note form opens in place of the actions.
+ */
+.chat-plan-body {
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--g-space-4) var(--g-space-12) var(--g-space-4) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.chat-plan-body > :first-child {
+  margin-top: 0;
+}
+
+.chat-plan-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-12);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.chat-plan-hint {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-plan-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-12);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.chat-plan-note > label {
+  color: var(--g-fg-2);
+}
+
+.chat-plan-note > textarea {
+  resize: vertical;
+}
+
 /* The usage-limit card's line under the agent's own words: what waits, and the way on. */
 .chat-limit-text {
   margin: 0;

@@ -32,6 +32,7 @@ import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
+import { planFeedback } from "./PlanCard";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
@@ -421,6 +422,27 @@ export function ChatView({
   ]);
   useEffect(() => () => onCommands?.([]), [onCommands]);
 
+  /**
+   * Add to the plan: the note goes into the running turn first, then the plan is declined, so the
+   * agent reads the decline and the note together and keeps planning with it. Without steering the
+   * note waits in the queue for the next turn.
+   */
+  const addToPlan = useCallback(
+    async (requestId: string, declineOptionId: string, note: string) => {
+      const text = planFeedback(note);
+      const turn = store.getSnapshot().openTurnId;
+      const steerable =
+        store.getSnapshot().session?.status === "running" &&
+        store.getSnapshot().lists?.capabilities?.steer === true &&
+        transport.composer?.steer !== undefined &&
+        turn !== null;
+      const steered = steerable ? await store.steer(turn as string, text) : false;
+      await store.respondPermission(requestId, declineOptionId);
+      if (!steered) await store.send(text);
+    },
+    [store, transport.composer],
+  );
+
   const actions = useMemo<TurnActions>(
     () => ({
       blobs: state.blobs,
@@ -428,6 +450,9 @@ export function ChatView({
       requests: state.requests,
       onRespondPermission: (requestId, optionId) =>
         void store.respondPermission(requestId, optionId),
+      onAddToPlan: addToPlan,
+      agentName:
+        agents?.find((entry) => entry.id === state.chat?.agent_id)?.name ?? state.chat?.agent_name,
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
         errorActions(kind, {
@@ -453,6 +478,10 @@ export function ChatView({
       startSession,
       missingTree,
       reviewRecreate,
+      addToPlan,
+      agents,
+      state.chat?.agent_id,
+      state.chat?.agent_name,
     ],
   );
 
@@ -807,6 +836,8 @@ export function ChatView({
                             onRespond={(optionId) =>
                               void store.respondPermission(item.request.request_id, optionId)
                             }
+                            agentName={agent?.name ?? state.chat?.agent_name}
+                            onAddToPlan={addToPlan}
                             blobs={state.blobs}
                             onLoadBlob={(sha256) => void store.loadBlob(sha256)}
                           />

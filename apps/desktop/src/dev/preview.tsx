@@ -387,7 +387,42 @@ function synthetic(mode: string): AuraEvent[] {
     ];
   events.push(ev.turnStarted("next"), ev.user("u2", "Check the small window layout too."));
   if (mode === "streaming") return events;
-  if (mode === "permission")
+  if (mode === "plan")
+    events.push({
+      type: "permission_requested",
+      request_id: "exit-plan",
+      tool_call_id: null,
+      title: "ExitPlanMode",
+      kind: "switch_mode",
+      raw_input: {
+        plan: [
+          "# Keep the active chat visible",
+          "",
+          "## Context",
+          "",
+          "The sidebar loses the open chat when a project has many chats.",
+          "",
+          "## Changes",
+          "",
+          "1. Scroll the open chat into view when it changes.",
+          "2. Give each project a clearer heading row.",
+          "3. Keep keyboard focus on the same chat when new activity arrives.",
+          "",
+          "## Verification",
+          "",
+          "- `pnpm --filter @auracode/desktop check:chat`",
+          "- Resize to 960 x 640 and check nothing overflows.",
+        ].join("\n"),
+      },
+      content: [],
+      locations: [],
+      options: [
+        { option_id: "allow", kind: "allow_once", label: "Allow once" },
+        { option_id: "deny", kind: "reject_once", label: "Deny" },
+      ],
+      truncated: null,
+    });
+  else if (mode === "permission")
     events.push(
       ev.toolCall("cmd", { kind: "execute", title: "pnpm test -- sidebar" }),
       ev.permission("permission"),
@@ -558,6 +593,7 @@ function Preview() {
     "streaming",
     "thinking",
     "permission",
+    "plan",
     "error",
     "new",
     "history",
@@ -627,6 +663,7 @@ function Preview() {
       : mode === "thinking" ||
           mode === "streaming" ||
           mode === "permission" ||
+          mode === "plan" ||
           mode === "history-question" ||
           mode === "focus-group"
         ? "running"
