@@ -84,7 +84,7 @@ impl Detector {
         inventory(live, &spec).await
     }
 
-    /// Metadata-only polling hook, also usable by tests. Starts probes only when something changed.
+    /// Re-read the environment and installation metadata. Probes run only when metadata changed.
     pub async fn refresh_changed_installations(&self) {
         if let Mode::Live(live) = &self.mode {
             refresh_metadata(live).await;
@@ -212,6 +212,10 @@ pub(super) async fn refresh_preferences(live: &Arc<Live>) -> bool {
 
 async fn refresh_metadata(live: &Arc<Live>) {
     let preference_changed = refresh_preferences(live).await;
+    // Installers can create a known tools directory or update the registry/login-shell PATH
+    // after Aura starts. Looking only at the cached PATH would never discover those locations.
+    // The resolver shares an in-flight refresh; existing sessions retain their original env.
+    live.env.refresh();
     let env = live.env.get().await;
     let selected = lock(&live.state).selections.clone();
     let specs = live.specs.clone();
@@ -245,4 +249,66 @@ pub(super) fn observe(live: &Arc<Live>) {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aura_process::{EnvKey, EnvMap, EnvResolverConfig};
+
+    #[tokio::test]
+    async fn metadata_refresh_discovers_a_tools_directory_created_after_startup() {
+        let scratch = tempfile::tempdir().unwrap();
+        let added = scratch.path().join("installed-later");
+        let env = EnvResolver::start(
+            EnvResolverConfig {
+                // No user shell, overrides or agent process is involved. Windows only reads
+                // its environment registry; Unix uses the isolated fallback after this miss.
+                shell: Some(scratch.path().join("no-shell")),
+                base: Some(EnvMap::new()),
+                home: Some(scratch.path().into()),
+                known_dirs: Some(vec![added.clone()]),
+                ..EnvResolverConfig::standard()
+            },
+            LeftoverRegistry::disabled(),
+            Handle::current(),
+        );
+        let live = Arc::new(Live {
+            specs: Vec::new(), // Never probe executables on the owner's machine.
+            env: Arc::clone(&env),
+            registry: LeftoverRegistry::disabled(),
+            adapters_dir: scratch.path().join("adapters"),
+            rt: Handle::current(),
+            state: Mutex::new(LiveState::default()),
+            preferences: None,
+            selection_gate: tokio::sync::Mutex::new(()),
+            listing_slots: tokio::sync::Semaphore::new(2),
+            listing_admission_gate: Mutex::new(None),
+        });
+        let contains = |resolved: &aura_process::ResolvedEnv| {
+            resolved
+                .vars
+                .get(&EnvKey::from("PATH"))
+                .is_some_and(|path| std::env::split_paths(path).any(|entry| entry == added))
+        };
+        refresh_metadata(&live).await;
+        let original = env.get().await;
+        assert!(!contains(&original));
+        let fingerprint = lock(&live.state).metadata_fingerprint;
+        std::fs::create_dir(&added).unwrap();
+        assert!(
+            !contains(env.get().await.as_ref()),
+            "the cached environment remains unchanged"
+        );
+        refresh_metadata(&live).await;
+        assert!(
+            contains(env.get().await.as_ref()),
+            "the next observation includes the new directory"
+        );
+        assert_ne!(lock(&live.state).metadata_fingerprint, fingerprint);
+        assert!(
+            !contains(&original),
+            "running sessions keep their original environment"
+        );
+    }
 }
