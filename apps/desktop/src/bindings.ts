@@ -359,10 +359,16 @@ export const commands = {
 	 */
 	chatSend: (chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE("chat_send", { chatId, text })),
 	/**
-	 *  The models `agent_id` listed the last time one of its chats started in this run, for Settings'
+	 *  The models `agent_id` listed the last time one of its chats ran on this device, for Settings'
 	 *  default model. Empty until then: agents list their models only from a running session.
 	 */
 	agentModels: (agentId: string) => typedError<ConfigChoice[], AppError>(__TAURI_INVOKE("agent_models", { agentId })),
+	/**
+	 *  The thinking levels `model` of `agent_id` offered the last time it ran on this device (`None`:
+	 *  the model the agent starts on), for Settings' default thinking level. Empty when unknown or
+	 *  when the model offers none.
+	 */
+	agentThinkingLevels: (agentId: string, model: string | null) => typedError<ConfigChoice[], AppError>(__TAURI_INVOKE("agent_thinking_levels", { agentId, model })),
 	/**  Removes a queued prompt. */
 	chatCancelQueued: (chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_cancel_queued", { chatId, promptId })),
 	/**  The words of a queued prompt as typed, for editing it in place. */
@@ -1532,6 +1538,11 @@ export type GeneralPreferences = {
 	default_agent: string | null,
 	/**  The model new chats with `default_agent` start on. `None`: the agent's own default. */
 	default_model: string | null,
+	/**
+	 *  The thinking level new chats with `default_agent` start on, chosen for `default_model`.
+	 *  `None`: the model's own default.
+	 */
+	default_effort: string | null,
 	default_autonomy: Autonomy,
 	/**  Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled. */
 	automatic_checkpoints: boolean,
@@ -2742,8 +2753,13 @@ export type SessionStatus =
 "auth_required";
 
 export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
-/**  Changing the agent clears the default model, which belongs to the previous agent. */
-{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
+/**
+ *  Changing the agent clears the default model and thinking level, which belong to the
+ *  previous agent.
+ */
+{ type: "default_agent"; agent_id: string | null } | 
+/**  Changing the model clears the default thinking level, which was chosen for the old one. */
+{ type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
 { type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */

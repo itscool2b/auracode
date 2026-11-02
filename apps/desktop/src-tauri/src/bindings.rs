@@ -272,6 +272,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::chat_folder_context,
             commands::chat_send,
             commands::agent_models,
+            commands::agent_thinking_levels,
             commands::chat_cancel_queued,
             commands::chat_queued_text,
             commands::chat_edit_queued,

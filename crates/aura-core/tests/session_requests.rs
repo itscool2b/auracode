@@ -891,8 +891,46 @@ fn model_option() -> ConfigOption {
     }
 }
 
-/// S18: an option change during a turn is sent at once; the choice is remembered for the next
-/// start; invalid values and an agent's refusal read as `OptionInvalid`.
+/// The current value of the option `id` in `lists`.
+fn shown(lists: &aura_protocol::session::SessionLists, id: &str) -> Option<String> {
+    lists.options.iter().find_map(|option| match &option.kind {
+        ConfigKind::Select { current, .. } if option.id == id => Some(current.clone()),
+        _ => None,
+    })
+}
+
+fn select(id: &str, category: ConfigCategory, current: &str, values: &[&str]) -> ConfigOption {
+    ConfigOption {
+        id: id.into(),
+        name: id.into(),
+        description: None,
+        category,
+        kind: ConfigKind::Select {
+            current: current.into(),
+            choices: values
+                .iter()
+                .map(|value| ConfigChoice {
+                    value: (*value).into(),
+                    name: (*value).into(),
+                    description: None,
+                    group: None,
+                })
+                .collect(),
+        },
+        pending: None,
+    }
+}
+
+fn choice(value: &str) -> ConfigValue {
+    ConfigValue::Choice {
+        value: value.into(),
+    }
+}
+
+/// S18: an option change during a turn is sent at once, and its answer shows the choice although
+/// the driver's own lists have not arrived; the choice is remembered for the next start; invalid
+/// values and an agent's refusal read as `OptionInvalid`; a stopped chat keeps a choice for its
+/// next start.
 // Memory preparation runs on the profile writer thread before the native Prompt command.
 #[tokio::test]
 async fn option_change_during_turn() {
@@ -922,10 +960,19 @@ async fn option_change_during_turn() {
     let smart = ConfigValue::Choice {
         value: "smart".into(),
     };
-    h.manager
+    // The scripted driver answers without sending lists, as every driver answers before its lists
+    // arrive: the answer itself shows the new model, so the picker never snaps back.
+    let lists = h
+        .manager
         .set_option(&chat.id, "model", smart.clone())
         .await
         .expect("set during the turn");
+    assert_eq!(shown(&lists, "model").as_deref(), Some("smart"));
+    assert!(lists.revision > attach.snapshot.session.revision);
+    assert_eq!(
+        shown(&h.manager.lists(&chat.id).await.expect("lists"), "model").as_deref(),
+        Some("smart")
+    );
     assert!(matches!(
         h.manager
             .set_option(
@@ -951,19 +998,204 @@ async fn option_change_during_turn() {
         h.manager.set_option(&chat.id, "model", ConfigValue::Choice { value: "fast".into() }).await,
         Err(SessionError::OptionInvalid(message)) if message == "That model isn't available on your plan."
     ));
+    assert_eq!(
+        shown(&h.manager.lists(&chat.id).await.expect("lists"), "model").as_deref(),
+        Some("smart"),
+        "a refused change shows nothing new"
+    );
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.stop(&chat.id).await.expect("stop");
     h.status(&chat.id, SessionStatus::Stopped).await;
+    let stopped = h.manager.lists(&chat.id).await.expect("lists");
+    assert_eq!(
+        shown(&stopped, "model").as_deref(),
+        Some("smart"),
+        "a stopped chat shows what its next start asks for"
+    );
+    let fast = choice("fast");
+    let lists = h
+        .manager
+        .set_option(&chat.id, "model", fast.clone())
+        .await
+        .expect("kept for the next start");
+    assert_eq!(shown(&lists, "model").as_deref(), Some("fast"));
+    assert!(lists.revision > stopped.revision);
     assert!(matches!(
-        h.manager.set_option(&chat.id, "model", smart.clone()).await,
-        Err(SessionError::SessionNotReady)
+        h.manager
+            .set_option(&chat.id, "model", choice("huge"))
+            .await,
+        Err(SessionError::OptionInvalid(_))
     ));
     h.manager.start(&chat.id, false).await.expect("start");
     h.status(&chat.id, SessionStatus::Ready).await;
     assert_eq!(
         h.factory.setups()[1].desired.get("model"),
-        Some(&smart),
-        "re-applied at the next start"
+        Some(&fast),
+        "the stopped chat's choice applies at the next start"
+    );
+}
+
+/// A chat whose agent is not running offers its connection's models and each model's thinking
+/// levels, with what its next start asks for; a level the newly chosen model does not offer is
+/// forgotten, one its catalog does not know waits for the agent, and mode changes wait for an idle
+/// agent. At Ready, a saved level the agent does not offer is forgotten.
+#[tokio::test]
+async fn a_stopped_chat_keeps_model_and_thinking_choices_for_its_next_start() {
+    let models = || {
+        select(
+            "model",
+            ConfigCategory::Model,
+            "fast",
+            &["fast", "smart", "tiny"],
+        )
+    };
+    let mode = select("mode", ConfigCategory::Mode, "ask", &["ask", "auto"]);
+    let (first, _) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Options(vec![
+            models(),
+            select("effort", ConfigCategory::Effort, "low", &["low", "high"]),
+            mode.clone(),
+        ])),
+        ready_step("n1"),
+    ]);
+    // The second start runs `smart`, which offers no `high`.
+    let mut smart = models();
+    if let ConfigKind::Select { current, .. } = &mut smart.kind {
+        *current = "smart".into();
+    }
+    let (second, _) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Options(vec![
+            smart,
+            select("effort", ConfigCategory::Effort, "low", &["low", "medium"]),
+        ])),
+        ready_step("n1"),
+    ]);
+    let (third, _) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = Harness::new(vec![first, second, third]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    let lists = h.manager.lists(&chat.id).await.expect("lists");
+    assert_eq!(shown(&lists, "model").as_deref(), Some("fast"));
+    assert_eq!(
+        shown(&lists, "effort").as_deref(),
+        Some("low"),
+        "the level the session ran with"
+    );
+    let lists = h
+        .manager
+        .set_option(&chat.id, "effort", choice("high"))
+        .await
+        .expect("level");
+    assert_eq!(shown(&lists, "effort").as_deref(), Some("high"));
+    assert!(matches!(
+        h.manager
+            .set_option(&chat.id, "effort", choice("max"))
+            .await,
+        Err(SessionError::OptionInvalid(_))
+    ));
+    assert!(matches!(
+        h.manager.set_option(&chat.id, "mode", choice("auto")).await,
+        Err(SessionError::OptionInvalid(message)) if message.contains("running and idle")
+    ));
+    // `smart` never ran: its levels are unknown, so the chosen level waits for the agent.
+    let lists = h
+        .manager
+        .set_option(&chat.id, "model", choice("smart"))
+        .await
+        .expect("model");
+    assert_eq!(shown(&lists, "model").as_deref(), Some("smart"));
+    assert_eq!(shown(&lists, "effort"), None);
+    h.manager.start(&chat.id, false).await.expect("start");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let setup = &h.factory.setups()[1];
+    assert_eq!(setup.desired.get("model"), Some(&choice("smart")));
+    assert_eq!(setup.desired.get("effort"), Some(&choice("high")));
+    // `smart` offers no `high`: the next start no longer asks for it.
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    h.manager.start(&chat.id, false).await.expect("start");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let setup = &h.factory.setups()[2];
+    assert_eq!(setup.desired.get("model"), Some(&choice("smart")));
+    assert_eq!(setup.desired.get("effort"), None);
+}
+
+/// A known model without a level forgets the level chosen for another one.
+#[tokio::test]
+async fn choosing_a_model_without_levels_forgets_the_level() {
+    let (first, _) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Options(vec![select(
+            "model",
+            ConfigCategory::Model,
+            "tiny",
+            &["fast", "tiny"],
+        )])),
+        Step::Emit(DriverEvent::Options(vec![
+            select("model", ConfigCategory::Model, "fast", &["fast", "tiny"]),
+            select("effort", ConfigCategory::Effort, "low", &["low", "high"]),
+        ])),
+        ready_step("n1"),
+    ]);
+    let (second, _) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    h.manager
+        .set_option(&chat.id, "effort", choice("high"))
+        .await
+        .expect("level");
+    let lists = h
+        .manager
+        .set_option(&chat.id, "model", choice("tiny"))
+        .await
+        .expect("model");
+    assert_eq!(shown(&lists, "effort"), None, "tiny offers no level");
+    h.manager.start(&chat.id, false).await.expect("start");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    assert_eq!(h.factory.setups()[1].desired.get("effort"), None);
+}
+
+/// The catalog survives a restart: a reopened chat offers its models and thinking levels before
+/// its agent starts, and a choice made then applies at the start.
+#[tokio::test]
+async fn the_model_catalog_survives_a_restart() {
+    let (first, _) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Options(vec![
+            select("model", ConfigCategory::Model, "fast", &["fast", "smart"]),
+            select("effort", ConfigCategory::Effort, "low", &["low", "high"]),
+        ])),
+        ready_step("n1"),
+    ]);
+    let h = Harness::new(vec![first]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let (second, _) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = h.restart(vec![second], Options::default()).await;
+    let mut lists = h.manager.lists(&chat.id).await.expect("lists");
+    for _ in 0..200 {
+        if !lists.options.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        lists = h.manager.lists(&chat.id).await.expect("lists");
+    }
+    assert_eq!(shown(&lists, "model").as_deref(), Some("fast"));
+    assert_eq!(shown(&lists, "effort").as_deref(), Some("low"));
+    let lists = h
+        .manager
+        .set_option(&chat.id, "effort", choice("high"))
+        .await
+        .expect("level before the start");
+    assert_eq!(shown(&lists, "effort").as_deref(), Some("high"));
+    h.manager.start(&chat.id, false).await.expect("start");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    assert_eq!(
+        h.factory.setups()[0].desired.get("effort"),
+        Some(&choice("high"))
     );
 }
 

@@ -752,10 +752,7 @@ mod tests {
             category("thinking", Some("mode"), "select"),
             ConfigCategory::Mode
         );
-        assert_eq!(
-            category("thinking", None, "boolean"),
-            ConfigCategory::Other
-        );
+        assert_eq!(category("thinking", None, "boolean"), ConfigCategory::Other);
         assert_eq!(
             category("thinking", Some("thinking"), "boolean"),
             ConfigCategory::Effort

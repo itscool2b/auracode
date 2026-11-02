@@ -173,6 +173,10 @@ pub(crate) enum Request {
         command: super::folder_resolution::Command,
         reply: oneshot::Sender<Result<super::folder_resolution::Reply, StoreError>>,
     },
+    AgentCatalogs {
+        command: super::agent_catalogs::Command,
+        reply: oneshot::Sender<Result<Option<String>, StoreError>>,
+    },
     #[cfg(feature = "account-sync")]
     PreserveAccount {
         command: crate::account_preservation::Command,
@@ -530,6 +534,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::SetupAttempt { .. }) => 2048,
         Work::Request(Request::ReadSetupAttempt { .. }) => 1024,
         Work::Request(Request::FolderResolution { command, .. }) => command.bytes(),
+        Work::Request(Request::AgentCatalogs { command, .. }) => command.bytes(),
         Work::Request(Request::WorkspaceRemoval { command, .. }) => command.bytes(),
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
@@ -737,6 +742,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::SetupAttempt { .. }) => "worktree setup attempt",
         Work::Request(Request::ReadSetupAttempt { .. }) => "read worktree setup attempt",
         Work::Request(Request::FolderResolution { .. }) => "folder resolution",
+        Work::Request(Request::AgentCatalogs { .. }) => "agent catalogs",
         Work::Request(Request::WorkspaceRemoval { .. }) => "workspace removal",
         Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
@@ -1483,6 +1489,20 @@ impl Writer {
                 } else {
                     self.write_tx(|conn| {
                         super::folder_resolution::execute(conn, &device, now, command)
+                    })
+                };
+                let _ = reply.send(result);
+            }
+            Request::AgentCatalogs { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::agent_catalogs::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::agent_catalogs::execute(conn, &device, now, command)
                     })
                 };
                 let _ = reply.send(result);

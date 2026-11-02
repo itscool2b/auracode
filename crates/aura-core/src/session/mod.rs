@@ -14,6 +14,7 @@
 mod actor;
 mod agent_accounts;
 mod agent_installations;
+mod catalogs;
 mod changes;
 mod cloning;
 mod composer;
@@ -162,19 +163,31 @@ impl fmt::Debug for ManagerDeps {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NewChatDefaults {
     pub autonomy: Autonomy,
-    /// `model` applies only to chats of this agent.
+    /// `model` and `effort` apply only to chats of this agent.
     pub agent: Option<String>,
     pub model: Option<String>,
+    /// The thinking level, chosen for `model` (`None`: the agent's own default model).
+    pub effort: Option<String>,
 }
 
 impl NewChatDefaults {
     /// The model a never-started chat of `agent_id` starts on, unless its project names one.
     pub(crate) fn model_for(&self, agent_id: &str) -> Option<String> {
-        self.model.clone().filter(|_| {
-            self.agent.as_deref().is_some_and(|agent| {
-                aura_agents::agent_of(agent) == aura_agents::agent_of(agent_id)
-            })
-        })
+        self.model.clone().filter(|_| self.applies_to(agent_id))
+    }
+
+    /// The thinking level a never-started chat of `agent_id` starts on when it starts on `model`:
+    /// the level was chosen for the default model, so another one (a project's) leaves it out.
+    pub(crate) fn effort_for(&self, agent_id: &str, model: Option<&str>) -> Option<String> {
+        self.effort
+            .clone()
+            .filter(|_| self.applies_to(agent_id) && model == self.model.as_deref())
+    }
+
+    fn applies_to(&self, agent_id: &str) -> bool {
+        self.agent
+            .as_deref()
+            .is_some_and(|agent| aura_agents::agent_of(agent) == aura_agents::agent_of(agent_id))
     }
 }
 
@@ -338,8 +351,9 @@ pub(crate) struct Shared {
     /// each request, so the profile's switch reaches running chats at once. On by default, as the
     /// profile preference is.
     pub(crate) agent_memory_writes: Arc<AtomicBool>,
-    /// The model choices each agent reported in this run, by agent id, for Settings.
-    pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
+    /// The model catalog each agent connection last reported, kept across restarts, so a chat
+    /// whose agent is not running still offers models and thinking levels (and Settings too).
+    pub(crate) catalogs: Arc<catalogs::Catalogs>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -449,6 +463,8 @@ impl SessionManager {
     /// [`new`](Self::new) with other actor limits (tests).
     pub(crate) fn with_knobs(deps: ManagerDeps, knobs: Knobs) -> SessionManager {
         let live = LiveAgents::new(deps.limits.max_live_agents);
+        let catalogs = catalogs::Catalogs::new();
+        catalogs.keep(Arc::clone(&deps.store), &deps.rt);
         SessionManager {
             inner: Arc::new(Inner {
                 shared: Arc::new(Shared {
@@ -474,7 +490,7 @@ impl SessionManager {
                     worktree_instruction_copies: AtomicBool::new(true),
                     agent_accounts: Mutex::new(None),
                     agent_memory_writes: Arc::new(AtomicBool::new(true)),
-                    reported_models: Mutex::new(HashMap::new()),
+                    catalogs,
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                     #[cfg(test)]
@@ -1250,13 +1266,40 @@ impl SessionManager {
         self.shared().agent_memory_writes.load(Ordering::Acquire)
     }
 
-    /// The model choices `agent_id` reported the last time one of its chats started in this run.
-    /// Empty until then: agents list their models only from a running session.
+    /// The model choices `agent_id` reported the last time one of its chats ran, on this device:
+    /// its current connection's, else its connection's that ran last. Empty until one has run,
+    /// since agents list their models only from a running session.
     pub fn reported_models(&self, agent_id: &str) -> Vec<aura_protocol::session::ConfigChoice> {
-        lock(&self.shared().reported_models)
-            .get(agent_id)
-            .cloned()
+        self.agent_catalog(agent_id)
+            .map(|catalog| catalog.models().to_vec())
             .unwrap_or_default()
+    }
+
+    /// The thinking levels `model` of `agent_id` offered the last time it ran (`None`: the model
+    /// the agent starts on). Empty when that is not known, or when the model offers none.
+    pub fn reported_thinking(
+        &self,
+        agent_id: &str,
+        model: Option<&str>,
+    ) -> Vec<aura_protocol::session::ConfigChoice> {
+        let Some(catalog) = self.agent_catalog(agent_id) else {
+            return Vec::new();
+        };
+        let Some(model) = model.or_else(|| catalog.default_model()) else {
+            return Vec::new();
+        };
+        match catalog.effort(model).flatten().map(|option| &option.kind) {
+            Some(aura_protocol::session::ConfigKind::Select { choices, .. }) => choices.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    fn agent_catalog(&self, agent_id: &str) -> Option<catalogs::Catalog> {
+        let agent = aura_agents::agent_of(agent_id);
+        let connection = self.deps().detector.connection_for(agent);
+        self.shared()
+            .catalogs
+            .for_agent(agent, connection.as_ref().map(|spec| spec.id))
     }
 
     /// Registers the webview's status channel (replacing its earlier one); returns its id.
@@ -1369,6 +1412,12 @@ impl SessionManager {
             );
             self.kill_all_now();
         }
+        // The agents' model lists learned since the last save, before the store closes.
+        let _ = tokio::time::timeout(
+            Duration::from_secs(1),
+            self.shared().catalogs.save_now(&self.deps().store),
+        )
+        .await;
         ShutdownSummary {
             sessions,
             graceful,

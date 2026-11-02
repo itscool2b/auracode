@@ -61,7 +61,10 @@ async fn choose_model(harness: &mut Harness, model: &str, resolved: &str) -> Vec
         })
         .expect("set model");
     let request = harness.wire().await;
-    assert_eq!(request["request"], json!({"subtype":"set_model","model":model}));
+    assert_eq!(
+        request["request"],
+        json!({"subtype":"set_model","model":model})
+    );
     harness.send(json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":{"model":resolved}}})).await;
     assert!(receive.await.expect("model reply").is_ok());
     next_options(harness).await

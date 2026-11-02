@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 mod controls;
+mod options;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
@@ -727,6 +728,13 @@ pub(crate) struct ChatActor {
     implementation_approved: bool,
     desired: BTreeMap<String, ConfigValue>,
     options: Vec<ConfigOption>,
+    /// The generation whose driver sent `options` last; 0 when none of this run's has.
+    options_generation: u64,
+    /// The current start chose no model, so its first lists show the model the agent starts on.
+    default_shown: bool,
+    /// A model change sent to the driver (generation, option, model): the lists that show that
+    /// model decide the thinking level the next start restores.
+    model_change: Option<(u64, String, String)>,
     commands: Vec<SlashCommand>,
     capabilities: Option<Capabilities>,
     agent_name: Option<String>,
@@ -807,8 +815,14 @@ impl ChatActor {
             .as_ref()
             .map_or(defaults.autonomy, |session| session.autonomy);
         let initial_model = initial_model.or_else(|| defaults.model_for(&chat.agent_id));
+        let initial_effort = defaults
+            .effort_for(&chat.agent_id, initial_model.as_deref())
+            .map(|value| {
+                let catalog = spec.as_ref().and_then(|spec| shared.catalogs.get(spec.id));
+                (effort_option_id(catalog.as_ref()), value)
+            });
         let controls = controls::preferences(agent_session.as_ref());
-        let desired = initial_options(agent_session.as_ref(), initial_model);
+        let desired = initial_options(agent_session.as_ref(), initial_model, initial_effort);
         let store = Arc::clone(&shared.deps.store);
         let replay_check = replay_check.filter(|_| {
             !continuation
@@ -863,6 +877,9 @@ impl ChatActor {
             implementation_approved: false,
             desired,
             options: Vec::new(),
+            options_generation: 0,
+            default_shown: false,
+            model_change: None,
             commands: Vec::new(),
             capabilities: None,
             agent_name: None,
@@ -904,6 +921,8 @@ impl ChatActor {
     async fn run(mut self, mut mailbox: mpsc::UnboundedReceiver<ChatMsg>) {
         self.publish();
         let mut workspace_changes = self.store.workspace_changes();
+        let mut catalog_changes = self.shared.catalogs.subscribe();
+        let mut catalogs_open = true;
         loop {
             // A flush that is due runs before anything else is read: a timer set for "now" only
             // fires on a later tick of a busy runtime, and the outbox bound must see the flush.
@@ -947,6 +966,10 @@ impl ChatActor {
                 detail = next_progress(&mut self.progress), if self.progress.is_some() => match detail {
                     Some(detail) => self.set_detail(Some(detail)),
                     None => self.progress = None,
+                },
+                changed = catalog_changes.changed(), if catalogs_open => match changed {
+                    Ok(()) => self.catalogs_changed(),
+                    Err(_) => catalogs_open = false,
                 },
             }
             let workspace_busy = self.turn.is_some()
@@ -1615,11 +1638,14 @@ impl ChatActor {
             let defaults = lock(&self.shared.new_chat_defaults).clone();
             self.autonomy = self.agent_session.as_ref().map_or(defaults.autonomy, |session| session.autonomy);
             let initial_model = load.initial_model.or_else(|| defaults.model_for(&self.chat.agent_id));
-            self.desired = initial_options(self.agent_session.as_ref(), initial_model);
+            let initial_effort = defaults.effort_for(&self.chat.agent_id, initial_model.as_deref()).map(|value| (effort_option_id(self.catalog().as_ref()), value));
+            self.desired = initial_options(self.agent_session.as_ref(), initial_model, initial_effort);
             self.controls = controls::preferences(self.agent_session.as_ref());
             self.control_pending = None;
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
+            self.options_generation = 0;
+            self.model_change = None;
             self.commands.clear();
             self.capabilities = None;
             self.native_session_id = None;
@@ -1751,7 +1777,7 @@ impl ChatActor {
         SessionLists {
             revision: self.revision,
             capabilities: self.capabilities.clone(),
-            options: self.options.clone(),
+            options: self.shown_options(),
             commands: self.commands.clone(),
             autonomy: self.autonomy_state.clone(),
             controls: self.control_lists(),
@@ -3220,6 +3246,14 @@ impl ChatActor {
             None
         };
         let generation = self.generation;
+        let desired = self.native_desired();
+        let model_id = self
+            .shared
+            .catalogs
+            .get(spec.id)
+            .map_or_else(|| "model".to_owned(), |catalog| catalog.model.id);
+        // Without a chosen model, the first lists show the one the agent starts on.
+        self.default_shown = !desired.contains_key(&model_id);
         let deps = &self.shared.deps;
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
@@ -3280,7 +3314,7 @@ impl ChatActor {
             resume: resume.clone(),
             native_start,
             autonomy: self.autonomy,
-            desired: self.native_desired(),
+            desired,
             timings: DriverTimings::STANDARD,
             client_version: deps.app_version.clone(),
         };
@@ -3432,15 +3466,9 @@ impl ChatActor {
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
         native_admitted: bool,
     ) {
-        let live = matches!(
-            self.status,
-            SessionStatus::Ready | SessionStatus::Running | SessionStatus::Cancelling
-        ) && self
-            .driver
-            .as_ref()
-            .is_some_and(|driver| driver.events.is_some());
-        if !live {
-            drop(reply.send(Err(SessionError::SessionNotReady)));
+        if !self.options_live() {
+            // Kept for the next start, as access is.
+            self.set_option_waiting(option_id, value, reply);
             return;
         }
         if let Err(error) = check_option(&self.options, &option_id, &value) {
@@ -3469,6 +3497,7 @@ impl ChatActor {
         }
         let (answer, receiver) = oneshot::channel();
         let generation = self.generation;
+        self.note_model_change(&option_id, &value);
         self.send_command(DriverCommand::SetOption {
             option_id: option_id.clone(),
             value: value.clone(),
@@ -4034,11 +4063,21 @@ impl ChatActor {
                         self.on_driver_event(event);
                     }
                 }
+                if !matches!(result, Ok(Ok(Ok(()))))
+                    && self
+                        .model_change
+                        .as_ref()
+                        .is_some_and(|(_, id, _)| *id == option_id)
+                {
+                    self.model_change = None;
+                }
                 let answer = match result {
                     Ok(Ok(Ok(()))) => {
                         if controls::is_control(&option_id) {
                             self.control_applied(&option_id, &value);
                         } else {
+                            // The driver's lists follow its answer: the answer shows the choice.
+                            self.show_applied(&option_id, &value);
                             self.desired.insert(option_id.clone(), value);
                             self.persist_desired();
                         }
@@ -4236,18 +4275,7 @@ impl ChatActor {
                 self.schedule_flush();
             }
             DriverEvent::Options(options) => {
-                // Settings offers these as the agent's models for its default model.
-                if let Some(choices) = options.iter().find_map(|option| match &option.kind {
-                    ConfigKind::Select { choices, .. }
-                        if option.category == ConfigCategory::Model && !choices.is_empty() =>
-                    {
-                        Some(choices.clone())
-                    }
-                    _ => None,
-                }) {
-                    lock(&self.shared.reported_models).insert(self.chat.agent_id.clone(), choices);
-                }
-                self.options = options;
+                self.take_options(options);
                 self.observe_native_controls();
                 self.revision = self.revision.wrapping_add(1);
                 self.info_dirty = true;
@@ -4553,6 +4581,7 @@ impl ChatActor {
                 }
             }
         }
+        self.forget_unoffered_effort();
         let config_json = serde_json::to_string(&self.desired).ok();
         let controls_json = serde_json::to_string(&self.controls).ok();
         let (model, effort) = (
@@ -5864,6 +5893,9 @@ impl ChatActor {
     }
 
     fn session_info(&self) -> SessionInfo {
+        // A chat whose agent is not running names the choices its next start asks for.
+        let waiting = (!self.options_live()).then(|| self.shown_options());
+        let options = waiting.as_deref().unwrap_or(&self.options);
         SessionInfo {
             worktree_setup: self.worktree_setup.clone(),
             status: self.status,
@@ -5872,9 +5904,9 @@ impl ChatActor {
             agent_name: self.agent_name.clone(),
             agent_version: self.agent_version.clone(),
             title: self.chat.title.clone(),
-            model: self.option_label(ConfigCategory::Model),
-            effort: self.option_label(ConfigCategory::Effort),
-            mode: self.option_label(ConfigCategory::Mode),
+            model: option_label(options, ConfigCategory::Model),
+            effort: option_label(options, ConfigCategory::Effort),
+            mode: option_label(options, ConfigCategory::Mode),
             autonomy: self.autonomy,
             queue_held: self.queue.iter().any(|row| row.held),
             revision: self.revision,
@@ -5882,23 +5914,6 @@ impl ChatActor {
             sending: self.sending(),
             account_id: self.account.as_ref().map(|(id, _)| id.clone()),
             usage_limit: self.usage_limit.clone(),
-        }
-    }
-
-    /// The display name of the current choice of the option of `category`.
-    fn option_label(&self, category: ConfigCategory) -> Option<String> {
-        let option = self
-            .options
-            .iter()
-            .find(|option| option.category == category)?;
-        match &option.kind {
-            ConfigKind::Select { current, choices } => Some(
-                choices
-                    .iter()
-                    .find(|choice| choice.value == *current)
-                    .map_or_else(|| current.clone(), |choice| choice.name.clone()),
-            ),
-            ConfigKind::Toggle { .. } => None,
         }
     }
 
@@ -5959,20 +5974,87 @@ fn uneditable() -> SessionError {
     SessionError::OptionInvalid("This message can't be edited. Remove it and send it again.".into())
 }
 
+/// What a chat asks its agent for at start: its saved session's choices, or for a chat whose agent
+/// never started, the project's or Settings' model and Settings' thinking level (`(option, level)`).
 fn initial_options(
     session: Option<&AgentSessionRow>,
     initial_model: Option<String>,
+    initial_effort: Option<(String, String)>,
 ) -> BTreeMap<String, ConfigValue> {
     let mut desired: BTreeMap<String, ConfigValue> = session
         .and_then(|session| session.config_json.as_deref())
         .and_then(|json| serde_json::from_str(json).ok())
         .unwrap_or_default();
-    if session.is_none()
-        && let Some(value) = initial_model
-    {
-        desired.insert("model".into(), ConfigValue::Choice { value });
+    if session.is_none() {
+        if let Some(value) = initial_model {
+            desired.insert("model".into(), ConfigValue::Choice { value });
+        }
+        if let Some((id, value)) = initial_effort {
+            desired.insert(id, ConfigValue::Choice { value });
+        }
     }
     desired
+}
+
+/// The id of the agent's thinking level option, as its catalog names it.
+fn effort_option_id(catalog: Option<&super::catalogs::Catalog>) -> String {
+    catalog
+        .and_then(|catalog| catalog.efforts.values().flatten().next())
+        .map_or_else(|| "effort".to_owned(), |option| option.id.clone())
+}
+
+/// Whether `option` offers `value`.
+fn offers(option: &ConfigOption, value: &ConfigValue) -> bool {
+    match (&option.kind, value) {
+        (ConfigKind::Select { choices, .. }, ConfigValue::Choice { value }) => {
+            choices.iter().any(|choice| choice.value == *value)
+        }
+        (ConfigKind::Toggle { .. }, ConfigValue::Toggle { .. }) => true,
+        _ => false,
+    }
+}
+
+/// Shows `value` as the option's current one; a choice it does not list is added, so it shows.
+fn show_value(option: &mut ConfigOption, value: &ConfigValue) {
+    match (&mut option.kind, value) {
+        (ConfigKind::Select { current, choices }, ConfigValue::Choice { value }) => {
+            if !value.is_empty() && !choices.iter().any(|choice| choice.value == *value) {
+                choices.push(aura_protocol::session::ConfigChoice {
+                    value: value.clone(),
+                    name: value.clone(),
+                    description: None,
+                    group: None,
+                });
+            }
+            current.clone_from(value);
+        }
+        (ConfigKind::Toggle { current }, ConfigValue::Toggle { value }) => *current = *value,
+        _ => {}
+    }
+}
+
+/// The display name of the current choice of the option of `category`; none for nothing chosen.
+fn option_label(options: &[ConfigOption], category: ConfigCategory) -> Option<String> {
+    let option = options.iter().find(|option| option.category == category)?;
+    match &option.kind {
+        ConfigKind::Select { current, .. } if current.is_empty() => None,
+        ConfigKind::Select { current, choices } => Some(
+            choices
+                .iter()
+                .find(|choice| choice.value == *current)
+                .map_or_else(|| current.clone(), |choice| choice.name.clone()),
+        ),
+        ConfigKind::Toggle { .. } => None,
+    }
+}
+
+fn current_value(option: &ConfigOption) -> ConfigValue {
+    match &option.kind {
+        ConfigKind::Select { current, .. } => ConfigValue::Choice {
+            value: current.clone(),
+        },
+        ConfigKind::Toggle { current } => ConfigValue::Toggle { value: *current },
+    }
 }
 
 /// The autonomy state while no agent runs (nothing is auto-answered).
