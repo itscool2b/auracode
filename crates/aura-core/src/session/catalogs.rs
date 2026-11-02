@@ -236,8 +236,10 @@ impl Catalogs {
         };
         let mut added = false;
         for (connection, catalog) in record.catalogs.into_iter().take(MAX_CATALOGS) {
-            if !state.catalogs.contains_key(&connection) {
-                state.catalogs.insert(connection, catalog);
+            if let std::collections::btree_map::Entry::Vacant(entry) =
+                state.catalogs.entry(connection)
+            {
+                entry.insert(catalog);
                 added = true;
             }
         }
