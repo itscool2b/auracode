@@ -2685,6 +2685,15 @@
   flex: 0 1 auto;
   min-width: 34px;
 }
+/* The model pill shares the shortfall, so neither label is cut to a stub. */
+.chat-pickers > .chat-model-popover {
+  flex: 0 1 auto;
+  min-width: 96px;
+}
+.chat-model-popover > summary {
+  min-width: 0;
+  overflow: hidden;
+}
 /* Its pills never shrink, so the group itself must not: shrinking it would only overlap them. */
 .chat-pickers > .chat-access-controls {
   flex-shrink: 0;

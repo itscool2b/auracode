@@ -148,6 +148,23 @@ try {
           "the wrapped token was read whole",
         );
 
+        // A browser that shows a code: it is pasted into the terminal, and Continue is its Enter.
+        await page.goto(`${origin}/?preview=accounts&accounts=code`);
+        await page
+          .getByTestId("agent-accounts")
+          .getByRole("button", { name: "Add account", exact: true })
+          .click();
+        await dialog.waitFor();
+        await dialog.getByRole("button", { name: "Sign in…" }).click();
+        const codeSheet = page.getByRole("dialog", {
+          name: "Sign in to another Claude Code account",
+        });
+        await codeSheet.getByText("paste it below and choose Continue", { exact: false }).waitFor();
+        await codeSheet.getByRole("button", { name: "Continue" }).click();
+        await dialog.waitFor({ state: "detached" });
+        assert.ok((await calls()).includes("token:enter"), "Continue sends Enter to the terminal");
+        assert.ok((await calls()).some((call) => call.startsWith("add:claude:Account 3:")));
+
         // When the token is not picked up, the paste field opens: an API key is refused, and a
         // token a terminal copy broke over two lines is accepted.
         await page.goto(`${origin}/?preview=accounts&accounts=nocapture`);

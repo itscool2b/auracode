@@ -24,7 +24,9 @@ const fixture = createAccountsFixture(
     ? { unavailable: "This computer has no secure storage auracode can keep account tokens in." }
     : variant === "nocapture"
       ? { tokenOutput: "missing" }
-      : {},
+      : variant === "code"
+        ? { tokenOutput: "code" }
+        : {},
 );
 const managed: string[] = [];
 const limit: UsageLimit = {

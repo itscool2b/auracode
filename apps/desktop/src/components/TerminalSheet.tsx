@@ -21,7 +21,7 @@ function tokenStatus(state: TerminalState | { state: "idle" }): string {
     case "starting":
       return "Opening the vendor sign-in flow…";
     case "running":
-      return "Approve it in your browser. auracode picks up the token by itself.";
+      return "Approve it in your browser. If it shows a code, paste it below and choose Continue.";
     case "failed":
       return state.message;
     case "finished":
@@ -298,26 +298,40 @@ export function TerminalSheet({
         >
           Copy selection
         </button>
-        <button
-          type="button"
-          className="g-button g-button-primary terminal-sheet__button--primary"
-          disabled={!ready || state.state !== "idle"}
-          onClick={() => {
-            const term = terminal.current;
-            started.current = true;
-            if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
-          }}
-        >
-          {purpose === "token"
-            ? "Start sign-in"
-            : purpose === "installation"
-              ? "Start installation"
-              : purpose === "setup"
-                ? "Start setup"
-                : purpose === "project"
-                  ? "Start project terminal"
-                  : "Start sign-in"}
-        </button>
+        {purpose === "token" && state.state === "running" ? (
+          // The browser's code is pasted into the terminal; Continue is its Enter.
+          <button
+            type="button"
+            className="g-button g-button-primary terminal-sheet__button--primary"
+            onClick={() => {
+              void session.current?.write(new TextEncoder().encode("\r"));
+              terminal.current?.focus();
+            }}
+          >
+            Continue
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="g-button g-button-primary terminal-sheet__button--primary"
+            disabled={!ready || state.state !== "idle"}
+            onClick={() => {
+              const term = terminal.current;
+              started.current = true;
+              if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
+            }}
+          >
+            {purpose === "token"
+              ? "Start sign-in"
+              : purpose === "installation"
+                ? "Start installation"
+                : purpose === "setup"
+                  ? "Start setup"
+                  : purpose === "project"
+                    ? "Start project terminal"
+                    : "Start sign-in"}
+          </button>
+        )}
       </footer>
     </dialog>
   );

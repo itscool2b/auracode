@@ -17,8 +17,11 @@ export function createAccountsFixture(
   initial: readonly string[] = [],
   options: {
     unavailable?: string;
-    /** `missing`: the sign-in finishes without printing a token, so it has to be pasted. */
-    tokenOutput?: "wrapped" | "missing";
+    /**
+     * `missing`: the sign-in finishes without printing a token, so it has to be pasted. `code`:
+     * it waits at "Paste code here" until Enter reaches the terminal, then prints the token.
+     */
+    tokenOutput?: "wrapped" | "missing" | "code";
   } = {},
 ): AccountsFixture {
   const calls: string[] = [];
@@ -35,6 +38,9 @@ export function createAccountsFixture(
     unavailable: options.unavailable ?? null,
   };
   const answer = () => structuredClone(state);
+  // `code`: whether the prompt was shown, and whether Enter has come since.
+  let prompted = false;
+  let entered = false;
   const tokenTerminal: TerminalTransport = {
     async reserve() {
       calls.push("token:reserve");
@@ -45,6 +51,19 @@ export function createAccountsFixture(
       return id;
     },
     async read() {
+      if (options.tokenOutput === "code" && !entered) {
+        const first = !prompted;
+        prompted = true;
+        if (!first) await new Promise((done) => setTimeout(done, 50));
+        return {
+          bytes: first
+            ? Array.from(new TextEncoder().encode("Paste code here if prompted > "))
+            : [],
+          done: false,
+          exit_code: null,
+          truncated: false,
+        };
+      }
       // What claude setup-token prints once the browser approves: the token wrapped onto lines.
       const wrapped = FIXTURE_TOKEN.match(/.{1,40}/g)?.join("\r\n") ?? FIXTURE_TOKEN;
       const text =
@@ -58,7 +77,12 @@ export function createAccountsFixture(
         truncated: false,
       };
     },
-    async write() {},
+    async write(_id, bytes) {
+      if (bytes.includes(13)) {
+        calls.push("token:enter");
+        entered = true;
+      }
+    },
     async resize() {},
     async close() {
       calls.push("token:close");
