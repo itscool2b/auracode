@@ -1,6 +1,7 @@
 import {
   type AgentEntry,
   type AppInfo,
+  commands,
   SMOKE_AGENT_CHECKS,
   SMOKE_CHAT_CHECKS,
   SMOKE_CHAT_REOPEN_CHECKS,
@@ -10,7 +11,8 @@ import {
   type SmokeScenario,
 } from "../bindings";
 import { errorMessage } from "./errors";
-import { agentSetConnection, agentsList } from "./ipc";
+import { agentSetConnection, agentsList, settle } from "./ipc";
+import { type SetupApi, setupApi } from "./setup";
 import {
   all,
   attr,
@@ -613,6 +615,188 @@ async function agentOption(agentId: string): Promise<{ disabled: boolean; text: 
   });
 }
 
+/** Restore the scratch profile's original preference even when a native navigation check fails. */
+export async function withAppearanceRestored<T>(api: SetupApi, run: () => Promise<T>): Promise<T> {
+  const original = (await api.snapshot()).preferences.appearance;
+  try {
+    return await run();
+  } finally {
+    const latest = await api.snapshot();
+    if (latest.preferences.appearance !== original) {
+      await api.apply(latest.preferences.revision, { type: "appearance", value: original });
+    }
+  }
+}
+
+function namedButton(name: string, within: ParentNode = document): HTMLButtonElement | null {
+  return (
+    [...within.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => (button.getAttribute("aria-label") ?? text(button).trim()) === name,
+    ) ?? null
+  );
+}
+
+async function openSettings(): Promise<HTMLElement> {
+  click(one("sidebar-settings"), "Open settings");
+  return waitFor("Settings navigation", () =>
+    document.querySelector<HTMLElement>('aside[aria-label="Settings navigation"]'),
+  );
+}
+
+async function customizeDestination(label: string): Promise<HTMLElement> {
+  const screen = await waitFor("Customize", () => one("customize-screen"));
+  await waitFor(`Customize to select ${label} and focus its heading`, () => {
+    const selected = namedButton(
+      label,
+      screen.querySelector('nav[aria-label="Customize sections"]') ?? screen,
+    );
+    return (
+      selected?.getAttribute("aria-current") === "page" &&
+      document.activeElement === screen.querySelector("h1")
+    );
+  });
+  if (document.querySelector('aside[aria-label="Settings navigation"]')) {
+    throw new StepError("Settings remained mounted behind Customize");
+  }
+  return screen;
+}
+
+async function returnToRetainedChat(
+  chatId: string,
+  input: HTMLTextAreaElement,
+  draft: string,
+): Promise<void> {
+  click(namedButton("Back to chats", one("customize-screen") ?? document), "Back to chats");
+  await waitFor("the original chat to become visible", () => {
+    const view = one("chat-view");
+    return (
+      view &&
+      !view.closest("[hidden]") &&
+      attr(view, "chat-id") === chatId &&
+      one("customize-screen") === null
+    );
+  });
+  if (one("composer-input") !== input || input.value !== draft) {
+    throw new StepError("Customize navigation replaced the composer or lost its unsent draft");
+  }
+  if (status() !== "ready") throw new StepError("Customize navigation changed the running session");
+}
+
+async function settingsCustomize(chatId: string, appearance: "light" | "dark"): Promise<string> {
+  const input = one("composer-input");
+  if (!(input instanceof HTMLTextAreaElement)) throw new StepError("the chat composer is missing");
+  const previousDraft = input.value;
+  const draft = `Unsent ${appearance} native navigation draft`;
+  setValue(input, draft);
+  try {
+    return await withAppearanceRestored(setupApi, async () => {
+      let navigation = await openSettings();
+      const appearanceControls = await waitFor("Appearance controls to load", () => {
+        const group = document
+          .querySelector('input[name="settings-appearance"]')
+          ?.closest("fieldset");
+        return group && !group.disabled ? group : null;
+      });
+      await choose(appearanceControls, "Appearance", appearance);
+      await waitFor(`the native preference to apply ${appearance}`, () => {
+        const choice = document.querySelector<HTMLInputElement>(
+          `input[name="settings-appearance"][value="${appearance}"]`,
+        );
+        return (
+          choice?.checked &&
+          !choice.matches(":disabled") &&
+          document.documentElement.dataset.theme === appearance
+        );
+      });
+      if ((await setupApi.snapshot()).preferences.appearance !== appearance) {
+        throw new StepError(`the ${appearance} preference was not persisted by the native backend`);
+      }
+      for (const label of ["Plugins & MCP", "Instructions", "Project memory"]) {
+        const link = namedButton(label, navigation);
+        link?.focus();
+        click(link, `Settings' ${label} link`);
+        const destination = await customizeDestination(label);
+        if (label === "Instructions") {
+          await waitFor(
+            "global Instructions scope",
+            () =>
+              destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')
+                ?.value === "global",
+          );
+        }
+        if (document.documentElement.dataset.theme !== appearance) {
+          throw new StepError("Customize lost the selected appearance");
+        }
+        await returnToRetainedChat(chatId, input, draft);
+        if (label !== "Project memory") navigation = await openSettings();
+      }
+      return `${appearance}: all three Settings links opened their Customize section with heading focus; chat ${chatId}, session and draft stayed mounted`;
+    });
+  } finally {
+    if (input.isConnected) setValue(input, previousDraft);
+  }
+}
+
+async function customizeScopes(chatId: string): Promise<string> {
+  const input = one("composer-input");
+  if (!(input instanceof HTMLTextAreaElement)) throw new StepError("the chat composer is missing");
+  const previousDraft = input.value;
+  const draft = "Unsent scoped Instructions draft";
+  setValue(input, draft);
+  try {
+    // The command palette carries this chat's exact scope through the real App callback.
+    click(
+      one("chat-list")?.querySelector('[aria-keyshortcuts="Control+K Meta+K"]') ?? null,
+      "Search",
+    );
+    const search = await waitFor("Search and commands", () =>
+      document.querySelector<HTMLInputElement>('input[aria-label="Search and commands"]'),
+    );
+    setValue(search, "Edit this chat's instructions");
+    const result = await waitFor("the chat Instructions command", () =>
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (entry) => text(entry.querySelector("strong")) === "Edit this chat's instructions",
+      ),
+    );
+    click(result, "Edit this chat's instructions");
+    let destination = await customizeDestination("Instructions");
+    await waitFor(
+      "the exact chat Instructions scope",
+      () =>
+        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
+        `chat:${chatId}`,
+    );
+    await returnToRetainedChat(chatId, input, draft);
+
+    const workspace = await settle(
+      commands.workspaceSnapshot({ include_archived: false, project_id: null }),
+    );
+    const chat = workspace.chats.find((entry) => entry.chat.id === chatId);
+    const project = workspace.projects.find((entry) => entry.id === chat?.project_id);
+    const folder = project?.folders.find((entry) => entry.id === chat?.folder_id);
+    if (!project || !folder)
+      throw new StepError("the smoke chat has no project folder for scope verification");
+    click(
+      namedButton(`Settings for ${project.name}`, one("chat-list") ?? document),
+      "Project settings",
+    );
+    await clickWhenEnabled("the project folder's Instructions", () =>
+      namedButton(`Instructions for ${folder.display_name}`),
+    );
+    destination = await customizeDestination("Instructions");
+    await waitFor(
+      "the exact project folder Instructions scope",
+      () =>
+        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
+        `folder:${folder.id}`,
+    );
+    await returnToRetainedChat(chatId, input, draft);
+    return "chat command and project folder action retained their exact Instructions scope, destination focus and unsent chat draft";
+  } finally {
+    if (input.isConnected) setValue(input, previousDraft);
+  }
+}
+
 // ---------- chat: the demo agent, every block and path ----------
 
 async function chatScenario(
@@ -1010,6 +1194,9 @@ async function chatScenario(
     return "the prompt started the stopped agent and went out once it was ready";
   });
 
+  await checks.run("settings-customize-light", () => settingsCustomize(chatId, "light"));
+  await checks.run("settings-customize-dark", () => settingsCustomize(chatId, "dark"));
+  await checks.run("customize-instructions-scopes", () => customizeScopes(chatId));
   await checks.run("transcript", async () => expectTranscript(CHAT_TRANSCRIPT));
 
   await checks.run("quit-with-turn", async () => {
