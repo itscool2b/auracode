@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { prefersReducedMotion } from "@auracode/ui";
 import {
   type ReactNode,
   useCallback,
@@ -8,9 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { chatActivity, hasLiveLine } from "../../lib/chat/activity";
+import { chatActivity, lastToolKind, streamingText } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
+import { workingContext, workingSince } from "../../lib/chat/working";
 import { useStickToBottom } from "../../lib/hooks";
 import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
@@ -18,11 +19,46 @@ import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
 import { UserMessage } from "./UserMessage";
 import { type TranscriptRow, VirtualRows } from "./VirtualRows";
+import { type LiveTail, NowLine } from "./WorkingLine";
+
+/** A disclosure the reader toggled, while its rows glide: until when, and which way. */
+interface Reveal {
+  readonly kind: "open" | "close";
+  readonly until: number;
+}
+
+/** Each a little longer than its glide (--g-dur-glide 240ms, --g-dur-panel 180ms). */
+const OPEN_MS = 300;
+const CLOSE_MS = 240;
+
+/** What each kind of row usually measures, so the rows below hold still while it is measured. */
+function estimateOf(item: RenderedItem, grouped: boolean): number {
+  switch (item.kind) {
+    case "user":
+      return 88;
+    case "message":
+      return 160;
+    case "tool":
+      return grouped ? 24 : 28;
+    case "permission":
+    case "question":
+      return 180;
+    case "error":
+      return 120;
+    case "notice":
+    case "gap":
+      return 32;
+  }
+}
 
 /**
  * The chat's turns: "Load earlier" at the top while older pages remain, a marker when the oldest
  * loaded turn was cut by a page, then every turn as it renders. Follows the bottom while content
  * grows, unless the reader scrolled up.
+ *
+ * A turn reads as its prompt, then the agent's text and its stretches of work, each stretch one
+ * disclosure however many calls it made, then one tail row: the working line while the turn runs,
+ * its footer once it ends, in the same place, so ending a turn moves nothing.
  */
 export function Transcript({
   state,
@@ -41,6 +77,7 @@ export function Transcript({
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
   const [groups, setGroups] = useState<DisclosureChoices>(() => new Map());
+  const [reveals, setReveals] = useState<ReadonlyMap<string, Reveal>>(() => new Map());
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
   const scroller = useRef<HTMLDivElement>(null);
@@ -61,22 +98,31 @@ export function Transcript({
   const activity = chatActivity(state);
   const chatAgentId = state.chat?.agent_id ?? "generic";
   const chatAgentName = state.session?.agent_name ?? state.chat?.agent_name ?? "Agent";
+  const at = typeof performance === "undefined" ? 0 : performance.now();
+  // The turn still running at the end: its tail row shows the working line.
+  const tailTurn =
+    last !== undefined &&
+    last.turnId !== null &&
+    last.end === null &&
+    (status === "running" || status === "cancelling" || status === "stopping")
+      ? last
+      : null;
   // A message on its way (its folder checkpoint saving) shows as sent, with "Sending" under it.
   const sending = state.sending;
   const pendingLabel =
     sending !== null
       ? "Sending"
-      : activity === "waiting"
-        ? "Waiting on you"
-        : status === "starting"
-          ? "Starting session"
-          : status === "cancelling" || status === "stopping"
-            ? "Stopping"
-            : status === "running" && !hasLiveLine(last)
-              ? last?.end === null
-                ? "Thinking"
-                : "Working"
-              : null;
+      : tailTurn !== null
+        ? null
+        : activity === "waiting"
+          ? "Waiting on you"
+          : status === "starting"
+            ? "Starting session"
+            : status === "cancelling" || status === "stopping"
+              ? "Stopping"
+              : status === "running"
+                ? "Working"
+                : null;
   const rows: TranscriptRow[] = [];
   let focusedGroupKey: string | null = null;
   let focusedGroupPhase = "";
@@ -127,11 +173,18 @@ export function Transcript({
         : turnAgent.agent_name;
     const active = status === "running" && segment === last && segment.end === null;
     let prompt: TranscriptRow["prompt"];
-    const addItem = (index: number, item: RenderedItem, grouped = false) =>
+    const addItem = (
+      index: number,
+      item: RenderedItem,
+      inGroup?: { readonly bare: boolean; readonly reveal?: Reveal["kind"] },
+    ) =>
       rows.push({
         key: JSON.stringify([segment.key, item.key]),
-        estimate: item.kind === "message" ? 200 : item.kind === "user" ? 72 : 48,
+        estimate: estimateOf(item, inGroup !== undefined),
         prompt,
+        reveal: inGroup?.reveal,
+        // The person's own message appears at once; the agent's output fades in.
+        arrive: item.kind !== "user",
         retain:
           (item.kind === "question" || item.kind === "permission") &&
           item.resolution === null &&
@@ -146,7 +199,8 @@ export function Transcript({
             agentName={agentName}
             active={active}
             live={live}
-            suppressByline={grouped}
+            suppressByline={inGroup !== undefined}
+            bareTool={inGroup?.bare === true}
           />
         ),
       });
@@ -160,18 +214,19 @@ export function Transcript({
         continue;
       if (item.kind === "user")
         prompt = { key: JSON.stringify([segment.key, item.key]), text: item.text };
-      const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];
-      if (item.kind === "tool") {
-        for (let next = index; next < segment.items.length; next++) {
-          const candidate = segment.items[next];
-          if (candidate?.kind !== "tool") break;
-          tools.push(candidate);
-        }
-      }
-      if (tools.length < 2) {
+      if (item.kind !== "tool") {
         addItem(index, item);
         continue;
       }
+      // A stretch of work: every call until the agent's next text, card or notice. Thoughts are
+      // not among the rendered items, so the calls on either side of one join the same stretch.
+      const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];
+      for (let next = index; next < segment.items.length; next++) {
+        const candidate = segment.items[next];
+        if (candidate?.kind !== "tool") break;
+        tools.push(candidate);
+      }
+      // Keyed by its first call, so a stretch keeps its row (and its disclosure) as calls join.
       const key = JSON.stringify([segment.key, "tool-group", item.key]);
       const failed = tools.some((tool) => tool.display === "failed");
       const phase = failed
@@ -189,33 +244,56 @@ export function Transcript({
       }
       const expanded =
         ownsFocus || (choice?.phase === phase || choice?.open === true ? choice.open : failed);
+      const reveal = reveals.get(key);
+      const moving = reveal !== undefined && reveal.until > at ? reveal.kind : undefined;
       rows.push({
         key,
-        estimate: 32,
+        estimate: 28,
         prompt,
         content: (
           <ToolGroup
             tools={tools}
             expanded={expanded}
-            agentId={agentId}
             agentName={agentName}
             byline={
               !segment.partial &&
               index === segment.items.findIndex((candidate) => candidate.kind !== "user")
             }
-            onToggle={() =>
-              setGroups((current) => new Map(current).set(key, { phase, open: !expanded }))
-            }
+            onToggle={() => {
+              setGroups((current) => new Map(current).set(key, { phase, open: !expanded }));
+              if (prefersReducedMotion()) return;
+              const kind = expanded ? "close" : "open";
+              const until = performance.now() + (expanded ? CLOSE_MS : OPEN_MS);
+              setReveals((current) => new Map(current).set(key, { kind, until }));
+            }}
           />
         ),
       });
-      if (expanded)
+      // Closing, the calls stay a moment to glide their height away.
+      if (expanded || moving === "close")
         tools.forEach((tool, offset) => {
-          addItem(index + offset, tool, true);
+          addItem(index + offset, tool, {
+            bare: tools.length === 1,
+            reveal: expanded ? (moving === "open" ? "open" : undefined) : "close",
+          });
         });
       index += tools.length - 1;
     }
-    if (segment.end !== null || (segment.plan?.length ?? 0) > 0)
+    const tail: LiveTail | undefined =
+      segment !== tailTurn
+        ? undefined
+        : status !== "running"
+          ? { kind: "stopping" }
+          : activity === "waiting"
+            ? { kind: "waiting" }
+            : {
+                kind: "working",
+                seed: segment.key,
+                context: workingContext(lastToolKind(segment)),
+                visible: !streamingText(segment),
+                since: workingSince(`${state.chatId}:${segment.key}`, Date.now()),
+              };
+    if (segment.end !== null || (segment.plan?.length ?? 0) > 0 || tail !== undefined)
       rows.push({
         key: JSON.stringify([segment.key, "footer"]),
         estimate: 44,
@@ -227,6 +305,7 @@ export function Transcript({
             actions={actions}
             agentId={agentId}
             agentName={agentName}
+            tail={tail}
           />
         ),
       });
@@ -235,6 +314,7 @@ export function Transcript({
     rows.push({
       key: `sending:${sending.prompt_id}`,
       estimate: 72,
+      arrive: false,
       content: (
         <div
           className="chat-segment chat-sending"
@@ -272,7 +352,7 @@ export function Transcript({
           label={pendingLabel}
           activity={activity}
           delay={
-            (pendingLabel === "Thinking" || pendingLabel === "Working") &&
+            pendingLabel === "Working" &&
             (last?.items.some((item) => item.kind !== "user") ?? false)
           }
         />
@@ -284,6 +364,21 @@ export function Transcript({
       estimate: 100,
       content: <p className="chat-centered">Nothing here yet. Send a message to start.</p>,
     });
+  // A reveal ends with a render, so the rows it kept or marked settle as they are.
+  useEffect(() => {
+    if (reveals.size === 0) return;
+    const soonest = Math.min(...[...reveals.values()].map((reveal) => reveal.until));
+    const timer = setTimeout(
+      () =>
+        setReveals((current) => {
+          const now = performance.now();
+          const kept = new Map([...current].filter(([, reveal]) => reveal.until > now));
+          return kept.size === current.size ? current : kept;
+        }),
+      Math.max(0, soonest - performance.now()) + 16,
+    );
+    return () => clearTimeout(timer);
+  }, [reveals]);
   useLayoutEffect(() => {
     if (focusedGroupKey === null) return;
     const key = focusedGroupKey;
@@ -361,17 +456,5 @@ function NowRow({
     return () => clearTimeout(timeout);
   }, [delay]);
   if (!visible) return null;
-  return (
-    <div className="chat-now" data-state={activity} role="status">
-      <span className="chat-gutter">
-        <AgentMark
-          agent={agentId}
-          state={activity}
-          size={16}
-          label={`${agentName}, ${label.toLowerCase()}`}
-        />
-      </span>
-      <span>{label}</span>
-    </div>
-  );
+  return <NowLine agentId={agentId} agentName={agentName} label={label} state={activity} />;
 }

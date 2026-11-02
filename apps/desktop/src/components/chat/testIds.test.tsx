@@ -290,9 +290,10 @@ describe("the automation attributes of the chat screens", () => {
         recovered: "false",
       },
     ]);
+    // The thought stays in the model; the transcript never shows it (owner, 2 November 2026).
+    expect(html).not.toContain("Thought for");
     expect(marked(html, "item")).toEqual([
       { tag: "div", kind: "user" },
-      { tag: "details", kind: "thought", completed: "true", "duration-ms": "1200" },
       { tag: "div", kind: "tool", "tool-kind": "read", status: "completed" },
       {
         tag: "div",

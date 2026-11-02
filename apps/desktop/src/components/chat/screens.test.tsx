@@ -1150,6 +1150,117 @@ describe("turns and the transcript", () => {
     ]);
   });
 
+  it("shows no reasoning and gathers the calls between the agent's words into one stretch", async () => {
+    const page = historyPage(
+      "c1",
+      items(
+        numbered([
+          ["t1", ev.turnStarted("t1")],
+          ["t1", ev.user("t1.u", "Fix the sidebar")],
+          ["t1", ev.thought("t1.th1", "")],
+          ["t1", ev.thoughtDone("t1.th1", 0)],
+          ["t1", ev.toolCall("a", { title: "Read Sidebar.tsx", status: "completed" })],
+          ["t1", ev.thought("t1.th2", "Now look for its callers.")],
+          ["t1", ev.thoughtDone("t1.th2", 1200)],
+          [
+            "t1",
+            ev.toolCall("b", { kind: "search", title: "Search for Sidebar", status: "completed" }),
+          ],
+          ["t1", ev.toolCall("c", { title: "Read App.tsx", status: "completed" })],
+          ["t1", ev.thought("t1.th3", "Done reading.")],
+          ["t1", ev.message("t1.m1", "The sidebar is fixed.")],
+          ["t1", ev.messageDone("t1.m1")],
+          ["t1", ev.toolCall("d", { kind: "execute", title: "pnpm test", status: "completed" })],
+          ["t1", ev.turnEnded("t1")],
+        ]),
+      ),
+    );
+    const state = await stateWith(page);
+    const html = renderToStaticMarkup(
+      <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(html).not.toMatch(/Thought for|Thinking|did not share its reasoning/);
+    expect(html).not.toContain('data-test-kind="thought"');
+    expect(html).not.toContain("Now look for its callers.");
+    // Three calls split by two thoughts form one stretch; the call after the answer is its own.
+    expect(
+      [...html.matchAll(/data-testid="tool-group" data-test-count="(\d+)"/g)].map(
+        (match) => match[1],
+      ),
+    ).toEqual(["3", "1"]);
+    expect(html).toContain("Read 2 files and searched for 1 pattern");
+    // A single call reads as its own line, past tense once done; settled stretches stay closed.
+    expect(html).toMatch(
+      /class="chat-tool-verb">Ran<\/span> <span class="chat-tool-object" data-literal="">pnpm test</,
+    );
+    expect(html).not.toContain('data-test-kind="tool"');
+    expect(html).toContain('data-testid="turn-footer"');
+    expect(html).not.toContain('data-testid="working-line"');
+  });
+
+  it("keeps the working line at a running turn's tail, aside while text streams", async () => {
+    const running = (events: Parameters<typeof numbered>[0]) =>
+      stateWith(historyPage("c1", items(numbered(events))), {
+        session: sessionInfo({ status: "running" }),
+      });
+    const thinking = await running([
+      ["t1", ev.turnStarted("t1")],
+      ["t1", ev.user("t1.u", "Check the layout")],
+      ["t1", ev.thought("t1.th", "Checking the narrow layout")],
+    ]);
+    const html = renderToStaticMarkup(
+      <Transcript state={thinking} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(html).toContain('data-testid="working-line"');
+    expect(html).not.toContain("data-hidden");
+    expect(html).toContain("is working");
+    expect(html).not.toMatch(/Thinking|Checking the narrow layout/);
+    // No second live row below it, and no footer yet.
+    expect(html).not.toContain('class="chat-now"');
+    expect(html).not.toContain('data-testid="turn-footer"');
+    const streaming = await running([
+      ["t1", ev.turnStarted("t1")],
+      ["t1", ev.user("t1.u", "Check the layout")],
+      ["t1", ev.message("t1.m", "The layout holds")],
+    ]);
+    const aside = renderToStaticMarkup(
+      <Transcript state={streaming} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(aside).toMatch(/data-testid="working-line" data-hidden=""/);
+    const waiting = await running([
+      ["t1", ev.turnStarted("t1")],
+      ["t1", ev.toolCall("cmd", { kind: "execute", title: "pnpm test" })],
+      ["t1", ev.permission("p")],
+    ]);
+    const asking = renderToStaticMarkup(
+      <Transcript state={waiting} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(asking).toContain("Waiting on you");
+    expect(asking).not.toContain('data-testid="working-line"');
+    const ended = await stateWith(
+      historyPage(
+        "c1",
+        items(
+          numbered([
+            ["t1", ev.turnStarted("t1")],
+            ["t1", ev.user("t1.u", "Check the layout")],
+            ["t1", ev.thought("t1.th", "Checking the narrow layout")],
+            ["t1", ev.message("t1.m", "The layout holds.")],
+            ["t1", ev.messageDone("t1.m")],
+            ["t1", ev.turnEnded("t1", "end_turn", { durationMs: 4200 })],
+          ]),
+        ),
+      ),
+      { session: sessionInfo({ status: "ready" }) },
+    );
+    const done = renderToStaticMarkup(
+      <Transcript state={ended} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    expect(done).not.toContain('data-testid="working-line"');
+    expect(done).toContain('data-testid="turn-footer"');
+    expect(done).toContain("4.2 s");
+  });
+
   it("unsaved_marker_and_reattach: marks the unsaved rows where they are missing", async () => {
     const page = historyPage("c1", items(numbered([[null, ev.notice("saved before the pause")]])), {
       unsaved_from: 1,

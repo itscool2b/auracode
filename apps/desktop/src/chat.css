@@ -6,7 +6,9 @@
  *
  * Every agent line starts on a 24px gutter: icons, chevrons and the live mark centre on x 12 and the
  * words start at x 24, so a live line handing over to the next keeps the mark and the words in place.
- * Nothing streamed ever moves: rows only append, and nothing animates in when text arrives.
+ * Nothing streamed ever moves: rows only append, a new row fades in and rises 2px once, and text
+ * arriving inside a message simply appears. The agent's reasoning is never shown (the working line
+ * stands in for it), and a running turn's tail keeps its place until the footer takes it.
  */
 
 /* ---------- Transcript column (6.4) ---------- */
@@ -149,7 +151,7 @@
   max-width: 240px;
 }
 
-/* ---------- The agent's lines: byline, now-row, thinking (6.4) ---------- */
+/* ---------- The agent's lines: byline, now-row, the working line (6.4) ---------- */
 
 /* Every agent line keeps its mark, icon or chevron in the 24px gutter, centred on x 12. */
 .chat-gutter {
@@ -188,31 +190,172 @@
   color: var(--g-fg-2);
 }
 
-.chat-thought > summary {
+/*
+ * The working line (owner, 2 November 2026): the agent's reasoning is never shown. While a turn
+ * runs and no text streams, its tail holds one quiet line instead: a halo in the agent's own glow
+ * breathing in the gutter on the composer rim's rhythm, a playful verb that crossfades to the next
+ * every few seconds with a sheen passing over it, and the elapsed time at the line's end. It is
+ * live agent state, so it alone keeps moving, like the composer's rim; streamed text fades it out
+ * in place, and the footer takes the same place when the turn ends, so nothing below it shifts.
+ */
+.chat-working {
   position: relative;
   display: flex;
   align-items: center;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 24px;
+  gap: var(--g-space-8);
+  min-height: 28px;
   padding: 0 var(--g-space-8) 0 var(--ui-gutter);
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-3);
-  list-style: none;
-  cursor: pointer;
-  font-variant-numeric: tabular-nums;
-  transition: color var(--g-dur-micro) var(--g-ease);
+  color: var(--g-fg-2);
+  transition:
+    opacity var(--g-dur-panel) var(--g-ease),
+    transform var(--g-dur-panel) var(--g-ease);
 }
 
-.chat-thought > summary::-webkit-details-marker,
+.chat-working[data-hidden] {
+  opacity: 0;
+  transform: translateY(2px);
+  transition-duration: var(--g-dur-exit);
+}
+
+.chat-working-halo {
+  position: relative;
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--agent-glow, var(--g-fg-3));
+}
+
+.chat-working-halo::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: var(--g-radius-pill);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--agent-glow, var(--g-fg-3)) 55%, transparent) 0%,
+    transparent 70%
+  );
+  opacity: 0.35;
+  transform: scale(0.7);
+  animation: chat-working-breathe var(--g-dur-bloom) var(--g-ease-in-out) infinite alternate;
+}
+
+@keyframes chat-working-breathe {
+  from {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0.9;
+    transform: scale(1.2);
+  }
+}
+
+/* Leaving and entering verbs share one cell, so the swap is a crossfade, not a reflow. */
+.chat-working-words {
+  display: inline-grid;
+  min-width: 0;
+}
+
+.chat-working-words > .chat-working-verb {
+  grid-area: 1 / 1;
+}
+
+.chat-working-verb {
+  position: relative;
+  white-space: nowrap;
+}
+
+.chat-working-verb[data-entering] {
+  animation: chat-working-in var(--g-dur-glide) var(--g-ease) both;
+}
+
+.chat-working-verb[data-leaving] {
+  animation: chat-working-out var(--g-dur-base) var(--g-ease) both;
+}
+
+@keyframes chat-working-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-working-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/*
+ * The sheen: a brighter copy of the verb, seen through a soft window that sweeps across it. The
+ * window travels one way while the copy travels back, so the words stand still and only the light
+ * moves: transform alone, once per breath of the halo.
+ */
+.chat-working-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 22%, black 50%, transparent 78%);
+  mask-image: linear-gradient(90deg, transparent 22%, black 50%, transparent 78%);
+  animation: chat-working-sweep var(--g-dur-bloom) var(--g-ease-in-out) var(--g-dur-glide) infinite
+    both;
+}
+
+.chat-working-sheen > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: color-mix(in oklab, var(--agent-glow, var(--g-fg-1)) 45%, var(--g-fg-1));
+  white-space: nowrap;
+  animation: chat-working-sweep-back var(--g-dur-bloom) var(--g-ease-in-out) var(--g-dur-glide)
+    infinite both;
+}
+
+@keyframes chat-working-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  70%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes chat-working-sweep-back {
+  0% {
+    transform: translateX(100%);
+  }
+  70%,
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.chat-working-time {
+  flex: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Tool rows and stretches of work (6.4) ---------- */
+
 .chat-tool summary::-webkit-details-marker {
   display: none;
-}
-
-@media (hover: hover) {
-  .chat-thought > summary:hover {
-    color: var(--g-fg-1);
-  }
 }
 
 .chat-disclosure,
@@ -222,52 +365,57 @@
 }
 
 .chat-disclosure {
-  transition: transform var(--g-dur-base) var(--g-ease);
+  transition: transform var(--g-dur-glide) var(--g-ease);
 }
 
-.chat-tool-group-toggle[aria-expanded="true"] .chat-disclosure,
-.chat-thought[open] > summary .chat-disclosure {
+.chat-tool-group-toggle[aria-expanded="true"] .chat-disclosure {
   transform: rotate(90deg);
 }
 
-.chat-thought > p {
-  max-width: 576px;
-  max-height: 280px;
-  margin: var(--g-space-4) 0 var(--g-space-4) calc(var(--ui-gutter) / 2);
-  padding: 0 0 0 calc(var(--ui-gutter) / 2 - 1px);
-  overflow: auto;
-  border-left: 1px solid var(--g-line);
-  color: var(--g-fg-2);
-  line-height: var(--g-leading-ui);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  scrollbar-width: thin;
-  scrollbar-color: var(--g-line-strong) transparent;
-}
-
-/* ---------- Tool rows and groups (6.4) ---------- */
-
-.chat-tool-head {
+/*
+ * A stretch's header and a call's head are one row type: 28px, a 10px radius like menu rows, the
+ * verb in fg-2 and its object in fg-1 (mono when it is code), quiet metadata at the end. They
+ * light a step under the hand (120ms) and a step more while pressed (80ms).
+ */
+.chat-tool-head,
+.chat-tool-group-toggle {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
+  width: 100%;
   min-height: 28px;
   padding: 0 var(--g-space-8) 0 var(--ui-gutter);
-  border-radius: var(--g-radius-8);
-  list-style: none;
+  border-radius: var(--g-radius-10);
+  color: var(--g-fg-2);
+  text-align: left;
   cursor: pointer;
-  transition: background-color var(--g-dur-micro) var(--g-ease);
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.chat-tool-head {
+  list-style: none;
 }
 
 @media (hover: hover) {
-  .chat-tool-head:hover {
+  :is(.chat-tool-head, .chat-tool-group-toggle):hover {
     background-color: var(--g-glass-control);
   }
 
   .chat-tool-head:hover .chat-tool-chevron {
     opacity: 1;
   }
+
+  .chat-tool-group-toggle:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+:is(.chat-tool-head, .chat-tool-group-toggle):active {
+  background-color: var(--g-glass-control-hover);
+  transition-duration: var(--g-dur-micro);
 }
 
 .chat-tool-label {
@@ -326,13 +474,18 @@
   color: var(--g-fg-3);
   opacity: 0;
   transition:
-    opacity var(--g-dur-micro) var(--g-ease),
-    transform var(--g-dur-base) var(--g-ease);
+    opacity var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-glide) var(--g-ease);
 }
 
-.chat-tool details[open] > summary .chat-tool-chevron {
+.chat-tool details[open]:not([data-reveal="close"]) > summary .chat-tool-chevron {
   opacity: 1;
   transform: rotate(90deg);
+}
+
+/* The only call of its stretch: the stretch's header is its head, so only its output shows. */
+.chat-tool[data-bare] > details > summary {
+  display: none;
 }
 
 .chat-tool-well {
@@ -370,12 +523,89 @@
 }
 
 /*
- * The virtualizer spaces rows 16px apart. A tool opened from a group pulls up into that gap, so
- * the group's calls read as one list on a spine (6.4): rows 4px apart, the line on x 11.
+ * Disclosures glide (owner, 2 November 2026): an opened stretch's calls and an opened call's well
+ * grow from nothing over 240ms and shrink away over 180ms while they fade, and the rows below
+ * follow in the same frame. The height is the one layout property the transcript animates, only
+ * at a reader's click, never while output streams. Every row sits in this wrapper always, so the
+ * glide never remounts what it shows; it clips only while it moves.
+ */
+.chat-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.chat-reveal-clip {
+  min-height: 0;
+}
+
+:is(
+    .chat-virtual-row[data-reveal="open"],
+    .chat-virtual-row[data-reveal="close"],
+    details[data-reveal]
+  )
+  > .chat-reveal
+  > .chat-reveal-clip {
+  overflow: hidden;
+}
+
+:is(.chat-virtual-row[data-reveal="open"], details[data-reveal="open"]) > .chat-reveal {
+  animation: chat-reveal-open var(--g-dur-glide) var(--g-ease) both;
+}
+
+:is(.chat-virtual-row[data-reveal="close"], details[data-reveal="close"]) > .chat-reveal {
+  animation: chat-reveal-close var(--g-dur-panel) var(--g-ease) both;
+}
+
+.chat-virtual-row[data-reveal="close"] {
+  pointer-events: none;
+}
+
+/* New output arrives once: a fade and a 2px rise, never a slide, and nothing else moves. */
+.chat-virtual-row[data-reveal="arrive"] > .chat-reveal,
+.chat-footer[data-arrived] {
+  animation: chat-row-arrive var(--g-dur-row) var(--g-ease-quint) both;
+}
+
+@keyframes chat-reveal-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+@keyframes chat-reveal-close {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+@keyframes chat-row-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The virtualizer spaces rows 8px apart. A call opened from a stretch pulls up into that gap, so
+ * the stretch's calls read as one list on a spine (6.4): rows 4px apart, the line on x 11.
  */
 .chat-segment[data-in-group] {
   position: relative;
-  margin-top: calc(var(--g-space-4) - var(--g-space-16));
+  margin-top: calc(var(--g-space-4) - var(--g-space-8));
 }
 
 .chat-segment[data-in-group]::before {
@@ -388,7 +618,7 @@
   background-color: var(--g-line);
 }
 
-/* Calls inside a group step one gutter in from the spine. */
+/* Calls inside a stretch step one gutter in from the spine. */
 .chat-segment[data-in-group] .chat-tool-head {
   padding-left: calc(var(--ui-gutter) + var(--g-space-16));
 }
@@ -401,33 +631,15 @@
   margin-left: calc(var(--ui-gutter) + var(--g-space-16));
 }
 
+/* The person's message keeps a turn's distance above it and a breath below it. */
+.chat-segment[data-item="user"] {
+  padding: var(--g-space-8) 0;
+}
+
 .chat-tool-group {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-8);
-}
-
-.chat-tool-group-toggle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  width: 100%;
-  min-height: 28px;
-  padding: 0 var(--g-space-8) 0 var(--ui-gutter);
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-2);
-  text-align: left;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .chat-tool-group-toggle:hover {
-    background-color: var(--g-glass-control);
-    color: var(--g-fg-1);
-  }
 }
 
 .chat-tool-group-summary {
@@ -447,13 +659,13 @@
   white-space: nowrap;
 }
 
-.chat-tool-group-result[data-failed="true"] {
+.chat-tool-group-result[data-tone="failed"] {
   color: var(--g-red);
   font-weight: 500;
 }
 
-/* A settled group, like a finished call, says nothing at its end; screen readers still hear it. */
-.chat-tool-group-result[data-done] {
+/* A settled or running stretch says nothing at its end; screen readers still hear it. */
+.chat-tool-group-result[data-tone="quiet"] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -2800,6 +3012,56 @@
 
 :root:is([data-motion="reduced"], [data-motion="off"]) .chat-sticky-prompt {
   animation: none;
+}
+
+/*
+ * Reduced motion: the working line keeps its first verb and its halo stands still, disclosures
+ * open and close at once, and new rows simply appear. The words still say what is happening.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .chat-working-sheen {
+    display: none;
+  }
+
+  .chat-working-halo::before,
+  .chat-working-verb,
+  .chat-reveal,
+  .chat-footer[data-arrived] {
+    animation: none;
+  }
+
+  .chat-working,
+  .chat-disclosure,
+  .chat-tool-chevron {
+    transition: none;
+  }
+
+  .chat-working[data-hidden] {
+    transform: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-sheen {
+  display: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.chat-working-verb, .chat-reveal, .chat-footer[data-arrived]) {
+  animation: none;
+}
+
+/* A pseudo-element cannot sit inside :is(), so the halo's glow takes its own rule. */
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-halo::before {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.chat-working, .chat-disclosure, .chat-tool-chevron) {
+  transition: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working[data-hidden] {
+  transform: none;
 }
 
 /* On a lit row the grey details step up a tone, so they keep 4.5:1 on the fill. */

@@ -1,5 +1,5 @@
 import { GitFork, ReceiptText, RotateCcw } from "lucide-react";
-import { Fragment, memo } from "react";
+import { Fragment, memo, useRef } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { costLabel, type ErrorActions, tokensLabel } from "../../lib/chat/present";
@@ -11,9 +11,9 @@ import { CopyAction } from "./CopyAction";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
-import { ThoughtBlock } from "./ThoughtBlock";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
 import { UserMessage } from "./UserMessage";
+import { type LiveTail, LiveTailLine } from "./WorkingLine";
 
 /** What the items of a turn act on. */
 export interface TurnActions extends BlobProps {
@@ -44,6 +44,8 @@ export const TurnView = memo(function TurnView({
   live = true,
   part,
   suppressByline = false,
+  bareTool = false,
+  tail,
 }: {
   readonly segment: RenderedSegment;
   readonly actions: TurnActions;
@@ -53,8 +55,16 @@ export const TurnView = memo(function TurnView({
   readonly live?: boolean;
   /** Virtual rows render one stable item or the footer; standalone previews render the whole turn. */
   readonly part?: number | "footer";
+  /** The item is a call inside an opened stretch of calls: the stretch's header names the agent. */
   readonly suppressByline?: boolean;
+  /** The call is its stretch's only one: the stretch's header is its head, so it shows its output. */
+  readonly bareTool?: boolean;
+  /** The turn still runs: its footer's place shows the working line, or what the agent waits on. */
+  readonly tail?: LiveTail;
 }) {
+  // The footer fades in where the working line was, never when its row merely scrolls back in.
+  const wasLive = useRef(false);
+  if (tail) wasLive.current = true;
   const firstAgentItem = segment.items.findIndex((item) => item.kind !== "user");
   const selected = typeof part === "number" ? segment.items[part] : undefined;
   const entries =
@@ -73,6 +83,7 @@ export const TurnView = memo(function TurnView({
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
       data-testid={part === undefined || part === 0 ? "segment" : "segment-part"}
       data-part={part ?? "whole"}
+      data-item={selected?.kind}
       data-in-group={suppressByline ? "" : undefined}
       data-test-kind={segment.turnId === null ? "outside" : "turn"}
       data-test-turn-id={segment.turnId ?? ""}
@@ -119,24 +130,13 @@ export const TurnView = memo(function TurnView({
                   <Answer text={item.text} />
                 </div>
               );
-            case "thought":
-              return (
-                <ThoughtBlock
-                  key={item.key}
-                  item={item}
-                  active={active}
-                  tail={index === segment.items.length - 1}
-                  agentId={agentId}
-                  agentName={agentName}
-                />
-              );
             case "tool":
               return (
                 <ToolBlock
                   key={item.key}
                   tool={item}
-                  agentId={agentId}
                   display={item.display}
+                  bare={bareTool}
                   blobs={actions.blobs}
                   onLoadBlob={actions.onLoadBlob}
                 />
@@ -210,13 +210,16 @@ export const TurnView = memo(function TurnView({
       {footer && segment.plan !== null && segment.plan.length > 0 ? (
         <Plan entries={segment.plan} />
       ) : null}
-      {footer ? (
+      {footer && tail ? (
+        <LiveTailLine tail={tail} agentId={agentId} agentName={agentName} />
+      ) : footer ? (
         <Footer
           segment={segment}
           agentName={agentName}
           canResume={actions.canResume}
           onStart={actions.onStart}
           onContinue={actions.onContinue}
+          arrived={wasLive.current}
         />
       ) : null}
     </section>
@@ -256,12 +259,15 @@ function Footer({
   canResume,
   onStart,
   onContinue,
+  arrived = false,
 }: {
   readonly segment: RenderedSegment;
   readonly agentName: string;
   readonly canResume: boolean;
   readonly onStart: (fresh: boolean) => void;
   readonly onContinue?: (intent: ConversationIntent) => void;
+  /** The turn just ended in view: the footer takes the working line's place with a fade. */
+  readonly arrived?: boolean;
 }) {
   const { end } = segment;
   if (end === null) return null;
@@ -281,7 +287,12 @@ function Footer({
   // its time; any other ending says how it ended. Tokens and cost wait in the receipt and the hint.
   const meta = [end.stopReason === "end_turn" ? null : reason, duration].filter(Boolean);
   return (
-    <div className="chat-footer" data-testid="turn-footer" data-reason={end.stopReason}>
+    <div
+      className="chat-footer"
+      data-testid="turn-footer"
+      data-reason={end.stopReason}
+      data-arrived={arrived ? "" : undefined}
+    >
       {response ? <CopyAction text={response} label="Copy response as Markdown" /> : null}
       {segment.turnId && onContinue ? (
         <>
