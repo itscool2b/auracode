@@ -809,6 +809,7 @@ export function ChatView({
               <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>
                 <Composer
                   blocked={
+                    pendingRequests.length > 0 ||
                     !handoffLoaded ||
                     canContinueHere ||
                     handoffError !== null ||

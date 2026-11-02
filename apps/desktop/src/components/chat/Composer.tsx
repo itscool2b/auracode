@@ -15,6 +15,7 @@ import { composerPlaceholder } from "../../lib/chat/queueWait";
 import type { ComposerContext, ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
+import { DictationControl } from "./DictationControl";
 import { SlashMenu } from "./SlashMenu";
 
 /**
@@ -57,6 +58,7 @@ export function Composer({
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
   const [sending, setSending] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const context = useComposerContext(chatId, contextApi);
   const { text, setText } = context;
@@ -102,7 +104,7 @@ export function Composer({
   const steerable = onSteer !== undefined && status === "running";
 
   const send = async (steer = false): Promise<void> => {
-    if (sending || context.busy || blocked || empty) return;
+    if (sending || dictating || context.busy || blocked || empty) return;
     if (steer && (!onSteer || status !== "running")) return;
     setSending(true);
     try {
@@ -254,6 +256,16 @@ export function Composer({
         ) : null}
         {controls}
         <div className="chat-composer-actions" data-running={working ? "" : undefined}>
+          {contextApi?.dictation ? (
+            <DictationControl
+              api={contextApi.dictation}
+              input={input}
+              text={text}
+              setText={setText}
+              disabled={blocked || sending || !context.ready}
+              onBusy={setDictating}
+            />
+          ) : null}
           <StopButton
             status={status}
             onStop={onStop}
@@ -264,7 +276,7 @@ export function Composer({
             <SendControls
               status={status}
               steerable={steerable}
-              disabled={sending || context.busy || blocked || empty}
+              disabled={sending || dictating || context.busy || blocked || empty}
               agentName={agentName}
               onSend={() => void send()}
               onSteer={() => void send(true)}

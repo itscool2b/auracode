@@ -504,6 +504,7 @@ async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> Res
                 ("APPDATA", "npm"),
                 ("LOCALAPPDATA", "Microsoft/WinGet/Links"),
                 ("LOCALAPPDATA", "Programs/OpenAI/Codex/bin"),
+                ("LOCALAPPDATA", "cursor-agent"),
             ] {
                 if let Some(base) = env
                     .vars
