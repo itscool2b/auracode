@@ -9,6 +9,7 @@ import {
   type SplitCache,
   splitIncremental,
 } from "../lib/markdown";
+import { ChatImageTile } from "./chat/ChatImages";
 
 /**
  * Streamed markdown, rendered block by block. Text only ever appends: a block appears where it will
@@ -187,6 +188,12 @@ function inlineNode(node: Inline): ReactNode {
       return node.text;
     case "code":
       return <code>{node.text}</code>;
+    case "image":
+      return (
+        <ChatImageTile
+          image={{ name: node.alt || "Agent image", source: { type: "project", path: node.path } }}
+        />
+      );
     case "strong":
       return (
         <strong>

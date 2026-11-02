@@ -323,6 +323,7 @@ export function Transcript({
         >
           <UserMessage
             item={{ kind: "user", key: `sending:${sending.prompt_id}`, text: sending.text }}
+            images={{ type: "queued", prompt_id: sending.prompt_id }}
           />
           {sending.parts.some((part) => part.type !== "text") ? (
             <ul aria-label="Message attachments">

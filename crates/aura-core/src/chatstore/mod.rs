@@ -384,7 +384,7 @@ impl ChatStore {
     ) -> Result<Vec<composer::StoredAttachment>, StoreError> {
         match self.composer_command(command).await? {
             composer::ComposerReply::Attachments(items) => Ok(items),
-            composer::ComposerReply::Draft(_) => {
+            composer::ComposerReply::Draft(_) | composer::ComposerReply::ImageParts(_) => {
                 Err(StoreError::Other("Unexpected draft response.".into()))
             }
         }

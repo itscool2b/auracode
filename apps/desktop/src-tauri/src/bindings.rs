@@ -203,6 +203,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::conversation_commands::continuation_preview,
             crate::conversation_commands::continuation_apply,
             crate::composer_commands::composer_pick,
+            crate::composer_commands::chat_message_images,
+            crate::composer_commands::chat_image_preview,
             crate::composer_commands::composer_import,
             crate::composer_commands::composer_paste,
             crate::composer_commands::composer_mentions,

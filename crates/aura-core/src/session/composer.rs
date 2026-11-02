@@ -314,7 +314,7 @@ impl SessionManager {
         Ok((text, parts))
     }
 
-    async fn composer_folder(&self, chat_id: &str) -> Result<PathBuf, SessionError> {
+    pub(super) async fn composer_folder(&self, chat_id: &str) -> Result<PathBuf, SessionError> {
         self.deps()
             .store
             .chats()
@@ -327,7 +327,7 @@ impl SessionManager {
     }
 }
 
-fn restricted(path: &Path) -> bool {
+pub(super) fn restricted(path: &Path) -> bool {
     path.components().any(|part| {
         let name = part.as_os_str().to_string_lossy().to_ascii_lowercase();
         matches!(

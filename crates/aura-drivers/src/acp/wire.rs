@@ -571,6 +571,9 @@ pub fn content_text(block: &Value) -> String {
     let kind = str_at(block, "type").unwrap_or("content");
     match kind {
         "text" => string_at(block, "text").unwrap_or_default(),
+        "image" if str_at(block, "uri").is_some() => {
+            crate::image_reference("Agent image", str_at(block, "uri").unwrap_or_default())
+        }
         "image" | "audio" => format!(
             "[{kind}: {}, {} KB]",
             str_at(block, "mimeType").unwrap_or("unknown type"),
@@ -581,12 +584,25 @@ pub fn content_text(block: &Value) -> String {
                 .filter(|title| !title.is_empty())
                 .or_else(|| str_at(block, "name"))
                 .unwrap_or("resource");
-            format!("[{label}]({})", str_at(block, "uri").unwrap_or_default())
+            let uri = str_at(block, "uri").unwrap_or_default();
+            if str_at(block, "mimeType").is_some_and(|mime| mime.starts_with("image/")) {
+                crate::image_reference(label, uri)
+            } else {
+                format!("[{label}]({uri})")
+            }
         }
         "resource" => {
             let resource = block.get("resource").unwrap_or(&Value::Null);
             match str_at(resource, "text") {
                 Some(text) => text.to_owned(),
+                None if str_at(resource, "mimeType")
+                    .is_some_and(|mime| mime.starts_with("image/")) =>
+                {
+                    crate::image_reference(
+                        "Agent image",
+                        str_at(resource, "uri").unwrap_or_default(),
+                    )
+                }
                 None => format!("[resource {}]", str_at(resource, "uri").unwrap_or_default()),
             }
         }

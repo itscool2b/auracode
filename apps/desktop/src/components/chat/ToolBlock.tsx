@@ -19,6 +19,8 @@ import type { BlobState } from "../../lib/chat/chatStore";
 import { toolPhrase } from "../../lib/chat/toolWords";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
 import { formatCount } from "../../lib/format";
+import { type Inline, parseInline } from "../../lib/markdown";
+import { ChatImageTile } from "./ChatImages";
 import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
 import { TerminalOutput } from "./TerminalOutput";
@@ -28,6 +30,32 @@ import { RevealContext } from "./VirtualRows";
 export interface BlobProps {
   readonly blobs: ReadonlyMap<string, BlobState>;
   readonly onLoadBlob: (sha256: string) => void;
+}
+
+function OutputImages({ text }: { readonly text: string }) {
+  const images: Extract<Inline, { kind: "image" }>[] = [];
+  const visit = (nodes: readonly Inline[]) => {
+    for (const node of nodes) {
+      if (images.length >= 8) return;
+      if (node.kind === "image" && !images.some((image) => image.path === node.path))
+        images.push(node);
+      else if ("children" in node) visit(node.children);
+    }
+  };
+  visit(parseInline(text));
+  return images.length ? (
+    <section className="chat-image-gallery" aria-label="Tool images">
+      {images.map((image) => (
+        <ChatImageTile
+          key={image.path}
+          image={{
+            name: image.alt || "Agent image",
+            source: { type: "project", path: image.path },
+          }}
+        />
+      ))}
+    </section>
+  ) : null;
 }
 
 const STATUS_LABEL: Record<ToolDisplayStatus, string> = {
@@ -308,6 +336,7 @@ export function ToolContentView({
           <pre className="ui-pre" data-testid="tool-text">
             {blob?.text || content.text}
           </pre>
+          <OutputImages text={blob?.text || content.text} />
           <div className="chat-output-actions">
             <CopyButton
               text={blob?.text || content.text}

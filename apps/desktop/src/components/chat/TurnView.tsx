@@ -109,6 +109,13 @@ export const TurnView = memo(function TurnView({
                 <UserMessage
                   key={item.key}
                   item={item}
+                  images={
+                    item.steering
+                      ? { type: "steering", message_id: item.key.slice("user:".length) }
+                      : segment.turnId
+                        ? { type: "turn", turn_id: segment.turnId }
+                        : undefined
+                  }
                   settled={segment.end !== null || !live}
                   onEdit={
                     segment.turnId && actions.onContinue && !active
