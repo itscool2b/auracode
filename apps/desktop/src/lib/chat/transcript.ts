@@ -622,8 +622,14 @@ export function stopReasonLabel(end: TurnEnd): string {
   }
 }
 
-/** An item as the transcript shows it: tools carry the status their mark shows. */
-export type RenderedItem = Exclude<Item, ToolItem> | (ToolItem & { display: ToolDisplayStatus });
+/**
+ * An item as the transcript shows it: tools carry the status their mark shows. Thoughts are kept
+ * in the model and in storage but never shown (owner, 2 November 2026): the working line stands in
+ * for the agent's reasoning, so a thought neither renders nor splits a run of tool calls.
+ */
+export type RenderedItem =
+  | Exclude<Item, ToolItem | ThoughtItem>
+  | (ToolItem & { display: ToolDisplayStatus });
 
 export interface RenderedSegment {
   readonly key: string;
@@ -643,14 +649,19 @@ export function renderTranscript(model: Transcript, live: boolean): RenderedSegm
   return model.segments.map((segment) => renderSegment(segment, itemsOf(model, segment), live));
 }
 
-function itemsOf(model: Transcript, segment: Segment): Item[] {
+/** A segment's items the screen shows, in order: every kind but thoughts. */
+function itemsOf(model: Transcript, segment: Segment): Exclude<Item, ThoughtItem>[] {
   return segment.itemKeys.flatMap((key) => {
     const item = model.items.get(key);
-    return item ? [item] : [];
+    return item && item.kind !== "thought" ? [item] : [];
   });
 }
 
-function renderSegment(segment: Segment, items: readonly Item[], live: boolean): RenderedSegment {
+function renderSegment(
+  segment: Segment,
+  items: readonly Exclude<Item, ThoughtItem>[],
+  live: boolean,
+): RenderedSegment {
   return {
     key: segment.key,
     turnId: segment.turnId,
@@ -668,33 +679,48 @@ function renderSegment(segment: Segment, items: readonly Item[], live: boolean):
 }
 
 /**
- * `renderTranscript` that reuses each rendered segment whose segment and items did not change, so
- * a frame re-renders only the turn it touched (a memoized turn view compares by identity).
+ * `renderTranscript` that reuses each rendered segment whose segment and shown items did not
+ * change, so a frame re-renders only the turn it touched (a memoized turn view compares by
+ * identity). A segment the reducer copied for a hidden thought's delta keeps its rendering.
  */
 export function renderCache(): (model: Transcript, live: boolean) => RenderedSegment[] {
   type Cached = {
     readonly live: boolean;
-    readonly items: Item[];
+    readonly segment: Segment;
+    readonly items: Exclude<Item, ThoughtItem>[];
     readonly rendered: RenderedSegment;
   };
-  let previous = new Map<Segment, Cached>();
+  let previous = new Map<string, Cached>();
   return (model, live) => {
-    const next = new Map<Segment, Cached>();
+    const next = new Map<string, Cached>();
     const rendered = model.segments.map((segment) => {
       const items = itemsOf(model, segment);
-      const cached = previous.get(segment);
+      const cached = previous.get(segment.key);
       const reuse =
         cached !== undefined &&
         cached.live === live &&
+        sameShown(cached.segment, segment) &&
         cached.items.length === items.length &&
         cached.items.every((item, index) => item === items[index]);
       const result = reuse ? cached.rendered : renderSegment(segment, items, live);
-      next.set(segment, { live, items, rendered: result });
+      next.set(segment.key, { live, segment, items, rendered: result });
       return result;
     });
     previous = next;
     return rendered;
   };
+}
+
+/** Whether two versions of a segment show the same: everything but its item keys compared. */
+function sameShown(a: Segment, b: Segment): boolean {
+  return (
+    a === b ||
+    (a.turnId === b.turnId &&
+      a.partial === b.partial &&
+      a.plan === b.plan &&
+      a.usage === b.usage &&
+      a.end === b.end)
+  );
 }
 
 /** The newest error card in the transcript, whose actions are the ones that still apply. */

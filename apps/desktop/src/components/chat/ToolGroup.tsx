@@ -1,80 +1,60 @@
-import { AgentMark } from "@auracode/ui/graphite";
 import { ChevronRight } from "lucide-react";
+import { groupResult, toolsSummary } from "../../lib/chat/toolWords";
 import type { RenderedItem } from "../../lib/chat/transcript";
+import { ToolPhraseText, toolTooltip } from "./ToolBlock";
 
 type RenderedTool = Extract<RenderedItem, { kind: "tool" }>;
 
-const KIND_LABEL = {
-  read: ["read", "reads"],
-  edit: ["edit", "edits"],
-  delete: ["deletion", "deletions"],
-  move: ["move", "moves"],
-  search: ["search", "searches"],
-  execute: ["command", "commands"],
-  think: ["thinking step", "thinking steps"],
-  fetch: ["fetch", "fetches"],
-  switch_mode: ["mode change", "mode changes"],
-  other: ["tool call", "tool calls"],
-} as const;
-
-/** The children remain separate virtual rows when opened, even for a thousand-call run. */
+/**
+ * The header of a stretch of work: every call the agent made between two pieces of its text, one
+ * or many, behind one disclosure (thoughts are not shown, so they never split a stretch). One call
+ * reads as its own line ("Searched for useState"); more read as one sentence of counts ("Read 3
+ * files and searched for 2 patterns"), in the progressive while any still runs. Opened, the calls
+ * follow as separate virtual rows on a spine, even for a thousand-call run; a single call shows
+ * its output directly. Failures and stops show at the end; otherwise the end speaks only to
+ * screen readers.
+ */
 export function ToolGroup({
   tools,
   expanded,
   onToggle,
-  agentId,
   agentName,
   byline,
 }: {
   readonly tools: readonly RenderedTool[];
   readonly expanded: boolean;
   readonly onToggle: () => void;
-  readonly agentId: string;
   readonly agentName: string;
   readonly byline: boolean;
 }) {
-  const running = tools.find(
-    (tool) => tool.display === "in_progress" || tool.display === "pending",
-  );
-  const failed = tools.filter((tool) => tool.display === "failed").length;
-  const stopped = tools.filter((tool) => tool.display === "stopped").length;
-  const counts = new Map<RenderedTool["toolKind"], number>();
-  for (const tool of tools) counts.set(tool.toolKind, (counts.get(tool.toolKind) ?? 0) + 1);
-  const summary = [...counts]
-    .map(([kind, count]) => `${count} ${KIND_LABEL[kind][count === 1 ? 0 : 1]}`)
-    .join(" · ");
+  const single = tools.length === 1 ? tools[0] : undefined;
+  const result = groupResult(tools);
   return (
-    <div className="chat-tool-group">
+    <div className="chat-tool-group" data-single={single ? "" : undefined}>
       {byline ? <span className="sr-only">{agentName}</span> : null}
       <button
         type="button"
         className="chat-tool-group-toggle"
         aria-expanded={expanded}
         onClick={onToggle}
+        title={single ? toolTooltip(single) : undefined}
         data-testid="tool-group"
+        data-test-count={tools.length}
       >
         <span className="chat-gutter">
-          {running ? (
-            <AgentMark agent={agentId} size={16} state="tool" label={`${agentName}, working`} />
-          ) : (
-            <ChevronRight className="chat-disclosure" size={12} aria-hidden="true" />
-          )}
+          <ChevronRight className="chat-disclosure" size={12} aria-hidden="true" />
         </span>
-        <span className="chat-tool-group-summary">
-          {running ? running.title || "Working" : summary}
-        </span>
-        <span
-          className="chat-tool-group-result"
-          data-failed={failed > 0}
-          data-done={!running && !failed && !stopped ? "" : undefined}
-        >
-          {running
-            ? `${tools.length} calls`
-            : failed
-              ? `${failed} failed`
-              : stopped
-                ? `${stopped} stopped`
-                : "Done"}
+        {single ? (
+          <ToolPhraseText
+            title={single.title || single.toolName || "Tool"}
+            kind={single.toolKind}
+            display={single.display}
+          />
+        ) : (
+          <span className="chat-tool-group-summary">{toolsSummary(tools)}</span>
+        )}
+        <span className="chat-tool-group-result" data-tone={result.tone}>
+          {result.text}
         </span>
       </button>
     </div>

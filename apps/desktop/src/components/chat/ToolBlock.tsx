@@ -1,4 +1,5 @@
-import { AgentMark, CopyButton, StatusDot } from "@auracode/ui/graphite";
+import { prefersReducedMotion } from "@auracode/ui";
+import { CopyButton, StatusDot } from "@auracode/ui/graphite";
 import {
   ArrowRightLeft,
   Brain,
@@ -6,20 +7,22 @@ import {
   FileMinus,
   FilePenLine,
   FileText,
-  Link,
+  Globe,
   Search,
   SlidersHorizontal,
   SquareTerminal,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
+import { toolPhrase } from "../../lib/chat/toolWords";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
 import { formatCount } from "../../lib/format";
 import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
 import { TerminalOutput } from "./TerminalOutput";
+import { RevealContext } from "./VirtualRows";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
 export interface BlobProps {
@@ -35,7 +38,8 @@ const STATUS_LABEL: Record<ToolDisplayStatus, string> = {
   stopped: "Stopped",
 };
 
-const TOOL_ICON = {
+/** One outline glyph per kind, 14px on a 1.5 stroke, in the row's gutter. */
+export const TOOL_ICON = {
   read: FileText,
   edit: FilePenLine,
   delete: FileMinus,
@@ -43,108 +47,95 @@ const TOOL_ICON = {
   search: Search,
   execute: SquareTerminal,
   think: Brain,
-  fetch: Link,
+  fetch: Globe,
   switch_mode: SlidersHorizontal,
   other: Wrench,
 } as const;
 
-/** Words an agent leads a tool title with; what follows is the object the call acts on. */
-const VERBS = new Set([
-  "add",
-  "apply",
-  "build",
-  "call",
-  "check",
-  "copy",
-  "create",
-  "delete",
-  "download",
-  "edit",
-  "execute",
-  "fetch",
-  "find",
-  "fix",
-  "glob",
-  "grep",
-  "inspect",
-  "install",
-  "list",
-  "load",
-  "move",
-  "open",
-  "patch",
-  "read",
-  "remove",
-  "rename",
-  "replace",
-  "run",
-  "save",
-  "search",
-  "switch",
-  "test",
-  "update",
-  "upload",
-  "use",
-  "view",
-  "write",
-]);
+/** How long a disclosure's height glide may take before its row stops following it. */
+const OPEN_MS = 300;
+const CLOSE_MS = 240;
 
-/** A shell command as agents title it: it starts like a program or a path, never like a sentence. */
-const COMMAND = /^[a-z./~][^\s]*\s/;
-
-/**
- * How a tool row reads (6.4): the verb in sans, then the object, in mono when it is one token (a
- * path, a pattern, an identifier) or a shell command ("Read" `Sidebar.tsx`, "Ran" `pnpm test`). A
- * command titled by itself gets the verb of its state. Display only: the full title stays the
- * row's tooltip.
- */
-export function toolLabel(
-  title: string,
-  kind: ToolItem["toolKind"],
-  display: ToolDisplayStatus,
-): { readonly verb: string | null; readonly object: string; readonly literal: boolean } {
-  const text = title.trim();
-  const unwrap = (value: string) => value.replace(/^`([^`]+)`$/, "$1");
-  // "write_file: aura-perm.txt": a tool's own name and its argument.
-  const named = /^([a-z][\w.-]*):\s+(\S.*)$/.exec(text);
-  if (named?.[1] && named[2]) return { verb: named[1], object: unwrap(named[2]), literal: true };
-  const space = text.indexOf(" ");
-  const first = space > 0 ? text.slice(0, space) : "";
-  if (/^[A-Z][a-z]+$/.test(first) && VERBS.has(first.toLowerCase())) {
-    const object = unwrap(text.slice(space + 1).trim());
-    const isLiteral = !/\s/.test(object) || (kind === "execute" && /^[a-z./~]/.test(object));
-    return { verb: first, object, literal: isLiteral };
-  }
-  if (kind === "execute" && COMMAND.test(text)) {
-    const verb = display === "pending" ? "Run" : display === "in_progress" ? "Running" : "Ran";
-    return { verb, object: unwrap(text), literal: true };
-  }
-  return { verb: null, object: text, literal: false };
+/** A call's line: the verb in the tense of its state in sans, then its object, in mono when code. */
+export function ToolPhraseText({
+  title,
+  kind,
+  display,
+}: {
+  readonly title: string;
+  readonly kind: ToolItem["toolKind"];
+  readonly display: ToolDisplayStatus;
+}) {
+  const phrase = toolPhrase(title, kind, display);
+  return (
+    <span className="chat-tool-label">
+      {phrase.verb ? (
+        <>
+          <span className="chat-tool-verb">{phrase.verb}</span>{" "}
+        </>
+      ) : null}
+      <span className="chat-tool-object" data-literal={phrase.literal ? "" : undefined}>
+        {phrase.object}
+      </span>
+    </span>
+  );
 }
 
-/** A tool call: title, kind, status and locations, with its output below. */
+/** A call's tooltip: its full title, and the path it acts on when that says more. */
+export function toolTooltip(tool: ToolItem): string {
+  const title = tool.title || tool.toolName || "Tool";
+  const path = tool.locations[0]?.path;
+  return path && !title.includes(path) ? `${title}\n${path}` : title;
+}
+
+/**
+ * A tool call: its line (kind icon, verb and object, status) over its output well. The well opens
+ * and closes with a height glide; while it moves, the virtual rows below follow it frame by frame.
+ * `bare`: the call is its stretch's only one, whose header already says it, so only the well shows.
+ */
 export function ToolBlock({
   tool,
   display,
   blobs,
   onLoadBlob,
-  agentId = "generic",
+  bare = false,
 }: {
   readonly tool: ToolItem;
   readonly display: ToolDisplayStatus;
-  readonly agentId?: string;
+  readonly bare?: boolean;
 } & BlobProps) {
   const running = display === "pending" || display === "in_progress";
   const Icon = TOOL_ICON[tool.toolKind];
-  const [expanded, setExpanded] = useDisclosure(tool.key, display, running || display === "failed");
+  const reveal = useContext(RevealContext);
+  // A call shown bare (its stretch's only one) stays open when a second call gives it a head.
+  const wasBare = useRef(bare);
+  if (bare) wasBare.current = true;
+  const [expanded, setExpanded] = useDisclosure(
+    tool.key,
+    display,
+    display === "failed" || wasBare.current,
+  );
   const [outputFocused, setOutputFocused] = useState(false);
-  const open = expanded || outputFocused;
+  const [moving, setMoving] = useState<"open" | "close" | null>(null);
+  const open = bare || expanded || outputFocused || moving === "close";
   const title = tool.title || tool.toolName || "Tool";
-  const label = toolLabel(title, tool.toolKind, display);
+  useEffect(() => {
+    if (moving === null) return;
+    const timer = setTimeout(() => setMoving(null), moving === "open" ? OPEN_MS : CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [moving]);
+  const toggle = () => {
+    const closing = expanded || outputFocused;
+    setExpanded(!closing);
+    if (prefersReducedMotion()) return;
+    setMoving(closing ? "close" : "open");
+    reveal?.hold(closing ? CLOSE_MS : OPEN_MS);
+  };
   return (
     <div
       className="chat-tool"
       data-kind="tool"
+      data-bare={bare ? "" : undefined}
       data-testid="item"
       data-test-kind="tool"
       data-test-tool-kind={tool.toolKind}
@@ -158,21 +149,25 @@ export function ToolBlock({
     >
       <details
         data-testid="tool-output"
+        data-reveal={moving ?? undefined}
         open={open}
         onToggle={(event) => {
-          if (event.currentTarget.open !== open) setExpanded(event.currentTarget.open);
+          // The page itself may open a closed call (find in page); follow it.
+          if (!bare && moving === null && event.currentTarget.open !== open)
+            setExpanded(event.currentTarget.open);
         }}
       >
-        <summary className="chat-tool-head" title={title}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: a summary is its details element's own button (Enter and Space click it); the click is taken over only so the well can glide shut before the details close. */}
+        <summary
+          className="chat-tool-head"
+          title={toolTooltip(tool)}
+          onClick={(event) => {
+            event.preventDefault();
+            toggle();
+          }}
+        >
           <span className="chat-gutter">
-            {running ? (
-              <AgentMark
-                agent={agentId}
-                state="tool"
-                size={16}
-                label={`Running ${tool.title || tool.toolName || "tool"}`}
-              />
-            ) : display === "failed" ? (
+            {display === "failed" ? (
               <StatusDot tone="red" />
             ) : display === "stopped" ? (
               <StatusDot tone="neutral" />
@@ -180,43 +175,45 @@ export function ToolBlock({
               <Icon className="chat-tool-icon" size={14} strokeWidth={1.5} aria-hidden="true" />
             )}
           </span>
-          <span className="chat-tool-label">
-            {label.verb ? (
-              <>
-                <span className="chat-tool-verb">{label.verb}</span>{" "}
-              </>
-            ) : null}
-            <span className="chat-tool-object" data-literal={label.literal ? "" : undefined}>
-              {label.object}
-            </span>
-          </span>
+          <ToolPhraseText title={title} kind={tool.toolKind} display={display} />
           <span className="chat-tool-status" data-status={display}>
             {STATUS_LABEL[display]}
           </span>
           <ChevronRight className="chat-tool-chevron" size={12} aria-hidden="true" />
         </summary>
-        <div className="chat-tool-well">
-          <Locations locations={tool.locations} />
-          {tool.content.length > 0 ? (
-            <div className="chat-segment">
-              {tool.content.map((content, index) => (
-                <ToolContentView
-                  // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
-                  key={index}
-                  content={content}
-                  disclosureKey={`${tool.key}:${index}`}
-                  running={running}
-                  blobs={blobs}
-                  onLoadBlob={onLoadBlob}
-                />
-              ))}
+        <div
+          className="chat-reveal"
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget) setMoving(null);
+          }}
+        >
+          <div className="chat-reveal-clip">
+            <div className="chat-tool-well">
+              <Locations locations={tool.locations} />
+              {tool.content.length > 0 ? (
+                <div className="chat-segment">
+                  {tool.content.map((content, index) => (
+                    <ToolContentView
+                      // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
+                      key={index}
+                      content={content}
+                      disclosureKey={`${tool.key}:${index}`}
+                      running={running}
+                      blobs={blobs}
+                      onLoadBlob={onLoadBlob}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="ui-muted">
+                  {running ? "Waiting for output…" : "No output reported."}
+                </p>
+              )}
+              {tool.truncated ? (
+                <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
+              ) : null}
             </div>
-          ) : (
-            <p className="ui-muted">{running ? "Waiting for output…" : "No output reported."}</p>
-          )}
-          {tool.truncated ? (
-            <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
-          ) : null}
+          </div>
         </div>
       </details>
     </div>

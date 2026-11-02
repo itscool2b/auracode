@@ -1,4 +1,5 @@
 import type { OrbState } from "@auracode/ui";
+import type { ToolKind } from "../../bindings";
 import type { ChatState } from "./chatStore";
 import { hasProcess, type RenderedSegment, toolDisplayStatus } from "./transcript";
 
@@ -40,15 +41,22 @@ export function chatActivity(state: ChatState): OrbState {
   return "thinking";
 }
 
-/** A live line already owns the gutter, so the pending row must not duplicate it. */
-export function hasLiveLine(segment: RenderedSegment | undefined): boolean {
-  return (
-    segment?.items.some(
-      (item) =>
-        (segment.end === null &&
-          (item.kind === "thought" || item.kind === "message") &&
-          !item.completed) ||
-        (item.kind === "tool" && (item.display === "pending" || item.display === "in_progress")),
-    ) ?? false
-  );
+/**
+ * Whether a running turn's newest shown output is text still streaming in. The text is then the
+ * live part of the turn, so the working line steps aside until it ends.
+ */
+export function streamingText(segment: RenderedSegment | undefined): boolean {
+  if (segment === undefined || segment.end !== null) return false;
+  const newest = segment.items.at(-1);
+  return newest?.kind === "message" && !newest.completed;
+}
+
+/** The kind of a turn's latest call, which the working line's words lean towards. */
+export function lastToolKind(segment: RenderedSegment | undefined): ToolKind | null {
+  const items = segment?.items ?? [];
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index];
+    if (item?.kind === "tool") return item.toolKind;
+  }
+  return null;
 }

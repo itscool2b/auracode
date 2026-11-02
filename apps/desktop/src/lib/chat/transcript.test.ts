@@ -9,6 +9,7 @@ import {
   hasProcess,
   lastErrorKey,
   reduce,
+  renderCache,
   renderTranscript,
   steeringState,
   stopReasonLabel,
@@ -46,6 +47,16 @@ function tool(model: Transcript, id: string): ToolItem {
 
 function keysOf(model: Transcript): string[][] {
   return model.segments.map((segment) => [...segment.itemKeys]);
+}
+
+/** The model's thoughts: never shown, but kept and compacted like every other item. */
+function thoughtsOf(model: Transcript) {
+  return [...model.items.values()].filter((item) => item.kind === "thought");
+}
+
+/** The kinds the screen shows, by segment. */
+function shownKinds(model: Transcript, live = true): string[][] {
+  return renderTranscript(model, live).map((segment) => segment.items.map((item) => item.kind));
 }
 
 describe("the transcript reducer", () => {
@@ -149,6 +160,42 @@ describe("the transcript reducer", () => {
       ]),
     );
     expect(keysOf(model)).toEqual([[], ["permission:bg.p1"]]);
+  });
+
+  it("keeps thoughts in the model but never shows them, so calls around one sit side by side", () => {
+    const model = build(
+      numbered([
+        ["t1", ev.turnStarted("t1")],
+        ["t1", ev.user("t1.u", "Fix it")],
+        ["t1", ev.thought("th1", "")],
+        ["t1", ev.thoughtDone("th1", 0)],
+        ["t1", ev.toolCall("a", { kind: "search" })],
+        ["t1", ev.thought("th2", "Now read the match.")],
+        ["t1", ev.thoughtDone("th2", 1200)],
+        ["t1", ev.toolCall("b", { kind: "read" })],
+        ["t1", ev.message("m", "Fixed.")],
+        ["t1", ev.turnEnded("t1")],
+      ]),
+    );
+    expect(keysOf(model)[0]).toContain("thought:th1");
+    expect(thoughtsOf(model).map((item) => item.key)).toEqual(["thought:th1", "thought:th2"]);
+    expect(shownKinds(model)).toEqual([["user", "tool", "tool", "message"]]);
+  });
+
+  it("reuses a turn's rendering while only its hidden thoughts change", () => {
+    const render = renderCache();
+    let model = build(
+      numbered([
+        ["t1", ev.turnStarted("t1")],
+        ["t1", ev.toolCall("a")],
+      ]),
+    );
+    const before = render(model, true)[0];
+    model = reduce(model, 3, null, ev.thought("th", "Hmm"));
+    model = reduce(model, 4, null, ev.thought("th", ", then"));
+    expect(render(model, true)[0]).toBe(before);
+    model = reduce(model, 5, null, ev.message("m", "Done"));
+    expect(render(model, true)[0]).not.toBe(before);
   });
 
   it("is pure: the model it was given stays as it was", () => {
@@ -419,6 +466,10 @@ describe("compacted_equals_live", () => {
     expect(renderTranscript(build(history), false)).toEqual(
       renderTranscript(build(asFrames(live)), false),
     );
+    // The stream's thoughts are never shown, yet compaction keeps each one whole.
+    expect(thoughtsOf(build(asFrames(live))).length).toBeGreaterThan(0);
+    expect(thoughtsOf(build(history))).toEqual(thoughtsOf(build(asFrames(live))));
+    expect(shownKinds(build(history)).flat()).not.toContain("thought");
 
     if (process.env.AURA_UPDATE_GOLDEN === "1") {
       writeFileSync(GOLDEN, `${JSON.stringify(fromLive, null, 2)}\n`);
@@ -452,6 +503,10 @@ describe("compacted_equals_live", () => {
         const fromLive = renderTranscript(build(asFrames(live)), true);
         const fromHistory = renderTranscript(build(compactHistory(live, maxPiece)), true);
         expect(fromHistory, `seed ${seed}, pieces of ${maxPiece}`).toEqual(fromLive);
+        expect(
+          thoughtsOf(build(compactHistory(live, maxPiece))),
+          `seed ${seed} thoughts, pieces of ${maxPiece}`,
+        ).toEqual(thoughtsOf(build(asFrames(live))));
       }
     }
   });
