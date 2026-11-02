@@ -46,6 +46,29 @@ async fn running(h: &mut Harness) {
 }
 
 #[tokio::test(start_paused = true)]
+async fn native_image_payloads_are_scrubbed_before_tool_raw_input_without_storage() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    running(&mut h).await;
+    h.send(json!({"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"mcpToolCall","id":"image-tool","server":"images","tool":"generate","status":"completed","result":{"content":[{"type":"image","mimeType":"image/png","data":"aW1hZ2U="}]}}}}));
+    loop {
+        if let DriverEvent::Event {
+            event: AuraEvent::ToolCall(call),
+            ..
+        } = h.event().await
+        {
+            assert_eq!(call.tool_call_id, "image-tool");
+            let saved = serde_json::to_string(&call).unwrap();
+            assert!(!saved.contains("aW1hZ2U="));
+            assert!(saved.contains("Image unavailable"));
+            assert!(call.raw_input.is_some());
+            break;
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn steering_uses_native_exact_turn_and_accepts_a_late_matching_acknowledgement() {
     let mut h = Harness::start().await;
     h.ready().await;
