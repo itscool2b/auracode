@@ -180,10 +180,10 @@ fn inline_agent_images_keep_chat_ownership_through_local_import() {
             .conn()
             .execute(
                 "INSERT INTO attachments(sha256,mime,size,created_at) VALUES(?1,'image/png',?2,1)",
-                params![hash, bytes.len()],
+                params![hash, bytes.len() as i64],
             )
             .unwrap();
-        f.source.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',?4,1)",params![crate::ids::new_id(),owner,hash,bytes.len()]).unwrap();
+        f.source.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',?4,1)",params![crate::ids::new_id(),owner,hash,bytes.len() as i64]).unwrap();
     }
     let event = AuraEvent::MessageDelta {
         message_id: "assistant".into(),
@@ -203,7 +203,7 @@ fn inline_agent_images_keep_chat_ownership_through_local_import() {
     assert_eq!(apply(&mut f, selected).unwrap().missing_attachments, 0);
     let (_, bytes) = f.files.sync_range(&owned, 0).unwrap();
     assert_eq!(bytes.as_slice(), owned_bytes);
-    let count: usize = f
+    let count: i64 = f
         .target
         .conn()
         .query_row(

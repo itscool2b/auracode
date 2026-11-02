@@ -68,6 +68,7 @@ struct Import<'a> {
     started: bool,
     required: BTreeSet<String>,
     inline_images: BTreeSet<String>,
+    image_scan_remaining: usize,
     file: Option<FileAssembly>,
     fragment: Zeroizing<Vec<u8>>,
     fragment_total: Option<u32>,
@@ -118,6 +119,7 @@ fn import_one(
         started: false,
         required: BTreeSet::new(),
         inline_images: BTreeSet::new(),
+        image_scan_remaining: IMAGE_SCAN_BYTES,
         file: None,
         fragment: Zeroizing::new(Vec::new()),
         fragment_total: None,
@@ -348,6 +350,15 @@ impl Import<'_> {
         if current.bytes.len() as u64 == file.total {
             if format!("{:x}", Sha256::digest(&current.bytes)) != file.hash {
                 return Err(SyncError::Invalid);
+            }
+            if image_reference_text(&file.mime) {
+                let take = self.image_scan_remaining.min(current.bytes.len());
+                self.image_scan_remaining -= take;
+                self.inline_images
+                    .extend(images_in_bytes(&current.bytes[..take], file.total));
+                if self.required.len() + self.inline_images.len() > 8192 {
+                    return Err(SyncError::Invalid);
+                }
             }
             self.files
                 .write(&file.hash, &current.bytes)
