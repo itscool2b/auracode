@@ -252,6 +252,42 @@ fn image_data_url(text: &str) -> bool {
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:image/"))
 }
 
+/// Inspect only the URI prefix of an unfinished JSON string. JSON can escape slashes or any
+/// ASCII letter, so checking its raw bytes alone would miss an encoded `data:image/` prefix.
+fn image_data_url_json(text: &str) -> bool {
+    let mut bytes = text.bytes();
+    for expected in b"data:image/" {
+        let Some(mut actual) = bytes.next() else {
+            return false;
+        };
+        if actual == b'\\' {
+            actual = match bytes.next() {
+                Some(b'/') => b'/',
+                Some(b'u') => {
+                    let mut codepoint = 0u16;
+                    for _ in 0..4 {
+                        let Some(digit) =
+                            bytes.next().and_then(|byte| char::from(byte).to_digit(16))
+                        else {
+                            return false;
+                        };
+                        codepoint = (codepoint << 4) | digit as u16;
+                    }
+                    if codepoint > 127 {
+                        return false;
+                    }
+                    codepoint as u8
+                }
+                _ => return false,
+            };
+        }
+        if actual.to_ascii_lowercase() != *expected {
+            return false;
+        }
+    }
+    true
+}
+
 fn blank_image_string(value: Option<&mut Value>) {
     if let Some(Value::String(text)) = value {
         IMAGE_DATA.clone_into(text);
@@ -415,7 +451,7 @@ fn blank_by_keys(text: &str) -> Cow<'_, str> {
                     }
                 } else if stack.last().is_some_and(Frame::blanks_value)
                     || stack.last().is_some_and(Frame::image_value)
-                    || image_data_url(text.get(at + 1..end).unwrap_or_default())
+                    || image_data_url_json(text.get(at + 1..end).unwrap_or_default())
                 {
                     out.push_str(text.get(copied..at).unwrap_or_default());
                     out.push('"');
@@ -1028,5 +1064,18 @@ mod tests {
             redactor.redact_json_text(r#"{"url":"data:image/png;base64,encoded"#),
             r#"{"url":"<IMAGE_DATA>"#
         );
+        for key in ["uri", "url"] {
+            for prefix in [
+                r"data:image\/",
+                r"data:\u0069mage\u002f",
+                r"\u0064ata:IMAGE/",
+            ] {
+                let raw = format!(r#"{{"{key}":"{prefix}png;base64,encoded"#);
+                assert_eq!(
+                    redactor.redact_json_text(&raw),
+                    format!(r#"{{"{key}":"<IMAGE_DATA>"#)
+                );
+            }
+        }
     }
 }

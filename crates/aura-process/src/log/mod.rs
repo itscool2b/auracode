@@ -592,6 +592,10 @@ mod tests {
                 r#"","mimeType":"image/webp"},"type":"resource"}}"#,
             ),
             (r#"{"item":{"result":""#, r#"","type":"imageGeneration"}}"#),
+            (
+                r#"{"resource":{"uri":"data:\u0069mage\/png;base64,"#,
+                r#"","mimeType":"image/png"}}"#,
+            ),
         ] {
             let payload = "QUJDREVGR0hJSktM".repeat(PARSE_LIMIT / 16 + 1);
             log.line(Direction::In, &format!("{head}{payload}{tail}"));
@@ -608,7 +612,7 @@ mod tests {
         assert!(!text.contains("private-key"));
         assert!(text.contains("Visible explanation"));
         assert!(text.contains("image/png"));
-        assert_eq!(records(&path).len(), 5);
+        assert_eq!(records(&path).len(), 6);
         assert_eq!(
             records(&path)[0]["msg"]["content"][0]["data"],
             "<IMAGE_DATA>"
