@@ -1,4 +1,4 @@
-//! Composer metadata on the profile writer. Arbitrary blob hashes are never accepted from the UI.
+//! Composer metadata on the profile writer. Image hashes require matching chat-owned metadata.
 use super::{StoreError, files::Attachments, rows};
 use aura_protocol::{
     PromptPart,
@@ -34,68 +34,6 @@ pub(crate) enum ComposerCommand {
         chat_id: String,
         ids: Vec<String>,
     },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::chatstore::test_support::TestDb;
-
-    #[test]
-    fn message_images_resolve_only_from_the_owning_chat_and_never_return_text() {
-        let db = TestDb::new();
-        let chat = db.chat("work");
-        let other = db.chat("other");
-        db.turn(&chat, "turn", 1, 1);
-        let json = r#"[{"type":"text","text":"private words"},{"type":"image","blob":"abc","mime":"image/png"}]"#;
-        db.conn()
-            .execute(
-                "UPDATE turns SET prompt_parts_json=?1 WHERE id='turn'",
-                [json],
-            )
-            .unwrap();
-        db.conn().execute("INSERT INTO queued_prompts (id,chat_id,text,parts_json,created_at,device_id) VALUES ('queue',?1,'text',?2,1,'dev')", params![chat,json]).unwrap();
-        db.conn().execute("INSERT INTO steering_inputs (message_id,chat_id,turn_id,seq,parts_json,state,created_at,updated_at) VALUES ('steer',?1,'turn',1,?2,'pending',1,1)", params![chat,json]).unwrap();
-        let files = Attachments::Local(std::path::PathBuf::from("unused"));
-        for context in [
-            ChatImageContext::Turn {
-                turn_id: "turn".into(),
-            },
-            ChatImageContext::Queued {
-                prompt_id: "queue".into(),
-            },
-            ChatImageContext::Steering {
-                message_id: "steer".into(),
-            },
-        ] {
-            let ComposerReply::ImageParts(parts) = execute(
-                db.conn(),
-                &files,
-                1,
-                ComposerCommand::ImageParts {
-                    chat_id: chat.clone(),
-                    context: context.clone(),
-                },
-            )
-            .unwrap() else {
-                panic!("wrong reply")
-            };
-            assert_eq!(parts.len(), 1);
-            assert!(matches!(&parts[0], PromptPart::Image { blob, .. } if blob == "abc"));
-            assert!(
-                execute(
-                    db.conn(),
-                    &files,
-                    1,
-                    ComposerCommand::ImageParts {
-                        chat_id: other.clone(),
-                        context
-                    }
-                )
-                .is_err()
-            );
-        }
-    }
 }
 
 pub(crate) enum ComposerReply {
@@ -251,6 +189,68 @@ pub(crate) fn execute(
                 result.push(item);
             }
             Ok(ComposerReply::Attachments(result))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chatstore::test_support::TestDb;
+
+    #[test]
+    fn message_images_resolve_only_from_the_owning_chat_and_never_return_text() {
+        let db = TestDb::new();
+        let chat = db.chat("work");
+        let other = db.chat("other");
+        db.turn(&chat, "turn", 1, 1);
+        let json = r#"[{"type":"text","text":"private words"},{"type":"image","blob":"abc","mime":"image/png"}]"#;
+        db.conn()
+            .execute(
+                "UPDATE turns SET prompt_parts_json=?1 WHERE id='turn'",
+                [json],
+            )
+            .unwrap();
+        db.conn().execute("INSERT INTO queued_prompts (id,chat_id,text,parts_json,created_at,device_id) VALUES ('queue',?1,'text',?2,1,'dev')", params![chat,json]).unwrap();
+        db.conn().execute("INSERT INTO steering_inputs (message_id,chat_id,turn_id,seq,parts_json,state,created_at,updated_at) VALUES ('steer',?1,'turn',1,?2,'pending',1,1)", params![chat,json]).unwrap();
+        let files = Attachments::Local(std::path::PathBuf::from("unused"));
+        for context in [
+            ChatImageContext::Turn {
+                turn_id: "turn".into(),
+            },
+            ChatImageContext::Queued {
+                prompt_id: "queue".into(),
+            },
+            ChatImageContext::Steering {
+                message_id: "steer".into(),
+            },
+        ] {
+            let ComposerReply::ImageParts(parts) = execute(
+                db.conn(),
+                &files,
+                1,
+                ComposerCommand::ImageParts {
+                    chat_id: chat.clone(),
+                    context: context.clone(),
+                },
+            )
+            .unwrap() else {
+                panic!("wrong reply")
+            };
+            assert_eq!(parts.len(), 1);
+            assert!(matches!(&parts[0], PromptPart::Image { blob, .. } if blob == "abc"));
+            assert!(
+                execute(
+                    db.conn(),
+                    &files,
+                    1,
+                    ComposerCommand::ImageParts {
+                        chat_id: other.clone(),
+                        context
+                    }
+                )
+                .is_err()
+            );
         }
     }
 }

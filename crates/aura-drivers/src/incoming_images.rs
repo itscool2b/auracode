@@ -27,21 +27,23 @@ impl ImageLineSource {
     }
 
     pub async fn next(&mut self) -> Option<StdoutItem> {
-        let future = self.pending.get_or_insert_with(|| {
-            let mut source = self.source.take().expect("one pending stdout read");
+        if self.pending.is_none() {
+            let mut source = self.source.take()?;
             let writer = self.writer.clone();
-            async move {
-                let item = match source.next().await {
-                    Some(StdoutItem::Line(line)) => Some(StdoutItem::Line(
-                        prepare_line(line, writer.as_deref()).await,
-                    )),
-                    item => item,
-                };
-                (source, item)
-            }
-            .boxed()
-        });
-        let (source, item) = future.await;
+            self.pending = Some(
+                async move {
+                    let item = match source.next().await {
+                        Some(StdoutItem::Line(line)) => Some(StdoutItem::Line(
+                            prepare_line(line, writer.as_deref()).await,
+                        )),
+                        item => item,
+                    };
+                    (source, item)
+                }
+                .boxed(),
+            );
+        }
+        let (source, item) = self.pending.as_mut()?.await;
         self.source = Some(source);
         self.pending = None;
         item
@@ -156,7 +158,9 @@ fn extract(
             .into_iter()
             .find(|pointer| node.pointer(pointer).is_some_and(data_uri))
         {
-            node.pointer_mut(pointer).expect("checked URI").take()
+            node.pointer_mut(pointer)
+                .map(Value::take)
+                .unwrap_or(Value::Null)
         } else {
             return false;
         };
