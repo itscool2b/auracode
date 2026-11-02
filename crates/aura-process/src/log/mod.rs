@@ -571,6 +571,60 @@ mod tests {
         record
     }
 
+    #[tokio::test]
+    async fn image_payloads_never_reach_protocol_log_files_even_when_cut_before_their_type() {
+        let directory = tempfile::tempdir().expect("directory");
+        let factory = factory(directory.path());
+        let log = factory.open("chat", "images");
+        let path = log.path().expect("logging enabled");
+        log.line(Direction::In, r#"{"method":"session/update","content":[{"type":"image","mimeType":"image/png","data":"PRIVATE_SMALL_IMAGE"},{"type":"text","text":"Visible explanation"}],"apiKey":"private-key"}"#);
+        for (head, tail) in [
+            (
+                r#"{"method":"session/update","content":{"data":""#,
+                r#"","type":"image"}}"#,
+            ),
+            (
+                r#"{"message":{"content":[{"type":"image","source":{"data":""#,
+                r#"","media_type":"image/png"}}]}}"#,
+            ),
+            (
+                r#"{"content":{"resource":{"blob":""#,
+                r#"","mimeType":"image/webp"},"type":"resource"}}"#,
+            ),
+            (r#"{"item":{"result":""#, r#"","type":"imageGeneration"}}"#),
+            (
+                r#"{"resource":{"uri":"data:\u0069mage\/png;base64,"#,
+                r#"","mimeType":"image/png"}}"#,
+            ),
+        ] {
+            let payload = "QUJDREVGR0hJSktM".repeat(PARSE_LIMIT / 16 + 1);
+            log.line(Direction::In, &format!("{head}{payload}{tail}"));
+            factory.idle_writes(&log).await;
+        }
+        drop(log);
+        factory.idle().await;
+        let text = std::fs::read_to_string(&path).expect("saved log");
+        assert!(!text.contains("PRIVATE_SMALL_IMAGE"));
+        assert!(
+            !text.contains("QUJD"),
+            "even encoded prefixes must be absent"
+        );
+        assert!(!text.contains("private-key"));
+        assert!(text.contains("Visible explanation"));
+        assert!(text.contains("image/png"));
+        assert_eq!(records(&path).len(), 6);
+        assert_eq!(
+            records(&path)[0]["msg"]["content"][0]["data"],
+            "<IMAGE_DATA>"
+        );
+        assert!(
+            records(&path)
+                .iter()
+                .skip(1)
+                .all(|record| record["truncated"].as_u64().is_some_and(|cut| cut > 0))
+        );
+    }
+
     #[test]
     fn notes_serialize_as_the_record_format_says() {
         let spawn = LogNote::Spawn {
