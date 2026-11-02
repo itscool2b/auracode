@@ -102,7 +102,10 @@ export interface ChatState {
   /** Saving is paused: rows from this seq to the attach point are not shown yet. */
   readonly unsavedFrom: number | null;
   readonly lists: SessionLists | null;
+  /** Why the lists could not load, or an autonomy or native control change was refused. */
   readonly listsError: string | null;
+  /** Why the last model, thinking level or other option change was refused. */
+  readonly optionError: string | null;
   /** Option changes on their way (up to 35 s), by option id: the pickers show the value asked for. */
   readonly optionsSaving: ReadonlyMap<string, ConfigValue>;
   /** An autonomy change on its way. */
@@ -123,6 +126,9 @@ export const BLOB_PAGE = 256 * 1024;
 
 /** A new `revision` refetches the lists after this long without another one. */
 export const LISTS_DEBOUNCE_MS = 200;
+
+/** A change answered with lists that do not show it yet stays shown at most this long. */
+export const OPTION_HOLD_MS = 1500;
 
 /** "Still working" shows after this long without a frame during a turn. */
 export const STILL_WORKING_MS = 60_000;
@@ -177,6 +183,7 @@ function initialState(chatId: string): ChatState {
     unsavedFrom: null,
     lists: null,
     listsError: null,
+    optionError: null,
     optionsSaving: new Map(),
     autonomySaving: null,
     controlSaving: null,
@@ -280,6 +287,12 @@ export class ChatStore {
   #listsRequest = 0;
   /** The number of each option's newest change, and of the newest autonomy change. */
   #optionRequests = new Map<string, number>();
+  /**
+   * Changes whose answer came with lists that do not show them yet (a driver answers before its
+   * lists arrive): the picker keeps showing the value asked for until the refetch the session's
+   * new revision brings lands, or `OPTION_HOLD_MS` passes.
+   */
+  #heldOptions = new Map<string, ReturnType<typeof setTimeout>>();
   #autonomyRequest = 0;
   #controlRequest = 0;
   #stillTimer: ReturnType<typeof setTimeout> | null = null;
@@ -699,7 +712,15 @@ export class ChatStore {
     this.#transport.lists(this.chatId).then(
       (lists) => {
         if (request !== this.#listsRequest || this.#closed) return;
-        this.#set({ ...this.#state, lists, listsError: null });
+        // The session's own lists: a change held for them now shows as they say.
+        let optionsSaving = this.#state.optionsSaving;
+        for (const [optionId, timer] of this.#heldOptions) {
+          clearTimeout(timer);
+          this.#optionRequests.delete(optionId);
+          optionsSaving = without(optionsSaving, optionId);
+        }
+        this.#heldOptions.clear();
+        this.#set({ ...this.#state, lists, listsError: null, optionsSaving });
       },
       (error: unknown) => {
         if (request !== this.#listsRequest || this.#closed) return;
@@ -710,24 +731,62 @@ export class ChatStore {
 
   /**
    * Changes an option. Its picker shows the value asked for until the answer arrives; a newer
-   * change supersedes it, and the lists come from the newest request's answer only.
+   * change supersedes it, and the lists come from the newest request's answer only. An answer
+   * whose lists do not show the change yet (they follow it) keeps the value asked for in view
+   * until the refetch its revision brings, so the picker never snaps back. A refusal says why.
    */
   async setOption(optionId: string, value: ConfigValue): Promise<void> {
     const request = ++this.#listsRequest;
     this.#optionRequests.set(optionId, request);
+    this.#release(optionId);
     const saving = new Map(this.#state.optionsSaving);
     saving.set(optionId, value);
-    this.#set({ ...this.#state, optionsSaving: saving });
+    this.#set({ ...this.#state, optionsSaving: saving, optionError: null });
     const answer = await this.#listsAnswer(() =>
       this.#transport.setOption(this.chatId, optionId, value),
     );
     if (this.#closed) return;
     let state = this.#state;
     if (this.#optionRequests.get(optionId) === request) {
-      this.#optionRequests.delete(optionId);
-      state = { ...state, optionsSaving: without(state.optionsSaving, optionId) };
+      if (
+        !("error" in answer) &&
+        request === this.#listsRequest &&
+        !showsValue(answer.lists, optionId, value)
+      ) {
+        this.#hold(optionId, request);
+      } else {
+        this.#optionRequests.delete(optionId);
+        state = { ...state, optionsSaving: without(state.optionsSaving, optionId) };
+      }
     }
-    this.#set(this.#withAnswer(state, request, answer));
+    if ("error" in answer) {
+      this.#set({ ...state, optionError: answer.error });
+      return;
+    }
+    this.#set({ ...this.#withAnswer(state, request, answer), optionError: null });
+  }
+
+  /** Keeps change `request` of `optionId` in view until the next lists, or for a moment. */
+  #hold(optionId: string, request: number): void {
+    this.#release(optionId);
+    this.#heldOptions.set(
+      optionId,
+      setTimeout(() => {
+        this.#heldOptions.delete(optionId);
+        if (this.#closed || this.#optionRequests.get(optionId) !== request) return;
+        this.#optionRequests.delete(optionId);
+        this.#set({
+          ...this.#state,
+          optionsSaving: without(this.#state.optionsSaving, optionId),
+        });
+      }, OPTION_HOLD_MS),
+    );
+  }
+
+  #release(optionId: string): void {
+    const timer = this.#heldOptions.get(optionId);
+    if (timer !== undefined) clearTimeout(timer);
+    this.#heldOptions.delete(optionId);
   }
 
   /** Changes the autonomy, the same way as an option. */
@@ -1132,6 +1191,8 @@ export class ChatStore {
   }
 
   #clearTimers(): void {
+    for (const timer of this.#heldOptions.values()) clearTimeout(timer);
+    this.#heldOptions.clear();
     if (this.#listsTimer !== null) clearTimeout(this.#listsTimer);
     if (this.#stillTimer !== null) clearTimeout(this.#stillTimer);
     if (this.#rejoinTimer !== null) clearTimeout(this.#rejoinTimer);
@@ -1174,6 +1235,20 @@ function without<V>(map: ReadonlyMap<string, V>, key: string): ReadonlyMap<strin
   const copy = new Map(map);
   copy.delete(key);
   return copy;
+}
+
+/**
+ * Whether `lists` show `value` for `optionId`, as current or as pending. Lists without the option
+ * say nothing either way, so they count as showing it.
+ */
+export function showsValue(lists: SessionLists, optionId: string, value: ConfigValue): boolean {
+  const option = lists.options.find((option) => option.id === optionId);
+  if (!option) return true;
+  const pending = option.pending;
+  if (pending !== null && pending.type === value.type && pending.value === value.value) return true;
+  if (option.kind.type === "select")
+    return value.type !== "choice" || option.kind.current === value.value;
+  return value.type !== "toggle" || option.kind.current === value.value;
 }
 
 function sameStorage(a: StorageStatus, b: StorageStatus): boolean {

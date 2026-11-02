@@ -2252,7 +2252,11 @@
   border-radius: var(--g-radius-pill);
 }
 
-/* Agent, model, effort and autonomy choices share a compact menu. */
+/*
+ * Agent, model and thinking share one menu. It reads top down: the current model and agent, the
+ * thinking level (always in view), then the model and agent lists, which scroll on their own, and
+ * More options. Only a window too short for all of that scrolls the menu itself.
+ */
 .chat-model-popover > .chat-popover-panel {
   bottom: calc(100% + 8px);
   left: auto;
@@ -2262,6 +2266,10 @@
   padding: var(--g-space-4);
   gap: 0;
   border-radius: var(--g-radius-14);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .chat-model-popover {
@@ -2306,43 +2314,168 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
-.chat-control-pending,
-.chat-pill-effort {
+.chat-control-pending {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   white-space: nowrap;
 }
+
+/* The pill always names the thinking level beside the model: "Opus 5.5 · High". */
+.chat-pill-effort {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-6);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  white-space: nowrap;
+}
+
+.chat-pill-level-short {
+  display: none;
+}
+
 .chat-picker-search {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--g-space-8);
   padding: var(--g-space-8);
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
   color: var(--g-fg-3);
 }
 .chat-picker-search > input {
   width: 100%;
   min-width: 0;
 }
+/* Narrow windows keep the level and shorten it ("X-high"), and give the model less room. */
 @media (max-width: 1100px) {
-  .chat-pill-effort {
+  .chat-pill-level {
     display: none;
   }
+  .chat-pill-level-short {
+    display: inline;
+  }
   .chat-pill-model {
-    max-width: 140px;
+    max-width: 120px;
   }
 }
 
 .chat-model-columns {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.chat-model-columns > section {
+/* The current model, named large beside its agent's mark. */
+.chat-model-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-width: 0;
+  padding: var(--g-space-8);
+}
+
+.chat-model-head-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+}
+
+.chat-model-head-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-model-head-title {
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-model-head-agent {
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Where a change goes, and why one was refused, right under the model. */
+.chat-model-notes {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  padding: 0 var(--g-space-8) var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-model-notes > p {
+  margin: 0;
+  color: inherit;
+}
+
+.chat-model-notes > p.ui-error {
+  color: var(--g-red);
+}
+
+/* Thinking: its name, then the levels on one segmented row. */
+.chat-picker-thinking {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-width: 0;
+  min-height: 48px;
+  padding: var(--g-space-4) var(--g-space-8);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.chat-picker-thinking > h3 {
+  flex: none;
+  margin: 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.chat-picker-thinking > .ui-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The model and agent lists share one region that scrolls on its own. */
+.chat-model-scroll {
+  flex: 1 1 auto;
+  min-height: min(176px, 28vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.chat-model-scroll > section {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-4);
@@ -2350,12 +2483,17 @@
   padding: var(--g-space-4) 0;
 }
 
-.chat-model-columns > section + section {
+.chat-model-scroll > section + section {
   box-shadow: inset 0 1px var(--g-line);
 }
 
+.chat-model-scroll :is(.picker-choices, .chat-agent-choices) {
+  max-height: none;
+  overflow: visible;
+}
+
 /* A part's name (Grok's "Voice"): 14/20 500 in fg-2, sentence case. */
-.chat-model-columns > section > h3:not(.sr-only) {
+.chat-model-scroll > section > h3 {
   margin: 0;
   padding: var(--g-space-8) var(--g-space-8) var(--g-space-4);
   color: var(--g-fg-2);
@@ -2370,6 +2508,10 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
+}
+
+.chat-picker-thinking > .chat-picker-empty {
+  padding: 0;
 }
 
 .chat-model-columns .ui-field {
@@ -2486,7 +2628,10 @@
   color: var(--g-fg-1);
 }
 
-/* Effort: Graphite's quiet segmented control, the levels sharing the row's width. */
+/*
+ * Thinking: Graphite's quiet segmented control. Each level is as wide as its name, and the row's
+ * spare width spreads between them, so six levels ("Extra high" among them) fit one row.
+ */
 .picker-choices[data-layout="segments"] {
   flex-direction: row;
   max-height: none;
@@ -2494,17 +2639,29 @@
   /* A 32px track with 24px levels 4px in, so every level sits on the grid. */
   height: 32px;
   padding: var(--g-space-4);
-  gap: var(--g-space-4);
+  gap: var(--g-space-2);
 }
 
 .picker-choices[data-layout="segments"] > .g-segment {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   height: 24px;
+  padding: 0 var(--g-space-8);
+}
+
+.picker-choices[data-layout="segments"] > .g-segment > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .picker-choices[data-layout="segments"] > .g-segment:disabled {
   color: var(--g-fg-4);
+}
+
+/* A choice on its way shows chosen, a step quieter until the agent answers. */
+.picker-choices > button[aria-busy="true"] {
+  opacity: 0.72;
 }
 
 .picker-option-label {
@@ -2586,9 +2743,11 @@
 }
 
 .chat-other-options {
+  flex: none;
   margin: 0;
   padding: 0 var(--g-space-8) var(--g-space-4);
   color: var(--g-fg-2);
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 .chat-other-options > summary {

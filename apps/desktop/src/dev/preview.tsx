@@ -109,6 +109,23 @@ const AGENT: AgentEntry = {
   latest_release: null,
 };
 
+/** The models Claude Code 2.1.310 listed (docs/spikes/claude-control/fixtures/turn-basic.jsonl). */
+const PREVIEW_MODELS: readonly (readonly [string, string, string])[] = [
+  ["default", "Default (recommended)", "Opus 5.5 · Best for everyday, complex tasks"],
+  ["opus", "Opus 5.5", "For complex work and everyday tasks"],
+  ["fable", "Fable 5.1", "For your toughest challenges"],
+  ["sonnet", "Sonnet 5.5", "Most efficient for simpler tasks"],
+  ["haiku", "Haiku 5.5", "Fastest for quick answers"],
+  ["claude-haiku-4-5-20251001", "Haiku 4.5", "Fastest for quick answers"],
+  ["claude-sonnet-5", "Sonnet 5", "Efficient for routine tasks"],
+  ["claude-opus-5", "Opus 5", "Best for everyday, complex tasks"],
+  ["claude-fable-5", "Fable 5", "Most capable for your hardest and longest-running tasks"],
+  ["claude-opus-4-8", "Opus 4.8", "Best for everyday, complex tasks"],
+  ["claude-opus-4-7", "Opus 4.7", "Best for everyday, complex tasks"],
+  ["claude-opus-4-6", "Opus 4.6", "Best for everyday, complex tasks"],
+  ["claude-sonnet-4-6", "Sonnet 4.6", "Efficient for routine tasks"],
+];
+
 /**
  * `agents=lineup` offers a full lineup in the chat's picker (each agent's mark at 16px): four that
  * can run, one still being checked and three not installed. Without it the chat knows only its own.
@@ -600,17 +617,21 @@ function Preview() {
   const [selected, setSelected] = useState<string | null>(
     mode === "new" || scenario ? null : "preview",
   );
+  // `&stopped`: the settled chat after its agent stopped, its last models and levels still offered.
+  const stopped = mode === "settled" && new URLSearchParams(location.search).has("stopped");
   const status: SessionStatus =
     queued?.status ??
-    (mode === "thinking" ||
-    mode === "streaming" ||
-    mode === "permission" ||
-    mode === "history-question" ||
-    mode === "focus-group"
-      ? "running"
-      : mode === "error" || mode === "missing-worktree"
-        ? "failed"
-        : "ready");
+    (stopped
+      ? "stopped"
+      : mode === "thinking" ||
+          mode === "streaming" ||
+          mode === "permission" ||
+          mode === "history-question" ||
+          mode === "focus-group"
+        ? "running"
+        : mode === "error" || mode === "missing-worktree"
+          ? "failed"
+          : "ready");
   const chat = useMemo(
     () =>
       chatSummary("preview", {
@@ -698,6 +719,7 @@ function Preview() {
         status: currentStatus,
         queue_held: queue.some((row) => row.held),
         queue_wait: queue.length > 0 ? wait : null,
+        revision: choices.revision,
       });
     const history = items(numbered(events.map((event) => [null, event] as const)));
     const before =
@@ -767,20 +789,14 @@ function Preview() {
           kind: {
             type: "select",
             current: "sonnet",
-            choices: [
-              {
-                value: "sonnet",
-                name: "Sonnet",
-                description: "Balanced coding and reasoning",
-                group: null,
-              },
-              {
-                value: "haiku",
-                name: "Haiku",
-                description: "Fast answers and smaller tasks",
-                group: null,
-              },
-            ],
+            // Claude Code's list as its driver reports it: a dozen models, so the menu must keep
+            // the thinking level in view above a list that scrolls.
+            choices: PREVIEW_MODELS.map(([value, name, description]) => ({
+              value,
+              name,
+              description,
+              group: null,
+            })),
           },
         },
         {
@@ -792,10 +808,15 @@ function Preview() {
           kind: {
             type: "select",
             current: "medium",
+            // As Claude's driver names them: its default, then the bare level ids.
             choices: [
-              { value: "low", name: "Low", description: null, group: null },
-              { value: "medium", name: "Medium", description: null, group: null },
-              { value: "high", name: "High", description: null, group: null },
+              { value: "default", name: "Default", description: null, group: null },
+              ...["low", "medium", "high", "xhigh", "max"].map((value) => ({
+                value,
+                name: value,
+                description: null,
+                group: null,
+              })),
             ],
           },
         },
@@ -833,16 +854,31 @@ function Preview() {
           return choices;
         },
         setOption: async (_chatId, id, value) => {
+          const option = choices.options.find((option) => option.id === id);
+          if (option?.kind.type !== "select" || value.type !== "choice")
+            throw new Error(`This agent has no option "${id}".`);
+          if (!option.kind.choices.some((choice) => choice.value === value.value))
+            throw new Error(`"${value.value}" isn't one of the choices for ${option.name}.`);
+          if (currentStatus === "starting" || currentStatus === "stopping")
+            throw new Error(
+              "Wait for the agent to finish starting or stopping, then choose again.",
+            );
+          const before = choices;
           choices = {
-            ...choices,
-            revision: choices.revision + 1,
-            options: choices.options.map((option) =>
-              option.id === id && option.kind.type === "select" && value.type === "choice"
+            ...before,
+            revision: before.revision + 1,
+            options: before.options.map((option) =>
+              option.id === id && option.kind.type === "select"
                 ? { ...option, kind: { ...option.kind, current: value.value } }
                 : option,
             ),
           };
-          return choices;
+          // A stopped chat keeps the choice for its next start and answers with it.
+          if (currentStatus === "stopped" || currentStatus === "failed") return choices;
+          // A running agent answers first and sends the lists that show the change after it,
+          // with a new revision, as the real drivers do.
+          setTimeout(() => publish([ev.session(header())]), 40);
+          return before;
         },
         attach: async (chatId, onFrame) => {
           receive = onFrame;

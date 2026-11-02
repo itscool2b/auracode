@@ -244,6 +244,43 @@ export function orderedOptions(options: readonly ConfigOption[]): ConfigOption[]
   );
 }
 
+/** Plain names for the thinking levels agents send as bare ids (`xhigh`, `low`). */
+const LEVEL_NAMES: Readonly<Record<string, string>> = {
+  default: "Default",
+  auto: "Auto",
+  none: "None",
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
+/** Shorter names for the composer's pill at narrow widths. */
+const LEVEL_SHORT_NAMES: Readonly<Record<string, string>> = {
+  "Extra high": "X-high",
+  Medium: "Med",
+  Minimal: "Min",
+};
+
+/**
+ * A thinking level's name: the agent's own when it gave one, else a plain name for its id
+ * ("xhigh" reads "Extra high"), else the id with a capital.
+ */
+export function levelName(choice: { readonly value: string; readonly name: string }): string {
+  if (choice.name !== choice.value) return choice.name;
+  const known = LEVEL_NAMES[choice.value.toLowerCase()];
+  if (known) return known;
+  return choice.name.charAt(0).toUpperCase() + choice.name.slice(1);
+}
+
+/** The pill's short form of a level's name. */
+export function levelShortName(name: string): string {
+  return LEVEL_SHORT_NAMES[name] ?? name;
+}
+
 /** A pending value in words: the choice's name, or on and off. */
 export function pendingLabel(option: ConfigOption, value: ConfigValue): string {
   if (value.type === "toggle") return value.value ? "on" : "off";

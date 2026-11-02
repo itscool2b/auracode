@@ -3,7 +3,7 @@ import { Check, Circle, FileText, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentEntry, FileMention, ProjectFilePreview } from "../../bindings";
 import type { ChatState } from "../../lib/chat/chatStore";
-import { autonomyLabel, costLabel, tokensLabel } from "../../lib/chat/present";
+import { autonomyLabel, costLabel, levelName, tokensLabel } from "../../lib/chat/present";
 import type { ComposerTransport } from "../../lib/composer";
 import { composerDraft } from "../../lib/composerDraft";
 import { errorMessage } from "../../lib/errors";
@@ -279,7 +279,9 @@ function Session({
     const option = state.lists?.options.find((option) => option.category === category);
     if (option?.kind.type !== "select") return null;
     const current = option.kind.current;
-    return option.kind.choices.find((choice) => choice.value === current)?.name ?? current;
+    const choice = option.kind.choices.find((choice) => choice.value === current);
+    if (!choice) return current || null;
+    return category === "effort" ? levelName(choice) : choice.name;
   };
   const recent = state.transcript.segments.findLast((segment) => segment.end !== null);
   const tokens = state.transcript.segments.findLast((segment) => segment.end?.usage)?.end?.usage;
@@ -289,7 +291,7 @@ function Session({
       : null;
   const properties = [
     ["Model", choiceLabel("model") ?? session?.model ?? "Not reported"],
-    ["Effort", choiceLabel("effort") ?? session?.effort ?? "Not reported"],
+    ["Thinking", choiceLabel("effort") ?? session?.effort ?? "Not reported"],
     ["Autonomy", autonomyLabel(session?.autonomy ?? "full_auto")],
     ["Folder", state.chat?.folder ?? "Unavailable"],
     [

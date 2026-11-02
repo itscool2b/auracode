@@ -1,6 +1,6 @@
 import { AgentMark } from "@auracode/ui/graphite";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Fragment, useId, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import type {
   AgentEntry,
   Autonomy,
@@ -11,7 +11,7 @@ import type {
   SessionStatus,
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
-import { orderedOptions, pendingLabel } from "../../lib/chat/present";
+import { levelName, levelShortName, orderedOptions, pendingLabel } from "../../lib/chat/present";
 import { agentVersion } from "../../lib/format";
 import { AccessPicker } from "./AccessPicker";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
@@ -61,17 +61,49 @@ const AGENT_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Access and native workflow controls sit beside a searchable agent, model and effort picker.
- * Live descriptors determine the choices. Pending changes keep the requested value visible.
+ * Where option changes go: to the running agent, to its next start (it is stopped, failed or
+ * signed out), or nowhere while it starts or stops.
+ */
+export function optionsTarget(status: SessionStatus): "agent" | "next-start" | "none" {
+  switch (status) {
+    case "ready":
+    case "running":
+    case "cancelling":
+      return "agent";
+    case "stopped":
+    case "failed":
+    case "auth_required":
+      return "next-start";
+    case "starting":
+    case "stopping":
+      return "none";
+  }
+}
+
+/** The name of the choice an option shows: the one on its way, else its current one. */
+function shownChoice(option: ConfigOption, saving: ConfigValue | null) {
+  if (option.kind.type !== "select") return null;
+  const value = saving?.type === "choice" ? saving.value : option.kind.current;
+  return option.kind.choices.find((choice) => choice.value === value) ?? null;
+}
+
+/**
+ * The agent, model and thinking picker, beside the access and native workflow controls. Live
+ * descriptors determine the choices; pending changes keep the requested value visible. While the
+ * agent is not running, its last known models and levels stay choosable for its next start.
  *
- * Keys: Ctrl or Cmd + . opens it on the current choice; up and down move within a part, left and
- * right move between parts, Enter chooses, digits set the effort, letters jump to agents.
+ * The menu reads top down: the current model and agent, the thinking level (always in view), the
+ * model and agent lists (they scroll on their own), then More options.
+ *
+ * Keys: Ctrl or Cmd + . opens it on the current model; up and down move within a part, left and
+ * right move between parts, Enter chooses, digits set the thinking level, letters jump to agents.
  */
 export function Pickers({
   lists,
   autonomy,
   status,
   error,
+  optionError = null,
   optionsSaving = new Map(),
   autonomySaving = null,
   controlSaving = null,
@@ -87,7 +119,10 @@ export function Pickers({
   /** The chat's autonomy until the lists arrive. */
   readonly autonomy: Autonomy;
   readonly status: SessionStatus;
+  /** Why the lists, access or workflow could not load or change. */
   readonly error: string | null;
+  /** Why a model, thinking level or other option change was refused. */
+  readonly optionError?: string | null;
   /** Option changes on their way, by option id. */
   readonly optionsSaving?: ReadonlyMap<string, ConfigValue>;
   readonly autonomySaving?: Autonomy | null;
@@ -100,19 +135,28 @@ export function Pickers({
   readonly onChooseAgent?: (id: string) => void;
   readonly onSetControl?: (change: SessionControlChange) => void;
 }) {
-  const autonomyId = useId();
+  const id = useId();
   const [query, setQuery] = useState("");
-  const optionsEnabled = status === "ready" || status === "running";
+  const columns = useRef<HTMLDivElement>(null);
+  useWheelChain(columns);
+  const target = optionsTarget(status);
+  const choicesEnabled = target !== "none";
+  // Mode changes wait for an idle agent, as the session requires.
+  const modeEnabled = status === "ready" && !transitionBlocked;
   const options = orderedOptions(lists?.options ?? []).filter(
     (option) => !["aura.access", "aura.workflow"].includes(option.id),
   );
-  const choiceLabel = (option: ConfigOption) =>
-    option.kind.type === "select"
-      ? (option.kind.choices.find((choice) => choice.value === option.kind.current)?.name ?? null)
-      : null;
   const model = options.find((option) => option.category === "model");
   const effort = options.find((option) => option.category === "effort");
-  const modelLabel = (model && choiceLabel(model)) ?? agent?.name ?? "Choose model";
+  const saving = (option: ConfigOption | undefined) =>
+    option ? (optionsSaving.get(option.id) ?? null) : null;
+  const modelName = model ? (shownChoice(model, saving(model))?.name ?? null) : null;
+  const modelLabel = modelName ?? agent?.name ?? "Model";
+  // The menu's title names the model; without one known it says the agent picks, once.
+  const headTitle = modelName ?? (model ? "The agent's default model" : (agent?.name ?? "Agent"));
+  const headAgent = model ? (agent?.name ?? "Agent") : null;
+  const levelChoice = effort ? shownChoice(effort, saving(effort)) : null;
+  const level = levelChoice ? levelName(levelChoice) : null;
   const others = options.filter(
     (option) => option.category !== "model" && option.category !== "effort",
   );
@@ -128,6 +172,28 @@ export function Pickers({
   const matchingAgents = offered.filter((entry) =>
     entry.name.toLowerCase().includes(query.trim().toLowerCase()),
   );
+  const note =
+    target === "none"
+      ? status === "starting"
+        ? "Changes open once the agent has started."
+        : "Changes open once the agent has stopped."
+      : target === "next-start" && (model || effort || others.length)
+        ? "Applies when the agent starts."
+        : null;
+  const thinkingEmpty =
+    target === "agent"
+      ? model
+        ? "This model has no thinking levels."
+        : "Not offered by this agent."
+      : model
+        ? "Shown once the agent runs this model."
+        : "Shown once the agent runs.";
+  const modelEmpty =
+    target === "agent"
+      ? "This agent does not offer a model selector."
+      : "Models show once this agent has run.";
+  const shortcutKey =
+    typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl";
   return (
     <div className="chat-pickers">
       <AccessPicker
@@ -142,11 +208,11 @@ export function Pickers({
         onSetControl={onSetControl}
       />
       <Popover
-        label="Agent and model"
-        triggerLabel={[agent?.name, modelLabel, effort && choiceLabel(effort), "Agent and model"]
+        label="Agent, model and thinking"
+        triggerLabel={`${[agent?.name, modelLabel, level ? `${level} thinking` : null]
           .filter(Boolean)
-          .join(" ")}
-        tip={`Agent, model and effort (${typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl"} .)`}
+          .join(", ")}. Agent, model and thinking`}
+        tip={`Agent, model and thinking (${shortcutKey} .)`}
         shortcut="."
         className="chat-model-popover"
         onOpenChange={(open) => {
@@ -160,19 +226,23 @@ export function Pickers({
               </span>
             ) : null}
             <strong className="chat-pill-model">{modelLabel}</strong>
-            {effort ? (
-              <>
-                {" "}
-                <span className="chat-pill-effort">{choiceLabel(effort)}</span>
-              </>
+            {level ? (
+              <span className="chat-pill-effort" data-testid="picker-pill-thinking">
+                <span aria-hidden="true">·</span>
+                <span className="chat-pill-level">{level}</span>
+                <span className="chat-pill-level-short">{levelShortName(level)}</span>
+              </span>
             ) : null}
             <ChevronDown size={12} />
           </>
         }
       >
-        <fieldset
+        {/* biome-ignore lint/a11y/useSemanticElements: a fieldset's anonymous content box gives its flex children no definite height, so the model list could not scroll on its own below the thinking level. */}
+        <div
+          ref={columns}
+          role="group"
           className="chat-model-columns"
-          aria-label="Agent, model and effort"
+          aria-label="Agent, model and thinking"
           onKeyDown={(event) => {
             if (
               event.ctrlKey ||
@@ -183,13 +253,12 @@ export function Pickers({
             )
               return;
             const parts = [
-              ...event.currentTarget.querySelectorAll<HTMLElement>(":scope > section"),
+              ...event.currentTarget.querySelectorAll<HTMLElement>("[data-picker-part]"),
             ].filter((part) => part.querySelector("button:not(:disabled)"));
-            const part = (event.target as HTMLElement).closest<HTMLElement>(
-              ".chat-model-columns > section",
-            );
+            const part = (event.target as HTMLElement).closest<HTMLElement>("[data-picker-part]");
             const index = part ? parts.indexOf(part) : 0;
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+              if (!parts.length) return;
               event.preventDefault();
               const next =
                 parts[
@@ -199,7 +268,7 @@ export function Pickers({
             } else if (
               /^[1-9]$/.test(event.key) &&
               effort?.kind.type === "select" &&
-              optionsEnabled
+              choicesEnabled
             ) {
               const choice = effort.kind.choices[Number(event.key) - 1];
               if (choice) {
@@ -217,135 +286,183 @@ export function Pickers({
             }
           }}
         >
+          <header className="chat-model-head">
+            <span className="chat-model-head-mark" aria-hidden="true">
+              <AgentMark agent={agent?.id ?? "generic"} size={20} />
+            </span>
+            <span className="chat-model-head-copy">
+              <strong className="chat-model-head-title" data-testid="picker-current-model">
+                {headTitle}
+              </strong>
+              {headAgent ? <span className="chat-model-head-agent">{headAgent}</span> : null}
+            </span>
+          </header>
+          {note || optionError ? (
+            <div className="chat-model-notes">
+              {optionError ? (
+                <p className="ui-error" role="alert" data-testid="picker-option-error">
+                  {optionError}
+                </p>
+              ) : null}
+              {note ? (
+                <p data-testid="picker-note" data-test-target={target}>
+                  {note}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <section
+            className="chat-picker-thinking"
+            data-picker-part="thinking"
+            aria-labelledby={`${id}-thinking`}
+          >
+            <h3 id={`${id}-thinking`}>Thinking</h3>
+            {effort ? (
+              <OptionPicker
+                option={effort}
+                saving={saving(effort)}
+                enabled={choicesEnabled}
+                onSet={onSetOption}
+              />
+            ) : (
+              <p className="chat-picker-empty" data-testid="picker-thinking-empty">
+                {thinkingEmpty}
+              </p>
+            )}
+          </section>
           <label className="chat-picker-search">
             <Search size={14} aria-hidden="true" />
             <input
               type="search"
               className="g-input"
               aria-label="Search agents and models"
-              placeholder="Search agents and models…"
+              placeholder="Search models and agents…"
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </label>
-          <section aria-labelledby={`${autonomyId}-agent`}>
-            <h3 id={`${autonomyId}-agent`}>Agent</h3>
-            {offered.length && onChooseAgent ? (
-              <fieldset
-                className="chat-agent-choices"
-                aria-label="Agents"
-                onKeyDown={movePickerFocus}
-              >
-                {matchingAgents.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    aria-pressed={entry.id === agent?.id}
-                    data-agent-key={AGENT_KEYS[entry.id]}
-                    disabled={entry.availability.state !== "ready"}
-                    onClick={(event) => {
-                      if (entry.id !== agent?.id) {
-                        closePopover(event.currentTarget);
-                        onChooseAgent(entry.id);
-                      }
-                    }}
-                  >
-                    <AgentMark agent={entry.id} size={16} />
-                    <span className="picker-choice-copy">
-                      <strong>{entry.name}</strong>
-                    </span>
-                    <small>
-                      {entry.availability.state === "ready"
-                        ? entry.availability.version === null
-                          ? "Installed"
-                          : agentVersion(entry.name, entry.availability.version)
-                        : entry.availability.state.replaceAll("_", " ")}
-                    </small>
-                    {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}
-                  </button>
-                ))}
-                {!matchingAgents.length ? (
-                  <p className="chat-picker-empty">No matching agents.</p>
-                ) : null}
-              </fieldset>
-            ) : (
-              <span className="chat-current-agent">
-                <AgentMark agent={agent?.id ?? "generic"} size={16} />
-                {agent?.name ?? "Agent"}
-              </span>
-            )}
-          </section>
-          <section aria-labelledby={`${autonomyId}-model`}>
-            <h3 id={`${autonomyId}-model`}>Model</h3>
-            {!model ? (
-              <p className="chat-picker-empty">
-                {optionsEnabled
-                  ? "This agent does not offer a model selector."
-                  : "Start the session to load its models and options."}
-              </p>
-            ) : null}
-            {options
-              .filter((option) => option.category === "model")
-              .map((option) => (
+          <div className="chat-model-scroll" data-testid="picker-lists">
+            <section
+              data-picker-part="model"
+              data-picker-initial=""
+              aria-labelledby={`${id}-model`}
+            >
+              <h3 id={`${id}-model`}>Model</h3>
+              {!model ? <p className="chat-picker-empty">{modelEmpty}</p> : null}
+              {model ? (
                 <OptionPicker
-                  key={option.id}
-                  option={option}
-                  saving={optionsSaving.get(option.id) ?? null}
-                  enabled={optionsEnabled}
+                  option={model}
+                  saving={saving(model)}
+                  enabled={choicesEnabled}
                   onSet={onSetOption}
                   query={query}
                 />
-              ))}
-          </section>
-          <section className="chat-picker-fields" aria-labelledby={`${autonomyId}-effort`}>
-            <h3 id={`${autonomyId}-effort`} className="sr-only">
-              Reasoning effort
-            </h3>
-            <div className="chat-picker-field">
-              <span className="chat-picker-field-label">Effort</span>
-              {effort ? null : (
-                <span className="chat-picker-empty">
-                  {optionsEnabled ? "Not offered" : "After the session starts"}
+              ) : null}
+            </section>
+            <section data-picker-part="agent" aria-labelledby={`${id}-agent`}>
+              <h3 id={`${id}-agent`}>Agent</h3>
+              {offered.length && onChooseAgent ? (
+                <fieldset
+                  className="chat-agent-choices"
+                  aria-label="Agents"
+                  onKeyDown={movePickerFocus}
+                >
+                  {matchingAgents.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      aria-pressed={entry.id === agent?.id}
+                      data-agent-key={AGENT_KEYS[entry.id]}
+                      disabled={entry.availability.state !== "ready"}
+                      onClick={(event) => {
+                        if (entry.id !== agent?.id) {
+                          closePopover(event.currentTarget);
+                          onChooseAgent(entry.id);
+                        }
+                      }}
+                    >
+                      <AgentMark agent={entry.id} size={16} />
+                      <span className="picker-choice-copy">
+                        <strong>{entry.name}</strong>
+                      </span>
+                      <small>
+                        {entry.availability.state === "ready"
+                          ? entry.availability.version === null
+                            ? "Installed"
+                            : agentVersion(entry.name, entry.availability.version)
+                          : entry.availability.state.replaceAll("_", " ")}
+                      </small>
+                      {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}
+                    </button>
+                  ))}
+                  {!matchingAgents.length ? (
+                    <p className="chat-picker-empty">No matching agents.</p>
+                  ) : null}
+                </fieldset>
+              ) : (
+                <span className="chat-current-agent">
+                  <AgentMark agent={agent?.id ?? "generic"} size={16} />
+                  {agent?.name ?? "Agent"}
                 </span>
               )}
-              {options
-                .filter((option) => option.category === "effort")
-                .map((option) => (
-                  <OptionPicker
-                    key={option.id}
-                    option={option}
-                    saving={optionsSaving.get(option.id) ?? null}
-                    enabled={optionsEnabled}
-                    onSet={onSetOption}
-                  />
-                ))}
-            </div>
-            {others.length ? (
-              <details className="chat-other-options">
-                <summary>More options</summary>
-                {others.map((option) => (
-                  <OptionPicker
-                    key={option.id}
-                    option={option}
-                    saving={optionsSaving.get(option.id) ?? null}
-                    enabled={optionsEnabled}
-                    onSet={onSetOption}
-                  />
-                ))}
-              </details>
-            ) : null}
-          </section>
-        </fieldset>
+            </section>
+          </div>
+          {others.length ? (
+            <details className="chat-other-options">
+              <summary>More options</summary>
+              {others.map((option) => (
+                <OptionPicker
+                  key={option.id}
+                  option={option}
+                  saving={saving(option)}
+                  enabled={option.category === "mode" ? modeEnabled : choicesEnabled}
+                  onSet={onSetOption}
+                />
+              ))}
+            </details>
+          ) : null}
+        </div>
       </Popover>
-      {error !== null ? (
+      {error !== null || optionError !== null ? (
         <span
           className="chat-picker-error-dot"
           role="img"
-          aria-label="Session settings error. Open the access picker for details."
+          aria-label={
+            optionError !== null
+              ? "A change was refused. Open the agent, model and thinking picker for details."
+              : "Session settings error. Open the access picker for details."
+          }
         />
       ) : null}
     </div>
   );
+}
+
+/**
+ * A wheel over the model and agent lists scrolls them; once they reach their end, it scrolls the
+ * menu itself (on a short window the menu scrolls too), instead of stopping or scrolling the chat.
+ */
+function useWheelChain(root: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY === 0 || !(event.target instanceof Element)) return;
+      const list = event.target.closest<HTMLElement>(".chat-model-scroll");
+      const panel = element.closest<HTMLElement>(".chat-popover-panel");
+      if (!list || !panel || panel.scrollHeight <= panel.clientHeight + 1) return;
+      const down = event.deltaY > 0;
+      const atEnd = down
+        ? list.scrollTop + list.clientHeight >= list.scrollHeight - 1
+        : list.scrollTop <= 0;
+      if (!atEnd) return;
+      event.preventDefault();
+      const line = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+      panel.scrollTop += event.deltaY * line;
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [root]);
 }
 
 function OptionPicker({
@@ -364,9 +481,11 @@ function OptionPicker({
 }) {
   const id = useId();
   const pending = option.pending === null ? null : pendingLabel(option, option.pending);
+  // Whatever the agent calls its level, the menu calls it Thinking.
+  const name = option.category === "effort" ? "Thinking" : option.name;
   const label = (
     <>
-      {option.name}
+      {name}
       {saving !== null ? (
         <span className="ui-muted"> (saving…)</span>
       ) : pending !== null ? (
@@ -399,30 +518,33 @@ function OptionPicker({
   const { choices, current } = option.kind;
   if (option.category === "model" || option.category === "effort") {
     const effort = option.category === "effort";
-    const matching = choices.filter((choice) =>
-      `${choice.name} ${choice.group ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()),
-    );
+    const matching = effort
+      ? choices.map((choice) => ({ ...choice, name: levelName(choice) }))
+      : choices.filter((choice) =>
+          `${choice.name} ${choice.group ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()),
+        );
+    const value = saving?.type === "choice" ? saving.value : current;
     return (
       <div
         className="ui-field"
         data-testid="picker-option"
         data-test-option-id={option.id}
         data-test-saving={String(saving !== null)}
-        data-test-value={saving?.type === "choice" ? saving.value : current}
+        data-test-value={value}
         data-layout={effort ? "segments" : "rows"}
       >
-        {saving !== null || pending !== null ? (
-          <span className="picker-option-label">{label}</span>
-        ) : (
-          <span className="sr-only">{label}</span>
-        )}
+        {/* The section's heading names the part; this says what is on its way, to readers. */}
+        <span className={pending !== null && !effort ? "picker-option-label" : "sr-only"}>
+          {label}
+        </span>
         <PickerChoices
-          label={option.name}
+          label={effort ? "Thinking" : option.name}
           choices={matching}
-          value={saving?.type === "choice" ? saving.value : current}
+          value={value}
+          busy={saving?.type === "choice" ? saving.value : null}
           enabled={enabled}
           effort={effort}
-          onChoose={(value) => onSet(option.id, { type: "choice", value })}
+          onChoose={(choice) => onSet(option.id, { type: "choice", value: choice })}
         />
         {!matching.length && query ? (
           <p className="chat-picker-empty">No matching models.</p>

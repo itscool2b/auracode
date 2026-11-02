@@ -133,10 +133,17 @@ const setup: SetupApi = {
     if (action.type === "motion") preferences.preferences.motion = action.value;
     if (action.type === "appearance") preferences.preferences.appearance = action.value;
     if (action.type === "default_agent") {
-      if (general.default_agent !== action.agent_id) general.default_model = null;
+      if (general.default_agent !== action.agent_id) {
+        general.default_model = null;
+        general.default_effort = null;
+      }
       general.default_agent = action.agent_id;
     }
-    if (action.type === "default_model") general.default_model = action.model;
+    if (action.type === "default_model") {
+      if (general.default_model !== action.model) general.default_effort = null;
+      general.default_model = action.model;
+    }
+    if (action.type === "default_effort") general.default_effort = action.effort;
     if (action.type === "default_autonomy") general.default_autonomy = action.value;
     if (action.type === "automatic_checkpoints") general.automatic_checkpoints = action.enabled;
     if (action.type === "notifications") general.notifications = action.enabled;
@@ -175,6 +182,16 @@ const general: GeneralApi = {
           { value: "gpt-5.5-codex", name: "GPT-5.5 Codex", description: null, group: null },
           { value: "gpt-5.5-mini", name: "GPT-5.5 mini", description: null, group: null },
         ]
+      : [],
+  // Codex ran its default model and GPT-5.5 mini here; their levels are known.
+  thinking: async (agentId, model) =>
+    agentId === "codex" && model !== "gpt-5.5-codex"
+      ? ["default", "low", "medium", "high"].map((value) => ({
+          value,
+          name: value === "default" ? "Default" : value,
+          description: null,
+          group: null,
+        }))
       : [],
 };
 let status: UpdateStatus = {

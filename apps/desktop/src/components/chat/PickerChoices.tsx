@@ -1,11 +1,19 @@
 import { Check } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 
+/**
+ * Focuses the chosen row under `root`, else its first enabled one. A menu with a part marked
+ * `data-picker-initial` (the model list) opens there when it has an enabled row.
+ */
 export function focusPickerChoice(root: Element | undefined) {
-  const chosen = root?.querySelector<HTMLButtonElement>(
-    'button[aria-pressed="true"]:not(:disabled)',
-  );
-  (chosen ?? root?.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus();
+  const pressed = 'button[aria-pressed="true"]:not(:disabled)';
+  const initial = root?.querySelector("[data-picker-initial]");
+  const target =
+    initial?.querySelector<HTMLButtonElement>(pressed) ??
+    initial?.querySelector<HTMLButtonElement>("button:not(:disabled)") ??
+    root?.querySelector<HTMLButtonElement>(pressed) ??
+    root?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+  target?.focus();
 }
 
 /** Move within a column without committing a setting until Enter or a click. */
@@ -39,6 +47,7 @@ export function PickerChoices({
   label,
   choices,
   value,
+  busy = null,
   enabled,
   onChoose,
   effort = false,
@@ -47,14 +56,16 @@ export function PickerChoices({
   readonly label: string;
   readonly choices: readonly PickerChoice[];
   readonly value: string;
+  /** The value a change on its way asked for: it shows chosen, marked busy until the answer. */
+  readonly busy?: string | null;
   readonly enabled: boolean;
   readonly onChoose: (value: string) => void;
   readonly effort?: boolean;
   readonly children?: ReactNode;
 }) {
   if (effort)
-    // Effort is one segmented row (Grok's compact fields): the levels side by side, the chosen one
-    // raised, digits choosing by position.
+    // The thinking level is one segmented row: the levels side by side, the chosen one raised,
+    // digits choosing by position.
     return (
       <fieldset
         className="picker-choices g-segmented g-segmented-quiet"
@@ -70,13 +81,14 @@ export function PickerChoices({
             className="g-segment"
             data-picker-value={choice.value}
             aria-pressed={value === choice.value}
+            aria-busy={busy === choice.value || undefined}
             disabled={!enabled}
-            title={[choice.description, index < 9 ? `Key ${index + 1}` : null]
+            title={[choice.name, choice.description, index < 9 ? `Key ${index + 1}` : null]
               .filter(Boolean)
               .join(" · ")}
             onClick={() => onChoose(choice.value)}
           >
-            {choice.name}
+            <span>{choice.name}</span>
           </button>
         ))}
       </fieldset>
@@ -90,6 +102,7 @@ export function PickerChoices({
           type="button"
           data-picker-value={choice.value}
           aria-pressed={value === choice.value}
+          aria-busy={busy === choice.value || undefined}
           disabled={!enabled}
           title={choice.description ?? undefined}
           onClick={() => onChoose(choice.value)}

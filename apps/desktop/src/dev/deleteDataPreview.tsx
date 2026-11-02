@@ -151,7 +151,11 @@ const setup: SetupApi = {
   snapshot: async () => structuredClone(snapshot),
   apply: async () => structuredClone(snapshot),
 };
-const general: GeneralApi = { agents: async () => [], models: async () => [] };
+const general: GeneralApi = {
+  agents: async () => [],
+  models: async () => [],
+  thinking: async () => [],
+};
 const status: UpdateStatus = {
   channel: "stable",
   phase: "idle",

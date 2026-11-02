@@ -13,6 +13,7 @@ import {
   BLOB_PAGE,
   ChatStore,
   LISTS_DEBOUNCE_MS,
+  OPTION_HOLD_MS,
   type PageVisibility,
   STILL_WORKING_MS,
 } from "./chatStore";
@@ -1031,7 +1032,9 @@ describe("the pickers", () => {
     await store.setOption("model", { type: "choice", value: "smart" });
     expect(store.getSnapshot().lists?.revision).toBe(7);
     await store.setOption("bad", { type: "toggle", value: true });
-    expect(store.getSnapshot().listsError).toBe("The agent refused that value.");
+    // A refused option change says why in the model menu; the access picker's error is untouched.
+    expect(store.getSnapshot().optionError).toBe("The agent refused that value.");
+    expect(store.getSnapshot().listsError).toBeNull();
     expect(store.getSnapshot().lists?.revision).toBe(7);
     await store.setAutonomy("ask");
     expect(store.getSnapshot().lists?.autonomy.note).toBe("Applies when the agent starts.");
@@ -1083,7 +1086,7 @@ describe("the pickers", () => {
       );
     await store.setOption("model", { type: "choice", value: "fast" });
     expect(store.getSnapshot()).toMatchObject({
-      listsError: "The agent isn't running in this chat.",
+      optionError: "The agent isn't running in this chat.",
     });
     expect(store.getSnapshot().optionsSaving.size).toBe(0);
     expect(store.getSnapshot().lists?.revision).toBe(12);
@@ -1105,6 +1108,62 @@ describe("the pickers", () => {
     answer(lists(2));
     await settled();
     expect(store.getSnapshot().lists?.revision).toBe(9);
+  });
+
+  it("keep a change in view when its answer's lists do not show it yet, until the refetch", async () => {
+    vi.useFakeTimers();
+    try {
+      const model = (current: string) => ({
+        id: "model",
+        name: "Model",
+        description: null,
+        category: "model" as const,
+        kind: {
+          type: "select" as const,
+          current,
+          choices: ["fast", "smart"].map((value) => ({
+            value,
+            name: value,
+            description: null,
+            group: null,
+          })),
+        },
+        pending: null,
+      });
+      let refetched = lists(8, { options: [model("smart")] });
+      const fake = new FakeTransport({
+        lists: () => Promise.resolve(refetched),
+        // A driver answers before its lists arrive: the answer still names the old model.
+        setOption: () => Promise.resolve(lists(7, { options: [model("fast")] })),
+      });
+      const store = await opened(fake, historyPage(CHAT, []), 0, {
+        session: sessionInfo({ revision: 7 }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await store.setOption("model", { type: "choice", value: "smart" });
+      // The picker keeps showing the model asked for instead of snapping back.
+      expect(store.getSnapshot().optionsSaving.get("model")).toEqual({
+        type: "choice",
+        value: "smart",
+      });
+      fake.lastAttach().onFrame(frame(CHAT, 0, [ev.session({ revision: 8 })]));
+      await vi.advanceTimersByTimeAsync(LISTS_DEBOUNCE_MS);
+      expect(store.getSnapshot().optionsSaving.size).toBe(0);
+      expect(store.getSnapshot().lists?.revision).toBe(8);
+      // Without a refetch, the answer's own lists show after a moment.
+      refetched = lists(9, { options: [model("smart")] });
+      await store.setOption("model", { type: "choice", value: "smart" });
+      expect(store.getSnapshot().optionsSaving.has("model")).toBe(true);
+      await vi.advanceTimersByTimeAsync(OPTION_HOLD_MS);
+      expect(store.getSnapshot().optionsSaving.size).toBe(0);
+      // An answer that shows the change ends the wait at once.
+      fake.handlers.setOption = () => Promise.resolve(lists(10, { options: [model("fast")] }));
+      await store.setOption("model", { type: "choice", value: "fast" });
+      expect(store.getSnapshot().optionsSaving.size).toBe(0);
+      expect(store.getSnapshot().optionError).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
