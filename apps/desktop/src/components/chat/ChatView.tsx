@@ -1,5 +1,5 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
   ChatSummary,
@@ -211,6 +211,28 @@ export function ChatView({
       ),
     [pendingRequests],
   );
+  // Queue every request, but only the oldest owns the composer. Resolving or withdrawing it
+  // reveals the next one, without exposing duplicate controls in the transcript.
+  const currentRequest = pendingRequests[0];
+  const requestId = currentRequest?.key ?? null;
+  const previousRequest = useRef<string | null>(null);
+  const requestDock = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (requestId === previousRequest.current) return;
+    previousRequest.current = requestId;
+    if (!active) return;
+    const focused = document.activeElement;
+    if (
+      focused !== document.body &&
+      !(
+        focused instanceof HTMLElement &&
+        focused.closest(".chat-compose-slot, .chat-permission-dock")
+      )
+    )
+      return;
+    if (requestId !== null) requestDock.current?.focus();
+    else focusComposer();
+  }, [requestId, active]);
 
   // A start that failed because the folder is missing, where the folder is this chat's app-owned
   // worktree deleted by hand: its card offers the Git workspace's Recreate folder review.
@@ -717,12 +739,13 @@ export function ChatView({
               onMove={(promptId, index) => store.moveQueued(promptId, index)}
             />
             {pendingRequests.length > 0 ? (
-              <section className="chat-permission-dock" aria-label="Waiting for your response">
-                <div className="chat-permission-label">
-                  Needs your response
-                  {pendingRequests.length > 1 ? ` · ${pendingRequests.length} requests` : ""}
-                </div>
-                {pendingRequests.map((item) => {
+              <section
+                ref={requestDock}
+                tabIndex={-1}
+                className="chat-permission-dock"
+                aria-label="Waiting for your response"
+              >
+                {pendingRequests.slice(0, 1).map((item) => {
                   if (item.kind !== "permission" && item.kind !== "question") return null;
                   const segment = state.transcript.segments.find((entry) =>
                     entry.itemKeys.includes(item.key),
@@ -770,6 +793,12 @@ export function ChatView({
                     </div>
                   );
                 })}
+                {pendingRequests.length > 1 ? (
+                  <p className="chat-request-remaining" role="status">
+                    {pendingRequests.length - 1} more{" "}
+                    {pendingRequests.length === 2 ? "request" : "requests"} waiting
+                  </p>
+                ) : null}
               </section>
             ) : null}
             <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>

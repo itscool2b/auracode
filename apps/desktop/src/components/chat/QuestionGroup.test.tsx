@@ -36,35 +36,39 @@ const drafts: QuestionDrafts = new Map([
 ]);
 
 describe("grouped question cards", () => {
-  it("shows every header, full question, option description and an independent free-text input", () => {
+  it("shows only the first question with its full options and no implicit selection", () => {
     const onRespond = vi.fn();
     const html = renderToStaticMarkup(
       <QuestionGroup questions={questions} busy={false} onRespond={onRespond} />,
     );
-    for (const question of questions) {
+    for (const question of questions.slice(0, 1)) {
       expect(html).toContain(`data-test-question-id="${question.id}"`);
-      expect(html).toContain(question.header);
       expect(html).toContain(question.question);
       for (const option of question.options) {
         expect(html).toContain(option.label);
         expect(html).toContain(option.description);
       }
     }
-    expect(html.match(/<fieldset/g)).toHaveLength(2);
+    expect(html).not.toContain(questions[1].question);
+    expect(html).toContain("Question 1 of 2.");
+    expect(html).toContain("Next");
+    expect(html.match(/<fieldset/g)).toHaveLength(1);
     expect(html.match(/type="radio"/g)).toHaveLength(2);
-    expect(html.match(/type="checkbox"/g)).toHaveLength(2);
-    expect(html.match(/data-testid="question-free-text"/g)).toHaveLength(2);
+    expect(html).not.toContain('type="checkbox"');
+    expect(html.match(/data-testid="question-free-text"/g)).toHaveLength(1);
     expect(html).not.toContain('checked=""');
     expect(html).toMatch(/data-testid="question-submit" disabled=""/);
     expect(onRespond).not.toHaveBeenCalled();
   });
 
   it("enables submission only after all questions have answers and disables all input while sending", () => {
-    const render = (busy: boolean, current: QuestionDrafts) =>
+    const render = (busy: boolean, current: QuestionDrafts, questionIndex = 1) =>
       renderToStaticMarkup(
         <QuestionGroupForm
           questions={questions}
           drafts={current}
+          questionIndex={questionIndex}
+          onNavigate={vi.fn()}
           busy={busy}
           onChange={vi.fn()}
           onRespond={vi.fn()}
@@ -72,14 +76,20 @@ describe("grouped question cards", () => {
       );
     const partial = render(false, new Map([["q0", { selected: [0], text: "" }]]));
     expect(partial).toMatch(/data-testid="question-submit" disabled=""/);
+    const first = render(false, new Map([["q0", { selected: [0], text: "" }]]), 0);
+    expect(first).not.toMatch(/data-testid="question-submit" disabled=""/);
+    expect(first).not.toContain('data-testid="question-back"');
     const complete = render(false, drafts);
     expect(complete).toContain('value="Next steps too"');
-    expect(complete.match(/checked=""/g)).toHaveLength(3);
+    expect(complete.match(/checked=""/g)).toHaveLength(2);
+    expect(complete).toContain("Question 2 of 2.");
+    expect(complete).toContain('data-testid="question-back"');
     expect(complete).not.toMatch(/data-testid="question-submit" disabled=""/);
     const busy = render(true, drafts);
-    expect(busy.match(/<fieldset[^>]*disabled=""/g)).toHaveLength(2);
+    expect(busy.match(/<fieldset[^>]*disabled=""/g)).toHaveLength(1);
     expect(busy).toMatch(/data-testid="question-submit" disabled=""/);
     expect(busy).toMatch(/data-testid="question-dismiss" disabled=""/);
+    expect(busy).toMatch(/data-testid="question-back" disabled=""/);
   });
 
   it("honors questions without free text and renders agent content as text", () => {
