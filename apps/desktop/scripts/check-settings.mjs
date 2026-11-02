@@ -114,7 +114,9 @@ try {
       await page.getByLabel("Default thinking level").selectOption("high");
       await page.waitForFunction(() => window.settingsFixture.general().default_effort === "high");
       await page.getByLabel("Default model").selectOption("gpt-5.5-codex");
-      await page.getByText("Codex lists this model's thinking levels once it has run it.").waitFor();
+      await page
+        .getByText("Codex lists this model's thinking levels once it has run it.")
+        .waitFor();
       assert.equal(await page.getByLabel("Default thinking level").count(), 0);
       await page.getByRole("radio", { name: "Ask", exact: true }).check();
       await page.getByRole("switch", { name: "Notifications" }).uncheck();
