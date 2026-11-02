@@ -11,7 +11,13 @@ export async function checkSettingsNavigation(page, url) {
       ["Instructions", "instructions"],
       ["Project memory", "memory"],
     ]) {
-      await navigation.getByRole("button", { name: label, exact: true }).focus();
+      const link = navigation.getByRole("button", { name: label, exact: true });
+      await link.focus();
+      // Mount effects and StrictMode cleanup must not take focus back after interaction.
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
+      assert.equal(await link.evaluate((element) => element === document.activeElement), true);
       await page.keyboard.press("Enter");
       assert.equal(
         (await page.evaluate(() => window.settingsFixture.calls())).at(-1),

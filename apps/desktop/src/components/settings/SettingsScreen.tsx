@@ -13,7 +13,7 @@ import {
   RefreshCcw,
   SlidersHorizontal,
 } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget } from "../../bindings";
 import type { DataCleanupApi } from "../../lib/dataCleanup";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
@@ -126,6 +126,8 @@ export function SettingsScreen({
   const [notices, setNotices] = useState(false);
   const [deleting, setDeleting] = useState(deleteDataOpenOnLoad);
   const heading = useRef<HTMLHeadingElement>(null);
+  const previousFocus = useRef<Element | null>(null);
+  const restoreFocus = useRef<number | null>(null);
   const customize = useRef(onCustomize);
   customize.current = onCustomize;
   useEffect(() => {
@@ -134,11 +136,18 @@ export function SettingsScreen({
     setPage(initialPage);
     if (initialPage === "instructions") customize.current?.("instructions");
   }, [navigationId, initialPage]);
-  useEffect(() => {
-    const previous = document.activeElement;
-    heading.current?.focus();
+  useLayoutEffect(() => {
+    if (restoreFocus.current !== null) {
+      cancelAnimationFrame(restoreFocus.current);
+      restoreFocus.current = null;
+    } else {
+      previousFocus.current = document.activeElement;
+      heading.current?.focus();
+    }
     return () => {
-      requestAnimationFrame(() => {
+      restoreFocus.current = requestAnimationFrame(() => {
+        restoreFocus.current = null;
+        const previous = previousFocus.current;
         if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
       });
     };
