@@ -188,6 +188,121 @@
           "category": "model",
           "kind": {
             "type": "select",
+            "current": "gpt-6-astra",
+            "choices": [
+              {
+                "value": "gpt-6.1-sol",
+                "name": "GPT-6.1-Sol",
+                "description": "Latest workhorse model for coding and everyday work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-astra",
+                "name": "GPT-6-Astra",
+                "description": "Frontier intelligence for the most demanding work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-sol",
+                "name": "GPT-6-Sol",
+                "description": "Previous generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-luna",
+                "name": "GPT-6-Luna",
+                "description": "Fast and affordable model for easier tasks.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-sol",
+                "name": "GPT-5.6-Sol",
+                "description": "Older generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-terra",
+                "name": "GPT-5.6-Terra",
+                "description": "Older balanced model for straightforward work.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-luna",
+                "name": "GPT-5.6-Luna",
+                "description": "Older fast and efficient model.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "ultra",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": "Fast responses with lighter reasoning",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balances speed and reasoning depth for everyday tasks",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "Greater reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": "Extra high reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": "Maximum reasoning depth for the hardest problems",
+                "group": null
+              },
+              {
+                "value": "ultra",
+                "name": "ultra",
+                "description": "Maximum reasoning with automatic task delegation",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
             "current": "gpt-6-luna",
             "choices": [
               {

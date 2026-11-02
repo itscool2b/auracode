@@ -1,4 +1,5 @@
-//! Every supported synthetic wire exchange conforms to the exact installed CLI schema.
+//! Stable fixture frames conform to the installed CLI schema. The documented synthetic
+//! collaboration-list extension is checked exactly, since the stable bundle excludes that method.
 #[cfg(test)]
 mod conformance {
     use serde_json::{Value, json};
@@ -51,6 +52,17 @@ mod conformance {
                     continue;
                 };
                 let direction = record["d"].as_str().unwrap();
+                if msg["id"] == "aura-replay-collaboration" {
+                    let expected = match direction {
+                        "out" => {
+                            json!({"id":"aura-replay-collaboration","method":"collaborationMode/list","params":{}})
+                        }
+                        "in" => json!({"id":"aura-replay-collaboration","result":{"data":[]}}),
+                        _ => panic!("invalid synthetic collaboration direction"),
+                    };
+                    assert_eq!(*msg, expected, "documented derived handshake only");
+                    continue;
+                }
                 let (schema_name, payload) = if let Some(method) = msg["method"].as_str() {
                     let request = msg.get("id").is_some();
                     if request {

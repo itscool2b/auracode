@@ -1,7 +1,8 @@
 {"d":"note","note":{"text":"Recorded Codex 0.162.1 Windows free probe-interrupted-start. Account usage, plan, installation identity, MCP names and incidental stderr sanitized; no prompts sent."}}
+{"d":"note","note":{"adaptation":"session-controls-9607df94","text":"Derived replay fixture: experimental API enabled; synthetic empty collaboration catalog added after startup. Original captured traffic is retained in originals/ when applicable."}}
 {"t":0,"d":"note","note":{"spawn":{"label":"codex app-server --listen stdio://","program":"<HOME>\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe","args":["app-server","--listen","stdio://"],"cwd":"<CWD>","removed":[],"set":[],"pid":12345}}}
 {"t":0,"d":"note","note":{"start":{"agent_id":"codex","dialect":"codex","resume":null,"autonomy":"full_auto","desired":{"effort":{"type":"choice","value":"ultra"},"model":{"type":"choice","value":"gpt-6-astra"}},"spawn_id":"019a0000-0000-7000-8000-000000000002"}}}
-{"t":0,"d":"out","msg":{"id":1,"method":"initialize","params":{"clientInfo":{"name":"auracode","title":"auracode","version":"0.1.0"},"capabilities":{"experimentalApi":false}}}}
+{"t":0,"d":"out","msg":{"id":1,"method":"initialize","params":{"clientInfo":{"name":"auracode","title":"auracode","version":"0.1.0"},"capabilities":{"experimentalApi":true}}}}
 {"t":612,"d":"in","msg":{"id":1,"result":{"userAgent":"Codex Desktop/0.162.1 (Windows 10.0.26300; x86_64) dumb (auracode; 0.1.0)","codexHome":"<HOME>\\.codex","platformFamily":"windows","platformOs":"windows"}}}
 {"t":612,"d":"in","msg":{"method":"remoteControl/status/changed","params":{"status":"disabled","serverName":"<HOST>","installationId":"00000000-0000-0000-0000-000000000000","environmentId":null},"emittedAtMs":1}}
 {"t":612,"d":"out","msg":{"method":"initialized","params":{}}}
