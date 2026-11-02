@@ -110,7 +110,12 @@ try {
       const general = () => page.evaluate(() => window.settingsFixture.general());
       assert.equal(await page.getByLabel("Default model").count(), 0);
       await page.getByLabel("Default agent").selectOption("codex");
+      // A thinking level for the agent's own default model; another model clears it.
+      await page.getByLabel("Default thinking level").selectOption("high");
+      await page.waitForFunction(() => window.settingsFixture.general().default_effort === "high");
       await page.getByLabel("Default model").selectOption("gpt-5.5-codex");
+      await page.getByText("Codex lists this model's thinking levels once it has run it.").waitFor();
+      assert.equal(await page.getByLabel("Default thinking level").count(), 0);
       await page.getByRole("radio", { name: "Ask", exact: true }).check();
       await page.getByRole("switch", { name: "Notifications" }).uncheck();
       await page.getByRole("switch", { name: "Keep awake" }).uncheck();
@@ -119,6 +124,7 @@ try {
       assert.deepEqual(await general(), {
         default_agent: "codex",
         default_model: "gpt-5.5-codex",
+        default_effort: null,
         default_autonomy: "ask",
         automatic_checkpoints: false,
         notifications: false,
