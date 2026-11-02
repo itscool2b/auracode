@@ -89,6 +89,168 @@ async function ready() {
   throw new Error(`Preview did not start: ${serverOutput}`);
 }
 
+async function workingLifecycle(page, engine, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "no-preference" });
+  await page.goto(`${url}/?preview=thinking&strict`);
+  const line = page.getByTestId("working-line");
+  await line.waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  assert.equal(await line.count(), 1, `${engine}/${theme}: duplicate working lines`);
+  assert.equal(await line.locator('[role="status"]').textContent(), "Claude Code is working");
+  const initial = await line.getAttribute("data-test-verb");
+  await page.waitForFunction(
+    (before) => document.querySelector('[data-testid="working-line"]')?.dataset.testVerb !== before,
+    initial,
+    { timeout: 4500 },
+  );
+  assert.match((await line.locator(".chat-working-time").textContent()) ?? "", /^[1-9]\d* s$/);
+  assert.equal(await line.locator(".chat-working-words").getAttribute("aria-hidden"), "true");
+
+  // A hidden document stops choosing new words. Bringing it back starts one fresh interval.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  const paused = await line.getAttribute("data-test-verb");
+  await page.waitForTimeout(3600);
+  assert.equal(await line.getAttribute("data-test-verb"), paused, "hidden working words rotate");
+  await page.evaluate(() => {
+    delete document.hidden;
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+
+  const step = (name) =>
+    page.evaluate(
+      (detail) =>
+        window.dispatchEvent(new CustomEvent("auracode-preview-working-step", { detail })),
+      name,
+    );
+  await step("tools");
+  const group = page.getByTestId("tool-group").last();
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-testid="tool-group"]')]
+      .at(-1)
+      ?.textContent.includes("searching for 1 pattern"),
+  );
+  assert.match((await group.textContent()) ?? "", /Reading 1 file and searching for 1 pattern/);
+  assert.equal(await group.getAttribute("data-test-count"), "2", "thought split a tool stretch");
+  assert.equal(await line.count(), 1, "tools duplicated the working line");
+  assert.doesNotMatch(
+    (await page.getByTestId("transcript").textContent()) ?? "",
+    /Thought for|private fixture reasoning|Checking the narrow layout/,
+  );
+  await group.focus();
+  await page.evaluate(() => {
+    window.__disclosureOverlaps = [];
+    const start = performance.now();
+    const sample = () => {
+      const rows = [...document.querySelectorAll("[data-row-key]")]
+        .map((node) => ({ key: node.dataset.rowKey, box: node.getBoundingClientRect() }))
+        .sort((a, b) => a.box.top - b.box.top);
+      for (let index = 1; index < rows.length; index++) {
+        const previous = rows[index - 1];
+        const next = rows[index];
+        if (previous.box.bottom > next.box.top + 1)
+          window.__disclosureOverlaps.push([previous.key, next.key]);
+      }
+      // rAF precedes ResizeObserver. Inspect after the frame's observer corrections, as painted.
+      if (performance.now() - start < 400) requestAnimationFrame(() => setTimeout(sample, 0));
+    };
+    requestAnimationFrame(() => setTimeout(sample, 0));
+  });
+  await page.keyboard.press("Enter");
+  assert.equal(await group.getAttribute("aria-expanded"), "true");
+  await settled(page);
+  await page.waitForTimeout(180);
+  assert.deepEqual(
+    await page.evaluate(() => window.__disclosureOverlaps),
+    [],
+    "disclosure height changes overlapped neighboring virtual rows in Strict Mode",
+  );
+  assert.equal(await page.locator('[data-test-turn-id="next"] [data-test-kind="tool"]').count(), 2);
+  await page.keyboard.press("Space");
+  await settled(page);
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('[data-test-turn-id="next"] [data-test-kind="tool"]').length === 0,
+  );
+  assert.equal(await group.getAttribute("aria-expanded"), "false");
+
+  // OS preference and application overrides both stop all working-line motion immediately.
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="working-line"]')?.hasAttribute("data-still"),
+  );
+  const still = await line.getAttribute("data-test-verb");
+  await page.waitForTimeout(3600);
+  assert.equal(await line.getAttribute("data-test-verb"), still, "reduced-motion words rotate");
+  assert.equal(await line.locator(".chat-working-sheen").count(), 0);
+  assert.equal(
+    await line.evaluate(
+      (node) =>
+        node.getAnimations({ subtree: true }).filter((a) => a.playState === "running").length,
+    ),
+    0,
+  );
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "no-preference" });
+  const motionModule = `/@fs/${resolve(app, "../../packages/ui/src/motion.ts").replaceAll("\\", "/")}`;
+  for (const preference of ["reduced", "off"]) {
+    await page.evaluate(
+      async ({ path, preference }) => {
+        const { setMotionPreference } = await import(path);
+        setMotionPreference(preference);
+      },
+      { path: motionModule, preference },
+    );
+    await page.waitForFunction(() =>
+      document.querySelector('[data-testid="working-line"]')?.hasAttribute("data-still"),
+    );
+    assert.equal(await line.locator(".chat-working-sheen").count(), 0);
+    assert.equal(
+      await line.evaluate(
+        (node) =>
+          node.getAnimations({ subtree: true }).filter((a) => a.playState === "running").length,
+      ),
+      0,
+    );
+  }
+  await page.evaluate(
+    async (path) => (await import(path)).setMotionPreference("full"),
+    motionModule,
+  );
+
+  await line.evaluate((node) => {
+    window.__workingFooterRow = node.closest("[data-row-key]");
+  });
+  await step("text");
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="working-line"]')?.hasAttribute("data-hidden"),
+  );
+  await step("rest");
+  await page.waitForTimeout(100);
+  assert.equal(
+    await line.getAttribute("data-hidden"),
+    "",
+    "working line returned before text rested",
+  );
+  await page.waitForFunction(
+    () => !document.querySelector('[data-testid="working-line"]')?.hasAttribute("data-hidden"),
+  );
+  await step("finish");
+  await line.waitFor({ state: "detached" });
+  const footer = page.locator('[data-test-turn-id="next"] [data-testid="turn-footer"]');
+  await footer.waitFor();
+  assert.equal(
+    await footer.evaluate((node) => node.closest("[data-row-key]") === window.__workingFooterRow),
+    true,
+    "footer remounted the working row",
+  );
+  assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
+  await settled(page);
+  const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  assert.deepEqual(scan.violations, [], `${engine}/${theme}: live-turn accessibility`);
+}
+
 async function inspect(engine, launcher) {
   const browser = await launcher.launch({ headless: true });
   const errors = [];
@@ -115,6 +277,7 @@ async function inspect(engine, launcher) {
     });
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
+    for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [
@@ -133,7 +296,7 @@ async function inspect(engine, launcher) {
           .locator(mode === "new" ? '[data-testid="new-chat"]' : '[data-test-phase="live"]')
           .waitFor();
         await page.evaluate(() => document.fonts.ready);
-        if (mode === "diff") await page.locator('[data-test-kind="tool"] summary').click();
+        if (mode === "diff") await page.getByTestId("tool-group").click();
         // Finish finite control transitions before testing text contrast or taking screenshots.
         await page.waitForTimeout(300);
         assert.equal(
@@ -165,10 +328,10 @@ async function inspect(engine, launcher) {
         results.push({ theme, mode, violations });
         await page.screenshot({ path: resolve(out, `${engine}-${theme}-${mode}.png`) });
         if (mode === "recorded-thinking") {
-          await page.locator(".chat-thought summary").click();
-          assert.match(
-            (await page.locator(".chat-thought").textContent()) ?? "",
-            /did not share its reasoning/,
+          assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
+          assert.doesNotMatch(
+            (await page.getByTestId("transcript").textContent()) ?? "",
+            /Thought for|did not share its reasoning/,
           );
         }
         if (mode === "diff") {
@@ -219,7 +382,7 @@ async function inspect(engine, launcher) {
           });
           assert.deepEqual(
             rendered.map((turn) => turn.items),
-            [["thought", "tool:read:completed", "tool:execute:completed", "message"], ["message"]],
+            [["tool:read:completed", "tool:execute:completed", "message"], ["message"]],
             "native smoke reader lost virtual transcript pieces",
           );
           assert.equal(rendered[1].prompt, "A browser-only verification message");
@@ -237,6 +400,8 @@ async function inspect(engine, launcher) {
         );
       }
     }
+
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
 
     // A short native-smoke history can release the sticky prompt at the bottom. Observe idle
     // frames too: reaching the end once must not leave an alternating header/scroll correction.
@@ -359,7 +524,7 @@ async function inspect(engine, launcher) {
         { prompt: "/echo Hello from the smoke run", items: ["message"] },
         {
           prompt: "Make the project list easier to scan, and keep the active chat visible.",
-          items: ["thought", "tool:read:completed", "tool:execute:completed", "message"],
+          items: ["tool:read:completed", "tool:execute:completed", "message"],
         },
         {
           prompt: "/permission auto",
@@ -507,6 +672,7 @@ async function inspect(engine, launcher) {
     );
 
     await page.goto(`${url}/?preview=focus-group`);
+    await page.getByTestId("tool-group").click();
     const firstCopy = page.getByRole("button", { name: "Copy output", exact: true }).first();
     await firstCopy.focus();
     await page.evaluate(() =>
@@ -520,6 +686,11 @@ async function inspect(engine, launcher) {
     assert.equal(await page.getByTestId("tool-group").getAttribute("aria-expanded"), "true");
     await page.getByTestId("tool-group").click();
     await page.getByTestId("tool-group").click();
+    assert.equal(
+      await firstCopy.isVisible(),
+      true,
+      "group remount forgot the opened single-call output",
+    );
     await firstCopy.focus();
     await page.evaluate(() =>
       window.dispatchEvent(new CustomEvent("auracode-preview-tool-step", { detail: "finish" })),
@@ -672,7 +843,7 @@ async function inspect(engine, launcher) {
     );
     const lastTool = page
       .locator('[data-test-kind="tool"]')
-      .filter({ hasText: "Read file 999" })
+      .filter({ hasText: "file 999" })
       .locator("details");
     await lastTool.locator("summary").click();
     await page.getByTestId("composer-input").focus();
@@ -683,14 +854,7 @@ async function inspect(engine, launcher) {
     // Unmounting follows the next layout pass; under load WebKit can take longer than a fixed sleep.
     await lastTool.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
-    const thought = page.locator(".chat-thought");
-    await thought.locator("summary").click();
-    // Opening the disclosure can change virtual row heights and restore the tail position.
-    // Scroll away again so the jump control is offered before testing the return to the tool.
-    await page.getByTestId("transcript").evaluate((node) => {
-      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
-      node.scrollTop = 0;
-    });
+    assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
     await page.getByTestId("jump-latest").click();
     await lastTool.waitFor();
     assert.notEqual(
@@ -702,12 +866,8 @@ async function inspect(engine, launcher) {
       node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       node.scrollTop = 0;
     });
-    await thought.waitFor();
-    assert.notEqual(
-      await thought.getAttribute("open"),
-      null,
-      "thought disclosure choice was forgotten",
-    );
+    await group.waitFor();
+    assert.equal(await group.getAttribute("aria-expanded"), "true");
     await page.getByTestId("transcript").evaluate((node) => {
       node.scrollTop = node.scrollHeight / 2;
     });
@@ -724,7 +884,8 @@ async function inspect(engine, launcher) {
     await stickyPrompt.focus();
     await page.keyboard.press("Enter");
     await stickyPrompt.waitFor({ state: "detached" });
-    const promptBounds = await page.locator('[data-test-kind="user"]').boundingBox();
+    // The prompt row owns its spacing; the message inside now has 8px of breathing room.
+    const promptBounds = await page.locator('.chat-segment[data-item="user"]').boundingBox();
     const transcriptBounds = await page.getByTestId("transcript").boundingBox();
     assert.ok(
       promptBounds && transcriptBounds && Math.abs(promptBounds.y - transcriptBounds.y) < 3,
