@@ -523,15 +523,40 @@ impl Session {
             None => Ok(execution),
         }
     }
+    /// Claude reported the model it runs, often as a resolved id (`claude-opus-5-5`). A report
+    /// that resolves to the model already selected keeps the selection: several aliases resolve to
+    /// one id (`default` and `opus`), and the first match would show the wrong one. A different
+    /// model replaces it and drops an explicit effort chosen for the old one.
     fn apply_model(&mut self, model: &str) -> bool {
-        if model.is_empty() || self.model == model {
+        if model.is_empty()
+            || self.model == model
+            || model_identity(&self.init, &self.model) == model_identity(&self.init, model)
+        {
             return false;
         }
+        self.select_model(model);
+        true
+    }
+    /// The person chose `chosen` and Claude answered with the model it runs now (`reported`). The
+    /// choice stays the selection unless Claude runs a model it does not resolve to.
+    fn choose_model(&mut self, chosen: &str, reported: Option<&str>) {
+        let next = match reported.filter(|model| !model.is_empty()) {
+            Some(reported)
+                if model_identity(&self.init, chosen) != model_identity(&self.init, reported) =>
+            {
+                reported
+            }
+            _ => chosen,
+        };
+        if !next.is_empty() && self.model != next {
+            self.select_model(next);
+        }
+    }
+    fn select_model(&mut self, model: &str) {
         if model_identity(&self.init, &self.model) != model_identity(&self.init, model) {
             self.effort = None;
         }
         self.model = model.to_owned();
-        true
     }
     fn native_metadata(&mut self, frame: &Value) {
         if frame["type"] != "system"
@@ -705,11 +730,23 @@ impl Session {
         }));
         self.refresh_telemetry();
     }
+    /// A saved effort the model no longer offers (it was chosen for another model, or Claude
+    /// changed its levels) is left out with a notice; the session starts at the model's default.
     fn configure_effort(&mut self) {
         if let Some(value) = self.setup.desired.get("effort").cloned() {
             match self.effort_request(&value) {
                 Ok(request) => self.request(request, Purpose::InitialEffort),
-                Err(err) => self.failure = Some(err),
+                Err(_) => {
+                    self.setup.desired.remove("effort");
+                    self.outbox.push_back(DriverEvent::Event {
+                        turn: None,
+                        event: AuraEvent::Notice {
+                            level: NoticeLevel::Info,
+                            message: "This model does not offer the thinking level chosen earlier, so it starts at its default.".into(),
+                        },
+                    });
+                    self.finish_start();
+                }
             }
         } else {
             self.finish_start();
@@ -1273,23 +1310,24 @@ impl Session {
                     .unwrap_or("default")
                     .into();
                 self.idle = payload["session_state"] == "idle";
-                self.model = self
-                    .observed_model
-                    .clone()
-                    .or_else(|| {
-                        self.setup
-                            .desired
-                            .get("model")
-                            .and_then(|v| {
-                                if let ConfigValue::Choice { value: m } = v {
-                                    Some(m.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .or_else(|| payload["model"].as_str().map(str::to_owned))
-                    })
-                    .unwrap_or_else(|| "default".into());
+                let desired = match self.setup.desired.get("model") {
+                    Some(ConfigValue::Choice { value }) => Some(value.clone()),
+                    _ => None,
+                };
+                // An early `system/init` names the resolved id; the alias chosen for it stays.
+                self.model = match (self.observed_model.clone(), desired) {
+                    (Some(observed), Some(desired))
+                        if model_identity(&self.init, &observed)
+                            == model_identity(&self.init, &desired) =>
+                    {
+                        desired
+                    }
+                    (Some(observed), _) => observed,
+                    (None, Some(desired)) => desired,
+                    (None, None) => payload["model"]
+                        .as_str()
+                        .map_or_else(|| "default".into(), str::to_owned),
+                };
                 for key in [
                     "pending_permission_requests",
                     "pending_user_dialog_requests",
@@ -1386,7 +1424,7 @@ impl Session {
                                 &self.mode,
                             )));
                         } else if id == "model" {
-                            self.apply_model(payload["model"].as_str().unwrap_or(&value));
+                            self.choose_model(&value, payload["model"].as_str());
                         } else {
                             self.effort = explicit_effort(&value);
                         }
