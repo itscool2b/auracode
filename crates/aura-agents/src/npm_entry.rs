@@ -27,6 +27,9 @@ pub(crate) fn is_shim(path: &Path) -> bool {
 
 /// Only package.json is read. A relative bin must remain inside this exact reviewed package.
 pub(crate) fn entry(agent: &str, shim: &Path) -> Option<PathBuf> {
+    if agent == "cursor" {
+        return crate::cursor_entry::command(shim).map(|(_, entry)| entry);
+    }
     let (package, command) = package(agent)?;
     if !is_shim(shim) || !shim.file_stem()?.eq_ignore_ascii_case(command) || !shim.is_file() {
         return None;
@@ -79,6 +82,14 @@ pub(crate) fn command(
 ) -> Result<(PathBuf, Vec<OsString>), String> {
     if !cfg!(windows) || !is_shim(path) {
         return Ok((path.to_owned(), Vec::new()));
+    }
+    if agent == "cursor" {
+        return crate::cursor_entry::command(path)
+            .map(|(node, entry)| (node, vec![entry.into_os_string()]))
+            .ok_or_else(|| {
+                "Cursor's Windows runtime is incomplete. Reinstall its official CLI distribution."
+                    .to_owned()
+            });
     }
     let entry = entry(agent, path).ok_or_else(|| {
         "The shell shim has no supported package bin. Install the vendor's executable or reviewed npm package."

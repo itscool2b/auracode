@@ -8,12 +8,14 @@ import {
   type PromptAck,
   type SteeringAck,
 } from "../bindings";
+import { type DictationApi, dictationApi } from "./dictation";
 import { settle } from "./ipc";
 
 export type ComposerContext = Pick<ComposerInput, "attachments" | "mentions">;
 
 /** UI orchestration only. Rust validates, stores, normalizes and resolves every context item. */
 export interface ComposerTransport {
+  readonly dictation?: DictationApi;
   file?(chatId: string, path: string): Promise<ProjectFilePreview>;
   draft(chatId: string): Promise<ComposerDraft>;
   saveDraft(chatId: string, input: ComposerInput): Promise<void>;
@@ -26,6 +28,7 @@ export interface ComposerTransport {
 }
 
 export const composerApi: ComposerTransport = {
+  dictation: dictationApi,
   file: async (id, path) => settle(commands.projectFilePreview(id, path)),
   draft: async (id) => settle(commands.composerDraft(id)),
   saveDraft: async (id, input) => {

@@ -55,6 +55,23 @@ The other catalog agents keep their official guides, for these reasons:
 - **Antigravity**: Google distributes a desktop app and an `agy` install script; neither offers a
   pinned version or checksum in the vendor's documentation.
 
+### Discovering an installation added while Aura is open
+
+The installation observer refreshes the resolved environment before its 30-second metadata
+check. Newly created known tool directories and changes to the Windows registry PATH or Unix
+login-shell PATH can therefore become available without restarting Aura. Executable probes run
+only when installation metadata or saved choices change; running sessions keep their original
+environment and executable. The agent list picks up background results on its regular refresh.
+
+Cursor's official Windows installer places `cursor-agent.cmd` beside `versions/<build>/node.exe`
+and `index.js` under `%LOCALAPPDATA%/cursor-agent`. That directory is a known tool location. Aura
+qualifies the `@anysphere/agent-cli-runtime` manifest and runs the bundled Node with its entry
+directly. It does not execute the shell launcher. Version discovery is bounded, supports dated
+and timestamped builds, ignores incomplete distributions, and confines runtime files to their
+distribution. The vendor-named `cursor-agent` entry remains required; a generic `agent` executable
+is not assumed to be Cursor. The [current installation guide](https://cursor.com/docs/cli/installation)
+also documents the shorter `agent` alias. This adds discovery support, not automatic installation.
+
 ### Sign in
 
 Sign in runs the agent's own documented login command for the detected executable, in the

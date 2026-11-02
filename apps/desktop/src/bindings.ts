@@ -266,6 +266,11 @@ export const commands = {
 	composerSteer: (chatId: string, expectedTurnId: string, input: ComposerInput) => typedError<SteeringAck, AppError>(__TAURI_INVOKE("composer_steer", { chatId, expectedTurnId, input })),
 	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
+	dictationModel: () => typedError<DictationModel, AppError>(__TAURI_INVOKE("dictation_model")),
+	dictationDownload: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_download", { id, channel })),
+	dictationStart: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, channel })),
+	dictationStop: (id: string) => __TAURI_INVOKE<void>("dictation_stop", { id }),
+	dictationCancel: (id: string) => __TAURI_INVOKE<void>("dictation_cancel", { id }),
 	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
 	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
 	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
@@ -1447,6 +1452,14 @@ export type DeviceIdentity = {
 	 *  2^53 ms, hundreds of millennia away.
 	 */
 	created_at: number,
+};
+
+export type DictationEvent = { state: "downloading"; received: number; total: number } | { state: "model_ready" } | { state: "preparing" } | { state: "recording"; seconds: number; level: number | null; limit_seconds: number } | { state: "transcribing"; percent: number } | { state: "complete"; text: string } | { state: "cancelled" } | { state: "failed"; message: string };
+
+export type DictationModel = {
+	installed: boolean,
+	name: string,
+	bytes: number,
 };
 
 export type EditablePrompt = {
