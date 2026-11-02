@@ -1,5 +1,13 @@
 import { ArrowLeft, BookOpen, FileText, Puzzle } from "lucide-react";
-import { type ComponentProps, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  type ComponentProps,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { InstructionsTarget } from "../../bindings";
 import { memoryChats } from "../../lib/projectMemory";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
@@ -53,6 +61,15 @@ export function CustomizeScreen({
   readonly onAgents: () => void;
   readonly services?: CustomizeServices;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focused = useRef(false);
+  useLayoutEffect(() => {
+    // Focus the destination before interaction, once across StrictMode's effect replay.
+    if (!focused.current) {
+      focused.current = true;
+      heading.current?.focus();
+    }
+  }, []);
   const organization = useSyncExternalStore(
     workspace?.subscribe ?? noSubscribe,
     workspace?.getSnapshot ?? emptyWorkspace,
@@ -88,7 +105,9 @@ export function CustomizeScreen({
           <ArrowLeft size={14} />
           Back to chats
         </button>
-        <h1>Customize</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          Customize
+        </h1>
         <p>Tools, instructions, and shared project context for your agents.</p>
       </header>
       <nav className="customize-tabs" aria-label="Customize sections">

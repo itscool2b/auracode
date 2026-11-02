@@ -482,8 +482,26 @@ export function App({
             }}
             onBack={() => setView(settingsReturn)}
             onAgents={() => setView("agents")}
-            onLibrary={() => {
-              setCustomizeEntry({ id: Date.now(), section: "plugins", projectId: null });
+            onCustomize={(section) => {
+              const target = settingsEntry.target;
+              const organization = workspace?.getSnapshot().data;
+              const projectId =
+                target?.type === "chat"
+                  ? organization?.chats.find((entry) => entry.chat.id === target.chat_id)
+                      ?.project_id
+                  : target?.type === "folder"
+                    ? organization?.projects.find((project) =>
+                        project.folders.some((folder) => folder.id === target.folder_id),
+                      )?.id
+                    : null;
+              setCustomizeEntry({
+                id: Date.now(),
+                section,
+                projectId: projectId ?? null,
+                target,
+                activeChatId: target?.type === "chat" ? target.chat_id : undefined,
+                chatLabel: settingsEntry.chatLabel,
+              });
               setView("library");
             }}
             onDiagnostics={() => setView("diagnostics")}

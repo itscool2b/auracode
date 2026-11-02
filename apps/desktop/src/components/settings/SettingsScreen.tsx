@@ -2,6 +2,7 @@ import { Keycap, Logo } from "@auracode/ui/graphite";
 import {
   ArrowLeft,
   ArrowUpRight,
+  BookOpen,
   Bot,
   CircleUser,
   FileText,
@@ -12,13 +13,14 @@ import {
   RefreshCcw,
   SlidersHorizontal,
 } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget } from "../../bindings";
 import type { DataCleanupApi } from "../../lib/dataCleanup";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
+import type { CustomizeSection } from "../customize/CustomizeScreen";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { DeleteDataDialog } from "./DeleteDataDialog";
@@ -72,6 +74,7 @@ export function SettingsScreen({
   onBack,
   onAgents,
   onLibrary,
+  onCustomize,
   onSetup,
   onDiagnostics,
   onImported,
@@ -95,6 +98,7 @@ export function SettingsScreen({
   readonly onBack: () => void;
   readonly onAgents: () => void;
   readonly onLibrary?: () => void;
+  readonly onCustomize?: (section: CustomizeSection) => void;
   readonly onSetup: () => void;
   readonly onDiagnostics: () => void;
   readonly onImported?: () => Promise<void>;
@@ -122,16 +126,28 @@ export function SettingsScreen({
   const [notices, setNotices] = useState(false);
   const [deleting, setDeleting] = useState(deleteDataOpenOnLoad);
   const heading = useRef<HTMLHeadingElement>(null);
+  const previousFocus = useRef<Element | null>(null);
+  const restoreFocus = useRef<number | null>(null);
+  const customize = useRef(onCustomize);
+  customize.current = onCustomize;
   useEffect(() => {
     void navigationId;
     // A new website link selects Account without destroying an existing code/key setup.
     setPage(initialPage);
+    if (initialPage === "instructions") customize.current?.("instructions");
   }, [navigationId, initialPage]);
-  useEffect(() => {
-    const previous = document.activeElement;
-    heading.current?.focus();
+  useLayoutEffect(() => {
+    if (restoreFocus.current !== null) {
+      cancelAnimationFrame(restoreFocus.current);
+      restoreFocus.current = null;
+    } else {
+      previousFocus.current = document.activeElement;
+      heading.current?.focus();
+    }
     return () => {
-      requestAnimationFrame(() => {
+      restoreFocus.current = requestAnimationFrame(() => {
+        restoreFocus.current = null;
+        const previous = previousFocus.current;
         if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
       });
     };
@@ -184,24 +200,40 @@ export function SettingsScreen({
         </button>
         <h2>Settings</h2>
         <nav>
-          {PAGES.map(([value, label, Icon]) => (
-            <button
-              key={value}
-              type="button"
-              aria-current={page === value ? "page" : undefined}
-              onClick={() => open(value)}
-            >
-              <Icon size={16} aria-hidden="true" />
-              <span className="settings-nav-label">{label}</span>
-            </button>
-          ))}
+          {PAGES.filter(([value]) => value !== "instructions" || !onCustomize).map(
+            ([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                aria-current={page === value ? "page" : undefined}
+                onClick={() => open(value)}
+              >
+                <Icon size={16} aria-hidden="true" />
+                <span className="settings-nav-label">{label}</span>
+              </button>
+            ),
+          )}
           <hr />
           <button type="button" onClick={onAgents}>
             <Bot size={16} aria-hidden="true" />
             <span className="settings-nav-label">Agents</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </button>
-          {onLibrary ? (
+          {onCustomize ? (
+            (
+              [
+                ["plugins", "Plugins & MCP", Puzzle],
+                ["instructions", "Instructions", FileText],
+                ["memory", "Project memory", BookOpen],
+              ] as const
+            ).map(([section, label, Icon]) => (
+              <button key={section} type="button" onClick={() => onCustomize(section)}>
+                <Icon size={16} aria-hidden="true" />
+                <span className="settings-nav-label">{label}</span>
+                <ArrowUpRight size={14} aria-hidden="true" />
+              </button>
+            ))
+          ) : onLibrary ? (
             <button type="button" onClick={onLibrary}>
               <Puzzle size={16} aria-hidden="true" />
               <span className="settings-nav-label">Plugins &amp; MCP</span>
@@ -242,7 +274,7 @@ export function SettingsScreen({
               reveal={reveal}
             />
           ) : null}
-          {page === "instructions" ? (
+          {page === "instructions" && !onCustomize ? (
             <InstructionsPanel
               api={instructions}
               setup={setup}
