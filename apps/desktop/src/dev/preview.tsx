@@ -1,5 +1,5 @@
 /** Development-only visual harness. It never starts a process or uses the native transport. */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
 import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
@@ -693,6 +693,37 @@ function Preview() {
     window.addEventListener("auracode-preview-tool-step", step);
     return () => window.removeEventListener("auracode-preview-tool-step", step);
   }, [mode]);
+  useEffect(() => {
+    if (mode !== "thinking") return;
+    // Browser acceptance advances one live turn deterministically, without sending a prompt.
+    const step = (event: Event) => {
+      switch ((event as CustomEvent).detail) {
+        case "tools":
+          publishPreview.current?.([
+            ev.thoughtDone("next-thought", 0),
+            ev.toolCall("working-read", { title: "Read first.ts", status: "completed" }),
+            ev.thought("working-hidden", "Do not render this private fixture reasoning."),
+            ev.thoughtDone("working-hidden", 0),
+            ev.toolCall("working-search", { kind: "search", title: "Search for sidebar" }),
+          ]);
+          break;
+        case "text":
+          publishPreview.current?.([
+            ev.toolUpdate("working-search", { status: "completed" }),
+            ev.message("working-answer", "A streamed answer."),
+          ]);
+          break;
+        case "rest":
+          publishPreview.current?.([ev.messageDone("working-answer")]);
+          break;
+        case "finish":
+          publishPreview.current?.([ev.turnEnded("next", "end_turn", { durationMs: 12_000 })]);
+          break;
+      }
+    };
+    window.addEventListener("auracode-preview-working-step", step);
+    return () => window.removeEventListener("auracode-preview-working-step", step);
+  }, [mode]);
   const transport = useMemo(() => {
     const events =
       mode === "recorded-thinking"
@@ -826,7 +857,6 @@ function Preview() {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
     };
-    publishPreview.current = publish;
     const context = withPreviewContext(
       new FakeTransport({
         lists: async () => choices,
@@ -881,6 +911,7 @@ function Preview() {
           return before;
         },
         attach: async (chatId, onFrame) => {
+          publishPreview.current = publish;
           receive = onFrame;
           attached.current = true;
           return attachResult(
@@ -1075,5 +1106,12 @@ function Preview() {
 }
 
 export function mountPreview(container: HTMLElement): void {
-  createRoot(container).render(<Preview />);
+  const preview = <Preview />;
+  createRoot(container).render(
+    new URLSearchParams(location.search).has("strict") ? (
+      <StrictMode>{preview}</StrictMode>
+    ) : (
+      preview
+    ),
+  );
 }
