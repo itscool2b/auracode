@@ -209,6 +209,14 @@ impl ChatStore {
     pub(crate) fn workspace_changes(&self) -> watch::Receiver<u64> {
         self.shared.workspace_activity.subscribe()
     }
+    /// Every committed change to a project's memory, history or proposals, whether the editor or
+    /// an agent made it, naming an agent's direct edit. A lagging receiver should re-read
+    /// everything.
+    pub fn memory_changes(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<aura_protocol::memory::ProjectMemoryChanged> {
+        self.shared.memory_changes.subscribe()
+    }
     #[cfg(test)]
     pub(crate) fn remove_workspace_before_begin(&self, chat: &str) {
         self.shared.workspace_activity.remove_before_begin(chat);

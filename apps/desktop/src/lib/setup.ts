@@ -47,8 +47,8 @@ export function preselectAgent(
 }
 
 /**
- * Rust's defaults: full auto, background services on, automatic checkpoints off, and Git-ignored
- * instruction files copied into new worktree chats.
+ * Rust's defaults: full auto, background services on, automatic checkpoints off, Git-ignored
+ * instruction files copied into new worktree chats, and agents editing project memory directly.
  */
 export const DEFAULT_GENERAL: GeneralPreferences = {
   default_agent: null,
@@ -60,4 +60,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   close_to_tray: true,
   config_sync_paused: [],
   copy_instructions_to_worktrees: true,
+  agent_memory_writes: true,
 };

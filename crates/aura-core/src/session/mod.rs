@@ -334,6 +334,10 @@ pub(crate) struct Shared {
     pub(crate) worktree_instruction_copies: AtomicBool,
     /// The profile's added agent accounts. `None` (tests, the CLI): agents use their own sign-in.
     pub(crate) agent_accounts: Mutex<Option<Arc<crate::agent_accounts::AgentAccountsStore>>>,
+    /// Agents edit project memory directly through their memory grants. Every grant reads this on
+    /// each request, so the profile's switch reaches running chats at once. On by default, as the
+    /// profile preference is.
+    pub(crate) agent_memory_writes: Arc<AtomicBool>,
     /// The model choices each agent reported in this run, by agent id, for Settings.
     pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
@@ -469,6 +473,7 @@ impl SessionManager {
                     automatic_checkpoints: AtomicBool::new(false),
                     worktree_instruction_copies: AtomicBool::new(true),
                     agent_accounts: Mutex::new(None),
+                    agent_memory_writes: Arc::new(AtomicBool::new(true)),
                     reported_models: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
@@ -1231,6 +1236,18 @@ impl SessionManager {
         self.shared()
             .worktree_instruction_copies
             .load(Ordering::Acquire)
+    }
+
+    /// Applies the active profile's choice to every chat's memory tools at once, running chats
+    /// included. Off: agents can still read memory and propose updates for review.
+    pub fn set_agent_memory_writes(&self, enabled: bool) {
+        self.shared()
+            .agent_memory_writes
+            .store(enabled, Ordering::Release);
+    }
+
+    pub fn agent_memory_writes(&self) -> bool {
+        self.shared().agent_memory_writes.load(Ordering::Acquire)
     }
 
     /// The model choices `agent_id` reported the last time one of its chats started in this run.

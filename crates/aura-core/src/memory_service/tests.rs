@@ -52,11 +52,19 @@ fn token_comparison_rejects_prefix_and_wrong_bytes() {
     assert!(!same_token("abc", "abd"));
     assert!(!same_token("abc", "abcd"));
 }
+fn grant(store: &Arc<ChatStore>, chat: &str, direct: &Arc<AtomicBool>) -> MemoryGrant {
+    MemoryGrant::start(
+        store.clone(),
+        chat.into(),
+        direct.clone(),
+        &tokio::runtime::Handle::current(),
+    )
+    .unwrap()
+}
 #[tokio::test]
-async fn scoped_memory_service_only_reads_and_proposes_and_drop_revokes_credential() {
+async fn review_only_memory_service_reads_and_proposes_and_drop_revokes_credential() {
     let (_dir, store, chat) = fixture();
-    let grant =
-        MemoryGrant::start(store.clone(), chat, &tokio::runtime::Handle::current()).unwrap();
+    let grant = grant(&store, &chat, &Arc::new(AtomicBool::new(false)));
     let endpoint = grant.endpoint.clone();
     let token = grant.token.clone();
     assert!(!format!("{grant:?}").contains(&token));
@@ -68,8 +76,20 @@ async fn scoped_memory_service_only_reads_and_proposes_and_drop_revokes_credenti
     assert_eq!(proposed["result"]["state"], "pending");
     let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
     assert_eq!(read["result"]["markdown"], "");
+    let write = call(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"write","base_revision":null,"markdown":"Direct","reason":"Not allowed"}),
+    )
+    .await;
+    assert_eq!(write["error"], REVIEW_ONLY);
+    let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
+    assert_eq!(read["result"]["markdown"], "");
     let accept = call(&endpoint, &token, serde_json::json!({"operation":"accept"})).await;
-    assert!(accept.get("error").is_some());
+    assert_eq!(
+        accept["error"],
+        "Unsupported memory operation. Use read, write or propose."
+    );
     let cross = call(
         &endpoint,
         &token,
@@ -80,5 +100,107 @@ async fn scoped_memory_service_only_reads_and_proposes_and_drop_revokes_credenti
     drop(grant);
     tokio::task::yield_now().await;
     assert!(tokio::net::TcpStream::connect(&endpoint).await.is_err());
+    store.shutdown(std::time::Duration::from_secs(5)).await;
+}
+#[tokio::test]
+async fn direct_writes_follow_the_profile_switch_mid_grant_and_still_need_the_token() {
+    let (_dir, store, chat) = fixture();
+    let direct = Arc::new(AtomicBool::new(true));
+    let grant = grant(&store, &chat, &direct);
+    let (endpoint, token) = (grant.endpoint.clone(), grant.token.clone());
+    let mut changes = store.memory_changes();
+    let write = |base: serde_json::Value, markdown: &str| serde_json::json!({"operation":"write","base_revision":base,"markdown":markdown,"reason":"Learned the test command"});
+    let stranger = call(&endpoint, "wrong", write(serde_json::Value::Null, "Forged")).await;
+    assert_eq!(
+        stranger["error"],
+        "Memory access expired. Restart the Aura session."
+    );
+    let first = call(
+        &endpoint,
+        &token,
+        write(serde_json::Value::Null, "Run cargo test."),
+    )
+    .await;
+    assert_eq!(first["result"]["markdown"], "Run cargo test.");
+    let revision = first["result"]["revision"].clone();
+    assert!(revision.is_string());
+    let project = first["result"]["project_id"].as_str().unwrap().to_owned();
+    // The window hears about the agent's edit, with what its notice needs to undo it.
+    assert_eq!(
+        changes.recv().await.unwrap(),
+        aura_protocol::memory::ProjectMemoryChanged {
+            project_id: Some(project.clone()),
+            agent_edit: Some(aura_protocol::memory::AgentMemoryEdit {
+                revision: revision.as_str().unwrap().to_owned(),
+                parent_revision: None,
+                chat_id: chat.clone(),
+            }),
+        }
+    );
+    let Reply::History(history) = store
+        .memory(Command::History(project.clone()))
+        .await
+        .unwrap()
+    else {
+        panic!("history")
+    };
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].source, format!("agent:{chat}"));
+    // A lost reply retried with the old base answers the revision that landed.
+    let retried = call(
+        &endpoint,
+        &token,
+        write(serde_json::Value::Null, "Run cargo test."),
+    )
+    .await;
+    assert_eq!(retried["result"]["revision"], revision);
+    // The retry added nothing, so it names no edit for a notice.
+    assert_eq!(changes.recv().await.unwrap().agent_edit, None);
+    // A different edit from a stale base is refused with the way forward.
+    let stale = call(
+        &endpoint,
+        &token,
+        write(serde_json::Value::Null, "Lost update"),
+    )
+    .await;
+    assert!(
+        stale["error"]
+            .as_str()
+            .unwrap()
+            .contains("Read it again, apply your edit")
+    );
+    // Writes must say what they replace memory with; absence is not an empty document.
+    let partial = call(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"write","base_revision":revision,"reason":"No Markdown"}),
+    )
+    .await;
+    assert!(partial.get("error").is_some());
+    let unknown = call(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"write","base_revision":revision,"markdown":"x","reason":"x","project_id":"foreign"}),
+    )
+    .await;
+    assert!(unknown.get("error").is_some());
+    // Turning the switch off applies to this running grant at once; reading and proposing stay.
+    direct.store(false, std::sync::atomic::Ordering::Release);
+    let refused = call(&endpoint, &token, write(revision.clone(), "While off")).await;
+    assert_eq!(refused["error"], REVIEW_ONLY);
+    let proposed = call(
+        &endpoint,
+        &token,
+        serde_json::json!({"operation":"propose","base_revision":revision,"markdown":"While off","reason":"Review this","idempotency_key":"off"}),
+    )
+    .await;
+    assert_eq!(proposed["result"]["state"], "pending");
+    let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
+    assert_eq!(read["result"]["markdown"], "Run cargo test.");
+    direct.store(true, std::sync::atomic::Ordering::Release);
+    let again = call(&endpoint, &token, write(revision.clone(), "Back on")).await;
+    assert_eq!(again["result"]["markdown"], "Back on");
+    assert_ne!(again["result"]["revision"], revision);
+    drop(grant);
     store.shutdown(std::time::Duration::from_secs(5)).await;
 }

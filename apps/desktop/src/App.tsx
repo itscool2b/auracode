@@ -77,6 +77,8 @@ export function App({
     target?: InstructionsTarget;
     chatLabel?: string;
     activeChatId?: string;
+    /** A memory revision to open with its changes (an agent edit's Review). */
+    memoryRevision?: string;
   }>({ id: 0, section: "plugins", projectId: null });
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -420,6 +422,15 @@ export function App({
               setCustomizeEntry({ id: Date.now(), section: "plugins", projectId, activeChatId });
               setView("library");
             }}
+            onReviewMemory={(projectId, revision) => {
+              setCustomizeEntry({
+                id: Date.now(),
+                section: "memory",
+                projectId,
+                memoryRevision: revision,
+              });
+              setView("library");
+            }}
             onSettings={() => {
               setSettingsReturn("chats");
               setSettingsEntry({ id: "chats", page: "general", email: "" });
@@ -491,6 +502,7 @@ export function App({
             instructionsTarget={customizeEntry.target}
             chatLabel={customizeEntry.chatLabel}
             activeChatId={customizeEntry.activeChatId}
+            initialMemoryRevision={customizeEntry.memoryRevision}
             onBack={() => setView("chats")}
             onAgents={() => setView("agents")}
           />

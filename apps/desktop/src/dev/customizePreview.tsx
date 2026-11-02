@@ -53,7 +53,7 @@ export function mountCustomizePreview(container: HTMLElement) {
   const services: CustomizeServices = {
     instructions: createInstructionsFixture("universal").api,
     setup: createSetupFixture(),
-    memory: createProjectMemoryFixture(),
+    memory: createProjectMemoryFixture().api,
     plugins: {
       api: {
         snapshot: async () => pluginFixture("plugins"),

@@ -430,6 +430,63 @@ fn project_memory_history_proposals_and_exact_prompt_snapshots_survive_encrypted
     );
 }
 #[test]
+fn agent_memory_revisions_keep_their_chat_through_local_import() {
+    use crate::chatstore::memory::{Command as MemoryCommand, Reply as MemoryReply};
+    use aura_protocol::memory::SaveProjectMemory;
+    let mut f = fixture();
+    let (project, chat, _) = seed(&f, false);
+    let save = |command| {
+        let MemoryReply::Memory(memory) =
+            crate::chatstore::memory::execute(f.source.conn(), command, 10).unwrap()
+        else {
+            panic!()
+        };
+        memory
+    };
+    let owner = save(MemoryCommand::Save(SaveProjectMemory {
+        project_id: project.clone(),
+        expected_revision: None,
+        markdown: "Owner notes".into(),
+        reason: "Reviewed durable fact".into(),
+    }));
+    let agent = save(MemoryCommand::AgentSave {
+        input: SaveProjectMemory {
+            project_id: project.clone(),
+            expected_revision: owner.revision,
+            markdown: "Owner notes and the agent's addition".into(),
+            reason: "Learned while working".into(),
+        },
+        chat_id: chat.clone(),
+    });
+    let selection = reviewed(&f);
+    apply(&mut f, selection).unwrap();
+    assert_eq!(
+        crate::chatstore::memory::read(f.target.conn(), &project).unwrap(),
+        agent
+    );
+    let sources = f
+        .target
+        .conn()
+        .prepare("SELECT source FROM project_memory_revisions WHERE project_id=?1 ORDER BY created_at,source")
+        .unwrap()
+        .query_map([&project], |r| r.get::<_, String>(0))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(sources, [format!("agent:{chat}"), "user".to_owned()]);
+    // The chat it names came along, so the editor can show its title.
+    assert!(
+        f.target
+            .conn()
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1)",
+                [&chat],
+                |r| r.get::<_, bool>(0)
+            )
+            .unwrap()
+    );
+}
+#[test]
 fn project_mcp_definitions_history_and_heads_import_without_global_settings_or_local_credentials() {
     use crate::mcp::{Command as McpCommand, Reply as McpReply};
     let mut f = fixture();

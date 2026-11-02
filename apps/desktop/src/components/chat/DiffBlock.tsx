@@ -12,12 +12,15 @@ export function DiffBlock({
   newText,
   disclosureKey,
   wholeFile = false,
+  copyPath = true,
 }: {
   readonly path: string;
   readonly oldText: string | null;
   readonly newText: string;
   readonly disclosureKey: string;
   readonly wholeFile?: boolean;
+  /** Off when `path` names a document rather than a file, such as project memory. */
+  readonly copyPath?: boolean;
 }) {
   const [expanded, setExpanded] = useDisclosure(disclosureKey, "diff", false);
   const bodyId = useId();
@@ -82,7 +85,7 @@ export function DiffBlock({
             />
           ))}
         </span>
-        <CopyButton text={path} label="Copy path" caption="Copy path" />
+        {copyPath ? <CopyButton text={path} label="Copy path" caption="Copy path" /> : null}
       </figcaption>
       {explain ? (
         <p className="chat-diff-note" id={noteId}>

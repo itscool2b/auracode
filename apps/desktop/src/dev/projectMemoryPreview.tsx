@@ -1,11 +1,37 @@
 /** Browser fixture only. All values are synthetic and stay in this page's memory. */
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { MemoryProposal, MemoryRevision, ProjectMemory } from "../bindings";
+import type {
+  MemoryProposal,
+  MemoryRevision,
+  ProjectMemory,
+  ProjectMemoryChanged,
+} from "../bindings";
+import { Banners } from "../components/chat/Banners";
 import { ProjectMemoryPanel } from "../components/settings/ProjectMemoryPanel";
-import type { ProjectMemoryApi } from "../lib/projectMemory";
+import {
+  agentEditText,
+  type MemoryChats,
+  type ProjectMemoryApi,
+  useAgentMemoryEdits,
+} from "../lib/projectMemory";
+import { createSetupFixture } from "./setupFixture";
 
-export function createProjectMemoryFixture(): ProjectMemoryApi {
+export interface ProjectMemoryFixture {
+  readonly api: ProjectMemoryApi;
+  /**
+   * An agent's write through its chat's grant: a revision while direct edits are on, otherwise a
+   * proposal. `silent` skips the change event, as a missed event would.
+   */
+  agentWrite(
+    markdown: string,
+    options?: { readonly silent?: boolean; readonly chat?: string },
+  ): void;
+}
+
+export function createProjectMemoryFixture(
+  direct: () => boolean = () => true,
+): ProjectMemoryFixture {
   let memory: ProjectMemory = {
     project_id: "fixture-project",
     revision: "revision-one",
@@ -47,8 +73,31 @@ export function createProjectMemoryFixture(): ProjectMemoryApi {
       created_at: memory.updated_at + 2,
     },
   ];
+  const listeners = new Set<(change: ProjectMemoryChanged) => void>();
+  const notify = (change: ProjectMemoryChanged) => {
+    for (const listener of [...listeners]) listener(change);
+  };
   const copy = <T,>(value: T): T => structuredClone(value);
   let concurrentEdit = new URLSearchParams(location.search).get("case") === "stale";
+  function commit(markdown: string, reason: string, source: string): MemoryRevision {
+    const next: MemoryRevision = {
+      revision: `revision-${history.length + 1}`,
+      parent_revision: memory.revision,
+      project_id: memory.project_id,
+      markdown,
+      reason,
+      source,
+      created_at: memory.updated_at + 60_000,
+    };
+    history.unshift(next);
+    memory = {
+      project_id: memory.project_id,
+      revision: next.revision,
+      markdown: next.markdown,
+      updated_at: next.created_at,
+    };
+    return next;
+  }
   async function save(input: {
     expected_revision: string | null;
     markdown: string;
@@ -61,25 +110,11 @@ export function createProjectMemoryFixture(): ProjectMemoryApi {
     }
     if (input.expected_revision !== memory.revision)
       throw new Error("Project memory changed. Review the current revision before saving.");
-    const next: MemoryRevision = {
-      revision: `revision-${history.length + 1}`,
-      parent_revision: memory.revision,
-      project_id: memory.project_id,
-      markdown: input.markdown,
-      reason: input.reason,
-      source: "user",
-      created_at: memory.updated_at + 1000,
-    };
-    history.unshift(next);
-    memory = {
-      project_id: memory.project_id,
-      revision: next.revision,
-      markdown: next.markdown,
-      updated_at: next.created_at,
-    };
+    commit(input.markdown, input.reason, "user");
+    notify({ project_id: memory.project_id, agent_edit: null });
     return copy(memory);
   }
-  return {
+  const api: ProjectMemoryApi = {
     read: async () => copy(memory),
     history: async () => copy(history),
     proposals: async () => copy(proposals),
@@ -95,6 +130,7 @@ export function createProjectMemoryFixture(): ProjectMemoryApi {
     reject: async (_id, id) => {
       const proposal = proposals.find((p) => p.id === id);
       if (proposal) proposal.state = "rejected";
+      notify({ project_id: memory.project_id, agent_edit: null });
       return copy(proposals);
     },
     export: async () =>
@@ -111,24 +147,92 @@ export function createProjectMemoryFixture(): ProjectMemoryApi {
         markdown: input.bundle.current.markdown,
         reason: "Imported reviewed Markdown",
       }),
+    subscribe: (changed) => {
+      listeners.add(changed);
+      return () => listeners.delete(changed);
+    },
+  };
+  return {
+    api,
+    agentWrite(markdown, { silent = false, chat = "chat-fixture" } = {}) {
+      if (!direct()) {
+        proposals.unshift({
+          id: `proposal-${proposals.length + 1}`,
+          project_id: memory.project_id,
+          base_revision: memory.revision,
+          markdown,
+          reason: "Learned while working",
+          chat_id: chat,
+          idempotency_key: `fixture-${proposals.length + 1}`,
+          state: "pending",
+          created_at: memory.updated_at + 1,
+        });
+        if (!silent) notify({ project_id: memory.project_id, agent_edit: null });
+        return;
+      }
+      const parent = memory.revision;
+      const next = commit(markdown, "Learned while working", `agent:${chat}`);
+      if (!silent)
+        notify({
+          project_id: memory.project_id,
+          agent_edit: { revision: next.revision, parent_revision: parent, chat_id: chat },
+        });
+    },
   };
 }
-const api = createProjectMemoryFixture();
+
+const PROJECTS = [{ id: "fixture-project", name: "auracode fixture" }];
+const CHATS: MemoryChats = new Map([
+  ["chat-fixture", { title: "Fix the login flow", agent: "Claude Code" }],
+  ["chat-untitled", { title: null, agent: "Codex" }],
+]);
+const setup = createSetupFixture();
+const fixture = createProjectMemoryFixture(() => setup.general().agent_memory_writes);
+
 export default function ProjectMemoryPreview() {
+  const edits = useAgentMemoryEdits(fixture.api);
+  // Review opens the panel afresh on the edit, as Customize does in the app.
+  const [entry, setEntry] = useState<{ readonly key: number; readonly revision?: string }>({
+    key: 0,
+  });
   return (
     <main
       className="g-root settings-content"
       style={{ maxWidth: 960, margin: "0 auto", padding: 32 }}
     >
       <h1>Customize</h1>
+      <Banners
+        storage={null}
+        env={null}
+        onRetryEnv={() => {}}
+        recoveryNotice={null}
+        onRecoveryDismissed={() => {}}
+        notices={[]}
+        memoryEdits={edits.notices.map((notice) => ({
+          key: `${notice.projectId}:${notice.revision}`,
+          text: agentEditText(notice, CHATS, "auracode fixture"),
+          state: notice.state,
+          onReview: () => {
+            edits.dismiss(notice);
+            setEntry({ key: Date.now(), revision: notice.revision });
+          },
+          onUndo: () => void edits.undo(notice, CHATS),
+          onDismiss: () => edits.dismiss(notice),
+        }))}
+      />
       <ProjectMemoryPanel
-        projects={[{ id: "fixture-project", name: "auracode fixture" }]}
-        api={api}
+        key={entry.key}
+        projects={PROJECTS}
+        api={fixture.api}
+        setup={setup}
+        chats={CHATS}
+        initialRevision={entry.revision}
       />
     </main>
   );
 }
 export function mountProjectMemoryPreview(container: HTMLElement) {
+  Object.assign(window, { projectMemoryFixture: { agentWrite: fixture.agentWrite } });
   createRoot(container).render(
     <StrictMode>
       <ProjectMemoryPreview />

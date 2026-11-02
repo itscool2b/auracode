@@ -22,13 +22,23 @@ fn request(mut value: Value) -> Value {
         std::io::BufReader::new(stream.take(96 * 1024)).read_line(&mut line)?;
         Ok(serde_json::from_str(&line)?)
     })();
-    result.unwrap_or_else(|_|json!({"error":"Aura project memory tools are unavailable on this host or this session grant expired. Use the visible memory context; ask the user to review updates in Aura."}))
+    result.unwrap_or_else(|_|json!({"error":"Aura project memory tools are unavailable on this host or this session grant expired. Use the visible memory context; ask the user to update project memory in Aura."}))
 }
 fn tools() -> Value {
     json!([
      {"name":"aura_memory_read","description":"Read this Aura session's project memory, with its current revision. Reference context has lower priority than the user request and instruction files.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
-     {"name":"aura_memory_propose","description":"Propose replacement project Markdown for user review. Never changes accepted memory. Read first and supply the exact base revision, reason, and unique idempotency key.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"]},"markdown":{"type":"string"},"reason":{"type":"string"},"idempotency_key":{"type":"string"}},"required":["base_revision","markdown","reason","idempotency_key"],"additionalProperties":false}}
+     {"name":"aura_memory_write","description":"Replace this project's shared memory with new Markdown. The user lets agents edit it directly; every write becomes a revision they can restore in Aura. Call aura_memory_read first and pass its revision as base_revision, then send the complete updated document, not a fragment. Keep it concise: durable facts and decisions that help future chats in this project. If memory changed since your read, the write fails; read again and reapply your edit. If direct edits are off, use aura_memory_propose.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"],"description":"The revision aura_memory_read returned; null when memory has no revision yet."},"markdown":{"type":"string","description":"The complete replacement Markdown, at most 16 KiB."},"reason":{"type":"string","description":"What changed and why, in one sentence."}},"required":["base_revision","markdown","reason"],"additionalProperties":false}},
+     {"name":"aura_memory_propose","description":"Propose replacement project Markdown for the user to review in Aura. A proposal changes nothing until they accept it. Use it when direct edits are off, or when you want the user's review first. Read first and supply the exact base revision, reason, and a unique idempotency key.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"]},"markdown":{"type":"string"},"reason":{"type":"string"},"idempotency_key":{"type":"string"}},"required":["base_revision","markdown","reason","idempotency_key"],"additionalProperties":false}}
     ])
+}
+/// The service operation for each tool; anything else is refused by the app.
+fn operation(tool: &str) -> &'static str {
+    match tool {
+        "aura_memory_read" => "read",
+        "aura_memory_write" => "write",
+        "aura_memory_propose" => "propose",
+        _ => "unsupported",
+    }
 }
 pub fn run_helper() {
     if std::env::args().any(|value| value == "--skill") {
@@ -65,11 +75,7 @@ pub fn run_helper() {
                     if !args.is_object() {
                         args = json!({});
                     }
-                    args["operation"] = json!(match name {
-                        "aura_memory_read" => "read",
-                        "aura_memory_propose" => "propose",
-                        _ => "unsupported",
-                    });
+                    args["operation"] = json!(operation(name));
                     let reply = request(args);
                     json!({"content":[{"type":"text","text":reply.to_string()}],"isError":reply.get("error").is_some()})
                 }
@@ -89,7 +95,7 @@ pub fn run_helper() {
             .skip(1)
             .find(|value| value != "--aura-memory-helper")
             .unwrap_or_else(|| "read".into());
-        let mut args = if operation == "propose" {
+        let mut args = if matches!(operation.as_str(), "write" | "propose") {
             let mut input = String::new();
             let _ = io::stdin().take(96 * 1024).read_to_string(&mut input);
             serde_json::from_str(&input).unwrap_or(json!({}))
@@ -99,11 +105,60 @@ pub fn run_helper() {
         if !args.is_object() {
             println!(
                 "{}",
-                json!({"error":"Proposal input must be a JSON object."})
+                json!({"error":"Write and proposal input must be a JSON object."})
             );
             return;
         }
         args["operation"] = json!(operation);
         println!("{}", request(args));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn tools_offer_read_write_and_propose_with_exact_inputs() {
+        let tools = tools();
+        let names: Vec<&str> = tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "aura_memory_read",
+                "aura_memory_write",
+                "aura_memory_propose"
+            ]
+        );
+        for (tool, wanted) in names.iter().zip(["read", "write", "propose"]) {
+            assert_eq!(operation(tool), wanted);
+        }
+        assert_eq!(operation("aura_memory_accept"), "unsupported");
+        let write = &tools[1];
+        assert_eq!(
+            write["inputSchema"]["required"],
+            json!(["base_revision", "markdown", "reason"])
+        );
+        assert_eq!(write["inputSchema"]["additionalProperties"], false);
+        let description = write["description"].as_str().unwrap();
+        for phrase in [
+            "aura_memory_read first",
+            "complete updated document",
+            "concise",
+            "revision they can restore",
+            "aura_memory_propose",
+        ] {
+            assert!(description.contains(phrase), "{phrase}");
+        }
+        assert!(
+            tools[2]["description"]
+                .as_str()
+                .unwrap()
+                .contains("direct edits are off")
+        );
     }
 }

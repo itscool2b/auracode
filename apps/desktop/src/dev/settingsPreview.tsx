@@ -144,6 +144,7 @@ const setup: SetupApi = {
     if (action.type === "close_to_tray") general.close_to_tray = action.enabled;
     if (action.type === "copy_instructions_to_worktrees")
       general.copy_instructions_to_worktrees = action.enabled;
+    if (action.type === "agent_memory_writes") general.agent_memory_writes = action.enabled;
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },

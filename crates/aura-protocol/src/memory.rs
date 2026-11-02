@@ -68,3 +68,18 @@ pub struct ImportProjectMemory {
     pub bundle: ProjectMemoryBundle,
     pub expected_revision: Option<String>,
 }
+/// An agent's direct edit: the revision it added, the one it replaced, and the chat it came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentMemoryEdit {
+    pub revision: String,
+    pub parent_revision: Option<String>,
+    pub chat_id: String,
+}
+/// What the window hears after a committed change to a project's memory, history or proposals.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ProjectMemoryChanged {
+    /// Empty when changes were missed: every open project should be read again.
+    pub project_id: Option<String>,
+    /// Set only when an agent's direct edit added a revision.
+    pub agent_edit: Option<AgentMemoryEdit>,
+}

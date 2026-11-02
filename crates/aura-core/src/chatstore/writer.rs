@@ -86,6 +86,9 @@ impl WriterConfig {
 /// What the store and the writer share.
 pub(crate) struct Shared {
     pub(crate) workspace_activity: Arc<super::workspace_activity::Activity>,
+    /// Each committed memory write, from the editor or an agent's grant alike.
+    pub(crate) memory_changes:
+        tokio::sync::broadcast::Sender<aura_protocol::memory::ProjectMemoryChanged>,
     queue: Mutex<Queue>,
     wake: Condvar,
     pub(crate) count: Arc<Semaphore>,
@@ -561,6 +564,7 @@ impl Shared {
     pub(crate) fn new(config: WriterConfig) -> Shared {
         Shared {
             workspace_activity: Arc::default(),
+            memory_changes: tokio::sync::broadcast::Sender::new(64),
             queue: Mutex::new(Queue {
                 items: VecDeque::new(),
                 saved: VecDeque::new(),
@@ -1510,7 +1514,15 @@ impl Writer {
                 } else if matches!(self.mode, Mode::Damaged) {
                     Err(StoreError::Damaged(DAMAGED.into()))
                 } else {
-                    self.write_tx(|conn| super::memory::execute(conn, command, now))
+                    // Committed before it is announced, so an open editor can re-read, even if
+                    // this caller stopped waiting.
+                    self.write_tx(|conn| super::memory::execute_tracked(conn, command, now))
+                        .map(|(reply, changed)| {
+                            if let Some(changed) = changed {
+                                let _ = self.shared.memory_changes.send(changed);
+                            }
+                            reply
+                        })
                 };
                 let _ = reply.send(result);
             }
