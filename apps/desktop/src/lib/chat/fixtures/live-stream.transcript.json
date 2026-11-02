@@ -59,13 +59,6 @@
         "text": "Fix the failing test"
       },
       {
-        "kind": "thought",
-        "key": "thought:t1.th1",
-        "text": "Looking at the test output.",
-        "completed": true,
-        "durationMs": 1200
-      },
-      {
         "kind": "tool",
         "key": "tool:t1.t1",
         "id": "t1.t1",

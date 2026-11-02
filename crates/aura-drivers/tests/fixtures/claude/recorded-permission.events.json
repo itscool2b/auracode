@@ -1469,7 +1469,7 @@
           "type": "tool_update",
           "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
           "status": null,
-          "title": "Write",
+          "title": "Write aura-perm.txt",
           "kind": "edit",
           "locations": [
             {
