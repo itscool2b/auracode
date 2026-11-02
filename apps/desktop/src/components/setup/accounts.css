@@ -1,11 +1,29 @@
 /*
- * Accounts in an agent's details (docs/agent-accounts.md): the Account row as the Connection row
- * (6.16), the added accounts as 36px rows on the facts' hairline (the name 14/20 fg-1, its date
- * 12/16 fg-3, Remove at the right edge), then Add account and its one line, on the 4px grid.
+ * Accounts in an agent's details (docs/agent-accounts.md): one 36px row per account on the facts'
+ * hairline, the main account first (the name 14/20 fg-1, what it is 12/16 fg-3, Use or Remove at
+ * the right edge), then Add account and its one line, on the 4px grid.
  */
-.agent-accounts > .settings-row {
-  padding-inline: 0;
+.agent-accounts-title {
+  margin: 0;
+  padding: var(--g-space-12) 0 var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  font-weight: var(--g-weight-medium);
+  line-height: var(--g-leading-ui);
   box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-accounts-title + p {
+  margin: 0 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.agent-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
 }
 
 .agent-accounts-list {
@@ -69,35 +87,36 @@
   color: var(--g-red);
 }
 
-/* Add account: three numbered steps, Get a token, then the two fields and the actions. */
+/* Add account: one line on what signs in, the name, Sign in; pasting a token stays one disclosure
+   away. */
 .add-account-form {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-16);
 }
 
-.add-account-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--g-space-8);
+.add-account-intro,
+.add-account-note {
   margin: 0;
-  padding-left: var(--g-space-20);
   color: var(--g-fg-2);
   line-height: var(--g-leading-ui);
-  list-style: decimal outside;
 }
 
-.add-account-steps > li {
-  display: list-item;
-  padding-left: var(--g-space-4);
+.add-account-manual > summary {
+  width: fit-content;
+  color: var(--g-fg-2);
+  cursor: pointer;
 }
 
-.add-account-steps > li::marker {
-  color: var(--g-fg-3);
-  font-variant-numeric: tabular-nums;
+.add-account-manual > summary:hover {
+  color: var(--g-fg-1);
 }
 
-.add-account-steps code {
+.add-account-manual[open] > summary {
+  margin-bottom: var(--g-space-12);
+}
+
+.add-account-manual code {
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
 }

@@ -18,6 +18,7 @@ import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
+import { AccountPicker } from "./AccountPicker";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -64,6 +65,7 @@ export function ChatView({
   onCommands,
   terminals = null,
   now,
+  onManageAccounts,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -84,6 +86,8 @@ export function ChatView({
   readonly terminals?: TerminalPanels | null;
   /** The store's clock (the still-working hint's); the development previews move it. */
   readonly now?: () => number;
+  /** Opens the Agents page, where accounts are added, chosen for new chats and removed. */
+  readonly onManageAccounts?: () => void;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
   const terminalOpen = useSyncExternalStore(
@@ -478,9 +482,29 @@ export function ChatView({
         onSetControl={transport.setControl ? (change) => void store.setControl(change) : undefined}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+        account={
+          transport.accounts && state.chat && takesAccounts(state.chat.agent_id) ? (
+            <AccountPicker
+              chatId={chatId}
+              agentId={state.chat.agent_id}
+              agentName={agent?.name ?? state.chat.agent_name}
+              status={status}
+              runningAccount={state.session?.account_id}
+              held={state.session?.queue_held ?? false}
+              api={transport.accounts}
+              onManage={onManageAccounts}
+            />
+          ) : null
+        }
       />
     ),
     [
+      chatId,
+      transport.accounts,
+      state.chat,
+      state.session?.account_id,
+      state.session?.queue_held,
+      onManageAccounts,
       agents,
       transport.conversation,
       transport.setControl,

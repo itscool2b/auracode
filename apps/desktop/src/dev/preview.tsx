@@ -30,6 +30,7 @@ import {
   sessionInfo,
 } from "../lib/chat/testing";
 import { TerminalPanels } from "../lib/terminalPanel";
+import { createAccountsFixture } from "./accountsFixture";
 import { MISSING_FOLDER, missingWorktreeGit } from "./missingWorktreeFixture";
 import { NewChatPreview } from "./newChatPreview";
 import type { NewChatScenario } from "./newChatWorktreeFixture";
@@ -859,6 +860,8 @@ function Preview() {
     };
     const context = withPreviewContext(
       new FakeTransport({
+        // Claude Code chats show the account picker: one added account beside the main one.
+        accounts: createAccountsFixture(["Work"]),
         lists: async () => choices,
         setControl: async (_chatId, change) => {
           if (currentStatus !== "ready" || queue.length > 0)

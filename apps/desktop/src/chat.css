@@ -2504,6 +2504,39 @@
   white-space: nowrap;
 }
 
+/* The account chip: which account the agent signs in with, between access and the model. */
+.chat-account-popover > summary {
+  font-size: var(--g-text-meta);
+  gap: var(--g-space-6);
+}
+.chat-account-name {
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
+  color: var(--g-fg-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-account-popover > .chat-popover-panel {
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(320px, calc(100vw - 80px));
+  padding: var(--g-space-8);
+}
+.chat-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-4);
+  box-shadow: inset 0 1px var(--g-line);
+}
+.chat-account-error {
+  margin: var(--g-space-4) var(--g-space-8);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
 /* The pill always names the thinking level beside the model: "Opus 5.5 · High". */
 .chat-pill-effort {
   display: inline-flex;

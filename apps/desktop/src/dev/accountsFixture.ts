@@ -15,7 +15,11 @@ export interface AccountsFixture extends AgentAccountsApi {
 
 export function createAccountsFixture(
   initial: readonly string[] = [],
-  options: { unavailable?: string } = {},
+  options: {
+    unavailable?: string;
+    /** `missing`: the sign-in finishes without printing a token, so it has to be pasted. */
+    tokenOutput?: "wrapped" | "missing";
+  } = {},
 ): AccountsFixture {
   const calls: string[] = [];
   let next = 1;
@@ -41,12 +45,14 @@ export function createAccountsFixture(
       return id;
     },
     async read() {
+      // What claude setup-token prints once the browser approves: the token wrapped onto lines.
+      const wrapped = FIXTURE_TOKEN.match(/.{1,40}/g)?.join("\r\n") ?? FIXTURE_TOKEN;
+      const text =
+        options.tokenOutput === "missing"
+          ? "Browser didn't open? Use the url below to sign in\r\n\r\nSign-in finished.\r\n"
+          : `✓ Long-lived authentication token created successfully!\r\n\r\nYour OAuth token (valid for 1 year):\r\n\r\n${wrapped}\r\n\r\nStore this token securely. You won't be able to see it again.\r\n`;
       return {
-        bytes: Array.from(
-          new TextEncoder().encode(
-            `Your OAuth token (valid for 1 year):\r\n\r\n${FIXTURE_TOKEN}\r\n\r\nStore this token securely.\r\n`,
-          ),
-        ),
+        bytes: Array.from(new TextEncoder().encode(text)),
         done: true,
         exit_code: 0,
         truncated: false,

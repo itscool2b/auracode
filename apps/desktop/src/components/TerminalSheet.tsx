@@ -1,6 +1,7 @@
 import type { Terminal } from "@xterm/xterm";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { findSetupToken } from "../lib/setupToken";
 import {
   TerminalSession,
   type TerminalState,
@@ -20,12 +21,12 @@ function tokenStatus(state: TerminalState | { state: "idle" }): string {
     case "starting":
       return "Opening the vendor sign-in flow…";
     case "running":
-      return "Approve it in the browser, then copy the token it prints.";
+      return "Approve it in your browser. auracode picks up the token by itself.";
     case "failed":
       return state.message;
     case "finished":
       return state.exitCode === 0
-        ? "Copy the token above, then paste it into Add account."
+        ? "The token did not show up. Copy it from above and paste it into Add account."
         : state.exitCode === null
           ? "The terminal closed without an exit status."
           : `The vendor command exited with code ${state.exitCode}.`;
@@ -42,6 +43,8 @@ export function TerminalSheet({
   transport = terminalTransport,
   purpose = "sign-in",
   review,
+  autoStart = false,
+  onToken,
 }: {
   readonly agentId: string;
   readonly agentName: string;
@@ -50,13 +53,18 @@ export function TerminalSheet({
   readonly transport?: TerminalTransport;
   readonly purpose?: "sign-in" | "installation" | "setup" | "project" | "token";
   readonly review?: ReactNode;
+  /** Starts the command once the terminal is ready: the person already asked for it. */
+  readonly autoStart?: boolean;
+  /** `purpose="token"`: the token `claude setup-token` printed, once, as soon as it is whole. */
+  readonly onToken?: (token: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const container = useRef<HTMLElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const session = useRef<TerminalSession | null>(null);
-  const callbacks = useRef({ onClose, onFinished });
-  callbacks.current = { onClose, onFinished };
+  const callbacks = useRef({ onClose, onFinished, onToken });
+  callbacks.current = { onClose, onFinished, onToken };
+  const started = useRef(false);
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<TerminalState | { state: "idle" }>({ state: "idle" });
   const [link, setLink] = useState<string | null>(null);
@@ -88,15 +96,31 @@ export function TerminalSheet({
         return;
       }
       const term = view.term;
+      let token: string | null = null;
+      // The token is read off the rendered screen, so wrapping and redraws are already resolved.
+      const scan = (finished: boolean) => {
+        if (purpose !== "token" || token !== null || !callbacks.current.onToken) return;
+        token = findSetupToken(screenLines(term), finished);
+        if (token !== null) callbacks.current.onToken(token);
+      };
       const connection = new TerminalSession(
         transport,
-        (bytes) => new Promise<void>((resolve) => term.write(bytes, resolve)),
+        (bytes) =>
+          new Promise<void>((resolve) =>
+            term.write(bytes, () => {
+              scan(false);
+              resolve();
+            }),
+          ),
         (next) => {
           if (disposed) return;
           term.options.disableStdin = next.state !== "running";
           setState(next);
           if (next.state === "running") term.focus();
-          if (next.state === "finished") callbacks.current.onFinished?.(next.exitCode);
+          if (next.state === "finished") {
+            scan(true);
+            callbacks.current.onFinished?.(next.exitCode);
+          }
         },
       );
       terminal.current = term;
@@ -131,6 +155,14 @@ export function TerminalSheet({
       cleanup();
     };
   }, [agentId, purpose, transport]);
+
+  useEffect(() => {
+    if (!autoStart || !ready || started.current || state.state !== "idle") return;
+    const term = terminal.current;
+    if (!term) return;
+    started.current = true;
+    void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
+  }, [autoStart, ready, state.state, agentId]);
 
   const close = () => {
     void session.current?.close();
@@ -199,7 +231,7 @@ export function TerminalSheet({
         <div>
           <h2 id={title} className="g-dialog-title">
             {purpose === "token"
-              ? `Get a ${agentName} token`
+              ? `Sign in to another ${agentName} account`
               : purpose === "installation"
                 ? `Install ${agentName}`
                 : purpose === "setup"
@@ -210,7 +242,7 @@ export function TerminalSheet({
           </h2>
           <p id={description}>
             {purpose === "token"
-              ? "Runs claude setup-token, the agent's own sign-in, which prints a token and saves nothing. Closing stops it."
+              ? "Runs claude setup-token, the agent's own sign-in. It prints a token and saves nothing; auracode keeps the token in this computer's secure storage. Closing stops it."
               : purpose === "installation"
                 ? "Runs the package manager below. Closing stops it."
                 : purpose === "setup"
@@ -272,11 +304,12 @@ export function TerminalSheet({
           disabled={!ready || state.state !== "idle"}
           onClick={() => {
             const term = terminal.current;
+            started.current = true;
             if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
           }}
         >
           {purpose === "token"
-            ? "Get token"
+            ? "Start sign-in"
             : purpose === "installation"
               ? "Start installation"
               : purpose === "setup"
@@ -289,4 +322,18 @@ export function TerminalSheet({
     </dialog>
   );
   return typeof document === "undefined" ? content : createPortal(content, document.body);
+}
+
+/** The terminal's lines, screen and scrollback, with lines it wrapped itself joined again. */
+function screenLines(term: Terminal): string[] {
+  const buffer = term.buffer.active;
+  const lines: string[] = [];
+  for (let index = 0; index < buffer.length; index += 1) {
+    const line = buffer.getLine(index);
+    if (!line) continue;
+    const text = line.translateToString(true);
+    if (line.isWrapped && lines.length) lines[lines.length - 1] += text;
+    else lines.push(text);
+  }
+  return lines;
 }
