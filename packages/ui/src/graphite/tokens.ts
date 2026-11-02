@@ -166,6 +166,8 @@ export type GraphiteColor = keyof typeof GRAPHITE_COLORS;
 export const GRAPHITE_DURATIONS = {
   glide: 240,
   bloom: 2400,
+  swim: 9000,
+  paddle: 1600,
   micro: 80,
   fast: 120,
   base: 160,

@@ -1,14 +1,5 @@
-import { getBrand } from "@auracode/ui";
 import { ArrowUp, Paperclip, Square } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactNode,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
 import { composerPlaceholder } from "../../lib/chat/queueWait";
@@ -17,6 +8,7 @@ import { errorMessage } from "../../lib/errors";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
 import { DictationControl } from "./DictationControl";
 import { SlashMenu } from "./SlashMenu";
+import { type CompanionVariant, companionVariant, WorkingCompanion } from "./WorkingCompanion";
 
 /**
  * The message box: Enter sends, Shift+Enter starts a new line; Send, and Stop while a turn runs or
@@ -34,7 +26,6 @@ export function Composer({
   onForceStop,
   controls,
   agentName = "the agent",
-  agentId,
   chatId,
   contextApi,
   blocked = false,
@@ -49,8 +40,6 @@ export function Composer({
   readonly onForceStop: () => void;
   readonly controls?: ReactNode;
   readonly agentName?: string;
-  /** The chat's agent: its brand glow lights the composer's rim while it works. */
-  readonly agentId?: string;
   readonly chatId?: string;
   readonly contextApi?: ComposerTransport;
   readonly blocked?: boolean;
@@ -102,6 +91,15 @@ export function Composer({
   const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
   const working = status === "running" || status === "starting";
   const steerable = onSteer !== undefined && status === "running";
+  // A new swim each time the agent starts working.
+  const [companion, setCompanion] = useState<{ key: number; variant: CompanionVariant } | null>(
+    null,
+  );
+  useEffect(() => {
+    setCompanion((current) =>
+      working ? (current ?? { key: Date.now(), variant: companionVariant() }) : null,
+    );
+  }, [working]);
 
   const send = async (steer = false): Promise<void> => {
     if (sending || dictating || context.busy || blocked || empty) return;
@@ -139,11 +137,8 @@ export function Composer({
   };
 
   return (
-    <div
-      className="chat-composer"
-      data-working={working ? "" : undefined}
-      style={agentId ? ({ "--agent-glow": getBrand(agentId).glow } as CSSProperties) : undefined}
-    >
+    <div className="chat-composer" data-working={working ? "" : undefined}>
+      {companion ? <WorkingCompanion key={companion.key} variant={companion.variant} /> : null}
       <ContextChips context={context} />
       {mentionOpen ? (
         <MentionMenu

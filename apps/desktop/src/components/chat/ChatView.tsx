@@ -843,7 +843,6 @@ export function ChatView({
                   chatId={chatId}
                   contextApi={transport.composer}
                   agentName={agent?.name ?? state.chat.agent_name}
-                  agentId={state.chat.agent_id}
                   controls={controls}
                   status={status}
                   commands={state.lists?.commands ?? []}

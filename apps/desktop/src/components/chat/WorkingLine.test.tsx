@@ -23,13 +23,14 @@ describe("the working line", () => {
     expect(line({ since: Date.now() - 1500 })).toMatch(/class="chat-working-time"[^>]*>1 s</);
   });
 
-  it("opens on the turn's first verb, with the elapsed time and the agent's glow", () => {
+  it("opens on the turn's first verb, with the elapsed time and no glow", () => {
     const html = line();
     const verb = workingVerb(seedOf("turn:t1"), 0, null);
     expect(html).toContain(`data-test-verb="${verb}"`);
     expect(html).toContain(`${verb}…`);
     expect(html).toMatch(/class="chat-working-time"[^>]*>12 s</);
-    expect(html).toContain("--agent-glow:#f08c64");
+    expect(html).not.toContain("--agent-glow");
+    expect(html).toContain("chat-working-dot");
     // The same turn always opens on the same verb; its context leans the first pick too.
     expect(line()).toContain(`data-test-verb="${verb}"`);
     expect(line({ context: "run" })).toContain(

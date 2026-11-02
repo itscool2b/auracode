@@ -10,7 +10,7 @@
   padding: var(--g-space-16);
   border: 1px solid var(--g-glass-rim-strong);
   border-radius: var(--g-radius-14);
-  background: var(--g-glass-pop);
+  background: var(--ui-menu-fill);
   box-shadow: var(--g-shadow-pop);
   backdrop-filter: blur(var(--g-blur-pop));
   color: var(--g-fg-1);
