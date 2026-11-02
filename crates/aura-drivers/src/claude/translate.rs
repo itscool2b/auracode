@@ -609,14 +609,102 @@ pub fn tool_kind(name: &str) -> ToolKind {
     }
 }
 
+/// The longest pattern or query a title quotes, in characters; the input keeps the whole of it.
+const MAX_SUBJECT_CHARS: usize = 120;
+
+/// How a call reads in the transcript. The agent's own description wins; Claude's built-in tools
+/// that carry none are titled from their input ("Read main.rs", "Search for useState"), and any
+/// other tool keeps its name. The full path stays in the call's locations and raw input.
 fn tool_title(name: &str, input: Option<&Value>) -> String {
-    input
+    if let Some(description) = input
         .and_then(|input| string(input, "description"))
+        .map(str::trim)
         .filter(|description| !description.is_empty())
-        .map_or_else(
-            || truncate(name, MAX_NAME_CHARS),
-            |description| truncate(description, MAX_DESCRIPTION_CHARS),
-        )
+    {
+        return truncate(description, MAX_DESCRIPTION_CHARS);
+    }
+    builtin_title(name, input).map_or_else(
+        || truncate(name, MAX_NAME_CHARS),
+        |title| truncate(&title, MAX_DESCRIPTION_CHARS),
+    )
+}
+
+/// A built-in tool's title from its input, or `None` when the input does not say enough yet (a
+/// call streams `{}` first and its input later).
+fn builtin_title(name: &str, input: Option<&Value>) -> Option<String> {
+    let field = |key: &str| {
+        input
+            .and_then(|input| string(input, key))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    Some(match name {
+        "Read" => format!("Read {}", file_name(field("file_path")?)),
+        "Edit" | "MultiEdit" => format!("Edit {}", file_name(field("file_path")?)),
+        "Write" => format!("Write {}", file_name(field("file_path")?)),
+        "NotebookEdit" => format!("Edit {}", file_name(field("notebook_path")?)),
+        "Grep" => format!("Search for {}", subject(field("pattern")?)),
+        "Glob" => format!("Find {}", subject(field("pattern")?)),
+        "LS" => format!("List {}", file_name(field("path")?)),
+        "WebFetch" => format!("Fetch {}", host(field("url")?)?),
+        "WebSearch" => format!("Search the web for {}", subject(field("query")?)),
+        "ToolSearch" => format!("Search tools for {}", subject(field("query")?)),
+        "Bash" => command_line(field("command")?),
+        "TodoWrite" => "Update to-dos".to_owned(),
+        "EnterPlanMode" => "Enter plan mode".to_owned(),
+        "ExitPlanMode" => "Exit plan mode".to_owned(),
+        _ => return None,
+    })
+}
+
+/// The last component of a Unix or Windows path ("src/main.rs" reads "main.rs").
+fn file_name(path: &str) -> &str {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    match trimmed.rsplit(['/', '\\']).next() {
+        Some(name) if !name.is_empty() => name,
+        _ => path,
+    }
+}
+
+/// A pattern or query on one line, cut to `MAX_SUBJECT_CHARS` with an ellipsis.
+fn subject(text: &str) -> String {
+    let line = text.lines().next().unwrap_or_default().trim();
+    let more = line.len() < text.trim().len();
+    let cut = truncate(line, MAX_SUBJECT_CHARS);
+    if more || cut.len() < line.len() {
+        format!("{cut}…")
+    } else {
+        cut
+    }
+}
+
+/// A command's first line, with an ellipsis when more lines follow (a script, a heredoc).
+fn command_line(command: &str) -> String {
+    let mut lines = command
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    let first = lines.next().unwrap_or_default();
+    if lines.next().is_some() {
+        format!("{first} …")
+    } else {
+        first.to_owned()
+    }
+}
+
+/// The host of a URL, without its scheme, credentials, port, path, query or fragment.
+fn host(url: &str) -> Option<&str> {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let host = if authority.starts_with('[') {
+        authority.split_inclusive(']').next().unwrap_or(authority)
+    } else {
+        authority.split(':').next().unwrap_or(authority)
+    };
+    (!host.is_empty()).then_some(host)
 }
 
 fn tool_locations(input: Option<&Value>) -> Vec<ToolLocation> {
@@ -1199,6 +1287,145 @@ mod tests {
             1
         );
         assert!(events.iter().any(|event| matches!(event, AuraEvent::ToolUpdate(update) if update.tool_call_id == "late" && update.status == Some(ToolStatus::Failed))));
+    }
+
+    #[test]
+    fn builtin_tools_are_titled_from_their_input() {
+        let long = "x".repeat(MAX_SUBJECT_CHARS + 10);
+        for (name, input, title) in [
+            (
+                "Read",
+                json!({"file_path":"C:\\repo\\src\\main.rs"}),
+                "Read main.rs",
+            ),
+            (
+                "Read",
+                json!({"file_path":"/repo/src/lib.rs","offset":10,"limit":40}),
+                "Read lib.rs",
+            ),
+            (
+                "Grep",
+                json!({"pattern":"useState","path":"src","glob":"*.tsx"}),
+                "Search for useState",
+            ),
+            ("Glob", json!({"pattern":"**/*.tsx"}), "Find **/*.tsx"),
+            ("LS", json!({"path":"/repo/src/"}), "List src"),
+            (
+                "WebFetch",
+                json!({"url":"https://me@docs.rs:443/serde/latest?q=1#top","prompt":"Summarize"}),
+                "Fetch docs.rs",
+            ),
+            (
+                "WebFetch",
+                json!({"url":"http://[::1]:8080/health"}),
+                "Fetch [::1]",
+            ),
+            (
+                "WebSearch",
+                json!({"query":"tauri window effects"}),
+                "Search the web for tauri window effects",
+            ),
+            (
+                "Edit",
+                json!({"file_path":"src/app.ts","old_string":"a","new_string":"b"}),
+                "Edit app.ts",
+            ),
+            (
+                "MultiEdit",
+                json!({"file_path":"src/app.ts","edits":[]}),
+                "Edit app.ts",
+            ),
+            (
+                "Write",
+                json!({"file_path":"notes\\todo.md","content":""}),
+                "Write todo.md",
+            ),
+            (
+                "NotebookEdit",
+                json!({"notebook_path":"nb/analysis.ipynb"}),
+                "Edit analysis.ipynb",
+            ),
+            (
+                "Bash",
+                json!({"command":"pnpm test -- sidebar"}),
+                "pnpm test -- sidebar",
+            ),
+            (
+                "Bash",
+                json!({"command":"cat <<'EOF' > a.txt\nhello\nEOF"}),
+                "cat <<'EOF' > a.txt …",
+            ),
+            ("TodoWrite", json!({"todos":[]}), "Update to-dos"),
+            ("ExitPlanMode", json!({"plan":"Ship it"}), "Exit plan mode"),
+        ] {
+            assert_eq!(tool_title(name, Some(&input)), title, "{name} {input}");
+        }
+        // The agent's own words win over the derived title.
+        assert_eq!(
+            tool_title(
+                "Bash",
+                Some(&json!({"command":"ls -la","description":"List the project files"}))
+            ),
+            "List the project files"
+        );
+        assert_eq!(
+            tool_title(
+                "Task",
+                Some(&json!({"description":"Explore the repo","prompt":"..."}))
+            ),
+            "Explore the repo"
+        );
+        // A long pattern is cut on one line; the input keeps the whole of it.
+        let cut = tool_title("Grep", Some(&json!({ "pattern": long })));
+        assert_eq!(
+            cut,
+            format!("Search for {}…", "x".repeat(MAX_SUBJECT_CHARS))
+        );
+        assert_eq!(
+            tool_title("WebSearch", Some(&json!({"query":"first\nsecond"}))),
+            "Search the web for first…"
+        );
+        // Input still streaming ({}), missing or blank fields, and other tools keep the name.
+        for (name, input) in [
+            ("Read", Some(json!({}))),
+            ("Grep", Some(json!({"pattern":"  "}))),
+            ("WebFetch", Some(json!({"url":"https:///path"}))),
+            ("Glob", None),
+            ("mcp__github__create_issue", Some(json!({"title":"Bug"}))),
+        ] {
+            assert_eq!(tool_title(name, input.as_ref()), name);
+        }
+    }
+
+    #[test]
+    fn a_streamed_call_is_retitled_once_its_input_commits() {
+        let mut translator = Translator::new();
+        let mut events = Vec::new();
+        for frame in [
+            stream(
+                "m",
+                json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"g","name":"Grep","input":{}}}),
+            ),
+            stream(
+                "m",
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"pattern\":\"useState\"}"}}),
+            ),
+            committed(
+                "m",
+                json!([{"type":"tool_use","id":"g","name":"Grep","input":{"pattern":"useState"}}]),
+            ),
+        ] {
+            events.extend(translator.ingest(&frame));
+        }
+        let titles = events
+            .iter()
+            .filter_map(|event| match event {
+                AuraEvent::ToolCall(call) => Some(call.title.as_str()),
+                AuraEvent::ToolUpdate(update) => update.title.as_deref(),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(titles, ["Grep", "Search for useState"]);
     }
 
     #[test]
