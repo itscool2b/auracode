@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AuraEvent, SessionStatus } from "../../bindings";
-import { chatActivity, hasLiveLine } from "./activity";
+import { chatActivity, lastToolKind, streamingText } from "./activity";
 import { type ChatState, ChatStore } from "./chatStore";
 import { ev, FakeTransport, numbered, sessionInfo } from "./testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "./transcript";
@@ -67,7 +67,7 @@ describe("live chat protocol state", () => {
     expect(chatActivity(state([]))).toBe("thinking");
     const ended = state([ev.turnStarted("t"), ev.thought("a", "partial"), ev.turnEnded("t")]);
     expect(chatActivity(ended)).toBe("thinking");
-    expect(hasLiveLine(renderTranscript(ended.transcript, true).at(-1))).toBe(false);
+    expect(streamingText(renderTranscript(ended.transcript, true).at(-1))).toBe(false);
     const completed = state([
       ev.turnStarted("t"),
       ev.message("a", "Done"),
@@ -77,22 +77,40 @@ describe("live chat protocol state", () => {
     expect(chatActivity(completed)).toBe("thinking");
   });
 
-  it("does not add a second live row beside a stream or running tool", () => {
-    const running = state([ev.turnStarted("t"), ev.toolCall("a")]);
-    expect(hasLiveLine(renderTranscript(running.transcript, true).at(-1))).toBe(true);
-    const done = state([
-      ev.turnStarted("t"),
-      ev.toolCall("a"),
-      ev.toolUpdate("a", { status: "completed" }),
-    ]);
-    expect(hasLiveLine(renderTranscript(done.transcript, true).at(-1))).toBe(false);
+  it("steps the working line aside only while the newest shown output is streaming text", () => {
+    const shown = (events: AuraEvent[]) => renderTranscript(state(events).transcript, true).at(-1);
+    const answer = [ev.turnStarted("t"), ev.message("a", "Hel")];
+    expect(streamingText(shown(answer))).toBe(true);
+    expect(streamingText(shown([...answer, ev.messageDone("a")]))).toBe(false);
+    // A call after the text, or hidden reasoning after it, brings the line back.
+    expect(streamingText(shown([...answer, ev.toolCall("b")]))).toBe(false);
+    expect(streamingText(shown([...answer, ev.messageDone("a"), ev.thought("th", "Hmm")]))).toBe(
+      false,
+    );
+    expect(streamingText(shown([...answer, ev.turnEnded("t")]))).toBe(false);
+  });
+
+  it("leans the working line towards the turn's latest call, across hidden thoughts", () => {
+    const shown = (events: AuraEvent[]) => renderTranscript(state(events).transcript, true).at(-1);
+    expect(lastToolKind(shown([ev.turnStarted("t"), ev.thought("th", "Hmm")]))).toBeNull();
+    expect(
+      lastToolKind(
+        shown([
+          ev.turnStarted("t"),
+          ev.toolCall("a", { kind: "read" }),
+          ev.thought("th", "Now run it"),
+          ev.toolCall("b", { kind: "execute" }),
+          ev.message("m", "Running the tests."),
+        ]),
+      ),
+    ).toBe("execute");
   });
 
   it("does not revive a cancelled tool while the native process finishes background work", () => {
     for (const reason of ["cancelled", "interrupted", "error"] as const) {
       const ended = state([ev.turnStarted("t"), ev.toolCall("a"), ev.turnEnded("t", reason)]);
       expect(chatActivity(ended)).toBe("thinking");
-      expect(hasLiveLine(renderTranscript(ended.transcript, true).at(-1))).toBe(false);
+      expect(streamingText(renderTranscript(ended.transcript, true).at(-1))).toBe(false);
     }
     expect(chatActivity(state([ev.turnStarted("t"), ev.toolCall("a"), ev.turnEnded("t")]))).toBe(
       "tool",

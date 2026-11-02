@@ -214,7 +214,7 @@ export const BIG_OUTPUT_CHARS = 200 * 1024;
 /** The demo agent's 40 slash commands (`COMMANDS` in its driver). */
 export const DEMO_COMMANDS = 40;
 
-const DEMO_ITEMS = ["thought", "tool:read:completed", "tool:edit:completed", "message"];
+const DEMO_ITEMS = ["tool:read:completed", "tool:edit:completed", "message"];
 const DEMO_PLAN = ["completed", "completed", "in_progress"];
 
 function turn(
@@ -690,10 +690,8 @@ async function chatScenario(
     await send(PROMPTS.demo);
     const ended = await waitTurnEnded(PROMPTS.demo);
     expectSegment(ended, demoTurn(PROMPTS.demo));
-    const thought = item(ended, "thought");
-    if (!(Number(attr(thought, "duration-ms")) > 0)) {
-      throw new StepError("the thought shows no duration");
-    }
+    if (ended.views.some((view) => view.kind === "thought"))
+      throw new StepError("the transcript exposed a reasoning row");
     const [read, edit] = items(ended, "tool");
     if (attr(one("tool-content", read), "type") !== "text") {
       throw new StepError("the read tool shows no text output");
@@ -716,7 +714,7 @@ async function chatScenario(
     const usage = await waitFor("the header to show context and cost", () =>
       text(one("chat-usage")),
     );
-    return `a thought (${attr(thought, "duration-ms")} ms), a read with text output, an edit with a diff, a 3-step plan, the markdown answer, and "${usage}" in the header`;
+    return `reasoning hidden, a read with text output, an edit with a diff, a 3-step plan, the markdown answer, and "${usage}" in the header`;
   });
 
   await checks.run("option-change", async () => {

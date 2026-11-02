@@ -154,7 +154,7 @@ function Answers({
           className="ui-row"
           onSubmit={(event) => {
             event.preventDefault();
-            onRespond({ type: "input", text });
+            if (!busy) onRespond({ type: "input", text });
           }}
         >
           <label htmlFor={inputId} className="sr-only">
