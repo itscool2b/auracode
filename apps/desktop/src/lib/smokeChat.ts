@@ -174,7 +174,9 @@ async function scenario<Name extends string>(
 
 // ---------- the script ----------
 
-/** The prompts the chat scenario sends, each once, so a turn is found by its prompt. */
+const RESTART_INPUT = "/echo restarted by a prompt";
+
+/** The displayed prompts, including the native attachment label where one is sent. */
 export const PROMPTS = {
   echo: "/echo Hello from the smoke run",
   demo: "Tidy up src/main.rs",
@@ -200,7 +202,7 @@ export const PROMPTS = {
   heldAtCrash: "/echo held at crash",
   auth: "/auth",
   ignoreCancel: "/ignore-cancel",
-  restart: "/echo restarted by a prompt",
+  restart: `${RESTART_INPUT}\n\n[Image: Pasted image.png]`,
   atQuit: "/ignore-cancel until auracode quits",
   heldAtQuit: "/echo held at quit",
 } as const;
@@ -409,7 +411,7 @@ async function checkImagePreview(within: ParentNode, selector = ".chat-image-ope
 }
 
 async function checkSentImage(): Promise<void> {
-  const user = await revealTranscriptItem(PROMPTS.echo, "user");
+  const user = await revealTranscriptItem(PROMPTS.restart, "user");
   await checkImagePreview(user);
   one("jump-latest")?.click();
 }
@@ -913,14 +915,12 @@ async function chatScenario(
   });
 
   await checks.run("echo-turn", async () => {
-    await pasteSmokeImage();
     await send(PROMPTS.echo, "enter");
     const ended = await waitTurnEnded(PROMPTS.echo);
     expectSegment(ended, echoTurn(PROMPTS.echo));
     expectReply(ended, echoed(PROMPTS.echo));
     if (one("turn-footer", ended.element) === null) throw new StepError("the turn has no footer");
-    await checkSentImage();
-    return `Enter sent the pasted image and prompt; native thumbnails and full previews decoded before and after sending; the reply read "${echoed(PROMPTS.echo)}" and the turn ended end_turn`;
+    return `Enter sent it; the reply read "${echoed(PROMPTS.echo)}" and the turn ended end_turn`;
   });
 
   await checks.run("demo-turn", async () => {
@@ -1238,13 +1238,15 @@ async function chatScenario(
   });
 
   await checks.run("send-starts-agent", async () => {
-    await send(PROMPTS.restart);
+    await pasteSmokeImage();
+    await send(RESTART_INPUT);
     const ended = await waitTurnEnded(PROMPTS.restart, START_TIMEOUT_MS);
     expectSegment(ended, echoTurn(PROMPTS.restart));
-    expectReply(ended, echoed(PROMPTS.restart));
+    expectReply(ended, echoed(RESTART_INPUT));
     await waitStatus("ready");
     await waitQueueEmpty();
-    return "the prompt started the stopped agent and went out once it was ready";
+    await checkSentImage();
+    return "the prompt started the stopped agent and sent its pasted image; native thumbnails and full previews decoded before and after sending";
   });
 
   await checks.run("settings-customize-light", () => settingsCustomize(chatId, "light"));

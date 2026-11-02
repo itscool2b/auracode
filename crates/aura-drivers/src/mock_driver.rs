@@ -508,7 +508,7 @@ impl Mock {
             agent_name: Some("Demo agent".into()),
             agent_version: Some(self.setup.client_version.clone()),
             capabilities: Capabilities {
-                images: false,
+                images: true,
                 steer: false,
                 interrupt: true,
                 resume: false,
@@ -721,10 +721,13 @@ impl Mock {
         for part in parts {
             match part {
                 PromptPart::Text { text: part } => text.push_str(part),
-                PromptPart::Image { .. } | PromptPart::Mention { .. } => {
+                // The demo executes its text commands unchanged. Opaque images let native smoke
+                // exercise attachment delivery and persistence without a paid model turn.
+                PromptPart::Image { .. } => {}
+                PromptPart::Mention { .. } => {
                     self.push(turn_error(
                         turn_id,
-                        internal("The demo agent takes text only."),
+                        internal("The demo agent does not resolve file mentions."),
                     ));
                     return;
                 }
@@ -1762,8 +1765,33 @@ mod tests {
         assert!(
             info.capabilities.set_model
                 && info.capabilities.set_effort
+                && info.capabilities.images
                 && !info.capabilities.resume
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_image_attachment_keeps_the_demo_text_command_intact() {
+        let (mut demo, _) = Demo::ready().await;
+        demo.command(DriverCommand::Prompt {
+            turn: TurnRef {
+                turn_id: "image-turn".into(),
+            },
+            parts: vec![
+                PromptPart::Text {
+                    text: "/echo image received".into(),
+                },
+                PromptPart::Image {
+                    blob: "a".repeat(64),
+                    mime: "image/png".into(),
+                },
+            ],
+        });
+        let events = demo.until(is_turn_ended).await;
+        assert_eq!(text_of(&events), "image received");
+        let (reason, _, error) = ended(&events);
+        assert_eq!(reason, StopReason::EndTurn);
+        assert!(error.is_none());
     }
 
     #[tokio::test(start_paused = true)]
