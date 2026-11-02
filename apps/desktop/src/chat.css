@@ -1111,7 +1111,7 @@
 .chat-request-scope {
   display: flex;
   gap: var(--g-space-6);
-  margin: var(--g-space-12) var(--g-space-16) 0;
+  margin: 0 var(--g-space-16) var(--g-space-12);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

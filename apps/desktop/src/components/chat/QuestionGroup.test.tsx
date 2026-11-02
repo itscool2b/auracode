@@ -76,6 +76,8 @@ describe("grouped question cards", () => {
       );
     const partial = render(false, new Map([["q0", { selected: [0], text: "" }]]));
     expect(partial).toMatch(/data-testid="question-submit" disabled=""/);
+    const missingFirst = render(false, new Map([["q1", { selected: [0], text: "" }]]));
+    expect(missingFirst).toMatch(/data-testid="question-submit" disabled=""/);
     const first = render(false, new Map([["q0", { selected: [0], text: "" }]]), 0);
     expect(first).not.toMatch(/data-testid="question-submit" disabled=""/);
     expect(first).not.toContain('data-testid="question-back"');

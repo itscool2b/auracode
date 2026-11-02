@@ -112,6 +112,9 @@ export async function checkQuestions(browser, url, out, engine) {
       await page.getByRole("button", { name: "Reattach chat", exact: true }).click();
       await question.waitFor();
       assert.deepEqual(await page.evaluate(() => window.questionCalls), []);
+      await radio.check();
+      await question.getByRole("button", { name: "Submit answers", exact: true }).click();
+      assert.equal(await radio.isDisabled(), true);
       await page.getByRole("button", { name: "Withdraw question", exact: true }).click();
       await question.waitFor({ state: "detached" });
       assert.equal(await input.isVisible(), false, "remaining permission still owns composer");

@@ -763,14 +763,6 @@ export function ChatView({
                       data-test-stop-reason={segment?.end?.stopReason ?? ""}
                       data-test-recovered={String(segment?.end?.recovered ?? false)}
                     >
-                      <p className="chat-request-scope">
-                        {segment?.turnId ? "Turn request" : "Session request"}
-                        {user?.kind === "user" ? (
-                          <span className="chat-request-prompt" title={user.text}>
-                            {user.text.slice(0, 160)}
-                          </span>
-                        ) : null}
-                      </p>
                       {item.kind === "question" ? (
                         <QuestionCard
                           item={item}
@@ -790,6 +782,14 @@ export function ChatView({
                           onLoadBlob={(sha256) => void store.loadBlob(sha256)}
                         />
                       )}
+                      <p className="chat-request-scope">
+                        {segment?.turnId ? "Turn request" : "Session request"}
+                        {user?.kind === "user" ? (
+                          <span className="chat-request-prompt" title={user.text}>
+                            {user.text.slice(0, 160)}
+                          </span>
+                        ) : null}
+                      </p>
                     </div>
                   );
                 })}
