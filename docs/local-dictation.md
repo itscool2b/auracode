@@ -117,4 +117,6 @@ The Windows runtime fix was checked with a fresh Whisper rebuild, all eight targ
 unit tests, and the optional pinned-model fixture, which passed in 40.6 seconds on this host.
 The actual debug app rebuilt successfully, and `dumpbin /DEPENDENTS` showed only Windows system
 and Universal CRT API-set DLLs, with no MSVCP, VCRUNTIME, VCOMP, Whisper, or GGML DLL imports.
-The release installer's own payload still needs the same import inspection before distribution.
+The Windows x64 release installer's actual embedded application also passed that import inspection
+and the stream, 33-check chat and eight-check reopen smoke suites in isolated data folders. This
+does not extend the microphone or non-Windows acceptance claims above.

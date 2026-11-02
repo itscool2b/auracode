@@ -118,3 +118,14 @@ Four previously recorded `session_lifecycle` timing tests still fail on this hos
 The pinned Whisper model also passed actual CPU inference and cancellation with the upstream JFK
 audio fixture, as detailed in [local dictation](../local-dictation.md). No live microphone capture,
 macOS native execution or Windows ARM64 app execution is claimed by this record.
+
+The Windows x64 NSIS installer was then built from `22e9a4a3`. Its actual embedded application,
+identified by its AMD64 PE header and auracode product metadata, was extracted without running the
+installer. The 65,954,304-byte payload has SHA-256
+`889ff1e27edd831f1ea74bdf1397eb875bc24cbdd7839d017c4cbe6fe54260e2`.
+Dependency and import inspection found only Windows system and Universal CRT libraries, with no
+external C++, OpenMP, Whisper or GGML runtime. That exact payload then passed the stream smoke
+(141 events, 129 frames, zero sequence gaps), all 33 chat checks and all eight reopen checks in
+fresh isolated data folders. Both chat launches closed their databases and runtime registries.
+This is packaged-release evidence; installation into the running host is a separate after-exit
+step and must be confirmed against the installed file's full hash after relaunch.
