@@ -1,6 +1,6 @@
 import { getBrand, type OrbState, usePrefersReducedMotion } from "@auracode/ui";
 import { AgentMark } from "@auracode/ui/graphite";
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   formatElapsed,
   rotationDelay,
@@ -30,13 +30,22 @@ const RETURN_DELAY_MS = 450;
 /** The longest a leaving verb stays, in case its animation never reports its end. */
 const LEAVE_MS = 400;
 
+/** A duration token's value in ms, as the page resolves it now (0 under reduced motion). */
+function tokenMs(element: Element, name: string): number {
+  const value = getComputedStyle(element).getPropertyValue(name).trim();
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount)) return 0;
+  return value.endsWith("ms") ? amount : value.endsWith("s") ? amount * 1000 : 0;
+}
+
 /**
  * The working line (docs/design/visual-language.md): one quiet line at the tail of a running turn.
  * A halo in the agent's own glow breathes in the gutter on the composer rim's 2400ms rhythm, and a
  * playful verb stands in for the agent's reasoning, swapping every 2.5 to 3.5 seconds with a soft
- * crossfade while a sheen passes over it. The elapsed time sits at the line's end in metadata
- * type. Screen readers hear "<agent> is working" once; the verbs and the time are not announced.
- * Under reduced motion (the OS's or the app's setting) the first verb stays and nothing moves.
+ * crossfade while a sheen passes over it. The elapsed time follows the verb in metadata type and
+ * glides, by transform alone, when a new verb is wider or narrower. Screen readers hear "<agent>
+ * is working" once; the verbs and the time are not announced. Under reduced motion (the OS's or
+ * the app's setting) the first verb stays and nothing moves.
  */
 export function WorkingLine({
   seed,
@@ -110,6 +119,28 @@ export function WorkingLine({
     return () => clearInterval(timer);
   }, []);
 
+  // The verbs differ in width; the time after them glides to its new place instead of jumping.
+  const words = useRef<HTMLSpanElement>(null);
+  const time = useRef<HTMLSpanElement>(null);
+  const wordsWidth = useRef<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new verb, or a leaving one going, is what changes the width.
+  useLayoutEffect(() => {
+    const cell = words.current;
+    const after = time.current;
+    if (!cell) return;
+    const width = cell.getBoundingClientRect().width;
+    const before = wordsWidth.current;
+    wordsWidth.current = width;
+    if (still || !after || before === null || Math.abs(before - width) < 0.5) return;
+    const duration = tokenMs(after, "--g-dur-glide");
+    if (duration <= 0 || typeof after.animate !== "function") return;
+    after.animate([{ transform: `translateX(${before - width}px)` }, { transform: "none" }], {
+      duration,
+      easing: getComputedStyle(after).getPropertyValue("--g-ease").trim() || "ease-out",
+    });
+  }, [word.tick, leaving, still]);
+
+  const elapsed = now - since;
   return (
     <div
       className="chat-working"
@@ -124,7 +155,7 @@ export function WorkingLine({
       <span className="chat-gutter" aria-hidden="true">
         <span className="chat-working-halo" />
       </span>
-      <span className="chat-working-words" aria-hidden="true">
+      <span ref={words} className="chat-working-words" aria-hidden="true">
         {leaving !== null && !still ? (
           <span
             key={`verb-${leaving.tick}`}
@@ -148,9 +179,11 @@ export function WorkingLine({
           )}
         </span>
       </span>
-      <span className="chat-working-time" aria-hidden="true">
-        {formatElapsed(now - since)}
-      </span>
+      {elapsed >= 1000 ? (
+        <span ref={time} className="chat-working-time" aria-hidden="true">
+          {formatElapsed(elapsed)}
+        </span>
+      ) : null}
     </div>
   );
 }

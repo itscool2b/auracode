@@ -197,7 +197,14 @@ export function VirtualRows({
     for (const [key, time] of arrivals.current)
       if (at - time > ARRIVAL_MS) arrivals.current.delete(key);
   });
-  useLayoutEffect(() => () => follower.current?.disconnect(), []);
+  useLayoutEffect(() => {
+    // Strict Mode replays setup after disconnecting, with the same mounted row elements.
+    for (const element of followed.current) {
+      if (element.isConnected) follower.current?.observe(element);
+      else followed.current.delete(element);
+    }
+    return () => follower.current?.disconnect();
+  }, []);
   // A partial page may grow the anchor item itself. While restoring its visible text fragment,
   // automatic row-size compensation would apply that same prefix height a second time.
   virtual.shouldAdjustScrollPositionOnItemSizeChange =

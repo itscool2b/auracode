@@ -345,7 +345,6 @@
 
 .chat-working-time {
   flex: none;
-  margin-left: auto;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

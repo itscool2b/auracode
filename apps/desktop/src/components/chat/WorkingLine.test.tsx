@@ -17,6 +17,12 @@ const line = (props: Partial<Parameters<typeof WorkingLine>[0]> = {}) =>
   );
 
 describe("the working line", () => {
+  it("waits for a whole second before showing elapsed time", () => {
+    expect(line({ since: Date.now() })).not.toContain("chat-working-time");
+    expect(line({ since: Date.now() - 500 })).not.toContain("chat-working-time");
+    expect(line({ since: Date.now() - 1500 })).toMatch(/class="chat-working-time"[^>]*>1 s</);
+  });
+
   it("opens on the turn's first verb, with the elapsed time and the agent's glow", () => {
     const html = line();
     const verb = workingVerb(seedOf("turn:t1"), 0, null);

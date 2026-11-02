@@ -61,6 +61,8 @@ The composer keeps access and native workflow controls on its left and the searc
 
 Automatic checkpoints are an opt-in, profile-local General setting. Extend the existing settings row and switch components. Explain the sending delay and file-undo tradeoff beside the control; full-auto autonomy must not imply that checkpoint protection is enabled. Changes must distinguish turns without a snapshot from earlier saved checkpoints that remain available.
 
+The transcript keeps reasoning in stored history but does not render reasoning rows. While a turn runs, one working line occupies its tail: the agent's halo, a rotating verb and elapsed time after the first second. Text streaming in hides that line; a request replaces it with "Waiting on you"; the completed turn's footer takes its place. Verb changes crossfade, and the elapsed time glides with their width. Reduced motion stops the rotation, halo and sheen. Consecutive tool calls share one disclosure, including calls separated only by hidden reasoning. Tool labels use readable verbs and arguments, retain their full title in a tooltip, and expose failed or stopped states. Expanding tool output preserves keyboard focus, the reader's scroll position and virtualized history.
+
 ## Website composition
 
 The page is light paper (`#fafafa`) with ink text, broken by two night bands: capabilities and the finale. Content is at most 1200px wide, or 1360px for wide stages. Gutters are 32px on desktop and 20px on mobile; section spacing is 168px on desktop and 104px on mobile. The hero title is Geist at `clamp(50px, 7.6vw, 112px)` and weight 560. Section titles are `clamp(38px, 5vw, 72px)` and leads 18/28px.
