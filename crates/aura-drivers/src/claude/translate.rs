@@ -650,7 +650,7 @@ fn builtin_title(name: &str, input: Option<&Value>) -> Option<String> {
         "WebSearch" => format!("Search the web for {}", subject(field("query")?)),
         "ToolSearch" => format!("Search tools for {}", subject(field("query")?)),
         "Bash" => command_line(field("command")?),
-        "TodoWrite" => "Update to-dos".to_owned(),
+        "TodoWrite" => "Update the to-do list".to_owned(),
         "EnterPlanMode" => "Enter plan mode".to_owned(),
         "ExitPlanMode" => "Exit plan mode".to_owned(),
         _ => return None,
@@ -1355,7 +1355,7 @@ mod tests {
                 json!({"command":"cat <<'EOF' > a.txt\nhello\nEOF"}),
                 "cat <<'EOF' > a.txt …",
             ),
-            ("TodoWrite", json!({"todos":[]}), "Update to-dos"),
+            ("TodoWrite", json!({"todos":[]}), "Update the to-do list"),
             ("ExitPlanMode", json!({"plan":"Ship it"}), "Exit plan mode"),
         ] {
             assert_eq!(tool_title(name, Some(&input)), title, "{name} {input}");
