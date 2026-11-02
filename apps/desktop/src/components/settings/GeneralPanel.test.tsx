@@ -5,6 +5,7 @@ import { DEFAULT_GENERAL, preselectAgent } from "../../lib/setup";
 import {
   autonomyDetail,
   defaultAgentChoices,
+  defaultLevelChoices,
   defaultModelChoices,
   GeneralPanel,
 } from "./GeneralPanel";
@@ -27,6 +28,7 @@ describe("Settings' General defaults", () => {
     expect(DEFAULT_GENERAL).toEqual({
       default_agent: null,
       default_model: null,
+      default_effort: null,
       default_autonomy: "full_auto",
       automatic_checkpoints: false,
       notifications: true,
@@ -62,6 +64,22 @@ describe("Settings' General defaults", () => {
     expect(defaultModelChoices([], null)).toEqual([]);
   });
 
+  it("offers the levels the model offered in plain words, keeping a saved one", () => {
+    const reported = ["default", "low", "xhigh"].map((value) => ({
+      value,
+      name: value === "default" ? "Default" : value,
+      description: null,
+      group: null,
+    }));
+    // The model's own default is the select's first entry, so it is not listed twice.
+    expect(defaultLevelChoices(reported, null)).toEqual([
+      { value: "low", name: "Low" },
+      { value: "xhigh", name: "Extra high" },
+    ]);
+    expect(defaultLevelChoices(reported, "max").at(-1)).toEqual({ value: "max", name: "Max" });
+    expect(defaultLevelChoices([], null)).toEqual([]);
+  });
+
   it("says what each autonomy level does in one line", () => {
     expect(autonomyDetail("full_auto")).toContain("without asking");
     expect(autonomyDetail("full_auto")).not.toContain("checkpoint");
@@ -86,7 +104,7 @@ describe("Settings' General defaults", () => {
       <GeneralPanel
         info={info}
         api={{ snapshot: () => new Promise(() => {}), apply: () => new Promise(() => {}) }}
-        general={{ agents: async () => [], models: async () => [] }}
+        general={{ agents: async () => [], models: async () => [], thinking: async () => [] }}
         onSetup={() => {}}
         reveal={async () => {}}
       />,

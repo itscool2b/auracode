@@ -447,6 +447,7 @@ export function ChatView({
         autonomy={autonomy}
         status={status}
         error={state.listsError}
+        optionError={state.optionError}
         optionsSaving={state.optionsSaving}
         autonomySaving={state.autonomySaving}
         controlSaving={state.controlSaving}
@@ -465,6 +466,7 @@ export function ChatView({
       autonomy,
       status,
       state.listsError,
+      state.optionError,
       state.optionsSaving,
       state.autonomySaving,
       state.controlSaving,

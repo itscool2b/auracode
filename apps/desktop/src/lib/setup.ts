@@ -23,10 +23,15 @@ export const setupApi = {
 export type SetupApi = typeof setupApi;
 export { setMotionPreference };
 
-/** What Settings' General page lists: the detected agents, and the models one has reported. */
+/**
+ * What Settings' General page lists: the detected agents, the models one has reported, and the
+ * thinking levels a model offered (`null`: the model the agent starts on).
+ */
 export const generalApi = {
   agents: (): Promise<AgentEntry[]> => agentsList(),
   models: (agentId: string): Promise<ConfigChoice[]> => settle(commands.agentModels(agentId)),
+  thinking: (agentId: string, model: string | null): Promise<ConfigChoice[]> =>
+    settle(commands.agentThinkingLevels(agentId, model)),
 };
 export type GeneralApi = typeof generalApi;
 
@@ -53,6 +58,7 @@ export function preselectAgent(
 export const DEFAULT_GENERAL: GeneralPreferences = {
   default_agent: null,
   default_model: null,
+  default_effort: null,
   default_autonomy: "full_auto",
   automatic_checkpoints: false,
   notifications: true,

@@ -8,6 +8,8 @@ import {
   errorActions,
   folderStateLabel,
   isStartFailure,
+  levelName,
+  levelShortName,
   matchingCommands,
   minutesLabel,
   orderedOptions,
@@ -228,6 +230,22 @@ describe("words for protocol values", () => {
     ]);
     expect(pendingLabel(option("m", "mode"), { type: "choice", value: "b" })).toBe("Beta");
     expect(pendingLabel(option("m", "mode"), { type: "toggle", value: false })).toBe("off");
+  });
+
+  it("name thinking levels plainly, keeping a name the agent chose", () => {
+    const level = (value: string, name = value) => levelName({ value, name });
+    expect([level("default", "Default"), level("low"), level("xhigh"), level("max")]).toEqual([
+      "Default",
+      "Low",
+      "Extra high",
+      "Max",
+    ]);
+    expect(level("high", "High effort")).toBe("High effort");
+    expect(level("turbo")).toBe("Turbo");
+    expect(level("XHIGH")).toBe("Extra high");
+    expect(levelShortName("Extra high")).toBe("X-high");
+    expect(levelShortName("Medium")).toBe("Med");
+    expect(levelShortName("High")).toBe("High");
   });
 });
 

@@ -25,7 +25,7 @@ impl AgentSpawner for Quiet {
         self.0.spawn(spec, ProtocolLog::disabled())
     }
 }
-fn setup() -> SessionSetup {
+pub(super) fn setup() -> SessionSetup {
     SessionSetup {
         mcp_servers: Vec::new(),
         attachment_dir: None,
@@ -71,7 +71,7 @@ impl Harness {
     pub(super) async fn start() -> Self {
         Self::start_with(setup()).await
     }
-    async fn start_with(setup: SessionSetup) -> Self {
+    pub(super) async fn start_with(setup: SessionSetup) -> Self {
         let (spawner, mut ends) = FakeSpawner::new();
         let (tx, commands) = mpsc::unbounded_channel();
         let (events, rx) = event_channel();

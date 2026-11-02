@@ -66,6 +66,9 @@ pub struct GeneralPreferences {
     pub default_agent: Option<String>,
     /// The model new chats with `default_agent` start on. `None`: the agent's own default.
     pub default_model: Option<String>,
+    /// The thinking level new chats with `default_agent` start on, chosen for `default_model`.
+    /// `None`: the model's own default.
+    pub default_effort: Option<String>,
     pub default_autonomy: Autonomy,
     /// Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled.
     pub automatic_checkpoints: bool,
@@ -92,6 +95,7 @@ impl Default for GeneralPreferences {
         Self {
             default_agent: None,
             default_model: None,
+            default_effort: None,
             default_autonomy: Autonomy::FullAuto,
             automatic_checkpoints: false,
             notifications: true,
@@ -129,12 +133,17 @@ pub enum SetupAction {
     },
     Finish,
     Restart,
-    /// Changing the agent clears the default model, which belongs to the previous agent.
+    /// Changing the agent clears the default model and thinking level, which belong to the
+    /// previous agent.
     DefaultAgent {
         agent_id: Option<String>,
     },
+    /// Changing the model clears the default thinking level, which was chosen for the old one.
     DefaultModel {
         model: Option<String>,
+    },
+    DefaultEffort {
+        effort: Option<String>,
     },
     DefaultAutonomy {
         value: Autonomy,
@@ -402,6 +411,7 @@ impl OnboardingStore {
                 let general = &mut next.preferences.general;
                 if general.default_agent != agent_id {
                     general.default_model = None;
+                    general.default_effort = None;
                 }
                 general.default_agent = agent_id;
             }
@@ -414,7 +424,22 @@ impl OnboardingStore {
                         ));
                     }
                 }
-                next.preferences.general.default_model = model;
+                let general = &mut next.preferences.general;
+                if general.default_model != model {
+                    general.default_effort = None;
+                }
+                general.default_model = model;
+            }
+            SetupAction::DefaultEffort { effort } => {
+                if let Some(effort) = &effort {
+                    identifier(effort, 128, "The thinking level is invalid.")?;
+                    if next.preferences.general.default_agent.is_none() {
+                        return Err(SetupError::Invalid(
+                            "Choose a default agent before its thinking level.",
+                        ));
+                    }
+                }
+                next.preferences.general.default_effort = effort;
             }
             SetupAction::DefaultAutonomy { value } => {
                 next.preferences.general.default_autonomy = value;
@@ -836,6 +861,7 @@ mod tests {
             GeneralPreferences {
                 default_agent: Some("codex".into()),
                 default_model: Some("gpt-5.5-codex".into()),
+                default_effort: None,
                 default_autonomy: Autonomy::Ask,
                 automatic_checkpoints: true,
                 notifications: false,
@@ -922,6 +948,58 @@ mod tests {
                 Err(SetupError::Invalid(_))
             ));
         }
+    }
+
+    /// The thinking level belongs to the agent and model it was chosen for.
+    #[test]
+    fn a_default_thinking_level_follows_its_agent_and_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let effort = |effort: &str| SetupAction::DefaultEffort {
+            effort: Some(effort.into()),
+        };
+        assert!(matches!(
+            store.apply(0, effort("high")),
+            Err(SetupError::Invalid(_))
+        ));
+        let agent = |id: &str| SetupAction::DefaultAgent {
+            agent_id: Some(id.into()),
+        };
+        let model = |model: &str| SetupAction::DefaultModel {
+            model: Some(model.into()),
+        };
+        store.apply(0, agent("claude")).unwrap();
+        let set = store.apply(1, effort("high")).unwrap();
+        assert_eq!(
+            set.preferences.general.default_effort.as_deref(),
+            Some("high"),
+            "a level for the agent's own default model"
+        );
+        let same = store.apply(2, model_none()).unwrap();
+        assert_eq!(
+            same.preferences.general.default_effort.as_deref(),
+            Some("high"),
+            "the same model keeps it"
+        );
+        let moved = store.apply(3, model("opus")).unwrap();
+        assert_eq!(moved.preferences.general.default_effort, None);
+        store.apply(4, effort("max")).unwrap();
+        let other = store.apply(5, agent("codex")).unwrap();
+        assert_eq!(other.preferences.general.default_effort, None);
+        for bad in [String::new(), "x".repeat(129), "line\nbreak".into()] {
+            assert!(matches!(
+                store.apply(6, SetupAction::DefaultEffort { effort: Some(bad) }),
+                Err(SetupError::Invalid(_))
+            ));
+        }
+        let cleared = store
+            .apply(6, SetupAction::DefaultEffort { effort: None })
+            .unwrap();
+        assert_eq!(cleared.preferences.general.default_effort, None);
+    }
+
+    fn model_none() -> SetupAction {
+        SetupAction::DefaultModel { model: None }
     }
 
     /// A default saved as "Claude Code (ACP)" from before agents had one entry each is Claude

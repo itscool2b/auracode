@@ -757,29 +757,79 @@ async function inspect(engine, launcher) {
       );
     }
 
+    // The agent, model and thinking menu, on Claude Code's dozen models in a 900px window. It
+    // opens on the current model; the preview answers a change with the old lists and sends the
+    // new ones after, as the real drivers do, and the choice must never snap back.
     await page.goto(`${url}/?preview=settled`);
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.keyboard.press("Control+.");
     await page.locator(".chat-model-popover[open]").waitFor();
-    await page.keyboard.press("ArrowRight");
     assert.equal(
       await page
         .locator('[data-picker-value="sonnet"]')
         .evaluate((node) => node === document.activeElement),
       true,
+      "the menu opens on the current model",
     );
     await page.keyboard.press("ArrowDown");
+    // Every change of what the pill and the list show, in order, while the answer and the lists
+    // after it arrive.
+    const shown = page.evaluate(async () => {
+      const seen = [];
+      const started = performance.now();
+      while (performance.now() - started < 900) {
+        const state = `${document.querySelector(".chat-pill-model")?.textContent}|${document
+          .querySelector('.chat-model-scroll [aria-pressed="true"]')
+          ?.getAttribute("data-picker-value")}`;
+        if (seen.at(-1) !== state) seen.push(state);
+        await new Promise((done) => setTimeout(done, 10));
+      }
+      return seen;
+    });
     await page.keyboard.press("Enter");
-    await page.waitForFunction(
-      () =>
-        document.querySelector('[data-picker-value="haiku"]')?.getAttribute("aria-pressed") ===
-        "true",
+    const states = await shown;
+    assert.deepEqual(
+      states[0] === "Sonnet 5.5|sonnet" ? states.slice(1) : states,
+      ["Haiku 5.5|haiku"],
+      `${engine}: the model switch snapped back or flickered: ${states.join(" > ")}`,
     );
-    await page.keyboard.press("3");
+    // The thinking level is in view without scrolling: no part of the menu has scrolled.
+    const thinking = await page.evaluate(() => {
+      const panel = document.querySelector(".chat-model-popover > .chat-popover-panel");
+      const row = document.querySelector(".chat-picker-thinking");
+      const box = row?.getBoundingClientRect();
+      const frame = panel?.getBoundingClientRect();
+      return {
+        inside:
+          !!box && !!frame && box.top >= frame.top && box.bottom <= frame.bottom && box.top >= 0,
+        panelScrolled: panel?.scrollTop ?? -1,
+        listScrolls: (() => {
+          const list = document.querySelector(".chat-model-scroll");
+          return !!list && list.scrollHeight > list.clientHeight;
+        })(),
+      };
+    });
+    assert.deepEqual(
+      thinking,
+      { inside: true, panelScrolled: 0, listScrolls: true },
+      `${engine}: the thinking level is not in view above a scrolling model list`,
+    );
+    await page.keyboard.press("4");
     await page.waitForFunction(
       () =>
         document.querySelector('[data-picker-value="high"]')?.getAttribute("aria-pressed") ===
         "true",
+    );
+    await page.locator('[data-picker-value="xhigh"]').click();
+    await page.waitForFunction(
+      () => document.querySelector(".chat-pill-level")?.textContent === "Extra high",
+    );
+    assert.equal(
+      await page
+        .locator(".chat-model-popover > .chat-popover-panel")
+        .evaluate((node) => node.scrollTop),
+      0,
+      "choosing a thinking level scrolled the menu",
     );
     await settled(page);
     const pickerScan = await new AxeBuilder({ page }).include(".chat-model-popover").analyze();
@@ -792,6 +842,27 @@ async function inspect(engine, launcher) {
         .evaluate((node) => node === document.activeElement),
       true,
     );
+    // A stopped chat keeps its last models and levels choosable; the choice applies at its start.
+    await page.goto(`${url}/?preview=settled&stopped`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.locator(".chat-model-popover > summary").click();
+    await page
+      .getByTestId("picker-note")
+      .filter({ hasText: "Applies when the agent starts." })
+      .waitFor();
+    await page.locator('[data-picker-value="opus"]').click();
+    await page.locator('[data-picker-value="low"]').click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".chat-pill-model")?.textContent === "Opus 5.5" &&
+        document.querySelector(".chat-pill-level")?.textContent === "Low",
+    );
+    await settled(page);
+    const stoppedScan = await new AxeBuilder({ page }).include(".chat-model-popover").analyze();
+    assert.deepEqual(stoppedScan.violations, [], "Stopped picker accessibility");
+    await page.keyboard.press("Escape");
+    await page.goto(`${url}/?preview=settled`);
+    await page.locator('[data-test-phase="live"]').waitFor();
     await page.getByRole("button", { name: "Attach a file", exact: true }).click();
     await page.getByText("interface-notes.md", { exact: true }).waitFor();
     await page.getByTestId("composer-input").fill("Review @Sidebar");

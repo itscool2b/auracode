@@ -10,7 +10,7 @@ import type {
   SetupSnapshot,
 } from "../../bindings";
 import { applySetupAppearance } from "../../lib/appearance";
-import { AUTONOMIES, autonomyLabel } from "../../lib/chat/present";
+import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
 import { errorMessage } from "../../lib/errors";
 import {
   DEFAULT_GENERAL,
@@ -59,6 +59,22 @@ export function defaultModelChoices(
   const choices = reported.map((choice) => ({ value: choice.value, name: choice.name }));
   if (saved && !choices.some((choice) => choice.value === saved))
     choices.push({ value: saved, name: saved });
+  return choices;
+}
+
+/**
+ * The thinking levels offered for the default model: what it offered (its own "default" is the
+ * select's first entry already), and the saved one if it is not among them.
+ */
+export function defaultLevelChoices(
+  reported: readonly ConfigChoice[],
+  saved: string | null,
+): { value: string; name: string }[] {
+  const choices = reported
+    .filter((choice) => choice.value !== "default")
+    .map((choice) => ({ value: choice.value, name: levelName(choice) }));
+  if (saved && !choices.some((choice) => choice.value === saved))
+    choices.push({ value: saved, name: levelName({ value: saved, name: saved }) });
   return choices;
 }
 
@@ -139,6 +155,24 @@ export function GeneralPanel({
       live = false;
     };
   }, [lists, agentId]);
+  const defaultModel = general.default_model;
+  const [levels, setLevels] = useState<readonly ConfigChoice[]>([]);
+  useEffect(() => {
+    let live = true;
+    setLevels([]);
+    if (agentId)
+      lists.thinking(agentId, defaultModel).then(
+        (value) => {
+          if (live) setLevels(value);
+        },
+        () => {
+          // Not known until the agent has run that model.
+        },
+      );
+    return () => {
+      live = false;
+    };
+  }, [lists, agentId, defaultModel]);
   const change = async (action: SetupAction) => {
     if (!saved || saving.current) return;
     saving.current = true;
@@ -160,6 +194,7 @@ export function GeneralPanel({
   const agentChoices = defaultAgentChoices(agents, agentId);
   const agentName = agentChoices.find((agent) => agent.id === agentId)?.name ?? agentId ?? "";
   const modelChoices = defaultModelChoices(models, general.default_model);
+  const levelChoices = defaultLevelChoices(levels, general.default_effort);
   const tray = info.os === "macos" ? "menu bar" : "tray";
   return (
     <>
@@ -220,6 +255,39 @@ export function GeneralPanel({
                   {modelChoices.map((model) => (
                     <option key={model.value} value={model.value}>
                       {model.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </Row>
+          ) : null}
+          {agentId && (levelChoices.length > 0 || modelChoices.length > 0) ? (
+            <Row
+              title="Thinking"
+              detail={
+                levelChoices.length > 0
+                  ? `New ${agentName} chats start at this thinking level.`
+                  : `${agentName} lists this model's thinking levels once it has run it.`
+              }
+            >
+              {levelChoices.length > 0 ? (
+                <select
+                  className="g-select settings-control settings-select"
+                  aria-label="Default thinking level"
+                  data-testid="settings-default-thinking"
+                  value={general.default_effort ?? ""}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    void change({
+                      type: "default_effort",
+                      effort: event.currentTarget.value || null,
+                    })
+                  }
+                >
+                  <option value="">The model's default</option>
+                  {levelChoices.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.name}
                     </option>
                   ))}
                 </select>

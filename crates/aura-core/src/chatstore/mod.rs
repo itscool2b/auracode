@@ -24,6 +24,7 @@
 
 #[cfg(all(test, feature = "account-sync"))]
 mod account_files_tests;
+pub(crate) mod agent_catalogs;
 pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod composer;
@@ -202,6 +203,30 @@ impl ChatStore {
             .ok_or(StoreError::Closed)?;
         self.shared.push(
             Work::Request(Request::FolderResolution { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    /// The agents' model catalogs, saved as one device-only setting of this profile.
+    pub(crate) async fn agent_catalogs(
+        &self,
+        command: agent_catalogs::Command,
+    ) -> Result<Option<String>, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::AgentCatalogs { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::AgentCatalogs { command, reply }),
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?

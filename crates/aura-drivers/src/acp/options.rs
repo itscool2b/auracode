@@ -3,8 +3,10 @@
 //! `session/set_model`).
 //!
 //! - `configOptions` entries: `select` becomes a select (grouped choices flattened, the group name
-//!   kept), `boolean` a toggle, other types are skipped. Category `mode`, `model`, `thought_level`,
-//!   `model_config` map to Mode, Model, Effort, ModelConfig; missing or other to Other.
+//!   kept), `boolean` a toggle, other types are skipped. Category `mode`, `model`, `model_config`
+//!   map to Mode, Model, ModelConfig; `thought_level`, `effort`, `reasoning`, `reasoning_effort`
+//!   and `thinking` to Effort, as does a select with one of those ids and no category; anything
+//!   else to Other.
 //! - Legacy `modes` become the option `mode` (category Mode) only when no real option has category
 //!   Mode; legacy `models` the option `model` (category Model) only when none has category Model.
 //! - Limits: 100 options, 500 choices each, names 200 characters, descriptions 300.
@@ -554,6 +556,17 @@ pub fn parse_config_option(raw: &Value) -> Option<ConfigOption> {
         },
         _ => return None,
     };
+    let category = match wire::str_at(raw, "category") {
+        Some("mode") => ConfigCategory::Mode,
+        Some("model") => ConfigCategory::Model,
+        Some(category) if names_effort(category) => ConfigCategory::Effort,
+        Some("model_config") => ConfigCategory::ModelConfig,
+        // An agent that leaves the category out may still name its thinking level plainly.
+        None | Some("") if matches!(kind, ConfigKind::Select { .. }) && names_effort(&id) => {
+            ConfigCategory::Effort
+        }
+        _ => ConfigCategory::Other,
+    };
     Some(ConfigOption {
         name: truncate(
             &wire::string_at(raw, "name").unwrap_or_else(|| id.clone()),
@@ -562,16 +575,25 @@ pub fn parse_config_option(raw: &Value) -> Option<ConfigOption> {
         id,
         description: wire::str_at(raw, "description")
             .map(|text| truncate(text, MAX_DESCRIPTION_CHARS)),
-        category: match wire::str_at(raw, "category") {
-            Some("mode") => ConfigCategory::Mode,
-            Some("model") => ConfigCategory::Model,
-            Some("thought_level") => ConfigCategory::Effort,
-            Some("model_config") => ConfigCategory::ModelConfig,
-            _ => ConfigCategory::Other,
-        },
+        category,
         kind,
         pending: None,
     })
+}
+
+/// Whether a category or an option id names a thinking level: `thought_level` (ACP's own),
+/// `effort`, `reasoning`, `reasoning_effort` or `thinking`, in any case and with `-`, `_` or no
+/// separator. Exact names only, so `reasoning_summary` or `thinking_budget` stay where they are.
+fn names_effort(name: &str) -> bool {
+    let plain: String = name
+        .chars()
+        .filter(|c| !matches!(c, '_' | '-' | ' '))
+        .flat_map(char::to_lowercase)
+        .collect();
+    matches!(
+        plain.as_str(),
+        "thoughtlevel" | "effort" | "reasoning" | "reasoningeffort" | "thinking"
+    )
 }
 
 fn select_choice(raw: &Value, group: Option<String>) -> Option<ConfigChoice> {
@@ -676,6 +698,81 @@ mod tests {
                 methods::SESSION_SET_CONFIG_OPTION,
                 json!({"sessionId": "s", "configId": "fast", "type": "boolean", "value": true})
             ))
+        );
+    }
+
+    /// Agents name their thinking level in several ways; each lands in Effort, so the picker shows
+    /// it as Thinking instead of under More options. Look-alike names keep their own place.
+    #[test]
+    fn thinking_levels_are_effort_whatever_the_agent_calls_them() {
+        let levels = json!([{"value": "low", "name": "Low"}, {"value": "high", "name": "High"}]);
+        let category = |id: &str, category: Option<&str>, kind: &str| {
+            let mut raw = if kind == "boolean" {
+                json!({"id": id, "name": id, "type": "boolean", "currentValue": false})
+            } else {
+                json!({"id": id, "name": id, "type": "select", "currentValue": "low", "options": levels})
+            };
+            if let Some(category) = category {
+                raw["category"] = json!(category);
+            }
+            parse_config_option(&raw).expect("parses").category
+        };
+        for named in [
+            "effort",
+            "reasoning",
+            "reasoning_effort",
+            "thinking",
+            "thought_level",
+            "Reasoning-Effort",
+            "reasoningEffort",
+        ] {
+            assert_eq!(
+                category("level", Some(named), "select"),
+                ConfigCategory::Effort,
+                "category {named}"
+            );
+            assert_eq!(
+                category(named, None, "select"),
+                ConfigCategory::Effort,
+                "id {named}"
+            );
+            assert_eq!(
+                category(named, Some(""), "select"),
+                ConfigCategory::Effort,
+                "id {named} with an empty category"
+            );
+        }
+        // A category the agent chose wins over the id, and an id alone never makes a switch a
+        // level; names that only resemble a level stay Other.
+        assert_eq!(
+            category("thinking", Some("model_config"), "select"),
+            ConfigCategory::ModelConfig
+        );
+        assert_eq!(
+            category("thinking", Some("mode"), "select"),
+            ConfigCategory::Mode
+        );
+        assert_eq!(category("thinking", None, "boolean"), ConfigCategory::Other);
+        assert_eq!(
+            category("thinking", Some("thinking"), "boolean"),
+            ConfigCategory::Effort
+        );
+        for other in [
+            "reasoning_summary",
+            "thinking_budget",
+            "effort_mode",
+            "verbosity",
+            "model",
+        ] {
+            assert_eq!(
+                category(other, None, "select"),
+                ConfigCategory::Other,
+                "{other}"
+            );
+        }
+        assert_eq!(
+            category("agent", Some("other"), "select"),
+            ConfigCategory::Other
         );
     }
 

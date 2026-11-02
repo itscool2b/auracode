@@ -767,6 +767,11 @@ async fn actor_and_driver_never_deadlock() {
     .expect("no deadlock")
     .expect("the option change completes");
     assert_eq!(lists.options.len(), 1);
+    // The actor reads no driver event while saving is paused, yet the answer shows the choice.
+    assert!(matches!(
+        &lists.options[0].kind,
+        aura_protocol::session::ConfigKind::Select { current, .. } if current == "smart"
+    ));
     assert!(handle.commands().iter().any(|command| matches!(
         command,
         aura_drivers::driver::LoggedCommand::SetOption { .. }

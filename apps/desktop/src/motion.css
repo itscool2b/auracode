@@ -41,6 +41,29 @@
   animation-timing-function: var(--g-ease-quint);
 }
 
+/* Closing, a popover settles back the same 2px as it fades, faster than it came (Popover.tsx). */
+.chat-popover[data-closing] > .chat-popover-panel {
+  animation: ui-popover-out var(--g-dur-exit) var(--g-ease-out) both;
+  pointer-events: none;
+}
+
+@keyframes ui-popover-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+/* A choice on its way eases to its quieter step. */
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button,
+.picker-choices[data-layout="segments"] > .g-segment {
+  transition-property: background-color, box-shadow, color, opacity;
+}
+
 /* A dialog lifts out of the scrim; the scrim itself fades in under it. */
 .g-dialog[open] {
   animation: ui-dialog-in var(--g-dur-panel) var(--g-ease-quint) both;
@@ -258,6 +281,22 @@
   }
 }
 
+/* A newly chosen model's check settles in. */
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button > svg {
+  animation: ui-check-in var(--g-dur-fast) var(--g-ease-out) both;
+}
+
+@keyframes ui-check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* --------------------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
@@ -287,7 +326,9 @@
   .chat-send:not(:disabled, [data-quiet]) > svg,
   .ui-pulse,
   .ui-pulse::after,
-  .new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after {
+  .new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after,
+  .chat-popover[data-closing] > .chat-popover-panel,
+  :is(.chat-agent-choices, .picker-choices:not([data-layout])) > button > svg {
     animation: none;
   }
 
@@ -301,6 +342,15 @@
     .ui-pulse,
     .ui-pulse::after,
     .new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after
+  ) {
+  animation: none;
+}
+
+/* A popover closes at once and a check simply appears. */
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(
+    .chat-popover[data-closing] > .chat-popover-panel,
+    :is(.chat-agent-choices, .picker-choices:not([data-layout])) > button > svg
   ) {
   animation: none;
 }

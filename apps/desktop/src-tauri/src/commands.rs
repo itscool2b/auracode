@@ -424,7 +424,7 @@ pub async fn chat_cancel_queued(
         .await?)
 }
 
-/// The models `agent_id` listed the last time one of its chats started in this run, for Settings'
+/// The models `agent_id` listed the last time one of its chats ran on this device, for Settings'
 /// default model. Empty until then: agents list their models only from a running session.
 #[tauri::command]
 #[specta::specta]
@@ -433,6 +433,21 @@ pub async fn agent_models(
     agent_id: String,
 ) -> Result<Vec<ConfigChoice>, AppError> {
     Ok(state.sessions()?.reported_models(&agent_id))
+}
+
+/// The thinking levels `model` of `agent_id` offered the last time it ran on this device (`None`:
+/// the model the agent starts on), for Settings' default thinking level. Empty when unknown or
+/// when the model offers none.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_thinking_levels(
+    state: State<'_, AppState>,
+    agent_id: String,
+    model: Option<String>,
+) -> Result<Vec<ConfigChoice>, AppError> {
+    Ok(state
+        .sessions()?
+        .reported_thinking(&agent_id, model.as_deref()))
 }
 
 /// The words of a queued prompt as typed, for editing it in place.

@@ -544,11 +544,44 @@ describe("the pickers", () => {
     pending: null,
   };
 
-  it("enable options only while the agent is ready or working; autonomy always", () => {
+  const mode: ConfigOption = {
+    id: "mode",
+    name: "Mode",
+    description: null,
+    category: "mode",
+    kind: {
+      type: "select",
+      current: "ask",
+      choices: [
+        { value: "ask", name: "Ask", description: null, group: null },
+        { value: "auto", name: "Auto", description: null, group: null },
+      ],
+    },
+    pending: null,
+  };
+  const effort: ConfigOption = {
+    id: "effort",
+    name: "Effort",
+    description: null,
+    category: "effort",
+    kind: {
+      type: "select",
+      current: "xhigh",
+      choices: ["default", "low", "xhigh"].map((value) => ({
+        value,
+        name: value === "default" ? "Default" : value,
+        description: null,
+        group: null,
+      })),
+    },
+    pending: null,
+  };
+
+  it("keep model and thinking choosable for the next start while stopped, none while starting, and mode only when idle", () => {
     const render = (status: Parameters<typeof Pickers>[0]["status"]) =>
       renderToStaticMarkup(
         <Pickers
-          lists={lists(1, { options: [toggle, model] })}
+          lists={lists(1, { options: [toggle, mode, model] })}
           autonomy="full_auto"
           status={status}
           error={null}
@@ -557,14 +590,97 @@ describe("the pickers", () => {
         />,
       );
     const stopped = render("stopped");
-    expect(stopped.match(/<button[^>]*data-picker-value[^>]*disabled/g)).toHaveLength(2);
-    expect(stopped).toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
+    expect(stopped).not.toMatch(/<button[^>]*data-picker-value[^>]*disabled/);
+    expect(stopped).not.toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
+    expect(stopped).toMatch(/<select[^>]*data-test-option-id="mode"[^>]*disabled/);
+    expect(stopped).toContain("Applies when the agent starts.");
     expect(stopped).toContain("Automatic checkpoints are optional in");
     expect(stopped).not.toContain("A local checkpoint is saved before each turn.");
     expect(stopped).toContain("(pending: Smart)");
     expect(stopped.indexOf("Model")).toBeLessThan(stopped.indexOf("Fast mode"));
+    const starting = render("starting");
+    expect(starting.match(/<button[^>]*data-picker-value[^>]*disabled/g)).toHaveLength(2);
+    expect(starting).toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
+    expect(starting).toContain("Changes open once the agent has started.");
+    const running = render("running");
+    expect(running).not.toMatch(/<button[^>]*data-picker-value[^>]*disabled/);
+    expect(running).toMatch(/<select[^>]*data-test-option-id="mode"[^>]*disabled/);
+    expect(running).not.toContain("Applies when the agent starts.");
     const ready = render("ready");
     expect(ready).not.toMatch(/disabled/);
+  });
+
+  it("show the thinking level above the model list, in plain words, and on the pill", () => {
+    const html = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [model, effort, toggle] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    const thinking = html.indexOf(">Thinking</h3>");
+    expect(thinking).toBeGreaterThan(-1);
+    expect(thinking).toBeLessThan(html.indexOf('data-picker-value="fast"'));
+    expect(html.indexOf('data-picker-value="fast"')).toBeLessThan(html.indexOf("More options"));
+    expect(html).not.toContain(">Effort<");
+    expect(html).toMatch(/data-picker-value="xhigh" aria-pressed="true"[^>]*><span>Extra high</);
+    expect(html).toMatch(/data-picker-value="low"[^>]*><span>Low</);
+    expect(html).toContain('class="chat-pill-level">Extra high</span>');
+    expect(html).toContain('class="chat-pill-level-short">X-high</span>');
+    expect(html).toContain('aria-label="Fast, Extra high thinking. Agent, model and thinking"');
+    // A model without levels says so where the levels would be.
+    const plain = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [model] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    expect(plain).toContain("This model has no thinking levels.");
+    expect(plain).not.toContain("chat-pill-effort");
+    expect(plain).toMatch(/data-testid="picker-current-model">Fast</);
+    // Before an agent has run, its stopped chat says where models will come from.
+    const unknown = renderToStaticMarkup(
+      <Pickers
+        lists={null}
+        autonomy="full_auto"
+        status="stopped"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    expect(unknown).toContain("Models show once this agent has run.");
+    expect(unknown).toContain("Shown once the agent runs.");
+    expect(unknown).not.toContain("Applies when the agent starts.");
+    expect(unknown).not.toContain("chat-model-head-agent");
+  });
+
+  it("say why a change was refused inside the model menu", () => {
+    const html = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [model, effort] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        optionError="That model isn't available on your plan."
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    const menu = html.slice(html.indexOf('class="chat-popover chat-model-popover"'));
+    expect(menu).toMatch(
+      /role="alert" data-testid="picker-option-error">That model isn&#x27;t available on your plan\./,
+    );
+    expect(html).toContain(
+      'aria-label="A change was refused. Open the agent, model and thinking picker for details."',
+    );
   });
 
   it("show the value a change on its way asked for, marked, instead of the old one", () => {

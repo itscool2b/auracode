@@ -67,6 +67,7 @@ fn defaults(general: &GeneralPreferences) -> NewChatDefaults {
         autonomy: general.default_autonomy,
         agent: general.default_agent.clone(),
         model: general.default_model.clone(),
+        effort: general.default_effort.clone(),
     }
 }
 
@@ -85,12 +86,14 @@ mod tests {
         let chosen = defaults(&GeneralPreferences {
             default_agent: Some("codex".into()),
             default_model: Some("gpt-5.5-codex".into()),
+            default_effort: Some("high".into()),
             default_autonomy: Autonomy::AutoEdit,
             ..GeneralPreferences::default()
         });
         assert_eq!(chosen.autonomy, Autonomy::AutoEdit);
         assert_eq!(chosen.agent.as_deref(), Some("codex"));
         assert_eq!(chosen.model.as_deref(), Some("gpt-5.5-codex"));
+        assert_eq!(chosen.effort.as_deref(), Some("high"));
     }
 
     #[tokio::test]
