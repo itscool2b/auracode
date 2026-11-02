@@ -55,8 +55,6 @@ The other catalog agents keep their official guides, for these reasons:
 - **Antigravity**: Google distributes a desktop app and an `agy` install script; neither offers a
   pinned version or checksum in the vendor's documentation.
 
-### Sign in
-
 ### Discovering an installation added while Aura is open
 
 The installation observer refreshes the resolved environment before its 30-second metadata

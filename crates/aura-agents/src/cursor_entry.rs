@@ -149,12 +149,28 @@ mod tests {
         let scratch = tempfile::tempdir().unwrap();
         let shim = scratch.path().join("cursor-agent.cmd");
         std::fs::write(&shim, "fixture").unwrap();
-        install(scratch.path(), "2026.10.22-abcdef0");
+        let original = install(scratch.path(), "2026.10.22-abcdef0");
         let mut env = aura_process::EnvMap::new();
         env.insert(aura_process::EnvKey::from("PATH"), scratch.path().into());
         // A saved selection is observed on every platform, independent of executable suffix.
         let selected = [("cursor".into(), shim)].into_iter().collect();
         let specs = [crate::get("cursor").unwrap().clone()];
+        for (file, contents) in [
+            ("node.exe", "changed runtime, never executed"),
+            ("index.js", "changed entry point, never executed"),
+            (
+                "package.json",
+                r#"{"name":"@anysphere/agent-cli-runtime","version":"2026.10.22"}"#,
+            ),
+        ] {
+            let previous = crate::candidates::fingerprint(&specs, &env, &selected);
+            std::fs::write(original.join(file), contents).unwrap();
+            assert_ne!(
+                crate::candidates::fingerprint(&specs, &env, &selected),
+                previous,
+                "{file}"
+            );
+        }
         let before = crate::candidates::fingerprint(&specs, &env, &selected);
         install(scratch.path(), "2026.11.02-abcdef0");
         assert_ne!(
@@ -163,18 +179,69 @@ mod tests {
         );
     }
 
+    #[test]
+    fn directory_enumeration_and_manifest_reads_are_bounded() {
+        let scratch = tempfile::tempdir().unwrap();
+        let shim = scratch.path().join("cursor-agent.cmd");
+        std::fs::write(&shim, "fixture").unwrap();
+        let older = install(scratch.path(), "2026.10.22-abcdef0");
+        let oversized = install(scratch.path(), "2026.11.02-abcdef0");
+        std::fs::write(
+            oversized.join("package.json"),
+            vec![b' '; MAX_MANIFEST as usize + 1],
+        )
+        .unwrap();
+        assert_eq!(
+            command(&shim).unwrap().1,
+            older.join("index.js").canonicalize().unwrap()
+        );
+        for index in 2..MAX_VERSIONS {
+            std::fs::write(
+                scratch
+                    .path()
+                    .join("versions")
+                    .join(format!("unrelated-{index}")),
+                "fixture",
+            )
+            .unwrap();
+        }
+        assert!(
+            command(&shim).is_some(),
+            "exactly the enumeration limit is supported"
+        );
+        std::fs::write(scratch.path().join("versions/one-too-many"), "fixture").unwrap();
+        assert_eq!(
+            command(&shim),
+            None,
+            "an incomplete directory inventory must not choose a runtime"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn runtime_links_cannot_escape_the_distribution() {
+        for file in ["node.exe", "index.js", "package.json"] {
+            let scratch = tempfile::tempdir().unwrap();
+            let outside = tempfile::tempdir().unwrap();
+            let shim = scratch.path().join("cursor-agent.cmd");
+            std::fs::write(&shim, "fixture").unwrap();
+            let folder = install(scratch.path(), "2026.10.22-abcdef0");
+            std::fs::rename(folder.join(file), outside.path().join(file)).unwrap();
+            std::os::unix::fs::symlink(outside.path().join(file), folder.join(file)).unwrap();
+            assert_eq!(command(&shim), None, "{file}");
+        }
         let scratch = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         let shim = scratch.path().join("cursor-agent.cmd");
         std::fs::write(&shim, "fixture").unwrap();
-        let folder = install(scratch.path(), "2026.10.22-abcdef0");
-        std::fs::write(outside.path().join("index.js"), "outside").unwrap();
-        std::fs::remove_file(folder.join("index.js")).unwrap();
-        std::os::unix::fs::symlink(outside.path().join("index.js"), folder.join("index.js"))
+        std::fs::create_dir(scratch.path().join("versions")).unwrap();
+        let target = install(outside.path(), "2026.10.22-abcdef0");
+        std::os::unix::fs::symlink(target, scratch.path().join("versions/2026.10.22-abcdef0"))
             .unwrap();
-        assert_eq!(command(&shim), None);
+        assert_eq!(
+            command(&shim),
+            None,
+            "a version directory cannot leave the distribution"
+        );
     }
 }
