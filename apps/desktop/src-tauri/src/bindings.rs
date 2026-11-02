@@ -304,7 +304,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         // in a JS number until 2^53. Typing them as `bigint` would not match what arrives.
         // The checks each chat smoke scenario must report: the UI names them from these, and the
         // shell holds its report to the same lists (`smoke::finalize`).
-        .constant("SMOKE_CHAT_CHECKS", smoke::CHAT_CHECKS)
+        .constant("SMOKE_CHAT_CHECKS", smoke::CHAT_CHECKS.as_slice())
         .constant("SMOKE_CHAT_REOPEN_CHECKS", smoke::CHAT_REOPEN_CHECKS)
         .constant("SMOKE_AGENT_CHECKS", smoke::AGENT_CHECKS)
         .dangerously_cast_bigints_to_number()
