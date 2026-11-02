@@ -3,10 +3,12 @@ import type { AgentAccounts as Accounts } from "../../bindings";
 import {
   type AgentAccountsApi,
   accountName,
+  accountUsage,
   MAIN_ACCOUNT,
   useAgentAccounts,
 } from "../../lib/agentAccounts";
 import { errorMessage } from "../../lib/errors";
+import { AccountUsageMeters } from "./AccountUsageMeters";
 import { AddAccountDialog } from "./AddAccountDialog";
 import "./accounts.css";
 
@@ -26,7 +28,7 @@ export function AgentAccounts({
   readonly agentName: string;
   readonly api: AgentAccountsApi;
 }) {
-  const { accounts, error: loadError, cache } = useAgentAccounts(agentId, api);
+  const { accounts, error: loadError, usage, cache } = useAgentAccounts(agentId, api);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -62,8 +64,9 @@ export function AgentAccounts({
     <div className="agent-accounts" data-testid="agent-accounts">
       <h2 className="agent-accounts-title">Accounts</h2>
       <p>
-        Switch a chat's account from its composer. When an account reaches its usage limit, the chat
-        continues on another one with the same conversation.
+        Each account's usage limits as it last reported them. Switch a chat's account from its
+        composer; when one reaches its limit, the chat continues on another with the same
+        conversation.
       </p>
       <ul className="agent-accounts-list" aria-label={`${agentName} accounts`}>
         {rows.map((id) => {
@@ -135,6 +138,7 @@ export function AgentAccounts({
                   ) : null}
                 </span>
               )}
+              <AccountUsageMeters usage={accountUsage(usage, id)} />
             </li>
           );
         })}
@@ -175,6 +179,31 @@ export function AgentAccounts({
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * An agent without added accounts: the usage limits its own sign-in last reported, when it has
+ * reported any (Codex does; agents that report none show nothing).
+ */
+export function AgentUsage({
+  agentId,
+  agentName,
+  api,
+}: {
+  readonly agentId: string;
+  readonly agentName: string;
+  readonly api: AgentAccountsApi;
+}) {
+  const { usage } = useAgentAccounts(agentId, api);
+  const main = accountUsage(usage, null);
+  if (!main) return null;
+  return (
+    <div className="agent-accounts" data-testid="agent-usage">
+      <h2 className="agent-accounts-title">Usage</h2>
+      <p>{agentName}'s usage limits as it last reported them.</p>
+      <AccountUsageMeters usage={main} />
     </div>
   );
 }

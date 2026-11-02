@@ -174,6 +174,8 @@ export const commands = {
 	agentInstallations: (agentId: string) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_installations", { agentId })),
 	agentSelectInstallation: (agentId: string, path: string | null) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_select_installation", { agentId, path })),
 	agentAccounts: (agentId: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_accounts", { agentId })),
+	/**  What each of the agent's accounts last reported about its usage limits. */
+	agentUsage: (agentId: string) => typedError<AgentUsage, AppError>(__TAURI_INVOKE("agent_usage", { agentId })),
 	/**  Adds an account from the token `claude setup-token` printed. The account is not used yet. */
 	agentAccountAdd: (agentId: string, name: string, token: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_account_add", { agentId, name, token })),
 	agentAccountRemove: (agentId: string, accountId: string) => typedError<AgentAccounts, AppError>(__TAURI_INVOKE("agent_account_remove", { agentId, accountId })),
@@ -540,6 +542,17 @@ export type AccountSyncStatus = {
 	message: string | null,
 };
 
+/**
+ *  The usage limits one of an agent's accounts last reported: its windows (a session, a week, a
+ *  model's own) and when it reported them. Agents report them while a chat runs on the account.
+ */
+export type AccountUsage = {
+	/**  The added account; `None`: the agent's own sign-in. */
+	account_id: string | null,
+	windows: LimitWindow[],
+	observed_at: number,
+};
+
 export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlocked" | "restart_required";
 
 export type AccountVaultStatus = {
@@ -716,6 +729,12 @@ export type AgentPlugins = {
 
 /**  Configuration sync for this agent on this device. */
 export type AgentSync = { state: "on" } | { state: "off" } | { state: "unsupported"; reason: string };
+
+/**  What each of an agent's accounts last reported about its usage limits, newest first. */
+export type AgentUsage = {
+	agent_id: string,
+	accounts: AccountUsage[],
+};
 
 /**  A command failure, serialized as `{ code, message }`. */
 export type AppError = {

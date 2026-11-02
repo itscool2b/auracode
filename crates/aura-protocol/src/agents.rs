@@ -182,6 +182,23 @@ pub struct AgentAccounts {
     pub unavailable: Option<String>,
 }
 
+/// The usage limits one of an agent's accounts last reported: its windows (a session, a week, a
+/// model's own) and when it reported them. Agents report them while a chat runs on the account.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+pub struct AccountUsage {
+    /// The added account; `None`: the agent's own sign-in.
+    pub account_id: Option<String>,
+    pub windows: Vec<crate::LimitWindow>,
+    pub observed_at: crate::Millis,
+}
+
+/// What each of an agent's accounts last reported about its usage limits, newest first.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+pub struct AgentUsage {
+    pub agent_id: String,
+    pub accounts: Vec<AccountUsage>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

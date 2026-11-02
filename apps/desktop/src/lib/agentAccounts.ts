@@ -1,5 +1,11 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { type AgentAccounts, commands, type SessionStatus } from "../bindings";
+import {
+  type AccountUsage,
+  type AgentAccounts,
+  type AgentUsage,
+  commands,
+  type SessionStatus,
+} from "../bindings";
 import { errorMessage } from "./errors";
 import { settle } from "./ipc";
 import { type TerminalTransport, terminalTransport } from "./terminal";
@@ -14,6 +20,8 @@ export interface AgentAccountsApi {
   use(agentId: string, accountId: string | null): Promise<AgentAccounts>;
   /** Chooses the account, then starts this chat again on it and sends what was held. */
   switchChat(chatId: string, agentId: string, accountId: string | null): Promise<AgentAccounts>;
+  /** What each of the agent's accounts last reported about its usage limits. */
+  usage(agentId: string): Promise<AgentUsage>;
   /** The terminal sheet's transport for `claude setup-token`. */
   readonly tokenTerminal: TerminalTransport;
 }
@@ -25,6 +33,7 @@ export const agentAccountsApi: AgentAccountsApi = {
   use: (agentId, accountId) => settle(commands.agentAccountUse(agentId, accountId)),
   switchChat: (chatId, agentId, accountId) =>
     settle(commands.chatSwitchAccount(chatId, agentId, accountId)),
+  usage: (agentId) => settle(commands.agentUsage(agentId)),
   tokenTerminal: {
     ...terminalTransport,
     start: (id, agentId, size) =>
@@ -68,9 +77,19 @@ export function resetText(resetsAt: number | null, now = Date.now()): string | n
 export interface AccountsState {
   readonly accounts: AgentAccounts | null;
   readonly error: string | null;
+  /** What each account last reported about its usage limits, if anything yet. */
+  readonly usage: AgentUsage | null;
 }
 
-const EMPTY: AccountsState = { accounts: null, error: null };
+const EMPTY: AccountsState = { accounts: null, error: null, usage: null };
+
+/** The usage an account (`null`: the agent's own sign-in) last reported. */
+export function accountUsage(
+  usage: AgentUsage | null,
+  accountId: string | null,
+): AccountUsage | null {
+  return usage?.accounts.find((entry) => (entry.account_id ?? null) === accountId) ?? null;
+}
 
 /**
  * One api's accounts per agent, shared by every surface that shows them (the composer, the limit
@@ -96,8 +115,21 @@ export class AccountsCache {
 
   /** Takes an answer the api gave, from any surface. */
   set(agentId: string, accounts: AgentAccounts): void {
-    this.entries.set(agentId, { accounts, error: null });
+    this.entries.set(agentId, { ...this.snapshot(agentId), accounts, error: null });
     this.emit();
+    void this.refreshUsage(agentId);
+  }
+
+  /** Usage changes as chats run: every surface that shows it asks again when it opens. */
+  refreshUsage(agentId: string): Promise<void> {
+    if (typeof this.api.usage !== "function") return Promise.resolve();
+    return this.api.usage(agentId).then(
+      (usage) => {
+        this.entries.set(agentId, { ...this.snapshot(agentId), usage });
+        this.emit();
+      },
+      () => {},
+    );
   }
 
   refresh(agentId: string): Promise<void> {
@@ -108,11 +140,9 @@ export class AccountsCache {
       .then(
         (accounts) => this.set(agentId, accounts),
         (reason) => {
-          this.entries.set(agentId, {
-            accounts: this.snapshot(agentId).accounts,
-            error: errorMessage(reason),
-          });
+          this.entries.set(agentId, { ...this.snapshot(agentId), error: errorMessage(reason) });
           this.emit();
+          void this.refreshUsage(agentId);
         },
       )
       .finally(() => this.loads.delete(agentId));
@@ -201,4 +231,19 @@ export function chooseChatAccount(
       ? cache.api.switchChat(chat.chatId, chat.agentId, accountId)
       : cache.api.use(chat.agentId, accountId),
   );
+}
+
+/** "42%", "100%": a window's share used, whole; "unknown" when the agent gave no number. */
+export function usedText(percent: number | null): string {
+  return percent === null ? "unknown" : `${Math.round(Math.max(0, Math.min(100, percent)))}%`;
+}
+
+/** "just now", "5 min ago", "3 h ago", "Nov 1": when an account last reported its usage. */
+export function seenText(at: number, now = Date.now()): string {
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return new Date(at).toLocaleDateString([], { month: "short", day: "numeric" });
 }

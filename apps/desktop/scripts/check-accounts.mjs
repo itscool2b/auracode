@@ -105,6 +105,13 @@ try {
           await idle.getByRole("button", { name: /^Main account/ }).getAttribute("aria-pressed"),
           "true",
         );
+        // Each account's usage as it last reported it: one line in the composer, meters on the page.
+        await idle.getByText("5 hours 42% · 7 days 81%").waitFor();
+        await idle.getByText("5 hours 100% · 7 days 18%").waitFor();
+        const page_ = page.getByTestId("agent-accounts");
+        assert.equal(await page_.getByTestId("account-usage").count(), 2);
+        await page_.getByText("As of 5 min ago").waitFor();
+        assert.equal(await page_.locator(".account-usage-window[data-full]").count(), 1);
         await axe(page);
         await shot("composer");
         await work.click();

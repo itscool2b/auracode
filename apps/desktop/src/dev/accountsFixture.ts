@@ -106,6 +106,36 @@ export function createAccountsFixture(
       state = { ...state, active: accountId };
       return answer();
     },
+    async usage(agentId) {
+      // The main account near its week, the first added one at its session limit.
+      const hour = 3_600_000;
+      const now = Date.now();
+      return {
+        agent_id: agentId,
+        accounts: [
+          {
+            account_id: null,
+            windows: [
+              { label: "5 hours", used_percent: 42, resets_at: now + 2 * hour },
+              { label: "7 days", used_percent: 81, resets_at: now + 50 * hour },
+            ],
+            observed_at: now - 5 * 60_000,
+          },
+          ...(state.accounts[0]
+            ? [
+                {
+                  account_id: state.accounts[0].id,
+                  windows: [
+                    { label: "5 hours", used_percent: 100, resets_at: now + hour },
+                    { label: "7 days", used_percent: 18, resets_at: now + 120 * hour },
+                  ],
+                  observed_at: now - 2 * hour,
+                },
+              ]
+            : []),
+        ],
+      };
+    },
     async switchChat(chatId, agentId, accountId) {
       calls.push(`switch:${chatId}:${agentId}:${accountId ?? "own"}`);
       state = { ...state, active: accountId };

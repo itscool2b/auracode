@@ -4247,7 +4247,17 @@ impl ChatActor {
                         }
                     }
                     AuraEvent::UsageUpdated(usage) => self.usage = Some(usage.clone()),
-                    AuraEvent::LimitsUpdated { windows } => self.limits = Some(windows.clone()),
+                    AuraEvent::LimitsUpdated { windows } => {
+                        // The account this process runs on reported them: the book keeps them
+                        // for that account, so its usage shows even after this chat moves on.
+                        self.shared.agent_usage.record(
+                            aura_agents::agent_of(&self.chat.agent_id),
+                            self.account.as_ref().map(|(id, _)| id.as_str()),
+                            windows,
+                            now_millis(),
+                        );
+                        self.limits = Some(windows.clone());
+                    }
                     _ => {}
                 }
                 self.push(event, tag.as_deref());

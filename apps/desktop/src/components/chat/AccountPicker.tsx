@@ -4,6 +4,7 @@ import type { SessionStatus } from "../../bindings";
 import {
   type AgentAccountsApi,
   accountName,
+  accountUsage,
   chatAccount,
   chooseChatAccount,
   MAIN_ACCOUNT,
@@ -11,6 +12,7 @@ import {
   useAgentAccounts,
 } from "../../lib/agentAccounts";
 import { errorMessage } from "../../lib/errors";
+import { AccountUsageMeters } from "../setup/AccountUsageMeters";
 import { AddAccountDialog } from "../setup/AddAccountDialog";
 import { movePickerFocus } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
@@ -41,7 +43,7 @@ export function AccountPicker({
   readonly api: AgentAccountsApi;
   readonly onManage?: () => void;
 }) {
-  const { accounts, error: loadError, cache } = useAgentAccounts(agentId, api);
+  const { accounts, error: loadError, usage, cache } = useAgentAccounts(agentId, api);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +116,11 @@ export function AccountPicker({
             >
               <span className="picker-choice-copy">
                 <strong>{accountName(accounts, id)}</strong>
-                {id === null ? <small>The account {agentName} is signed in to</small> : null}
+                {accountUsage(usage, id) ? (
+                  <AccountUsageMeters compact usage={accountUsage(usage, id)} />
+                ) : id === null ? (
+                  <small>The account {agentName} is signed in to</small>
+                ) : null}
               </span>
               {id === current ? <Check size={14} aria-label="Selected" /> : null}
             </button>
