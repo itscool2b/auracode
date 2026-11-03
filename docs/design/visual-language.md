@@ -75,7 +75,7 @@ The page is light paper (`#fafafa`) with ink text, broken by two night bands: ca
 
 The home page, in order:
 
-1. **Header.** A floating glass capsule with a pill that glides between links. It turns to dark glass over night bands. On mobile it opens as a glass sheet.
+1. **Header.** A floating glass capsule with a pill that glides between links. It turns to dark glass over night bands. On mobile it opens as a solid sheet, as the app's menus are: white on paper and night over a night band, so its links read clearly over any content.
 2. **Hero.** "One window for *[agent]*." The agent name rolls in letter by letter, in Fraunces Italic, and the split letters keep the face's kerning (each takes its kerned offset from the set word). Below sit the lead, a magnetic Download pill and "See it work".
    - The hero window is a live glass mini-app. It replays a real handoff loop: the message types in, the agent thinks, runs a tool and replies, then the next message hands off to another agent.
    - Its printed frame, which no-JS and reduced motion keep, shows Codex's turn, the handoff to Claude Code and its finished turn, and the next message to Pi typed in the composer; the headline names Claude Code.

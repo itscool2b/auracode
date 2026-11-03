@@ -268,6 +268,35 @@ try {
       still = await stillMarquee(page);
       assert.equal(still.names.length, 9);
       assert.ok(still.inView, "the still marquee wraps inside a 390px page");
+      // The phone menu reads clearly over a night band: a solid night sheet with light links.
+      await page.evaluate(() => {
+        const band = document.querySelector("#capabilities");
+        window.scrollTo(0, band.getBoundingClientRect().top + window.scrollY + 400);
+      });
+      await page.waitForFunction(() =>
+        document.querySelector(".site-nav")?.hasAttribute("data-night"),
+      );
+      await page.locator(".nav-menu-button").click();
+      await page.getByRole("navigation", { name: "Menu" }).waitFor();
+      await page.waitForFunction(() =>
+        document
+          .querySelector(".nav-sheet")
+          .getAnimations()
+          .every((animation) => animation.playState === "finished"),
+      );
+      await settled(page);
+      axe = await new AxeBuilder({ page })
+        .include(".nav-sheet")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze();
+      assert.deepEqual(
+        axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+        [],
+        "the phone menu over a night band",
+      );
+      await page.keyboard.press("Escape");
+      await page.getByRole("navigation", { name: "Menu" }).waitFor({ state: "hidden" });
+      await page.evaluate(() => window.scrollTo(0, 0));
       // The narrowest phones still in use: nothing may scroll sideways at 320px either.
       await page.setViewportSize({ width: 320, height: 640 });
       assert.ok(
