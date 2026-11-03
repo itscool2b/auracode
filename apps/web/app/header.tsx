@@ -33,25 +33,38 @@ export function SiteHeader() {
     };
   }, []);
 
-  // Over a night band the capsule turns to dark glass, so it never sits pale on black.
+  // Over a night band the capsule turns to dark glass, so it never sits pale on black. It turns
+  // when the band's edge crosses the capsule's middle, not while most of it is still on paper.
   useEffect(() => {
     const node = header.current;
     const nights = document.querySelectorAll(".night");
     if (!node || nights.length === 0 || typeof IntersectionObserver === "undefined") return;
     const under = new Set<Element>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) under.add(entry.target);
-          else under.delete(entry.target);
-        }
-        node.toggleAttribute("data-night", under.size > 0);
-      },
-      // A thin band where the capsule floats, near the top of the viewport.
-      { rootMargin: "-24px 0px -93% 0px" },
-    );
-    for (const night of nights) observer.observe(night);
-    return () => observer.disconnect();
+    let observer: IntersectionObserver | null = null;
+    const watch = () => {
+      observer?.disconnect();
+      under.clear();
+      const capsule = node.querySelector(".nav-capsule")?.getBoundingClientRect();
+      const line = capsule ? Math.round(capsule.top + capsule.height / 2) : 38;
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) under.add(entry.target);
+            else under.delete(entry.target);
+          }
+          node.toggleAttribute("data-night", under.size > 0);
+        },
+        // A one-pixel line through the capsule's middle.
+        { rootMargin: `-${line}px 0px -${Math.max(0, window.innerHeight - line - 1)}px 0px` },
+      );
+      for (const night of nights) observer.observe(night);
+    };
+    watch();
+    window.addEventListener("resize", watch);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", watch);
+    };
   }, []);
 
   useEffect(() => {

@@ -18,6 +18,9 @@
   --s-gutter: 32px;
   --s-section: 168px;
   --s-nav: 76px;
+  /* The night bands and the hero stage are slabs set into the paper: this far in, this round. */
+  --s-inset: 12px;
+  --s-slab: 32px;
   --s-serif: "Instrument Serif", ui-serif, "New York", Georgia, serif;
   /* Arrive fast, land softly. */
   --s-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -27,6 +30,12 @@
   --s-swift: cubic-bezier(0.65, 0, 0.35, 1);
   /* Print grain for the night bands. Same-origin SVG noise as a data URL (img-src allows data:). */
   --s-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* The night bands' hairline grid, 72px square. */
+  --s-grid:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px) center top / 72px 72px,
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) center top / 72px 72px;
+  /* The app's pixel, printed in a 10px grid: the texture of the stages the windows stand on. */
+  --s-pixels: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Crect x='4' y='4' width='2' height='2' fill='rgb(10,10,11)' fill-opacity='0.11'/%3E%3C/svg%3E");
 }
 
 @media (max-width: 767px) {
@@ -34,6 +43,8 @@
     --s-gutter: 20px;
     --s-section: 104px;
     --s-nav: 68px;
+    --s-inset: 8px;
+    --s-slab: 24px;
   }
 }
 

@@ -1,9 +1,12 @@
 /*
- * Capabilities on the night band. Light product windows float on the dark like product shots on
- * a dark stage, over a hairline grid. No colour lights the band: the windows and the type carry it.
+ * Capabilities on the night band: a slab of night set into the paper, its corners as round as the
+ * windows it holds. Light product windows float on it like product shots on a dark stage, over a
+ * hairline grid. No colour lights the band: the windows and the type carry it.
  */
 .caps {
   overflow: hidden;
+  margin: 0 var(--s-inset);
+  border-radius: var(--s-slab);
 }
 
 .caps-sky {
@@ -16,11 +19,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
-  background-size: 72px 72px;
-  background-position: center top;
+  background: var(--s-grid);
   -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
   mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
 }

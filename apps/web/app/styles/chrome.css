@@ -239,11 +239,22 @@
 
 /* ------------------------------------------------------------------------------- footer */
 
+/*
+ * The night footer is a slab set into the paper, its last edge cutting the giant name off. On the
+ * home page it continues the finale's slab, so only its lower corners round.
+ */
 .site-footer {
   position: relative;
   overflow: hidden;
+  margin: 0 var(--s-inset) var(--s-inset);
   padding: 104px 0 0;
+  border-radius: var(--s-slab);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.home ~ .site-footer {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .footer-grid {

@@ -7,7 +7,8 @@ import { Marquee } from "./Marquee";
 
 /**
  * "One window for" the agent at work. The glass window below replays one session handed from
- * agent to agent; the name in the headline follows it.
+ * agent to agent; the name in the headline follows it. The window and the agents it runs stand
+ * on one pale stage printed with the app's pixels.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
@@ -39,14 +40,16 @@ export function Hero() {
           </a>
         </div>
       </div>
-      <div className="hero-stage" ref={stage}>
-        <div className="hero-detail" aria-hidden="true">
-          <div className="hero-tilt">
-            <HeroWindow state={state} />
+      <div className="hero-floor">
+        <div className="hero-stage" ref={stage}>
+          <div className="hero-detail" aria-hidden="true">
+            <div className="hero-tilt">
+              <HeroWindow state={state} />
+            </div>
           </div>
         </div>
+        <Marquee />
       </div>
-      <Marquee />
     </section>
   );
 }
