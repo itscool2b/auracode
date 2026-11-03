@@ -1,5 +1,5 @@
 import catalog from "#release-catalog";
-import { Arrow, Page } from "../ui";
+import { AppTile, Arrow, Page } from "../ui";
 
 export const meta = () => [{ title: "Download auracode · Windows and macOS" }];
 
@@ -23,6 +23,7 @@ export default function Download() {
   return (
     <Page
       wide
+      art={<AppTile />}
       title="Download auracode."
       tone="Free, local, no account."
       lead={

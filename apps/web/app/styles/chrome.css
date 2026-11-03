@@ -194,6 +194,10 @@
     transform: translateY(-2.5px) rotate(-45deg);
   }
 
+  /*
+   * The menu is solid, as the app's menus are, so its links read clearly over any content: white
+   * on paper, and night over a night band, matching the capsule it drops from.
+   */
   .nav-sheet {
     position: absolute;
     top: calc(100% + 14px);
@@ -203,11 +207,10 @@
     min-width: 220px;
     padding: 8px;
     border-radius: 22px;
-    background-color: rgb(255 255 255 / 0.86);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    backdrop-filter: blur(24px) saturate(180%);
+    background-color: #ffffff;
     box-shadow:
-      inset 0 0 0 1px rgb(10 10 11 / 0.07),
+      inset 0 0 0 1px rgb(10 10 11 / 0.08),
+      0 2px 4px rgb(10 10 11 / 0.04),
       0 24px 60px -20px rgb(10 10 11 / 0.3);
     animation: sheet-in 420ms var(--s-expo) both;
     transform-origin: top right;
@@ -219,7 +222,7 @@
     height: 44px;
     padding: 0 14px;
     border-radius: 14px;
-    color: var(--g-fg-1);
+    color: var(--s-ink);
     font-size: 16px;
     font-weight: 500;
     text-decoration: none;
@@ -227,6 +230,21 @@
 
   .nav-sheet a:hover {
     background-color: rgb(10 10 11 / 0.05);
+  }
+
+  .site-nav[data-night] .nav-sheet {
+    background-color: #18191c;
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.1),
+      0 24px 60px -20px rgb(0 0 0 / 0.7);
+  }
+
+  .site-nav[data-night] .nav-sheet a {
+    color: var(--s-night-fg-1);
+  }
+
+  .site-nav[data-night] .nav-sheet a:hover {
+    background-color: rgb(255 255 255 / 0.08);
   }
 }
 
@@ -275,9 +293,11 @@
   color: var(--g-fg-2);
   font-family: var(--s-serif);
   font-size: 34px;
-  line-height: 36px;
+  line-height: 38px;
   font-style: italic;
-  letter-spacing: -0.01em;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 /* The home page's finale has just said it, in larger type. */
@@ -358,13 +378,25 @@ html.js .footer-giant:not([data-revealed]) span {
   }
 }
 
+/* Below a laptop the wordmark and its line stand over the links, so neither column is squeezed. */
+@media (max-width: 1023px) {
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .footer-links {
+    justify-content: start;
+    gap: 32px 64px;
+  }
+}
+
 @media (max-width: 767px) {
   .site-footer {
     padding-top: 72px;
   }
 
   .footer-grid {
-    grid-template-columns: 1fr;
     gap: 40px;
   }
 

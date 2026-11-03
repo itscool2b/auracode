@@ -14,7 +14,8 @@ const FINE = "(hover: hover) and (pointer: fine)";
 /**
  * The page-wide motion layer, all of it off under reduced motion:
  * - reveals: blocks marked [data-reveal] arrive once as they enter, their children staggered;
- * - zones: [data-zone] sections hold their ambient loops while offscreen;
+ * - zones: [data-zone] sections hold their ambient loops while offscreen, and the page holds them
+ *   all while its tab is hidden ([data-hidden] on the root);
  * - magnetic: [data-magnetic] buttons lean a few pixels toward the pointer.
  * The pointer listener serves the magnetic pull only, and it does nothing on touch. Nothing here
  * paints light: the site has no glow (docs/design/visual-language.md).
@@ -50,7 +51,7 @@ export function Enhancements() {
     }
 
     // Zones with ambient motion (the hero's marquee and live window, the night band) hold it
-    // while offscreen.
+    // while offscreen, and the whole page holds it while its tab is hidden.
     let zones: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== "undefined") {
       zones = new IntersectionObserver((entries) => {
@@ -59,6 +60,9 @@ export function Enhancements() {
       });
       for (const zone of document.querySelectorAll("[data-zone]")) zones.observe(zone);
     }
+    const onVisibility = () => root.toggleAttribute("data-hidden", document.hidden);
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
 
     // Pointer effects: only for a fine pointer with motion allowed.
     let frame = 0;
@@ -112,6 +116,7 @@ export function Enhancements() {
     return () => {
       observer?.disconnect();
       zones?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerleave", release);
       pointer.removeEventListener("change", sync);

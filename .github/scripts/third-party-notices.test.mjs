@@ -47,6 +47,7 @@ test("native inventory follows only normal runtime edges, through workspace crat
 test("locked catalogue includes complete font notices and explicit native sources without build tools", () => {
   const catalogue = verifiedCatalogue();
   for (const name of [
+    "@fontsource-variable/fraunces",
     "@fontsource-variable/geist",
     "@fontsource-variable/geist-mono",
     "@fontsource/instrument-serif",
@@ -86,6 +87,7 @@ test("both outputs say the agent marks are their owners' trademarks and point at
 test("website output contains frontend notices, not desktop native dependencies", () => {
   const text = renderText(verifiedCatalogue(), "web");
   assert.match(text, /@fontsource-variable\/geist/);
+  assert.match(text, /@fontsource-variable\/fraunces/);
   assert.match(text, /react-router/);
   assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm|whisper-rs/);
 });

@@ -27,19 +27,27 @@
   letter-spacing: -0.054em;
 }
 
+/* The narrowest phones keep "One window for" on one line. */
+@media (max-width: 380px) {
+  .hero-title {
+    font-size: 12.8vw;
+  }
+}
+
 .hero-line {
   display: block;
 }
 
-/* The agent's name: the serif, a touch larger, rolling letter by letter (AgentRoll). */
+/* The agent's name: the accent italic, a touch larger, rolling letter by letter (AgentRoll). */
 .hero-line-agent {
-  padding-bottom: 0.04em;
+  padding-bottom: 0.06em;
   font-family: var(--s-serif);
-  font-size: 1.1em;
-  line-height: 0.98;
+  font-size: 1.08em;
+  line-height: 1;
   font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.022em;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 /*
@@ -63,6 +71,13 @@
   display: inline-block;
   visibility: hidden;
   pointer-events: none;
+}
+
+/* The same word split into letter boxes, read for its kerning and kept out of the layout. */
+.roll-measure-split {
+  position: absolute;
+  bottom: 0;
+  left: 0;
 }
 
 .roll-word {
@@ -233,32 +248,95 @@
 .marquee-block {
   position: relative;
   z-index: 2;
-  padding-top: 80px;
+  padding-top: 76px;
 }
 
+/*
+ * Two lanes the width of the floor's slab, faded out at its edges: named pills in front, gliding
+ * left, and the bare marks behind them, smaller steps of tone, gliding right. Hairline rails top
+ * and bottom hold the lanes like a track. Depth is tone and scale; nothing glows.
+ */
 .marquee {
-  display: flex;
+  --marquee-fade: min(16%, 180px);
+  --marquee-gap: 12px;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  width: min(calc(100% - 2 * var(--s-inset)), calc(var(--s-wide) + 2 * var(--s-gutter)));
+  margin: 0 auto;
+  padding: 22px 0;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--marquee-fade),
+    #000 calc(100% - var(--marquee-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--marquee-fade),
+    #000 calc(100% - var(--marquee-fade)),
+    transparent
+  );
 }
 
-.marquee-track {
+.marquee::before,
+.marquee::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background-color: rgb(10 10 11 / 0.08);
+  pointer-events: none;
+}
+
+.marquee::before {
+  top: 0;
+}
+
+.marquee::after {
+  bottom: 0;
+}
+
+/* A lane is one run of sets; scripts repeat the set and start the glide once it is measured. */
+.marquee-lane {
+  display: flex;
+  width: max-content;
+}
+
+.marquee-set {
   display: flex;
   flex: none;
-  gap: 12px;
-  padding: 10px 6px 18px;
+  gap: var(--marquee-gap);
+  margin: 0;
+  padding: 0 var(--marquee-gap) 0 0;
   list-style: none;
-  animation: marquee 52s linear infinite;
 }
 
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
+/* Longhands, so the holds below (pointer, offscreen, hidden tab) can set the play state alone. */
+html.js .marquee-lane[data-ready] {
+  animation-name: marquee;
+  animation-duration: var(--marquee-seconds);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+html.js .marquee-lane-back[data-ready] {
+  animation-direction: reverse;
 }
 
 @keyframes marquee {
   to {
-    transform: translateX(-100%);
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marquee:hover .marquee-lane {
+    animation-play-state: paused;
   }
 }
 
@@ -267,39 +345,86 @@
   align-items: center;
   gap: 11px;
   height: 54px;
-  padding: 0 20px 0 13px;
+  padding: 0 22px 0 15px;
   border-radius: 999px;
-  background-color: rgb(255 255 255 / 0.72);
+  background-color: #ffffff;
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.06),
-    inset 0 1px 0 #ffffff,
-    0 1px 2px rgb(10 10 11 / 0.04);
+    inset 0 0 0 1px rgb(10 10 11 / 0.07),
+    0 1px 2px rgb(10 10 11 / 0.05),
+    0 10px 22px -14px rgb(10 10 11 / 0.24);
   color: var(--g-fg-1);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 20px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   transition:
     transform 420ms var(--s-glide),
     box-shadow 420ms var(--s-swift);
 }
 
-.marquee-item:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    inset 0 1px 0 #ffffff,
-    0 12px 28px -14px rgb(10 10 11 / 0.3);
+@media (hover: hover) and (pointer: fine) {
+  .marquee-lane:not(.marquee-lane-back) .marquee-item:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 0 0 1px rgb(10 10 11 / 0.09),
+      0 2px 4px rgb(10 10 11 / 0.05),
+      0 18px 30px -16px rgb(10 10 11 / 0.32);
+  }
+}
+
+/* The back lane: smaller, flatter pills a step back in tone, the marks themselves unchanged. */
+.marquee-lane-back .marquee-item {
+  gap: 9px;
+  height: 42px;
+  padding: 0 17px 0 11px;
+  background-color: rgb(255 255 255 / 0.42);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.07);
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .marquee-lane-back .marquee-item {
+    background-color: var(--g-surface-2);
+  }
 }
 
 .marquee-note {
   max-width: 600px;
-  margin: 18px auto 0;
+  margin: 22px auto 0;
   padding: 0 var(--s-gutter);
   color: var(--g-fg-3);
   font-size: 14px;
   line-height: 22px;
   text-align: center;
   text-wrap: balance;
+}
+
+/*
+ * Without scripts, or with reduced motion, the named lane stands still and wraps inside the slab,
+ * so every agent shows at every width; the copies and the back lane are not shown.
+ */
+html:not(.js) .marquee {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html:not(.js) .marquee-lane,
+html:not(.js) .marquee-set {
+  flex-wrap: wrap;
+  justify-content: center;
+  width: auto;
+}
+
+html:not(.js) .marquee-set {
+  flex: 1 1 100%;
+  padding: 0 var(--s-gutter);
+}
+
+html:not(.js) :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
+  display: none;
 }
 
 /* ------------------------------------------------------------------------------- product */
@@ -453,14 +578,14 @@ html.js .product-frame:not([data-revealed]) .callout {
 }
 
 /*
- * One digit tall: the strip of 0 to 9 slides behind it. The figure's tight tracking pulls each
- * digit's advance inside its outline, so the window gives the outline back on the right.
+ * One digit tall: the strip of 0 to 9 slides behind it. The digits keep their full advance (no
+ * tracking: each figure is a single digit), so the widest outline, the 0, fits the window whole.
  */
 .reel {
   --reel: 0.96em;
   display: inline-block;
   height: var(--reel);
-  padding-right: 0.1em;
+  padding-right: 0.02em;
   overflow: hidden;
   vertical-align: top;
 }
@@ -475,6 +600,7 @@ html.js .product-frame:not([data-revealed]) .callout {
   display: block;
   height: var(--reel);
   line-height: var(--reel);
+  letter-spacing: 0;
   background: linear-gradient(180deg, var(--s-ink) 35%, #8b8d94 115%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -513,6 +639,11 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   text-wrap: pretty;
 }
 
+.figure-unit {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html.js .numbers-grid:not([data-revealed]) .reel-strip,
   html.js .numbers-grid[data-revealed] .reel-strip {
@@ -548,9 +679,13 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   list-style: none;
   color: var(--s-ink);
   font-family: var(--s-serif);
-  font-size: clamp(34px, 4.2vw, 64px);
+  /* The longest fact, on one line of the live wheel, fits its column from 1024px up. */
+  font-size: clamp(32px, 3.5vw, 56px);
   line-height: 1.06;
-  letter-spacing: -0.016em;
+  font-style: italic;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 .wheel-link {
@@ -626,28 +761,29 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   font-size: clamp(36px, 4vw, 56px);
 }
 
+/*
+ * The questions sit on one white sheet, the utility pages' surface, a hairline between each pair
+ * of rows and inset from the sheet's edges.
+ */
 .faq-list {
   display: grid;
-  gap: 10px;
+  padding: 6px;
+  border-radius: 26px;
+  background-color: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.075),
+    0 1px 2px rgb(10 10 11 / 0.04),
+    0 18px 40px -26px rgb(10 10 11 / 0.22);
 }
 
 .faq-item {
+  --faq-x: 22px;
   border-radius: 20px;
-  background-color: rgb(255 255 255 / 0.66);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    inset 0 1px 0 #ffffff,
-    0 1px 2px rgb(10 10 11 / 0.03);
-  transition:
-    background-color 400ms var(--s-swift),
-    box-shadow 400ms var(--s-swift);
+  transition: background-color 400ms var(--s-swift);
 }
 
-.faq-item[open] {
-  background-color: #ffffff;
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    0 24px 50px -30px rgb(10 10 11 / 0.3);
+.faq-item:is([data-state="open"], [open]:not([data-state])) {
+  background-color: var(--g-surface-2);
 }
 
 .faq-item > summary {
@@ -655,14 +791,33 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 21px 22px 21px 24px;
+  padding: 22px var(--faq-x);
   border-radius: 20px;
   color: var(--g-fg-1);
-  font-size: 17px;
-  line-height: 24px;
+  font-size: 18px;
+  line-height: 26px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   list-style: none;
   cursor: pointer;
+}
+
+/* The hairline above every row after the first, hidden next to an open row's tone. */
+.faq-item + .faq-item > summary {
+  background:
+    linear-gradient(rgb(10 10 11 / 0.08), rgb(10 10 11 / 0.08)) center top /
+    calc(100% - 2 * var(--faq-x)) 1px no-repeat;
+}
+
+.faq-item:is([data-state="open"], [open]:not([data-state])) > summary,
+.faq-item:is([data-state="open"], [open]:not([data-state])) + .faq-item > summary {
+  background: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .faq-item > summary:hover .faq-icon {
+    background-color: rgb(10 10 11 / 0.09);
+  }
 }
 
 .faq-item > summary::-webkit-details-marker {
@@ -726,17 +881,18 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
 .faq-answer > p {
   max-width: 600px;
-  padding: 0 24px 24px;
+  padding: 0 var(--faq-x) 24px;
   color: var(--g-fg-2);
   font-size: 16px;
   line-height: 26px;
+  text-wrap: pretty;
 }
 
 .faq-agents {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 24px 24px;
+  padding: 0 var(--faq-x) 24px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -795,10 +951,12 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 }
 
 .finale-note {
+  max-width: 520px;
   margin-top: 30px;
   color: var(--g-fg-2);
   font-size: 19px;
   line-height: 28px;
+  text-wrap: balance;
 }
 
 .finale-actions {
@@ -817,30 +975,32 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   .hero-lead,
   .hero-actions,
   .hero-detail,
-  .marquee-track,
+  html.js .marquee-lane[data-ready],
   .callout-dot::after,
   .roll-in,
   .roll-out {
     animation: none;
   }
 
+  /* The named lane wraps inside the slab, so every agent shows at every width. */
   .marquee {
-    flex-wrap: wrap;
-    justify-content: center;
     -webkit-mask-image: none;
     mask-image: none;
   }
 
-  /* The row wraps inside the stage, so every agent shows at every width. */
-  .marquee-track {
-    flex: 1 1 100%;
+  .marquee-lane,
+  .marquee-set {
     flex-wrap: wrap;
     justify-content: center;
-    padding-right: var(--s-gutter);
-    padding-left: var(--s-gutter);
+    width: auto;
   }
 
-  .marquee-track[aria-hidden="true"] {
+  .marquee-set {
+    flex: 1 1 100%;
+    padding: 0 var(--s-gutter);
+  }
+
+  :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
     display: none;
   }
 
@@ -880,6 +1040,26 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 @media (max-width: 767px) {
   .hero {
     padding-top: 36px;
+  }
+
+  /* Phones get a lighter lane: shorter pills, the same marks. */
+  .marquee {
+    --marquee-gap: 10px;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .marquee-item {
+    gap: 10px;
+    height: 46px;
+    padding: 0 18px 0 12px;
+    font-size: 15px;
+  }
+
+  .marquee-lane-back .marquee-item {
+    height: 38px;
+    padding: 0 14px 0 10px;
+    font-size: 13px;
   }
 
   .hero-lead {
@@ -946,7 +1126,32 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
   .numbers-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
+    gap: 0;
+  }
+
+  /* A phone sets each figure beside its line, a row per figure between hairlines. */
+  .figure {
+    display: grid;
+    grid-template-columns: 0.62em minmax(0, 1fr);
+    align-items: end;
+    gap: 22px;
+    padding: 26px 0 24px;
+    font-size: 112px;
+  }
+
+  .figure:last-child {
+    border-bottom: 1px solid rgb(10 10 11 / 0.1);
+  }
+
+  .figure-number {
+    font-size: 1em;
+    line-height: 1;
+  }
+
+  .figure-text {
+    margin: 0 0 6px;
+    font-size: 16px;
+    line-height: 24px;
   }
 
   .wheel-grid {
@@ -957,14 +1162,26 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     grid-column: 1;
   }
 
+  .faq-list {
+    padding: 4px;
+    border-radius: 22px;
+  }
+
+  .faq-item {
+    --faq-x: 16px;
+    border-radius: 18px;
+  }
+
   .faq-item > summary {
-    padding: 18px 16px 18px 18px;
+    padding: 18px var(--faq-x);
+    border-radius: 18px;
     font-size: 16px;
+    line-height: 24px;
   }
 
   .faq-answer > p,
   .faq-agents {
-    padding: 0 18px 20px;
+    padding-bottom: 20px;
   }
 
   .finale-note {

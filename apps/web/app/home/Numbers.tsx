@@ -26,16 +26,20 @@ function Reel({ value, from }: { value: number; from: number }) {
 }
 
 const FIGURES = [
-  { value: 1, from: 8, text: "window for every agent you run, side by side in one chat." },
+  { value: 1, from: 8, unit: "window", text: "for every agent you run, side by side in one chat." },
   {
     value: AGENTS.length,
     from: 0,
-    text: "agents with their own marks and harnesses, plus any agent that speaks ACP.",
+    unit: "agents",
+    text: "with their own marks and harnesses, plus any agent that speaks ACP.",
   },
-  { value: 0, from: 9, text: "accounts to create. Local work never asks you to sign in." },
+  { value: 0, from: 9, unit: "accounts", text: "to create. Local work never asks you to sign in." },
 ] as const;
 
-/** Three true figures, set huge, each rolling into place on its own reel. */
+/**
+ * Three true figures, set huge, each rolling into place on its own reel. The word each figure
+ * counts leads its line in ink, so the figure and its unit read as one phrase.
+ */
 export function Numbers() {
   return (
     <section className="section numbers" aria-labelledby="numbers-title">
@@ -44,12 +48,14 @@ export function Numbers() {
       </h2>
       <div className="wrap numbers-grid" data-reveal="">
         {FIGURES.map((figure, i) => (
-          <div key={figure.text} className="figure" style={{ "--n": i } as CSSProperties}>
+          <div key={figure.unit} className="figure" style={{ "--n": i } as CSSProperties}>
             <p className="figure-number">
               <span className="sr-only">{figure.value}</span>
               <Reel value={figure.value} from={figure.from} />
             </p>
-            <p className="figure-text">{figure.text}</p>
+            <p className="figure-text">
+              <span className="figure-unit">{figure.unit}</span> {figure.text}
+            </p>
           </div>
         ))}
       </div>

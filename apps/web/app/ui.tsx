@@ -1,19 +1,23 @@
+import { Logo } from "@auracode/ui/graphite";
 import type { ReactNode } from "react";
 
 /**
- * An inner page: a two-tone title (the first clause in ink, the rest in grey) inside the
- * framed content column. No eyebrow above it.
+ * An inner page: a two-tone title (the first clause in ink, the rest in grey on its own line)
+ * inside the framed content column. No eyebrow above it; an optional picture stands beside it.
  */
 export function Page({
   title,
   tone,
   lead,
+  art,
   wide = false,
   children,
 }: {
   title: string;
   tone?: string;
   lead?: ReactNode;
+  /** Decorative, beside the title on wide screens. */
+  art?: ReactNode;
   wide?: boolean;
   children: ReactNode;
 }) {
@@ -21,22 +25,41 @@ export function Page({
     <main id="main" className="page">
       <div className="frame page-frame">
         <div className={wide ? "page-column page-column-wide" : "page-column"}>
-          <header className="page-head" data-reveal="">
-            <h1 className="page-title">
-              {title}
-              {tone ? (
-                <>
-                  {" "}
-                  <span>{tone}</span>
-                </>
-              ) : null}
-            </h1>
-            {lead ? <p className="page-lead">{lead}</p> : null}
+          <header className={art ? "page-head page-head-art" : "page-head"} data-reveal="">
+            <div className="page-head-text">
+              <h1 className="page-title">
+                {title}
+                {tone ? (
+                  <>
+                    {" "}
+                    <span>{tone}</span>
+                  </>
+                ) : null}
+              </h1>
+              {lead ? <p className="page-lead">{lead}</p> : null}
+            </div>
+            {art ? (
+              <div className="page-art" aria-hidden="true">
+                {art}
+              </div>
+            ) : null}
           </header>
           {children}
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * The app as an object: the auracode logo on a raised white tile with a hairline rim, the way the
+ * desktop app's icon sits on a dock. Decorative; the page around it names the app.
+ */
+export function AppTile() {
+  return (
+    <span className="app-tile">
+      <Logo size={64} />
+    </span>
   );
 }
 
