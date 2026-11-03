@@ -59,7 +59,7 @@ export function AgentRoll({ name }: { name: string }) {
     );
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: read runs for each new name.
+  // Each new name is measured, and its kerning read, before it paints.
   useIsoLayoutEffect(read, [shown.current]);
 
   // Fonts can arrive after the first measure; measure again once they have.
