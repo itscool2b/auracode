@@ -234,32 +234,95 @@
 .marquee-block {
   position: relative;
   z-index: 2;
-  padding-top: 80px;
+  padding-top: 76px;
 }
 
+/*
+ * Two lanes the width of the floor's slab, faded out at its edges: named pills in front, gliding
+ * left, and the bare marks behind them, smaller steps of tone, gliding right. Hairline rails top
+ * and bottom hold the lanes like a track. Depth is tone and scale; nothing glows.
+ */
 .marquee {
-  display: flex;
+  --marquee-fade: min(16%, 180px);
+  --marquee-gap: 12px;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  width: min(calc(100% - 2 * var(--s-inset)), calc(var(--s-wide) + 2 * var(--s-gutter)));
+  margin: 0 auto;
+  padding: 22px 0;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--marquee-fade),
+    #000 calc(100% - var(--marquee-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--marquee-fade),
+    #000 calc(100% - var(--marquee-fade)),
+    transparent
+  );
 }
 
-.marquee-track {
+.marquee::before,
+.marquee::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background-color: rgb(10 10 11 / 0.08);
+  pointer-events: none;
+}
+
+.marquee::before {
+  top: 0;
+}
+
+.marquee::after {
+  bottom: 0;
+}
+
+/* A lane is one run of sets; scripts repeat the set and start the glide once it is measured. */
+.marquee-lane {
+  display: flex;
+  width: max-content;
+}
+
+.marquee-set {
   display: flex;
   flex: none;
-  gap: 12px;
-  padding: 10px 6px 18px;
+  gap: var(--marquee-gap);
+  margin: 0;
+  padding: 0 var(--marquee-gap) 0 0;
   list-style: none;
-  animation: marquee 52s linear infinite;
 }
 
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
+/* Longhands, so the holds below (pointer, offscreen, hidden tab) can set the play state alone. */
+html.js .marquee-lane[data-ready] {
+  animation-name: marquee;
+  animation-duration: var(--marquee-seconds);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+html.js .marquee-lane-back[data-ready] {
+  animation-direction: reverse;
 }
 
 @keyframes marquee {
   to {
-    transform: translateX(-100%);
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marquee:hover .marquee-lane {
+    animation-play-state: paused;
   }
 }
 
@@ -268,39 +331,80 @@
   align-items: center;
   gap: 11px;
   height: 54px;
-  padding: 0 20px 0 13px;
+  padding: 0 22px 0 15px;
   border-radius: 999px;
-  background-color: rgb(255 255 255 / 0.72);
+  background-color: #ffffff;
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.06),
-    inset 0 1px 0 #ffffff,
-    0 1px 2px rgb(10 10 11 / 0.04);
+    inset 0 0 0 1px rgb(10 10 11 / 0.07),
+    0 1px 2px rgb(10 10 11 / 0.05),
+    0 10px 22px -14px rgb(10 10 11 / 0.24);
   color: var(--g-fg-1);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 20px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   transition:
     transform 420ms var(--s-glide),
     box-shadow 420ms var(--s-swift);
 }
 
-.marquee-item:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    inset 0 1px 0 #ffffff,
-    0 12px 28px -14px rgb(10 10 11 / 0.3);
+@media (hover: hover) and (pointer: fine) {
+  .marquee-lane:not(.marquee-lane-back) .marquee-item:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 0 0 1px rgb(10 10 11 / 0.09),
+      0 2px 4px rgb(10 10 11 / 0.05),
+      0 18px 30px -16px rgb(10 10 11 / 0.32);
+  }
+}
+
+/* The back lane: smaller, flatter pills a step back in tone, the marks themselves unchanged. */
+.marquee-lane-back .marquee-item {
+  gap: 9px;
+  height: 42px;
+  padding: 0 17px 0 11px;
+  background-color: rgb(255 255 255 / 0.42);
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.07);
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 18px;
 }
 
 .marquee-note {
   max-width: 600px;
-  margin: 18px auto 0;
+  margin: 22px auto 0;
   padding: 0 var(--s-gutter);
   color: var(--g-fg-3);
   font-size: 14px;
   line-height: 22px;
   text-align: center;
   text-wrap: balance;
+}
+
+/*
+ * Without scripts, or with reduced motion, the named lane stands still and wraps inside the slab,
+ * so every agent shows at every width; the copies and the back lane are not shown.
+ */
+html:not(.js) .marquee {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html:not(.js) .marquee-lane,
+html:not(.js) .marquee-set {
+  flex-wrap: wrap;
+  justify-content: center;
+  width: auto;
+}
+
+html:not(.js) .marquee-set {
+  flex: 1 1 100%;
+  padding: 0 var(--s-gutter);
+}
+
+html:not(.js) :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
+  display: none;
 }
 
 /* ------------------------------------------------------------------------------- product */
@@ -821,30 +925,32 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   .hero-lead,
   .hero-actions,
   .hero-detail,
-  .marquee-track,
+  html.js .marquee-lane[data-ready],
   .callout-dot::after,
   .roll-in,
   .roll-out {
     animation: none;
   }
 
+  /* The named lane wraps inside the slab, so every agent shows at every width. */
   .marquee {
-    flex-wrap: wrap;
-    justify-content: center;
     -webkit-mask-image: none;
     mask-image: none;
   }
 
-  /* The row wraps inside the stage, so every agent shows at every width. */
-  .marquee-track {
-    flex: 1 1 100%;
+  .marquee-lane,
+  .marquee-set {
     flex-wrap: wrap;
     justify-content: center;
-    padding-right: var(--s-gutter);
-    padding-left: var(--s-gutter);
+    width: auto;
   }
 
-  .marquee-track[aria-hidden="true"] {
+  .marquee-set {
+    flex: 1 1 100%;
+    padding: 0 var(--s-gutter);
+  }
+
+  :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
     display: none;
   }
 

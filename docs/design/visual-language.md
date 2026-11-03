@@ -79,7 +79,7 @@ The home page, in order:
 2. **Hero.** "One window for *[agent]*." The agent name rolls in letter by letter, in Fraunces Italic. Below sit the lead, a magnetic Download pill and "See it work".
    - The hero window is a live glass mini-app. It replays a real handoff loop: the message types in, the agent thinks, runs a tool and replies, then the next message hands off to another agent.
    - The composer's agent chip and the headline change agents together.
-   - An agent marquee, drawn from one logo sprite, runs underneath.
+   - An agent marquee, drawn from one logo sprite, runs underneath on two lanes the width of the floor's slab, between hairline rails and faded at its edges: named pills glide left and a smaller, quieter lane of named pills glides right. Each lane repeats one measured set until each half of its track covers the view, then slides by exactly half its length, so the loop is seamless at every width; speeds are pixels per second (34 and 22). It holds under a fine pointer, offscreen and in a hidden tab. Without scripts or with reduced motion it is one still, wrapped list of every agent. Marks keep the website's 16 to 24px tiles with the name beside them (`third-party/brand-marks.md`).
 3. **Product.** A real desktop screenshot in a glass bezel. A scroll-linked tilt flattens it, and callouts point at real parts of the interface.
 4. **Capabilities (night).** Six tabs, with the third active by default, and a glass indicator that glides between them with the timer inside. Each scene has its own choreography. The band is a rounded slab of night over a hairline grid; no colour lights it.
 5. **Numbers.** Odometer reels: one window, the count of supported agents and zero accounts needed for local work.

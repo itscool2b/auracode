@@ -492,8 +492,9 @@ html.js .words:not([data-revealed]) .w-in {
   }
 }
 
-/* Offscreen zones hold their ambient motion (enhance.tsx marks them). */
-[data-off] :is(.marquee-track, .m-loader rect, .m-caret, .m-shimmer) {
+/* Offscreen zones, and the whole page in a hidden tab, hold their ambient loops (enhance.tsx). */
+:is([data-off], [data-hidden]) :is(.marquee-lane, .m-loader rect, .m-caret, .m-shimmer, .m-steer),
+[data-hidden] .callout-dot::after {
   animation-play-state: paused;
 }
 
