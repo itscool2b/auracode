@@ -133,7 +133,7 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(new URL(page.url()).hash, "#main");
       await page.evaluate(() => document.activeElement?.blur());
-      // No canvas anywhere (the halo and the window are CSS) and no film Pause button.
+      // No canvas anywhere (the window is CSS) and no film Pause button.
       assert.equal(await page.locator("canvas").count(), 0);
       assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
       // The capabilities panel: six tabs, each view clean under axe once shown.

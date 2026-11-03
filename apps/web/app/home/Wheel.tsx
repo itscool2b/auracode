@@ -23,8 +23,8 @@ export function Wheel() {
 
   const [wide, setWide] = useState(false);
   useEffect(() => {
-    // Narrow screens keep the plain list: long facts would wrap into each other on the wheel.
-    const query = window.matchMedia("(min-width: 768px)");
+    // Narrower screens keep the plain list: the longest fact must fit on one line of the wheel.
+    const query = window.matchMedia("(min-width: 1024px)");
     const sync = () => setWide(query.matches);
     sync();
     query.addEventListener("change", sync);

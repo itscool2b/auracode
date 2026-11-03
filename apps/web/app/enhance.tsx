@@ -14,10 +14,10 @@ const FINE = "(hover: hover) and (pointer: fine)";
 /**
  * The page-wide motion layer, all of it off under reduced motion:
  * - reveals: blocks marked [data-reveal] arrive once as they enter, their children staggered;
- * - glint: [data-glint] glass catches the light where the pointer is;
- * - magnetic: [data-magnetic] buttons lean a few pixels toward the pointer;
- * - follow: a [data-follow] section's halo drifts toward the pointer.
- * One pointer listener serves the last three, and it does nothing on touch.
+ * - zones: [data-zone] sections hold their ambient loops while offscreen;
+ * - magnetic: [data-magnetic] buttons lean a few pixels toward the pointer.
+ * The pointer listener serves the magnetic pull only, and it does nothing on touch. Nothing here
+ * paints light: the site has no glow (docs/design/visual-language.md).
  */
 export function Enhancements() {
   useEffect(() => {
@@ -49,7 +49,8 @@ export function Enhancements() {
       for (const target of targets) observer.observe(target);
     }
 
-    // Zones with ambient motion (the hero's halo, the night bands) hold it while offscreen.
+    // Zones with ambient motion (the hero's marquee and live window, the night band) hold it
+    // while offscreen.
     let zones: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== "undefined") {
       zones = new IntersectionObserver((entries) => {
@@ -74,24 +75,6 @@ export function Enhancements() {
       frame = 0;
       const event = last;
       if (!event || !(event.target instanceof Element)) return;
-      const glint = event.target.closest<HTMLElement>("[data-glint]");
-      if (glint) {
-        const box = glint.getBoundingClientRect();
-        glint.style.setProperty(
-          "--gx",
-          `${(((event.clientX - box.left) / box.width) * 100).toFixed(1)}%`,
-        );
-        glint.style.setProperty(
-          "--gy",
-          `${(((event.clientY - box.top) / box.height) * 100).toFixed(1)}%`,
-        );
-      }
-      const follow = event.target.closest<HTMLElement>("[data-follow]");
-      if (follow) {
-        const box = follow.getBoundingClientRect();
-        follow.style.setProperty("--fx", `${(event.clientX - box.left).toFixed(0)}px`);
-        follow.style.setProperty("--fy", `${(event.clientY - box.top).toFixed(0)}px`);
-      }
       const pull = event.target.closest<HTMLElement>("[data-magnetic]");
       if (pull !== magnet) release();
       if (pull) {

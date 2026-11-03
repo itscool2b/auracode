@@ -8,9 +8,6 @@
   position: relative;
   isolation: isolate;
   padding: 64px 0 0;
-  transition:
-    --halo-a 1600ms var(--s-swift),
-    --halo-b 1600ms var(--s-swift);
 }
 
 .hero-copy {
@@ -153,12 +150,40 @@
   }
 }
 
+/*
+ * The floor the window and the agents stand on: a pale slab printed with the app's pixels, rising
+ * out of the paper behind the window's lower part. No light; tone, texture and shadow give depth,
+ * and the window's glass has something real to sit over.
+ */
+.hero-floor {
+  position: relative;
+  isolation: isolate;
+  margin-top: 72px;
+  padding-bottom: 72px;
+}
+
+.hero-floor::before {
+  content: "";
+  position: absolute;
+  top: 96px;
+  bottom: 0;
+  left: 50%;
+  z-index: -1;
+  width: min(calc(100% - 2 * var(--s-inset)), calc(var(--s-wide) + 2 * var(--s-gutter)));
+  border-radius: var(--s-slab);
+  background-color: var(--g-surface-3);
+  background-image: var(--s-pixels);
+  background-position: center top;
+  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  translate: -50% 0;
+  pointer-events: none;
+}
+
 .hero-stage {
   position: relative;
   z-index: 1;
   display: flex;
   justify-content: center;
-  margin-top: 72px;
   padding: 0 var(--s-gutter);
   perspective: 2200px;
 }
@@ -200,123 +225,6 @@
   }
   to {
     transform: none;
-  }
-}
-
-/*
- * The halo: the working agent's light behind the window, crossfading as agents hand off. It sits
- * behind the whole hero, brightest where the window rises, so the window's glass picks it up.
- */
-.halo {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 0;
-  height: min(1500px, 100%);
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.halo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: var(--s-grain);
-  opacity: 0.28;
-  mix-blend-mode: soft-light;
-  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 45%, #000, transparent 75%);
-  mask-image: radial-gradient(ellipse 60% 55% at 50% 45%, #000, transparent 75%);
-}
-
-.halo-core,
-.halo-bloom,
-.halo-rays {
-  position: absolute;
-  left: 50%;
-  top: 640px;
-  border-radius: 50%;
-  translate: -50% -50%;
-}
-
-.halo-core {
-  width: min(1500px, 130%);
-  aspect-ratio: 1.9 / 1;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--halo-a) 88%, transparent),
-    color-mix(in oklab, var(--halo-a) 46%, transparent) 42%,
-    color-mix(in oklab, var(--halo-a) 12%, transparent) 72%,
-    transparent 100%
-  );
-  animation: halo-drift 16s ease-in-out infinite alternate;
-}
-
-.halo-bloom {
-  top: 760px;
-  width: min(900px, 90%);
-  aspect-ratio: 1.5 / 1;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--halo-b) 70%, transparent),
-    transparent 100%
-  );
-  mix-blend-mode: multiply;
-  opacity: 0.7;
-  animation: halo-sway 22s ease-in-out infinite alternate;
-}
-
-.hero-copy,
-.hero-stage,
-.marquee-block {
-  z-index: 1;
-}
-
-.halo-rays {
-  top: 0;
-  width: 140%;
-  aspect-ratio: 2 / 1;
-  border-radius: 0;
-  translate: -50% -12%;
-  background: conic-gradient(
-    from 180deg at 50% 0%,
-    transparent 0deg,
-    color-mix(in oklab, var(--halo-a) 16%, transparent) 150deg,
-    transparent 166deg,
-    color-mix(in oklab, var(--halo-a) 12%, transparent) 180deg,
-    transparent 196deg,
-    color-mix(in oklab, var(--halo-b) 14%, transparent) 210deg,
-    transparent 360deg
-  );
-  -webkit-mask-image: radial-gradient(ellipse 50% 70% at 50% 0%, #000, transparent 80%);
-  mask-image: radial-gradient(ellipse 50% 70% at 50% 0%, #000, transparent 80%);
-  animation: rays-sway 26s ease-in-out infinite alternate;
-}
-
-@keyframes halo-drift {
-  from {
-    transform: translateX(-3%) scale(1);
-  }
-  to {
-    transform: translateX(3%) scale(1.06);
-  }
-}
-
-@keyframes halo-sway {
-  from {
-    transform: translate(-14%, 10%) scale(1);
-  }
-  to {
-    transform: translate(16%, -6%) scale(1.12);
-  }
-}
-
-@keyframes rays-sway {
-  from {
-    transform: rotate(-4deg);
-  }
-  to {
-    transform: rotate(4deg);
   }
 }
 
@@ -378,9 +286,9 @@
 .marquee-item:hover {
   transform: translateY(-3px);
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.06),
+    inset 0 0 0 1px rgb(10 10 11 / 0.08),
     inset 0 1px 0 #ffffff,
-    0 14px 34px -12px color-mix(in oklab, var(--glow) 75%, transparent);
+    0 12px 28px -14px rgb(10 10 11 / 0.3);
 }
 
 .marquee-note {
@@ -411,18 +319,6 @@
   position: relative;
   margin-top: 64px;
   perspective: 2400px;
-}
-
-.product-glow {
-  position: absolute;
-  inset: 8% 8% -10%;
-  z-index: -1;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side at 30% 50%, rgb(240 140 100 / 0.22), transparent),
-    radial-gradient(closest-side at 72% 46%, rgb(111 139 255 / 0.2), transparent),
-    radial-gradient(closest-side at 50% 80%, rgb(71 245 138 / 0.12), transparent);
-  filter: blur(36px);
 }
 
 .product-frame {
@@ -556,11 +452,15 @@ html.js .product-frame:not([data-revealed]) .callout {
   letter-spacing: -0.08em;
 }
 
-/* One digit tall: the strip of 0 to 9 slides behind it. */
+/*
+ * One digit tall: the strip of 0 to 9 slides behind it. The figure's tight tracking pulls each
+ * digit's advance inside its outline, so the window gives the outline back on the right.
+ */
 .reel {
   --reel: 0.96em;
   display: inline-block;
   height: var(--reel);
+  padding-right: 0.1em;
   overflow: hidden;
   vertical-align: top;
 }
@@ -648,7 +548,7 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   list-style: none;
   color: var(--s-ink);
   font-family: var(--s-serif);
-  font-size: clamp(36px, 5.2vw, 78px);
+  font-size: clamp(34px, 4.2vw, 64px);
   line-height: 1.06;
   letter-spacing: -0.016em;
 }
@@ -679,14 +579,18 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   perspective: 1400px;
 }
 
+/*
+ * The facts sit on a shallow drum: each step away from the line is one line lower, a few degrees
+ * further round and fainter, so the line in ink reads first and the rest stay legible as type.
+ */
 .wheel[data-live] .wheel-item {
   position: absolute;
   top: 0;
   left: 0;
   white-space: nowrap;
   opacity: max(var(--fade), 0.05);
-  transform: translateY(calc(var(--offset) * 1.16em)) rotateX(calc(var(--offset) * -16deg));
-  transform-origin: 0 50% -2em;
+  transform: translateY(calc(var(--offset) * 1.22em)) rotateX(calc(var(--offset) * -7deg));
+  transform-origin: 0 50% -3em;
   color: #9a9aa3;
   transition: color 300ms var(--s-swift);
   will-change: transform, opacity;
@@ -845,28 +749,24 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
 /* -------------------------------------------------------------------------------- finale */
 
+/* The finale and the footer under it are one slab of night: round on top here, below there. */
 .finale {
   overflow: hidden;
+  margin: 0 var(--s-inset);
   padding-bottom: 40px;
+  border-radius: var(--s-slab) var(--s-slab) 0 0;
   text-align: center;
 }
 
-.finale-halo {
+/* The capabilities band's hairline grid, faded at both ends, so the two nights read as one set. */
+.finale::before {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 1000px;
-  aspect-ratio: 1.6 / 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side at 40% 50%, rgb(240 140 100 / 0.34), transparent),
-    radial-gradient(closest-side at 62% 52%, rgb(111 139 255 / 0.28), transparent),
-    radial-gradient(closest-side at 50% 60%, rgb(255 95 196 / 0.14), transparent);
-  filter: blur(40px);
+  inset: 0;
+  background: var(--s-grid);
+  -webkit-mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent);
+  mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent);
   pointer-events: none;
-  translate: calc(var(--fx, 50vw) - 50%) calc(var(--fy, 55%) - 50%);
-  transition: translate 1400ms var(--s-glide);
-  animation: halo-drift 18s ease-in-out infinite alternate;
 }
 
 .finale-inner {
@@ -917,12 +817,8 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   .hero-lead,
   .hero-actions,
   .hero-detail,
-  .halo-core,
-  .halo-bloom,
-  .halo-rays,
   .marquee-track,
   .callout-dot::after,
-  .finale-halo,
   .roll-in,
   .roll-out {
     animation: none;
@@ -935,17 +831,19 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     mask-image: none;
   }
 
+  /* The row wraps inside the stage, so every agent shows at every width. */
   .marquee-track {
+    flex: 1 1 100%;
     flex-wrap: wrap;
     justify-content: center;
+    padding-right: var(--s-gutter);
+    padding-left: var(--s-gutter);
   }
 
   .marquee-track[aria-hidden="true"] {
     display: none;
   }
 
-  .hero,
-  .finale-halo,
   .roll[data-measured] {
     transition: none;
   }
@@ -989,9 +887,19 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     line-height: 26px;
   }
 
-  .hero-stage {
+  .hero-floor {
     margin-top: 48px;
-    padding: 0 12px;
+    padding-bottom: 48px;
+  }
+
+  .hero-floor::before {
+    top: 120px;
+    -webkit-mask-image: linear-gradient(transparent, #000 160px);
+    mask-image: linear-gradient(transparent, #000 160px);
+  }
+
+  .hero-stage {
+    padding: 0 20px;
   }
 
   .hw {
@@ -1016,6 +924,26 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     display: none;
   }
 
+  /*
+   * A phone shows the real screenshot nearly twice as large, cropped to the chat layer (from 17.9%
+   * to 71.7% of its width): the transcript, the code block and the composer read as the app rather
+   * than as a thumbnail of it.
+   */
+  .product-frame picture {
+    display: block;
+    overflow: hidden;
+    border-radius: 14px;
+    box-shadow: 0 0 0 1px rgb(10 10 11 / 0.06);
+  }
+
+  .product-frame img {
+    width: 186%;
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
+    translate: -17.9% 0;
+  }
+
   .numbers-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
@@ -1027,11 +955,6 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
   .wheel-link {
     grid-column: 1;
-  }
-
-  .wheel[data-live] .wheel-item {
-    white-space: normal;
-    width: calc(100vw - 2 * var(--s-gutter));
   }
 
   .faq-item > summary {
@@ -1046,5 +969,11 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
   .finale-note {
     font-size: 17px;
+  }
+
+  .finale-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: min(100%, 300px);
   }
 }

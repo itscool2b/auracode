@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { SpriteMark } from "./Sprite";
 
 /*
- * Illustration parts that mirror the Halo desktop: glass layers, the chat header, the transcript's
+ * Illustration parts that mirror the desktop: glass layers, the chat header, the transcript's
  * gutter, the floating composer with access on its left and the agent picker on its right, tool
  * rows and the Changes panel. They draw supported app states only. Everything here is decorative
  * and sits inside aria-hidden views; the words around them carry the meaning.

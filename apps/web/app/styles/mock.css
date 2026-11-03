@@ -1,5 +1,5 @@
 /*
- * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Capabilities.tsx): the Halo desktop in
+ * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Capabilities.tsx): the desktop in
  * miniature. A sidebar on the window's glass, a floating content layer, a glass toolbar, the
  * transcript's gutter, the floating composer, frosted popovers. Light, like the app on paper.
  */
@@ -739,8 +739,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background-color: var(--halo-a);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--halo-a) 28%, transparent);
+  background-color: var(--m-ink);
   opacity: 0;
 }
 
@@ -823,16 +822,6 @@
     transform: translateY(8px) rotateX(-60deg) scale(0.94);
     filter: blur(3px);
   }
-}
-
-/* While the agent works, the composer's rim breathes in its colour: the app's live halo. */
-.hw[data-working] .m-composer {
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--halo-a) 45%, rgb(10 10 11 / 0.1)),
-    0 0 0 4px color-mix(in oklab, var(--halo-a) 14%, transparent),
-    0 16px 40px -14px color-mix(in oklab, var(--halo-a) 55%, transparent),
-    inset 0 1px 0 #ffffff;
-  transition: box-shadow 600ms var(--s-swift);
 }
 
 /* ---------------------------------------------------------------- capability scenes */

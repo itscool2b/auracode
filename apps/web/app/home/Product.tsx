@@ -1,9 +1,9 @@
 import { Words } from "../reveal";
 
 const CALLOUTS = [
-  { id: "projects", text: "Projects and chats", x: "10%", y: "28%" },
-  { id: "composer", text: "Agent, model and access", x: "37%", y: "88%" },
-  { id: "changes", text: "Every change, file by file", x: "83%", y: "30%" },
+  { id: "projects", text: "Projects and chats", x: "9.5%", y: "52%" },
+  { id: "composer", text: "Agent, model, access and account", x: "44%", y: "79%" },
+  { id: "changes", text: "Every change, file by file", x: "86%", y: "62%" },
 ] as const;
 
 /**
@@ -26,8 +26,7 @@ export function Product() {
         </p>
       </div>
       <div className="product-stage wrap-wide">
-        <div className="product-glow" aria-hidden="true" />
-        <figure className="product-frame" data-reveal="trigger" data-glint="">
+        <figure className="product-frame" data-reveal="trigger">
           <picture>
             <source
               type="image/webp"
