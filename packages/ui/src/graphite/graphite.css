@@ -678,6 +678,12 @@
   background-color: var(--g-brand-plate);
 }
 
+/* The model mark never transitions: a theme change repaints it at once, and nothing eases. */
+.g-model-mark,
+.g-model-mark * {
+  transition: none;
+}
+
 /* The OpenAI Blossom is the same white artwork when it marks the model maker. */
 .g-model-mark:where([data-maker="openai"]) {
   background-color: var(--g-brand-plate);
