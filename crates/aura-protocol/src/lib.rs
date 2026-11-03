@@ -32,6 +32,7 @@ pub mod repository_publication;
 pub mod search;
 pub mod session;
 pub mod setup_actions;
+pub mod tasks;
 pub mod workspace;
 pub mod workspace_removal;
 
@@ -113,6 +114,13 @@ pub enum AuraEvent {
     PlanUpdated {
         entries: Vec<PlanEntry>,
     },
+    /// A background task's record: a subagent or a background command ([`tasks`]).
+    TaskUpdated(tasks::BackgroundTask),
+    /// One step of a background task's work, added or replaced by its `step_id`.
+    TaskStep {
+        task_id: String,
+        step: tasks::TaskStep,
+    },
     UsageUpdated(UsageInfo),
     LimitsUpdated {
         windows: Vec<LimitWindow>,
@@ -162,6 +170,8 @@ impl AuraEvent {
             AuraEvent::UiRequest(_) => "ui_request",
             AuraEvent::UiResolved { .. } => "ui_resolved",
             AuraEvent::PlanUpdated { .. } => "plan_updated",
+            AuraEvent::TaskUpdated(_) => "task_updated",
+            AuraEvent::TaskStep { .. } => "task_step",
             AuraEvent::UsageUpdated(_) => "usage_updated",
             AuraEvent::LimitsUpdated { .. } => "limits_updated",
             AuraEvent::SessionUpdated(_) => "session_updated",
@@ -197,6 +207,8 @@ impl AuraEvent {
             | AuraEvent::UiRequest(_)
             | AuraEvent::UiResolved { .. }
             | AuraEvent::PlanUpdated { .. }
+            | AuraEvent::TaskUpdated(_)
+            | AuraEvent::TaskStep { .. }
             | AuraEvent::Notice { .. }
             | AuraEvent::Error { .. } => true,
         }
@@ -889,10 +901,12 @@ mod tests {
             AuraEvent::Notice { .. } => 18,
             AuraEvent::Error { .. } => 19,
             AuraEvent::SteeringStatus { .. } => 20,
+            AuraEvent::TaskUpdated(_) => 21,
+            AuraEvent::TaskStep { .. } => 22,
         }
     }
 
-    const VARIANTS: usize = 21;
+    const VARIANTS: usize = 23;
 
     fn truncation() -> Option<Truncation> {
         Some(Truncation {
@@ -1077,6 +1091,68 @@ mod tests {
                     status: PlanStatus::InProgress,
                     priority: Some(PlanPriority::High),
                 }],
+            },
+            AuraEvent::TaskUpdated(tasks::BackgroundTask {
+                task_id: "a3c89c21b19145224".into(),
+                kind: tasks::TaskKind::Agent,
+                title: "Map account switching code".into(),
+                agent_type: Some("Explore".into()),
+                tool_call_id: Some("toolu_01".into()),
+                parent_task_id: None,
+                backgrounded: true,
+                status: tasks::TaskStatus::Completed,
+                activity: Some("Reading docs/agent-accounts.md".into()),
+                tool_uses: Some(12),
+                tokens: Some(48_210),
+                duration_ms: Some(61_000),
+                started_at: Some(1_793_658_476_000),
+                ended_at: Some(1_793_658_537_330),
+                prompt: Some("Find where accounts switch".into()),
+                summary: Some("## Findings\n\nThe switch lives in `accounts.rs`.".into()),
+                summary_truncated: truncation(),
+            }),
+            AuraEvent::TaskUpdated(tasks::BackgroundTask {
+                task_id: "b1".into(),
+                kind: tasks::TaskKind::Command,
+                title: "Run website browser tests".into(),
+                agent_type: None,
+                tool_call_id: None,
+                parent_task_id: Some("a3c89c21b19145224".into()),
+                backgrounded: true,
+                status: tasks::TaskStatus::Running,
+                activity: None,
+                tool_uses: None,
+                tokens: None,
+                duration_ms: None,
+                started_at: None,
+                ended_at: None,
+                prompt: None,
+                summary: None,
+                summary_truncated: None,
+            }),
+            AuraEvent::TaskStep {
+                task_id: "a3c89c21b19145224".into(),
+                step: tasks::TaskStep {
+                    step_id: "toolu_02".into(),
+                    kind: tasks::TaskStepKind::Tool,
+                    title: "Read accounts.rs".into(),
+                    tool_kind: Some(ToolKind::Read),
+                    status: Some(ToolStatus::Completed),
+                    text: None,
+                    truncated: None,
+                },
+            },
+            AuraEvent::TaskStep {
+                task_id: "a3c89c21b19145224".into(),
+                step: tasks::TaskStep {
+                    step_id: "u1.0".into(),
+                    kind: tasks::TaskStepKind::Text,
+                    title: String::new(),
+                    tool_kind: None,
+                    status: None,
+                    text: Some("Now the **driver**.".into()),
+                    truncated: truncation(),
+                },
             },
             AuraEvent::UsageUpdated(UsageInfo {
                 context_used: Some(1000),
@@ -1320,6 +1396,21 @@ mod tests {
             session::ConfigCategory::ALL,
             session::ConfigCategory::Other,
             session::ConfigCategory::as_str,
+        );
+        check_lenient(
+            tasks::TaskKind::ALL,
+            tasks::TaskKind::Other,
+            tasks::TaskKind::as_str,
+        );
+        check_lenient(
+            tasks::TaskStatus::ALL,
+            tasks::TaskStatus::Stopped,
+            tasks::TaskStatus::as_str,
+        );
+        check_lenient(
+            tasks::TaskStepKind::ALL,
+            tasks::TaskStepKind::Text,
+            tasks::TaskStepKind::as_str,
         );
     }
 

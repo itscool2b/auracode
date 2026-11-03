@@ -8,6 +8,8 @@
 //! | a tool call and its updates, for an id minted in this turn (`<turn_id>.` prefix) or called in it | one call with the final state at the call's seq (no call stored: a synthesized one at the first update's seq) |
 //! | updates for an id minted elsewhere | one merged update (the fields last set) at the first such update's seq |
 //! | plans, usage | the last of each |
+//! | a background task's updates, per task | its first row as it is (with the prompt), and its latest state at its latest row, the summary kept |
+//! | a background task's steps, per task and step | the latest state at the step's first seq |
 //! | everything else, and rows that do not parse | unchanged, the payload copied verbatim |
 //!
 //! Kept rows keep their original seqs, a subset of the inputs', so `UNIQUE (chat_id, seq)` holds and
@@ -18,7 +20,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use aura_protocol::{AuraEvent, Millis, ToolCall, ToolKind, ToolStatus, ToolUpdate};
+use aura_protocol::tasks::{BackgroundTask, TaskStep};
+use aura_protocol::{AuraEvent, Millis, ToolCall, ToolKind, ToolStatus, ToolUpdate, Truncation};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::ids::new_id;
@@ -129,6 +132,14 @@ struct Delta {
     text: String,
 }
 
+/// A background task's rows in this turn: its first row as it is (the start, with the prompt), its
+/// latest state at its latest row, and the summary from whichever row carried it.
+struct TaskRows<'a> {
+    first: &'a InRow,
+    summary: Option<(String, Option<Truncation>)>,
+    latest: Option<(u32, Millis, BackgroundTask)>,
+}
+
 /// A tool's events in this turn.
 enum ToolEvent {
     Call(ToolCall),
@@ -162,6 +173,11 @@ pub(crate) fn compact(turn_id: &str, mut rows: Vec<InRow>, limits: &CompactLimit
     let mut other_index: HashMap<String, usize> = HashMap::new();
     let mut last_plan: Option<&InRow> = None;
     let mut last_usage: Option<&InRow> = None;
+    let mut tasks: Vec<TaskRows<'_>> = Vec::new();
+    let mut task_index: HashMap<String, usize> = HashMap::new();
+    // Per step: its latest state at its first row, so steps keep their order.
+    let mut steps: Vec<(u32, Millis, String, TaskStep)> = Vec::new();
+    let mut step_index: HashMap<(String, String), usize> = HashMap::new();
 
     for (row, event) in rows.iter().zip(parsed) {
         let Some(event) = event else {
@@ -219,6 +235,33 @@ pub(crate) fn compact(turn_id: &str, mut rows: Vec<InRow>, limits: &CompactLimit
             }
             AuraEvent::PlanUpdated { .. } => last_plan = Some(row),
             AuraEvent::UsageUpdated(_) => last_usage = Some(row),
+            AuraEvent::TaskUpdated(task) => {
+                let index = *task_index.entry(task.task_id.clone()).or_insert_with(|| {
+                    tasks.push(TaskRows {
+                        first: row,
+                        summary: None,
+                        latest: None,
+                    });
+                    tasks.len() - 1
+                });
+                let rows = &mut tasks[index];
+                if let Some(summary) = &task.summary {
+                    rows.summary = Some((summary.clone(), task.summary_truncated.clone()));
+                }
+                if !std::ptr::eq(rows.first, row) {
+                    rows.latest = Some((row.seq, row.created_at, task));
+                }
+            }
+            AuraEvent::TaskStep { task_id, step } => {
+                let key = (task_id.clone(), step.step_id.clone());
+                match step_index.get(&key) {
+                    Some(&index) => steps[index].3 = step,
+                    None => {
+                        step_index.insert(key, steps.len());
+                        steps.push((row.seq, row.created_at, task_id, step));
+                    }
+                }
+            }
             _ => kept.push(verbatim(row)),
         }
     }
@@ -245,6 +288,27 @@ pub(crate) fn compact(turn_id: &str, mut rows: Vec<InRow>, limits: &CompactLimit
     for (id, seq, created_at, updates) in other_tools {
         let merged = updates.into_iter().fold(empty_update(&id), merge_update);
         kept.push(encoded(seq, created_at, &AuraEvent::ToolUpdate(merged)));
+    }
+    for task in tasks {
+        kept.push(verbatim(task.first));
+        if let Some((seq, created_at, mut latest)) = task.latest {
+            // The first row carries the prompt; the latest says everything else.
+            latest.prompt = None;
+            if latest.summary.is_none()
+                && let Some((summary, truncated)) = task.summary
+            {
+                latest.summary = Some(summary);
+                latest.summary_truncated = truncated;
+            }
+            kept.push(encoded(seq, created_at, &AuraEvent::TaskUpdated(latest)));
+        }
+    }
+    for (seq, created_at, task_id, step) in steps {
+        kept.push(encoded(
+            seq,
+            created_at,
+            &AuraEvent::TaskStep { task_id, step },
+        ));
     }
     kept.extend(last_plan.map(verbatim));
     kept.extend(last_usage.map(verbatim));
@@ -780,6 +844,93 @@ mod tests {
                 (2, delta("t.m1", "abcdabcd")),
                 (4, delta("t.m1", "abcdabcd")),
                 (6, delta("t.m1", "abcd")),
+            ]
+        );
+    }
+
+    #[test]
+    fn compaction_keeps_a_tasks_start_and_latest_state_and_each_steps_latest() {
+        use aura_protocol::tasks::{TaskKind, TaskStatus, TaskStepKind};
+        let task = |status: TaskStatus, activity: &str| BackgroundTask {
+            task_id: "a".into(),
+            kind: TaskKind::Agent,
+            title: "Explore".into(),
+            agent_type: None,
+            tool_call_id: None,
+            parent_task_id: None,
+            backgrounded: false,
+            status,
+            activity: Some(activity.into()),
+            tool_uses: None,
+            tokens: None,
+            duration_ms: None,
+            started_at: Some(1),
+            ended_at: None,
+            prompt: None,
+            summary: None,
+            summary_truncated: None,
+        };
+        let start = BackgroundTask {
+            prompt: Some("Map it".into()),
+            ..task(TaskStatus::Running, "Starting")
+        };
+        let done = BackgroundTask {
+            summary: Some("Found it".into()),
+            ..task(TaskStatus::Completed, "Reading b.rs")
+        };
+        let step = |status: ToolStatus| TaskStep {
+            step_id: "s1".into(),
+            kind: TaskStepKind::Tool,
+            title: "Read a.rs".into(),
+            tool_kind: Some(ToolKind::Read),
+            status: Some(status),
+            text: None,
+            truncated: None,
+        };
+        let rows = vec![
+            row(1, &AuraEvent::TaskUpdated(start.clone())),
+            row(
+                2,
+                &AuraEvent::TaskStep {
+                    task_id: "a".into(),
+                    step: step(ToolStatus::InProgress),
+                },
+            ),
+            row(
+                3,
+                &AuraEvent::TaskUpdated(task(TaskStatus::Running, "Reading a.rs")),
+            ),
+            row(
+                4,
+                &AuraEvent::TaskStep {
+                    task_id: "a".into(),
+                    step: step(ToolStatus::Completed),
+                },
+            ),
+            row(5, &AuraEvent::TaskUpdated(done.clone())),
+            row(
+                6,
+                &AuraEvent::TaskUpdated(task(TaskStatus::Completed, "Reading b.rs")),
+            ),
+        ];
+        let compacted = compact("t", rows, &CompactLimits::STANDARD);
+        let kept: Vec<(u32, AuraEvent)> = compacted
+            .rows
+            .iter()
+            .map(|row| (row.seq, serde_json::from_str(&row.payload).expect("parse")))
+            .collect();
+        assert_eq!(
+            kept,
+            [
+                (1, AuraEvent::TaskUpdated(start)),
+                (
+                    2,
+                    AuraEvent::TaskStep {
+                        task_id: "a".into(),
+                        step: step(ToolStatus::Completed)
+                    }
+                ),
+                (6, AuraEvent::TaskUpdated(done)),
             ]
         );
     }

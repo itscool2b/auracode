@@ -2540,6 +2540,7 @@ impl ChatActor {
             reply: ReplyHasher::default(),
         });
         let tagged = Some(tag);
+        self.normalizer.begin_turn();
         self.push_normalized(
             AuraEvent::TurnStarted {
                 turn_id: turn_id.clone(),
@@ -5943,6 +5944,7 @@ impl ChatActor {
             last_error: self.last_error.clone(),
             auth: self.auth.clone(),
             storage: self.store.status().borrow().clone(),
+            tasks: self.normalizer.tasks().to_vec(),
         }
     }
 }

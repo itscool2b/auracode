@@ -103,6 +103,8 @@ fn read(conn: &Connection, chat_id: &str, max_source: u64) -> rusqlite::Result<S
             AuraEvent::UiRequest(_) => "Question",
             AuraEvent::UiResolved { .. } => "Answer",
             AuraEvent::PlanUpdated { .. } => "Plan",
+            // A task's report: subagent work no longer shows in the transcript itself.
+            AuraEvent::TaskUpdated(task) if task.summary.is_some() => "Background task",
             AuraEvent::SteeringStatus { .. } => "Steering delivery",
             AuraEvent::Notice { .. } => "Notice",
             AuraEvent::Error { .. } => "Error",
@@ -115,6 +117,12 @@ fn read(conn: &Connection, chat_id: &str, max_source: u64) -> rusqlite::Result<S
         };
         let body = match &event {
             AuraEvent::Notice { message, .. } => message.clone(),
+            AuraEvent::TaskUpdated(task) => format!(
+                "{} ({})\n\n{}",
+                task.title,
+                task.status.as_str(),
+                task.summary.as_deref().unwrap_or("")
+            ),
             AuraEvent::Error {
                 message, detail, ..
             } => format!("{message}\n{}", detail.as_deref().unwrap_or("")),
