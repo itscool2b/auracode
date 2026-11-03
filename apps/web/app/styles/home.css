@@ -31,15 +31,16 @@
   display: block;
 }
 
-/* The agent's name: the serif, a touch larger, rolling letter by letter (AgentRoll). */
+/* The agent's name: the accent italic, a touch larger, rolling letter by letter (AgentRoll). */
 .hero-line-agent {
-  padding-bottom: 0.04em;
+  padding-bottom: 0.06em;
   font-family: var(--s-serif);
-  font-size: 1.1em;
-  line-height: 0.98;
+  font-size: 1.08em;
+  line-height: 1;
   font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.022em;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 /*
@@ -550,7 +551,10 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   font-family: var(--s-serif);
   font-size: clamp(34px, 4.2vw, 64px);
   line-height: 1.06;
-  letter-spacing: -0.016em;
+  font-style: italic;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 .wheel-link {

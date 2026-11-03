@@ -9,8 +9,9 @@ import {
   useRouteError,
 } from "react-router";
 import "@auracode/ui/graphite.css";
-// Instrument Serif, for the accent phrases (Geist comes with Graphite).
-import "@auracode/ui/fonts.css";
+// Fraunces Italic, for the accent phrases: only the italic, with its optical-size and weight axes
+// (Geist and Geist Mono come with Graphite).
+import "@fontsource-variable/fraunces/opsz-italic.css";
 import "./styles/index.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
 import { SiteFooter } from "./footer";

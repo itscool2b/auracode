@@ -28,7 +28,7 @@ Glass tokens:
 
 Radii form a concentric family: 6, 10, 14, 18 and 22px, plus pill. Every control is a pill: buttons, chips, segmented controls, tabs, switches and picker triggers. Inputs and menu rows use 10px; panes, menus and grouped lists 14px; transcript and setup cards 18px; the composer 22px. Nested radii stay concentric.
 
-Geist Variable is the interface and prose face on the desktop and the website. Geist Mono sets machine-generated text. Instrument Serif Italic sets accent phrases on the website only. Desktop chrome is 13/20px, prose 15/24px, metadata 12/16px, headings 16/22px and titles 20/28px. Keep success, warning and danger distinct and verify text contrast on its real surface.
+Geist Variable is the interface and prose face on the desktop and the website. Geist Mono sets machine-generated text. Fraunces Italic sets accent phrases on the website only (owner, 3 November 2026: "something sexier" than the Instrument Serif Italic it replaces). It is a high-contrast display italic, bundled from `@fontsource-variable/fraunces` as its italic optical-size cut only, so the website loads one accent file. Its optical size follows the type size, and display settings pin it at 144, the sharpest; it sets at weight 360 with -0.028em tracking. The wheel's facts use it too. Desktop chrome is 13/20px, prose 15/24px, metadata 12/16px, headings 16/22px and titles 20/28px. Keep success, warning and danger distinct and verify text contrast on its real surface.
 
 Dark background and first four surfaces are `#101112`, `#141516`, `#1c1d1f`, `#202226` and `#292b2f`. The light counterparts are `#fafafa`, `#ffffff`, `#f4f4f5`, `#f0f0f2` and `#e8e8eb`. Code, terminal, diff, selection and status tokens keep explicit values for both modes. Do not assume a dark code or terminal surface in light mode.
 
@@ -76,7 +76,7 @@ The page is light paper (`#fafafa`) with ink text, broken by two night bands: ca
 The home page, in order:
 
 1. **Header.** A floating glass capsule with a pill that glides between links. It turns to dark glass over night bands. On mobile it opens as a glass sheet.
-2. **Hero.** "One window for *[agent]*." The agent name rolls in letter by letter, in Instrument Serif Italic. Below sit the lead, a magnetic Download pill and "See it work".
+2. **Hero.** "One window for *[agent]*." The agent name rolls in letter by letter, in Fraunces Italic. Below sit the lead, a magnetic Download pill and "See it work".
    - The hero window is a live glass mini-app. It replays a real handoff loop: the message types in, the agent thinks, runs a tool and replies, then the next message hands off to another agent.
    - The composer's agent chip and the headline change agents together.
    - An agent marquee, drawn from one logo sprite, runs underneath.

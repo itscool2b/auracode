@@ -10,7 +10,7 @@ The owner named SpaceXAI, Harvey, Vercel and Aside for cleanliness and organizat
 | --- | --- | --- |
 | [SpaceXAI hero](https://mobbin.com/sites/sections/00ed6985-4338-4daa-9061-607f173448cc) | Two-tone headline, a live chat panel as the hero's proof, black and outline pill actions | The live hero window, two-tone page titles, pill actions. Its label above the title and its compliance ticks are not adopted |
 | [SpaceXAI media](https://mobbin.com/sites/sections/dfea7d6f-670a-4d55-8289-ff0267c89efb) | One plain statement above one large rounded media frame | The product reveal: one real screenshot in one large glass bezel |
-| [Harvey hero](https://mobbin.com/sites/sections/2e23b7a5-3438-48b3-ae2c-0b8e468e15a5) | Large serif statement, short lead, one action, product interface on a textured band | Instrument Serif accents and the product shown on its own stage |
+| [Harvey hero](https://mobbin.com/sites/sections/2e23b7a5-3438-48b3-ae2c-0b8e468e15a5) | Large serif statement, short lead, one action, product interface on a textured band | Serif accents (Fraunces Italic since 3 November 2026) and the product shown on its own stage |
 | [Harvey word wheel](https://mobbin.com/sites/sections/1ea04536-af11-4dd1-8806-28b61f033a33) | A sentence completed by a scrolling wheel of phrases | The "With auracode," wheel of true local-first facts |
 | [Harvey product tabs](https://mobbin.com/sites/sections/0222603b-9f41-4d7e-af9e-40ccfc3c0ca3) | Product tabs on a dark band | The capabilities night band, its six tabs and gliding indicator |
 | [Harvey benefits](https://mobbin.com/sites/sections/13ddabd9-7090-4949-88af-9d1cd651ccb5) | A clear list with supporting visuals | Capability notes and the FAQ's organization |

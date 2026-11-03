@@ -21,7 +21,13 @@
   /* The night bands and the hero stage are slabs set into the paper: this far in, this round. */
   --s-inset: 12px;
   --s-slab: 32px;
-  --s-serif: "Instrument Serif", ui-serif, "New York", Georgia, serif;
+  /*
+   * The accent face: Fraunces Italic, the only cut the site loads. Its optical size follows the
+   * type size, so a 40px clause keeps sturdy hairlines; display settings pin it at its sharpest.
+   */
+  --s-serif: "Fraunces Variable", "Iowan Old Style", "New York", Georgia, serif;
+  --s-serif-weight: 360;
+  --s-serif-track: -0.028em;
   /* Arrive fast, land softly. */
   --s-expo: cubic-bezier(0.16, 1, 0.3, 1);
   /* Travel and settle without a bounce. */
@@ -187,13 +193,23 @@ svg {
 .serif {
   font-family: var(--s-serif);
   font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.012em;
+  font-weight: var(--s-serif-weight);
+  letter-spacing: var(--s-serif-track);
+  font-synthesis: none;
 }
 
 .title .serif,
 .finale-title .serif {
-  font-size: 1.08em;
+  font-size: 1.06em;
+}
+
+/* At display sizes the accent sets at Fraunces' largest optical size: finest hairlines, tightest fit. */
+@media (min-width: 768px) {
+  :is(.title, .finale-title) .serif,
+  .page-title > span,
+  .hero-line-agent {
+    font-variation-settings: "opsz" 144;
+  }
 }
 
 .lead {
