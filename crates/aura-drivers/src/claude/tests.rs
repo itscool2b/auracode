@@ -652,6 +652,26 @@ async fn permissions_preserve_input_and_withdrawal_ignores_late_answers() {
     h.stop().await;
 }
 
+/// Approving ExitPlanMode is the implementation approval: its card is marked as a mode switch so
+/// the session records the approval and follows Claude out of Plan, and it keeps the plan.
+#[tokio::test(start_paused = true)]
+async fn the_plan_approval_card_is_a_mode_switch_with_its_plan() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    h.wire().await;
+    let input = json!({"plan":"# Ship it\n\n1. Build"});
+    h.send(json!({"type":"control_request","request_id":"exit-plan","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","display_name":"ExitPlanMode","input":input}})).await;
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.kind, Some(aura_protocol::ToolKind::SwitchMode));
+            assert_eq!(request.raw_input, Some(input.clone()));
+            break;
+        }
+    }
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn unsupported_effort_never_reaches_the_cli() {
     let mut h = Harness::start().await;

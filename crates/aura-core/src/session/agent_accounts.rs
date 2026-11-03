@@ -2,7 +2,7 @@
 //! and moving a chat to another account where its limit stopped it.
 use super::{SessionError, SessionManager, actor::ChatMsg, lock};
 use crate::agent_accounts::{AccountError, AgentAccountsStore};
-use aura_protocol::agents::AgentAccounts;
+use aura_protocol::agents::{AgentAccounts, AgentUsage};
 use std::sync::Arc;
 
 const UNAVAILABLE: &str = "Added accounts are not available in this build.";
@@ -12,6 +12,18 @@ impl SessionManager {
     /// in on its own.
     pub fn set_agent_accounts(&self, store: Option<Arc<AgentAccountsStore>>) {
         *lock(&self.shared().agent_accounts) = store;
+    }
+
+    /// Keeps the usage book in `path` (a local profile's `agent-usage.json`) across restarts.
+    pub fn persist_agent_usage(&self, path: &std::path::Path) {
+        self.shared().agent_usage.persist_at(path);
+    }
+
+    /// What each of the agent's accounts last reported about its usage limits.
+    pub fn agent_usage(&self, agent_id: &str) -> AgentUsage {
+        self.shared()
+            .agent_usage
+            .usage(aura_agents::agent_of(agent_id))
     }
 
     pub async fn agent_accounts(&self, agent_id: &str) -> Result<AgentAccounts, SessionError> {
@@ -47,8 +59,21 @@ impl SessionManager {
         account_id: String,
     ) -> Result<AgentAccounts, SessionError> {
         let agent = aura_agents::agent_of(agent_id).to_owned();
-        self.with_accounts(move |store| store.remove(&agent, &account_id))
-            .await
+        let removed = account_id.clone();
+        let accounts = self
+            .with_accounts({
+                let agent = agent.clone();
+                move |store| store.remove(&agent, &account_id)
+            })
+            .await?;
+        if !accounts
+            .accounts
+            .iter()
+            .any(|account| account.id == removed)
+        {
+            self.shared().agent_usage.forget(&agent, &removed);
+        }
+        Ok(accounts)
     }
 
     /// Chooses the account the agent's next starts sign in with (`None`: its own sign-in).

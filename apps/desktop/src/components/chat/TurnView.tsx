@@ -20,6 +20,14 @@ export interface TurnActions extends BlobProps {
   readonly onContinue?: (intent: ConversationIntent) => void;
   readonly requests: ReadonlyMap<string, RequestState>;
   readonly onRespondPermission: (requestId: string, optionId: string | null) => void;
+  /** A plan card's Add to the plan (PlanCard.tsx). */
+  readonly onAddToPlan?: (
+    requestId: string,
+    declineOptionId: string,
+    note: string,
+  ) => Promise<void>;
+  /** The chat's agent, as plan cards name it. */
+  readonly agentName?: string;
   readonly onRespondUi: (requestId: string, answer: UiAnswer | null) => void;
   /** The actions of an error card. */
   readonly errorActions: (
@@ -157,6 +165,8 @@ export const TurnView = memo(function TurnView({
                   onRespond={(optionId) =>
                     actions.onRespondPermission(item.request.request_id, optionId)
                   }
+                  agentName={actions.agentName}
+                  onAddToPlan={actions.onAddToPlan}
                   blobs={actions.blobs}
                   onLoadBlob={actions.onLoadBlob}
                 />

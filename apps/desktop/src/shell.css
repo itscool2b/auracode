@@ -1004,9 +1004,7 @@ details.setup-install-review[open] > summary::before {
   overflow: hidden;
   border: 0;
   border-radius: var(--g-radius-8);
-  background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
+  background-color: var(--ui-menu-fill);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1392,9 +1390,7 @@ details.setup-install-review[open] > summary::before {
   /* The ring is an inset hairline, so the panel's content starts on the grid. */
   border: 0;
   border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
+  background-color: var(--ui-menu-fill);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
     var(--g-shadow-pop);

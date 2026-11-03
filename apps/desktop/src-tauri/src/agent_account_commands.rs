@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
 };
 use aura_core::agent_accounts::TokenVault;
-use aura_protocol::agents::AgentAccounts;
+use aura_protocol::agents::{AgentAccounts, AgentUsage};
 use aura_sync::vault::{NativeTokens, TokenEntry, TokenStore, VaultError};
 use tauri::{State, Webview};
 
@@ -93,6 +93,18 @@ pub async fn agent_accounts(
 ) -> Result<AgentAccounts, AppError> {
     current(&webview, &state)?;
     Ok(state.sessions()?.agent_accounts(&agent_id).await?)
+}
+
+/// What each of the agent's accounts last reported about its usage limits.
+#[tauri::command]
+#[specta::specta]
+pub fn agent_usage(
+    webview: Webview,
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<AgentUsage, AppError> {
+    current(&webview, &state)?;
+    Ok(state.sessions()?.agent_usage(&agent_id))
 }
 
 /// Adds an account from the token `claude setup-token` printed. The account is not used yet.

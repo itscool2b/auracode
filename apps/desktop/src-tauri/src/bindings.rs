@@ -153,6 +153,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::agent_installation_commands::agent_installations,
             crate::agent_installation_commands::agent_select_installation,
             crate::agent_account_commands::agent_accounts,
+            crate::agent_account_commands::agent_usage,
             crate::agent_account_commands::agent_account_add,
             crate::agent_account_commands::agent_account_remove,
             crate::agent_account_commands::agent_account_use,

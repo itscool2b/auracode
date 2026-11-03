@@ -35,6 +35,8 @@ export const MODES = [
   "streaming",
   "thinking",
   "permission",
+  // A plan waiting for review, with Accept plan and Add to the plan.
+  "plan",
   "error",
   "new",
   "history",
@@ -75,8 +77,8 @@ export const MODES = [
   "agents#grok-missing",
   "agents&broken#cursor-broken",
   "setup#roster",
-  // Added accounts: Claude Code's Accounts with one added, a chat's usage-limit card, then the
-  // same without secure storage.
+  // Added accounts: Claude Code's Accounts with one added and each account's usage, the composer's
+  // account picker, a chat's usage-limit card, then the same without secure storage.
   "accounts",
   "accounts&accounts=unavailable",
   // The details' executable choice, opened on its own fixture page (the Agents preview has no

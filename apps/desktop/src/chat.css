@@ -192,8 +192,8 @@
 
 /*
  * The working line (owner, 2 November 2026): the agent's reasoning is never shown. While a turn
- * runs and no text streams, its tail holds one quiet line instead: a halo in the agent's own glow
- * breathing in the gutter on the composer rim's rhythm, a playful verb that crossfades to the next
+ * runs and no text streams, its tail holds one quiet line instead: a neutral dot breathing in the
+ * gutter (never a glow), a playful verb that crossfades to the next
  * every few seconds with a sheen passing over it, and the elapsed time at the line's end. It is
  * live agent state, so it alone keeps moving, like the composer's rim; streamed text fades it out
  * in place, and the footer takes the same place when the turn ends, so nothing below it shifts.
@@ -217,38 +217,21 @@
   transition-duration: var(--g-dur-exit);
 }
 
-.chat-working-halo {
-  position: relative;
+.chat-working-dot {
   display: block;
   width: 6px;
   height: 6px;
   border-radius: var(--g-radius-pill);
-  background-color: var(--agent-glow, var(--g-fg-3));
-}
-
-.chat-working-halo::before {
-  content: "";
-  position: absolute;
-  inset: -7px;
-  border-radius: var(--g-radius-pill);
-  background-image: radial-gradient(
-    circle,
-    color-mix(in oklab, var(--agent-glow, var(--g-fg-3)) 55%, transparent) 0%,
-    transparent 70%
-  );
-  opacity: 0.35;
-  transform: scale(0.7);
+  background-color: var(--g-fg-2);
   animation: chat-working-breathe var(--g-dur-bloom) var(--g-ease-in-out) infinite alternate;
 }
 
 @keyframes chat-working-breathe {
   from {
     opacity: 0.35;
-    transform: scale(0.7);
   }
   to {
-    opacity: 0.9;
-    transform: scale(1.2);
+    opacity: 1;
   }
 }
 
@@ -300,7 +283,7 @@
 /*
  * The sheen: a brighter copy of the verb, seen through a soft window that sweeps across it. The
  * window travels one way while the copy travels back, so the words stand still and only the light
- * moves: transform alone, once per breath of the halo.
+ * moves: transform alone, once per breath of the dot.
  */
 .chat-working-sheen {
   position: absolute;
@@ -317,7 +300,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  color: color-mix(in oklab, var(--agent-glow, var(--g-fg-1)) 45%, var(--g-fg-1));
+  color: var(--g-fg-1);
   white-space: nowrap;
   animation: chat-working-sweep-back var(--g-dur-bloom) var(--g-ease-in-out) var(--g-dur-glide)
     infinite both;
@@ -1059,6 +1042,55 @@
   color: var(--g-fg-1);
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+/*
+ * A plan waiting for review (Claude Code's ExitPlanMode, owner 2 November 2026): the plan set as
+ * prose on the card, scrolling on its own when long, then Accept plan and Add to the plan. The
+ * note form opens in place of the actions.
+ */
+.chat-plan-body {
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--g-space-4) var(--g-space-12) var(--g-space-4) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.chat-plan-body > :first-child {
+  margin-top: 0;
+}
+
+.chat-plan-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-12);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.chat-plan-hint {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-plan-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-12);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.chat-plan-note > label {
+  color: var(--g-fg-2);
+}
+
+.chat-plan-note > textarea {
+  resize: vertical;
 }
 
 /* The usage-limit card's line under the agent's own words: what waits, and the way on. */
@@ -1993,10 +2025,10 @@
  * (x 16 inside the pill); Send sits as far in from the right.
  */
 /*
- * Halo: the composer is a frosted glass capsule floating over the pane, radius 22, with a hairline
- * rim and one long soft shadow. Focus within brightens the rim a step; reached from the keyboard,
- * the message box draws the focus ring. While the agent works, the rim breathes in the agent's
- * own colour (--agent-glow): the live halo.
+ * The composer is a frosted glass capsule floating over the pane, radius 22, with a hairline rim
+ * and one long soft shadow. Focus within brightens the rim a step; reached from the keyboard, the
+ * message box draws the focus ring. While the agent works, its companion swims along the rim
+ * (below). Nothing glows (owner, 2 November 2026).
  */
 .chat-composer {
   position: relative;
@@ -2019,33 +2051,175 @@
 }
 
 /*
- * While the halo owns the box-shadow, the composer's own transition on it is off: a transition
- * started under a running animation never advances in WebKit, so the page would never settle.
+ * The working companion (owner, 2 November 2026): the logo's sea lion or turtle swims laps along
+ * the composer's top rim while a turn runs, a new swim each turn (WorkingCompanion.tsx). Its lane
+ * sits just above the rim and clips it; the track carries it across, fading in and out at the
+ * ends, and its body moves on its own path. Neutral ink, decorative, never a glow.
  */
-.chat-composer[data-working]:not(:has(.g-textarea:focus-visible)) {
-  animation: composer-halo var(--g-dur-bloom) var(--g-ease-in-out) infinite alternate;
-  transition: none;
+.chat-companion {
+  position: absolute;
+  bottom: calc(100% - 8px);
+  left: var(--g-space-20);
+  right: var(--g-space-20);
+  height: 52px;
+  overflow: clip;
+  color: var(--g-fg-2);
+  pointer-events: none;
 }
 
-@keyframes composer-halo {
+.chat-companion[data-heading="left"] {
+  transform: scaleX(-1);
+}
+
+.chat-companion-track {
+  position: absolute;
+  inset: 0;
+  animation: chat-companion-lap calc(var(--g-dur-swim) * var(--companion-pace, 1)) linear infinite;
+}
+
+.chat-companion-body {
+  position: absolute;
+  bottom: var(--g-space-4);
+  left: -40px;
+  display: flex;
+  transform-origin: 50% 70%;
+  animation: chat-companion-cruise var(--g-dur-paddle) var(--g-ease-in-out) infinite alternate;
+}
+
+.chat-companion[data-path="porpoise"] .chat-companion-body {
+  animation: chat-companion-porpoise calc(var(--g-dur-swim) * var(--companion-pace, 1) / 3)
+    var(--g-ease-in-out) infinite;
+}
+
+.chat-companion[data-path="roll"] .chat-companion-body {
+  animation: chat-companion-roll calc(var(--g-dur-swim) * var(--companion-pace, 1)) var(--g-ease)
+    infinite;
+}
+
+.chat-companion[data-path="glide"] .chat-companion-body {
+  animation: chat-companion-glide calc(var(--g-dur-paddle) * 2) var(--g-ease-in-out) infinite
+    alternate;
+}
+
+.chat-companion[data-path="bob"] .chat-companion-body {
+  animation: chat-companion-bob var(--g-dur-paddle) var(--g-ease-in-out) infinite;
+}
+
+.chat-companion[data-path="dip"] .chat-companion-body {
+  animation: chat-companion-dip calc(var(--g-dur-swim) * var(--companion-pace, 1) / 2)
+    var(--g-ease-in-out) infinite;
+}
+
+@keyframes chat-companion-lap {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  8%,
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(calc(100% + 80px));
+  }
+}
+
+@keyframes chat-companion-cruise {
   from {
-    box-shadow:
-      var(--ui-composer-shadow),
-      0 0 0 1px color-mix(in oklab, var(--agent-glow, var(--g-fg-3)) 28%, transparent),
-      0 0 0 0 transparent;
+    transform: translateY(0) rotate(-3deg);
   }
   to {
-    box-shadow:
-      var(--ui-composer-shadow),
-      0 0 0 1px color-mix(in oklab, var(--agent-glow, var(--g-fg-3)) 60%, transparent),
-      0 8px 32px -6px color-mix(in oklab, var(--agent-glow, var(--g-fg-3)) 45%, transparent);
+    transform: translateY(-3px) rotate(3deg);
   }
 }
 
+@keyframes chat-companion-porpoise {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  70% {
+    transform: translateY(-16px) rotate(-24deg);
+  }
+  85% {
+    transform: translateY(-6px) rotate(18deg);
+  }
+}
+
+@keyframes chat-companion-roll {
+  0%,
+  40% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-180deg);
+  }
+  60%,
+  100% {
+    transform: translateY(0) rotate(-360deg);
+  }
+}
+
+@keyframes chat-companion-glide {
+  from {
+    transform: translateY(-1px) rotate(-2deg);
+  }
+  to {
+    transform: translateY(-5px) rotate(2deg);
+  }
+}
+
+@keyframes chat-companion-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-6px) rotate(-6deg);
+  }
+  60% {
+    transform: translateY(-2px) rotate(4deg);
+  }
+}
+
+@keyframes chat-companion-dip {
+  0%,
+  35%,
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    opacity: 0.25;
+    transform: translateY(10px) rotate(14deg);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-4px) rotate(-8deg);
+  }
+}
+
+/* Reduced motion: the companion rests at the start of its lane. */
 @media (prefers-reduced-motion: reduce) {
-  .chat-composer[data-working]:not(:has(.g-textarea:focus-visible)) {
+  .chat-companion-track,
+  .chat-companion-body {
     animation: none;
   }
+
+  .chat-companion-body {
+    left: 0;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.chat-companion-track, .chat-companion-body) {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-companion-body {
+  left: 0;
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"])
@@ -2291,9 +2465,7 @@
   list-style: none;
   border: 0;
   border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
+  background-color: var(--ui-menu-fill);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
     var(--g-shadow-pop);
@@ -2502,6 +2674,63 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   white-space: nowrap;
+}
+
+/*
+ * The account chip: which account the agent signs in with, between access and the model. When the
+ * row is short of room it gives way first: its name truncates, down to the icon alone, before the
+ * access and workflow pills do.
+ */
+.chat-pickers > .chat-account-popover {
+  flex: 0 1 auto;
+  min-width: 34px;
+}
+/* The model pill shares the shortfall, so neither label is cut to a stub. */
+.chat-pickers > .chat-model-popover {
+  flex: 0 1 auto;
+  min-width: 96px;
+}
+.chat-model-popover > summary {
+  min-width: 0;
+  overflow: hidden;
+}
+/* Its pills never shrink, so the group itself must not: shrinking it would only overlap them. */
+.chat-pickers > .chat-access-controls {
+  flex-shrink: 0;
+}
+.chat-account-popover > summary {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--g-text-meta);
+  gap: var(--g-space-6);
+}
+.chat-account-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
+  color: var(--g-fg-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-account-popover > .chat-popover-panel {
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(320px, calc(100vw - 80px));
+  padding: var(--g-space-8);
+}
+.chat-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-4);
+  box-shadow: inset 0 1px var(--g-line);
+}
+.chat-account-error {
+  margin: var(--g-space-4) var(--g-space-8);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
 }
 
 /* The pill always names the thinking level beside the model: "Opus 5.5 · High". */
@@ -2989,7 +3218,7 @@
     display: none;
   }
 
-  .chat-working-halo::before,
+  .chat-working-dot,
   .chat-working-verb,
   .chat-reveal,
   .chat-footer[data-arrived] {
@@ -3016,8 +3245,7 @@
   animation: none;
 }
 
-/* A pseudo-element cannot sit inside :is(), so the halo's glow takes its own rule. */
-:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-halo::before {
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-dot {
   animation: none;
 }
 

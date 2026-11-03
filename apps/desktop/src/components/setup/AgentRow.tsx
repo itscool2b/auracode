@@ -25,7 +25,7 @@ import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
 import "../settings/settings.css";
 import { type AgentAccountsApi, takesAccounts } from "../../lib/agentAccounts";
-import { AgentAccounts } from "./AgentAccounts";
+import { AgentAccounts, AgentUsage } from "./AgentAccounts";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
 
@@ -757,6 +757,8 @@ function AgentDetail({
       ) : null}
       {accounts && takesAccounts(agent.id) ? (
         <AgentAccounts agentId={agent.id} agentName={agent.name} api={accounts} />
+      ) : accounts ? (
+        <AgentUsage agentId={agent.id} agentName={agent.name} api={accounts} />
       ) : null}
       {children}
       {agent.id !== "demo" ? <AgentInstallations agentId={agent.id} onChanged={onRefresh} /> : null}

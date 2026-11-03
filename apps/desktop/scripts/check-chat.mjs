@@ -285,6 +285,7 @@ async function inspect(engine, launcher) {
         "settled",
         "thinking",
         "permission",
+        "plan",
         "error",
         "diff",
         "recorded-thinking",
@@ -1149,6 +1150,35 @@ async function inspect(engine, launcher) {
       0,
       "hidden document still animates",
     );
+
+    // A plan waiting for review: the plan as prose, Accept plan, and Add to the plan, which sends
+    // the note and declines the plan so the agent keeps planning with it.
+    await page.goto(`${url}/?preview=plan`);
+    const plan = page.locator('[data-kind="plan-approval"]').first();
+    await plan.waitFor();
+    await plan.getByRole("heading", { name: "Keep the active chat visible" }).waitFor();
+    assert.equal(await plan.getByRole("button", { name: "Allow once" }).count(), 0);
+    await plan.getByRole("button", { name: "Add to the plan…" }).click();
+    const note = plan.getByLabel("What should the plan add or change?");
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), "TEXTAREA");
+    await note.fill("Also keep the scroll position when switching projects.");
+    await plan.getByRole("button", { name: "Send to plan" }).click();
+    await page
+      .locator('[data-kind="plan-approval"][data-resolved="true"]')
+      .first()
+      .getByText("Sent back to keep planning.")
+      .waitFor();
+    await page
+      .getByText("Also keep the scroll position when switching projects.")
+      .first()
+      .waitFor();
+    await page.goto(`${url}/?preview=plan`);
+    await page
+      .locator('[data-kind="plan-approval"]')
+      .first()
+      .getByRole("button", { name: "Accept plan" })
+      .click();
+    await page.getByText("Plan accepted.").first().waitFor();
 
     await page.setViewportSize({ width: 960, height: 640 });
     await page.goto(`${url}/?preview=permission`);

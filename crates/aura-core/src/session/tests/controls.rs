@@ -332,6 +332,92 @@ async fn only_explicit_native_plan_approval_allows_a_reported_execution_transiti
     }
 }
 
+/// The owner's report: a plan approved during a turn, the turn stopped, and Send refused until
+/// Execute was chosen again. The approval must carry the session out of Plan by itself.
+#[tokio::test]
+async fn a_plan_approved_mid_turn_still_sends_after_stop() {
+    let options = |workflow: &str| {
+        DriverEvent::Options(vec![
+            aura_drivers::controls::select(
+                aura_drivers::controls::ACCESS,
+                "Access",
+                "bypassPermissions",
+                vec![aura_drivers::controls::choice(
+                    "bypassPermissions",
+                    "Full access",
+                )],
+            ),
+            aura_drivers::controls::workflow(workflow),
+        ])
+    };
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Emit(options("plan")),
+        ready_step("plan-then-stop"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::RespondPermission {
+            request_id: Some("exit-plan".into()),
+        }),
+        Step::Expect(CommandMatch::Interrupt),
+        Step::EndTurn {
+            stop_reason: StopReason::Cancelled,
+            usage: None,
+            error: None,
+        },
+        Step::Expect(CommandMatch::Prompt),
+    ]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    rig.manager.send(&chat.id, "plan it".into()).await.unwrap();
+    handle.wait_for(CommandMatch::Prompt).await;
+    handle.emit(DriverEvent::Permission {
+        turn: None,
+        request: aura_protocol::PermissionRequest {
+            request_id: "exit-plan".into(),
+            tool_call_id: None,
+            title: "ExitPlanMode".into(),
+            kind: Some(aura_protocol::ToolKind::SwitchMode),
+            raw_input: Some(serde_json::json!({"plan": "# Plan"})),
+            content: Vec::new(),
+            locations: Vec::new(),
+            options: vec![aura_protocol::PermissionOption {
+                option_id: "allow".into(),
+                kind: aura_protocol::PermissionOptionKind::AllowOnce,
+                label: "Allow once".into(),
+            }],
+            truncated: None,
+        },
+    });
+    eventually("plan approval card", || {
+        lock(&rig.statuses.updates)
+            .iter()
+            .rev()
+            .find(|u| u.chat_id == chat.id)
+            .is_some_and(|u| u.needs_attention)
+    })
+    .await;
+    rig.manager
+        .respond_permission(&chat.id, "exit-plan", Some("allow".into()))
+        .await
+        .unwrap();
+    // Claude leaves Plan on its own and reports it while the turn goes on.
+    handle.emit(options("execute"));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    rig.manager.interrupt(&chat.id).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert_eq!(
+        lists.controls.workflow.requested.as_deref(),
+        Some("execute")
+    );
+    rig.manager
+        .send(&chat.id, "keep going".into())
+        .await
+        .expect("a message after Stop sends without choosing Execute again");
+    handle.wait_for(CommandMatch::Prompt).await;
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn legacy_live_access_obeys_native_idle_queue_and_approval_admission_but_stopped_defaults_remain_editable()
  {

@@ -504,6 +504,10 @@ pub(crate) fn start_profile_chats(
         crate::agent_account_commands::ProfileTokens::open()
             .map(|tokens| Arc::new(tokens) as Arc<dyn aura_core::agent_accounts::TokenVault>)
     };
+    // Usage percentages and reset times only; an account profile keeps them in memory.
+    if file_key.is_none() {
+        manager.persist_agent_usage(&profile.dir.join("agent-usage.json"));
+    }
     manager.set_agent_accounts(Some(Arc::new(
         aura_core::agent_accounts::AgentAccountsStore::open(&profile.dir, tokens),
     )));

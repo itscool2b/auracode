@@ -69,6 +69,15 @@
   background-color: transparent;
 }
 
+/*
+ * Menus and popovers are solid (owner, 2 November 2026): the access, workflow, account and model
+ * pickers, the slash and mention menus, tooltips and the other popovers, so what is being chosen
+ * reads clearly over any content. The composer and the panes stay glass.
+ */
+:root {
+  --ui-menu-fill: var(--g-overlay);
+}
+
 /* Reduce transparency: the layers turn solid and the window keeps its opaque colour. */
 @media (prefers-reduced-transparency: reduce) {
   :root {

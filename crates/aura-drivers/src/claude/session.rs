@@ -1229,11 +1229,18 @@ impl Session {
         }
         let native_tool = request["tool_use_id"].as_str().unwrap_or("");
         let allowed = options.iter().map(|o| o.option_id.clone()).collect();
+        // Plan mode's own tools are marked, so approving ExitPlanMode counts as the implementation
+        // approval that lets the session follow Claude out of Plan. Every other request stays
+        // unclassified: Claude applies its own permission mode to them.
+        let kind = request["tool_name"]
+            .as_str()
+            .map(super::translate::tool_kind)
+            .filter(|kind| *kind == aura_protocol::ToolKind::SwitchMode);
         let card = PermissionRequest {
             request_id: id.clone(),
             tool_call_id: self.translator.tool_call_id(native_tool).map(str::to_owned),
             title,
-            kind: None,
+            kind,
             raw_input: request.get("input").cloned(),
             content: vec![],
             locations: vec![],

@@ -81,6 +81,7 @@ async fn a_limited_chat_continues_on_another_account_where_it_stopped() {
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
+        Step::Emit(limits(100.0)),
         Step::Emit(DriverEvent::UsageLimit(limit())),
         Step::EndTurn {
             stop_reason: StopReason::Error,
@@ -98,6 +99,7 @@ async fn a_limited_chat_continues_on_another_account_where_it_stopped() {
         Step::Spawn(launch()),
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
+        Step::Emit(limits(3.0)),
         Step::EndTurn {
             stop_reason: StopReason::EndTurn,
             usage: None,
@@ -216,6 +218,30 @@ async fn a_limited_chat_continues_on_another_account_where_it_stopped() {
     );
     assert_eq!(attach.snapshot.session.usage_limit, None);
     assert!(attach.snapshot.queue.is_empty());
+    // Each account keeps the usage it reported: the main account at its limit, Work fresh.
+    let usage = h.manager.agent_usage("claude");
+    let used = |account: Option<&str>| {
+        usage
+            .accounts
+            .iter()
+            .find(|entry| entry.account_id.as_deref() == account)
+            .map(|entry| entry.windows[0].used_percent)
+    };
+    assert_eq!(used(None), Some(100.0));
+    assert_eq!(used(Some(work.as_str())), Some(3.0));
+}
+
+fn limits(used: f64) -> DriverEvent {
+    DriverEvent::Event {
+        turn: None,
+        event: aura_protocol::AuraEvent::LimitsUpdated {
+            windows: vec![aura_protocol::LimitWindow {
+                label: "5 hours".into(),
+                used_percent: used,
+                resets_at: Some(1_793_572_200_000),
+            }],
+        },
+    }
 }
 
 /// A refused token on an added account names the account and offers no vendor sign-in, which

@@ -328,6 +328,7 @@ export function ChatsScreen({
             folderLabel={selectedFolder?.display_name ?? null}
             storage={snapshot.storage}
             agents={snapshot.agents}
+            onManageAccounts={onAgents}
           />
         )}
       </main>

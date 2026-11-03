@@ -2,6 +2,7 @@ import type { PermissionDecision, Value } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { permissionResolutionLabel } from "../../lib/chat/present";
 import type { PermissionItem } from "../../lib/chat/transcript";
+import { PlanCard, planApproval } from "./PlanCard";
 import { type BlobProps, EventDetails, Locations, ToolContentView } from "./ToolBlock";
 
 /** The most of a request's raw input the card shows; "Show full details" has the rest. */
@@ -48,13 +49,39 @@ export function PermissionCard({
   onRespond,
   blobs,
   onLoadBlob,
+  agentName = "The agent",
+  onAddToPlan,
 }: {
   readonly item: PermissionItem;
   readonly request: RequestState | undefined;
   /** The option chosen; `null` dismisses the card (the agent hears `cancelled`). */
   readonly onRespond: (optionId: string | null) => void;
+  /** Names the agent on a plan card. */
+  readonly agentName?: string;
+  /** A plan card's Add to the plan: decline it with a note the agent keeps planning with. */
+  readonly onAddToPlan?: (
+    requestId: string,
+    declineOptionId: string,
+    note: string,
+  ) => Promise<void>;
 } & BlobProps) {
   const { request: ask, resolution } = item;
+  const plan = planApproval(ask);
+  if (plan)
+    return (
+      <PlanCard
+        item={item}
+        approval={plan}
+        request={request}
+        agentName={agentName}
+        onRespond={onRespond}
+        onAddToPlan={
+          onAddToPlan
+            ? (declineOptionId, note) => onAddToPlan(ask.request_id, declineOptionId, note)
+            : undefined
+        }
+      />
+    );
   const rows = inputRows(ask.raw_input);
   const raw = rows === null ? rawInputSummary(ask.raw_input) : null;
   const closed = resolution !== null || request?.gone === true;

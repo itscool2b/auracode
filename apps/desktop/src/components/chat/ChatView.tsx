@@ -18,6 +18,7 @@ import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
+import { AccountPicker } from "./AccountPicker";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -31,6 +32,7 @@ import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
+import { planFeedback } from "./PlanCard";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
@@ -64,6 +66,7 @@ export function ChatView({
   onCommands,
   terminals = null,
   now,
+  onManageAccounts,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -84,6 +87,8 @@ export function ChatView({
   readonly terminals?: TerminalPanels | null;
   /** The store's clock (the still-working hint's); the development previews move it. */
   readonly now?: () => number;
+  /** Opens the Agents page, where accounts are added, chosen for new chats and removed. */
+  readonly onManageAccounts?: () => void;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
   const terminalOpen = useSyncExternalStore(
@@ -417,6 +422,27 @@ export function ChatView({
   ]);
   useEffect(() => () => onCommands?.([]), [onCommands]);
 
+  /**
+   * Add to the plan: the note goes into the running turn first, then the plan is declined, so the
+   * agent reads the decline and the note together and keeps planning with it. Without steering the
+   * note waits in the queue for the next turn.
+   */
+  const addToPlan = useCallback(
+    async (requestId: string, declineOptionId: string, note: string) => {
+      const text = planFeedback(note);
+      const turn = store.getSnapshot().openTurnId;
+      const steerable =
+        store.getSnapshot().session?.status === "running" &&
+        store.getSnapshot().lists?.capabilities?.steer === true &&
+        transport.composer?.steer !== undefined &&
+        turn !== null;
+      const steered = steerable ? await store.steer(turn as string, text) : false;
+      await store.respondPermission(requestId, declineOptionId);
+      if (!steered) await store.send(text);
+    },
+    [store, transport.composer],
+  );
+
   const actions = useMemo<TurnActions>(
     () => ({
       blobs: state.blobs,
@@ -424,6 +450,9 @@ export function ChatView({
       requests: state.requests,
       onRespondPermission: (requestId, optionId) =>
         void store.respondPermission(requestId, optionId),
+      onAddToPlan: addToPlan,
+      agentName:
+        agents?.find((entry) => entry.id === state.chat?.agent_id)?.name ?? state.chat?.agent_name,
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
         errorActions(kind, {
@@ -449,6 +478,10 @@ export function ChatView({
       startSession,
       missingTree,
       reviewRecreate,
+      addToPlan,
+      agents,
+      state.chat?.agent_id,
+      state.chat?.agent_name,
     ],
   );
 
@@ -478,9 +511,29 @@ export function ChatView({
         onSetControl={transport.setControl ? (change) => void store.setControl(change) : undefined}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+        account={
+          transport.accounts && state.chat && takesAccounts(state.chat.agent_id) ? (
+            <AccountPicker
+              chatId={chatId}
+              agentId={state.chat.agent_id}
+              agentName={agent?.name ?? state.chat.agent_name}
+              status={status}
+              runningAccount={state.session?.account_id}
+              held={state.session?.queue_held ?? false}
+              api={transport.accounts}
+              onManage={onManageAccounts}
+            />
+          ) : null
+        }
       />
     ),
     [
+      chatId,
+      transport.accounts,
+      state.chat,
+      state.session?.account_id,
+      state.session?.queue_held,
+      onManageAccounts,
       agents,
       transport.conversation,
       transport.setControl,
@@ -783,6 +836,8 @@ export function ChatView({
                             onRespond={(optionId) =>
                               void store.respondPermission(item.request.request_id, optionId)
                             }
+                            agentName={agent?.name ?? state.chat?.agent_name}
+                            onAddToPlan={addToPlan}
                             blobs={state.blobs}
                             onLoadBlob={(sha256) => void store.loadBlob(sha256)}
                           />
@@ -819,7 +874,6 @@ export function ChatView({
                   chatId={chatId}
                   contextApi={transport.composer}
                   agentName={agent?.name ?? state.chat.agent_name}
-                  agentId={state.chat.agent_id}
                   controls={controls}
                   status={status}
                   commands={state.lists?.commands ?? []}

@@ -1,6 +1,6 @@
 import { AgentMark } from "@auracode/ui/graphite";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type {
   AgentEntry,
   Autonomy,
@@ -114,6 +114,7 @@ export function Pickers({
   agents,
   onChooseAgent,
   onSetControl,
+  account = null,
 }: {
   readonly lists: SessionLists | null;
   /** The chat's autonomy until the lists arrive. */
@@ -134,6 +135,8 @@ export function Pickers({
   readonly agents?: readonly AgentEntry[] | null;
   readonly onChooseAgent?: (id: string) => void;
   readonly onSetControl?: (change: SessionControlChange) => void;
+  /** The account picker, for an agent that takes added accounts. */
+  readonly account?: ReactNode;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -207,6 +210,7 @@ export function Pickers({
         onSetAutonomy={onSetAutonomy}
         onSetControl={onSetControl}
       />
+      {account}
       <Popover
         label="Agent, model and thinking"
         triggerLabel={`${[agent?.name, modelLabel, level ? `${level} thinking` : null]

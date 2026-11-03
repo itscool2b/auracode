@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import type { AgentAccounts, UsageLimit } from "../../bindings";
-import { type AgentAccountsApi, accountName, resetText } from "../../lib/agentAccounts";
+import { useState } from "react";
+import type { UsageLimit } from "../../bindings";
+import {
+  type AgentAccountsApi,
+  accountName,
+  resetText,
+  useAgentAccounts,
+} from "../../lib/agentAccounts";
 import { errorMessage } from "../../lib/errors";
 import { AddAccountDialog } from "../setup/AddAccountDialog";
 
@@ -29,15 +34,11 @@ export function UsageLimitCard({
   readonly api?: AgentAccountsApi;
   readonly refused?: boolean;
 }) {
-  const [accounts, setAccounts] = useState<AgentAccounts | null>(null);
+  const { accounts, error: loadError, cache } = useAgentAccounts(agentId, api);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => {
-    if (!api) return;
-    api.list(agentId).then(setAccounts, (reason) => setError(errorMessage(reason)));
-  }, [agentId, api]);
-  useEffect(load, [load]);
+  const [failure, setError] = useState<string | null>(null);
+  const error = failure ?? loadError;
   const others: (string | null)[] = accounts
     ? [null, ...accounts.accounts.map((account) => account.id)].filter((id) => id !== accountId)
     : [];
@@ -47,12 +48,15 @@ export function UsageLimitCard({
   const switchable =
     api !== undefined &&
     (accounts === null || accounts.unavailable === null || others.includes(null));
+  const switchTo = (id: string | null) => {
+    if (!api || !cache) throw new Error("Accounts are not available here.");
+    return cache.change(agentId, () => api.switchChat(chatId, agentId, id));
+  };
   const continueWith = async (id: string | null) => {
-    if (!api) return;
     setBusy(true);
     setError(null);
     try {
-      await api.switchChat(chatId, agentId, id);
+      await switchTo(id);
     } catch (reason) {
       setError(errorMessage(reason));
       setBusy(false);
@@ -90,7 +94,7 @@ export function UsageLimitCard({
                 onClick={() => void continueWith(id)}
               >
                 {id === null
-                  ? `Continue with ${agentName}'s own sign-in`
+                  ? "Continue with your main account"
                   : `Continue with ${accountName(accounts, id)}`}
               </button>
             ))}
@@ -118,8 +122,10 @@ export function UsageLimitCard({
           agentName={agentName}
           api={api}
           onClose={() => setAdding(false)}
-          onAdded={(next) => {
-            setAccounts(next);
+          accounts={accounts}
+          after="switch"
+          onAdded={async (_next, id) => {
+            await switchTo(id);
             setAdding(false);
           }}
         />

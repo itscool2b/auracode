@@ -348,6 +348,8 @@ pub(crate) struct Shared {
     pub(crate) worktree_instruction_copies: AtomicBool,
     /// The profile's added agent accounts. `None` (tests, the CLI): agents use their own sign-in.
     pub(crate) agent_accounts: Mutex<Option<Arc<crate::agent_accounts::AgentAccountsStore>>>,
+    /// What each agent account last reported about its usage limits.
+    pub(crate) agent_usage: crate::agent_usage::UsageBook,
     /// Agents edit project memory directly through their memory grants. Every grant reads this on
     /// each request, so the profile's switch reaches running chats at once. On by default, as the
     /// profile preference is.
@@ -490,6 +492,7 @@ impl SessionManager {
                     automatic_checkpoints: AtomicBool::new(false),
                     worktree_instruction_copies: AtomicBool::new(true),
                     agent_accounts: Mutex::new(None),
+                    agent_usage: crate::agent_usage::UsageBook::default(),
                     agent_memory_writes: Arc::new(AtomicBool::new(true)),
                     catalogs,
                     #[cfg(test)]

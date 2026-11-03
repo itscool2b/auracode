@@ -1,6 +1,6 @@
-import { getBrand, type OrbState, usePrefersReducedMotion } from "@auracode/ui";
+import { type OrbState, usePrefersReducedMotion } from "@auracode/ui";
 import { AgentMark } from "@auracode/ui/graphite";
-import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   formatElapsed,
   rotationDelay,
@@ -40,7 +40,8 @@ function tokenMs(element: Element, name: string): number {
 
 /**
  * The working line (docs/design/visual-language.md): one quiet line at the tail of a running turn.
- * A halo in the agent's own glow breathes in the gutter on the composer rim's 2400ms rhythm, and a
+ * A neutral dot breathes in the gutter (never a glow: owner, 2 November 2026) while the agent's
+ * companion swims along the composer's rim, and a
  * playful verb stands in for the agent's reasoning, swapping every 2.5 to 3.5 seconds with a soft
  * crossfade while a sheen passes over it. The elapsed time follows the verb in metadata type and
  * glides, by transform alone, when a new verb is wider or narrower. Screen readers hear "<agent>
@@ -148,12 +149,12 @@ export function WorkingLine({
       data-hidden={shown ? undefined : ""}
       data-still={still ? "" : undefined}
       data-test-verb={word.verb}
-      style={{ "--agent-glow": getBrand(agentId).glow } as CSSProperties}
+      data-agent={agentId}
     >
       {/* One text node, so the live region reads as one sentence. */}
       <span className="sr-only" role="status">{`${agentName} is working`}</span>
       <span className="chat-gutter" aria-hidden="true">
-        <span className="chat-working-halo" />
+        <span className="chat-working-dot" />
       </span>
       <span ref={words} className="chat-working-words" aria-hidden="true">
         {leaving !== null && !still ? (

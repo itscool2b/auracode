@@ -1,11 +1,29 @@
 /*
- * Accounts in an agent's details (docs/agent-accounts.md): the Account row as the Connection row
- * (6.16), the added accounts as 36px rows on the facts' hairline (the name 14/20 fg-1, its date
- * 12/16 fg-3, Remove at the right edge), then Add account and its one line, on the 4px grid.
+ * Accounts in an agent's details (docs/agent-accounts.md): one 36px row per account on the facts'
+ * hairline, the main account first (the name 14/20 fg-1, what it is 12/16 fg-3, Use or Remove at
+ * the right edge), then Add account and its one line, on the 4px grid.
  */
-.agent-accounts > .settings-row {
-  padding-inline: 0;
+.agent-accounts-title {
+  margin: 0;
+  padding: var(--g-space-12) 0 var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  font-weight: var(--g-weight-medium);
+  line-height: var(--g-leading-ui);
   box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-accounts-title + p {
+  margin: 0 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.agent-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
 }
 
 .agent-accounts-list {
@@ -69,35 +87,36 @@
   color: var(--g-red);
 }
 
-/* Add account: three numbered steps, Get a token, then the two fields and the actions. */
+/* Add account: one line on what signs in, the name, Sign in; pasting a token stays one disclosure
+   away. */
 .add-account-form {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-16);
 }
 
-.add-account-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--g-space-8);
+.add-account-intro,
+.add-account-note {
   margin: 0;
-  padding-left: var(--g-space-20);
   color: var(--g-fg-2);
   line-height: var(--g-leading-ui);
-  list-style: decimal outside;
 }
 
-.add-account-steps > li {
-  display: list-item;
-  padding-left: var(--g-space-4);
+.add-account-manual > summary {
+  width: fit-content;
+  color: var(--g-fg-2);
+  cursor: pointer;
 }
 
-.add-account-steps > li::marker {
-  color: var(--g-fg-3);
-  font-variant-numeric: tabular-nums;
+.add-account-manual > summary:hover {
+  color: var(--g-fg-1);
 }
 
-.add-account-steps code {
+.add-account-manual[open] > summary {
+  margin-bottom: var(--g-space-12);
+}
+
+.add-account-manual code {
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
 }
@@ -115,4 +134,95 @@
 
 .add-account-form .g-dialog-actions {
   margin: 0;
+}
+
+/*
+ * Usage per account: under each account row, its windows as thin meters (the label, a 4px bar,
+ * the share and reset in 12/16 fg-3), then when it reported. A full window turns its share and
+ * bar to the warning colour. The composer's rows show one line of shares instead.
+ */
+.agent-account {
+  flex-wrap: wrap;
+}
+
+.agent-account > .account-usage,
+.agent-account > .account-usage-none {
+  flex-basis: 100%;
+}
+
+.account-usage {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) minmax(80px, 200px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--g-space-4) var(--g-space-12);
+  padding: var(--g-space-2) 0 var(--g-space-8);
+}
+
+.account-usage-window {
+  display: contents;
+}
+
+.account-usage-label {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.account-usage progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-4);
+  appearance: none;
+}
+
+.account-usage progress::-webkit-progress-bar {
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-4);
+}
+
+.account-usage progress::-webkit-progress-value {
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-2);
+}
+
+.account-usage progress::-moz-progress-bar {
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-2);
+}
+
+.account-usage-window[data-full] progress::-webkit-progress-value {
+  background-color: var(--g-warning);
+}
+
+.account-usage-window[data-full] progress::-moz-progress-bar {
+  background-color: var(--g-warning);
+}
+
+.account-usage-value,
+.account-usage-seen,
+.account-usage-none {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.account-usage-window[data-full] .account-usage-value {
+  color: var(--g-warning);
+}
+
+.account-usage-seen {
+  grid-column: 1 / -1;
+}
+
+.account-usage-none {
+  margin: 0;
+  padding-bottom: var(--g-space-8);
+}
+
+.account-usage-line[data-full] {
+  color: var(--g-warning);
 }
