@@ -15,10 +15,7 @@ import { ToolBlock } from "./ToolBlock";
 import { TaskLinkContext } from "./taskLinks";
 
 function transcript(events: readonly AuraEvent[]): Transcript {
-  return applyEntries(
-    emptyTranscript(),
-    numbered(events.map((event) => ["t", event] as const)),
-  );
+  return applyEntries(emptyTranscript(), numbered(events.map((event) => ["t", event] as const)));
 }
 
 const strip = (model: Transcript, live: readonly string[]) =>
@@ -51,10 +48,12 @@ describe("the background strip", () => {
     const html = strip(model, ["a", "b", "c"]);
     expect(html.match(/data-testid="task-pill"/g)).toHaveLength(3);
     expect(html).toContain("Map account switching code");
-    expect(html).toContain("7 tools");
-    expect(html).toContain('aria-label="Map account switching code, Explore, Running, Reading a.rs');
+    expect(html).toContain("1m 12s · 7 tools");
+    // The words are the name, in the order they show; the type and status follow, unseen.
+    expect(html).not.toMatch(/<button[^>]*aria-label/);
+    expect(html).toContain('<span class="sr-only">Explore, Running</span>');
     // An ended pill says only that it ended.
-    expect(html).toMatch(/aria-label="Audit, Done"/);
+    expect(html).toMatch(/Audit<\/span> <span class="sr-only">Done<\/span>/);
     expect(html).toContain('role="status"');
   });
 
@@ -66,7 +65,7 @@ describe("the background strip", () => {
     const html = strip(model, ["a", "b", "c", "d"]);
     expect(html).not.toContain('data-testid="task-pill"');
     expect(html).toContain("4 background tasks");
-    expect(html).toContain('aria-label="4 background tasks, 4 running"');
+    expect(html).toContain('aria-label="4 background tasks 4 running"');
   });
 
   it("shows nothing but its live region without tasks", () => {

@@ -183,7 +183,10 @@ describe("the chat store's tasks", () => {
   it("keeps a later frame's record over the snapshot when an older page is loaded", () => {
     const history = applyEntries(
       emptyTranscript(),
-      numbered([["t", ev.turnStarted("t")], ["t", ev.task("a")]]),
+      numbered([
+        ["t", ev.turnStarted("t")],
+        ["t", ev.task("a")],
+      ]),
     );
     const snapshot = withTasks(history, [backgroundTask("a", { tool_uses: 1 })]);
     const later = applyEntries(snapshot, [

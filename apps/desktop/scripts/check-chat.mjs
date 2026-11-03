@@ -388,7 +388,7 @@ async function inspect(engine, launcher) {
         }
         if (mode === "tasks-many") {
           assert.equal(await page.getByTestId("task-pill").count(), 0);
-          await page.locator('summary[aria-label="5 background tasks, 2 running"]').click();
+          await page.locator('summary[aria-label="5 background tasks 2 running"]').click();
           await page.getByRole("button", { name: /^Map account switching code/ }).click();
           await page.getByTestId("task-panel").waitFor();
           await page.keyboard.press("Escape");

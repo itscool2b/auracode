@@ -86,17 +86,42 @@ export function taskFacts(
   ].filter((part): part is string => part !== null);
 }
 
-/** Everything a pill shows, for its accessible name. */
-function pillName(item: TaskItem, display: TaskStatus, now: number): string {
-  return [
-    item.task.title,
-    item.task.agent_type,
-    TASK_STATUS_LABEL[display],
-    display === "running" ? item.task.activity : null,
-    ...taskFacts(item, display, now),
-  ]
-    .filter(Boolean)
-    .join(", ");
+/**
+ * A task's line in a pill, a menu row or the panel's list of the tasks it started: the kind's glyph,
+ * the title, what it does now, its facts and its mark. Its words are its button's name, in the
+ * order they show (spaces between them, so the name reads them apart), and the agent type and the
+ * status, which the glyph and the mark show, follow for screen readers.
+ */
+export function TaskLine({
+  item,
+  display,
+  activity = null,
+  facts,
+}: {
+  readonly item: TaskItem;
+  readonly display: TaskStatus;
+  readonly activity?: string | null;
+  readonly facts: readonly string[];
+}) {
+  const unseen = [item.task.agent_type, TASK_STATUS_LABEL[display]].filter(Boolean).join(", ");
+  return (
+    <>
+      <TaskKindIcon kind={item.task.kind} />
+      <span className="chat-task-title">{item.task.title}</span>{" "}
+      {activity ? (
+        <>
+          <span className="chat-task-activity">{activity}</span>{" "}
+        </>
+      ) : null}
+      {facts.length ? (
+        <>
+          <span className="chat-task-facts">{facts.join(" · ")}</span>{" "}
+        </>
+      ) : null}
+      <span className="sr-only">{unseen}</span>
+      <TaskMark display={display} />
+    </>
+  );
 }
 
 function TaskPill({
@@ -124,16 +149,15 @@ function TaskPill({
         data-status={display}
         data-testid="task-pill"
         data-test-task-id={item.task.task_id}
-        aria-label={pillName(item, display, now)}
         aria-expanded={open}
         title={item.task.title}
-        onClick={() => onOpen(item.task.task_id)}
+        onClick={(event) => {
+          // WebKit does not focus a clicked button; the panel returns focus to it when it closes.
+          event.currentTarget.focus();
+          onOpen(item.task.task_id);
+        }}
       >
-        <TaskKindIcon kind={item.task.kind} />
-        <span className="chat-task-title">{item.task.title}</span>
-        {activity ? <span className="chat-task-activity">{activity}</span> : null}
-        {facts.length ? <span className="chat-task-facts">{facts.join(" · ")}</span> : null}
-        <TaskMark display={display} />
+        <TaskLine item={item} display={display} activity={activity} facts={facts} />
       </button>
     </li>
   );
@@ -219,12 +243,13 @@ function TaskOverflow({
   return (
     <Popover
       label="Background tasks"
-      triggerLabel={running ? `${count}, ${running} running` : count}
+      // The summary's name is its words as they show.
+      triggerLabel={running ? `${count} ${running} running` : count}
       className="chat-task-overflow"
       trigger={
         <span className="chat-task-pill" data-testid="task-overflow">
           <Bot className="chat-task-kind" size={14} strokeWidth={1.5} aria-hidden="true" />
-          <span className="chat-task-title">{count}</span>
+          <span className="chat-task-title">{count}</span>{" "}
           {running ? <span className="chat-task-facts">{running} running</span> : null}
           <TaskMark
             display={running ? "running" : (displays[displays.length - 1] ?? "completed")}
@@ -241,17 +266,14 @@ function TaskOverflow({
               <button
                 type="button"
                 className="g-menu-item chat-task-menu-item"
-                aria-label={pillName(item, display, now)}
                 aria-current={openTaskId === item.task.task_id ? "true" : undefined}
                 onClick={(event) => {
-                  closePopover(event.currentTarget);
+                  // The list's pill keeps the focus, for the panel to return it there.
+                  closePopover(event.currentTarget, true);
                   onOpen(item.task.task_id);
                 }}
               >
-                <TaskKindIcon kind={item.task.kind} />
-                <span className="chat-task-title">{item.task.title}</span>
-                {facts.length ? <span className="chat-task-facts">{facts.join(" · ")}</span> : null}
-                <TaskMark display={display} />
+                <TaskLine item={item} display={display} facts={facts} />
               </button>
             </li>
           );

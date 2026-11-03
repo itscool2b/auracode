@@ -16,7 +16,7 @@ import {
 } from "../../lib/chat/tasks";
 import type { ToolDisplayStatus } from "../../lib/chat/transcript";
 import { Answer } from "../Markdown";
-import { TaskKindIcon, TaskMark, taskFacts, useClock } from "./BackgroundTasks";
+import { TaskKindIcon, TaskLine, TaskMark, taskFacts, useClock } from "./BackgroundTasks";
 import { FullOutput, TOOL_ICON, ToolPhraseText } from "./ToolBlock";
 import "./tasks.css";
 
@@ -78,15 +78,27 @@ export function TaskPanel({
   const children = childTasks(tasks, task.task_id);
   const parent = task.parent_task_id !== null ? (tasks.get(task.parent_task_id) ?? null) : null;
 
-  useEffect(() => {
-    const previous = document.activeElement;
-    return () => {
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
-    };
-  }, []);
-  // A new task here (a child, its parent) starts at its top with the focus on its close button.
+  // Focus returns, on close, to what last opened a task here from outside: a pill, an Open.
+  const panel = useRef<HTMLElement>(null);
+  const returnTo = useRef<HTMLElement | null>(null);
+  useEffect(
+    () => () => {
+      const target = returnTo.current;
+      if (target?.isConnected) target.focus();
+    },
+    [],
+  );
+  // A new task here (a child, its parent) starts at its end with the focus on its close button.
   useEffect(() => {
     void task.task_id;
+    // A click inside the panel can leave the focus on the page (WebKit): that is no opener.
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !panel.current?.contains(active)
+    )
+      returnTo.current = active;
     following.current = true;
     closeButton.current?.focus();
   }, [task.task_id]);
@@ -121,6 +133,7 @@ export function TaskPanel({
 
   return (
     <aside
+      ref={panel}
       className="changes-panel task-panel"
       style={{ "--changes-width": `${width}px` } as CSSProperties}
       aria-labelledby={titleId}
@@ -349,13 +362,9 @@ function ChildRow({
         type="button"
         className="task-child"
         data-status={display}
-        aria-label={[item.task.title, TASK_STATUS_LABEL[display], ...facts].join(", ")}
         onClick={() => onOpen(item.task.task_id)}
       >
-        <TaskKindIcon kind={item.task.kind} />
-        <span className="chat-task-title">{item.task.title}</span>
-        {facts.length ? <span className="chat-task-facts">{facts.join(" · ")}</span> : null}
-        <TaskMark display={display} />
+        <TaskLine item={item} display={display} facts={facts} />
       </button>
     </li>
   );

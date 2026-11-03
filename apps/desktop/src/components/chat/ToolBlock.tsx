@@ -262,7 +262,11 @@ export function ToolBlock({
           data-testid="tool-open-task"
           aria-label={`Open task: ${task.title}`}
           title="Follow this task beside the chat"
-          onClick={task.open}
+          onClick={(event) => {
+            // WebKit does not focus a clicked button; the panel returns focus to it when it closes.
+            event.currentTarget.focus();
+            task.open();
+          }}
         >
           Open
         </button>
