@@ -783,10 +783,9 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
 /* The hairline above every row after the first, hidden next to an open row's tone. */
 .faq-item + .faq-item > summary {
-  background: linear-gradient(rgb(10 10 11 / 0.08), rgb(10 10 11 / 0.08)) center top / calc(
-      100% - 2 * var(--faq-x)
-    )
-    1px no-repeat;
+  background:
+    linear-gradient(rgb(10 10 11 / 0.08), rgb(10 10 11 / 0.08)) center top /
+    calc(100% - 2 * var(--faq-x)) 1px no-repeat;
 }
 
 .faq-item:is([data-state="open"], [open]:not([data-state])) > summary,
