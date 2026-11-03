@@ -42,7 +42,7 @@ interface Turn {
 
 export const TURNS: readonly Turn[] = [
   {
-    agent: "claude-code",
+    agent: "codex",
     prompt: "Check the pacing change for edge cases before we ship.",
     thought: "3.1 s",
     tool: { icon: "edit", verb: "Edited", object: "src/pacing.ts", add: 12, del: 3 },
@@ -51,7 +51,7 @@ export const TURNS: readonly Turn[] = [
     time: "42 s",
   },
   {
-    agent: "codex",
+    agent: "claude-code",
     prompt: "Check what a late frame does.",
     thought: "2.2 s",
     tool: { icon: "terminal", verb: "Ran", object: "cargo test pacing", result: "14 passed" },
@@ -154,8 +154,12 @@ export interface HandoffState {
   readonly settled: boolean;
 }
 
-/** The page as it is printed and as it stays without motion: Claude Code done, Codex next. */
-export const INITIAL: HandoffState = { k: 1, phase: "type", lap: 0, settled: true };
+/**
+ * The page as it is printed and as it stays without motion: Codex's turn, the handoff to Claude
+ * Code and its finished turn, and the next message, to Pi, typed in the composer. The window shows
+ * the app's core move complete, and the headline names Claude Code.
+ */
+export const INITIAL: HandoffState = { k: 2, phase: "type", lap: 0, settled: true };
 
 function advance(state: HandoffState): HandoffState {
   const at = ORDER.indexOf(state.phase);

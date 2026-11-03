@@ -558,14 +558,14 @@ html.js .product-frame:not([data-revealed]) .callout {
 }
 
 /*
- * One digit tall: the strip of 0 to 9 slides behind it. The figure's tight tracking pulls each
- * digit's advance inside its outline, so the window gives the outline back on the right.
+ * One digit tall: the strip of 0 to 9 slides behind it. The digits keep their full advance (no
+ * tracking: each figure is a single digit), so the widest outline, the 0, fits the window whole.
  */
 .reel {
   --reel: 0.96em;
   display: inline-block;
   height: var(--reel);
-  padding-right: 0.1em;
+  padding-right: 0.02em;
   overflow: hidden;
   vertical-align: top;
 }
@@ -580,6 +580,7 @@ html.js .product-frame:not([data-revealed]) .callout {
   display: block;
   height: var(--reel);
   line-height: var(--reel);
+  letter-spacing: 0;
   background: linear-gradient(180deg, var(--s-ink) 35%, #8b8d94 115%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -616,6 +617,11 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   font-size: 17px;
   line-height: 26px;
   text-wrap: pretty;
+}
+
+.figure-unit {
+  color: var(--g-fg-1);
+  font-weight: 500;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -734,28 +740,29 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   font-size: clamp(36px, 4vw, 56px);
 }
 
+/*
+ * The questions sit on one white sheet, the utility pages' surface, a hairline between each pair
+ * of rows and inset from the sheet's edges.
+ */
 .faq-list {
   display: grid;
-  gap: 10px;
+  padding: 6px;
+  border-radius: 26px;
+  background-color: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px rgb(10 10 11 / 0.075),
+    0 1px 2px rgb(10 10 11 / 0.04),
+    0 18px 40px -26px rgb(10 10 11 / 0.22);
 }
 
 .faq-item {
+  --faq-x: 22px;
   border-radius: 20px;
-  background-color: rgb(255 255 255 / 0.66);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    inset 0 1px 0 #ffffff,
-    0 1px 2px rgb(10 10 11 / 0.03);
-  transition:
-    background-color 400ms var(--s-swift),
-    box-shadow 400ms var(--s-swift);
+  transition: background-color 400ms var(--s-swift);
 }
 
-.faq-item[open] {
-  background-color: #ffffff;
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    0 24px 50px -30px rgb(10 10 11 / 0.3);
+.faq-item:is([data-state="open"], [open]:not([data-state])) {
+  background-color: var(--g-surface-2);
 }
 
 .faq-item > summary {
@@ -763,14 +770,34 @@ html.js .numbers-grid[data-revealed] .reel-strip {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 21px 22px 21px 24px;
+  padding: 22px var(--faq-x);
   border-radius: 20px;
   color: var(--g-fg-1);
-  font-size: 17px;
-  line-height: 24px;
+  font-size: 18px;
+  line-height: 26px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   list-style: none;
   cursor: pointer;
+}
+
+/* The hairline above every row after the first, hidden next to an open row's tone. */
+.faq-item + .faq-item > summary {
+  background: linear-gradient(rgb(10 10 11 / 0.08), rgb(10 10 11 / 0.08)) center top / calc(
+      100% - 2 * var(--faq-x)
+    )
+    1px no-repeat;
+}
+
+.faq-item:is([data-state="open"], [open]:not([data-state])) > summary,
+.faq-item:is([data-state="open"], [open]:not([data-state])) + .faq-item > summary {
+  background: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .faq-item > summary:hover .faq-icon {
+    background-color: rgb(10 10 11 / 0.09);
+  }
 }
 
 .faq-item > summary::-webkit-details-marker {
@@ -834,17 +861,18 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
 .faq-answer > p {
   max-width: 600px;
-  padding: 0 24px 24px;
+  padding: 0 var(--faq-x) 24px;
   color: var(--g-fg-2);
   font-size: 16px;
   line-height: 26px;
+  text-wrap: pretty;
 }
 
 .faq-agents {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 24px 24px;
+  padding: 0 var(--faq-x) 24px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -903,10 +931,12 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 }
 
 .finale-note {
+  max-width: 520px;
   margin-top: 30px;
   color: var(--g-fg-2);
   font-size: 19px;
   line-height: 28px;
+  text-wrap: balance;
 }
 
 .finale-actions {
@@ -1056,7 +1086,32 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 
   .numbers-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
+    gap: 0;
+  }
+
+  /* A phone sets each figure beside its line, a row per figure between hairlines. */
+  .figure {
+    display: grid;
+    grid-template-columns: 0.62em minmax(0, 1fr);
+    align-items: end;
+    gap: 22px;
+    padding: 26px 0 24px;
+    font-size: 112px;
+  }
+
+  .figure:last-child {
+    border-bottom: 1px solid rgb(10 10 11 / 0.1);
+  }
+
+  .figure-number {
+    font-size: 1em;
+    line-height: 1;
+  }
+
+  .figure-text {
+    margin: 0 0 6px;
+    font-size: 16px;
+    line-height: 24px;
   }
 
   .wheel-grid {
@@ -1067,14 +1122,26 @@ html.js .numbers-grid[data-revealed] .reel-strip {
     grid-column: 1;
   }
 
+  .faq-list {
+    padding: 4px;
+    border-radius: 22px;
+  }
+
+  .faq-item {
+    --faq-x: 16px;
+    border-radius: 18px;
+  }
+
   .faq-item > summary {
-    padding: 18px 16px 18px 18px;
+    padding: 18px var(--faq-x);
+    border-radius: 18px;
     font-size: 16px;
+    line-height: 24px;
   }
 
   .faq-answer > p,
   .faq-agents {
-    padding: 0 18px 20px;
+    padding-bottom: 20px;
   }
 
   .finale-note {
