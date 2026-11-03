@@ -1,3 +1,4 @@
+import accentFont from "@fontsource-variable/fraunces/files/fraunces-latin-opsz-italic.woff2?url";
 import { Capabilities } from "../home/Capabilities";
 import { Faq } from "../home/Faq";
 import { Finale } from "../home/Finale";
@@ -6,6 +7,14 @@ import { Numbers } from "../home/Numbers";
 import { Product } from "../home/Product";
 import { AgentSprite } from "../home/Sprite";
 import { Wheel } from "../home/Wheel";
+
+/**
+ * The hero sets the agent's name in the accent italic above the fold, so the home page fetches its
+ * one file with the stylesheet instead of after it (the same hashed file the CSS points at).
+ */
+export const links = () => [
+  { rel: "preload", href: accentFont, as: "font", type: "font/woff2", crossOrigin: "anonymous" },
+];
 
 export const meta = () => [
   { title: "auracode · One window for your coding agents" },
