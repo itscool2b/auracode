@@ -5,6 +5,7 @@ import type {
   AuraEvent,
   Autonomy,
   AutonomyState,
+  BackgroundTask,
   BlobText,
   ChatAttach,
   ChatSnapshot,
@@ -21,6 +22,7 @@ import type {
   SessionInfo,
   SessionLists,
   StorageStatus,
+  TaskStep,
   ToolCall,
   ToolUpdate,
   UiAnswer,
@@ -171,6 +173,33 @@ export function lists(revision: number, overrides: Partial<SessionLists> = {}): 
 }
 
 /** Events in the shapes drivers and the session actor send. */
+/** A running subagent's record, as a driver sends it. */
+export function backgroundTask(
+  id: string,
+  overrides: Partial<BackgroundTask> = {},
+): BackgroundTask {
+  return {
+    task_id: id,
+    kind: "agent",
+    title: `Task ${id}`,
+    agent_type: null,
+    tool_call_id: null,
+    parent_task_id: null,
+    backgrounded: true,
+    status: "running",
+    activity: null,
+    tool_uses: null,
+    tokens: null,
+    duration_ms: null,
+    started_at: null,
+    ended_at: null,
+    prompt: null,
+    summary: null,
+    summary_truncated: null,
+    ...overrides,
+  };
+}
+
 export const ev = {
   turnStarted: (turnId: string, promptId: string | null = null): AuraEvent => ({
     type: "turn_started",
@@ -225,6 +254,24 @@ export const ev = {
     content: [],
     truncated: null,
     ...overrides,
+  }),
+  task: (id: string, overrides: Partial<BackgroundTask> = {}): AuraEvent => ({
+    type: "task_updated",
+    ...backgroundTask(id, overrides),
+  }),
+  taskStep: (taskId: string, stepId: string, overrides: Partial<TaskStep> = {}): AuraEvent => ({
+    type: "task_step",
+    task_id: taskId,
+    step: {
+      step_id: stepId,
+      kind: "tool",
+      title: `Read ${stepId}`,
+      tool_kind: "read",
+      status: "completed",
+      text: null,
+      truncated: null,
+      ...overrides,
+    },
   }),
   toolUpdate: (id: string, overrides: Partial<ToolUpdate> = {}): AuraEvent => ({
     type: "tool_update",
@@ -402,9 +449,38 @@ function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: numb
   const foreign = new Map<string, { seq: number; update: ToolUpdate }>();
   let plan: Row | null = null;
   let usage: Row | null = null;
+  // A task: its first row as it is, its latest state at its latest row with the summary kept.
+  const tasks = new Map<
+    string,
+    {
+      first: Row;
+      latest: { seq: number; task: BackgroundTask } | null;
+      summary: Pick<BackgroundTask, "summary" | "summary_truncated"> | null;
+    }
+  >();
+  // A step: its latest state at its first row.
+  const steps = new Map<string, Row>();
   for (const row of rows) {
     const { event } = row;
     switch (event.type) {
+      case "task_updated": {
+        const { type: _type, ...task } = event;
+        const known = tasks.get(task.task_id);
+        const summary =
+          task.summary !== null
+            ? { summary: task.summary, summary_truncated: task.summary_truncated }
+            : (known?.summary ?? null);
+        if (known) tasks.set(task.task_id, { ...known, latest: { seq: row.seq, task }, summary });
+        else tasks.set(task.task_id, { first: { ...row }, latest: null, summary });
+        break;
+      }
+      case "task_step": {
+        const key = `${event.task_id}\u0000${event.step.step_id}`;
+        const known = steps.get(key);
+        if (known) known.event = event;
+        else steps.set(key, { ...row });
+        break;
+      }
       case "user_message_delta":
       case "message_delta":
       case "thought_delta": {
@@ -467,6 +543,18 @@ function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: numb
   for (const { seq, update } of foreign.values()) {
     kept.push({ seq, turnId, event: { type: "tool_update", ...update } });
   }
+  for (const { first, latest, summary } of tasks.values()) {
+    kept.push(first);
+    if (latest) {
+      const task: BackgroundTask = {
+        ...latest.task,
+        prompt: null,
+        ...(latest.task.summary === null && summary ? summary : {}),
+      };
+      kept.push({ seq: latest.seq, turnId, event: { type: "task_updated", ...task } });
+    }
+  }
+  kept.push(...steps.values());
   if (plan) kept.push(plan);
   if (usage) kept.push(usage);
   return kept.sort((a, b) => a.seq - b.seq);

@@ -25,6 +25,7 @@ import { ChatImageTile } from "./ChatImages";
 import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
 import { TerminalOutput } from "./TerminalOutput";
+import { TaskLinkContext } from "./taskLinks";
 import { RevealContext } from "./VirtualRows";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
@@ -137,6 +138,8 @@ export function ToolBlock({
   const running = display === "pending" || display === "in_progress";
   const Icon = TOOL_ICON[tool.toolKind];
   const reveal = useContext(RevealContext);
+  // A call that started a background task opens it beside the chat.
+  const task = useContext(TaskLinkContext)?.(tool.id) ?? null;
   // A call shown bare (its stretch's only one) stays open when a second call gives it a head.
   const wasBare = useRef(bare);
   if (bare) wasBare.current = true;
@@ -171,6 +174,7 @@ export function ToolBlock({
       className="chat-tool"
       data-kind="tool"
       data-bare={bare ? "" : undefined}
+      data-task={task ? "" : undefined}
       data-testid="item"
       data-test-kind="tool"
       data-test-tool-kind={tool.toolKind}
@@ -251,6 +255,18 @@ export function ToolBlock({
           </div>
         </div>
       </details>
+      {task ? (
+        <button
+          type="button"
+          className="g-button g-button-ghost g-button-24 chat-tool-task"
+          data-testid="tool-open-task"
+          aria-label={`Open task: ${task.title}`}
+          title="Follow this task beside the chat"
+          onClick={task.open}
+        >
+          Open
+        </button>
+      ) : null}
     </div>
   );
 }
