@@ -82,6 +82,12 @@ button.chat-task-pill:active {
     inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
+/* On the lit fill the quiet text takes the pill's own ink: grey there falls under 4.5:1. */
+:is(.chat-task-pill[aria-expanded="true"], .chat-task-overflow[open] > summary > .chat-task-pill)
+  :is(.chat-task-activity, .chat-task-facts) {
+  color: inherit;
+}
+
 .chat-task-kind {
   flex: none;
   color: var(--g-fg-2);

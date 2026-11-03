@@ -135,6 +135,11 @@ export const MODES = [
   // A chat whose worktree folder was deleted: its start error, and Recreate folder from it.
   "missing-worktree",
   "missing-worktree#recreate",
+  // Background tasks: the dock's strip, a subagent's task panel, and the overflow pill's list.
+  "tasks",
+  "tasks#task-panel",
+  "tasks-many",
+  "tasks-many#task-menu",
   // Setup's clone: the form with its exact command, Git running, and a failed clone; the same
   // clone from New project's dialog; and an agent's reviewed install with npm running.
   "clone",
@@ -275,6 +280,14 @@ const OPENERS = {
   palette: (page) => page.keyboard.press("Control+k"),
   "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
+  "task-panel": async (page) => {
+    await page.getByTestId("task-pill").nth(1).click();
+    await page.getByTestId("task-panel").getByText("Prompt", { exact: true }).click();
+  },
+  "task-menu": async (page) => {
+    await page.getByTestId("task-overflow").click();
+    await page.locator(".chat-task-menu").waitFor();
+  },
   quit: (page) => page.getByTestId("quit-keep").waitFor(),
   "busy-folder": async (page) => {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });

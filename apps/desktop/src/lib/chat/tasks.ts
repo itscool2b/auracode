@@ -56,8 +56,13 @@ export function mergeTask(
   turnKey: string | null,
 ): TaskItem {
   const known = previous?.placeholder === false ? previous.task : null;
+  // Where it came from never changes: a record that leaves it out keeps what is known.
   const merged: BackgroundTask = {
     ...task,
+    agent_type: task.agent_type ?? known?.agent_type ?? null,
+    tool_call_id: task.tool_call_id ?? known?.tool_call_id ?? null,
+    parent_task_id: task.parent_task_id ?? known?.parent_task_id ?? null,
+    started_at: task.started_at ?? known?.started_at ?? null,
     prompt: task.prompt ?? known?.prompt ?? null,
     summary: task.summary ?? known?.summary ?? null,
     summary_truncated:

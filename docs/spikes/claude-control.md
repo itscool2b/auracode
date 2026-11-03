@@ -433,6 +433,31 @@ Local command (`/usage`) turn: `system/init`, `system/commands_changed`, an `ass
   scrubbed env plus `CLAUDE_CODE_SDK_READS_SESSION_STATE=1`, own process group.
 - Resume/fork per the table; never two live processes on one session id.
 
+## Subagents and background tasks (2.1.316, 2 November 2026)
+
+Read from a real protocol log; the driver's tests use synthetic frames of the same shape
+(`crates/aura-drivers/src/claude/tasks.rs`).
+
+- **Task frames** are `system` frames. `task_started` carries `task_id`, `tool_use_id` (the Agent or Bash
+  call that started it), `description`, `task_type` (`local_agent` with `subagent_type`, or `local_bash`),
+  `is_backgrounded`, `prompt` (agents) and, for a task a subagent started, `parent_task_id` with
+  `owned_by_subagent`. `task_progress` reports the current activity as `description` and
+  `usage {total_tokens, tool_uses, duration_ms}`; `task_updated` sends a `patch` (`status` of `completed`,
+  `failed`, `killed`, ..., `end_time`, or `is_backgrounded: true` when a foreground command is moved to the
+  background); `task_notification` is the end, with `status` (`completed`, `failed`, `stopped`), a `summary`
+  (the report, markdown, up to tens of KiB) and an `output_file` path, which never leaves the driver.
+  `background_tasks_changed` lists the tasks running in the background, sometimes before their `task_started`.
+- **Every Bash call** gets `task_started` and `task_notification`, foreground ones (`is_backgrounded: false`)
+  too. The driver shows every subagent but a command only once it runs in the background.
+- **A subagent's own messages** arrive only as committed `assistant` and `user` frames (no `stream_event`
+  seen) with `parent_tool_use_id` set to the starting call and `agent_id` set to the task id. The driver turns
+  them into the task's steps (`AuraEvent::TaskStep`: its tool calls titled like the transcript's, with the
+  `tool_result` status, and its text), never into transcript content.
+- **Lifetimes.** A backgrounded task outlives the turn that started it; when it ends while the session is idle,
+  Claude Code runs a turn of its own (`result.origin.kind: "task-notification"`). The session reports a
+  foreground task still running at its turn's end, and every task still running when the process ends, as
+  stopped.
+
 ## Issues for the plan and the protocol
 
 All four are now in [the plan](../plan.md): the env scrub as its engineering rule, the three protocol
@@ -462,9 +487,8 @@ items as M1a follow-ups that the M1b driver maps.
 - Allow-always (`updatedPermissions`) and `deny` with `interrupt: true`.
 - Steering and queueing: `priority: "now"|"next"|"later"`, `shouldQuery: false`, `cancel_async_message`,
   `interrupt_send_now_v1`; `--replay-user-messages`.
-- Images in `message.content`; `--add-dir`; subagent streams (`parent_tool_use_id`); background tasks
-  (`task_*` frames); compaction (`compact_boundary`); `set_max_thinking_tokens`; `rewind_files` with
-  checkpointing enabled.
+- Images in `message.content`; `--add-dir`; compaction (`compact_boundary`); `set_max_thinking_tokens`;
+  `rewind_files` with checkpointing enabled. (Subagent streams and `task_*` frames: see above.)
 - Closing stdin while a permission request is open (docs say the CLI cancels it).
 - Effect of an inherited `CLAUDE_EFFORT` on a real model turn.
 - Windows (`claude.exe`, `.cmd` shim refusal per the SDK, Job Objects) and Linux.
