@@ -266,7 +266,7 @@ export function renderText(catalogue, distribution) {
     "",
     "Component source archives are linked below, including the unmodified source for MPL-covered components.",
     "",
-    "Agent marks: the logos shown beside the Claude Code (the Claude spark), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok Build (the Grok mark), OpenCode, oh-my-pi and Hermes agents are trademarks of their respective owners. They only identify which agent a chat uses, imply no endorsement or partnership, and are not covered by these notices or by any license for auracode. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
+    "Agent marks: the logos shown beside the Claude Code (the Claude spark), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok Build (the Grok mark), OpenCode, oh-my-pi and Hermes agents, and the model makers' marks (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Mistral AI, Meta, Qwen and Moonshot AI), are trademarks of their respective owners. They only identify which agent a chat uses or whose model is working, imply no endorsement or partnership, and are not covered by these notices or by any license for auracode. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
     "",
   ];
   const used = new Map();

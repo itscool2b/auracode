@@ -217,21 +217,20 @@
   transition-duration: var(--g-dur-exit);
 }
 
-.chat-working-dot {
-  display: block;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-fg-2);
+/*
+ * The model maker's mark breathes in scale only: a vendor mark is never dimmed, recoloured or
+ * filtered (third-party/brand-marks.md).
+ */
+.chat-working-mark {
   animation: chat-working-breathe var(--g-dur-bloom) var(--g-ease-in-out) infinite alternate;
 }
 
 @keyframes chat-working-breathe {
   from {
-    opacity: 0.35;
+    transform: scale(0.86);
   }
   to {
-    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -3218,7 +3217,7 @@
     display: none;
   }
 
-  .chat-working-dot,
+  .chat-working-mark,
   .chat-working-verb,
   .chat-reveal,
   .chat-footer[data-arrived] {
@@ -3245,7 +3244,7 @@
   animation: none;
 }
 
-:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-dot {
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-working-mark {
   animation: none;
 }
 

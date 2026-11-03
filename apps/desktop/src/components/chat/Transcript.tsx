@@ -292,6 +292,7 @@ export function Transcript({
                 context: workingContext(lastToolKind(segment)),
                 visible: !streamingText(segment),
                 since: workingSince(`${state.chatId}:${segment.key}`, Date.now()),
+                model: state.session?.model ?? null,
               };
     if (segment.end !== null || (segment.plan?.length ?? 0) > 0 || tail !== undefined)
       rows.push({

@@ -158,6 +158,18 @@ button.chat-task-pill:active {
   display: none;
 }
 
+/*
+ * The summary only holds the pill: the popover trigger's own fill, rim and padding would draw a second
+ * pill around it, so the pill alone carries the open state.
+ */
+.chat-popover.chat-task-overflow > summary,
+.chat-popover.chat-task-overflow[open] > summary {
+  height: auto;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
 /* The list is a menu: solid, so what is chosen reads over any content. */
 .chat-task-overflow > .chat-popover-panel {
   width: min(380px, calc(100vw - var(--g-space-32)));
