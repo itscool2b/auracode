@@ -185,8 +185,9 @@ svg {
   text-wrap: balance;
 }
 
-/* The second clause steps back: grey, and usually in the serif. */
+/* The second clause steps back to its own line: grey, and usually in the serif. */
 .title-soft {
+  display: block;
   color: var(--g-fg-3);
 }
 

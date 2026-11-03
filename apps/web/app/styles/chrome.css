@@ -360,13 +360,25 @@ html.js .footer-giant:not([data-revealed]) span {
   }
 }
 
+/* Below a laptop the wordmark and its line stand over the links, so neither column is squeezed. */
+@media (max-width: 1023px) {
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .footer-links {
+    justify-content: start;
+    gap: 32px 64px;
+  }
+}
+
 @media (max-width: 767px) {
   .site-footer {
     padding-top: 72px;
   }
 
   .footer-grid {
-    grid-template-columns: 1fr;
     gap: 40px;
   }
 
