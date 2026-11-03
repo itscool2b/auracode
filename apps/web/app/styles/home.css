@@ -66,6 +66,13 @@
   pointer-events: none;
 }
 
+/* The same word split into letter boxes, read for its kerning and kept out of the layout. */
+.roll-measure-split {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
 .roll-word {
   position: absolute;
   bottom: 0;
