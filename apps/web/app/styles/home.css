@@ -27,6 +27,13 @@
   letter-spacing: -0.054em;
 }
 
+/* The narrowest phones keep "One window for" on one line. */
+@media (max-width: 380px) {
+  .hero-title {
+    font-size: 12.8vw;
+  }
+}
+
 .hero-line {
   display: block;
 }
@@ -376,6 +383,12 @@ html.js .marquee-lane-back[data-ready] {
   color: var(--g-fg-2);
   font-size: 14px;
   line-height: 18px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .marquee-lane-back .marquee-item {
+    background-color: var(--g-surface-2);
+  }
 }
 
 .marquee-note {
@@ -1027,6 +1040,26 @@ html.js .numbers-grid[data-revealed] .reel-strip {
 @media (max-width: 767px) {
   .hero {
     padding-top: 36px;
+  }
+
+  /* Phones get a lighter lane: shorter pills, the same marks. */
+  .marquee {
+    --marquee-gap: 10px;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .marquee-item {
+    gap: 10px;
+    height: 46px;
+    padding: 0 18px 0 12px;
+    font-size: 15px;
+  }
+
+  .marquee-lane-back .marquee-item {
+    height: 38px;
+    padding: 0 14px 0 10px;
+    font-size: 13px;
   }
 
   .hero-lead {

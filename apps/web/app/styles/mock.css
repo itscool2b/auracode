@@ -168,8 +168,11 @@
   line-height: 19px;
 }
 
+/* One column as wide as the turn: a long tool line truncates its argument, as the app's do, and
+   never widens the turn past its window. */
 .m-turn {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
 }
 
@@ -185,6 +188,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   min-height: 22px;
   color: var(--g-fg-2);
   white-space: nowrap;
@@ -203,6 +207,7 @@
 }
 
 .m-code {
+  min-width: 0;
   overflow: hidden;
   padding: 1px 7px;
   border-radius: 6px;
@@ -437,7 +442,15 @@
   white-space: nowrap;
 }
 
+/* On the narrowest windows the line truncates rather than running under the window's edge. */
+.m-handoff-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .m-handoff .m-strong {
+  flex: none;
   margin-left: auto;
   padding: 2px 9px;
   border-radius: 999px;

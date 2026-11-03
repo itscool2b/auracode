@@ -376,7 +376,9 @@ export function HeroWindow({ state }: { state: HandoffState }) {
             <div className="handoff-next">
               <p className="m-handoff" data-shown={before ? "" : undefined}>
                 <SpriteMark agent={cur.agent} size={16} />
-                Next message includes a handoff to {nextName}
+                <span className="m-handoff-text">
+                  Next message includes a handoff to {nextName}
+                </span>
                 <span className="m-strong">Preview</span>
               </p>
               <Composer
