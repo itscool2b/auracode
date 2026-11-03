@@ -1,5 +1,5 @@
 import { type OrbState, usePrefersReducedMotion } from "@auracode/ui";
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark, ModelMark } from "@auracode/ui/graphite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   formatElapsed,
@@ -20,6 +20,8 @@ export type LiveTail =
       readonly visible: boolean;
       /** When the UI first saw the turn working (ms since the epoch). */
       readonly since: number;
+      /** The model at work, whose maker's mark leads the line. */
+      readonly model?: string | null;
     }
   | { readonly kind: "waiting" }
   | { readonly kind: "stopping" };
@@ -40,7 +42,8 @@ function tokenMs(element: Element, name: string): number {
 
 /**
  * The working line (docs/design/visual-language.md): one quiet line at the tail of a running turn.
- * A neutral dot breathes in the gutter (never a glow: owner, 2 November 2026) while the agent's
+ * The mark of the company whose model is working breathes in the gutter (owner, 3 November 2026;
+ * never a glow, never dimmed) while the agent's
  * companion swims along the composer's rim, and a
  * playful verb stands in for the agent's reasoning, swapping every 2.5 to 3.5 seconds with a soft
  * crossfade while a sheen passes over it. The elapsed time follows the verb in metadata type and
@@ -56,6 +59,7 @@ export function WorkingLine({
   agentId,
   agentName,
   reduced,
+  model = null,
 }: {
   readonly seed: string;
   readonly context: WorkingContext;
@@ -65,6 +69,8 @@ export function WorkingLine({
   readonly agentName: string;
   /** Overrides the motion preference (server rendering cannot read it). */
   readonly reduced?: boolean;
+  /** The model at work: its maker's mark leads the line (ModelMark). */
+  readonly model?: string | null;
 }) {
   const preference = usePrefersReducedMotion();
   const still = reduced ?? preference;
@@ -154,7 +160,7 @@ export function WorkingLine({
       {/* One text node, so the live region reads as one sentence. */}
       <span className="sr-only" role="status">{`${agentName} is working`}</span>
       <span className="chat-gutter" aria-hidden="true">
-        <span className="chat-working-dot" />
+        <ModelMark model={model} agent={agentId} size={16} className="chat-working-mark" />
       </span>
       <span ref={words} className="chat-working-words" aria-hidden="true">
         {leaving !== null && !still ? (
@@ -236,6 +242,7 @@ export function LiveTailLine({
           since={tail.since}
           agentId={agentId}
           agentName={agentName}
+          model={tail.model ?? null}
         />
       );
     case "waiting":

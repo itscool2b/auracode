@@ -30,7 +30,9 @@ describe("the working line", () => {
     expect(html).toContain(`${verb}…`);
     expect(html).toMatch(/class="chat-working-time"[^>]*>12 s</);
     expect(html).not.toContain("--agent-glow");
-    expect(html).toContain("chat-working-dot");
+    expect(html).toContain("chat-working-mark");
+    // Claude Code without a named model still runs Anthropic's models.
+    expect(html).toContain('data-maker="anthropic"');
     // The same turn always opens on the same verb; its context leans the first pick too.
     expect(line()).toContain(`data-test-verb="${verb}"`);
     expect(line({ context: "run" })).toContain(

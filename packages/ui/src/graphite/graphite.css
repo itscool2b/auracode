@@ -678,6 +678,11 @@
   background-color: var(--g-brand-plate);
 }
 
+/* The OpenAI Blossom is the same white artwork when it marks the model maker. */
+.g-model-mark:where([data-maker="openai"]) {
+  background-color: var(--g-brand-plate);
+}
+
 .g-agent-mark-glyph {
   display: block;
   padding-top: 0.06em;

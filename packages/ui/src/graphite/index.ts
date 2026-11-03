@@ -31,6 +31,8 @@ export {
   type LogoSvgOptions,
   logoSvg,
 } from "./logoPaths";
+export { ModelMark, type ModelMarkProps } from "./ModelMark";
+export { MODEL_MAKERS, type ModelMaker, type ModelMakerId, modelMaker } from "./modelMakers";
 export {
   type LoaderTempo,
   type LoaderTone,

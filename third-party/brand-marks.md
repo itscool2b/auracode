@@ -159,6 +159,33 @@ Retrieved 2026-10-28. Hashes are SHA-256 of the file as downloaded.
   canonical before a public release. Repository license MIT, which covers the code, not the
   trademark.
 
+## Model makers
+
+While an agent works, the chat's working line shows the mark of the company whose model is
+working (`ModelMark`, `packages/ui/src/graphite/modelMakers.ts`). Used at the owner's direction
+(2026-11-03), only to say which company's model is running; no endorsement is implied.
+
+- **Anthropic, OpenAI and xAI** reuse the marks recorded above: the Claude spark, the OpenAI
+  Blossom and the Grok mark.
+- **The others** are in `packages/ui/src/graphite/maker-logos/`. Their makers' brand files sit
+  behind pages that do not serve the plain mark, so each is the exact copy from Simple Icons
+  16.36.0 (CC0, https://simpleicons.org), retrieved 2026-11-03.
+  - Simple Icons publishes one colour per brand; the files use that brand colour unchanged. Moonshot
+    AI's mark is published in black, so it is drawn in `currentColor`, as Grok's is.
+  - The hash is SHA-256 of the file as downloaded, before only the wrapper changed (the role, the
+    aria-label, the title and the fill attribute).
+
+| File | Company | Simple Icons slug | Colour | Vendor source named by Simple Icons | SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| `gemini.svg` | Google Gemini | googlegemini | #8E75B2 | https://gemini.google.com | a6228d8846040401e941a39ed17459785e8324dbb7b870ce84233c9b3e9863a0 |
+| `deepseek.svg` | DeepSeek | deepseek | #5786FE | https://www.deepseek.com | 7a55a0a7391d116eba7d32807d6838478f9209f6034612941e74fbb14934e2ef |
+| `mistral.svg` | Mistral AI | mistralai | #FA520F | https://chat.mistral.ai | 88f00cf2e82e4d36bb4fdd0e913df200c6e7d6162ec627cc58cfdd6a4eb17d18 |
+| `meta.svg` | Meta | meta | #0467DF | https://www.meta.com (guidelines: https://www.facebook.com/brand/resources/meta/company-brand) | e3e9db62f59dc477e5917687349b8aa9685b841d40300c1afad60ad85075cd2e |
+| `qwen.svg` | Qwen | qwen | #6950EF | https://qwen.ai | 36854c60b26bfa5a0cc0d4123727c0ef559efba6f129c0dfa623f3c443fe3e5b |
+| `moonshot.svg` | Moonshot AI | moonshotai | currentColor | https://www.moonshot.cn | 2b9efa8dd053294bc133f1c57cb618ac75487363bce6425b79dd5c0c92f73569 |
+
+Before a public release, check each against the company's current mark and brand guidelines.
+
 ## Agents without a mark
 
 Any other ACP or custom agent shows the first two letters of its id (`agentCode()`), and an
