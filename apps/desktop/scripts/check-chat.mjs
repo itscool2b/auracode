@@ -290,6 +290,9 @@ async function inspect(engine, launcher) {
         "diff",
         "recorded-thinking",
         "recorded-tools",
+        // Background tasks: the strip's pills, then (below) the task panel; and the overflow.
+        "tasks",
+        "tasks-many",
         ...QUEUE_CASES.map((queue) => queue.mode),
       ]) {
         await page.goto(`${url}/?preview=${mode}`);
@@ -334,6 +337,61 @@ async function inspect(engine, launcher) {
             (await page.getByTestId("transcript").textContent()) ?? "",
             /Thought for|did not share its reasoning/,
           );
+        }
+        if (mode === "tasks") {
+          // Three pills; the first opens its panel, which takes the focus and passes axe.
+          assert.equal(await page.getByTestId("task-pill").count(), 3, "tasks: pills");
+          const pill = page.getByTestId("task-pill").nth(1);
+          await pill.click();
+          const panel = page.getByTestId("task-panel");
+          await panel.waitFor();
+          assert.equal(
+            await panel.getAttribute("data-test-task-id"),
+            await pill.getAttribute("data-test-task-id"),
+            "tasks: the pill opened another task",
+          );
+          assert.equal(await pill.getAttribute("aria-expanded"), "true");
+          assert.ok((await panel.getByTestId("task-step").count()) > 0, "tasks: no steps");
+          await panel.getByText("Prompt", { exact: true }).click();
+          await page.waitForTimeout(200);
+          const panelScan = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+            .analyze();
+          results.push({
+            theme,
+            mode: "tasks#panel",
+            violations: panelScan.violations.map((violation) => ({
+              rule: violation.id,
+              nodes: violation.nodes.map((node) => ({
+                target: node.target,
+                reason: node.failureSummary,
+              })),
+            })),
+          });
+          await page.screenshot({ path: resolve(out, `${engine}-${theme}-tasks-panel.png`) });
+          // A child task opens in place; Back returns to its parent.
+          await panel.getByRole("button", { name: /^Run the account tests/ }).click();
+          await page.getByRole("button", { name: "Back to Map account switching code" }).click();
+          await panel.getByRole("button", { name: "Close task" }).waitFor();
+          await page.keyboard.press("Escape");
+          assert.equal(await panel.count(), 0, "tasks: Escape did not close the panel");
+          assert.equal(
+            await pill.evaluate((node) => node === document.activeElement),
+            true,
+            "tasks: focus did not return to the pill",
+          );
+          // The call in the transcript that started a task opens it too.
+          await page.getByTestId("tool-group").last().click();
+          await page.getByTestId("tool-open-task").first().click();
+          await panel.waitFor();
+          await page.keyboard.press("Escape");
+        }
+        if (mode === "tasks-many") {
+          assert.equal(await page.getByTestId("task-pill").count(), 0);
+          await page.locator('summary[aria-label="5 background tasks 2 running"]').click();
+          await page.getByRole("button", { name: /^Map account switching code/ }).click();
+          await page.getByTestId("task-panel").waitFor();
+          await page.keyboard.press("Escape");
         }
         if (mode === "diff") {
           assert.equal(await page.locator(".chat-diff-table tbody tr").count(), 14);

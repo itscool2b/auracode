@@ -209,6 +209,11 @@ pub struct ChatSnapshot {
     pub last_error: Option<ErrorInfo>,
     pub auth: Option<AuthPrompt>,
     pub storage: StorageStatus,
+    /// The background tasks the live session knows: every running one, and those that ended since
+    /// the current or last turn started. A running task in history that is not here ended with an
+    /// earlier process.
+    #[serde(default)]
+    pub tasks: Vec<crate::tasks::BackgroundTask>,
 }
 
 /// One page of a chat's stored history, oldest first.
@@ -574,6 +579,7 @@ mod tests {
                     },
                     unsaved_bytes: 1024,
                 },
+                tasks: Vec::new(),
             },
             history: HistoryPage {
                 chat_id: "c".into(),

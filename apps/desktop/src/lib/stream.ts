@@ -309,6 +309,10 @@ class Draft {
       case "prompt_lifecycle":
         // The demo stream plays agent turns only: no user messages, no prompt queue.
         break;
+      case "task_updated":
+      case "task_step":
+        // The demo agent starts no background tasks.
+        break;
       case "plan_updated":
         this.#plan = event.entries;
         break;

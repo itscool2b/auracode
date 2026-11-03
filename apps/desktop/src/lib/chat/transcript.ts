@@ -1,5 +1,6 @@
 import type {
   AuraEvent,
+  BackgroundTask,
   ErrorKind,
   NoticeLevel,
   PermissionDecision,
@@ -22,6 +23,7 @@ import type {
   UsageInfo,
   Value,
 } from "../../bindings";
+import { mergeTask, newestTurnKey, type TaskItem, withStep } from "./tasks";
 
 /**
  * A chat's transcript, rebuilt from its events in seq order by a pure reducer. History pages and
@@ -182,6 +184,8 @@ export interface Segment {
 export interface Transcript {
   readonly segments: readonly Segment[];
   readonly items: ReadonlyMap<string, Item>;
+  /** Background tasks by id: not items, since the dock and the task panel show them (tasks.ts). */
+  readonly tasks: ReadonlyMap<string, TaskItem>;
 }
 
 /**
@@ -192,7 +196,22 @@ export function emptyTranscript(cutTurnId: string | null = null): Transcript {
   return {
     segments: cutTurnId === null ? [] : [turnSegment(`turn:${cutTurnId}`, cutTurnId, null, true)],
     items: new Map(),
+    tasks: new Map(),
   };
+}
+
+/**
+ * The live session's tasks (the snapshot's) over the ones history gave: a task whose records are
+ * all in an older page still shows, and a known one takes its newest record.
+ */
+export function withTasks(model: Transcript, tasks: readonly BackgroundTask[]): Transcript {
+  if (tasks.length === 0) return model;
+  const next = new Map(model.tasks);
+  const turnKey = newestTurnKey(model.segments);
+  tasks.forEach((task, index) => {
+    next.set(task.task_id, mergeTask(next.get(task.task_id), task, index - tasks.length, turnKey));
+  });
+  return { ...model, tasks: next };
 }
 
 /** Applies entries in seq order. Returns `model` itself when there are none. */
@@ -281,13 +300,21 @@ function turnSegment(
 class Draft {
   readonly #baseItems: ReadonlyMap<string, Item>;
   #items: Map<string, Item> | null = null;
+  readonly #baseTasks: ReadonlyMap<string, TaskItem>;
+  #tasks: Map<string, TaskItem> | null = null;
   readonly #segments: Segment[];
   /** The `itemKeys` arrays this draft made itself, by segment, so it may push to them. */
   readonly #ownedKeys = new Map<number, string[]>();
 
   constructor(base: Transcript) {
     this.#baseItems = base.items;
+    this.#baseTasks = base.tasks;
     this.#segments = [...base.segments];
+  }
+
+  #setTask(id: string, change: (previous: TaskItem | undefined) => TaskItem): void {
+    this.#tasks ??= new Map(this.#baseTasks);
+    this.#tasks.set(id, change(this.#tasks.get(id)));
   }
 
   apply(entry: Entry): void {
@@ -451,6 +478,17 @@ class Draft {
       case "plan_updated":
         this.#setSegment(this.#target(seq), { plan: event.entries });
         break;
+      case "task_updated": {
+        const { type: _type, ...task } = event;
+        const turnKey = newestTurnKey(this.#segments);
+        this.#setTask(task.task_id, (previous) => mergeTask(previous, task, seq, turnKey));
+        break;
+      }
+      case "task_step":
+        this.#setTask(event.task_id, (previous) =>
+          withStep(previous, event.task_id, event.step, seq),
+        );
+        break;
       case "usage_updated": {
         // Stored only inside a turn: between turns it is live header state, never history.
         const open = this.#openTurn();
@@ -491,7 +529,11 @@ class Draft {
   }
 
   finish(): Transcript {
-    return { segments: this.#segments, items: this.#items ?? this.#baseItems };
+    return {
+      segments: this.#segments,
+      items: this.#items ?? this.#baseItems,
+      tasks: this.#tasks ?? this.#baseTasks,
+    };
   }
 
   #get(key: string): Item | undefined {

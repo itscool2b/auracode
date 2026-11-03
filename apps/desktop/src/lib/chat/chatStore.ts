@@ -2,6 +2,7 @@ import type {
   AuraEvent,
   AuthPrompt,
   Autonomy,
+  BackgroundTask,
   ChatAttach,
   ChatSummary,
   ConfigValue,
@@ -22,7 +23,13 @@ import type {
 } from "../../bindings";
 import { errorMessage } from "../errors";
 import { CommandError } from "../ipc";
-import { applyEntries, type Entry, emptyTranscript, type Transcript } from "./transcript";
+import {
+  applyEntries,
+  type Entry,
+  emptyTranscript,
+  type Transcript,
+  withTasks,
+} from "./transcript";
 import type { Transport } from "./transport";
 
 /**
@@ -87,6 +94,11 @@ export interface ChatState {
   readonly auth: AuthPrompt | null;
   readonly storage: StorageStatus | null;
   readonly transcript: Transcript;
+  /**
+   * The tasks the live session knows (the snapshot's, and any a live frame reports): a task history
+   * says still runs but that is not here ran in an earlier process, and shows as stopped.
+   */
+  readonly liveTasks: ReadonlySet<string>;
   /**
    * The agent that ran each turn, by turn id: from history pages, and from the chat's agent when a
    * turn starts live. A turn missing here is the chat's current agent's.
@@ -174,6 +186,7 @@ function initialState(chatId: string): ChatState {
     auth: null,
     storage: null,
     transcript: emptyTranscript(),
+    liveTasks: new Set(),
     turnAgents: new Map(),
     hasMore: false,
     loadingEarlier: false,
@@ -275,6 +288,10 @@ export class ChatStore {
   #entries: Entry[] = [];
   /** The oldest loaded page's cut turn. */
   #cut: string | null = null;
+  /** The attach's tasks, laid over the history again whenever the transcript is rebuilt. */
+  #snapshotTasks: readonly BackgroundTask[] = [];
+  /** How many of `#entries` came before the attach: the snapshot's tasks go between. */
+  #attachedEntries = 0;
   #beforeSeq: number | null = null;
   #closed = false;
 
@@ -461,6 +478,8 @@ export class ChatStore {
       this.#entries.push({ seq: history.unsaved_from, gap: true });
     }
     this.#expectedSeq = attached.next_seq;
+    this.#snapshotTasks = snapshot.tasks ?? [];
+    this.#attachedEntries = this.#entries.length;
     this.#interruptAsked = false;
     this.#authRefreshed = snapshot.session.status === "auth_required";
     this.#queuedSinceUpdate = new Set();
@@ -479,7 +498,11 @@ export class ChatStore {
       lastError: snapshot.last_error,
       auth: snapshot.auth,
       storage: snapshot.storage,
-      transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      transcript: withTasks(
+        applyEntries(emptyTranscript(this.#cut), this.#entries),
+        this.#snapshotTasks,
+      ),
+      liveTasks: new Set(this.#snapshotTasks.map((task) => task.task_id)),
       turnAgents: withTurnAgents(new Map(), history),
       hasMore: history.has_more,
       loadingEarlier: false,
@@ -599,6 +622,10 @@ export class ChatStore {
       }
       case "limits_updated":
         return { ...state, limits: event.windows };
+      case "task_updated":
+        return state.liveTasks.has(event.task_id)
+          ? state
+          : { ...state, liveTasks: new Set(state.liveTasks).add(event.task_id) };
       case "permission_resolved":
       case "ui_resolved":
         // The card is resolved now; whatever answer was on its way is done.
@@ -685,10 +712,19 @@ export class ChatStore {
     if (generation !== this.#generation) return;
     this.#cut = page.cut_turn_id;
     this.#beforeSeq = page.before_seq;
-    this.#entries = [...pageEntries(page), ...this.#entries];
+    const older = pageEntries(page);
+    this.#entries = [...older, ...this.#entries];
+    this.#attachedEntries += older.length;
+    // The snapshot's tasks are newer than history and older than the live frames since the attach.
     this.#set({
       ...this.#state,
-      transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      transcript: applyEntries(
+        withTasks(
+          applyEntries(emptyTranscript(this.#cut), this.#entries.slice(0, this.#attachedEntries)),
+          this.#snapshotTasks,
+        ),
+        this.#entries.slice(this.#attachedEntries),
+      ),
       turnAgents: withTurnAgents(this.#state.turnAgents, page),
       hasMore: page.has_more,
       loadingEarlier: false,

@@ -375,6 +375,37 @@ async fn initializes_after_hooks_and_sends_native_prompt_without_hidden_fields()
     h.stop().await;
 }
 
+/// A background subagent reports through the turn that started it and keeps reporting after it.
+#[tokio::test(start_paused = true)]
+async fn background_tasks_report_in_their_turn_and_after_it() {
+    use aura_protocol::AuraEvent;
+    use aura_protocol::tasks::TaskStatus;
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    h.wire().await;
+    h.send(json!({"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":"toolu_spawn","description":"Explore the repo","subagent_type":"Explore","is_backgrounded":true,"task_type":"local_agent","prompt":"Look around."})).await;
+    h.send(json!({"type":"result","subtype":"success","user_message_uuid":"t1"}))
+        .await;
+    h.send(json!({"type":"system","subtype":"task_notification","task_id":"a1","tool_use_id":"toolu_spawn","status":"completed","output_file":"","summary":"Done looking."})).await;
+    let mut seen = Vec::new();
+    while seen.len() < 2 {
+        if let DriverEvent::Event {
+            turn,
+            event: AuraEvent::TaskUpdated(task),
+        } = h.event().await
+        {
+            seen.push((turn, task.status, task.summary));
+        }
+    }
+    assert_eq!(seen[0], (Some("t1".into()), TaskStatus::Running, None));
+    assert_eq!(
+        seen[1],
+        (None, TaskStatus::Completed, Some("Done looking.".into()))
+    );
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn result_ends_turn_but_idle_is_a_separate_event() {
     let mut h = Harness::start().await;

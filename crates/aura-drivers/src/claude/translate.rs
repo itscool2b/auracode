@@ -12,6 +12,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::time::Instant;
 
+use super::tasks::Tasks;
 use crate::acp::map::{hex, reduce_commands as reduce_acp_commands};
 use crate::acp::options::{MAX_CHOICES, MAX_DESCRIPTION_CHARS, MAX_NAME_CHARS, truncate};
 use crate::acp::wire::CommandEntry;
@@ -118,6 +119,8 @@ pub struct Translator {
     tools: HashMap<String, Tool>,
     seen_frames: HashSet<String>,
     main_stop_reason: Option<String>,
+    /// Subagents and background commands, which outlive turns.
+    tasks: Tasks,
 }
 
 impl Default for Translator {
@@ -141,6 +144,7 @@ impl Translator {
             tools: HashMap::new(),
             seen_frames: HashSet::new(),
             main_stop_reason: None,
+            tasks: Tasks::default(),
         }
     }
 
@@ -173,11 +177,18 @@ impl Translator {
         events
     }
 
-    /// Convert only content and usage. Commands and options use the reducers below; the driver
-    /// owns `system/init`, statuses, control requests and result stop reasons.
+    /// Convert only content, usage and background tasks. Commands and options use the reducers
+    /// below; the driver owns `system/init`, statuses, control requests and result stop reasons. A
+    /// subagent's own messages become its task's steps ([`super::tasks`]), never transcript content.
     pub fn ingest(&mut self, frame: &Value) -> Vec<AuraEvent> {
         let mut events = Vec::new();
         let family = string(frame, "type").unwrap_or_default();
+        let tools = &self.tools;
+        let shown = |native: &str| tools.get(native).map(|tool| tool.id.clone());
+        if family == "system" {
+            self.tasks.system(frame, shown, &mut events);
+            return events;
+        }
         if !matches!(
             family,
             "stream_event" | "assistant" | "user" | "result" | "rate_limit_event"
@@ -187,6 +198,9 @@ impl Translator {
         if let Some(id) = string(frame, "uuid")
             && !self.seen_frames.insert(id.to_owned())
         {
+            return events;
+        }
+        if self.tasks.subagent(frame, shown, &mut events) {
             return events;
         }
         match family {
@@ -570,11 +584,11 @@ impl Translator {
     }
 }
 
-fn string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+pub(super) fn string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-fn bounded_id(id: &str) -> String {
+pub(super) fn bounded_id(id: &str) -> String {
     if id.chars().count() <= 96 {
         id.to_owned()
     } else {
@@ -615,7 +629,7 @@ const MAX_SUBJECT_CHARS: usize = 120;
 /// How a call reads in the transcript. The agent's own description wins; Claude's built-in tools
 /// that carry none are titled from their input ("Read main.rs", "Search for useState"), and any
 /// other tool keeps its name. The full path stays in the call's locations and raw input.
-fn tool_title(name: &str, input: Option<&Value>) -> String {
+pub(super) fn tool_title(name: &str, input: Option<&Value>) -> String {
     if let Some(description) = input
         .and_then(|input| string(input, "description"))
         .map(str::trim)

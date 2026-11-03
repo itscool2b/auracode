@@ -12,6 +12,7 @@ import { takesAccounts } from "../../lib/agentAccounts";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { queueWaitView } from "../../lib/chat/queueWait";
+import { newestTurnKey, tasksByToolCall } from "../../lib/chat/tasks";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
@@ -19,6 +20,7 @@ import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { AccountPicker } from "./AccountPicker";
+import { BackgroundTasks } from "./BackgroundTasks";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -37,9 +39,11 @@ import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
+import { TaskPanel } from "./TaskPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
+import { type TaskLink, TaskLinkContext } from "./taskLinks";
 import { isPanelToggle } from "./terminalRuntime";
 import { UsageLimitCard } from "./UsageLimitCard";
 
@@ -97,6 +101,8 @@ export function ChatView({
     () => false,
   );
   const [changesOpen, setChangesOpen] = useState(false);
+  // The background task the right panel follows; it and the Changes panel share the panel's place.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [gitOpen, setGitOpen] = useState(false);
   const [dialog, setDialog] = useState<"tools" | "export" | "debug" | null>(null);
   const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
@@ -164,6 +170,47 @@ export function ChatView({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store, active, terminals, chatId]);
+
+  useEffect(() => {
+    if (changesOpen) setOpenTaskId(null);
+  }, [changesOpen]);
+  const openTask = useCallback((taskId: string) => {
+    setChangesOpen(false);
+    setOpenTaskId(taskId);
+  }, []);
+  const tasks = state.transcript.tasks;
+  // The transcript's Open actions change only when a call's task or its title does, so a task's
+  // progress does not re-render every tool row.
+  const linkSignature = JSON.stringify(
+    [...tasksByToolCall(tasks)].map(([call, taskId]) => [
+      call,
+      taskId,
+      tasks.get(taskId)?.task.title ?? "",
+    ]),
+  );
+  const taskLinks = useMemo(() => {
+    const links = new Map(
+      (JSON.parse(linkSignature) as [string, string, string][]).map(
+        ([call, taskId, title]) => [call, { taskId, title }] as const,
+      ),
+    );
+    return (toolCallId: string): TaskLink | null => {
+      const link = links.get(toolCallId);
+      return link ? { title: link.title, open: () => openTask(link.taskId) } : null;
+    };
+  }, [linkSignature, openTask]);
+  const openTaskItem = openTaskId === null ? undefined : tasks.get(openTaskId);
+  const openTaskCommand = useMemo(() => {
+    const callId = openTaskItem?.task.kind === "command" ? openTaskItem.task.tool_call_id : null;
+    const call = callId === null ? undefined : state.transcript.items.get(`tool:${callId}`);
+    const input = call?.kind === "tool" ? call.rawInput : null;
+    return input !== null && typeof input === "object" && !Array.isArray(input)
+      ? typeof input.command === "string"
+        ? input.command
+        : null
+      : null;
+  }, [openTaskItem, state.transcript.items]);
+  const loadBlob = useCallback((sha256: string) => void store.loadBlob(sha256), [store]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
   useEffect(() => {
@@ -669,13 +716,15 @@ export function ChatView({
                 </button>
               </div>
             ) : null}
-            <Transcript
-              dockedRequests={dockedRequests}
-              state={state}
-              live={live}
-              actions={actions}
-              onLoadEarlier={() => void store.loadEarlier()}
-            />
+            <TaskLinkContext.Provider value={taskLinks}>
+              <Transcript
+                dockedRequests={dockedRequests}
+                state={state}
+                live={live}
+                actions={actions}
+                onLoadEarlier={() => void store.loadEarlier()}
+              />
+            </TaskLinkContext.Provider>
             <div className="chat-dock">
               {recreateNote ? (
                 <p
@@ -782,6 +831,16 @@ export function ChatView({
                   }
                 />
               ) : null}
+              <BackgroundTasks
+                tasks={tasks}
+                turnKey={newestTurnKey(state.transcript.segments)}
+                live={live}
+                liveTasks={state.liveTasks}
+                openTaskId={openTaskItem ? openTaskId : null}
+                onOpen={(taskId) =>
+                  openTaskId === taskId ? setOpenTaskId(null) : openTask(taskId)
+                }
+              />
               <QueueList
                 queue={state.queue}
                 held={held}
@@ -926,6 +985,18 @@ export function ChatView({
               transcript={state.transcript}
               onClose={() => setChangesOpen(false)}
               onStop={() => void store.stop()}
+            />
+          ) : openTaskItem && !openTaskItem.placeholder ? (
+            <TaskPanel
+              item={openTaskItem}
+              tasks={tasks}
+              command={openTaskCommand}
+              live={live}
+              liveTasks={state.liveTasks}
+              blobs={state.blobs}
+              onLoadBlob={loadBlob}
+              onOpen={openTask}
+              onClose={() => setOpenTaskId(null)}
             />
           ) : null}
         </div>

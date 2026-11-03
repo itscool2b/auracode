@@ -29,6 +29,7 @@
 use std::io;
 use std::sync::Arc;
 
+use aura_protocol::tasks::{BackgroundTask, TaskStatus, TaskStep};
 use aura_protocol::{
     AuraEvent, EVENT_BUDGET, Millis, PermissionDecision, PermissionRequest, PlanEntry, PlanStatus,
     ResolvedBy, SessionInfo, ToolCall, ToolContent, ToolLocation, ToolUpdate, Truncation, UiAnswer,
@@ -64,6 +65,15 @@ const PLACEHOLDER_CHARS: usize = 256;
 /// Room kept for the event's own `truncated` field while its content is fitted.
 const TRUNCATION_ROOM: usize = 160;
 
+/// A task's or a step's id, and the ids a task names.
+const TASK_ID_CHARS: usize = 128;
+const TASK_AGENT_TYPE_CHARS: usize = 128;
+const TASK_ACTIVITY_CHARS: usize = 256;
+/// A task's prompt, without a blob: drivers already cut it to this.
+const TASK_PROMPT_BYTES: usize = 4 * 1024;
+/// Ended tasks the session keeps for the snapshot besides the running ones.
+const MAX_ENDED_TASKS: usize = 64;
+
 /// An open message or thought.
 #[derive(Debug, Clone)]
 struct OpenText {
@@ -94,6 +104,9 @@ pub(crate) struct Normalizer {
     texts: Vec<OpenText>,
     cards: Vec<OpenCard>,
     questions: Vec<OpenQuestion>,
+    /// Background tasks as last shown, with their prompt and summary: every running one, and those
+    /// that ended since the current turn started. Oldest first.
+    tasks: Vec<BackgroundTask>,
 }
 
 impl Normalizer {
@@ -186,6 +199,14 @@ impl Normalizer {
             AuraEvent::PlanUpdated { entries } => AuraEvent::PlanUpdated {
                 entries: fit_plan(entries),
             },
+            AuraEvent::TaskUpdated(task) => {
+                AuraEvent::TaskUpdated(self.track_task(fit_task(task, &mut blobs), now))
+            }
+            AuraEvent::TaskStep { task_id, step } => {
+                let task_id = cap_chars(task_id, TASK_ID_CHARS);
+                let step = fit_step(&task_id, step, &mut blobs);
+                AuraEvent::TaskStep { task_id, step }
+            }
             AuraEvent::Notice { level, message } => AuraEvent::Notice {
                 level,
                 message: cap_escaped(message, MESSAGE_BYTES),
@@ -253,17 +274,104 @@ impl Normalizer {
     }
 
     /// `MessageCompleted`/`ThoughtCompleted` for what is still open in `turn`, and resolutions `by`
-    /// for its open cards and questions; called before every `TurnEnded` the actor pushes.
+    /// for its open cards and questions; called before every `TurnEnded` the actor pushes. A task
+    /// still running in the foreground ends with its turn: it shows as stopped.
     pub(crate) fn close_turn(&mut self, turn: &str, by: ResolvedBy, now: Millis) -> Vec<AuraEvent> {
         let mut out = self.close_texts(|tag| tag == Some(turn), now);
         out.extend(self.resolve(|tag| tag == Some(turn), by));
+        out.extend(self.stop_tasks(|task| !task.backgrounded, now));
         out
     }
 
-    /// The same for what is open outside any turn, when the driver ends.
+    /// The same for what is open outside any turn, when the driver ends. Every task still running,
+    /// in the background too, ends with the agent's process.
     pub(crate) fn close_untagged(&mut self, by: ResolvedBy, now: Millis) -> Vec<AuraEvent> {
         let mut out = self.close_texts(|tag| tag.is_none(), now);
         out.extend(self.resolve(|tag| tag.is_none(), by));
+        out.extend(self.stop_tasks(|_| true, now));
+        out
+    }
+
+    /// A turn starts: the tasks that ended before it leave the snapshot (history keeps them).
+    pub(crate) fn begin_turn(&mut self) {
+        self.tasks.retain(|task| task.status == TaskStatus::Running);
+    }
+
+    /// The tasks the snapshot lists, oldest first.
+    pub(crate) fn tasks(&self) -> &[BackgroundTask] {
+        &self.tasks
+    }
+
+    /// Remembers a fitted task and fills in when it started and ended: when the session first heard
+    /// of it, and when it first reported an end, unless the agent said. Answers the event to push,
+    /// which keeps the driver's `None` prompt and summary.
+    fn track_task(&mut self, mut task: BackgroundTask, now: Millis) -> BackgroundTask {
+        let known = self
+            .tasks
+            .iter()
+            .position(|known| known.task_id == task.task_id);
+        let previous = known.and_then(|index| self.tasks.get(index));
+        task.started_at = task
+            .started_at
+            .or_else(|| previous.and_then(|previous| previous.started_at))
+            .or(Some(now));
+        if task.status != TaskStatus::Running {
+            task.ended_at = task
+                .ended_at
+                .or_else(|| previous.and_then(|previous| previous.ended_at))
+                .or(Some(now));
+        }
+        let mut kept = task.clone();
+        if let Some(previous) = previous {
+            if kept.prompt.is_none() {
+                kept.prompt.clone_from(&previous.prompt);
+            }
+            if kept.summary.is_none() {
+                kept.summary.clone_from(&previous.summary);
+                kept.summary_truncated
+                    .clone_from(&previous.summary_truncated);
+            }
+        }
+        match known {
+            Some(index) => self.tasks[index] = kept,
+            None => self.tasks.push(kept),
+        }
+        let ended = self
+            .tasks
+            .iter()
+            .filter(|task| task.status != TaskStatus::Running)
+            .count();
+        let mut excess = ended.saturating_sub(MAX_ENDED_TASKS);
+        self.tasks.retain(|task| {
+            if excess > 0 && task.status != TaskStatus::Running {
+                excess -= 1;
+                return false;
+            }
+            true
+        });
+        task
+    }
+
+    /// `TaskUpdated` with `Stopped` for each running task that `matches`.
+    fn stop_tasks(
+        &mut self,
+        matches: impl Fn(&BackgroundTask) -> bool,
+        now: Millis,
+    ) -> Vec<AuraEvent> {
+        let mut out = Vec::new();
+        for task in &mut self.tasks {
+            if task.status != TaskStatus::Running || !matches(task) {
+                continue;
+            }
+            task.status = TaskStatus::Stopped;
+            task.ended_at = Some(now);
+            out.push(AuraEvent::TaskUpdated(BackgroundTask {
+                prompt: None,
+                summary: None,
+                summary_truncated: None,
+                ..task.clone()
+            }));
+        }
         out
     }
 
@@ -727,6 +835,63 @@ fn cut_entry(entry: ToolContent, target: usize, blobs: &mut Vec<Op>) -> ToolCont
             emptied_diff(&entry, truncated)
         }
     }
+}
+
+/// `text` as the head that fits `room` bytes of JSON once the event carries a `truncated`, and a
+/// blob of all of it; `text` itself when it fits `room` as it is.
+fn fit_text(text: String, room: usize, blobs: &mut Vec<Op>) -> (String, Option<Truncation>) {
+    if escaped_str_len(&text) <= room {
+        return (text, None);
+    }
+    let head = prefix_escaped(&text, room.saturating_sub(TRUNCATION_ROOM)).to_owned();
+    let truncated = spill(text.as_bytes(), "text/plain", blobs);
+    (head, Some(truncated))
+}
+
+/// Ids, the title, the agent type and the activity have fixed caps and the prompt 4 KiB; the
+/// summary takes what the budget leaves, with a blob of all of it when it is cut.
+fn fit_task(mut task: BackgroundTask, blobs: &mut Vec<Op>) -> BackgroundTask {
+    task.task_id = cap_chars(task.task_id, TASK_ID_CHARS);
+    task.tool_call_id = task.tool_call_id.map(|id| cap_chars(id, TASK_ID_CHARS));
+    task.parent_task_id = task.parent_task_id.map(|id| cap_chars(id, TASK_ID_CHARS));
+    task.title = cap_chars(task.title, TITLE_CHARS);
+    task.agent_type = task
+        .agent_type
+        .map(|name| cap_chars(name, TASK_AGENT_TYPE_CHARS));
+    task.activity = task
+        .activity
+        .map(|text| cap_chars(text, TASK_ACTIVITY_CHARS));
+    task.prompt = task.prompt.map(|text| cap_escaped(text, TASK_PROMPT_BYTES));
+    if let Some(summary) = task.summary.take() {
+        task.summary = Some(String::new());
+        let room = EVENT_BUDGET.saturating_sub(json_len(&task) + tag_len("task_updated"));
+        let (summary, truncated) = fit_text(summary, room, blobs);
+        task.summary = Some(summary);
+        if truncated.is_some() {
+            task.summary_truncated = truncated;
+        }
+    }
+    task
+}
+
+/// A step's ids and title have fixed caps; its text takes what the budget leaves, with a blob of
+/// all of it when it is cut.
+fn fit_step(task_id: &str, mut step: TaskStep, blobs: &mut Vec<Op>) -> TaskStep {
+    step.step_id = cap_chars(step.step_id, TASK_ID_CHARS);
+    step.title = cap_chars(step.title, TITLE_CHARS);
+    if let Some(text) = step.text.take() {
+        step.text = Some(String::new());
+        let room = EVENT_BUDGET.saturating_sub(json_len(&AuraEvent::TaskStep {
+            task_id: task_id.to_owned(),
+            step: step.clone(),
+        }));
+        let (text, truncated) = fit_text(text, room, blobs);
+        step.text = Some(text);
+        if truncated.is_some() {
+            step.truncated = truncated;
+        }
+    }
+    step
 }
 
 fn fit_tool_call(mut call: ToolCall, blobs: &mut Vec<Op>) -> ToolCall {
@@ -1333,6 +1498,154 @@ mod tests {
         let kept = entries.len() - 1;
         assert_eq!(last.content, format!("+ {} more", 100 - kept));
         assert!(entries[0].content.chars().count() <= PLAN_ENTRY_CHARS);
+    }
+
+    fn task(id: &str, backgrounded: bool) -> BackgroundTask {
+        BackgroundTask {
+            task_id: id.into(),
+            kind: aura_protocol::tasks::TaskKind::Agent,
+            title: "Explore the repo".into(),
+            agent_type: Some("Explore".into()),
+            tool_call_id: None,
+            parent_task_id: None,
+            backgrounded,
+            status: TaskStatus::Running,
+            activity: None,
+            tool_uses: None,
+            tokens: None,
+            duration_ms: None,
+            started_at: None,
+            ended_at: None,
+            prompt: Some("Map the code".into()),
+            summary: None,
+            summary_truncated: None,
+        }
+    }
+
+    fn task_event(events: &[AuraEvent]) -> &BackgroundTask {
+        match events {
+            [AuraEvent::TaskUpdated(task)] => task,
+            other => panic!("one task update, got {other:?}"),
+        }
+    }
+
+    /// The session stamps when it first heard of a task and when it ended, keeps the prompt and
+    /// summary for the snapshot while the events carry each once, and a long summary keeps its head
+    /// inline with a blob of all of it.
+    #[test]
+    fn tasks_are_stamped_kept_and_fitted() {
+        let mut normalizer = Normalizer::default();
+        let (events, blobs) =
+            normalizer.apply(AuraEvent::TaskUpdated(task("a", true)), Some("t"), 100);
+        assert!(blobs.is_empty());
+        assert_eq!(task_event(&events).started_at, Some(100));
+        let progress = BackgroundTask {
+            prompt: None,
+            activity: Some("Reading main.rs".into()),
+            ..task("a", true)
+        };
+        let (events, _) = normalizer.apply(AuraEvent::TaskUpdated(progress), None, 200);
+        let shown = task_event(&events);
+        assert_eq!(
+            (shown.started_at, shown.prompt.as_deref()),
+            (Some(100), None)
+        );
+        assert_eq!(
+            normalizer.tasks()[0].prompt.as_deref(),
+            Some("Map the code")
+        );
+
+        let summary =
+            "## Findings\n\n".to_owned() + &"The switch lives in accounts.rs. ".repeat(900);
+        let done = BackgroundTask {
+            prompt: None,
+            status: TaskStatus::Completed,
+            summary: Some(summary.clone()),
+            ..task("a", true)
+        };
+        let (events, blobs) = normalizer.apply(AuraEvent::TaskUpdated(done), None, 300);
+        let shown = task_event(&events);
+        assert_eq!(shown.ended_at, Some(300));
+        assert!(json_len(&events[0]) <= EVENT_BUDGET);
+        let truncated = shown.summary_truncated.as_ref().expect("cut");
+        assert_eq!(truncated.total_bytes, summary.len() as u64);
+        let stored = blob_map(&blobs);
+        assert_eq!(
+            stored[truncated.blob.as_deref().expect("blob")],
+            summary.as_bytes()
+        );
+        assert!(summary.starts_with(shown.summary.as_deref().expect("head")));
+        assert_eq!(
+            normalizer.tasks()[0].prompt.as_deref(),
+            Some("Map the code")
+        );
+
+        // The next turn starts without the ended task; a running one stays.
+        normalizer.apply(AuraEvent::TaskUpdated(task("b", true)), None, 400);
+        normalizer.begin_turn();
+        let ids: Vec<_> = normalizer
+            .tasks()
+            .iter()
+            .map(|t| t.task_id.as_str())
+            .collect();
+        assert_eq!(ids, ["b"]);
+    }
+
+    /// A foreground task ends with its turn; a background one ends with the agent's process.
+    #[test]
+    fn tasks_without_an_end_stop_with_their_turn_or_process() {
+        let mut normalizer = Normalizer::default();
+        normalizer.apply(AuraEvent::TaskUpdated(task("fg", false)), Some("t"), 1);
+        normalizer.apply(AuraEvent::TaskUpdated(task("bg", true)), Some("t"), 1);
+        let closed = normalizer.close_turn("t", ResolvedBy::Turn, 50);
+        let stopped = task_event(&closed);
+        assert_eq!(
+            (stopped.task_id.as_str(), stopped.status, stopped.ended_at),
+            ("fg", TaskStatus::Stopped, Some(50))
+        );
+        assert_eq!(stopped.prompt, None);
+        assert!(normalizer.close_turn("t", ResolvedBy::Turn, 60).is_empty());
+        let closed = normalizer.close_untagged(ResolvedBy::System, 70);
+        assert_eq!(task_event(&closed).task_id, "bg");
+        assert!(
+            normalizer
+                .tasks()
+                .iter()
+                .all(|task| task.status == TaskStatus::Stopped)
+        );
+    }
+
+    #[test]
+    fn a_long_task_step_keeps_its_head_and_a_blob() {
+        let mut normalizer = Normalizer::default();
+        let text = "Reading the driver. ".repeat(1000);
+        let step = TaskStep {
+            step_id: "u.0".into(),
+            kind: aura_protocol::tasks::TaskStepKind::Text,
+            title: String::new(),
+            tool_kind: None,
+            status: None,
+            text: Some(text.clone()),
+            truncated: None,
+        };
+        let (events, blobs) = normalizer.apply(
+            AuraEvent::TaskStep {
+                task_id: "a".into(),
+                step,
+            },
+            None,
+            1,
+        );
+        assert!(json_len(&events[0]) <= EVENT_BUDGET);
+        let AuraEvent::TaskStep { step, .. } = &events[0] else {
+            panic!("a step");
+        };
+        let truncated = step.truncated.as_ref().expect("cut");
+        assert_eq!(
+            blob_map(&blobs)[truncated.blob.as_deref().expect("blob")],
+            text.as_bytes()
+        );
+        assert!(text.starts_with(step.text.as_deref().expect("head")));
     }
 
     #[test]

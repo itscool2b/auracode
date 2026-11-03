@@ -35,6 +35,7 @@ import { MISSING_FOLDER, missingWorktreeGit } from "./missingWorktreeFixture";
 import { NewChatPreview } from "./newChatPreview";
 import type { NewChatScenario } from "./newChatWorktreeFixture";
 import { withPreviewContext } from "./previewContext";
+import { taskPreviewEvents, taskPreviewRecords } from "./tasksPreview";
 import { terminalPanelFixture } from "./terminalPanelFixture";
 
 /**
@@ -376,6 +377,9 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // A running turn that started subagents and background commands (tasksPreview.ts).
+  if (mode === "tasks" || mode === "tasks-many")
+    return [...events, ...taskPreviewEvents(mode === "tasks-many")];
   // A later start failed: the chat's worktree folder was deleted outside the app.
   if (mode === "missing-worktree")
     return [
@@ -609,6 +613,8 @@ function Preview() {
     "recorded-tools",
     "terminal-panel",
     "missing-worktree",
+    "tasks",
+    "tasks-many",
     ...Object.keys(NEW_CHAT_SCENARIOS),
     ...Object.keys(QUEUE_PREVIEWS),
   ].includes(requested)
@@ -665,7 +671,9 @@ function Preview() {
           mode === "permission" ||
           mode === "plan" ||
           mode === "history-question" ||
-          mode === "focus-group"
+          mode === "focus-group" ||
+          mode === "tasks" ||
+          mode === "tasks-many"
         ? "running"
         : mode === "error" || mode === "missing-worktree"
           ? "failed"
@@ -966,6 +974,10 @@ function Preview() {
               chat: { ...chat, status: currentStatus },
               session: header(),
               queue,
+              tasks:
+                mode === "tasks" || mode === "tasks-many"
+                  ? taskPreviewRecords(mode === "tasks-many")
+                  : [],
             },
           );
         },
