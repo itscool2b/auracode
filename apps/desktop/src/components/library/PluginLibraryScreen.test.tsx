@@ -28,6 +28,27 @@ function section(mode: string, agentId: string, override: Partial<AgentPlugins> 
 }
 
 describe("Plugin library", () => {
+  it("lists Grok's plugins and marketplaces and adds a marketplace where its list is", () => {
+    const html = section("live", "grok");
+    expect(html).toContain("xAI Official");
+    expect(html).toContain("xai-org/plugin-marketplace");
+    expect(html).toContain("Available from your marketplaces");
+    expect(html).toContain('data-testid="add-marketplace"');
+    expect(html).toMatch(/Add marketplace<\/button>/);
+  });
+
+  it("calls Hermes taps skill sources and adds one there", () => {
+    const html = section("live", "hermes");
+    expect(html).toContain("Skill sources");
+    expect(html).toContain("team/skills");
+    expect(html).toMatch(/Add skill source<\/button>/);
+    expect(html).toContain("browser-firecrawl");
+  });
+
+  it("offers no Add where the agent cannot add a marketplace", () => {
+    expect(section("live", "cursor")).not.toContain('data-testid="add-marketplace"');
+  });
+
   it("keeps an initial checking section distinct from an uninstalled agent", () => {
     const html = section("plugins", "claude", {
       installed: false,

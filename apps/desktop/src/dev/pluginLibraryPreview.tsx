@@ -344,18 +344,109 @@ export function pluginFixture(mode: string): PluginLibrary {
       },
     ],
   });
-  const hermes = nativeAgent("hermes", "Hermes", true, {
-    version: 1,
-    provider: "hermes",
-    actions: [],
-    native_routes: [
-      {
-        id: "settings",
-        label: "Open native customization",
-        instructions: "Synthetic native route. No process is started.",
-      },
-    ],
+  // Grok Build and Hermes list their own plugins and marketplaces (Hermes: skill sources),
+  // with reviewed actions, as Rust assembles them since November 2026.
+  const listed = (
+    agent_id: "grok" | "hermes",
+    name: string,
+    version: string,
+    features: FeatureListing[],
+  ): AgentPlugins => ({
+    agent_id,
+    name,
+    installed: true,
+    version,
+    management: {
+      version: 1,
+      provider: agent_id,
+      actions: [
+        {
+          feature: "plugins",
+          kind: "plugin",
+          actions: ["install", "update", "remove", "enable", "disable"],
+        },
+        {
+          feature: "marketplaces",
+          kind: "marketplace",
+          actions: agent_id === "grok" ? ["install", "update", "remove"] : ["install", "remove"],
+        },
+      ],
+      native_routes: [
+        {
+          id: "settings",
+          label: "Open native customization",
+          instructions: "Synthetic native route. No process is started.",
+        },
+      ],
+    },
+    system: "marketplace",
+    summary:
+      agent_id === "grok"
+        ? "Plugins from marketplace sources, plus skills and MCP servers."
+        : "Plugins from Hermes's catalog or GitHub, skill sources (taps), skills and MCP servers.",
+    harness: { state: "up_to_date", version, checked_at: NOW - 60_000 },
+    updated_at: NOW - 60_000,
+    version_change: null,
+    sync: { state: "unsupported", reason: "Configuration sync covers Claude Code, Codex and Pi." },
+    notices: [],
+    features,
   });
+  const grok = listed("grok", "Grok Build", "1.0.70", [
+    {
+      feature: "plugins",
+      state: { state: "live" },
+      command: "grok plugin list --json --available",
+      entries: [entry("tools", { marketplace: "team", version: "1.2.0", enabled: true })],
+      available: [
+        entry("vercel", {
+          installed: false,
+          marketplace: "xAI Official",
+          description: "Vercel deployment platform integration.",
+        }),
+        entry("supabase", {
+          installed: false,
+          marketplace: "xAI Official",
+          description: "Supabase database, auth and storage.",
+        }),
+      ],
+      available_total: 351,
+    },
+    {
+      feature: "marketplaces",
+      state: { state: "live" },
+      command: "grok plugin marketplace list --json",
+      entries: [
+        entry("xAI Official", { kind: "git", description: "xai-org/plugin-marketplace" }),
+        entry("claude-plugins-official", {
+          kind: "git",
+          description: "anthropics/claude-plugins-official",
+        }),
+      ],
+      available: [],
+      available_total: 0,
+    },
+    files("skills", "Read from the agent's native skills folder.", []),
+  ]);
+  const hermes = listed("hermes", "Hermes", "0.22.5", [
+    {
+      feature: "plugins",
+      state: { state: "live" },
+      command: "hermes plugins list --json",
+      entries: [
+        entry("browser-firecrawl", {
+          version: "1.0.0",
+          enabled: true,
+          kind: "bundled",
+          description: "Firecrawl cloud browser backend.",
+        }),
+      ],
+      available: [],
+      available_total: 0,
+    },
+    files("marketplaces", "Hermes skill sources (taps), read from skills/.hub/taps.json.", [
+      entry("team/skills"),
+    ]),
+  ]);
   return {
     agents: [
       claude,
@@ -363,7 +454,7 @@ export function pluginFixture(mode: string): PluginLibrary {
       pi,
       opencode,
       hermes,
-      nativeAgent("grok", "Grok Build", true),
+      grok,
       nativeAgent("cursor", "Cursor", true),
       nativeAgent("antigravity", "Antigravity", false),
       nativeAgent("omp", "oh-my-pi", false),

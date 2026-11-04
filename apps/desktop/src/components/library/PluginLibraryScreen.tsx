@@ -1,5 +1,5 @@
 import { AgentMark, StatusDot } from "@auracode/ui/graphite";
-import { ArrowLeft, Ellipsis, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, Ellipsis, Plus, RefreshCw, Search } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -19,7 +19,14 @@ import type {
   LibrarySourceStatus,
 } from "../../lib/library/bindings";
 import { pluginsApi as nativePluginsApi, type PluginsApi } from "../../lib/plugins/api";
-import { ago, featureLabel, harnessText, harnessTone, sourceText } from "../../lib/plugins/format";
+import {
+  addsMarketplaces,
+  ago,
+  featureLabel,
+  harnessText,
+  harnessTone,
+  sourceText,
+} from "../../lib/plugins/format";
 import { PluginLibraryLoader } from "../../lib/plugins/loading";
 import type { SharedMcpApi } from "../../lib/sharedMcp";
 import { Modal } from "../chat/Modal";
@@ -492,14 +499,9 @@ export function AgentSection({
       (action) => action.kind !== "marketplace" && action.actions.includes("install"),
     )?.kind ?? null;
   const menu: MenuItem[] = [{ label: "Refresh listings", onSelect: onRefresh }];
-  if (
-    provider &&
-    management?.actions.some(
-      (action) => action.kind === "marketplace" && action.actions.includes("install"),
-    )
-  )
+  if (provider && addsMarketplaces(management))
     menu.push({
-      label: "Add marketplace…",
+      label: agent.agent_id === "hermes" ? "Add skill source…" : "Add marketplace…",
       onSelect: () => onVendor({ provider, kind: "marketplace", action: "install", target: "" }),
     });
   menu.push({ label: "Copy history", onSelect: onHistory });
@@ -634,6 +636,12 @@ function Feature({
       .includes(query.toLowerCase()),
   );
   const headingId = `plugins-${agent.agent_id}-${feature.feature}`;
+  // Adding a marketplace sits where its list is, not only in the agent's menu.
+  const adds =
+    feature.feature === "marketplaces" &&
+    provider !== undefined &&
+    agent.installed &&
+    addsMarketplaces(agent.management?.version === 1 ? agent.management : null);
   return (
     <section className="plugins-feature" aria-labelledby={headingId}>
       <div className="plugins-feature-head">
@@ -643,6 +651,19 @@ function Feature({
         <p className="plugins-source" data-failed={failed || undefined}>
           {sourceText(feature.state, feature.command)}
         </p>
+        {adds && provider ? (
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28 plugins-add"
+            data-testid="add-marketplace"
+            onClick={() =>
+              onVendor({ provider, kind: "marketplace", action: "install", target: "" })
+            }
+          >
+            <Plus size={14} aria-hidden="true" />
+            {agent.agent_id === "hermes" ? "Add skill source" : "Add marketplace"}
+          </button>
+        ) : null}
       </div>
       {feature.entries.length ? (
         <ul className="plugins-rows">
@@ -766,6 +787,7 @@ function Row({
       ) : null}
       {!entry.installed &&
       provider &&
+      provider !== "grok" &&
       kind &&
       agent.installed &&
       capability?.actions.includes("install") ? (
@@ -776,6 +798,16 @@ function Row({
           onClick={() => onVendor({ provider, kind, action: "install", target: entry.key })}
         >
           Install
+        </button>
+      ) : null}
+      {/* Grok installs from a source, never a marketplace entry's name: its own CLI does. */}
+      {!entry.installed && provider === "grok" && agent.installed ? (
+        <button
+          type="button"
+          className="g-button g-button-outline g-button-28"
+          onClick={() => onVendor({ provider, kind: "native", action: "open", target: "settings" })}
+        >
+          Install<span className="sr-only"> {entry.label}</span> in Grok…
         </button>
       ) : null}
       {items.length ? (
