@@ -55,6 +55,7 @@ pub mod native_shell;
 pub mod onboarding;
 pub mod os;
 pub mod plugin_library;
+pub mod processes;
 pub mod profile_commands;
 pub mod profile_config;
 pub mod project_tools;

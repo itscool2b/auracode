@@ -323,7 +323,9 @@ mod win {
     use std::mem::size_of;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
-    use windows::Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation};
+    use windows::Wdk::System::Threading::{
+        NtQueryInformationProcess, ProcessCommandLineInformation,
+    };
     use windows::Win32::Foundation::{ERROR_MORE_DATA, FILETIME, HANDLE, UNICODE_STRING};
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
@@ -368,7 +370,10 @@ mod win {
         let mut more = unsafe { Process32FirstW(raw(&snapshot), &mut entry) }.is_ok();
         while more {
             let name = &entry.szExeFile;
-            let end = name.iter().position(|&unit| unit == 0).unwrap_or(name.len());
+            let end = name
+                .iter()
+                .position(|&unit| unit == 0)
+                .unwrap_or(name.len());
             found.push(Entry {
                 pid: entry.th32ProcessID,
                 ppid: entry.th32ParentProcessID,
@@ -438,7 +443,9 @@ mod win {
             let count = (list.NumberOfProcessIdsInList as usize).min(ROOM);
             // SAFETY: `count` ids follow the header inside `buffer`.
             let ids = unsafe { std::slice::from_raw_parts(list.ProcessIdList.as_ptr(), count) };
-            ids.iter().filter_map(|&id| u32::try_from(id).ok()).collect()
+            ids.iter()
+                .filter_map(|&id| u32::try_from(id).ok())
+                .collect()
         }
     }
 
@@ -469,7 +476,13 @@ mod win {
         let mut user = FILETIME::default();
         // SAFETY: four valid FILETIME out-pointers.
         let times = unsafe {
-            GetProcessTimes(raw(&process), &mut created, &mut exited, &mut kernel, &mut user)
+            GetProcessTimes(
+                raw(&process),
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
         }
         .is_ok();
         let mut memory = PROCESS_MEMORY_COUNTERS {
@@ -533,7 +546,8 @@ mod win {
     pub(crate) fn terminate(pid: u32) -> Result<(), String> {
         // SAFETY: plain Win32 calls; the handle is owned at once.
         let process = owned(
-            unsafe { OpenProcess(PROCESS_TERMINATE, false, pid) }.map_err(|error| error.message())?,
+            unsafe { OpenProcess(PROCESS_TERMINATE, false, pid) }
+                .map_err(|error| error.message())?,
         );
         // SAFETY: the handle is open with PROCESS_TERMINATE.
         unsafe { TerminateProcess(raw(&process), 1) }.map_err(|error| error.message())

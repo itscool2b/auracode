@@ -99,7 +99,10 @@ async fn an_agent_and_its_child_are_listed_and_the_child_stops_on_request() {
 
     let _ = process.control.shutdown(ShutdownPlan::STANDARD).await;
     reaper.assert_gone().await;
-    assert!(tree(&process.control).await.is_empty(), "an exited agent lists nothing");
+    assert!(
+        tree(&process.control).await.is_empty(),
+        "an exited agent lists nothing"
+    );
 }
 
 /// The case the owner hit on 2026-11-03: a program started through a parent that exited at once

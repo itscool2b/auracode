@@ -4218,6 +4218,10 @@ impl ChatActor {
                 if matches!(event, AuraEvent::SteeringStatus { .. }) {
                     return;
                 }
+                // The Processes page lists every chat's tasks without opening the chat.
+                if let AuraEvent::TaskUpdated(task) = &event {
+                    self.book.note_task(task);
+                }
                 // Readiness, usage and empty deltas are not a response to the prompt. Only
                 // correlate actual output with the matching open turn, never background events.
                 let meaningful = match &event {

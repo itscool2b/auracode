@@ -279,6 +279,10 @@ export const commands = {
 	dictationStart: (id: string, language: string | null, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, language, channel })),
 	dictationStop: (id: string) => __TAURI_INVOKE<void>("dictation_stop", { id }),
 	dictationCancel: (id: string) => __TAURI_INVOKE<void>("dictation_cancel", { id }),
+	/**  Every chat's agent processes and what each started. */
+	processesSnapshot: () => typedError<ProcessesSnapshot, AppError>(__TAURI_INVOKE("processes_snapshot")),
+	/**  Stops `pid` and everything under it, if it runs under one of `chat_id`'s agents. */
+	processStop: (chatId: string, pid: number) => typedError<null, AppError>(__TAURI_INVOKE("process_stop", { chatId, pid })),
 	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
 	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
 	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
@@ -731,6 +735,12 @@ export type AgentPlugins = {
 	notices: string[],
 };
 
+/**  One agent process and everything it started, the agent first, then nearest first. */
+export type AgentProcesses = {
+	pid: number,
+	processes: ProcessRow[],
+};
+
 /**  Configuration sync for this agent on this device. */
 export type AgentSync = { state: "on" } | { state: "off" } | { state: "unsupported"; reason: string };
 
@@ -1078,6 +1088,17 @@ export type ChatMove = {
 	 */
 	folder_id: string | null,
 	allow_busy_folder: boolean,
+};
+
+/**
+ *  One chat's agent processes, and the tasks its agent reported. Subagents run inside the
+ *  agent's own process, so the tasks are how they show.
+ */
+export type ChatProcesses = {
+	chat_id: string,
+	agents: AgentProcesses[],
+	/**  The latest record of each task, oldest first (at most 64). */
+	tasks: BackgroundTask[],
 };
 
 export type ChatSearchHit = {
@@ -2426,6 +2447,32 @@ export type PluginSystem =
 "packages" | 
 /**  Plugins declared in its configuration and loaded by the agent itself. */
 "declared";
+
+/**
+ *  One process. Numbers that do not fit a JavaScript integer exactly never occur here: times are
+ *  milliseconds and sizes bytes.
+ */
+export type ProcessRow = {
+	pid: number,
+	/**  Its parent, when that parent is in the same agent's tree. */
+	parent: number | null,
+	name: string,
+	/**  Masked and cut short ([`aura_process::tree::mask_command`]). */
+	command: string | null,
+	started_ms: number | null,
+	cpu_ms: number | null,
+	memory_bytes: number | null,
+};
+
+/**  Every running agent process, by chat, as the snapshot found them. */
+export type ProcessesSnapshot = {
+	/**
+	 *  When the table was read, in milliseconds since the Unix epoch; the page works out processor
+	 *  use between two snapshots from it.
+	 */
+	taken_at_ms: number | null,
+	chats: ChatProcesses[],
+};
 
 export type ProfileKind = 
 /**  Data that lives only on this machine. */

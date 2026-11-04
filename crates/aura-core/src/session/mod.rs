@@ -428,6 +428,15 @@ struct Inner {
     next_actor: AtomicU64,
 }
 
+/// One chat whose agent processes run: what the Processes page lists for it.
+#[derive(Debug, Clone)]
+pub struct ChatAgents {
+    pub chat_id: String,
+    pub processes: Vec<aura_process::ProcessControl>,
+    /// The latest record of each task its agent reported, oldest first (at most 64).
+    pub tasks: Vec<aura_protocol::tasks::BackgroundTask>,
+}
+
 /// A chat's running actor.
 struct ActorEntry {
     id: u64,
@@ -1435,26 +1444,30 @@ impl SessionManager {
         self.shared().lost_writes.load(Ordering::Acquire)
     }
 
-    /// Every chat's agent processes that still run, for the Processes page: chat id, then its
-    /// processes in the order its drivers started them. Chats without a running process are left
-    /// out. `aura_process::tree` lists what each one started.
-    pub fn agent_processes(&self) -> Vec<(String, Vec<aura_process::ProcessControl>)> {
+    /// Every chat whose agent processes still run, for the Processes page, by chat id: its
+    /// processes in the order its drivers started them, and the tasks its agent reported.
+    /// `aura_process::tree` lists what each process started.
+    pub fn agent_processes(&self) -> Vec<ChatAgents> {
         let books: Vec<(String, Arc<ProcessBook>)> = lock(&self.inner.actors)
             .iter()
             .map(|(chat_id, entry)| (chat_id.clone(), Arc::clone(&entry.book)))
             .collect();
-        let mut chats: Vec<(String, Vec<aura_process::ProcessControl>)> = books
+        let mut chats: Vec<ChatAgents> = books
             .into_iter()
             .filter_map(|(chat_id, book)| {
-                let running: Vec<_> = book
+                let processes: Vec<_> = book
                     .all()
                     .into_iter()
                     .filter(|control| control.try_exited().is_none())
                     .collect();
-                (!running.is_empty()).then_some((chat_id, running))
+                (!processes.is_empty()).then(|| ChatAgents {
+                    chat_id,
+                    processes,
+                    tasks: book.tasks(),
+                })
             })
             .collect();
-        chats.sort_by(|a, b| a.0.cmp(&b.0));
+        chats.sort_by(|a, b| a.chat_id.cmp(&b.chat_id));
         chats
     }
 
