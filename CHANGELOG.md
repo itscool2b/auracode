@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-04
 
+- See every process the agents run: a Processes page lists each chat's subagents, background commands and every program its agent started (even ones whose parent exited), with Stop; earlier turns' tasks stay in reach in the chat, and Stop says it also ends running tasks. ([#70](https://github.com/itscool2b/auracode/pull/70))
 - Add this changelog, kept current by every merge, with a format check in `pnpm lint`. ([#69](https://github.com/itscool2b/auracode/pull/69))
 - Dictation records on Windows: routine audio glitch reports no longer end every recording after a tenth of a second, and Whisper's AVX2 build transcribes 11 s of speech in 0.65 s instead of 18 s. ([#68](https://github.com/itscool2b/auracode/pull/68))
 
