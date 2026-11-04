@@ -1,0 +1,77 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { checkChangelog, EM_DASH } from "./check-changelog.mjs";
+
+const script = fileURLToPath(new URL("./check-changelog.mjs", import.meta.url));
+const pr = (n) => `([#${n}](https://github.com/itscool2b/auracode/pull/${n}))`;
+const valid = [
+  "# Changelog",
+  "",
+  "Intro.",
+  "",
+  "## 2026-11-03",
+  "",
+  `- Dictation works. ${pr(68)}`,
+  `- The working line shows the model maker. ${pr(66)}`,
+  "",
+  "## 2026-11-02",
+  "",
+  `- Images preview in chat. ${pr(61)}`,
+  "",
+].join("\n");
+
+test("a valid changelog passes and counts its entries", () => {
+  assert.deepEqual(checkChangelog(valid), { problems: [], count: 3 });
+  assert.deepEqual(checkChangelog(valid.replace(/\n/g, "\r\n")).problems, []);
+});
+
+for (const [name, text, problem] of [
+  ["a missing title", valid.replace("# Changelog", "# Changes"), /line 1/],
+  [
+    "dates out of order",
+    valid.replace("## 2026-11-02", "## 2026-11-04"),
+    /newest first, once each/,
+  ],
+  ["a repeated date", valid.replace("## 2026-11-02", "## 2026-11-03"), /once each/],
+  ["a repeated pull request", valid.replace(pr(61), pr(66)), /already listed/],
+  ["numbers out of order in a day", valid.replace(pr(66), pr(70)), /newest first within a day/],
+  [
+    "an entry without its pull request",
+    valid.replace(` ${pr(61)}`, ""),
+    /ends with its pull request/,
+  ],
+  [
+    "a link to another pull request",
+    valid.replace("pull/61", "pull/60"),
+    /links to pull request 60/,
+  ],
+  ["an entry before any date", valid.replace("Intro.", `- Early. ${pr(1)}`), /not under a date/],
+  ["an em dash", valid.replace("Dictation works.", `Dictation ${EM_DASH} works.`), /em dash/],
+  ["no entries", "# Changelog\n", /no entries/],
+]) {
+  test(`rejects ${name}`, () => {
+    const { problems } = checkChangelog(text);
+    assert.ok(
+      problems.some((p) => problem.test(p)),
+      `expected ${problem} in ${JSON.stringify(problems)}`,
+    );
+  });
+}
+
+test("the command reads CHANGELOG.md from the given folder and sets the exit code", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "auracode-changelog-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, "CHANGELOG.md"), valid);
+  const ok = spawnSync(process.execPath, [script, root], { encoding: "utf8" });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.match(ok.stdout, /lists 3 pull requests/);
+  writeFileSync(join(root, "CHANGELOG.md"), valid.replace(pr(61), pr(66)));
+  const bad = spawnSync(process.execPath, [script, root], { encoding: "utf8" });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /already listed/);
+});

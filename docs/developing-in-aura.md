@@ -87,6 +87,16 @@ named by `OPENSSL_SRC_PERL`.
   per run. `chat-reopen` covers what an upgrade does to running chats: the second launch finds the
   stored history, the interrupted turn and Resume.
 
+## Changelog
+
+Every pull request merged into `main` adds its line to [CHANGELOG.md](../CHANGELOG.md) in the
+same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, saying in plain
+words what changed for the person using auracode, and ending with its link,
+`([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to learn its
+number, then commit the line. If it merges on a later day than planned, move the line. `pnpm lint`
+runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the links and that
+each pull request appears once.
+
 ## Getting a change into the installed app
 
 On Windows, `apps/desktop/scripts/host-upgrade.mjs` replaces the installed app with a local build
