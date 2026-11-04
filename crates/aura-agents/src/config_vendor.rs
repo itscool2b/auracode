@@ -9,7 +9,7 @@ use aura_protocol::{
 use sha2::{Digest, Sha256};
 use std::{
     ffi::OsString,
-    path::{Component, Path, PathBuf},
+    path::{Component, Path, PathBuf, Prefix},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -245,10 +245,23 @@ fn https_git(value: &str) -> bool {
                     .all(|byte| byte.is_ascii_alphanumeric() || b"._-~".contains(&byte))
         })
 }
-/// An absolute local folder: never a network or device path, never one that climbs out.
+/// An absolute folder on a local disk, `C:\...` on Windows and `/...` elsewhere, that never climbs
+/// out. Network, device and verbatim paths are refused by their parsed prefix before anything
+/// touches the filesystem, whatever their separators: Windows reads `\/server/share` and
+/// `/\server\share` as network shares too, and checking one for a folder would reach that server.
 fn local_folder(value: &str) -> bool {
     let path = Path::new(value);
-    path.is_absolute()
+    let mut parts = path.components();
+    let rooted = if cfg!(windows) {
+        matches!(
+            parts.next(),
+            Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_))
+        ) && matches!(parts.next(), Some(Component::RootDir))
+    } else {
+        matches!(parts.next(), Some(Component::RootDir))
+    };
+    rooted
+        && path.is_absolute()
         && !value.starts_with("\\\\")
         && !value.starts_with("//")
         && !value.chars().any(char::is_control)
@@ -637,6 +650,31 @@ mod tests {
                 arguments(&request(P::Grok, K::Marketplace, A::Install, refused)).is_err(),
                 "{refused}"
             );
+        }
+        // Windows reads these as network shares, devices or verbatim paths whatever their
+        // separators; none may pass as a local folder.
+        if cfg!(windows) {
+            for refused in [
+                r"\/server/share",
+                r"/\server\share",
+                r"\/server\share\market",
+                r"\\?\UNC\server\share",
+                r"\\?\C:\market",
+                r"/\?\C:\market",
+                r"\\.\pipe\market",
+                r"//./pipe/market",
+                r"C:market",
+                r"\??\C:\market",
+                r"\market",
+            ] {
+                assert!(!local_folder(refused), "{refused}");
+                assert!(
+                    arguments(&request(P::Claude, K::Marketplace, A::Install, refused)).is_err(),
+                    "{refused}"
+                );
+            }
+            assert!(local_folder(r"D:\tools\market"));
+            assert!(local_folder("C:/Users/person/market"));
         }
     }
 
