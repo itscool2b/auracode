@@ -17,7 +17,7 @@
     "crates/aura-config/Cargo.toml": "6933baa2560a1fed11dac92001b0bb3b76b8badd19ad236a4c865c68924ad6fd",
     "crates/aura-core/Cargo.toml": "8dc35a2633f4e8582b6cbc7e6306314c179b08d1ff03f3c0c3589752a0f11217",
     "crates/aura-drivers/Cargo.toml": "d5a15a9ad07b3e9647d1aaf6b95b583c20a3d42860fbf8e3a8f37adff34392a1",
-    "crates/aura-process/Cargo.toml": "ba82ec1456cc3be54cd26e74c2560b45c517d30739b48164533bc541ccb58a51",
+    "crates/aura-process/Cargo.toml": "32fecd9b59aacf59a88c790bd9d03d72c84e59e2b9dcd7e4d10b53cee99095ed",
     "crates/aura-protocol/Cargo.toml": "5d2b9ca24f6c0cc9ebe7a08fa6de7aa25d9fb28be8ae2443b3100dc40dc36c70",
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
     "crates/aura-sync/Cargo.toml": "aa968fa121135ffac6f919092d65af607cd8405a08338ea98d8cccdabb523ddb",

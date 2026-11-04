@@ -219,6 +219,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::dictation::commands::dictation_start,
             crate::dictation::commands::dictation_stop,
             crate::dictation::commands::dictation_cancel,
+            crate::processes::processes_snapshot,
+            crate::processes::process_stop,
             crate::changes_commands::chat_changes,
             crate::changes_commands::chat_change_diff,
             crate::changes_commands::checkpoint_revert_preview,

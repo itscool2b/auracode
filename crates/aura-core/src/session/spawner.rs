@@ -11,12 +11,17 @@ use aura_drivers::driver::AgentSpawner;
 use aura_process::{
     LogFactory, ProcessControl, ProcessSpawner, SpawnError, SpawnSpec, SpawnedProcess,
 };
+use aura_protocol::tasks::{BackgroundTask, TaskStatus};
 use futures::FutureExt;
 use futures::future::BoxFuture;
 
 use crate::ids::new_id;
 
-/// Every process a chat's drivers spawned and that may still run.
+/// Tasks remembered per chat at most, for the Processes page; the oldest go first.
+const MAX_TASKS: usize = 64;
+
+/// Every process a chat's drivers spawned and that may still run, and the latest record of each
+/// task its agent reported (subagents run inside the agent's own process, so only these show them).
 #[derive(Debug, Default)]
 pub(crate) struct ProcessBook {
     inner: Mutex<BookInner>,
@@ -27,6 +32,7 @@ struct BookInner {
     entries: Vec<(u64, ProcessControl)>,
     /// Generations that were force-stopped: what they spawn from now on is killed at once.
     closed: Vec<u64>,
+    tasks: Vec<BackgroundTask>,
 }
 
 impl ProcessBook {
@@ -64,11 +70,43 @@ impl ProcessBook {
             .collect()
     }
 
+    /// Keeps the latest record of `task`. An update carries the whole record except a prompt or
+    /// summary already known, which stay.
+    pub(crate) fn note_task(&self, task: &BackgroundTask) {
+        let mut inner = self.lock();
+        if let Some(known) = inner
+            .tasks
+            .iter_mut()
+            .find(|known| known.task_id == task.task_id)
+        {
+            let prompt = known.prompt.take();
+            let summary = known.summary.take();
+            *known = task.clone();
+            known.prompt = known.prompt.take().or(prompt);
+            known.summary = known.summary.take().or(summary);
+        } else {
+            inner.tasks.push(task.clone());
+            if inner.tasks.len() > MAX_TASKS {
+                inner.tasks.remove(0);
+            }
+        }
+    }
+
+    /// The tasks reported so far, in the order they were first heard of.
+    pub(crate) fn tasks(&self) -> Vec<BackgroundTask> {
+        self.lock().tasks.clone()
+    }
+
     /// Forgets `generation`'s processes once its driver ended; dropping the last handle kills a
-    /// tree that is still alive.
+    /// tree that is still alive. A task still running ran inside those processes: it stopped too.
     pub(crate) fn clear(&self, generation: u64) {
         let removed: Vec<ProcessControl> = {
             let mut inner = self.lock();
+            for task in &mut inner.tasks {
+                if task.status == TaskStatus::Running {
+                    task.status = TaskStatus::Stopped;
+                }
+            }
             let (gone, kept) = std::mem::take(&mut inner.entries)
                 .into_iter()
                 .partition(|(entry, _)| *entry == generation);
@@ -196,6 +234,71 @@ mod tests {
             }),
             max_line_bytes: 1024,
         }
+    }
+
+    fn task(id: &str, status: TaskStatus) -> BackgroundTask {
+        BackgroundTask {
+            task_id: id.into(),
+            kind: aura_protocol::tasks::TaskKind::Agent,
+            title: format!("Task {id}"),
+            agent_type: Some("Explore".into()),
+            tool_call_id: None,
+            parent_task_id: None,
+            backgrounded: true,
+            status,
+            activity: None,
+            tool_uses: None,
+            tokens: None,
+            duration_ms: None,
+            started_at: None,
+            ended_at: None,
+            prompt: None,
+            summary: None,
+            summary_truncated: None,
+        }
+    }
+
+    #[test]
+    fn the_book_keeps_each_tasks_latest_record_and_known_text() {
+        let book = ProcessBook::default();
+        book.note_task(&BackgroundTask {
+            prompt: Some("Map the code".into()),
+            ..task("a", TaskStatus::Running)
+        });
+        book.note_task(&BackgroundTask {
+            activity: Some("Reading lib.rs".into()),
+            ..task("a", TaskStatus::Running)
+        });
+        book.note_task(&task("b", TaskStatus::Running));
+        book.note_task(&BackgroundTask {
+            summary: Some("Done".into()),
+            ..task("b", TaskStatus::Completed)
+        });
+        let tasks = book.tasks();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].prompt.as_deref(), Some("Map the code"), "kept");
+        assert_eq!(
+            tasks[0].activity.as_deref(),
+            Some("Reading lib.rs"),
+            "updated"
+        );
+        assert_eq!(tasks[1].status, TaskStatus::Completed);
+        assert_eq!(tasks[1].summary.as_deref(), Some("Done"));
+        // The driver ended: what still ran inside its processes stopped with them.
+        book.clear(1);
+        let tasks = book.tasks();
+        assert_eq!(tasks[0].status, TaskStatus::Stopped);
+        assert_eq!(
+            tasks[1].status,
+            TaskStatus::Completed,
+            "an ended task keeps its end"
+        );
+        for n in 0..MAX_TASKS + 5 {
+            book.note_task(&task(&format!("t{n}"), TaskStatus::Running));
+        }
+        let tasks = book.tasks();
+        assert_eq!(tasks.len(), MAX_TASKS);
+        assert_eq!(tasks.last().unwrap().task_id, format!("t{}", MAX_TASKS + 4));
     }
 
     #[tokio::test]

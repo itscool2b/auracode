@@ -41,8 +41,9 @@ uuid.workspace = true
 nix = { version = "0.31.3", features = ["signal", "process", "user", "term", "fs"] }
 
 [target.'cfg(windows)'.dependencies]
-# ConPTY and suspended, job-contained native terminal creation.
-windows = { version = "0.62.2", features = ["Win32_System_Threading", "Win32_System_Console", "Win32_System_JobObjects", "Win32_Security"] }
+# ConPTY and suspended, job-contained native terminal creation; the process listing behind the
+# Processes page (ToolHelp snapshots, memory counters, command lines through NtQueryInformationProcess).
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Console", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_ProcessStatus", "Wdk_System_Threading"] }
 # The machine and user environment from the registry, through its safe API.
 winreg = "0.56.0"
 

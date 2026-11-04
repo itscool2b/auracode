@@ -6,6 +6,7 @@ import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { CustomizeScreen, type CustomizeSection } from "./components/customize/CustomizeScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
+import { ProcessesScreen } from "./components/processes/ProcessesScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
 import { AccountPanel } from "./components/settings/AccountPanel";
@@ -42,7 +43,15 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress" | "setup" | "agents" | "settings" | "library";
+type View =
+  | "chats"
+  | "diagnostics"
+  | "stress"
+  | "setup"
+  | "agents"
+  | "processes"
+  | "settings"
+  | "library";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -404,7 +413,9 @@ export function App({
         />
       </div>
     );
-  if (view === "chats" || view === "settings" || view === "library") {
+  // Settings, Customize and Processes keep the chats mounted behind them: the open chat and its
+  // draft survive the visit.
+  if (view === "chats" || view === "settings" || view === "library" || view === "processes") {
     return (
       <>
         <div hidden={view !== "chats"} className="app-view">
@@ -418,6 +429,7 @@ export function App({
             onRecoveryDismissed={onRecoveryDismissed}
             onDiagnostics={() => setView("diagnostics")}
             onAgents={() => setView("agents")}
+            onProcesses={() => setView("processes")}
             onCustomize={(projectId, activeChatId) => {
               setCustomizeEntry({ id: Date.now(), section: "plugins", projectId, activeChatId });
               setView("library");
@@ -524,6 +536,18 @@ export function App({
             onBack={() => setView("chats")}
             onAgents={() => setView("agents")}
           />
+        ) : null}
+        {view === "processes" ? (
+          <div className="pane-shell g-root">
+            <ProcessesScreen
+              app={chats}
+              onBack={() => setView("chats")}
+              onOpenChat={(id) => {
+                setView("chats");
+                setOpenChatRequest({ id });
+              }}
+            />
+          </div>
         ) : null}
       </>
     );

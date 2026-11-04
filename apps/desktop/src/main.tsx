@@ -97,6 +97,10 @@ void appearanceReady.then(() => {
         void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
           mountQuestionsPreview(container),
         );
+      else if (mode === "processes")
+        void import("./dev/processesPreview").then(({ mountProcessesPreview }) =>
+          mountProcessesPreview(container),
+        );
       else if (mode === "dictation")
         void import("./dev/dictationPreview").then(({ mountDictationPreview }) =>
           mountDictationPreview(container),

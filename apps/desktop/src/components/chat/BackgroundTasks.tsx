@@ -1,5 +1,5 @@
 import { PixelLoader } from "@auracode/ui/graphite";
-import { Bot, Check, CircleStop, TerminalSquare, TriangleAlert } from "lucide-react";
+import { Bot, Check, CircleStop, History, TerminalSquare, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskKind, TaskStatus } from "../../bindings";
 import {
@@ -188,15 +188,16 @@ export function BackgroundTasks({
   readonly onOpen: (taskId: string) => void;
 }) {
   const listed = stripTasks(tasks, turnKey, live, liveTasks);
+  const earlier = earlierTasks(tasks, listed);
   const displays = listed.map((item) => taskDisplay(item, live, liveTasks));
   const running = displays.some((display) => display === "running");
   const now = useClock(running);
   return (
     <>
       <TaskAnnouncer tasks={tasks} live={live} liveTasks={liveTasks} />
-      {listed.length === 0 ? null : (
+      {listed.length === 0 && earlier.length === 0 ? null : (
         <section className="chat-tasks" aria-label="Background tasks" data-testid="task-strip">
-          {listed.length <= STRIP_PILLS ? (
+          {listed.length === 0 ? null : listed.length <= STRIP_PILLS ? (
             <ul className="chat-tasks-list">
               {listed.map((item, index) => (
                 <TaskPill
@@ -218,9 +219,87 @@ export function BackgroundTasks({
               onOpen={onOpen}
             />
           )}
+          {earlier.length > 0 ? (
+            <EarlierTasks
+              items={earlier}
+              displays={earlier.map((item) => taskDisplay(item, live, liveTasks))}
+              now={now}
+              openTaskId={openTaskId}
+              onOpen={onOpen}
+            />
+          ) : null}
         </section>
       )}
     </>
+  );
+}
+
+/** The tasks that ended before the newest turn, newest first: the strip's last pill lists them. */
+export function earlierTasks(
+  tasks: ReadonlyMap<string, TaskItem>,
+  listed: readonly TaskItem[],
+): TaskItem[] {
+  const shown = new Set(listed.map((item) => item.task.task_id));
+  return shownTasks(tasks)
+    .filter(
+      (item) =>
+        !shown.has(item.task.task_id) &&
+        (item.task.parent_task_id === null || !tasks.has(item.task.parent_task_id)),
+    )
+    .reverse();
+}
+
+/**
+ * "3 earlier": the tasks of earlier turns, so what an agent ran never vanishes when the next
+ * message is sent. Its list is a solid menu; a row opens the task panel.
+ */
+function EarlierTasks({
+  items,
+  displays,
+  now,
+  openTaskId,
+  onOpen,
+}: {
+  readonly items: readonly TaskItem[];
+  readonly displays: readonly TaskStatus[];
+  readonly now: number;
+  readonly openTaskId: string | null;
+  readonly onOpen: (taskId: string) => void;
+}) {
+  const words = `${items.length} earlier ${items.length === 1 ? "task" : "tasks"}`;
+  return (
+    <Popover
+      label="Earlier tasks"
+      triggerLabel={words}
+      className="chat-task-overflow chat-task-earlier"
+      trigger={
+        <span className="chat-task-pill" data-testid="task-earlier">
+          <History className="chat-task-kind" size={14} strokeWidth={1.5} aria-hidden="true" />
+          <span className="chat-task-title">{items.length} earlier</span>
+        </span>
+      }
+    >
+      <ul className="chat-task-menu">
+        {items.map((item, index) => {
+          const display = displays[index] ?? item.task.status;
+          return (
+            <li key={item.task.task_id}>
+              <button
+                type="button"
+                className="g-menu-item chat-task-menu-item"
+                aria-current={openTaskId === item.task.task_id ? "true" : undefined}
+                onClick={(event) => {
+                  closePopover(event.currentTarget, true);
+                  onOpen(item.task.task_id);
+                }}
+              >
+                <TaskLine item={item} display={display} facts={taskFacts(item, display, now)} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Popover>
   );
 }
 

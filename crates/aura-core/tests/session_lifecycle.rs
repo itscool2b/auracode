@@ -1376,6 +1376,47 @@ async fn quit_without_sessions_commits_and_closes() {
     drop(owner);
 }
 
+/// The Processes page lists a chat's running agent process, and not once the chat is stopped.
+#[tokio::test(start_paused = true)]
+async fn agent_processes_lists_a_running_chat_until_it_stops() {
+    let options = Options {
+        agents: vec![with_process(mock_spec())],
+        ..Options::default()
+    };
+    let (driver, _) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
+    let h = Harness::with(vec![driver], options);
+    assert!(h.manager.agent_processes().is_empty(), "no chat runs yet");
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let listed = h.manager.agent_processes();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert_eq!(listed[0].chat_id, chat.id);
+    assert!(listed[0].tasks.is_empty(), "no task was reported");
+    assert_eq!(
+        listed[0]
+            .processes
+            .iter()
+            .map(|control| control.pid())
+            .collect::<Vec<_>>(),
+        vec![aura_process::ControlImpl::pid(
+            h.spawner.controls()[0].as_ref()
+        )]
+    );
+    h.manager.send(&chat.id, "go".into()).await.expect("send");
+    h.status(&chat.id, SessionStatus::Running).await;
+    h.manager.force_stop(&chat.id).await.expect("force stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    eventually("the stopped chat is no longer listed", || {
+        h.manager.agent_processes().is_empty()
+    })
+    .await;
+}
+
 /// S34: force stop reaches a wedged driver through its recorded process.
 #[tokio::test(start_paused = true)]
 async fn force_stop_bypasses_wedged_driver() {

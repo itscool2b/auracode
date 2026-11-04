@@ -33,6 +33,7 @@ pub mod spawn;
 pub mod supervisor;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+pub mod tree;
 
 mod framing;
 mod sniff;
