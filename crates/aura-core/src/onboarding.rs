@@ -46,12 +46,49 @@ pub enum AppearancePreference {
     Dark,
 }
 
+/// The desktop's theme: Aura's own neutral palette, or one per supported agent (owner,
+/// 3 November 2026). It belongs to the profile on this device, like appearance, and works in both
+/// appearances. A file from a newer build that names a theme this build lacks reads as Aura
+/// ([`fill_defaults`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemePreference {
+    #[default]
+    Aura,
+    Claude,
+    Codex,
+    Grok,
+    Pi,
+    Antigravity,
+    Cursor,
+    Opencode,
+    OhMyPi,
+    Hermes,
+}
+
+impl ThemePreference {
+    /// Every theme's saved name, as serde writes it.
+    pub const NAMES: [&'static str; 10] = [
+        "aura",
+        "claude",
+        "codex",
+        "grok",
+        "pi",
+        "antigravity",
+        "cursor",
+        "opencode",
+        "oh_my_pi",
+        "hermes",
+    ];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct SetupPreferences {
     pub revision: u32,
     pub step: SetupStep,
     pub motion: MotionPreference,
     pub appearance: AppearancePreference,
+    pub theme: ThemePreference,
     pub completed: bool,
     pub first_project_id: Option<String>,
     /// Files written before these settings existed read their defaults ([`fill_defaults`]).
@@ -128,6 +165,9 @@ pub enum SetupAction {
     Appearance {
         value: AppearancePreference,
     },
+    Theme {
+        value: ThemePreference,
+    },
     Project {
         project_id: String,
     },
@@ -192,6 +232,7 @@ impl Default for Record {
                 step: SetupStep::Welcome,
                 motion: MotionPreference::Full,
                 appearance: AppearancePreference::System,
+                theme: ThemePreference::Aura,
                 completed: false,
                 first_project_id: None,
                 general: GeneralPreferences::default(),
@@ -389,6 +430,7 @@ impl OnboardingStore {
             SetupAction::Visit { step } => next.preferences.step = step,
             SetupAction::Motion { value } => next.preferences.motion = value,
             SetupAction::Appearance { value } => next.preferences.appearance = value,
+            SetupAction::Theme { value } => next.preferences.theme = value,
             SetupAction::Project { project_id } => {
                 if project_id.is_empty()
                     || project_id.len() > 128
@@ -504,6 +546,16 @@ fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
     preferences
         .entry("appearance")
         .or_insert_with(|| serde_json::Value::String("system".into()));
+    // No theme yet, or one a newer build added: Aura's own.
+    let theme = preferences
+        .entry("theme")
+        .or_insert_with(|| serde_json::Value::String("aura".into()));
+    if !theme
+        .as_str()
+        .is_some_and(|name| ThemePreference::NAMES.contains(&name))
+    {
+        *theme = serde_json::Value::String("aura".into());
+    }
     let Ok(serde_json::Value::Object(defaults)) =
         serde_json::to_value(GeneralPreferences::default())
     else {
@@ -689,6 +741,43 @@ mod tests {
                 .general
                 .agent_memory_writes
         );
+    }
+
+    #[test]
+    fn themes_default_to_aura_change_and_survive_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":2,"step":"project","motion":"full","appearance":"dark","completed":true,"first_project_id":null}}"#,
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert_eq!(store.preferences().theme, ThemePreference::Aura, "older files read as Aura");
+        let next = store
+            .apply(2, SetupAction::Theme { value: ThemePreference::Claude })
+            .unwrap();
+        assert_eq!(next.preferences.theme, ThemePreference::Claude);
+        assert_eq!(next.preferences.appearance, AppearancePreference::Dark, "kept");
+        assert_eq!(
+            OnboardingStore::open(dir.path()).unwrap().preferences().theme,
+            ThemePreference::Claude
+        );
+        // Every name round-trips as serde writes it.
+        for name in ThemePreference::NAMES {
+            let value: ThemePreference = serde_json::from_value(serde_json::json!(name)).unwrap();
+            assert_eq!(serde_json::to_value(value).unwrap(), serde_json::json!(name));
+        }
+        // A theme from a newer build reads as Aura instead of failing the whole file.
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":5,"step":"project","motion":"full","appearance":"light","theme":"future_agent","completed":true,"first_project_id":null}}"#,
+        )
+        .unwrap();
+        let reopened = OnboardingStore::open(dir.path()).unwrap();
+        let snapshot = reopened.snapshot().unwrap();
+        assert!(snapshot.notice.is_none(), "{:?}", snapshot.notice);
+        assert_eq!(snapshot.preferences.theme, ThemePreference::Aura);
+        assert_eq!(snapshot.preferences.appearance, AppearancePreference::Light);
     }
 
     #[test]

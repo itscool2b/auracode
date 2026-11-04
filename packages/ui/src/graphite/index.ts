@@ -60,6 +60,15 @@ export {
   swumDistance,
 } from "./swim";
 export {
+  THEME_IDS,
+  THEMES,
+  type ThemeDefinition,
+  type ThemeId,
+  type ThemeSeed,
+  themesCss,
+  themeTokens,
+} from "./themes";
+export {
   contrastRatio,
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,

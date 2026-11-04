@@ -108,6 +108,10 @@ async function checkLibrary(page, engine) {
   const dialog = page.getByRole("dialog", { name: "Manage integrations" });
   await dialog.waitFor();
   assert.equal(await dialog.getByLabel("Plugin and marketplace").inputValue(), "tools@team");
+  assert.match(
+    await dialog.locator(".vendor-intro").textContent(),
+    /reviewed command\. You review the exact command before it runs\.$/,
+  );
   await audit(page, `${engine} vendor dialog from a row`);
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached" });

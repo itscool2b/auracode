@@ -2915,7 +2915,7 @@ export type SessionStatus =
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
 
-export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "theme"; value: ThemePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
 /**
  *  Changing the agent clears the default model and thinking level, which belong to the
  *  previous agent.
@@ -2945,6 +2945,7 @@ export type SetupPreferences = {
 	step: SetupStep,
 	motion: MotionPreference,
 	appearance: AppearancePreference,
+	theme: ThemePreference,
 	completed: boolean,
 	first_project_id: string | null,
 	/**  Files written before these settings existed read their defaults ([`fill_defaults`]). */
@@ -3128,6 +3129,14 @@ export type TerminalChunk = {
 	exit_code: number | null,
 	truncated: boolean,
 };
+
+/**
+ *  The desktop's theme: Aura's own neutral palette, or one per supported agent (owner,
+ *  3 November 2026). It belongs to the profile on this device, like appearance, and works in both
+ *  appearances. A file from a newer build that names a theme this build lacks reads as Aura
+ *  ([`fill_defaults`]).
+ */
+export type ThemePreference = "aura" | "claude" | "codex" | "grok" | "pi" | "antigravity" | "cursor" | "opencode" | "oh_my_pi" | "hermes";
 
 /**  Token accounting for a turn, when the agent reports it. */
 export type TokenUsage = {

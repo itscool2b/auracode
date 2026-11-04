@@ -1,7 +1,41 @@
-import type { AppearancePreference } from "../bindings";
+import { THEME_IDS } from "@auracode/ui/graphite";
+import type { AppearancePreference, ThemePreference } from "../bindings";
 
 export type ResolvedAppearance = "light" | "dark";
 const PREVIEW_KEY = "auracode.preview.appearance";
+const PALETTE_PREVIEW_KEY = "auracode.preview.palette";
+
+export function isTheme(value: unknown): value is ThemePreference {
+  return typeof value === "string" && (THEME_IDS as readonly string[]).includes(value);
+}
+
+let theme: ThemePreference = "aura";
+const themeListeners = new Set<() => void>();
+
+/**
+ * The desktop theme: a palette layer over the tokens for whichever appearance is resolved
+ * (themes.css). Aura is the base palette itself and sets no attribute.
+ */
+export function setThemePreference(next: ThemePreference): void {
+  theme = next;
+  if (typeof document !== "undefined") {
+    if (next === "aura") delete document.documentElement.dataset.palette;
+    else document.documentElement.dataset.palette = next;
+  }
+  for (const listener of themeListeners) listener();
+}
+
+export function getThemePreference(): ThemePreference {
+  initializeAppearance();
+  return theme;
+}
+
+export function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  return () => {
+    themeListeners.delete(listener);
+  };
+}
 
 export function isAppearance(value: unknown): value is AppearancePreference {
   return value === "system" || value === "light" || value === "dark";
@@ -74,6 +108,15 @@ export function initializeAppearance(): void {
     }
     const override = query.get("theme");
     initial = isAppearance(override) ? override : isAppearance(saved) ? saved : "system";
+    // `&palette=claude` previews a theme; the choice is kept like the appearance's.
+    let savedPalette: string | null = null;
+    try {
+      savedPalette = window.localStorage.getItem(PALETTE_PREVIEW_KEY);
+    } catch {
+      /* Storage may be disabled. */
+    }
+    const palette = query.get("palette");
+    setThemePreference(isTheme(palette) ? palette : isTheme(savedPalette) ? savedPalette : "aura");
   }
   controller = createAppearanceController(
     window.matchMedia("(prefers-color-scheme: dark)"),
@@ -93,6 +136,12 @@ export function initializeAppearance(): void {
   );
 }
 
+/** The appearance in effect now: System resolved against the device. */
+export function getResolvedAppearance(): ResolvedAppearance {
+  initializeAppearance();
+  return controller?.resolved() ?? "dark";
+}
+
 export function getAppearancePreference(): AppearancePreference {
   initializeAppearance();
   return controller?.preference() ?? "system";
@@ -106,11 +155,22 @@ export function setAppearancePreference(preference: AppearancePreference): void 
 /** Ignore a slower snapshot response from before the user's latest saved preference. */
 export function applySetupAppearance(preferences: {
   readonly appearance: AppearancePreference;
+  readonly theme?: ThemePreference;
   readonly revision: number;
 }): void {
   if (preferences.revision < appliedRevision) return;
   appliedRevision = preferences.revision;
   setAppearancePreference(preferences.appearance);
+  setThemePreference(isTheme(preferences.theme) ? preferences.theme : "aura");
+}
+
+/** Previews keep the chosen theme across reloads, as they keep the appearance. */
+export function rememberPreviewTheme(next: ThemePreference): void {
+  try {
+    window.localStorage.setItem(PALETTE_PREVIEW_KEY, next);
+  } catch {
+    /* Keep the in-memory choice. */
+  }
 }
 
 export function subscribeAppearance(listener: () => void): () => void {

@@ -21,7 +21,7 @@
     "crates/aura-protocol/Cargo.toml": "5d2b9ca24f6c0cc9ebe7a08fa6de7aa25d9fb28be8ae2443b3100dc40dc36c70",
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
     "crates/aura-sync/Cargo.toml": "aa968fa121135ffac6f919092d65af607cd8405a08338ea98d8cccdabb523ddb",
-    "packages/ui/package.json": "38fa12ba84b2b020e567ad4d021139804bb84c5c5618592e19703b258ee9af6b",
+    "packages/ui/package.json": "aa571a30eac1836db5311e26622541afce99b0c0fb8db4269ae5b647a2260970",
     "pnpm-lock.yaml": "ee1745049a4bfc5ab1ec23da15b80282952c4a4460e88c673aec0a129bcd09c4",
     "third-party/overrides.json": "7f32e39d068514b123a79cc95efd87b922baf1aae9116ae28b08c4c18fe86e90"
   },

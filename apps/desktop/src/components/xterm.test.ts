@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createXterm } from "./xterm";
 
 const appearance = vi.hoisted(() => ({ change: () => {}, unsubscribe: vi.fn() }));
+const theme = vi.hoisted(() => ({ change: () => {}, unsubscribe: vi.fn() }));
 vi.mock("../lib/appearance", () => ({
   subscribeAppearance: (listener: () => void) => {
     appearance.change = listener;
     return appearance.unsubscribe;
+  },
+  subscribeTheme: (listener: () => void) => {
+    theme.change = listener;
+    return theme.unsubscribe;
   },
 }));
 
@@ -57,9 +62,20 @@ describe("terminal appearance", () => {
       foreground: "#24292f",
       red: "#b42318",
     });
+    // A new theme repaints it too, in the same appearance.
+    colors = { "--g-terminal-bg": "#ede9e0", "--g-code-fg": "#1f1d1a", "--g-ansi-red": "#a33a1e" };
+    theme.change();
+    expect(view.term.options.theme).toMatchObject({
+      background: "#ede9e0",
+      foreground: "#1f1d1a",
+      red: "#a33a1e",
+    });
+    expect(Terminal).toHaveBeenCalledTimes(1);
+    expect(view.term.buffer).toBe(buffer);
     expect(dispose).not.toHaveBeenCalled();
     view.dispose();
     expect(appearance.unsubscribe).toHaveBeenCalledOnce();
+    expect(theme.unsubscribe).toHaveBeenCalledOnce();
     expect(dispose).toHaveBeenCalledOnce();
   });
 });

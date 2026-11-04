@@ -18,7 +18,7 @@ import type {
   UpdateStatus,
 } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
-import { getAppearancePreference } from "../lib/appearance";
+import { getAppearancePreference, getThemePreference } from "../lib/appearance";
 import type { DataCleanupApi } from "../lib/dataCleanup";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
@@ -144,6 +144,7 @@ const snapshot: SetupSnapshot = {
     completed: true,
     first_project_id: null,
     appearance: getAppearancePreference(),
+    theme: getThemePreference(),
     general: { ...DEFAULT_GENERAL },
   },
 };
