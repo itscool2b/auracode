@@ -36,7 +36,65 @@ pub enum DictationEvent {
     Cancelled,
     Failed {
         message: String,
+        reason: DictationFailure,
     },
+}
+
+/// Why an operation failed, so the panel offers the recovery that can help.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum DictationFailure {
+    /// The model is missing, damaged, failed to download or failed to load: download it again.
+    Model,
+    /// The microphone is missing, blocked, busy or stopped.
+    Microphone,
+    /// The recording held no speech.
+    NoSpeech,
+    /// This processor lacks the instructions the speech engine needs.
+    Unsupported,
+    Other,
+}
+
+/// A failed operation's reason and its one-line explanation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Failure {
+    pub reason: DictationFailure,
+    pub message: String,
+    /// Cancellation travels as a failure internally and ends as `Cancelled`.
+    pub cancelled: bool,
+}
+impl Failure {
+    fn new(reason: DictationFailure, message: impl Into<String>) -> Self {
+        Self {
+            reason,
+            message: message.into(),
+            cancelled: false,
+        }
+    }
+    pub fn model(message: impl Into<String>) -> Self {
+        Self::new(DictationFailure::Model, message)
+    }
+    pub fn microphone(message: impl Into<String>) -> Self {
+        Self::new(DictationFailure::Microphone, message)
+    }
+    pub fn no_speech(message: impl Into<String>) -> Self {
+        Self::new(DictationFailure::NoSpeech, message)
+    }
+    pub fn other(message: impl Into<String>) -> Self {
+        Self::new(DictationFailure::Other, message)
+    }
+    pub fn unsupported() -> Self {
+        Self::new(
+            DictationFailure::Unsupported,
+            "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of auracode works as usual.",
+        )
+    }
+    pub fn cancelled() -> Self {
+        Self {
+            cancelled: true,
+            ..Self::other("Dictation cancelled.")
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -44,6 +102,8 @@ pub struct DictationModel {
     pub installed: bool,
     pub name: String,
     pub bytes: u32,
+    /// This processor can run the speech engine.
+    pub supported: bool,
 }
 
 #[derive(Default)]
@@ -79,11 +139,14 @@ impl Operation {
         }
         true
     }
-    pub fn finish(&self, result: Result<DictationEvent, String>) {
-        let event = if self.cancelled() {
-            DictationEvent::Cancelled
-        } else {
-            result.unwrap_or_else(|message| DictationEvent::Failed { message })
+    pub fn finish(&self, result: Result<DictationEvent, Failure>) {
+        let event = match result {
+            _ if self.cancelled() => DictationEvent::Cancelled,
+            Err(failure) if failure.cancelled => DictationEvent::Cancelled,
+            Err(Failure {
+                reason, message, ..
+            }) => DictationEvent::Failed { message, reason },
+            Ok(event) => event,
         };
         // Cancellation still ends the UI's busy state. Stale page channels simply reject it.
         (self.sink)(event);
@@ -191,6 +254,39 @@ mod tests {
         drop(operation);
         assert!(!begin(&service, "main").cancelled());
     }
+    #[test]
+    fn a_failure_reaches_the_page_with_its_reason_and_cancellation_wins() {
+        let service = Arc::new(Dictation::default());
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let begin = |service: &Arc<Dictation>| {
+            let sent = sent.clone();
+            service
+                .begin(
+                    "main",
+                    uuid::Uuid::new_v4().to_string(),
+                    Arc::new(move |event| {
+                        lock(&sent).push(event);
+                        true
+                    }),
+                    Box::new(|| true),
+                )
+                .unwrap()
+        };
+        begin(&service).finish(Err(Failure::model("damaged")));
+        begin(&service).finish(Err(Failure::cancelled()));
+        let operation = begin(&service);
+        operation.cancel.cancel();
+        operation.finish(Err(Failure::microphone("late")));
+        drop(operation);
+        let sent = lock(&sent);
+        assert!(matches!(
+            &sent[0],
+            DictationEvent::Failed { reason: DictationFailure::Model, message } if message == "damaged"
+        ));
+        assert!(matches!(sent[1], DictationEvent::Cancelled));
+        assert!(matches!(sent[2], DictationEvent::Cancelled));
+    }
+
     #[test]
     fn stale_page_or_disconnected_channel_cancels() {
         let service = Arc::new(Dictation::default());

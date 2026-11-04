@@ -272,7 +272,11 @@ export const commands = {
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
 	dictationModel: () => typedError<DictationModel, AppError>(__TAURI_INVOKE("dictation_model")),
 	dictationDownload: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_download", { id, channel })),
-	dictationStart: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, channel })),
+	/**
+	 *  `language`: the person's language tag (the webview's `navigator.language`). Whisper hears that
+	 *  language, or detects one itself when it does not know the tag.
+	 */
+	dictationStart: (id: string, language: string | null, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, language, channel })),
 	dictationStop: (id: string) => __TAURI_INVOKE<void>("dictation_stop", { id }),
 	dictationCancel: (id: string) => __TAURI_INVOKE<void>("dictation_cancel", { id }),
 	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
@@ -1540,12 +1544,25 @@ export type DeviceIdentity = {
 	created_at: number,
 };
 
-export type DictationEvent = { state: "downloading"; received: number; total: number } | { state: "model_ready" } | { state: "preparing" } | { state: "recording"; seconds: number; level: number | null; limit_seconds: number } | { state: "transcribing"; percent: number } | { state: "complete"; text: string } | { state: "cancelled" } | { state: "failed"; message: string };
+export type DictationEvent = { state: "downloading"; received: number; total: number } | { state: "model_ready" } | { state: "preparing" } | { state: "recording"; seconds: number; level: number | null; limit_seconds: number } | { state: "transcribing"; percent: number } | { state: "complete"; text: string } | { state: "cancelled" } | { state: "failed"; message: string; reason: DictationFailure };
+
+/**  Why an operation failed, so the panel offers the recovery that can help. */
+export type DictationFailure = 
+/**  The model is missing, damaged, failed to download or failed to load: download it again. */
+"model" | 
+/**  The microphone is missing, blocked, busy or stopped. */
+"microphone" | 
+/**  The recording held no speech. */
+"no_speech" | 
+/**  This processor lacks the instructions the speech engine needs. */
+"unsupported" | "other";
 
 export type DictationModel = {
 	installed: boolean,
 	name: string,
 	bytes: number,
+	/**  This processor can run the speech engine. */
+	supported: boolean,
 };
 
 export type EditablePrompt = {

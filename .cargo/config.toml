@@ -1,13 +1,23 @@
-# Release bundles must also run on CPUs older than the build host. Whisper is CPU-only and
-# statically linked; do not let ggml emit host-specific instructions into distributed binaries.
+# Whisper is CPU-only and statically linked. ggml must not tune itself to the build machine
+# (GGML_NATIVE), so distributed binaries carry a fixed instruction set: AVX2 with FMA and F16C,
+# the level every Mac that runs macOS 13.3 has and that Intel (2013) and AMD (2015) processors
+# share. Without it Whisper runs scalar code: 11 s of speech took 18 s to transcribe instead of
+# 1.1 s. ggml applies these flags to its CPU backend (ggml-cpu) only, which has no startup
+# initializers, and the app checks the processor before dictation calls into it, so auracode
+# still starts and works on older processors; only dictation needs them. ARM builds ignore them.
+# See docs/local-dictation.md for the link check behind this.
 [env]
 GGML_NATIVE = "OFF"
-GGML_AVX = "OFF"
-GGML_AVX2 = "OFF"
+GGML_AVX = "ON"
+GGML_AVX2 = "ON"
+GGML_FMA = "ON"
+GGML_F16C = "ON"
+GGML_SSE42 = "ON"
 GGML_BMI2 = "OFF"
-GGML_SSE42 = "OFF"
-GGML_FMA = "OFF"
-GGML_F16C = "OFF"
+# whisper-rs-sys forwards the GGML_* and CMAKE_* values to CMake but does not rebuild when they
+# change, so a warm target keeps the old objects. It does rebuild when this variable changes:
+# bump the number whenever a value in this file changes. The define itself is unused.
+BINDGEN_EXTRA_CLANG_ARGS = "-DAURA_WHISPER_BUILD=2"
 # whisper-rs-sys forwards these to CMake. Keep its C/C++ runtime in the static library too;
 # otherwise the Windows app imports MSVCP140.dll without shipping that prerequisite.
 # CMP0091 enables the property for whisper.cpp's older minimum CMake version. Non-MSVC

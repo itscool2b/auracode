@@ -5,6 +5,8 @@ import {
   DictationController,
   dictationBusy,
   insertDictation,
+  offersModelDownload,
+  offersRetry,
 } from "../../lib/dictation";
 import "./dictation.css";
 
@@ -43,9 +45,27 @@ export function DictationControl({
   );
   const busy = dictationBusy(state);
   const visible = state.state !== "idle";
+  const control = useRef<HTMLSpanElement>(null);
+  const finish = useRef<HTMLButtonElement>(null);
+  const recording = state.state === "recording";
   useEffect(() => {
     onBusy(busy);
   }, [busy, onBusy]);
+  // Enter or Space finishes a recording: its button takes focus when listening starts.
+  useEffect(() => {
+    if (recording) finish.current?.focus();
+  }, [recording]);
+  // A closing panel would leave focus on nothing; the draft takes it back. Only on closing: the
+  // first render never moves focus.
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    const closed = wasVisible.current && !visible;
+    wasVisible.current = visible;
+    if (!closed) return;
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || control.current?.contains(focused))
+      latest.current.input.current?.focus();
+  }, [visible]);
   useEffect(() => {
     controller.activate();
     return () => {
@@ -84,7 +104,7 @@ export function DictationControl({
     void controller.start();
   };
   return (
-    <span className="dictation-control">
+    <span className="dictation-control" ref={control}>
       <button
         type="button"
         className="chat-composer-attach"
@@ -159,13 +179,14 @@ export function DictationControl({
               </p>
               <meter aria-label="Microphone level" min={0} max={1} value={state.level ?? 0} />
               <button
+                ref={finish}
                 type="button"
                 className="g-button g-button-28"
                 onClick={() => void controller.stop()}
               >
                 <Square size={12} /> Finish recording
               </button>
-              <p>Finish to add the text to your draft. Esc cancels.</p>
+              <p>Enter finishes and adds the text to your draft. Esc cancels.</p>
             </>
           ) : null}
           {state.state === "transcribing" ? (
@@ -197,25 +218,29 @@ export function DictationControl({
               <p role="alert" className="ui-error">
                 {state.message}
               </p>
-              <div className="dictation-recovery">
-                <button
-                  type="button"
-                  className="g-button g-button-28"
-                  onClick={() => {
-                    rememberSelection();
-                    void controller.open();
-                  }}
-                >
-                  Try again
-                </button>
-                <button
-                  type="button"
-                  className="g-button g-button-28"
-                  onClick={() => void controller.download()}
-                >
-                  Download model again
-                </button>
-              </div>
+              {offersRetry(state) ? (
+                <div className="dictation-recovery">
+                  <button
+                    type="button"
+                    className="g-button g-button-28"
+                    onClick={() => {
+                      rememberSelection();
+                      void controller.open();
+                    }}
+                  >
+                    Try again
+                  </button>
+                  {offersModelDownload(state) ? (
+                    <button
+                      type="button"
+                      className="g-button g-button-28"
+                      onClick={() => void controller.download()}
+                    >
+                      Download model again
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : null}
         </section>

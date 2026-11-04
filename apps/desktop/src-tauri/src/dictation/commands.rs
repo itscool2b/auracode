@@ -1,4 +1,4 @@
-use super::{DictationEvent, DictationModel, Operation, audio, model};
+use super::{DictationEvent, DictationModel, Failure, Operation, audio, model};
 use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
@@ -62,22 +62,27 @@ pub async fn dictation_download(
     Ok(())
 }
 
+/// `language`: the person's language tag (the webview's `navigator.language`). Whisper hears that
+/// language, or detects one itself when it does not know the tag.
 #[tauri::command]
 #[specta::specta]
 pub fn dictation_start(
     webview: Webview,
     state: State<'_, AppState>,
     id: String,
+    language: Option<String>,
     channel: Channel<DictationEvent>,
 ) -> Result<(), AppError> {
     let root = root(&state)?;
     let operation = operation(&webview, &state, id, channel)?;
     tauri::async_runtime::spawn_blocking(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            audio::run(&root, &operation)
+            audio::run(&root, &operation, language.as_deref())
         }))
         .unwrap_or_else(|_| {
-            Err("Dictation stopped unexpectedly. Your draft is unchanged. Try again.".into())
+            Err(Failure::other(
+                "Dictation stopped unexpectedly. Your draft is unchanged. Try again.",
+            ))
         });
         operation.finish(result);
     });
