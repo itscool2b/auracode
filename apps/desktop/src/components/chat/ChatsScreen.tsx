@@ -67,6 +67,7 @@ export function ChatsScreen({
   onRecoveryDismissed,
   onDiagnostics,
   onAgents,
+  onProcesses,
   onSettings,
   onCustomize,
   onInstructions,
@@ -84,6 +85,8 @@ export function ChatsScreen({
   readonly onRecoveryDismissed: () => void;
   readonly onDiagnostics: () => void;
   readonly onAgents?: () => void;
+  /** Opens Processes: everything the agents run, across chats. */
+  readonly onProcesses?: () => void;
   readonly onSettings?: () => void;
   readonly onCustomize?: (projectId: string | null, activeChatId?: string) => void;
   /** Opens Settings' Instructions on a scope: global, a project folder, or a chat's folder. */
@@ -274,6 +277,7 @@ export function ChatsScreen({
                   )
               : undefined
           }
+          onProcesses={onProcesses}
           onProjectSettings={workspace ? (project) => setProjectDialog({ project }) : undefined}
           onChatOptions={workspace ? (chat) => setChatOptions(chat.id) : undefined}
           selected={selected}

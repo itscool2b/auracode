@@ -141,6 +141,20 @@ button.chat-task-pill:active {
 
 /* ---------- More than three: one pill and its list ---------- */
 
+/* Earlier turns' tasks: one compact pill at the row's end, its list the same solid menu. */
+.chat-task-earlier {
+  flex: none;
+}
+
+.chat-tasks > * + .chat-task-earlier {
+  margin-left: var(--g-space-6);
+}
+
+.chat-task-earlier .chat-task-title {
+  color: var(--g-fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .chat-task-overflow {
   display: flex;
   min-width: 0;

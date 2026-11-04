@@ -29,6 +29,7 @@ export function Composer({
   chatId,
   contextApi,
   blocked = false,
+  runningTasks = 0,
 }: {
   readonly status: SessionStatus;
   readonly commands: readonly SlashCommand[];
@@ -43,6 +44,8 @@ export function Composer({
   readonly chatId?: string;
   readonly contextApi?: ComposerTransport;
   readonly blocked?: boolean;
+  /** Background tasks running now: Stop ends them with the turn, and says so. */
+  readonly runningTasks?: number;
 }) {
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
@@ -266,6 +269,7 @@ export function Composer({
             onStop={onStop}
             onForceStop={onForceStop}
             quiet={!empty && status !== "cancelling"}
+            runningTasks={runningTasks}
           />
           {working && empty ? null : (
             <SendControls
@@ -392,12 +396,19 @@ export function StopButton({
   onStop,
   onForceStop,
   quiet = false,
+  runningTasks = 0,
 }: {
   readonly status: SessionStatus;
   readonly onStop: () => void;
   readonly onForceStop: () => void;
   readonly quiet?: boolean;
+  /** Claude Code ends its background tasks when its turn is stopped: the button says so. */
+  readonly runningTasks?: number;
 }) {
+  const ends =
+    runningTasks > 0
+      ? `Also ends ${runningTasks} background ${runningTasks === 1 ? "task" : "tasks"}.`
+      : undefined;
   if (status === "cancelling") {
     return (
       <button
@@ -420,7 +431,8 @@ export function StopButton({
         data-quiet={quiet ? "" : undefined}
         onClick={onStop}
         aria-label="Stop"
-        title="Stop (Esc)"
+        aria-description={ends}
+        title={ends ? `Stop (Esc). ${ends}` : "Stop (Esc)"}
       >
         <Square size={10} fill="currentColor" strokeWidth={0} />
       </button>

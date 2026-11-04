@@ -169,7 +169,7 @@
   background-color: transparent;
 }
 
-.pane-shell > :is(.agents-screen, .plugins-screen) {
+.pane-shell > :is(.agents-screen, .plugins-screen, .processes-screen) {
   position: relative;
   isolation: isolate;
   flex: 1;
@@ -181,11 +181,11 @@
 }
 
 /* The pane's light, as the chat's: under the content, never over a word. */
-.pane-shell > :is(.agents-screen, .plugins-screen)::before {
+.pane-shell > :is(.agents-screen, .plugins-screen, .processes-screen)::before {
   content: none;
 }
 
-.pane-shell .agents-page {
+.pane-shell :is(.agents-page, .processes-page) {
   padding-top: calc(var(--ui-titlebar-height) + var(--g-space-4) - var(--ui-pane-inset));
 }
 
@@ -532,7 +532,7 @@ details.setup-install-review[open] > summary::before {
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
-.chat-nav-action > span:not(.chat-keys) {
+.chat-nav-action > span:not(.chat-keys, .chat-nav-count) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -581,6 +581,16 @@ details.setup-install-review[open] > summary::before {
   display: inline-flex;
   flex: none;
   gap: var(--g-space-4);
+}
+
+/* Processes counts the agents at work in the shortcut's place: plain figures, no badge. */
+.chat-nav-count {
+  flex: none;
+  padding-right: var(--g-space-4);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The shortcut shows when its row is under the hand or the keyboard (Grok shows none at rest). */

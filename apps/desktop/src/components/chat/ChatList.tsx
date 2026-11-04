@@ -1,5 +1,6 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import {
+  Activity,
   ChevronDown,
   ChevronRight,
   Ellipsis,
@@ -123,6 +124,7 @@ export function ChatList({
   onNewProject,
   onProjectNewChat,
   onCustomize,
+  onProcesses,
   onProjectSettings,
   onChatOptions,
   archived = false,
@@ -139,6 +141,8 @@ export function ChatList({
   readonly onNewProject?: () => void;
   readonly onProjectNewChat?: (project: ProjectSummary) => void;
   readonly onCustomize?: () => void;
+  /** Opens Processes; the row counts the chats whose agent works now. */
+  readonly onProcesses?: () => void;
   readonly onProjectSettings?: (project: ProjectSummary) => void;
   readonly onChatOptions?: (chat: ChatSummary) => void;
   readonly archived?: boolean;
@@ -215,6 +219,7 @@ export function ChatList({
     if (searching) search.current?.focus();
   }, [searching]);
   const section = archived ? "Archived" : "Projects";
+  const working = chats?.filter((chat) => chat.status === "running").length ?? 0;
   return (
     <nav aria-label="Chats" className="chat-navigation" data-testid="chat-list">
       <div className="chat-nav-actions">
@@ -249,6 +254,27 @@ export function ChatList({
           >
             <SlidersHorizontal size={16} />
             <span>Customize</span>
+          </button>
+        ) : null}
+        {onProcesses ? (
+          <button
+            type="button"
+            className="chat-nav-action"
+            onClick={onProcesses}
+            data-testid="processes-button"
+            aria-label={
+              working > 0
+                ? `Processes, ${working} ${working === 1 ? "agent" : "agents"} working`
+                : "Processes"
+            }
+          >
+            <Activity size={16} />
+            <span>Processes</span>
+            {working > 0 ? (
+              <span className="chat-nav-count" aria-hidden="true">
+                {working}
+              </span>
+            ) : null}
           </button>
         ) : null}
         {searching ? (

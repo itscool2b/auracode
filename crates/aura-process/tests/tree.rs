@@ -16,6 +16,7 @@ use common::{GONE_WITHIN, Reaper, launch, next_json, read_pids, spec, wait_gone}
 use serde_json::json;
 use tokio::runtime::Handle;
 
+#[cfg(test)]
 async fn spawned(mode: &str, folder: &std::path::Path, extra: &[&str]) -> (SpawnedProcess, u32) {
     let pidfile = folder.join(format!("{mode}.pid"));
     let pidfile_arg = pidfile.to_string_lossy().into_owned();
@@ -34,6 +35,7 @@ async fn spawned(mode: &str, folder: &std::path::Path, extra: &[&str]) -> (Spawn
     (process, pid)
 }
 
+#[cfg(test)]
 async fn tree(control: &ProcessControl) -> Vec<TreeProcess> {
     let control = control.clone();
     tokio::task::spawn_blocking(move || Snapshot::take().map(|snapshot| snapshot.tree(&control)))

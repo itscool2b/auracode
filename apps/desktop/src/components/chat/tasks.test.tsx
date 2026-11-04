@@ -10,6 +10,7 @@ import {
   type Transcript,
 } from "../../lib/chat/transcript";
 import { BackgroundTasks } from "./BackgroundTasks";
+import { StopButton } from "./Composer";
 import { TaskPanel } from "./TaskPanel";
 import { ToolBlock } from "./ToolBlock";
 import { TaskLinkContext } from "./taskLinks";
@@ -72,6 +73,52 @@ describe("the background strip", () => {
     const html = strip(transcript([ev.turnStarted("t")]), []);
     expect(html).not.toContain("task-strip");
     expect(html).toContain('data-testid="task-announcement"');
+  });
+
+  it("keeps earlier turns' tasks in one pill, so the next message never hides them", () => {
+    const model = transcript([
+      ev.turnStarted("t1"),
+      ev.task("a", { title: "Explore dictation" }),
+      ev.task("a", { title: "Explore dictation", status: "stopped" }),
+      ev.turnStarted("t2"),
+      ev.task("b", { title: "Run the tests", kind: "command" }),
+    ]);
+    const html = strip(model, ["b"]);
+    expect(html.match(/data-testid="task-pill"/g)).toHaveLength(1);
+    expect(html).toContain("Run the tests");
+    expect(html).toContain('data-testid="task-earlier"');
+    expect(html).toContain('aria-label="1 earlier task"');
+    expect(html).toContain("Explore dictation");
+    // Only earlier tasks: the strip stays, with just that pill.
+    const quiet = strip(
+      transcript([
+        ev.turnStarted("t1"),
+        ev.task("a", { title: "Explore", status: "completed" }),
+        ev.turnStarted("t2"),
+      ]),
+      [],
+    );
+    expect(quiet).toContain('data-testid="task-earlier"');
+    expect(quiet).not.toContain('data-testid="task-pill"');
+  });
+});
+
+describe("the stop button", () => {
+  it("says that stopping also ends the running background tasks", () => {
+    const html = (runningTasks: number) =>
+      renderToStaticMarkup(
+        <StopButton
+          status="running"
+          onStop={() => {}}
+          onForceStop={() => {}}
+          runningTasks={runningTasks}
+        />,
+      );
+    expect(html(0)).toContain('title="Stop (Esc)"');
+    expect(html(0)).not.toContain("aria-description");
+    expect(html(3)).toContain('title="Stop (Esc). Also ends 3 background tasks."');
+    expect(html(1)).toContain('aria-description="Also ends 1 background task."');
+    expect(html(1)).toContain('aria-label="Stop"');
   });
 });
 

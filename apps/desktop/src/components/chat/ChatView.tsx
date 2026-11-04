@@ -12,7 +12,7 @@ import { takesAccounts } from "../../lib/agentAccounts";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { queueWaitView } from "../../lib/chat/queueWait";
-import { newestTurnKey, tasksByToolCall } from "../../lib/chat/tasks";
+import { newestTurnKey, shownTasks, taskDisplay, tasksByToolCall } from "../../lib/chat/tasks";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
@@ -239,6 +239,9 @@ export function ChatView({
     };
   }, [transport.conversation, state.phase, chatId, status, handoffRevision]);
   const live = hasProcess(status);
+  const runningTasks = shownTasks(tasks).filter(
+    (item) => taskDisplay(item, live, state.liveTasks) === "running",
+  ).length;
   const resumable =
     (state.session?.native_session_id ?? null) !== null || hasTurns(state.transcript);
   const newestError = lastErrorKey(state.transcript);
@@ -931,6 +934,7 @@ export function ChatView({
                     state.controlSaving !== null
                   }
                   chatId={chatId}
+                  runningTasks={runningTasks}
                   contextApi={transport.composer}
                   agentName={agent?.name ?? state.chat.agent_name}
                   controls={controls}
