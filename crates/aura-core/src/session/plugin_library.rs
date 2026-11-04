@@ -416,6 +416,51 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                     false,
                 )
             }
+            // Grok Build lists its plugins and marketplace sources as JSON; Hermes lists its
+            // plugins, and its skill sources (taps) are read from the file it writes. Both keep
+            // the reviewed file inventory for MCP servers and skills.
+            "grok" | "hermes" => {
+                let reason = "Read from reviewed native configuration paths. This inventory does not start the agent or connect servers.";
+                let servers = extensions
+                    .servers
+                    .iter()
+                    .map(|s| PluginEntry {
+                        kind: s.kind.clone(),
+                        enabled: s.enabled,
+                        local_fields: s.local_fields.clone(),
+                        ..named(&s.name)
+                    })
+                    .collect();
+                let skills = extensions.skills.iter().map(|s| named(s)).collect();
+                let marketplaces = if id == "grok" {
+                    live_or_files(listings, PluginFeature::Marketplaces, Vec::new(), not_run)
+                } else {
+                    files(
+                        PluginFeature::Marketplaces,
+                        "Hermes skill sources (taps), read from skills/.hub/taps.json.",
+                        extensions
+                            .marketplaces
+                            .iter()
+                            .map(|name| named(name))
+                            .collect(),
+                    )
+                };
+                (
+                    PluginSystem::Marketplace,
+                    if id == "grok" {
+                        "Plugins from marketplace sources, plus skills and MCP servers."
+                    } else {
+                        "Plugins from Hermes's catalog or GitHub, skill sources (taps), skills and MCP servers."
+                    },
+                    vec![
+                        live_or_files(listings, PluginFeature::Plugins, Vec::new(), not_run),
+                        marketplaces,
+                        files(PluginFeature::McpServers, reason, servers),
+                        files(PluginFeature::Skills, reason, skills),
+                    ],
+                    false,
+                )
+            }
             _ => {
                 let reason = "Read from reviewed native configuration paths. This inventory does not start the agent or connect servers.";
                 let servers = extensions

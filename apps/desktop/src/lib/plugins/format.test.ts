@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ago, featureLabel, harnessText, harnessTone, sourceText } from "./format";
+import {
+  addsMarketplaces,
+  ago,
+  featureLabel,
+  harnessText,
+  harnessTone,
+  sourceText,
+  vendorTargetCopy,
+} from "./format";
 
 describe("Plugin library wording", () => {
   it("words every harness state and gives volt only to an update", () => {
@@ -49,5 +57,38 @@ describe("Plugin library wording", () => {
     expect(ago(now - 60_000, now)).toBe("1 minute ago");
     expect(ago(now - 5 * 60_000, now)).toBe("5 minutes ago");
     expect(ago(now - 3 * 3_600_000, now)).toBe("3 hours ago");
+  });
+});
+
+describe("adding marketplaces and plugins", () => {
+  it("asks each agent for what its own command accepts", () => {
+    expect(vendorTargetCopy("claude", "marketplace", "install")).toEqual({
+      label: "Marketplace source",
+      placeholder: "owner/repository, an https Git address or a local folder",
+    });
+    expect(vendorTargetCopy("grok", "marketplace", "remove").label).toBe("Marketplace name");
+    expect(vendorTargetCopy("hermes", "marketplace", "install")).toEqual({
+      label: "Skill source (GitHub repository)",
+      placeholder: "owner/repository",
+    });
+    expect(vendorTargetCopy("grok", "plugin", "install").label).toBe("Plugin source");
+    expect(vendorTargetCopy("grok", "plugin", "remove").label).toBe("Plugin name");
+    expect(vendorTargetCopy("hermes", "plugin", "install").placeholder).toBe(
+      "catalog name or owner/repository",
+    );
+    expect(vendorTargetCopy("claude", "plugin", "install").placeholder).toBe("plugin@marketplace");
+    expect(vendorTargetCopy("pi", "package", "install").label).toBe("Package source");
+  });
+
+  it("names Hermes taps skill sources and offers adding only where reviewed", () => {
+    expect(featureLabel("marketplaces", "hermes")).toBe("Skill sources");
+    expect(featureLabel("marketplaces", "grok")).toBe("Marketplaces");
+    expect(addsMarketplaces(null)).toBe(false);
+    expect(
+      addsMarketplaces({ actions: [{ kind: "marketplace", actions: ["update", "remove"] }] }),
+    ).toBe(false);
+    expect(addsMarketplaces({ actions: [{ kind: "marketplace", actions: ["install"] }] })).toBe(
+      true,
+    );
   });
 });

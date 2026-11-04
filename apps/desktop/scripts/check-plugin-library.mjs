@@ -140,12 +140,37 @@ async function checkLibrary(page, engine) {
   await agents.getByRole("button", { name: "OpenCode", exact: true }).click();
   await page.getByText("Configuration sync covers Claude Code, Codex and Pi.").waitFor();
   assert.equal(await page.getByRole("switch").count(), 0);
+  // Grok Build lists its plugins and marketplaces, and adds a marketplace where its list is.
+  await agents.getByRole("button", { name: "Grok Build", exact: true }).click();
+  await page.getByText("xai-org/plugin-marketplace", { exact: false }).waitFor();
+  // An available Grok plugin installs in Grok: its CLI installs from sources, not names.
+  assert.equal(await page.getByRole("button", { name: "Install vercel", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Install vercel in Grok" }).waitFor();
+  await page.getByText("grok plugin marketplace list --json", { exact: false }).waitFor();
+  await page.getByRole("button", { name: "Add marketplace", exact: true }).click();
+  const source = page.getByRole("textbox", { name: "Marketplace source" });
+  await source.waitFor();
+  assert.equal(
+    await source.getAttribute("placeholder"),
+    "owner/repository, an https Git address or a local folder",
+  );
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await audit(page, `${engine} Grok plugins and marketplaces`);
+  await page.screenshot({ path: resolve(out, `${engine}-plugins-grok.png`) });
+  // Hermes: its plugins, and its skill sources (taps) with their own Add.
   await agents.getByRole("button", { name: "Hermes", exact: true }).click();
-  await page.getByText("team_docs", { exact: true }).waitFor();
+  await page.getByText("browser-firecrawl", { exact: true }).waitFor();
+  await page.getByText("team/skills", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Add skill source", exact: true }).click();
+  await page.getByRole("textbox", { name: "Skill source (GitHub repository)" }).waitFor();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  // Cursor still has no qualified interface, and says so.
+  await agents.getByRole("button", { name: "Cursor", exact: true }).click();
   await page
     .getByText("no qualified structured plugin-management interface", { exact: false })
     .waitFor();
-  assert.equal(await page.getByRole("button", { name: "Add plugin", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Add marketplace", exact: true }).count(), 0);
+  await agents.getByRole("button", { name: "Hermes", exact: true }).click();
   await page.getByRole("button", { name: "Hermes actions" }).click();
   await page.getByRole("menuitem", { name: "Open native customization" }).click();
   await page.getByRole("dialog", { name: "Manage integrations" }).waitFor();

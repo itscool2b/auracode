@@ -10,6 +10,7 @@ import type {
 } from "../../lib/config-vendor/bindings";
 import { errorMessage } from "../../lib/errors";
 import type { LibraryItem } from "../../lib/library/bindings";
+import { vendorTargetCopy } from "../../lib/plugins/format";
 import type { TerminalTransport } from "../../lib/terminal";
 import { Modal } from "../chat/Modal";
 import { TerminalSheet } from "../TerminalSheet";
@@ -60,6 +61,7 @@ export function VendorDialog({
     preset?.action ?? (initial ? "remove" : "install"),
   );
   const [target, setTarget] = useState(preset?.target ?? initial?.item.key ?? "");
+  const copy = vendorTargetCopy(provider, kind, action);
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<readonly PluginManagement[]>(
     suppliedCapabilities ?? [],
@@ -221,17 +223,7 @@ export function VendorDialog({
           </label>
         </div>
         <div className="vendor-target">
-          <label htmlFor={`${field}-target`}>
-            {kind === "native"
-              ? "Native customization route"
-              : kind === "plugin"
-                ? "Plugin and marketplace"
-                : kind === "package"
-                  ? "Package source"
-                  : action === "install"
-                    ? "GitHub repository"
-                    : "Marketplace name"}
-          </label>
+          <label htmlFor={`${field}-target`}>{copy.label}</label>
           <input
             id={`${field}-target`}
             aria-describedby={`${field}-note`}
@@ -244,15 +236,7 @@ export function VendorDialog({
             disabled={busy}
             readOnly={kind === "native"}
             onChange={(event) => setTarget(event.currentTarget.value)}
-            placeholder={
-              kind === "plugin"
-                ? "plugin@marketplace"
-                : kind === "package"
-                  ? "npm:@team/package@1.2.3"
-                  : action === "install"
-                    ? "owner/repository"
-                    : "marketplace-name"
-            }
+            placeholder={copy.placeholder}
           />
           <small id={`${field}-note`} className="vendor-note">
             {kind === "native"

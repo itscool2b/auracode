@@ -273,6 +273,19 @@
   color: var(--g-red);
 }
 
+/* A marketplace list adds to itself: its heading and source on the left, Add on the right. */
+.plugins-feature-head:has(.plugins-add) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--g-space-16);
+  align-items: center;
+}
+
+.plugins-feature-head .plugins-add {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
 .plugins-rows {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

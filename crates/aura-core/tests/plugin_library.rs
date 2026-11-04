@@ -419,7 +419,7 @@ async fn unsupported_agents_are_explicitly_unavailable_and_opencode_sync_is_not_
     let fixture = Fixture::new();
     let (task, mut rx) = fixture.start(false);
     let (_, initial) = next(&mut rx).await;
-    for id in ["cursor", "grok", "antigravity", "hermes"] {
+    for id in ["cursor", "antigravity"] {
         let agent = initial
             .agents
             .iter()
@@ -434,6 +434,31 @@ async fn unsupported_agents_are_explicitly_unavailable_and_opencode_sync_is_not_
                 )),
             "unsupported native plugin APIs must be explicit"
         );
+    }
+    // Grok Build and Hermes list their plugins and their marketplaces (Hermes: skill sources).
+    for id in ["grok", "hermes"] {
+        let agent = initial
+            .agents
+            .iter()
+            .find(|agent| agent.agent_id == id)
+            .unwrap();
+        for wanted in [
+            aura_protocol::plugins::PluginFeature::Plugins,
+            aura_protocol::plugins::PluginFeature::Marketplaces,
+        ] {
+            let feature = agent
+                .features
+                .iter()
+                .find(|feature| feature.feature == wanted)
+                .unwrap_or_else(|| panic!("{id} lists {wanted:?}"));
+            assert!(
+                !matches!(
+                    feature.state,
+                    aura_protocol::plugins::ListingState::Unavailable { .. }
+                ),
+                "{id} {wanted:?} is supported now"
+            );
+        }
     }
     assert_eq!(
         initial.agents.len(),

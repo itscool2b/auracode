@@ -9,7 +9,7 @@ use aura_protocol::{
 use sha2::{Digest, Sha256};
 use std::{
     ffi::OsString,
-    path::{Component, Path, PathBuf},
+    path::{Component, Path, PathBuf, Prefix},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -17,7 +17,7 @@ pub enum VendorError {
     #[error("This action is not supported by this provider's reviewed CLI. No command has run.")]
     Unsupported,
     #[error(
-        "Use a qualified plugin name, marketplace name or pinned npm/GitHub package source. Local paths, credentials and command flags are not accepted."
+        "Use a qualified plugin name, a marketplace name, a GitHub repository (owner/repository), an https Git address, an existing local folder or a pinned npm/GitHub package source. Credentials and command flags are not accepted."
     )]
     Target,
     #[error("The installation or configuration location changed. Refresh agents and review again.")]
@@ -50,12 +50,17 @@ pub fn prepare(
         P::Claude => "2.1.310",
         P::Codex => "0.162.1",
         P::Pi => "1.0.2",
+        P::Grok => "1.0.70",
         _ => "0.0.0",
     };
     if request.kind != K::Native && !crate::version_at_least(&installation.version, minimum) {
         return Err(VendorError::Unsupported);
     }
     let command = arguments(request)?;
+    // A local folder a vendor clones or reads from must exist now: typed, not synced.
+    if local_folder(&request.target) && !Path::new(&request.target).is_dir() {
+        return Err(VendorError::Target);
+    }
     crate::maintenance::check_unchanged(installation).map_err(|_| VendorError::Changed)?;
     let variable = |name: &str| {
         env.get(&EnvKey::from(name))
@@ -211,6 +216,64 @@ fn github(value: &str) -> bool {
         .split_once('/')
         .is_some_and(|(owner, repo)| name(owner) && name(repo))
 }
+/// A vendor list label, which may hold spaces (Grok's "xAI Official"): printable, not a flag.
+fn label(value: &str) -> bool {
+    !value.trim().is_empty()
+        && value.chars().count() <= 128
+        && !value.starts_with('-')
+        && !value.chars().any(char::is_control)
+}
+/// An `https` Git address without credentials, port tricks, query or fragment.
+fn https_git(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("https://") else {
+        return false;
+    };
+    let Some((host, path)) = rest.split_once('/') else {
+        return false;
+    };
+    !host.is_empty()
+        && host.len() <= 253
+        && !host.starts_with(['-', '.'])
+        && host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-:".contains(&byte))
+        && path.split('/').all(|segment| {
+            !segment.is_empty()
+                && segment != ".."
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"._-~".contains(&byte))
+        })
+}
+/// An absolute folder on a local disk, `C:\...` on Windows and `/...` elsewhere, that never climbs
+/// out. Network, device and verbatim paths are refused by their parsed prefix before anything
+/// touches the filesystem, whatever their separators: Windows reads `\/server/share` and
+/// `/\server\share` as network shares too, and checking one for a folder would reach that server.
+fn local_folder(value: &str) -> bool {
+    let path = Path::new(value);
+    let mut parts = path.components();
+    let rooted = if cfg!(windows) {
+        matches!(
+            parts.next(),
+            Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_))
+        ) && matches!(parts.next(), Some(Component::RootDir))
+    } else {
+        matches!(parts.next(), Some(Component::RootDir))
+    };
+    rooted
+        && path.is_absolute()
+        && !value.starts_with("\\\\")
+        && !value.starts_with("//")
+        && !value.chars().any(char::is_control)
+        && !path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir))
+}
+/// Where a marketplace or plugin comes from: GitHub `owner/repo`, an `https` Git address or a
+/// local folder, which each vendor CLI clones or reads itself.
+fn source(value: &str) -> bool {
+    github(value) || https_git(value) || local_folder(value)
+}
 fn reference(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -301,8 +364,8 @@ pub fn arguments(request: &VendorRequest) -> Result<Vec<String>, VendorError> {
         }
         (P::Codex, K::Plugin, A::Install) => vec!["plugin", "add", t],
         (P::Codex, K::Plugin, A::Remove) => vec!["plugin", "remove", t],
-        (P::Claude | P::Codex, K::Marketplace, A::Install) => {
-            if !github(t) {
+        (P::Claude | P::Codex | P::Grok, K::Marketplace, A::Install) => {
+            if !source(t) {
                 return Err(VendorError::Target);
             }
             let mut values = vec!["plugin", "marketplace", "add", t];
@@ -335,6 +398,67 @@ pub fn arguments(request: &VendorRequest) -> Result<Vec<String>, VendorError> {
                 A::Remove => vec!["remove", t, "--no-approve"],
                 _ => vec!["update", "--extension", t, "--no-approve"],
             }
+        }
+        (P::Grok, K::Marketplace, A::Update | A::Remove) => {
+            if !label(t) {
+                return Err(VendorError::Target);
+            }
+            let command = if request.action == A::Remove {
+                "remove"
+            } else {
+                "update"
+            };
+            vec!["plugin", "marketplace", command, t]
+        }
+        (P::Grok, K::Plugin, A::Install) => {
+            if !source(t) {
+                return Err(VendorError::Target);
+            }
+            vec!["plugin", "install", t]
+        }
+        (P::Grok, K::Plugin, action) => {
+            if !name(t) {
+                return Err(VendorError::Target);
+            }
+            let command = match action {
+                A::Update => "update",
+                A::Remove => "uninstall",
+                A::Enable => "enable",
+                A::Disable => "disable",
+                A::Install | A::Open => return Err(VendorError::Unsupported),
+            };
+            vec!["plugin", command, t]
+        }
+        (P::Hermes, K::Plugin, A::Install) => {
+            if !(name(t) || github(t) || https_git(t)) {
+                return Err(VendorError::Target);
+            }
+            vec!["plugins", "install", t]
+        }
+        (P::Hermes, K::Plugin, action) => {
+            if !name(t) {
+                return Err(VendorError::Target);
+            }
+            let command = match action {
+                A::Update => "update",
+                A::Remove => "remove",
+                A::Enable => "enable",
+                A::Disable => "disable",
+                A::Install | A::Open => return Err(VendorError::Unsupported),
+            };
+            vec!["plugins", command, t]
+        }
+        // Hermes calls its skill sources taps: GitHub repositories only.
+        (P::Hermes, K::Marketplace, A::Install | A::Remove) => {
+            if !github(t) {
+                return Err(VendorError::Target);
+            }
+            let command = if request.action == A::Remove {
+                "remove"
+            } else {
+                "add"
+            };
+            vec!["skills", "tap", command, t]
         }
         _ => return Err(VendorError::Unsupported),
     };
@@ -485,5 +609,147 @@ mod tests {
             prepare(&installation, &env, &request),
             Err(VendorError::Unsupported)
         ));
+    }
+
+    #[test]
+    fn marketplaces_come_from_github_https_git_or_a_local_folder() {
+        let folder = if cfg!(windows) {
+            r"C:\Users\person\marketplace"
+        } else {
+            "/home/person/marketplace"
+        };
+        for source in [
+            "team/tools",
+            "https://github.com/team/tools.git",
+            "https://git.example.com:8443/team/tools",
+            folder,
+        ] {
+            for provider in [P::Claude, P::Codex, P::Grok] {
+                let args = arguments(&request(provider, K::Marketplace, A::Install, source));
+                assert!(args.is_ok(), "{provider:?} {source}: {args:?}");
+                assert_eq!(
+                    &args.unwrap()[..4],
+                    ["plugin", "marketplace", "add", source]
+                );
+            }
+        }
+        for refused in [
+            "-rf",
+            "https://user:secret@github.com/a/b",
+            "https://github.com/a/b?ref=x",
+            "https://github.com/a/b#main",
+            "https://github.com/a/../b",
+            "http://github.com/a/b",
+            "relative/folder/x",
+            "../outside",
+            r"\\server\share\market",
+            "//server/share",
+            "team/tools; rm -rf",
+        ] {
+            assert!(
+                arguments(&request(P::Grok, K::Marketplace, A::Install, refused)).is_err(),
+                "{refused}"
+            );
+        }
+        // Windows reads these as network shares, devices or verbatim paths whatever their
+        // separators; none may pass as a local folder.
+        if cfg!(windows) {
+            for refused in [
+                r"\/server/share",
+                r"/\server\share",
+                r"\/server\share\market",
+                r"\\?\UNC\server\share",
+                r"\\?\C:\market",
+                r"/\?\C:\market",
+                r"\\.\pipe\market",
+                r"//./pipe/market",
+                r"C:market",
+                r"\??\C:\market",
+                r"\market",
+            ] {
+                assert!(!local_folder(refused), "{refused}");
+                assert!(
+                    arguments(&request(P::Claude, K::Marketplace, A::Install, refused)).is_err(),
+                    "{refused}"
+                );
+            }
+            assert!(local_folder(r"D:\tools\market"));
+            assert!(local_folder("C:/Users/person/market"));
+        }
+    }
+
+    #[test]
+    fn grok_and_hermes_get_their_own_reviewed_commands() {
+        let args = |provider, kind, action, target: &str| {
+            arguments(&request(provider, kind, action, target)).map_err(|error| error.to_string())
+        };
+        assert_eq!(
+            args(P::Grok, K::Marketplace, A::Remove, "xAI Official").unwrap(),
+            ["plugin", "marketplace", "remove", "xAI Official"]
+        );
+        assert_eq!(
+            args(
+                P::Grok,
+                K::Marketplace,
+                A::Update,
+                "claude-plugins-official"
+            )
+            .unwrap(),
+            ["plugin", "marketplace", "update", "claude-plugins-official"]
+        );
+        assert_eq!(
+            args(P::Grok, K::Plugin, A::Install, "team/grok-tools").unwrap(),
+            ["plugin", "install", "team/grok-tools"]
+        );
+        assert_eq!(
+            args(P::Grok, K::Plugin, A::Remove, "vercel").unwrap(),
+            ["plugin", "uninstall", "vercel"]
+        );
+        assert_eq!(
+            args(P::Grok, K::Plugin, A::Disable, "vercel").unwrap(),
+            ["plugin", "disable", "vercel"]
+        );
+        assert!(args(P::Grok, K::Marketplace, A::Remove, "-x").is_err());
+        assert_eq!(
+            args(
+                P::Hermes,
+                K::Plugin,
+                A::Install,
+                "anpicasso/hermes-plugin-chrome-profiles"
+            )
+            .unwrap(),
+            [
+                "plugins",
+                "install",
+                "anpicasso/hermes-plugin-chrome-profiles"
+            ]
+        );
+        assert_eq!(
+            args(P::Hermes, K::Plugin, A::Install, "browser-firecrawl").unwrap(),
+            ["plugins", "install", "browser-firecrawl"]
+        );
+        assert_eq!(
+            args(P::Hermes, K::Plugin, A::Enable, "browser-firecrawl").unwrap(),
+            ["plugins", "enable", "browser-firecrawl"]
+        );
+        assert_eq!(
+            args(P::Hermes, K::Marketplace, A::Install, "team/skills").unwrap(),
+            ["skills", "tap", "add", "team/skills"]
+        );
+        assert_eq!(
+            args(P::Hermes, K::Marketplace, A::Remove, "team/skills").unwrap(),
+            ["skills", "tap", "remove", "team/skills"]
+        );
+        // Hermes taps are GitHub repositories only.
+        assert!(
+            args(
+                P::Hermes,
+                K::Marketplace,
+                A::Install,
+                "https://git.example.com/a/b"
+            )
+            .is_err()
+        );
+        assert!(args(P::Hermes, K::Marketplace, A::Update, "team/skills").is_err());
     }
 }

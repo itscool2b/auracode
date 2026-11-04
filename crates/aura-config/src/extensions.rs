@@ -456,6 +456,33 @@ pub fn inspect_extra(provider: &str, root: &Path) -> Extensions {
             Err(error) => result.notices.push(format!("config.yaml: {error}")),
         }
     }
+    if provider == "hermes" {
+        // Taps: the GitHub skill sources `hermes skills tap add` records. Its list command
+        // prints a table, so the file it writes is read instead.
+        match safe_fs::read(&dir, "skills/.hub/taps.json") {
+            Ok(Some(bytes)) => match serde_json::from_slice::<Value>(&bytes) {
+                Ok(value) => {
+                    let repos = value
+                        .get("taps")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|tap| tap.get("repo").and_then(Value::as_str))
+                        .filter(|repo| tap_repo(repo));
+                    result
+                        .marketplaces
+                        .extend(repos.take(200).map(str::to_owned));
+                }
+                Err(_) => result
+                    .notices
+                    .push("Hermes skill sources (skills/.hub/taps.json) could not be read.".into()),
+            },
+            Ok(None) => {}
+            Err(error) => result
+                .notices
+                .push(format!("skills/.hub/taps.json: {error}")),
+        }
+    }
     if matches!(provider, "cursor" | "hermes" | "grok")
         && let Ok(children) = safe_fs::children(&dir, "skills")
     {
@@ -479,6 +506,19 @@ pub fn inspect_extra(provider: &str, root: &Path) -> Extensions {
         }
     }
     result
+}
+
+/// A tap is a GitHub `owner/repo`; anything else in the file is not listed.
+fn tap_repo(value: &str) -> bool {
+    value.len() <= 200
+        && value.split_once('/').is_some_and(|(owner, repo)| {
+            [owner, repo].iter().all(|part| {
+                !part.is_empty()
+                    && part
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            })
+        })
 }
 
 /// JSON with comments and trailing commas, as OpenCode accepts, to plain JSON. Strings are kept
@@ -581,6 +621,27 @@ mod tests {
         let hermes = inspect_extra("hermes", root);
         assert_eq!(hermes.servers[0].name, "hermes_docs");
         assert!(!format!("{hermes:?}").contains("private-env"));
+        assert!(
+            hermes.marketplaces.is_empty(),
+            "no taps file: no skill sources"
+        );
+        std::fs::create_dir_all(root.join("skills/.hub")).unwrap();
+        std::fs::write(
+            root.join("skills/.hub/taps.json"),
+            r#"{"taps":[{"repo":"team/skills","path":"skills/"},{"repo":"not a repo"},{"path":"x"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(inspect_extra("hermes", root).marketplaces, ["team/skills"]);
+        std::fs::write(root.join("skills/.hub/taps.json"), "{broken").unwrap();
+        let broken = inspect_extra("hermes", root);
+        assert!(broken.marketplaces.is_empty());
+        assert!(
+            broken
+                .notices
+                .iter()
+                .any(|notice| notice.contains("taps.json"))
+        );
+        std::fs::remove_file(root.join("skills/.hub/taps.json")).unwrap();
         std::fs::write(
             root.join("config.yaml"),
             "mcp_servers: { docs: { command: node } }\n",

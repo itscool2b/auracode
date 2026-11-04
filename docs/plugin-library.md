@@ -70,18 +70,32 @@ pending approvals. Saved changes apply after restart; native OAuth and headers r
 | Pi | None (packages) | Packages | `pi list --no-approve` with `PI_OFFLINE=1` | Plain text under "User packages:" and "Project packages:"; private sources are shown as "Package N (private source)". |
 | | | Skills, MCP servers, prompt templates | `skills/`, `mcp.json`, `prompts/` in `PI_CODING_AGENT_DIR` | `pi mcp list` starts every server, so it is never run. |
 | OpenCode | Declared in config | Plugins, MCP servers, skills, commands, agents | `opencode.json` or `opencode.jsonc` (`plugin`, `mcp`) and the `plugins/`, `skills/`, `commands/`, `agents/` folders (and their singular forms) in `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode` | OpenCode installs npm plugins with Bun whenever it starts, and `opencode mcp list` checks each server's connection, so no OpenCode command is run for inventory. Configuration sync does not cover OpenCode. |
+| Grok Build | Marketplaces | Plugins (installed and available) | `grok plugin list --json --available` | One array; `status` "available" is a marketplace entry, anything else installed ("disabled" off). |
+| | | Marketplaces | `grok plugin marketplace list --json` | `name`, `kind` and `source.url` (a GitHub address shows as owner/repo; others do not). |
+| | | MCP servers, skills | `~/.grok/config.toml`, `skills/` | No listing command that leaves servers alone. |
+| Hermes | Catalog and skill sources | Plugins (installed) | `hermes plugins list --json` | `name`, `status`, `version`, `description`, `source`. `hermes plugins browse` prints no JSON, so the catalog is not listed. |
+| | | Skill sources (taps) | `skills/.hub/taps.json` in `HERMES_HOME` | `hermes skills tap list` prints a table; the file it writes holds `taps[].repo`. |
+| | | MCP servers, skills | `config.yaml` (documented block-map form), skill folders | |
 
-Cursor adds reviewed `~/.cursor/mcp.json`, command/agent/hook and skill inventory. Grok Build adds
-reviewed `~/.grok/config.toml` MCP names and skills. Hermes adds documented block-map MCP names from
-`HERMES_HOME/config.yaml` and its skill folders; richer YAML forms require native review. These readers
-retain names and credential field names only and execute no server. Antigravity and oh-my-pi have explicit
-unavailable extension listings where no reader is qualified. The page never treats an unsupported API
-as a successful empty live listing.
+Cursor adds reviewed `~/.cursor/mcp.json`, command/agent/hook and skill inventory. These readers
+retain names and credential field names only and execute no server. Hermes' richer YAML forms require
+native review. Cursor, Antigravity and oh-my-pi have explicit unavailable plugin listings where no
+interface is qualified. The page never treats an unsupported API as a successful empty live listing.
+
+Adding a marketplace sits in each Marketplaces section ("Add skill source" for Hermes) as well as the
+agent's menu. Claude Code, Codex and Grok take a GitHub `owner/repository`, an `https` Git address
+without credentials, query or fragment, or an existing absolute local folder, never a network or device
+path; each vendor's own `plugin marketplace add` runs after review. Hermes skill sources are GitHub
+repositories (`hermes skills tap add`). Grok installs plugins from a source (`grok plugin install`),
+not by a marketplace entry's name, so an available Grok plugin offers Install in Grok, which opens its
+CLI; its marketplaces update and remove by name, which may hold spaces ("xAI Official"). Hermes installs
+a catalog name, `owner/repository` or Git address and updates, removes, enables and disables by name.
 
 The backend publishes versioned management capabilities. The renderer offers only the reviewed
-operations in that response. Claude, Codex and Pi retain their supported plugin/package operations.
-Installed OpenCode, Hermes, Cursor and Grok also have named native customization routes, using a reviewed
-interactive terminal rather than invented common management flags. The available native screens remain
+operations in that response. Claude, Codex, Pi, Grok Build (1.0.70 or later) and Hermes have their
+supported plugin, package, marketplace or skill-source operations. Installed OpenCode, Hermes, Cursor
+and Grok also have named native customization routes, using a reviewed interactive terminal rather than
+invented common management flags. The available native screens remain
 agent-specific. Native configuration sync continues to cover Claude, Codex and Pi only; shared Aura MCP
 definition sync is separate.
 

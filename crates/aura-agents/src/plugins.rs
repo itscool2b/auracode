@@ -72,6 +72,33 @@ pub fn management(
                 kind: K::Package,
                 actions: vec![A::Install, A::Update, A::Remove],
             }),
+            // Grok installs from a source (owner/repo, a Git address or a folder), not by a
+            // marketplace entry's name; its marketplaces are sources it refreshes itself.
+            P::Grok => {
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Plugins,
+                    kind: K::Plugin,
+                    actions: vec![A::Install, A::Update, A::Remove, A::Enable, A::Disable],
+                });
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Marketplaces,
+                    kind: K::Marketplace,
+                    actions: vec![A::Install, A::Update, A::Remove],
+                });
+            }
+            // Hermes: plugins from its curated catalog or GitHub, and skill sources (taps).
+            P::Hermes => {
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Plugins,
+                    kind: K::Plugin,
+                    actions: vec![A::Install, A::Update, A::Remove, A::Enable, A::Disable],
+                });
+                actions.push(PluginManagementAction {
+                    feature: PluginFeature::Marketplaces,
+                    kind: K::Marketplace,
+                    actions: vec![A::Install, A::Remove],
+                });
+            }
             _ => {}
         }
     }
@@ -103,6 +130,9 @@ enum Parser {
     CodexMarketplaces,
     CodexMcp,
     PiPackages,
+    GrokPlugins,
+    GrokMarketplaces,
+    HermesPlugins,
 }
 
 /// Failed refreshes keep the prior public rows while reporting the new failure.
@@ -173,6 +203,27 @@ pub fn recipes(provider: &str) -> &'static [ListingRecipe] {
             parser: Parser::CodexMcp,
         },
     ];
+    const GROK: &[ListingRecipe] = &[
+        ListingRecipe {
+            feature: PluginFeature::Plugins,
+            args: &["plugin", "list", "--json", "--available"],
+            set: &[],
+            parser: Parser::GrokPlugins,
+        },
+        ListingRecipe {
+            feature: PluginFeature::Marketplaces,
+            args: &["plugin", "marketplace", "list", "--json"],
+            set: &[],
+            parser: Parser::GrokMarketplaces,
+        },
+    ];
+    // `hermes plugins browse` prints no JSON, so the catalog itself is not listed.
+    const HERMES: &[ListingRecipe] = &[ListingRecipe {
+        feature: PluginFeature::Plugins,
+        args: &["plugins", "list", "--json"],
+        set: &[],
+        parser: Parser::HermesPlugins,
+    }];
     const PI: &[ListingRecipe] = &[ListingRecipe {
         feature: PluginFeature::Packages,
         // Project-local files are ignored: a listing never extends trust to a folder.
@@ -184,6 +235,8 @@ pub fn recipes(provider: &str) -> &'static [ListingRecipe] {
         "claude" => CLAUDE,
         "codex" => CODEX,
         "pi" => PI,
+        "grok" => GROK,
+        "hermes" => HERMES,
         _ => &[],
     }
 }
@@ -243,10 +296,16 @@ fn parse(parser: Parser, bytes: &[u8]) -> Result<(Vec<PluginEntry>, Vec<PluginEn
                 let kind = item.get("source").and_then(text);
                 Some(PluginEntry {
                     // A GitHub repository is public context; a local path or URL stays out.
+                    // Claude Code 2.1.316 says `url`; older builds said `repo`.
                     description: item
                         .get("repo")
                         .and_then(text)
-                        .filter(|repo| github_repo(repo)),
+                        .filter(|repo| github_repo(repo))
+                        .or_else(|| {
+                            item.get("url")
+                                .and_then(text)
+                                .and_then(|url| github_slug(&url))
+                        }),
                     kind,
                     ..entry(name.clone(), true)
                 })
@@ -269,6 +328,78 @@ fn parse(parser: Parser, bytes: &[u8]) -> Result<(Vec<PluginEntry>, Vec<PluginEn
         }
         Parser::CodexMcp => {
             let entries = list(&value, MAX_ENTRIES, codex_mcp)?;
+            Ok((entries, Vec::new(), 0))
+        }
+        // One array: status "available" comes from a marketplace, anything else is installed
+        // ("disabled" is off). Removal and updates take the plain name.
+        Parser::GrokPlugins => {
+            let array = value.as_array().ok_or(())?;
+            let entry = |item: &Value, installed: bool| {
+                let name = text(item.get("name")?)?;
+                let status = item.get("status").and_then(text);
+                Some(PluginEntry {
+                    marketplace: item.get("marketplace").and_then(text),
+                    version: item.get("version").and_then(text),
+                    description: item
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .map(|value| clip(value, MAX_DESCRIPTION))
+                        .filter(|value| !value.is_empty()),
+                    enabled: installed.then(|| status.as_deref() != Some("disabled")),
+                    ..self::entry(name, installed)
+                })
+            };
+            let (available, installed): (Vec<&Value>, Vec<&Value>) = array
+                .iter()
+                .partition(|item| item.get("status").and_then(Value::as_str) == Some("available"));
+            let total = u32::try_from(available.len()).unwrap_or(u32::MAX);
+            Ok((
+                installed
+                    .into_iter()
+                    .take(MAX_ENTRIES)
+                    .filter_map(|item| entry(item, true))
+                    .collect(),
+                available
+                    .into_iter()
+                    .take(MAX_AVAILABLE)
+                    .filter_map(|item| entry(item, false))
+                    .collect(),
+                total,
+            ))
+        }
+        Parser::GrokMarketplaces => {
+            let entries = list(&value, MAX_ENTRIES, |item| {
+                let name = text(item.get("name")?)?;
+                let url = item
+                    .get("source")
+                    .and_then(|source| source.get("url"))
+                    .and_then(text);
+                Some(PluginEntry {
+                    kind: item.get("kind").and_then(text),
+                    description: url.as_deref().and_then(github_slug),
+                    ..entry(name, true)
+                })
+            })?;
+            Ok((entries, Vec::new(), 0))
+        }
+        Parser::HermesPlugins => {
+            let entries = list(&value, MAX_ENTRIES, |item| {
+                let name = text(item.get("name")?)?;
+                Some(PluginEntry {
+                    version: item.get("version").and_then(text),
+                    description: item
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .map(|value| clip(value, MAX_DESCRIPTION))
+                        .filter(|value| !value.is_empty()),
+                    enabled: item
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .map(|status| status == "enabled"),
+                    kind: item.get("source").and_then(text),
+                    ..entry(name, true)
+                })
+            })?;
             Ok((entries, Vec::new(), 0))
         }
         Parser::PiPackages => Err(()),
@@ -460,6 +591,17 @@ fn package_safe(source: &str) -> bool {
         && source
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "@/._-:^~".contains(c))
+}
+
+/// owner/repo from a GitHub address (https://github.com/owner/repo.git), which is public
+/// context; any other address or a local path stays out.
+fn github_slug(url: &str) -> Option<String> {
+    let slug = url.strip_prefix("https://github.com/")?;
+    let slug = slug
+        .strip_suffix(".git")
+        .unwrap_or(slug)
+        .trim_end_matches('/');
+    github_repo(slug).then(|| slug.to_owned())
 }
 
 fn github_repo(value: &str) -> bool {
@@ -713,6 +855,117 @@ mod tests {
             .find(|recipe| recipe.feature == feature)
             .unwrap();
         listing_from_output(provider, recipe, ok(stdout), &Redactor::standard())
+    }
+
+    #[test]
+    fn grok_and_hermes_plugins_and_marketplaces_parse_their_json() {
+        // Shapes recorded from grok 1.0.70 and Hermes 0.22.5 on 2026-11-04 (trimmed).
+        let plugins = run(
+            "grok",
+            PluginFeature::Plugins,
+            r#"[{"status":"available","name":"vercel","version":null,"description":"Vercel deployment platform integration.",
+                 "marketplace":"xAI Official","skill_count":0,"has_hooks":false,"has_agents":false,"has_mcp":false,
+                 "components":{"skills":[{"name":"ai-gateway","description":"Vercel AI Gateway guidance"}]}},
+               {"status":"enabled","name":"tools","version":"1.2.0","description":"Team tools","marketplace":"team"},
+               {"status":"disabled","name":"old","marketplace":"team"}]"#,
+        );
+        assert_eq!(plugins.state, ListingState::Live);
+        assert_eq!(
+            plugins.command.as_deref(),
+            Some("grok plugin list --json --available")
+        );
+        let installed: Vec<_> = plugins
+            .entries
+            .iter()
+            .map(|entry| (entry.key.as_str(), entry.enabled))
+            .collect();
+        assert_eq!(installed, [("tools", Some(true)), ("old", Some(false))]);
+        assert_eq!(plugins.available_total, 1);
+        assert_eq!(plugins.available[0].key, "vercel");
+        assert_eq!(
+            plugins.available[0].marketplace.as_deref(),
+            Some("xAI Official")
+        );
+        assert!(!plugins.available[0].installed);
+
+        let markets = run(
+            "grok",
+            PluginFeature::Marketplaces,
+            r#"[{"name":"xAI Official","kind":"git","source":{"url":"https://github.com/xai-org/plugin-marketplace.git","branch":null}},
+               {"name":"mine","kind":"path","source":{"url":"C:\\Users\\person\\market"}}]"#,
+        );
+        assert_eq!(markets.entries.len(), 2);
+        assert_eq!(markets.entries[0].label, "xAI Official");
+        assert_eq!(
+            markets.entries[0].description.as_deref(),
+            Some("xai-org/plugin-marketplace")
+        );
+        assert_eq!(
+            markets.entries[1].description, None,
+            "a local path stays out"
+        );
+        assert!(!format!("{markets:?}").contains("person"));
+
+        let hermes = run(
+            "hermes",
+            PluginFeature::Plugins,
+            r#"[{"name":"browser-firecrawl","status":"enabled","version":"1.0.0","description":"Firecrawl browser backend.",
+                 "source":"bundled","removed":null},
+               {"name":"chrome-profiles","status":"disabled","version":"0.1.0","description":"","source":"git","removed":null}]"#,
+        );
+        assert_eq!(
+            hermes.command.as_deref(),
+            Some("hermes plugins list --json")
+        );
+        assert_eq!(hermes.entries[0].enabled, Some(true));
+        assert_eq!(hermes.entries[0].kind.as_deref(), Some("bundled"));
+        assert_eq!(hermes.entries[1].enabled, Some(false));
+        assert_eq!(hermes.entries[1].description, None);
+
+        // Claude Code 2.1.316 names a marketplace's address `url`, no longer `repo`.
+        let claude = run(
+            "claude",
+            PluginFeature::Marketplaces,
+            r#"[{"name":"claude-plugins-official","source":"git","url":"https://github.com/anthropics/claude-plugins-official.git",
+                 "installLocation":"C:\\Users\\person\\.claude\\plugins\\marketplaces\\claude-plugins-official"}]"#,
+        );
+        assert_eq!(
+            claude.entries[0].description.as_deref(),
+            Some("anthropics/claude-plugins-official")
+        );
+        assert!(!format!("{claude:?}").contains("person"));
+    }
+
+    #[test]
+    fn grok_and_hermes_offer_reviewed_plugin_and_marketplace_actions() {
+        use aura_protocol::config_vendor::{VendorAction as A, VendorKind as K};
+        let actions = |provider: &str, version: &str, kind: K| {
+            management(provider, Some(version))
+                .and_then(|management| {
+                    management
+                        .actions
+                        .into_iter()
+                        .find(|action| action.kind == kind)
+                })
+                .map(|action| action.actions)
+        };
+        assert_eq!(
+            actions("grok", "1.0.70", K::Marketplace),
+            Some(vec![A::Install, A::Update, A::Remove])
+        );
+        assert_eq!(
+            actions("grok", "1.0.69", K::Marketplace),
+            None,
+            "below the floor"
+        );
+        assert_eq!(
+            actions("hermes", "0.22.5+3357.g4ea7944", K::Marketplace),
+            Some(vec![A::Install, A::Remove])
+        );
+        assert!(
+            actions("hermes", "0.22.5+3357.g4ea7944", K::Plugin)
+                .is_some_and(|plugin| plugin.contains(&A::Enable))
+        );
     }
 
     #[test]
