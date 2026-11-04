@@ -5,10 +5,13 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
-## 2026-11-03
+## 2026-11-04
 
 - Add this changelog, kept current by every merge, with a format check in `pnpm lint`. ([#69](https://github.com/itscool2b/auracode/pull/69))
 - Dictation records on Windows: routine audio glitch reports no longer end every recording after a tenth of a second, and Whisper's AVX2 build transcribes 11 s of speech in 0.65 s instead of 18 s. ([#68](https://github.com/itscool2b/auracode/pull/68))
+
+## 2026-11-03
+
 - Website: Fraunces Italic accents, a seamless two-lane marquee and site-wide polish. ([#67](https://github.com/itscool2b/auracode/pull/67))
 - The working line shows the logo of the company whose model is working. ([#66](https://github.com/itscool2b/auracode/pull/66))
 - Subagents and background commands appear above the composer and open into a panel that follows their progress. ([#65](https://github.com/itscool2b/auracode/pull/65))
