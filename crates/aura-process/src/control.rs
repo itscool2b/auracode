@@ -53,6 +53,11 @@ pub trait ControlImpl: Send + Sync + 'static {
     fn record_escaped(&self) -> BoxFuture<'static, ()>;
     /// The last `max_bytes` of stderr: lossy, ANSI stripped, NOT redacted.
     fn stderr_tail(&self, max_bytes: usize) -> String;
+    /// Windows: the processes in the agent's own tree job ([`crate::tree`]), which includes
+    /// programs whose parent already exited. `None` where there is no such job.
+    fn job_members(&self) -> Option<Vec<u32>> {
+        None
+    }
 }
 
 /// A handle to a running agent. Methods forward to its [`ControlImpl`]; the last handle dropped
@@ -119,6 +124,11 @@ impl ProcessControl {
     /// See [`ControlImpl::stderr_tail`].
     pub fn stderr_tail(&self, max_bytes: usize) -> String {
         self.imp().stderr_tail(max_bytes)
+    }
+
+    /// See [`ControlImpl::job_members`].
+    pub fn job_members(&self) -> Option<Vec<u32>> {
+        self.imp().job_members()
     }
 }
 
@@ -234,6 +244,9 @@ pub(crate) struct ControlState {
     /// Windows: kill requests to the waiter, which owns the job.
     #[cfg(windows)]
     pub(crate) kill: tokio::sync::mpsc::UnboundedSender<()>,
+    /// Windows: the job the agent joined to list its tree ([`crate::tree`]); never kills.
+    #[cfg(windows)]
+    pub(crate) tree: Option<crate::tree::TreeJob>,
     chain: Mutex<Option<Shared<BoxFuture<'static, ShutdownReport>>>>,
 }
 
@@ -274,6 +287,8 @@ impl ControlState {
             retain_registry: AtomicBool::new(false),
             #[cfg(windows)]
             kill,
+            #[cfg(windows)]
+            tree: None,
             chain: Mutex::new(None),
         }
     }
@@ -378,6 +393,11 @@ impl ControlImpl for ChildControl {
 
     fn stderr_tail(&self, max_bytes: usize) -> String {
         self.state.tail.tail(max_bytes)
+    }
+
+    #[cfg(windows)]
+    fn job_members(&self) -> Option<Vec<u32>> {
+        self.state.tree.as_ref().map(crate::tree::TreeJob::members)
     }
 }
 

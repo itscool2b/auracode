@@ -31,6 +31,7 @@ pub mod registry;
 pub mod shutdown;
 pub mod spawn;
 pub mod supervisor;
+pub mod tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

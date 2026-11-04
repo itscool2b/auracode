@@ -152,6 +152,22 @@ fn run(args: &[String]) -> Result<ExitCode> {
             ready()?;
             wait_for_eof()
         }
+        // A grandchild whose parent has exited, as `Start-Process` leaves one: `orphan-parent`
+        // starts `hang`, writes its pid and exits at once.
+        "spawn-orphan" => {
+            let pidfile = path(rest, 0)?;
+            let pidfile_arg = pidfile.to_string_lossy().into_owned();
+            spawn_self(&["orphan-parent", &pidfile_arg], Placement::Inherit)?;
+            wait_for_file(&pidfile)?;
+            ready()?;
+            wait_for_eof()
+        }
+        "orphan-parent" => {
+            let pidfile = path(rest, 0)?;
+            let grandchild = spawn_self(&["hang"], Placement::Inherit)?;
+            write_pids(&pidfile, &[grandchild])?;
+            Ok(ExitCode::SUCCESS)
+        }
         "spawn-pty-child" | "spawn-job-child" => {
             let pidfile = path(rest, 0)?;
             let placement = if mode == "spawn-pty-child" {

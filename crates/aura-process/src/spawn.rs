@@ -317,7 +317,8 @@ pub(crate) async fn own_child(
         #[cfg(windows)]
         kill_rx,
     ));
-    let state = ControlState::new(
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut state = ControlState::new(
         pid,
         #[cfg(unix)]
         start_time,
@@ -334,6 +335,12 @@ pub(crate) async fn own_child(
         #[cfg(windows)]
         kill_tx,
     );
+    // A job of its own, nested in the one that ends it, lists what it starts even after their
+    // parent exits (crate::tree). Without it the parent chain still lists most of the tree.
+    #[cfg(windows)]
+    {
+        state.tree = crate::tree::TreeJob::attach(pid);
+    }
     guard.armed = false;
     Ok(ProcessControl::new(Arc::new(ChildControl::new(state))))
 }
