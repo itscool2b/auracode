@@ -149,7 +149,7 @@ export function VendorDialog({
       <p className="vendor-intro">
         {kind === "native"
           ? "Open this agent's native customization interface in a reviewed terminal."
-          : "Install or change a personal integration with the agent's own reviewed command."}
+          : "Install or change a personal integration with the agent's own reviewed command."}{" "}
         You review the exact command before it runs.
       </p>
       <form
