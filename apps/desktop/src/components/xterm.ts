@@ -1,5 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
-import { subscribeAppearance } from "../lib/appearance";
+import { subscribeAppearance, subscribeTheme } from "../lib/appearance";
 
 /** An opened xterm view in Graphite's terminal colours, fitted to its element. */
 export interface XtermView {
@@ -94,10 +94,13 @@ export function createXterm(
   }
   // Output cannot set the OS clipboard. Copying is always the user's own action.
   const clipboard = term.parser.registerOscHandler(52, () => true);
-  // This also updates detached, inactive tabs. Their buffers, selection and running PTY survive.
-  const unsubscribeAppearance = subscribeAppearance(() => {
+  // A new appearance or theme repaints every terminal, detached and inactive tabs too. Their
+  // buffers, selection and running PTY survive.
+  const repaint = () => {
     term.options.theme = terminalTheme();
-  });
+  };
+  const unsubscribeAppearance = subscribeAppearance(repaint);
+  const unsubscribeTheme = subscribeTheme(repaint);
   const fit = () => {
     const dimensions = fitAddon.proposeDimensions();
     if (!dimensions || dimensions.cols < 2 || dimensions.rows < 1) return;
@@ -108,6 +111,7 @@ export function createXterm(
     fit,
     dispose: () => {
       unsubscribeAppearance();
+      unsubscribeTheme();
       clipboard.dispose();
       term.dispose();
     },
