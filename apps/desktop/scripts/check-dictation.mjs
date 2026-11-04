@@ -49,6 +49,10 @@ export async function checkDictation(browser, url, out, engine) {
       );
       await page.getByRole("button", { name: "Start recording", exact: true }).click();
       await page.getByRole("meter", { name: "Microphone level" }).waitFor();
+      // Listening hands focus to Finish, so Enter or Space ends the recording.
+      await page.waitForFunction(
+        () => document.activeElement?.textContent?.trim() === "Finish recording",
+      );
       await audit("recording");
       await input.fill("Keep my edits");
       await input.press("Enter");
@@ -79,12 +83,44 @@ export async function checkDictation(browser, url, out, engine) {
       await input.waitFor();
       assert.equal(await input.inputValue(), "Keep my edits Add a regression test.");
 
+      // Enter on the focused Finish button finishes; the closing panel returns focus to the draft.
+      await mic.click();
+      await page.getByRole("meter", { name: "Microphone level" }).waitFor();
+      await page.waitForFunction(
+        () => document.activeElement?.textContent?.trim() === "Finish recording",
+      );
+      await page.keyboard.press("Enter");
+      await page.getByRole("progressbar", { name: "Transcription", exact: true }).waitFor();
+      await page.getByRole("button", { name: "Complete transcription", exact: true }).click();
+      await panel.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => document.activeElement === document.querySelector('[data-testid="composer-input"]'),
+      );
+
+      const retry = page.getByRole("button", { name: "Try again", exact: true });
+      const redownload = page.getByRole("button", { name: "Download model again", exact: true });
       await open("denied");
       await input.fill("Keep this draft");
       await mic.click();
       await page.getByRole("alert").waitFor();
       await audit("permission-error");
       assert.equal(await input.inputValue(), "Keep this draft");
+      // A microphone problem is not fixed by downloading 142 MiB again.
+      assert.equal(await retry.count(), 1);
+      assert.equal(await redownload.count(), 0);
+
+      await open("damaged");
+      await mic.click();
+      await page.getByRole("alert").waitFor();
+      assert.equal(await retry.count(), 1);
+      assert.equal(await redownload.count(), 1);
+
+      await open("unsupported");
+      await mic.click();
+      await page.getByRole("alert").filter({ hasText: "AVX2" }).waitFor();
+      await audit("unsupported");
+      assert.equal(await retry.count(), 0);
+      assert.equal(await redownload.count(), 0);
       assert.deepEqual(errors, []);
     } finally {
       await context.close();

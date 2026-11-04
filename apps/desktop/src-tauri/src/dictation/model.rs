@@ -1,4 +1,4 @@
-use super::{DictationEvent, DictationModel, Operation};
+use super::{DictationEvent, DictationModel, Failure, Operation};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -19,27 +19,30 @@ pub fn status(root: &Path) -> DictationModel {
             .is_ok_and(|m| m.is_file() && m.len() == u64::from(MODEL_BYTES)),
         name: "Whisper base (multilingual)".into(),
         bytes: MODEL_BYTES,
+        supported: super::audio::cpu_supported(),
     }
 }
-pub fn verify(path: &Path, operation: &Operation) -> Result<(), String> {
+pub fn verify(path: &Path, operation: &Operation) -> Result<(), Failure> {
     let mut file = std::fs::File::open(path)
-        .map_err(|_| "Download the dictation model before recording.".to_string())?;
+        .map_err(|_| Failure::model("Download the dictation model before recording."))?;
     let mut digest = Sha256::new();
     let mut bytes = 0u64;
     let mut buffer = [0u8; 65536];
     loop {
         if operation.cancelled() {
-            return Err("Dictation cancelled.".into());
+            return Err(Failure::cancelled());
         }
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "The dictation model could not be read. Download it again.".to_string())?;
+        let count = file.read(&mut buffer).map_err(|_| {
+            Failure::model("The dictation model could not be read. Download it again.")
+        })?;
         if count == 0 {
             break;
         }
         bytes += count as u64;
         if bytes > u64::from(MODEL_BYTES) {
-            return Err("The dictation model is damaged. Download it again.".into());
+            return Err(Failure::model(
+                "The dictation model is damaged. Download it again.",
+            ));
         }
         digest.update(&buffer[..count]);
     }
@@ -49,6 +52,7 @@ pub fn verify(path: &Path, operation: &Operation) -> Result<(), String> {
         u64::from(MODEL_BYTES),
         MODEL_SHA256,
     )
+    .map_err(Failure::model)
 }
 fn validate(
     bytes: u64,
@@ -64,7 +68,31 @@ fn validate(
     Ok(())
 }
 
-pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationEvent, String> {
+pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationEvent, Failure> {
+    fetch(root, operation)
+        .await
+        .map_err(|failure| match failure {
+            Fetch::Cancelled => Failure::cancelled(),
+            Fetch::Failed(message) => Failure::model(message),
+        })
+}
+
+enum Fetch {
+    Cancelled,
+    Failed(String),
+}
+impl From<String> for Fetch {
+    fn from(message: String) -> Self {
+        Fetch::Failed(message)
+    }
+}
+impl From<&str> for Fetch {
+    fn from(message: &str) -> Self {
+        Fetch::Failed(message.into())
+    }
+}
+
+async fn fetch(root: PathBuf, operation: &Operation) -> Result<DictationEvent, Fetch> {
     let path = path(&root);
     let directory = path.parent().ok_or("The model folder is unavailable.")?;
     std::fs::create_dir_all(directory).map_err(|_| {
@@ -82,7 +110,7 @@ pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationE
         .build()
         .map_err(|_| "The model downloader could not start.".to_string())?;
     let mut response = tokio::select! {
-        _ = operation.cancel.cancelled() => return Err("Download cancelled.".into()),
+        _ = operation.cancel.cancelled() => return Err(Fetch::Cancelled),
         response = client.get(MODEL_URL).send() => response.map_err(|_| "The model could not be downloaded. Check your connection and retry.".to_string())?
             .error_for_status().map_err(|_| "The model server refused the download. Try again later.".to_string())?,
     };
@@ -91,10 +119,10 @@ pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationE
     let mut last = std::time::Instant::now() - Duration::from_secs(1);
     loop {
         if operation.cancelled() {
-            return Err("Download cancelled.".into());
+            return Err(Fetch::Cancelled);
         }
         let chunk = tokio::select! {
-            _ = operation.cancel.cancelled() => return Err("Download cancelled.".into()),
+            _ = operation.cancel.cancelled() => return Err(Fetch::Cancelled),
             chunk = response.chunk() => chunk.map_err(|_| "The model download was interrupted. Retry when connected.".to_string())?,
         };
         let Some(chunk) = chunk else {
@@ -113,7 +141,7 @@ pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationE
                 received: received as u32,
                 total: MODEL_BYTES,
             }) {
-                return Err("Download cancelled.".into());
+                return Err(Fetch::Cancelled);
             }
             last = std::time::Instant::now();
         }
@@ -125,7 +153,7 @@ pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationE
         MODEL_SHA256,
     )?;
     if operation.cancelled() {
-        return Err("Download cancelled.".into());
+        return Err(Fetch::Cancelled);
     }
     temporary
         .as_file()

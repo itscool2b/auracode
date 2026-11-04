@@ -39,10 +39,61 @@ Building the native dependency adds CMake 3.15 or newer and LLVM/libclang to the
 requirements. Windows MSVC needs `cmake` on PATH and `LIBCLANG_PATH` pointing to the directory
 containing `libclang.dll`. Visual Studio's Desktop development with C++ and LLVM components provide
 the compiler and libclang. macOS needs CMake and the Xcode command line tools. These tools are
-build dependencies only. The repository's Cargo config disables build-host CPU instruction
-selection and explicitly disables AVX, AVX2, BMI2, SSE4.2, FMA, and F16C so Windows and macOS x64
-bundles do not inherit the build machine's instruction requirements.
+build dependencies only.
 Windows x64/ARM64 and universal macOS remain the release targets. Linux/WSL remain deferred.
+
+### Capture errors
+
+cpal 0.18 reports glitches and reroutes through the same stream error callback as failures. On
+Windows an early capture packet routinely carries WASAPI's data discontinuity flag, which cpal
+reports as `Xrun`. Until November 2026 any callback ended the recording, so on Windows every
+recording failed about 120 ms after it began with "The microphone disconnected or stopped
+responding" and never reached transcription. `Xrun`, `DeviceChanged` (the stream follows the new
+default device) and `RealtimeDenied` now leave the recording running. `PermissionDenied` names the
+privacy setting; every other kind ends it, since cpal ends its capture thread after them. A
+watchdog also ends a stream that delivers no audio within 5 seconds, or stops delivering for 3.
+Each failure carries a reason (`model`, `microphone`, `no_speech`, `unsupported`, `other`), and the
+panel offers "Download model again" only for model failures.
+
+Windows' own microphone usage list (CapabilityAccessManager `NonPackaged`) did not record these
+short sessions on build 26300, even successful ones, so it is no evidence either way.
+
+### Recognition
+
+The webview's `navigator.language` selects Whisper's language (`en-US` becomes `en`); a tag Whisper
+does not know falls back to its detection, which misreads short clips. whisper.cpp already drops a
+segment it judges silent (no-speech probability above 0.6 and low confidence, OpenAI's rule); the
+app no longer drops segments again on the probability alone, which discarded clear speech. Text is
+read lossily, so a token that ends inside a multi-byte character cannot fail a transcript, and
+Whisper's bracketed upper-case markers such as `[BLANK_AUDIO]` are removed. Decoding uses up to 8
+threads.
+
+### Processor instructions
+
+ggml-cpu is built with AVX, AVX2, FMA, F16C and SSE4.2 (`.cargo/config.toml`); BMI2 and host
+tuning (`GGML_NATIVE`) stay off. Without them Whisper runs scalar code. On a Ryzen 7 5800X3D the
+pinned model took 18.0 s for upstream's 11 s `jfk.wav` with the old settings, and 0.65 s with these
+and 8 threads, with identical text; a 14.6 s synthesized sentence went from 18.3 s to 0.71 s.
+Encoding less than Whisper's 30 s window (`audio_ctx`) saved a further third but misheard words,
+so it stays off.
+
+Every Mac that runs macOS 13.3 has these instructions. Windows x64 processors from before Intel's
+2013 Haswell and AMD's 2015 Excavator lack AVX2, so the app must still start on them:
+
+- ggml applies the flags to ggml-cpu only. Its objects contain no dynamic initializers
+  (`dumpbin /headers` finds no `.CRT$XCU` section in `ggml-cpu.lib`); the startup initializers are
+  in whisper and ggml-base, which are built without them.
+- 112 functions, all MSVC standard library helpers, are defined both in ggml-cpu and in the other
+  libraries. A `/MAP` of the linked app showed that each of the 27 kept in the image came from a
+  non-AVX object (25 from `whisper.obj`, 2 from `ggml.c.obj`); the other 85 were discarded. So no
+  code that runs before dictation can call an AVX2 copy.
+- `dictation::audio::cpu_supported()` checks AVX, AVX2, FMA and F16C before any Whisper call.
+  `dictation_model` reports the result and the panel explains, without retry or download offers.
+
+Repeat the map check after updating whisper-rs-sys or the MSVC toolchain. whisper-rs-sys forwards
+`GGML_*` and `CMAKE_*` variables to CMake but does not rebuild when they change, so the Cargo
+config also sets `BINDGEN_EXTRA_CLANG_ARGS` to a revision marker, which it does track: bump it
+with any whisper build setting.
 
 Windows ARM64's release matrix selects Ninja and `.github/cmake/windows-arm64-clang.cmake` only
 after exporting host bindings. whisper.cpp 1.8.3 rejects ARM with MSVC's `cl.exe`, so the toolchain
@@ -112,6 +163,15 @@ this small test reader is not a general WAV decoder. The model is stored below t
 at `models/dictation/ggml-base.bin`, separate from the installed app's model. The fixture verifies
 an expected English phrase and cancels a second inference after 250 ms. It does not measure a
 cancellation latency bound, multilingual accuracy, microphone capture, or two-minute recordings.
+
+The November 2026 fix was reproduced and checked natively on Windows 11 (build 26300, Ryzen 7
+5800X3D). The installed release build, run with a scratch `AURACODE_DATA_DIR` and driven over
+CDP, failed every recording at 438 ms with the disconnect message. The fixed debug app recorded 4 s
+from the real microphone (level peak 0.17), transcribed in 0.65 s and completed with the spoken
+text. The dictation unit tests, both opt-in model tests (`offline_model_fixture`,
+`offline_model_timing`, which times every 16 kHz WAV in the fixture folder) and
+`check-dictation.mjs` passed. The browser check now also covers the Finish button taking focus
+(Enter finishes), focus returning to the draft, and the recovery offered per failure reason.
 
 The Windows runtime fix was checked with a fresh Whisper rebuild, all eight targeted dictation
 unit tests, and the optional pinned-model fixture, which passed in 40.6 seconds on this host.

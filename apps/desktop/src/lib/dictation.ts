@@ -10,13 +10,18 @@ export interface DictationApi {
   stop(id: string): Promise<void>;
   cancel(id: string): Promise<void>;
 }
+/** The person's language tag, which Whisper hears in place of guessing from a short clip. */
+export function systemLanguage(): string | null {
+  return typeof navigator === "undefined" ? null : navigator.language || null;
+}
+
 export const dictationApi: DictationApi = {
   model: () => settle(commands.dictationModel()),
   download: async (id, onmessage) => {
     await settle(commands.dictationDownload(id, new Channel(onmessage)));
   },
   start: async (id, onmessage) => {
-    await settle(commands.dictationStart(id, new Channel(onmessage)));
+    await settle(commands.dictationStart(id, systemLanguage(), new Channel(onmessage)));
   },
   stop: async (id) => {
     await commands.dictationStop(id);
@@ -26,10 +31,24 @@ export const dictationApi: DictationApi = {
   },
 };
 
+/** What Rust reports for a processor without AVX2; the panel says it before any command runs. */
+export const UNSUPPORTED_MESSAGE =
+  "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of auracode works as usual.";
+
 export type DictationState =
   | { state: "idle" | "checking" | "needs_model" | "ready" }
   | { state: "cancelling"; message?: string }
   | DictationEvent;
+
+/** A new model download helps only when the model itself failed. */
+export function offersModelDownload(value: DictationState): boolean {
+  return value.state === "failed" && value.reason === "model";
+}
+
+/** Retrying cannot help a processor that lacks the engine's instructions. */
+export function offersRetry(value: DictationState): boolean {
+  return value.state === "failed" && value.reason !== "unsupported";
+}
 export function dictationBusy(value: DictationState): boolean {
   return [
     "checking",
@@ -72,11 +91,13 @@ export class DictationController {
     try {
       const model = await this.api.model();
       if (this.#disposed || generation !== this.#generation) return;
-      if (model.installed) await this.start();
+      if (model.supported === false)
+        this.#set({ state: "failed", message: UNSUPPORTED_MESSAGE, reason: "unsupported" });
+      else if (model.installed) await this.start();
       else this.#set({ state: "needs_model" });
     } catch (error) {
       if (generation === this.#generation)
-        this.#set({ state: "failed", message: errorMessage(error) });
+        this.#set({ state: "failed", message: errorMessage(error), reason: "other" });
     }
   }
   async #run(kind: "download" | "start") {
@@ -121,7 +142,7 @@ export class DictationController {
       this.#set(
         this.#cancelled === id
           ? { state: "idle" }
-          : { state: "failed", message: errorMessage(error) },
+          : { state: "failed", message: errorMessage(error), reason: "other" },
       );
     }
   }
@@ -138,7 +159,7 @@ export class DictationController {
       await this.api.stop(id);
     } catch (error) {
       if (this.#active !== id) return;
-      this.#set({ state: "failed", message: errorMessage(error) });
+      this.#set({ state: "failed", message: errorMessage(error), reason: "other" });
       await this.cancel();
     }
   }

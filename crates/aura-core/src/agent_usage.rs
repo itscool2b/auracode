@@ -104,7 +104,7 @@ impl UsageBook {
                 observed_at: entry.observed_at,
             })
             .collect();
-        accounts.sort_by(|a, b| b.observed_at.cmp(&a.observed_at));
+        accounts.sort_by_key(|account| std::cmp::Reverse(account.observed_at));
         AgentUsage {
             agent_id: agent_id.to_owned(),
             accounts,

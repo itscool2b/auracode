@@ -14,7 +14,12 @@ function Preview() {
     let installed = scenario !== "download";
     let event: (value: DictationEvent) => void = () => {};
     const api: DictationApi = {
-      model: async () => ({ installed, name: "Whisper base", bytes: 147951465 }),
+      model: async () => ({
+        installed,
+        name: "Whisper base",
+        bytes: 147951465,
+        supported: scenario !== "unsupported",
+      }),
       download: async (_id, receive) => {
         event = receive;
         receive({ state: "downloading", received: 73975732, total: 147951465 });
@@ -24,7 +29,15 @@ function Preview() {
         if (scenario === "denied")
           receive({
             state: "failed",
-            message: "Allow microphone access in system privacy settings, then try again.",
+            reason: "microphone",
+            message:
+              "Microphone access is turned off for desktop apps. Allow it in your system privacy settings, then try again.",
+          });
+        else if (scenario === "damaged")
+          receive({
+            state: "failed",
+            reason: "model",
+            message: "The dictation model did not pass its integrity check. Download it again.",
           });
         else receive({ state: "recording", seconds: 3, level: 0.4, limit_seconds: 120 });
       },

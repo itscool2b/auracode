@@ -5,12 +5,14 @@ import {
   DictationController,
   dictationBusy,
   insertDictation,
+  offersModelDownload,
+  offersRetry,
 } from "./dictation";
 
-function fixture(installed = true) {
+function fixture(installed = true, supported = true) {
   let receive: (event: DictationEvent) => void = () => {};
   const api: DictationApi = {
-    model: vi.fn(async () => ({ installed, name: "Whisper base", bytes: 147951465 })),
+    model: vi.fn(async () => ({ installed, name: "Whisper base", bytes: 147951465, supported })),
     start: vi.fn(async (_id, event) => {
       receive = event;
     }),
@@ -109,10 +111,31 @@ describe("local dictation", () => {
   it("shows backend failures and allows retry", async () => {
     const f = fixture();
     await f.controller.open();
-    f.event({ state: "failed", message: "Microphone denied" });
-    expect(f.controller.getSnapshot()).toEqual({ state: "failed", message: "Microphone denied" });
+    f.event({ state: "failed", message: "Microphone denied", reason: "microphone" });
+    expect(f.controller.getSnapshot()).toEqual({
+      state: "failed",
+      message: "Microphone denied",
+      reason: "microphone",
+    });
     await f.controller.open();
     expect(f.api.start).toHaveBeenCalledTimes(2);
+  });
+  it("offers a new model download only when the model failed", () => {
+    const failed = (reason: "model" | "microphone" | "no_speech" | "unsupported" | "other") =>
+      ({ state: "failed", message: "x", reason }) as const;
+    expect(offersModelDownload(failed("model"))).toBe(true);
+    for (const reason of ["microphone", "no_speech", "unsupported", "other"] as const)
+      expect(offersModelDownload(failed(reason))).toBe(false);
+    expect(offersRetry(failed("microphone"))).toBe(true);
+    expect(offersRetry(failed("unsupported"))).toBe(false);
+    expect(offersRetry({ state: "idle" })).toBe(false);
+  });
+  it("never starts on a processor the engine cannot run on", async () => {
+    const f = fixture(true, false);
+    await f.controller.open();
+    expect(f.controller.getSnapshot()).toMatchObject({ state: "failed", reason: "unsupported" });
+    expect(f.api.start).not.toHaveBeenCalled();
+    expect(f.api.download).not.toHaveBeenCalled();
   });
   it("does not start a recording after dismissing a pending model check", async () => {
     const f = fixture();
@@ -123,7 +146,7 @@ describe("local dictation", () => {
       });
     const opening = f.controller.open();
     await f.controller.cancel();
-    ready({ installed: true, name: "base", bytes: 1 });
+    ready({ installed: true, name: "base", bytes: 1, supported: true });
     await opening;
     expect(f.api.start).not.toHaveBeenCalled();
   });
