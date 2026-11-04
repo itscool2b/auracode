@@ -8,8 +8,9 @@ import type {
   GeneralPreferences,
   SetupAction,
   SetupSnapshot,
+  ThemePreference,
 } from "../../bindings";
-import { applySetupAppearance } from "../../lib/appearance";
+import { applySetupAppearance, getThemePreference, setThemePreference } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
 import { errorMessage } from "../../lib/errors";
 import {
@@ -19,6 +20,7 @@ import {
   setMotionPreference,
 } from "../../lib/setup";
 import { Row, Switch } from "./SettingsRow";
+import { ThemeGallery } from "./ThemeGallery";
 
 /** One line under Autonomy for the level chosen. */
 export function autonomyDetail(autonomy: Autonomy): string {
@@ -103,6 +105,9 @@ export function GeneralPanel({
   const [models, setModels] = useState<readonly ConfigChoice[]>([]);
   const mounted = useRef(false);
   const saving = useRef(false);
+  // The theme chosen but not saved yet, and the latest choice made while another save ran.
+  const [theme, setTheme] = useState<ThemePreference | null>(null);
+  const queuedTheme = useRef<ThemePreference | null>(null);
   useEffect(() => {
     void reload;
     mounted.current = true;
@@ -190,6 +195,27 @@ export function GeneralPanel({
       if (mounted.current) setBusy(false);
     }
   };
+  // A theme paints the moment it is chosen and keyboard focus stays on it: a save in flight never
+  // disables the gallery, so arrow keys can run through the themes. The latest choice saves once
+  // that save ends; one that fails returns to the saved theme beside the error.
+  const chooseTheme = (value: ThemePreference) => {
+    setTheme(value);
+    setThemePreference(value);
+    if (saving.current) queuedTheme.current = value;
+    else void change({ type: "theme", value });
+  };
+  useEffect(() => {
+    if (busy || !saved || theme === null) return;
+    const queued = queuedTheme.current;
+    queuedTheme.current = null;
+    if (queued !== null && queued !== saved.preferences.theme) {
+      setThemePreference(queued);
+      void change({ type: "theme", value: queued });
+      return;
+    }
+    if (theme !== saved.preferences.theme) setThemePreference(saved.preferences.theme);
+    setTheme(null);
+  });
   const disabled = !saved || busy;
   const agentChoices = defaultAgentChoices(agents, agentId);
   const agentName = agentChoices.find((agent) => agent.id === agentId)?.name ?? agentId ?? "";
@@ -403,6 +429,16 @@ export function GeneralPanel({
                 </label>
               ))}
             </fieldset>
+          </Row>
+          <Row
+            title="Theme"
+            detail="Aura is auracode's own. Each agent's theme carries its colours through the whole app, in light and dark."
+          >
+            <ThemeGallery
+              value={theme ?? saved?.preferences.theme ?? getThemePreference()}
+              disabled={!saved}
+              onChange={chooseTheme}
+            />
           </Row>
           <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
             <fieldset className="settings-segmented settings-control" disabled={disabled}>

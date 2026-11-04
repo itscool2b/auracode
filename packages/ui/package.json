@@ -15,6 +15,7 @@
     "./graphite": "./src/graphite/index.ts",
     "./graphite.css": "./src/graphite/graphite.css",
     "./graphite-tokens.css": "./src/graphite/tokens.css",
+    "./themes.css": "./src/graphite/themes.css",
     "./orbit": "./src/orbit/index.ts",
     "./orbit.css": "./src/orbit/orbit.css",
     "./orbit-tokens.css": "./src/orbit/tokens.css"

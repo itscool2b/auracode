@@ -5,7 +5,7 @@ import type { AgentEntry, ProjectSummary, SetupSnapshot } from "../bindings";
 import { ProjectDialog } from "../components/chat/ProjectDialog";
 import { AgentsScreen } from "../components/setup/AgentsScreen";
 import { Onboarding } from "../components/setup/Onboarding";
-import { getAppearancePreference } from "../lib/appearance";
+import { getAppearancePreference, getThemePreference } from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
@@ -204,6 +204,7 @@ const initial: SetupSnapshot = {
     step: cloneMode ? "project" : "welcome",
     motion: "full",
     appearance: getAppearancePreference(),
+    theme: getThemePreference(),
     completed: false,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },
@@ -231,6 +232,7 @@ const api: SetupApi = {
     if (action.type === "visit") next.preferences.step = action.step;
     if (action.type === "motion") next.preferences.motion = action.value;
     if (action.type === "appearance") next.preferences.appearance = action.value;
+    if (action.type === "theme") next.preferences.theme = action.value;
     if (action.type === "finish") next.preferences.completed = true;
     if (action.type === "project") next.preferences.first_project_id = action.project_id;
     if (action.type === "restart") {

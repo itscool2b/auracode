@@ -8,6 +8,8 @@
  * from its edges. With no material the same layers sit on the opaque --g-window colour.
  */
 @import "@auracode/ui/graphite.css";
+/* Desktop themes, one per supported agent: palettes over these tokens (themes.ts). */
+@import "@auracode/ui/themes.css";
 @import "@auracode/ui/desktop-fonts.css";
 
 :root {
