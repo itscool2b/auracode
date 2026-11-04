@@ -1435,6 +1435,29 @@ impl SessionManager {
         self.shared().lost_writes.load(Ordering::Acquire)
     }
 
+    /// Every chat's agent processes that still run, for the Processes page: chat id, then its
+    /// processes in the order its drivers started them. Chats without a running process are left
+    /// out. `aura_process::tree` lists what each one started.
+    pub fn agent_processes(&self) -> Vec<(String, Vec<aura_process::ProcessControl>)> {
+        let books: Vec<(String, Arc<ProcessBook>)> = lock(&self.inner.actors)
+            .iter()
+            .map(|(chat_id, entry)| (chat_id.clone(), Arc::clone(&entry.book)))
+            .collect();
+        let mut chats: Vec<(String, Vec<aura_process::ProcessControl>)> = books
+            .into_iter()
+            .filter_map(|(chat_id, book)| {
+                let running: Vec<_> = book
+                    .all()
+                    .into_iter()
+                    .filter(|control| control.try_exited().is_none())
+                    .collect();
+                (!running.is_empty()).then_some((chat_id, running))
+            })
+            .collect();
+        chats.sort_by(|a, b| a.0.cmp(&b.0));
+        chats
+    }
+
     /// `kill_tree()` on every recorded process of every chat; synchronous, callable from any
     /// thread, never panics.
     pub fn kill_all_now(&self) {
