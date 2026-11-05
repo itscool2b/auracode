@@ -30,6 +30,7 @@ import type { StreamStore } from "./lib/session";
 import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
+import { subscribeNoticeSounds } from "./lib/sounds";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
 import type { WorkspaceStore } from "./lib/workspace";
@@ -166,6 +167,8 @@ export function App({
       }),
     [],
   );
+  // Settings' Sounds: the native shell sends a notice only while they are on.
+  useEffect(() => subscribeNoticeSounds(), []);
   const [stressConfig, setStressConfig] = useState<StressConfig>(DEFAULT_STRESS);
   const [stressAutoStart, setStressAutoStart] = useState(false);
   const [brandId, setBrandId] = useState<AgentBrandId>("claude-code");

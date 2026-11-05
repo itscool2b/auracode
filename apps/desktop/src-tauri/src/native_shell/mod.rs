@@ -22,6 +22,8 @@ const TRAY: &str = "auracode-main";
 const OPEN: &str = "auracode-open";
 const QUIT: &str = "auracode-quit";
 pub const OPEN_CHAT_EVENT: &str = "auracode-open-chat";
+/// A chat finished, failed or needs the person, for Settings' Sounds; its payload names which.
+pub const NOTICE_EVENT: &str = "auracode-chat-notice";
 
 pub struct NativeShell {
     activity: Mutex<Activity>,
@@ -41,6 +43,7 @@ pub struct NativeShell {
 /// Settings' General switches as the shell reads them, and the latest work state.
 struct Switches {
     notifications: AtomicBool,
+    sounds: AtomicBool,
     keep_awake: AtomicBool,
     keep_in_tray: AtomicBool,
     working: AtomicBool,
@@ -51,6 +54,7 @@ impl Default for Switches {
         let general = GeneralPreferences::default();
         Self {
             notifications: AtomicBool::new(general.notifications),
+            sounds: AtomicBool::new(general.sounds),
             keep_awake: AtomicBool::new(general.keep_awake),
             keep_in_tray: AtomicBool::new(general.close_to_tray),
             working: AtomicBool::new(false),
@@ -70,6 +74,7 @@ impl NativeShell {
         switches
             .notifications
             .store(general.notifications, Ordering::Release);
+        switches.sounds.store(general.sounds, Ordering::Release);
         switches
             .keep_in_tray
             .store(general.close_to_tray, Ordering::Release);
@@ -458,6 +463,18 @@ fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Not
     {
         return;
     }
+    let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
+        return;
+    };
+    let current = || {
+        shell.profile_epoch.load(Ordering::Acquire) == epoch
+            && lock(&shell.activity).notice_is_current(chat, notice)
+    };
+    // The sound plays in the window, whether or not it is in front; the notification only
+    // for a chat the person is not looking at.
+    if shell.switches.sounds.load(Ordering::Acquire) && current() {
+        let _ = app.emit(NOTICE_EVENT, notice.sound());
+    }
     let foreground = app
         .get_webview_window(crate::window::MAIN_WINDOW)
         .is_some_and(|window| {
@@ -468,15 +485,7 @@ fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Not
     if foreground {
         return;
     }
-    let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
-        return;
-    };
-    if !shell.notifications_enabled() {
-        return;
-    }
-    if shell.profile_epoch.load(Ordering::Acquire) != epoch
-        || !lock(&shell.activity).notice_is_current(chat, notice)
-    {
+    if !shell.notifications_enabled() || !current() {
         return;
     }
     let Some(profile) = app.state::<AppState>().app_info().profile else {

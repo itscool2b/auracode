@@ -73,6 +73,8 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       return { ...preferences, general: { ...general, automatic_checkpoints: action.enabled } };
     case "notifications":
       return { ...preferences, general: { ...general, notifications: action.enabled } };
+    case "sounds":
+      return { ...preferences, general: { ...general, sounds: action.enabled } };
     case "keep_awake":
       return { ...preferences, general: { ...general, keep_awake: action.enabled } };
     case "close_to_tray":

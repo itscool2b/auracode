@@ -26,6 +26,15 @@ impl Notice {
             Self::Failed => "An agent could not continue",
         }
     }
+
+    /// The sound the window plays for this notice.
+    pub fn sound(self) -> &'static str {
+        match self {
+            Self::Attention => "attention",
+            Self::Finished => "finished",
+            Self::Failed => "failed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

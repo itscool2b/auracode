@@ -198,6 +198,7 @@ try {
         default_autonomy: "ask",
         automatic_checkpoints: false,
         notifications: false,
+        sounds: false,
         keep_awake: false,
         close_to_tray: false,
         config_sync_paused: [],
@@ -205,6 +206,9 @@ try {
         agent_memory_writes: true,
         keep_steps_open: false,
       });
+      // Sounds are off until turned on; turning them on plays one and saves the choice.
+      await page.getByRole("switch", { name: "Sounds" }).check();
+      await page.waitForFunction(() => window.settingsFixture.general().sounds);
       // Another agent clears the model, which belonged to Codex; it has not listed its own.
       await page.getByLabel("Default agent").selectOption("claude");
       await page.getByText("Claude Code lists its models once one of its chats starts.").waitFor();
