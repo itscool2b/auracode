@@ -99,13 +99,17 @@ and a hands-on walkthrough before merging.
       since Automatic checkpoints are off by default; Pi steering. Native fork from an earlier
       answer waits: Claude resumes at a transcript entry id that auracode does not store per
       turn yet.
-    - [x] Second part (this pull request): MCP input forms for Claude and Codex, which before
+    - [x] Second part (#82, merged 2026-11-05): MCP input forms for Claude and Codex, which before
       were a silent cancel (Claude) or a cancel with a notice (Codex): forms from the MCP form
       schema and browser steps, checked by one rule in the session and both drivers. And what
       a session loaded, in the Session tab: Claude reports MCP servers with their state, skills,
       plugins, subagents and its tool count; Codex its MCP servers as they start; Pi its
       skills. No agent is asked anything new for it.
-    - [ ] Third part: terminals and file access for the ACP agents.
+    - [x] Third part (this pull request): ACP agents' terminals, which showed "terminal output
+      is not available": auracode advertises Zed's display-only terminals, so an agent such as
+      codex-acp streams a command's output to it, shown live and with its exit code. Client file
+      access and client-run terminals stay off on purpose: the agents run commands and use
+      files themselves, and auracode has no unsaved buffers to offer, the reason ACP has them.
   - [ ] C, D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page

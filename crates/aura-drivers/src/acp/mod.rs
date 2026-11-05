@@ -22,6 +22,7 @@ pub mod map;
 pub mod options;
 pub mod permissions;
 pub mod requests;
+pub mod terminals;
 mod vendor_updates;
 pub mod wire;
 
@@ -964,6 +965,7 @@ impl Session {
         consider(self.eof_grace_deadline());
         consider(self.exit_wait_deadline);
         consider(self.mode_retry.as_ref().map(|(at, _)| *at));
+        consider(self.mapper.terminal_due());
         next
     }
 
@@ -1083,6 +1085,10 @@ impl Session {
 
     fn on_deadline(&mut self) {
         let now = Instant::now();
+        // A running command's held output, due to show.
+        for event in self.mapper.flush_terminals(now) {
+            self.push(event);
+        }
         let due: Vec<i64> = self
             .pending
             .iter()

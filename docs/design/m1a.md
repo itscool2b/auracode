@@ -1348,7 +1348,7 @@ logged and dropped. Ids from the agent are echoed exactly as received. We never 
 initialize        {"protocolVersion":1,
                    "clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,
                                          "session":{"notices":{},"configOptions":{"boolean":{}}},
-                                         "auth":{"terminal":true}},
+                                         "auth":{"terminal":true},"_meta":{"terminal_output":true}},
                    "clientInfo":{"name":"auracode","title":"auracode","version":"<workspace version>"}}
 session/new       {"cwd":"<agent_folder>","mcpServers":[]}
 session/resume    {"sessionId":"<id>","cwd":"<agent_folder>","mcpServers":[]}
@@ -1480,7 +1480,7 @@ below emits `DriverEvent::Event` tagged per rule 8 unless it names another `Driv
 | `tool_call_update` | `ToolUpdate` with only the present fields (`name` -> `tool_name`); `content: Some` exactly when present (replace) | unknown id -> first a synthesized `ToolCall` (title from the update or "Tool", kind `other`, status `pending`); `rawOutput` dropped |
 | tool content `{"type":"content","content":block}` | `ToolContent::Text { text }` | content to text |
 | tool content `{"type":"diff",path,oldText?,newText}` | `ToolContent::Diff { path, old_text, new_text }` | `oldText` absent = new file |
-| tool content `{"type":"terminal",terminalId}` | `ToolContent::Text { "[terminal output is not available in auracode]" }` | we advertise `terminal: false` |
+| tool content `{"type":"terminal",terminalId}` | `ToolContent::Terminal { output, exit_code }` of that display terminal | since 2026-11-05: a display-only terminal (Zed's extension, which codex-acp speaks once `clientCapabilities._meta.terminal_output` is true). The agent runs the command and streams `_meta.terminal_output {terminal_id, data}` on the call's updates, then `_meta.terminal_exit {terminal_id, exit_code, signal}`; `_meta.terminal_info` names it. A running command shows its last 3,000 bytes at most every 200 ms, so live updates never spill a blob; its exit shows the last 256 KiB at once, saying how much came before, which the session stores whole. Escape sequences are dropped and a CR rewrites its line (`acp/terminals.rs`). Client-run terminals stay off (`terminal: false`), as do client file reads and writes: the agents run commands and use files themselves, and aura has no unsaved buffers to offer, the reason ACP has them |
 | tool content, other `type` | dropped, logged | |
 | `plan` `{entries:[{content,priority,status}]}` | `PlanUpdated { entries }` | full replacement; unknown priority -> `None`, unknown status -> `pending` |
 | `available_commands_update` | `DriverEvent::Commands` | name (128 chars), description (300), `input.hint` (200) as `input_hint`; de-duplicated by name; at most 1,000; debounced 250 ms |

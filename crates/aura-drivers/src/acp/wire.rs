@@ -11,9 +11,6 @@ use aura_protocol::{
 };
 use serde_json::{Map, Value};
 
-/// The text a terminal tool content becomes: auracode advertises `terminal: false`.
-pub const TERMINAL_PLACEHOLDER: &str = "[terminal output is not available in auracode]";
-
 /// The string at `key`, when it is one.
 pub fn str_at<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
@@ -477,18 +474,38 @@ pub struct ToolFields {
     pub raw_input: Option<Value>,
     /// Content entries of a type auracode does not show, dropped.
     pub dropped_content: usize,
+    /// The content entries that are display terminals: their position and terminal id.
+    pub terminals: Vec<(usize, String)>,
+    /// The update's terminal `_meta` (terminals.rs).
+    pub terminal_meta: Vec<super::terminals::TerminalMeta>,
 }
 
 impl ToolFields {
     pub fn parse(value: &Value) -> Option<ToolFields> {
         let tool_call_id = string_at(value, "toolCallId")?;
         let mut dropped_content = 0;
+        let mut terminals = Vec::new();
         let content = value
             .get("content")
             .and_then(Value::as_array)
             .map(|entries| {
                 let mut content = Vec::with_capacity(entries.len());
                 for entry in entries {
+                    // A display terminal: its output arrives on later updates' `_meta`.
+                    if str_at(entry, "type") == Some("terminal") {
+                        match str_at(entry, "terminalId").filter(|id| !id.is_empty()) {
+                            Some(id) => {
+                                terminals.push((content.len(), id.to_owned()));
+                                content.push(ToolContent::Terminal {
+                                    output: String::new(),
+                                    exit_code: None,
+                                    truncated: None,
+                                });
+                            }
+                            None => dropped_content += 1,
+                        }
+                        continue;
+                    }
                     match tool_content(entry) {
                         Some(item) => content.push(item),
                         None => dropped_content += 1,
@@ -512,6 +529,8 @@ impl ToolFields {
                 .filter(|input| !input.is_null())
                 .cloned(),
             dropped_content,
+            terminals,
+            terminal_meta: super::terminals::meta(value),
         })
     }
 }
@@ -527,10 +546,6 @@ fn tool_content(entry: &Value) -> Option<ToolContent> {
             path: string_at(entry, "path")?,
             old_text: string_at(entry, "oldText"),
             new_text: string_at(entry, "newText")?,
-            truncated: None,
-        }),
-        "terminal" => Some(ToolContent::Text {
-            text: TERMINAL_PLACEHOLDER.into(),
             truncated: None,
         }),
         _ => None,
@@ -892,9 +907,9 @@ mod tests {
             &content[1],
             ToolContent::Diff { old_text: None, .. }
         ));
-        assert!(
-            matches!(&content[3], ToolContent::Text { text, .. } if text == TERMINAL_PLACEHOLDER)
-        );
+        // A display terminal: its output comes on later updates (terminals.rs).
+        assert!(matches!(&content[3], ToolContent::Terminal { output, .. } if output.is_empty()));
+        assert_eq!(fields.terminals, [(3, "term-1".to_owned())]);
         assert_eq!(
             fields.locations.expect("locations"),
             [

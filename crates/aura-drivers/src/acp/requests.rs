@@ -37,6 +37,8 @@ pub fn initialize(version: &str) -> Value {
             "terminal": false,
             "session": {"notices": {}, "configOptions": {"boolean": {}}},
             "auth": {"terminal": true},
+            // Display-only terminals (terminals.rs): the agent runs a command and streams its output.
+            "_meta": {"terminal_output": true},
         },
         "clientInfo": {"name": "auracode", "title": "auracode", "version": version},
     })
@@ -108,7 +110,7 @@ mod tests {
     fn requests_have_the_spec_shape_in_order() {
         assert_eq!(
             initialize("0.1.0").to_string(),
-            r#"{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"session":{"notices":{},"configOptions":{"boolean":{}}},"auth":{"terminal":true}},"clientInfo":{"name":"auracode","title":"auracode","version":"0.1.0"}}"#
+            r#"{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"session":{"notices":{},"configOptions":{"boolean":{}}},"auth":{"terminal":true},"_meta":{"terminal_output":true}},"clientInfo":{"name":"auracode","title":"auracode","version":"0.1.0"}}"#
         );
         assert_eq!(
             new_session("/w").to_string(),

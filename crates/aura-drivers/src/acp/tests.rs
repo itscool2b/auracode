@@ -17,7 +17,7 @@ use aura_process::{
 use aura_protocol::session::{ConfigKind, ConfigValue};
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, PermissionOptionKind,
-    PermissionRequest, PromptPart, StopReason, TokenUsage, ToolKind, UsageScope,
+    PermissionRequest, PromptPart, StopReason, TokenUsage, ToolContent, ToolKind, UsageScope,
 };
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
@@ -3467,4 +3467,83 @@ async fn the_log_has_the_start_note_after_the_spawn_note_and_every_command_in_or
         ["set_autonomy", "prompt", "interrupt", "shutdown"]
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+// ---- display terminals -------------------------------------------------------------------------
+
+/// codex-acp's display terminals: the command's output streams on the tool call's updates and
+/// shows as its terminal (a held chunk on the next timer tick), then its exit code and everything.
+#[tokio::test(start_paused = true)]
+async fn an_agents_display_terminal_streams_its_output_and_exit() {
+    let terminal_of = |event: &DriverEvent| match event {
+        DriverEvent::Event {
+            event: AuraEvent::ToolUpdate(update),
+            ..
+        } => update.content.as_ref().and_then(|content| {
+            content.iter().find_map(|entry| match entry {
+                ToolContent::Terminal {
+                    output, exit_code, ..
+                } => Some((output.clone(), *exit_code)),
+                _ => None,
+            })
+        }),
+        _ => None,
+    };
+    let mut harness = ready_generic().await;
+    harness.prompt("T", "run the tests");
+    let (prompt, _) = harness.request("session/prompt").await;
+    harness.update(
+        json!({"sessionUpdate": "tool_call", "toolCallId": "exec-1", "title": "cargo test",
+        "kind": "execute", "status": "in_progress",
+        "content": [{"type": "terminal", "terminalId": "exec-1"}],
+        "_meta": {"terminal_info": {"terminal_id": "exec-1", "cwd": "/w"}}}),
+    );
+    let output = |data: &str| {
+        json!({"sessionUpdate": "tool_call_update", "toolCallId": "exec-1",
+        "_meta": {"terminal_output": {"terminal_id": "exec-1", "data": data}}})
+    };
+    harness.update(output("\u{1b}[32mrunning\u{1b}[0m 2 tests\r\n"));
+    let first = harness
+        .events_until(|event| terminal_of(event).is_some())
+        .await;
+    assert_eq!(
+        terminal_of(first.last().unwrap()),
+        Some(("running 2 tests\n".to_owned(), None))
+    );
+    // Within the throttle window the next chunk is held, then shows on the timer.
+    harness.update(output("test a ... ok\n"));
+    let held = harness
+        .events_until(|event| terminal_of(event).is_some())
+        .await;
+    assert_eq!(
+        terminal_of(held.last().unwrap()),
+        Some(("running 2 tests\ntest a ... ok\n".to_owned(), None))
+    );
+    harness.update(
+        json!({"sessionUpdate": "tool_call_update", "toolCallId": "exec-1",
+        "status": "completed",
+        "_meta": {"terminal_exit": {"terminal_id": "exec-1", "exit_code": 0, "signal": null}}}),
+    );
+    let end = harness
+        .events_until(|event| terminal_of(event).is_some())
+        .await;
+    assert_eq!(
+        terminal_of(end.last().unwrap()),
+        Some(("running 2 tests\ntest a ... ok\n".to_owned(), Some(0)))
+    );
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    harness.events_until(is_turn_ended).await;
+}
+
+/// The client says it shows display terminals: codex-acp streams output only to clients that do.
+#[tokio::test(start_paused = true)]
+async fn initialize_advertises_display_terminal_output() {
+    let mut harness = Harness::start(setup("generic")).await;
+    let (_, params) = harness.request("initialize").await;
+    assert_eq!(
+        params["clientCapabilities"]["_meta"]["terminal_output"],
+        json!(true)
+    );
+    // It still runs no command for the agent.
+    assert_eq!(params["clientCapabilities"]["terminal"], json!(false));
 }

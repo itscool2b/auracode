@@ -16,7 +16,9 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use aura_protocol::{AuraEvent, SlashCommand, ToolCall, ToolKind, ToolStatus, ToolUpdate};
+use aura_protocol::{
+    AuraEvent, SlashCommand, ToolCall, ToolContent, ToolKind, ToolStatus, ToolUpdate,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::time::Instant;
@@ -114,6 +116,8 @@ pub struct Mapper {
     permission_only: HashSet<String>,
     message: Option<Open>,
     thought: Option<Open>,
+    /// Display terminals: commands the agent runs and streams to auracode (terminals.rs).
+    terminals: super::terminals::Terminals,
 }
 
 impl Mapper {
@@ -126,6 +130,7 @@ impl Mapper {
             permission_only: HashSet::new(),
             message: None,
             thought: None,
+            terminals: super::terminals::Terminals::default(),
         }
     }
 
@@ -195,7 +200,7 @@ impl Mapper {
             }
             Update::ToolCall(fields) => {
                 events.extend(self.close_open(now));
-                events.push(self.tool_call(fields));
+                events.push(self.tool_call(fields, now));
             }
             Update::ToolCallUpdate(fields) => {
                 events.extend(self.close_open(now));
@@ -209,7 +214,7 @@ impl Mapper {
                     // Output for a tool the agent named only in a permission request is a block
                     // after all (A3), and later updates land on it.
                     self.permission_only.remove(&fields.tool_call_id);
-                    events.extend(self.tool_call_update(fields));
+                    events.extend(self.tool_call_update(fields, now));
                 }
             }
             Update::Plan(entries) => {
@@ -308,8 +313,9 @@ impl Mapper {
     }
 
     /// `tool_call`: a new block, or an update with every field for an id already seen.
-    fn tool_call(&mut self, fields: ToolFields) -> DriverEvent {
+    fn tool_call(&mut self, mut fields: ToolFields, now: Instant) -> DriverEvent {
         self.permission_only.remove(&fields.tool_call_id);
+        let content = self.terminal_content(&mut fields, now).unwrap_or_default();
         let kind = fields.kind.unwrap_or(ToolKind::Other);
         let title = fields
             .title
@@ -318,7 +324,6 @@ impl Mapper {
             .or_else(|| fields.name.clone().filter(|name| !name.is_empty()))
             .unwrap_or_else(|| UNNAMED_TOOL.to_owned());
         let status = fields.status.unwrap_or(ToolStatus::Pending);
-        let content = fields.content.unwrap_or_default();
         let locations = fields.locations.unwrap_or_default();
         if let Some(tool) = self.tools.get_mut(&fields.tool_call_id) {
             tool.kind = kind;
@@ -359,8 +364,9 @@ impl Mapper {
     }
 
     /// `tool_call_update`: only the present fields; an unknown id first gets a synthesized call.
-    fn tool_call_update(&mut self, fields: ToolFields) -> Vec<DriverEvent> {
+    fn tool_call_update(&mut self, mut fields: ToolFields, now: Instant) -> Vec<DriverEvent> {
         let mut events = Vec::new();
+        fields.content = self.terminal_content(&mut fields, now);
         let minted = match self.tools.get_mut(&fields.tool_call_id) {
             Some(tool) => {
                 if let Some(kind) = fields.kind {
@@ -412,6 +418,51 @@ impl Mapper {
             truncated: None,
         })));
         events
+    }
+
+    /// The tool's content with its display terminals' output, when it has content to show: what
+    /// the update brought, or a terminal's output that is due (terminals.rs).
+    fn terminal_content(
+        &mut self,
+        fields: &mut ToolFields,
+        now: Instant,
+    ) -> Option<Vec<ToolContent>> {
+        let tool = fields.tool_call_id.clone();
+        let content = fields
+            .content
+            .take()
+            .map(|content| self.terminals.content(&tool, content, &fields.terminals));
+        let metas = std::mem::take(&mut fields.terminal_meta);
+        if metas.is_empty() {
+            return content;
+        }
+        self.terminals.apply(&tool, metas, now).or(content)
+    }
+
+    /// When a running command's held output is due to show.
+    pub fn terminal_due(&self) -> Option<Instant> {
+        self.terminals.due()
+    }
+
+    /// The tool updates that show running commands' held output, now due.
+    pub fn flush_terminals(&mut self, now: Instant) -> Vec<DriverEvent> {
+        let due = self.terminals.flush(now);
+        due.into_iter()
+            .filter_map(|(tool, content)| {
+                let minted = self.tools.get(&tool)?.minted.clone();
+                Some(self.tag(AuraEvent::ToolUpdate(ToolUpdate {
+                    tool_call_id: minted,
+                    status: None,
+                    title: None,
+                    kind: None,
+                    locations: None,
+                    raw_input: None,
+                    tool_name: None,
+                    content: Some(content),
+                    truncated: None,
+                })))
+            })
+            .collect()
     }
 
     /// A permission request names `tool_call_id`: the block's minted id, kind and title when the
@@ -486,6 +537,7 @@ fn shows_more(fields: &ToolFields) -> bool {
             .as_ref()
             .is_some_and(|locations| !locations.is_empty())
         || fields.raw_input.is_some()
+        || !fields.terminal_meta.is_empty()
 }
 
 fn thought_completed(open: Open, now: Instant) -> DriverEvent {
@@ -1015,8 +1067,9 @@ mod tests {
                     new_text: "fresh".into(),
                     truncated: None
                 },
-                ToolContent::Text {
-                    text: super::super::wire::TERMINAL_PLACEHOLDER.into(),
+                ToolContent::Terminal {
+                    output: String::new(),
+                    exit_code: None,
                     truncated: None
                 },
             ]

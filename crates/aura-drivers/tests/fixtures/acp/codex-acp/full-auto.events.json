@@ -1098,8 +1098,9 @@
           "tool_name": "exec_command",
           "content": [
             {
-              "type": "text",
-              "text": "[terminal output is not available in auracode]",
+              "type": "terminal",
+              "output": "",
+              "exit_code": null,
               "truncated": null
             }
           ],
@@ -1120,7 +1121,14 @@
           "locations": null,
           "raw_input": null,
           "tool_name": null,
-          "content": null,
+          "content": [
+            {
+              "type": "terminal",
+              "output": "",
+              "exit_code": 0,
+              "truncated": null
+            }
+          ],
           "truncated": null
         }
       }

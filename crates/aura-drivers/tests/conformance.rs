@@ -43,7 +43,12 @@ mod conformance {
                             .boolean(acp::BooleanConfigOptionCapabilities::new()),
                     ),
             )
-            .auth(acp::AuthCapabilities::new().terminal(true));
+            .auth(acp::AuthCapabilities::new().terminal(true))
+            // Display-only terminals, which codex-acp streams once a client says so.
+            .meta(serde_json::Map::from_iter([(
+                "terminal_output".to_owned(),
+                serde_json::json!(true),
+            )]));
         let initialize =
             acp::InitializeRequest::new(agent_client_protocol_schema::ProtocolVersion::V1)
                 .client_capabilities(capabilities)
