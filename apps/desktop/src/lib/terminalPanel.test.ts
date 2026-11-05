@@ -109,7 +109,7 @@ describe("the docked terminal panels", () => {
     panels.rename(id, " ");
     expect(tab(id)?.title).toBe("Run");
     // Once it exits it no longer counts as running, and the app's limit holds for a new one.
-    runtimes[0]?.status({ state: "finished", exitCode: 1 });
+    runtimes[0]?.status({ state: "finished", exitCode: 1, truncated: false });
     expect(panels.runningTab("chat")).toBeNull();
     panels.runTab("other", transport, "C:/worktrees/other", "http://localhost:25050");
     panels.runTab("third", transport, "C:/worktrees/third", "http://localhost:25060");

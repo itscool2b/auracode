@@ -8,5 +8,9 @@ describe("Run's name for its command", () => {
     ).toBe("cmd /d /c pnpm dev");
     expect(runLabel({ program: "/usr/local/bin/pnpm", args: ["dev"] })).toBe("pnpm dev");
     expect(runLabel({ program: "node.EXE", args: [] })).toBe("node");
+    // A long script ends in an ellipsis at 80 characters.
+    const long = runLabel({ program: "node", args: ["-e", "x".repeat(200)] });
+    expect(long).toHaveLength(80);
+    expect(long.endsWith("…")).toBe(true);
   });
 });

@@ -24,8 +24,12 @@ export const worktreeRunApi: WorktreeRunApi = {
   }),
 };
 
+/** Longer labels end in an ellipsis: the button's tooltip, not the whole script. */
+const LABEL_LIMIT = 80;
+
 /** "pnpm dev": the program's name without its folder or `.exe`, then its arguments. */
 export function runLabel(command: SetupCommand): string {
   const name = (command.program.split(/[\\/]/).at(-1) ?? command.program).replace(/\.exe$/i, "");
-  return [name, ...command.args].join(" ");
+  const label = [name, ...command.args].join(" ");
+  return label.length > LABEL_LIMIT ? `${label.slice(0, LABEL_LIMIT - 1).trimEnd()}…` : label;
 }
