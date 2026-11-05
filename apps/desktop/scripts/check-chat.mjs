@@ -1339,6 +1339,38 @@ async function inspect(engine, launcher) {
       assert.deepEqual(scan.violations, [], `${tab} context accessibility`);
     }
     await page.getByRole("button", { name: "Close Changes" }).click();
+    // Rewind on a sent message: Changes against the files before that turn with every change
+    // selected, then that message's Edit once the files are back.
+    await page.locator(".chat-user-wrap").first().hover();
+    await page.getByRole("button", { name: "Rewind to before this message" }).first().click();
+    await page.getByText("1 selected", { exact: true }).waitFor();
+    assert.ok(
+      await page
+        .getByRole("checkbox", { name: "Select src/components/Sidebar.tsx for revert" })
+        .isChecked(),
+      "Rewind did not select the changed file",
+    );
+    await page.getByRole("button", { name: "Review revert" }).click();
+    const editAfter = page.getByRole("checkbox", {
+      name: "Then edit this message to continue from there",
+    });
+    assert.ok(await editAfter.isChecked(), "Rewind did not offer its Edit");
+    await settled(page);
+    const rewindScan = await new AxeBuilder({ page })
+      .include("dialog[open]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    assert.deepEqual(rewindScan.violations, [], "Rewind confirmation accessibility");
+    await page.getByRole("button", { name: "Revert 1 file", exact: true }).click();
+    await page.getByRole("button", { name: "Review edited prompt", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // Nothing left to restore: the message's Edit is one step away.
+    await page.locator(".chat-user-wrap").first().hover();
+    await page.getByRole("button", { name: "Rewind to before this message" }).first().click();
+    await page.getByRole("button", { name: "Edit this message", exact: true }).click();
+    await page.getByRole("button", { name: "Review edited prompt", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Close Changes" }).click();
     await page.getByRole("button", { name: "Fork", exact: true }).click();
     await page.getByRole("region", { name: "Exact continuation context" }).waitFor();
     await page.getByRole("button", { name: "Close", exact: true }).click();

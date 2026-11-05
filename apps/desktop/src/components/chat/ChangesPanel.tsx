@@ -17,6 +17,12 @@ import { ContextContents, type ContextTab } from "./ContextContents";
 import { DiffBlock } from "./DiffBlock";
 import { Modal } from "./Modal";
 
+/** A Rewind from a sent message. `nonce` changes with each request, so asking again re-applies it. */
+export interface RewindRequest {
+  readonly turnId: string;
+  readonly nonce: number;
+}
+
 export function ChangesPanel({
   chatId,
   api,
@@ -27,6 +33,8 @@ export function ChangesPanel({
   state,
   composer,
   agent,
+  rewind = null,
+  onEditFrom,
 }: {
   readonly chatId: string;
   readonly api: ChangesTransport;
@@ -37,6 +45,10 @@ export function ChangesPanel({
   readonly state: ChatState;
   readonly composer?: ComposerTransport;
   readonly agent: AgentEntry | null;
+  /** Compares with the files before this turn and selects every change, for one Review revert. */
+  readonly rewind?: RewindRequest | null;
+  /** Continues the conversation from a turn: its Edit, as a rewind's last step. */
+  readonly onEditFrom?: (turnId: string) => void;
 }) {
   const title = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -47,7 +59,8 @@ export function ChangesPanel({
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
-  const [scope, setScope] = useState("");
+  // A rewind opens on the files before its turn; otherwise Changes compares with the latest turn.
+  const [scope, setScope] = useState(rewind?.turnId ?? "");
   const [revision, setRevision] = useState(0);
   const [snapshot, setSnapshot] = useState<ChangesSnapshot | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -60,7 +73,32 @@ export function ChangesPanel({
   const [result, setResult] = useState<RevertResult | null>(null);
   const [width, setWidth] = useState(380);
   const [tab, setTab] = useState<ContextTab>("Changes");
+  // A rewind selects every file its own comparison lists (never an earlier scope's), and offers
+  // its message's Edit once they are back.
+  const selectAllFor = useRef<string | null>(rewind?.turnId ?? null);
+  const [editAfter, setEditAfter] = useState(rewind !== null && onEditFrom !== undefined);
+  const applied = useRef(rewind?.nonce ?? 0);
   const live = hasProcess(status);
+
+  const rewindTurn = rewind?.turnId;
+  const rewindNonce = rewind?.nonce;
+  const canEdit = onEditFrom !== undefined;
+  useEffect(() => {
+    // The request the panel opened with is already its state; a later one, even for the same
+    // turn, compares again from scratch.
+    if (!rewindTurn || rewindNonce === undefined || rewindNonce === applied.current) return;
+    applied.current = rewindNonce;
+    selectAllFor.current = rewindTurn;
+    setTab("Changes");
+    setScope(rewindTurn);
+    setSelected(new Set());
+    setSnapshot(null);
+    setPath(null);
+    setDiff(null);
+    setResult(null);
+    setEditAfter(canEdit);
+    setRevision((value) => value + 1);
+  }, [rewindTurn, rewindNonce, canEdit]);
 
   useEffect(() => {
     // A status transition or explicit refresh scans the current files once.
@@ -74,10 +112,16 @@ export function ChangesPanel({
       .then((value) => {
         if (stale) return;
         setSnapshot(value);
-        setSelected(
-          (current) =>
-            new Set([...current].filter((path) => value.files.some((file) => file.path === path))),
-        );
+        if (selectAllFor.current !== null && selectAllFor.current === scope) {
+          selectAllFor.current = null;
+          setSelected(new Set(value.files.map((file) => file.path)));
+        } else
+          setSelected(
+            (current) =>
+              new Set(
+                [...current].filter((path) => value.files.some((file) => file.path === path)),
+              ),
+          );
         setPath((current) =>
           value.files.some((file) => file.path === current)
             ? current
@@ -134,9 +178,12 @@ export function ChangesPanel({
     if (!preview || acting) return;
     setActing(true);
     try {
-      setResult(await api.revert(chatId, preview.token));
+      const outcome = await api.revert(chatId, preview.token);
+      setResult(outcome);
       setSelected(new Set());
       setRevision((value) => value + 1);
+      // A rewind goes on to the message's Edit only when every file came back.
+      if (editAfter && scope && onEditFrom && !outcome.error) onEditFrom(scope);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -278,6 +325,7 @@ export function ChangesPanel({
                 value={scope}
                 onChange={(event) => {
                   setScope(event.currentTarget.value);
+                  setEditAfter(false);
                   setSelected(new Set());
                   setSnapshot(null);
                   setPath(null);
@@ -307,7 +355,21 @@ export function ChangesPanel({
                 <p className="changes-empty">{snapshot.unavailable_reason}</p>
               ) : null}
               {!busy && checkpoint && snapshot?.files.length === 0 ? (
-                <p className="changes-empty">No file changes since this checkpoint.</p>
+                <p className="changes-empty">
+                  No file changes since this checkpoint.
+                  {scope && onEditFrom ? (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="g-link changes-inline-action"
+                        onClick={() => onEditFrom(scope)}
+                      >
+                        Edit this message
+                      </button>
+                    </>
+                  ) : null}
+                </p>
               ) : null}
               {checkpoint?.warnings.length ? (
                 <details className="changes-warnings">
@@ -440,6 +502,17 @@ export function ChangesPanel({
               {warning}
             </p>
           ))}
+          {scope && onEditFrom ? (
+            <label className="changes-edit-after">
+              <input
+                type="checkbox"
+                checked={editAfter}
+                disabled={acting}
+                onChange={(event) => setEditAfter(event.currentTarget.checked)}
+              />
+              Then edit this message to continue from there
+            </label>
+          ) : null}
           <div className="g-dialog-actions">
             <button
               type="button"

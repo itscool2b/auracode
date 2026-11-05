@@ -8,9 +8,45 @@ import { ErrorCard } from "./ErrorCard";
 import { PermissionCard, rawInputSummary } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
 import { EventDetails, FullOutput, ToolBlock, ToolContentView } from "./ToolBlock";
+import { UserMessage } from "./UserMessage";
 
 const NO_BLOBS = new Map<string, BlobState>();
 const noop = (): void => {};
+
+describe("a sent message", () => {
+  it("offers Rewind beside Edit, but not on a steer, which has no turn of its own", () => {
+    const sent = renderToStaticMarkup(
+      <UserMessage
+        item={{ kind: "user", key: "user:t1", text: "Make the sidebar wider" }}
+        onEdit={noop}
+        onRewind={noop}
+      />,
+    );
+    expect(sent).toContain('aria-label="Edit prompt"');
+    expect(sent).toContain('aria-label="Rewind to before this message"');
+    expect(
+      renderToStaticMarkup(
+        <UserMessage
+          item={{ kind: "user", key: "user:t1", text: "Make the sidebar wider" }}
+          onEdit={noop}
+        />,
+      ),
+    ).not.toContain("Rewind");
+    const steer = renderToStaticMarkup(
+      <UserMessage
+        item={{
+          kind: "user",
+          key: "user:m1",
+          text: "Also the footer",
+          steering: { state: "accepted", detail: null },
+        }}
+        onEdit={noop}
+        onRewind={noop}
+      />,
+    );
+    expect(steer).not.toContain("Rewind");
+  });
+});
 
 function permission(overrides: Partial<PermissionItem["request"]> = {}): PermissionItem {
   return {

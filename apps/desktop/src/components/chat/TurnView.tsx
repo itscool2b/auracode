@@ -42,6 +42,8 @@ export interface TurnActions extends BlobProps {
   readonly canResume: boolean;
   /** Opens the Changes panel: the Review beside a finished turn's changed files. */
   readonly onOpenChanges?: () => void;
+  /** Rewind on a sent message: Changes against the files before that turn, all selected. */
+  readonly onRewind?: (turnId: string) => void;
 }
 
 /** One turn (or the events between turns): its items in order, its plan, and its footer. */
@@ -131,6 +133,11 @@ export const TurnView = memo(function TurnView({
                     segment.turnId && actions.onContinue && !active
                       ? () =>
                           actions.onContinue?.({ type: "edit", turn_id: segment.turnId as string })
+                      : undefined
+                  }
+                  onRewind={
+                    segment.turnId && actions.onRewind && !active
+                      ? () => actions.onRewind?.(segment.turnId as string)
                       : undefined
                   }
                 />
