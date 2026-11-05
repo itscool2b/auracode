@@ -186,6 +186,9 @@ export const GRAPHITE_DURATIONS = {
   cycle: 3000,
   timer: 7500,
   exit: 120,
+  wave: 80,
+  ink: 560,
+  dissolve: 320,
 } as const;
 
 /** Staggers in ms, mirroring `--g-stagger*`. */

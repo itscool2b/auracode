@@ -270,13 +270,12 @@ export const commands = {
 	composerSteer: (chatId: string, expectedTurnId: string, input: ComposerInput) => typedError<SteeringAck, AppError>(__TAURI_INVOKE("composer_steer", { chatId, expectedTurnId, input })),
 	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
-	dictationModel: () => typedError<DictationModel, AppError>(__TAURI_INVOKE("dictation_model")),
-	dictationDownload: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_download", { id, channel })),
+	dictationModel: () => __TAURI_INVOKE<DictationModel>("dictation_model"),
 	/**
-	 *  `language`: the person's language tag (the webview's `navigator.language`). Whisper hears that
-	 *  language, or detects one itself when it does not know the tag.
+	 *  Opens the microphone at once and streams the live text until `dictation_stop` (finish) or
+	 *  `dictation_cancel`. The bundled models are English; there is no time limit.
 	 */
-	dictationStart: (id: string, language: string | null, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, language, channel })),
+	dictationStart: (id: string, channel: Channel<DictationEvent>) => typedError<null, AppError>(__TAURI_INVOKE("dictation_start", { id, channel })),
 	dictationStop: (id: string) => __TAURI_INVOKE<void>("dictation_stop", { id }),
 	dictationCancel: (id: string) => __TAURI_INVOKE<void>("dictation_cancel", { id }),
 	/**  Every chat's agent processes and what each started. */
@@ -1565,11 +1564,20 @@ export type DeviceIdentity = {
 	created_at: number,
 };
 
-export type DictationEvent = { state: "downloading"; received: number; total: number } | { state: "model_ready" } | { state: "preparing" } | { state: "recording"; seconds: number; level: number | null; limit_seconds: number } | { state: "transcribing"; percent: number } | { state: "complete"; text: string } | { state: "cancelled" } | { state: "failed"; message: string; reason: DictationFailure };
+export type DictationEvent = 
+/**  The engine is loading, the first time a recording starts. */
+{ state: "preparing" } | 
+/**
+ *  The microphone is open: the time so far, its level (0 to 1), whether a phrase is in
+ *  progress, and the text so far.
+ */
+{ state: "listening"; seconds: number; level: number | null; speaking: boolean; text: LiveText } | 
+/**  The microphone has closed and the last phrase is settling. */
+{ state: "finishing"; text: LiveText } | { state: "complete"; text: string } | { state: "cancelled" } | { state: "failed"; message: string; reason: DictationFailure };
 
 /**  Why an operation failed, so the panel offers the recovery that can help. */
 export type DictationFailure = 
-/**  The model is missing, damaged, failed to download or failed to load: download it again. */
+/**  The bundled models are missing or failed to load: reinstalling restores them. */
 "model" | 
 /**  The microphone is missing, blocked, busy or stopped. */
 "microphone" | 
@@ -2191,6 +2199,16 @@ export type ListingState =
 { state: "files"; reason: string } | 
 /**  Nothing can be listed on this device, for the reason given. */
 { state: "unavailable"; reason: string };
+
+/**
+ *  The text so far: phrases already settled, then the phrase in progress split into the words two
+ *  passes agreed on and the rest, which can still change.
+ */
+export type LiveText = {
+	settled: string,
+	stable: string,
+	tentative: string,
+};
 
 export type LocalImportPreview = {
 	projects: LocalImportProject[],

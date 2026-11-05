@@ -1,26 +1,14 @@
-# Whisper is CPU-only and statically linked. ggml must not tune itself to the build machine
-# (GGML_NATIVE), so distributed binaries carry a fixed instruction set: AVX2 with FMA and F16C,
-# the level every Mac that runs macOS 13.3 has and that Intel (2013) and AMD (2015) processors
-# share. Without it Whisper runs scalar code: 11 s of speech took 18 s to transcribe instead of
-# 1.1 s. ggml applies these flags to its CPU backend (ggml-cpu) only, which has no startup
-# initializers, and the app checks the processor before dictation calls into it, so auracode
-# still starts and works on older processors; only dictation needs them. ARM builds ignore them.
-# See docs/local-dictation.md for the link check behind this.
+# Dictation's speech engine, transcribe.cpp (ggml), is statically linked. ggml must not tune
+# itself to the build machine (GGML_NATIVE), so distributed binaries carry a fixed instruction
+# set: AVX2 with FMA and F16C, the level every Mac that runs macOS 13.3 has and that Intel (2013)
+# and AMD (2015) processors share. Without it the engine runs scalar code, several times slower.
+# ggml applies these flags to its CPU backend (ggml-cpu) only, which has no startup initializers,
+# and the app checks the processor before dictation calls into it, so auracode still starts and
+# works on older processors; only dictation needs them. ARM builds ignore the x86 flags.
+#
+# transcribe-cpp-sys forwards TRANSCRIBE_CMAKE_ARGS to CMake after its own defaults and rebuilds
+# when it changes. CMP0091 with MultiThreaded keeps the engine's C/C++ runtime in the static
+# library; otherwise the Windows app imports MSVCP140.dll without shipping that prerequisite.
+# Non-MSVC platforms ignore the runtime property. See docs/local-dictation.md for the link checks.
 [env]
-GGML_NATIVE = "OFF"
-GGML_AVX = "ON"
-GGML_AVX2 = "ON"
-GGML_FMA = "ON"
-GGML_F16C = "ON"
-GGML_SSE42 = "ON"
-GGML_BMI2 = "OFF"
-# whisper-rs-sys forwards the GGML_* and CMAKE_* values to CMake but does not rebuild when they
-# change, so a warm target keeps the old objects. It does rebuild when this variable changes:
-# bump the number whenever a value in this file changes. The define itself is unused.
-BINDGEN_EXTRA_CLANG_ARGS = "-DAURA_WHISPER_BUILD=2"
-# whisper-rs-sys forwards these to CMake. Keep its C/C++ runtime in the static library too;
-# otherwise the Windows app imports MSVCP140.dll without shipping that prerequisite.
-# CMP0091 enables the property for whisper.cpp's older minimum CMake version. Non-MSVC
-# platforms ignore this property; Rust and the other native dependencies keep their settings.
-CMAKE_POLICY_DEFAULT_CMP0091 = "NEW"
-CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
+TRANSCRIBE_CMAKE_ARGS = "-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_SSE42=ON -DGGML_BMI2=OFF -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"

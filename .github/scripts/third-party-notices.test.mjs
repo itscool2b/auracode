@@ -60,9 +60,11 @@ test("locked catalogue includes complete font notices and explicit native source
   assert.deepEqual(
     catalogue.records.filter((r) => r.ecosystem === "native").map((r) => r.name),
     [
+      "ggml (transcribe-cpp-sys source)",
+      "miniz (transcribe-cpp-sys source)",
       "OpenSSL (openssl-src source)",
+      "Silero VAD segmentation code (transcribe-cpp-sys source)",
       "SQLCipher (libsqlite3-sys source)",
-      "whisper.cpp and ggml (whisper-rs-sys source)",
     ],
   );
   for (const name of [
@@ -74,6 +76,28 @@ test("locked catalogue includes complete font notices and explicit native source
     "cc",
   ])
     assert.ok(!catalogue.records.some((r) => r.name === name), name);
+});
+
+test("the bundled dictation models keep their licenses, conversion notices and attribution", () => {
+  const catalogue = verifiedCatalogue();
+  const models = catalogue.records.filter((r) => r.ecosystem === "model");
+  assert.deepEqual(
+    models.map((r) => [r.name, r.license, r.distributions]),
+    [
+      [
+        "Parakeet TDT-CTC 110M speech model (parakeet-tdt_ctc-110m-Q6_K.gguf)",
+        "CC-BY-4.0",
+        ["desktop"],
+      ],
+      ["Silero VAD v6.2 voice activity model (silero-vad-v6.2-F32.gguf)", "MIT", ["desktop"]],
+    ],
+  );
+  const texts = (record) => record.files.map((entry) => catalogue.texts[entry.sha256]).join("\n");
+  assert.match(texts(models[0]), /NVIDIA NeMo and Suno\.ai/);
+  assert.match(texts(models[0]), /Attribution 4\.0 International/);
+  assert.match(texts(models[0]), /Modifications: handy-computer converted/);
+  assert.match(texts(models[1]), /Copyright \(c\) 2020-present Silero Team/);
+  assert.match(texts(models[1]), /Modifications: handy-computer converted/);
 });
 
 test("both outputs say the agent marks are their owners' trademarks and point at their sources", () => {
@@ -89,7 +113,7 @@ test("website output contains frontend notices, not desktop native dependencies"
   assert.match(text, /@fontsource-variable\/geist/);
   assert.match(text, /@fontsource-variable\/fraunces/);
   assert.match(text, /react-router/);
-  assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm|whisper-rs/);
+  assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm|transcribe-cpp|Parakeet/);
 });
 
 test("packaging emits readable plain text and escaped script-free HTML", () => {

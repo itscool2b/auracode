@@ -48,7 +48,14 @@ export function runtimePackages(metadata, packageName) {
 }
 
 function inputFiles() {
-  const files = ["Cargo.lock", "Cargo.toml", "pnpm-lock.yaml", "third-party/overrides.json"];
+  const files = [
+    "Cargo.lock",
+    "Cargo.toml",
+    "pnpm-lock.yaml",
+    "third-party/overrides.json",
+    "third-party/models.json",
+    "apps/desktop/scripts/dictation-models.mjs",
+  ];
   for (const folder of ["apps", "crates", "packages"]) {
     for (const entry of readdirSync(join(root, folder), { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
@@ -191,22 +198,23 @@ export function collect() {
           files: [file(readFileSync(license, "utf8"), `${source}#sqlcipher/LICENSE`)],
         });
       }
-      if (pkg.name === "whisper-rs-sys") {
-        add({
-          ecosystem: "native",
-          name: "whisper.cpp and ggml (whisper-rs-sys source)",
-          version: pkg.version,
-          license: "MIT",
-          source: `${source}#whisper.cpp`,
-          distributions: ["desktop"],
-          targets: [target],
-          files: [
-            file(
-              readFileSync(join(directory, "whisper.cpp/LICENSE"), "utf8"),
-              `${source}#whisper.cpp/LICENSE`,
-            ),
-          ],
-        });
+      if (pkg.name === "transcribe-cpp-sys") {
+        // transcribe.cpp vendors and statically links these; its own MIT text is the crate's LICENSE.
+        for (const [name, path] of [
+          ["ggml", "ggml/LICENSE"],
+          ["miniz", "src/third_party/miniz/LICENSE"],
+          ["Silero VAD segmentation code", "src/third_party/silero_vad/LICENSE"],
+        ])
+          add({
+            ecosystem: "native",
+            name: `${name} (transcribe-cpp-sys source)`,
+            version: pkg.version,
+            license: "MIT",
+            source: `${source}#${dirname(path)}`,
+            distributions: ["desktop"],
+            targets: [target],
+            files: [file(readFileSync(join(directory, path), "utf8"), `${source}#${path}`)],
+          });
       }
     }
     if (target.includes("windows")) {
@@ -226,10 +234,45 @@ export function collect() {
       });
     }
   }
+  // The speech models bundled as app resources (apps/desktop/scripts/dictation-models.mjs): model
+  // weights, not code. Each keeps its license, its converter's NOTICE and an attribution.
+  const models = json(join(root, "third-party/models.json"));
+  const pins = readFileSync(join(root, "apps/desktop/scripts/dictation-models.mjs"), "utf8");
+  const pinned = [...pins.matchAll(/file: "([^"]+)"/g)].map((match) => match[1]);
+  if (JSON.stringify(sort([...pinned])) !== JSON.stringify(sort(Object.keys(models))))
+    throw new Error("The bundled dictation models changed: review third-party/models.json");
+  for (const [name, model] of Object.entries(models)) {
+    if (!pins.includes(`revision: "${model.revision}"`))
+      throw new Error(`The pinned revision changed for ${name}: review third-party/models.json`);
+    const source = `https://huggingface.co/${model.repo}/tree/${model.revision}`;
+    add({
+      ecosystem: "model",
+      name: model.name,
+      version: model.revision,
+      license: model.license,
+      source,
+      distributions: ["desktop"],
+      targets: [...targets],
+      files: [
+        file(model.attribution, `${source}#attribution`),
+        ...model.files.map((entry) => {
+          const text = readFileSync(
+            join(root, "third-party/upstream", `${entry.sha256}.txt`),
+            "utf8",
+          );
+          if (digest(text) !== entry.sha256) throw new Error(`Upstream notice changed for ${name}`);
+          return file(
+            text,
+            `https://huggingface.co/${model.repo}/blob/${model.revision}/${entry.name}`,
+          );
+        }),
+      ],
+    });
+  }
   return {
     version: 1,
     scope:
-      "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher and Windows vendored OpenSSL are explicitly included. Linker-level and installer SDK qualification is separate.",
+      "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher, Windows vendored OpenSSL, transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
     inputs: inputFiles(),
     records: [...records.values()].sort((a, b) =>
       `${a.ecosystem}/${a.name}/${a.version}`.localeCompare(

@@ -5,7 +5,9 @@
 // Mac has no identity yet the bundle is signed ad hoc, as CI does, with a warning: a machine
 // without the certificate can still build. APPLE_SIGNING_IDENTITY, when set, always wins (it is
 // Tauri's own setting). Elsewhere this is plain `tauri build`. Arguments are passed on to it. See
-// ../README.md.
+// ../README.md. Every bundle first fetches dictation's speech models, or verifies the ones already
+// fetched, against their pinned SHA-256 (scripts/dictation-models.mjs), since the installer carries
+// them.
 
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -13,6 +15,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
+import { ensureModels } from "./dictation-models.mjs";
 
 const signingScript = fileURLToPath(new URL("./macos-signing.sh", import.meta.url));
 const tauriCli = createRequire(import.meta.url).resolve("@tauri-apps/cli/tauri.js");
@@ -58,6 +61,15 @@ if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
     // Ambiguous: the script has said which identities clash. Signing with either would be a guess.
     process.exit(lookup.status ?? 1);
   }
+}
+
+try {
+  await ensureModels();
+} catch (error) {
+  console.error(
+    `auracode: the dictation models are not ready, so the bundle would lack them: ${error.message}`,
+  );
+  process.exit(1);
 }
 
 const build = spawnSync(process.execPath, [tauriCli, "build", ...args], {

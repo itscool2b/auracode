@@ -63,6 +63,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": { "resources/dictation/": "dictation/" },
     "category": "DeveloperTool",
     "shortDescription": "One home for all your coding agents.",
     "longDescription": "auracode runs your coding agents through their own harnesses, with local chats, reviewed Git workspaces and encrypted account sync in one dark desktop interface.",

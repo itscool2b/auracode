@@ -1,47 +1,249 @@
-.dictation-control {
+/*
+ * Dictation (Dictation.tsx, docs/local-dictation.md). While the microphone is open, the composer's
+ * controls give way to the bar: Cancel, the live waveform, the time and Finish where Send was. The
+ * message box shows the ghost: the draft as it is, with the words heard so far at the cursor,
+ * lighter while they can still change. Finish sets them in ink with one sweep; Cancel dissolves
+ * them. Neutral ink and the theme's mark, never a glow (owner, 4 November 2026).
+ */
+
+.chat-composer-field {
   position: relative;
-  display: inline-flex;
-}
-.dictation-panel {
-  position: absolute;
-  bottom: calc(100% + var(--g-space-8));
-  right: 0;
-  width: min(320px, calc(100vw - 100px));
-  padding: var(--g-space-16);
-  border: 1px solid var(--g-glass-rim-strong);
-  border-radius: var(--g-radius-14);
-  background: var(--ui-menu-fill);
-  box-shadow: var(--g-shadow-pop);
-  backdrop-filter: blur(var(--g-blur-pop));
-  color: var(--g-fg-1);
-  z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-12);
 }
-.dictation-heading,
-.dictation-recovery {
+
+/* The draft's own text hides under the ghost, which repeats it with the same metrics. */
+.chat-composer-field[data-ghost] > .g-textarea {
+  color: transparent;
+  caret-color: transparent;
+}
+
+.chat-composer-field[data-ghost] > .g-textarea::placeholder {
+  color: transparent;
+}
+
+.dictation-ghost {
+  position: absolute;
+  inset: 0;
+  overflow: hidden auto;
+  padding: var(--g-space-12) var(--g-space-16) var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+/* Words heard: a phrase already settled or agreed by two passes, then the ones still forming. */
+.dictation-word {
+  color: var(--g-fg-2);
+  transition: color var(--g-dur-base) var(--g-ease);
+  animation: dictation-word-in var(--g-dur-reveal) var(--g-ease-expo) backwards;
+}
+
+.dictation-word[data-kind="tentative"] {
+  color: var(--g-fg-3);
+}
+
+@keyframes dictation-word-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/*
+ * Where the next word goes: the theme's mark, breathing while the microphone listens. It takes no
+ * width, so the draft after it sits where it will once the words land.
+ */
+.dictation-caret {
+  position: relative;
+}
+
+.dictation-caret::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-volt);
+  content: "";
+  animation: dictation-caret var(--g-dur-tick) var(--g-ease-in-out) infinite alternate;
+}
+
+@keyframes dictation-caret {
+  to {
+    opacity: 0.25;
+  }
+}
+
+.dictation-hint {
+  margin-left: var(--g-space-2);
+  color: var(--g-fg-3);
+}
+
+/* The microphone has closed and the last phrase settles. */
+.dictation-ghost[data-mode="finishing"] .dictation-words {
+  animation: dictation-breathe var(--g-dur-shimmer) var(--g-ease-in-out) infinite alternate;
+}
+
+@keyframes dictation-breathe {
+  to {
+    opacity: 0.55;
+  }
+}
+
+/*
+ * Finish: the words are in the draft, and one sweep sets them in ink, its leading edge in the
+ * theme's mark. The sweep follows the lines in reading order, since an inline box's background
+ * runs as if the box were one line.
+ */
+.dictation-set {
+  background-image: linear-gradient(90deg, var(--g-fg-1) 36%, var(--g-volt) 48%, var(--g-fg-2) 60%);
+  background-position: 0 0;
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: dictation-ink var(--g-dur-ink) var(--g-ease-glide) both;
+}
+
+@keyframes dictation-ink {
+  from {
+    background-position: 100% 0;
+  }
+}
+
+/* Cancel: the words blur away from the newest back, and the draft is as it was. */
+.dictation-ghost[data-mode="dissolve"] .dictation-word {
+  animation: dictation-dissolve var(--g-dur-dissolve) var(--g-ease) both;
+  animation-delay: calc(var(--from-end, 0) * var(--g-dur-dissolve) / 16);
+}
+
+@keyframes dictation-dissolve {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+/* The bar keeps the controls' row: Cancel where Attach was, Finish where Send was. */
+.dictation-bar {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
+  min-height: 32px;
+  padding: 0 var(--g-space-8) var(--g-space-8);
+  animation: dictation-bar-in var(--g-dur-panel) var(--g-ease) backwards;
 }
-.dictation-heading {
-  justify-content: space-between;
+
+@keyframes dictation-bar-in {
+  from {
+    opacity: 0;
+  }
 }
-.dictation-panel p {
+
+.dictation-bar .chat-send[aria-disabled="true"] {
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-3);
+  cursor: default;
+}
+
+/*
+ * The waveform: one bar per microphone report (80 ms), newest at the right, dark where voice
+ * detection heard speech. It opens from the middle, fades in from the left, and each report
+ * slides the row one bar along.
+ */
+.dictation-wave {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 28px;
+  overflow: hidden;
+  color: var(--g-fg-4);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 24%);
+  mask-image: linear-gradient(90deg, transparent, black 24%);
+  transition: opacity var(--g-dur-base) var(--g-ease);
+  animation: dictation-wave-open var(--g-dur-glide) var(--g-ease-glide) backwards;
+}
+
+.dictation-wave[data-quiet] {
+  opacity: 0.6;
+}
+
+@keyframes dictation-wave-open {
+  from {
+    clip-path: inset(0 50%);
+  }
+}
+
+.dictation-wave-track {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-2);
+  height: 100%;
+}
+
+.dictation-wave-track[data-step="odd"] {
+  animation: dictation-wave-odd var(--g-dur-wave) linear;
+}
+
+.dictation-wave-track[data-step="even"] {
+  animation: dictation-wave-even var(--g-dur-wave) linear;
+}
+
+/* Two names for one slide, so each report restarts it. */
+@keyframes dictation-wave-odd {
+  from {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes dictation-wave-even {
+  from {
+    transform: translateX(4px);
+  }
+}
+
+.dictation-wave-track > span {
+  flex: none;
+  width: 2px;
+  height: max(2px, calc(var(--level) * 100%));
+  border-radius: var(--g-radius-pill);
+  background-color: currentColor;
+}
+
+.dictation-wave-track > span[data-voiced] {
+  color: var(--g-fg-1);
+}
+
+.dictation-time {
+  flex: none;
+  min-width: 4ch;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* A failure, or a stop that did not take, in the bar: its words, then the way on. */
+.dictation-problem {
+  flex: 1;
+  min-width: 0;
   margin: 0;
+  color: var(--g-red);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  color: var(--g-fg-2);
 }
-.dictation-panel progress,
-.dictation-panel meter {
-  width: 100%;
-  accent-color: var(--g-fg-1);
-}
-.dictation-panel .g-button {
-  flex-shrink: 0;
-}
-.dictation-panel .ui-error {
-  color: var(--g-red);
+
+.dictation-bar[data-state="problem"] > .g-button {
+  flex: none;
 }

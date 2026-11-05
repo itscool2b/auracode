@@ -1,0 +1,36 @@
+{
+  "parakeet-tdt_ctc-110m-Q6_K.gguf": {
+    "name": "Parakeet TDT-CTC 110M speech model (parakeet-tdt_ctc-110m-Q6_K.gguf)",
+    "repo": "handy-computer/parakeet-tdt_ctc-110m-gguf",
+    "revision": "1c3f0d5378fdd358905cc410a93ed9e64f52d170",
+    "license": "CC-BY-4.0",
+    "attribution": "Parakeet TDT-CTC 110M (https://huggingface.co/nvidia/parakeet-tdt_ctc-110m) was developed by the NVIDIA NeMo and Suno.ai teams and is licensed under the Creative Commons Attribution 4.0 International license (https://creativecommons.org/licenses/by/4.0/). auracode bundles handy-computer's GGUF conversion of it, quantized to Q6_K, without further changes. The conversion's NOTICE records how it differs from the original.",
+    "files": [
+      {
+        "name": "LICENSE",
+        "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+      },
+      {
+        "name": "NOTICE",
+        "sha256": "c8adba97ba3c25562e26996c50ec5161e86869630ac0beb284897b016c46ecad"
+      }
+    ]
+  },
+  "silero-vad-v6.2-F32.gguf": {
+    "name": "Silero VAD v6.2 voice activity model (silero-vad-v6.2-F32.gguf)",
+    "repo": "handy-computer/silero-vad-v6.2-gguf",
+    "revision": "a9b2d61c20ae4ddf3644edb34969e8185a485448",
+    "license": "MIT",
+    "attribution": "Silero VAD (https://github.com/snakers4/silero-vad) is by the Silero Team and is licensed under the MIT license. auracode bundles handy-computer's GGUF conversion of it without further changes. The conversion's NOTICE records how it differs from the original.",
+    "files": [
+      {
+        "name": "LICENSE",
+        "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b"
+      },
+      {
+        "name": "NOTICE",
+        "sha256": "f1ea43096a23b40d4b14fcf131586710035444e69e35051c5d83c60725b50555"
+      }
+    ]
+  }
+}

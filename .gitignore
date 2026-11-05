@@ -55,3 +55,7 @@ test-results/
 
 # Local browser automation output
 /.playwright-mcp/
+
+# Dictation models, fetched and verified by apps/desktop/scripts/dictation-models.mjs.
+apps/desktop/src-tauri/resources/dictation/*.gguf
+apps/desktop/src-tauri/resources/dictation/*.partial

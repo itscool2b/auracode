@@ -265,16 +265,6 @@
       }
     ]
   },
-  "cargo/whisper-rs-sys/0.15.0": {
-    "revision": "7558e1b72f54f2f22a53589afb77e65681834c36",
-    "files": [
-      {
-        "source": "https://crates.io/api/v1/crates/whisper-rs/0.16.0/download#LICENSE",
-        "sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
-        "file": "upstream/f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff.txt"
-      }
-    ]
-  },
   "cargo/objc2-audio-toolbox/0.3.2": {
     "revision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
     "files": [

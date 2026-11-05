@@ -16,6 +16,13 @@ exceptions because their native code is compiled into the product through build 
 Playwright, Biome, Sharp, Cargo build helpers and the test-only Codex schema are not added to runtime
 notices. The schema instead has its own pinned upstream `LICENSE` and `NOTICE` beside the fixture.
 
+Dictation's speech engine, transcribe.cpp, vendors ggml, miniz and Silero VAD's segmentation code;
+each gets its own record from the text in the locked `transcribe-cpp-sys` archive. The speech models
+the desktop bundles as resources are listed in `models.json`, and
+`apps/desktop/scripts/dictation-models.mjs` pins them. They are model weights, not code. Each
+record keeps the model's license, its converter's NOTICE and an attribution, from texts preserved
+in `upstream/`. The generator fails when the pinned models and that list disagree.
+
 Some published Rust archives omit their license files. `overrides.json` identifies the exact
 `.cargo_vcs_info.json` revision and the authoritative upstream source used for each replacement.
 `upstream/` preserves those texts with hashes. The standard MPL-2.0 text for selectors is identical
