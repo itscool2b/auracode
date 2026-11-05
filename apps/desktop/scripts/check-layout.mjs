@@ -34,6 +34,8 @@ export const MODES = [
   "settled",
   // A call's input, a web search's links, JSON replies, edit counts, Claude's plan, compaction.
   "tool-details",
+  // Code colours, inline and display math, and a Mermaid diagram in one answer.
+  "rich-answer",
   "streaming",
   "thinking",
   "permission",

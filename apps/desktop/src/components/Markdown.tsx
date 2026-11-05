@@ -1,4 +1,3 @@
-import { CopyButton } from "@auracode/ui/graphite";
 import { createContext, Fragment, memo, type ReactNode, useContext, useMemo, useRef } from "react";
 import { imageSource } from "../lib/chatImages";
 import {
@@ -12,12 +11,14 @@ import {
 } from "../lib/markdown";
 import { EMPTY_IMAGE_PATHS, imagePathsIncremental } from "../lib/markdownImages";
 import { ChatImageTile } from "./chat/ChatImages";
+import { CodeBlock, MathView, MermaidBlock } from "./RichBlocks";
 
 /**
  * Streamed markdown, rendered block by block. Text only ever appends: a block appears where it will
  * stay, with no entrance, so lines already read never move while the answer streams. Finished
- * blocks are memoized, so a new frame only re-renders the block that is still growing. Everything
- * is React elements: agent text cannot inject HTML.
+ * blocks are memoized, so a new frame only re-renders the block that is still growing. Agent text
+ * cannot inject HTML: everything is React elements, code colours included, and math and diagrams
+ * are built by KaTeX and Mermaid from parsed nodes, never from markup (RichBlocks.tsx).
  */
 const ImageLimit = createContext<ReadonlySet<string> | null>(null);
 
@@ -78,18 +79,16 @@ function BlockView({ block }: { readonly block: Block }) {
           <InlineText text={block.text} />
         </p>
       );
-    case "code":
-      return (
-        <div className="code-block">
-          <div className="code-header">
-            <span className="code-lang">{block.lang || "Code"}</span>
-            <CopyButton text={block.code} label="Copy code" />
-          </div>
-          <pre {...mark} aria-busy={!block.closed}>
-            <code>{block.code}</code>
-          </pre>
-        </div>
-      );
+    case "code": {
+      const lang = block.lang.toLowerCase();
+      if (lang === "mermaid") return <MermaidBlock code={block.code} closed={block.closed} />;
+      // A math fence is display math once it closes.
+      if (lang === "math" && block.closed && block.code.trim())
+        return <MathView tex={block.code.trim()} display />;
+      return <CodeBlock lang={block.lang} code={block.code} closed={block.closed} />;
+    }
+    case "math":
+      return <MathView tex={block.tex} display />;
     case "list": {
       const items = block.items.map((item, index) => (
         <li
@@ -201,6 +200,8 @@ function inlineNode(node: Inline): ReactNode {
       return node.text;
     case "code":
       return <code>{node.text}</code>;
+    case "math":
+      return <MathView tex={node.tex} display={false} />;
     case "image":
       return <InlineImage node={node} />;
     case "strong":

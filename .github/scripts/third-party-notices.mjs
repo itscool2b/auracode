@@ -70,6 +70,12 @@ function inputFiles() {
   );
 }
 
+function missingLicense(pkg) {
+  throw new Error(
+    `${pkg.name}@${pkg.version} names no license: review its license file and add it to NPM_LICENSES`,
+  );
+}
+
 function licenseFiles(directory) {
   return sort(readdirSync(directory)).filter(
     (name) =>
@@ -77,6 +83,24 @@ function licenseFiles(directory) {
       statSync(join(directory, name)).isFile(),
   );
 }
+
+/**
+ * npm packages whose package.json names no license, with the license their own license file
+ * states (reviewed). Any other package without one stops the refresh until it is reviewed.
+ */
+export const NPM_LICENSES = { "khroma@2.1.0": "MIT" };
+
+/**
+ * npm packages in a dependency's metadata that auracode does not ship, each with why (reviewed),
+ * and what keeps it out. elkjs is EPL-2.0 or GPL-3.0; Mermaid imports it only for its optional
+ * ELK layout, which apps/desktop/vite.config.ts replaces with a stub.
+ */
+export const NPM_EXCLUDED = {
+  elkjs: {
+    reason: "EPL-2.0 or GPL-3.0; Mermaid's optional ELK layout, replaced by a stub",
+    guard: ["apps/desktop/vite.config.ts", "elkStub.ts"],
+  },
+};
 
 export function collect() {
   const overrides = json(join(root, "third-party/overrides.json"));
@@ -112,6 +136,15 @@ export function collect() {
     if (seen.has(directory)) return;
     seen.add(directory);
     const pkg = json(join(directory, "package.json"));
+    const excluded = NPM_EXCLUDED[pkg.name];
+    if (excluded) {
+      const [guardFile, marker] = excluded.guard;
+      if (!readFileSync(join(root, guardFile), "utf8").includes(marker))
+        throw new Error(
+          `${pkg.name} is left out of the notices, but ${guardFile} no longer keeps it out`,
+        );
+      return;
+    }
     if (!pkg.private) {
       const source = `https://registry.npmjs.org/${pkg.name}/-/${pkg.name.split("/").at(-1)}-${pkg.version}.tgz`;
       const files = installedFiles(directory, source);
@@ -126,7 +159,7 @@ export function collect() {
         ecosystem: "npm",
         name: pkg.name,
         version: pkg.version,
-        license: pkg.license,
+        license: pkg.license ?? NPM_LICENSES[`${pkg.name}@${pkg.version}`] ?? missingLicense(pkg),
         source,
         distributions: [distribution],
         targets: [],

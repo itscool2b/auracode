@@ -377,6 +377,24 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // Code colours, math and a diagram in one answer (missing features A, owner's plan).
+  if (mode === "rich-answer")
+    return [
+      ...events,
+      ev.turnStarted("rich"),
+      ev.user("u-rich", "Show me the fix, the cost and how a click flows."),
+      ev.message(
+        "rich-answer",
+        'The scroll fix needs one change and a test. Here is the change:\n\n```ts\nexport function reveal(row: HTMLElement, list: HTMLElement): void {\n  // Keep the open chat in view without moving focus.\n  if (!list.contains(row)) throw new Error("row is not in the list");\n  row.scrollIntoView({ block: "nearest" });\n  row.focus({ preventScroll: true });\n}\n```\n\nAnd the Rust side, for the native list:\n\n```rust\npub fn clamp_index(index: usize, len: usize) -> Option<usize> {\n    (len > 0).then(|| index.min(len - 1)) // 0 rows: nothing to show\n}\n```\n\nWith $n$ rows of height $h$, the list scrolls at most $\\max(0, nh - H)$ pixels, so the cost per frame is\n\n$$\nT(n) = \\sum_{i=1}^{n} \\frac{h_i}{v} \\le \\frac{nh}{v}\n$$\n\nHow a click reaches the row:\n\n```mermaid\nflowchart LR\n  Click[Sidebar click] --> Select[Select chat]\n  Select --> Reveal[Reveal row]\n  Reveal --> Focus[Focus without scroll]\n```',
+      ),
+      ev.messageDone("rich-answer"),
+      // A diagram that asks for Mermaid's ELK layout, which auracode leaves out (lib/elkStub.ts).
+      ev.message(
+        "rich-elk",
+        "The same flow, laid out with ELK:\n\n```mermaid\n---\nconfig:\n  layout: elk\n---\nflowchart TD\n  Click --> Select\n```",
+      ),
+      ev.messageDone("rich-elk"),
+    ];
   // What a call shows besides its output: Claude's to-do list as the turn's plan, a web search's
   // links, an MCP call's input and JSON reply, an edit's line counts, a long command, and a
   // compacted conversation (missing features A, owner's plan of 4 November 2026).
@@ -727,6 +745,7 @@ function Preview() {
     "tasks",
     "tasks-many",
     "tool-details",
+    "rich-answer",
     ...Object.keys(NEW_CHAT_SCENARIOS),
     ...Object.keys(QUEUE_PREVIEWS),
   ].includes(requested)

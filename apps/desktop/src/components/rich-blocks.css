@@ -1,0 +1,136 @@
+/*
+ * Code colours, math and diagrams in answers (RichBlocks.tsx; owner's plan, 4 November 2026,
+ * missing features A). Colours are the theme's code tokens, so every theme and appearance carries
+ * its own; nothing glows.
+ */
+
+.hljs .hljs-keyword,
+.hljs .hljs-selector-tag,
+.hljs .hljs-built_in,
+.hljs .hljs-doctag,
+.hljs .hljs-template-tag,
+.hljs .hljs-type {
+  color: var(--g-code-keyword);
+}
+
+.hljs .hljs-string,
+.hljs .hljs-regexp,
+.hljs .hljs-template-variable,
+.hljs .hljs-symbol,
+.hljs .hljs-link,
+.hljs .hljs-selector-attr,
+.hljs .hljs-selector-pseudo {
+  color: var(--g-code-string);
+}
+
+.hljs .hljs-number,
+.hljs .hljs-literal,
+.hljs .hljs-bullet {
+  color: var(--g-code-number);
+}
+
+.hljs .hljs-title,
+.hljs .hljs-section,
+.hljs .hljs-selector-id,
+.hljs .hljs-selector-class,
+.hljs .hljs-name {
+  color: var(--g-code-function);
+}
+
+.hljs .hljs-attr,
+.hljs .hljs-attribute,
+.hljs .hljs-property,
+.hljs .hljs-params,
+.hljs .hljs-variable {
+  color: var(--g-code-bright);
+}
+
+.hljs .hljs-comment,
+.hljs .hljs-quote,
+.hljs .hljs-meta {
+  color: var(--g-code-dim);
+}
+
+.hljs .hljs-addition {
+  color: var(--g-green);
+}
+
+.hljs .hljs-deletion {
+  color: var(--g-red-hover);
+}
+
+.hljs .hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs .hljs-strong {
+  font-weight: 600;
+}
+
+/* Math: display math centred in its own row, scrolling sideways when wider than the column. */
+.math-block {
+  margin: var(--g-space-8) 0;
+  padding: var(--g-space-4) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--g-fg-1);
+}
+
+.math-source {
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+}
+
+/* A diagram sits in its code block's frame; Diagram and Code switch between the two. */
+.mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: var(--g-space-16);
+  overflow-x: auto;
+}
+
+.mermaid-diagram > svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-views {
+  display: inline-flex;
+  gap: var(--g-space-2);
+  margin-left: auto;
+  margin-right: var(--g-space-4);
+}
+
+.mermaid-views > button {
+  height: 24px;
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.mermaid-views > button[aria-pressed="true"] {
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-1);
+}
+
+@media (hover: hover) {
+  .mermaid-views > button:hover {
+    background-color: var(--g-glass-control-hover);
+    color: var(--g-fg-1);
+  }
+}
+
+.mermaid-problem {
+  margin: 0;
+  padding: var(--g-space-8) var(--g-space-16) var(--g-space-12);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
@@ -23,6 +24,16 @@ export const WEBVIEW2_TARGET = "chrome130";
 
 export default defineConfig({
   plugins: [react(), noticesPlugin("desktop")],
+  resolve: {
+    // Mermaid's optional ELK layout needs elkjs, which is EPL-2.0 or GPL-3.0: auracode ships a stub
+    // in its place (src/lib/elkStub.ts), and the third-party notices leave elkjs out.
+    alias: [
+      {
+        find: /^elkjs\/lib\/elk\.bundled\.js$/,
+        replacement: fileURLToPath(new URL("./src/lib/elkStub.ts", import.meta.url)),
+      },
+    ],
+  },
   // Keep Rust's compile errors on screen instead of clearing them.
   clearScreen: false,
   server: {
