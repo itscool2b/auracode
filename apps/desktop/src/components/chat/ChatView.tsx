@@ -516,8 +516,10 @@ export function ChatView({
       onRecreateFolder: missingTree ? () => void reviewRecreate() : undefined,
       canResume: !live,
       onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
+      onOpenChanges: transport.changes ? () => setChangesOpen(true) : undefined,
     }),
     [
+      transport.changes,
       store,
       state.blobs,
       state.requests,

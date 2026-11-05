@@ -35,11 +35,13 @@ and a hands-on walkthrough before merging.
 4. **Finished turns fold into "Worked for".**
    - At the turn's end, interim messages, tools, thinking and answered cards fold into one row:
      "Worked for 2m 14s · 12 steps".
-   - Under it: the final answer, then a card per file made or changed (Open, Open in).
-   - The final answer is Codex's `final_answer` phase where sent, else the text after the last
-     tool call.
-   - Never folded: the last message, errors, unanswered questions, plans waiting for Accept.
-   - Turns without tools get no row. Old chats fold too. File links in answers get type icons.
+   - Under it: the final answer, then one card naming the files the turn changed, with Review
+     (opens Changes).
+   - The final answer is the run of messages that ends the turn.
+   - Never folded: the last message, errors, unanswered questions, plans waiting for Accept,
+     a steer. Turns without tools get no row. Old chats fold too.
+   - Moved to item 7: per-file Open and Open in (with "open a file at its line"), file-type icons
+     on links in answers, and reading Codex's `final_answer` phase in its driver.
 5. **Dictation.**
    - Parakeet 110M (about 105 MB) plus Silero VAD v6.2, bundled.
    - Loaded once and kept warm, 2 to 4 threads, nothing while silent, no time limit.
@@ -71,10 +73,11 @@ and a hands-on walkthrough before merging.
 
 ## Status
 
-- [ ] 1. Composer buttons and the model picker
-- [ ] 2. Claude Code default theme
-- [ ] 3. Denser transcript
-- [ ] 4. Worked-for fold and file cards
+- [x] 1. Composer buttons and the model picker (#73, merged 2026-11-05)
+- [x] 2. Claude Code default theme (#74, merged 2026-11-05)
+- [x] 3. Denser transcript and the Text size setting (#75, merged 2026-11-05)
+- [x] 4. Worked-for fold and the changed-files card (this pull request). The switch to keep
+  steps open moves to item 6, Settings > Chats.
 - [ ] 5. Dictation
 - [ ] 6. Settings
 - [ ] 7. Missing features A, B, C, D

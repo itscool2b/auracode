@@ -9,6 +9,15 @@ import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+/**
+ * Finished turns fold their work under "Worked for" (owner, 4 November 2026). Checks that reach
+ * into a finished turn's tool calls open every fold in view first; none folded is a no-op.
+ */
+const openWork = async (page) => {
+  const closed = page.locator('[data-testid="worked-for"][aria-expanded="false"]');
+  for (let left = await closed.count(); left > 0; left -= 1) await closed.first().click();
+};
+
 // Sheets fade in and controls settle their colours; audit only once every finite animation ends.
 const settled = (page) =>
   page.waitForFunction(() =>
@@ -300,7 +309,10 @@ async function inspect(engine, launcher) {
           .locator(mode === "new" ? '[data-testid="new-chat"]' : '[data-test-phase="live"]')
           .waitFor();
         await page.evaluate(() => document.fonts.ready);
-        if (mode === "diff") await page.getByTestId("tool-group").click();
+        if (mode === "diff") {
+          await openWork(page);
+          await page.getByTestId("tool-group").click();
+        }
         // Finish finite control transitions before testing text contrast or taking screenshots.
         await page.waitForTimeout(300);
         assert.equal(
@@ -381,6 +393,7 @@ async function inspect(engine, launcher) {
             "tasks: focus did not return to the pill",
           );
           // The call in the transcript that started a task opens it too.
+          await openWork(page);
           await page.getByTestId("tool-group").last().click();
           await page.getByTestId("tool-open-task").first().click();
           await panel.waitFor();
@@ -415,6 +428,7 @@ async function inspect(engine, launcher) {
           await page.evaluate(() => {
             window.__clipboardFail = false;
           });
+          await openWork(page);
           await page.getByTestId("tool-group").click();
           const tool = page.locator('[data-test-kind="tool"] details').first();
           assert.equal(await tool.getAttribute("open"), null);
@@ -472,6 +486,10 @@ async function inspect(engine, launcher) {
         new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
       node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       node.scrollTop = 0;
+      await paint();
+      // Finished turns' work is folded under "Worked for": open it, then the calls inside.
+      for (const work of node.querySelectorAll('[data-testid="worked-for"][aria-expanded="false"]'))
+        work.click();
       await paint();
       for (const group of node.querySelectorAll('[data-testid="tool-group"]')) group.click();
       await paint();
@@ -731,6 +749,7 @@ async function inspect(engine, launcher) {
     );
 
     await page.goto(`${url}/?preview=focus-group`);
+    await openWork(page);
     await page.getByTestId("tool-group").click();
     const firstCopy = page.getByRole("button", { name: "Copy output", exact: true }).first();
     await firstCopy.focus();
@@ -881,6 +900,7 @@ async function inspect(engine, launcher) {
     await page.goto(`${url}/?preview=large-turn`);
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.waitForTimeout(400);
+    await openWork(page);
     const group = page.getByTestId("tool-group");
     assert.equal(
       await group.getAttribute("aria-expanded"),
@@ -976,6 +996,46 @@ async function inspect(engine, launcher) {
         `${engine}/${mode}: partial history moved text from ${partialBefore?.y} to ${partialAfter?.y}`,
       );
     }
+
+    // A finished turn's work folds under "Worked for" above its final answer (owner, 4 November
+    // 2026, after Codex): the calls are out of view until it opens, by click or by keyboard.
+    await page.goto(`${url}/?preview=settled`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    const work = page.getByTestId("worked-for");
+    assert.equal(await work.count(), 1, `${engine}: the finished turn has no Worked for row`);
+    assert.equal(await work.getAttribute("aria-expanded"), "false");
+    assert.match((await work.textContent()) ?? "", /Worked for .+ · \d+ steps?$/);
+    assert.equal(await page.getByTestId("tool-group").count(), 0, "folded work still shows calls");
+    await page.getByText("Both sidebar tests pass.", { exact: true }).waitFor();
+    await work.focus();
+    await page.keyboard.press("Enter");
+    await page.getByTestId("tool-group").waitFor();
+    assert.equal(await work.getAttribute("aria-expanded"), "true");
+    assert.ok(
+      await work.evaluate((node) => node === document.activeElement),
+      `${engine}: opening the work moved focus`,
+    );
+    await page.keyboard.press("Enter");
+    await page.getByTestId("tool-group").waitFor({ state: "detached" });
+    assert.equal(await work.getAttribute("aria-expanded"), "false");
+    // What the turn changed stays in view under the answer, with Review opening Changes.
+    await page.goto(`${url}/?preview=recorded-tools`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    const changed = page.getByTestId("changed-files");
+    await changed.waitFor();
+    assert.match((await changed.textContent()) ?? "", /Changed 1 file/);
+    assert.equal(await changed.getByRole("listitem").count(), 1);
+    const review = changed.getByRole("button", { name: "Review", exact: true });
+    if (await review.count()) {
+      await review.click();
+      await page.locator(".changes-panel").waitFor();
+    }
+    await settled(page);
+    const foldScan = await new AxeBuilder({ page })
+      .include('[data-testid="worked-for-row"]')
+      .include('[data-testid="changed-files"]')
+      .analyze();
+    assert.deepEqual(foldScan.violations, [], "Worked for and changed files accessibility");
 
     // The agent, model and thinking menu, on Claude Code's dozen models in a 900px window. It
     // opens on the current model; the preview answers a change with the old lists and sends the
