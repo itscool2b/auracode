@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type DiffComment, excerptOf, quoteStart, reviewMessage, reviewRequest } from "./review";
+import {
+  afterHunkRevert,
+  type DiffComment,
+  excerptOf,
+  quoteStart,
+  reviewMessage,
+  reviewRequest,
+} from "./review";
 
 const comment = (path: string, line: number, text: string, extra: Partial<DiffComment> = {}) => ({
   id: `${path}:${line}`,
@@ -86,5 +93,26 @@ describe("review requests", () => {
     const quoted = quoteStart(`${"word ".repeat(30)}end`);
     expect(quoted.endsWith("word…")).toBe(true);
     expect(quoted.length).toBeLessThanOrEqual(81);
+  });
+});
+
+describe("comments after a reverted change", () => {
+  const on = (line: number, side: "new" | "old" = "new", path = "a.ts") =>
+    comment(path, line, `on ${side} ${line}`, { id: `${path}:${side}:${line}`, side });
+
+  it("drops the change's own comments and moves later lines' by the lines it gave back", () => {
+    // Lines 5 and 6 of the current text replaced line 5 of the checkpoint.
+    const hunk = { old_start: 4, old_lines: 1, new_start: 4, new_lines: 2 };
+    const kept = afterHunkRevert(
+      [on(3), on(5), on(6), on(9), on(5, "old"), on(8, "old"), on(5, "new", "b.ts")],
+      "a.ts",
+      hunk,
+    );
+    expect(kept.map((item) => [item.path, item.side, item.line])).toEqual([
+      ["a.ts", "new", 3],
+      ["a.ts", "new", 8],
+      ["a.ts", "old", 8],
+      ["b.ts", "new", 5],
+    ]);
   });
 });

@@ -277,6 +277,127 @@ async fn newly_ignored_saved_file_does_not_look_deleted() {
 }
 
 #[tokio::test]
+async fn one_hunk_reverts_alone_and_a_later_edit_makes_it_stale() {
+    use aura_protocol::changes::{HunkRevert, LineHunk};
+    let rig = rig();
+    std::fs::write(rig.work.join("code.txt"), "one\ntwo\nthree\nfour\nfive\n").expect("before");
+    let checkpoint = rig
+        .service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect("checkpoint");
+    std::fs::write(
+        rig.work.join("code.txt"),
+        "one\nTWO\nthree\nfour\nFIVE\nsix\n",
+    )
+    .expect("edit");
+    let diff = rig
+        .service
+        .diff(
+            &rig.chat,
+            &rig.folder,
+            &rig.work,
+            &checkpoint.id,
+            "code.txt",
+        )
+        .await
+        .expect("diff");
+    let sha = diff.after_sha256.expect("current hash");
+    // The second hunk: "five" became "FIVE" and "six" was added.
+    let second = LineHunk {
+        old_start: 4,
+        old_lines: 1,
+        new_start: 4,
+        new_lines: 2,
+    };
+    let selection = |sha: &str| HunkRevert {
+        path: "code.txt".into(),
+        after_sha256: sha.into(),
+        hunks: vec![second],
+    };
+    let preview = rig
+        .service
+        .preview_hunk_revert(
+            &rig.chat,
+            &rig.folder,
+            &rig.work,
+            &checkpoint.id,
+            selection(&sha),
+        )
+        .await
+        .expect("preview");
+    assert_eq!(preview.files.len(), 1);
+    let result = rig
+        .service
+        .revert(&rig.chat, &rig.folder, &rig.work, &preview.token)
+        .await
+        .expect("revert");
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("code.txt")).expect("reverted"),
+        "one\nTWO\nthree\nfour\nfive\n"
+    );
+    // The original stays in recovery, as for any revert.
+    let backup = PathBuf::from(&result.recovery_paths[0]);
+    assert_eq!(
+        std::fs::read_to_string(backup.join("original-0")).expect("original retained"),
+        "one\nTWO\nthree\nfour\nFIVE\nsix\n"
+    );
+    // Counted against an older text, a hunk is refused.
+    let stale = rig
+        .service
+        .preview_hunk_revert(
+            &rig.chat,
+            &rig.folder,
+            &rig.work,
+            &checkpoint.id,
+            selection(&sha),
+        )
+        .await
+        .expect_err("stale hash");
+    assert!(stale.to_string().contains("Refresh Changes"), "{stale}");
+    // An edit after the preview makes its revert stale; nothing newer is overwritten.
+    let diff = rig
+        .service
+        .diff(
+            &rig.chat,
+            &rig.folder,
+            &rig.work,
+            &checkpoint.id,
+            "code.txt",
+        )
+        .await
+        .expect("diff");
+    let first = HunkRevert {
+        path: "code.txt".into(),
+        after_sha256: diff.after_sha256.expect("current hash"),
+        hunks: vec![LineHunk {
+            old_start: 1,
+            old_lines: 1,
+            new_start: 1,
+            new_lines: 1,
+        }],
+    };
+    let preview = rig
+        .service
+        .preview_hunk_revert(&rig.chat, &rig.folder, &rig.work, &checkpoint.id, first)
+        .await
+        .expect("preview");
+    std::fs::write(rig.work.join("code.txt"), "one\nTwo\nthree\nfour\nfive\n").expect("newer edit");
+    let error = rig
+        .service
+        .revert(&rig.chat, &rig.folder, &rig.work, &preview.token)
+        .await
+        .map(|result| result.error)
+        .unwrap_or_else(|error| Some(error.to_string()));
+    assert!(error.is_some_and(|error| error.contains("changed after the preview")));
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("code.txt")).expect("newer kept"),
+        "one\nTwo\nthree\nfour\nfive\n"
+    );
+}
+
+#[tokio::test]
 async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
     let rig = rig();
     std::fs::write(rig.work.join("edit.txt"), b"before\r\n").expect("before");

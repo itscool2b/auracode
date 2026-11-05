@@ -424,7 +424,7 @@ async function reviewComments(page, theme) {
     const edge = await box.boundingBox();
     assert.ok(edge && view && edge.x + edge.width <= view.x + view.width + 1, "comment overflows");
   }
-  await page.getByRole("button", { name: "Comment on line 3" }).click();
+  await page.getByRole("button", { name: "Comment on line 3", exact: true }).click();
   await settled(page);
   const scan = await new AxeBuilder({ page })
     .include(".changes-panel")
@@ -461,8 +461,8 @@ async function reviewComments(page, theme) {
   // A comment on a file put back goes with it: the changes it was about no longer exist.
   await page.locator(".changes-file-list button", { hasText: "src/styles.css" }).click();
   await page.getByRole("region", { name: "Line changes for src/styles.css" }).waitFor();
-  await page.getByRole("button", { name: "Comment on line 2" }).click();
-  await page.getByRole("textbox", { name: "Comment on line 2" }).fill("Keep 240px.");
+  await page.getByRole("button", { name: "Comment on line 2", exact: true }).click();
+  await page.getByRole("textbox", { name: "Comment on line 2", exact: true }).fill("Keep 240px.");
   await page.keyboard.press("Enter");
   await bar.getByText("1 comment", { exact: true }).waitFor();
   await page.getByRole("checkbox", { name: "Select src/styles.css for revert" }).check();
@@ -478,10 +478,76 @@ async function reviewComments(page, theme) {
   await page.getByRole("table", { name: "File line changes" }).waitFor();
   await bar.getByText(/^Answer .+'s request first$/).waitFor();
   assert.ok(await bar.getByRole("button", { name: /^Ask .+ to review$/ }).isDisabled());
-  await page.getByRole("button", { name: "Comment on line 4" }).click();
-  await page.getByRole("textbox", { name: "Comment on line 4" }).fill("Later.");
+  await page.getByRole("button", { name: "Comment on line 4", exact: true }).click();
+  await page.getByRole("textbox", { name: "Comment on line 4", exact: true }).fill("Later.");
   await page.keyboard.press("Enter");
   assert.ok(await bar.getByRole("button", { name: "Send comment", exact: true }).isDisabled());
+}
+
+/**
+ * One change reverted on its own (missing features C): Changes folds what did not change, keeps
+ * every revert behind Stop while the session runs, and a change's Revert puts back only its
+ * lines, moving a later line's comment with them.
+ */
+async function hunkRevert(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=settled`);
+  await page.locator('[data-test-phase="live"]').waitFor();
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.locator(".changes-file-list button", { hasText: "src/styles.css" }).click();
+  const lines = page.getByRole("region", { name: "Line changes for src/styles.css" });
+  await lines.waitFor();
+  // Each change shows with three lines around it; the nine unchanged lines between them fold.
+  assert.equal(await lines.locator(".chat-diff-line").count(), 15);
+  const unfold = lines.getByRole("button", { name: "Show 9 unchanged lines" });
+  await unfold.waitFor();
+  const reverts = lines.getByRole("button", { name: /^Revert the change at line/ });
+  assert.equal(await reverts.count(), 0, "a live session offered a revert");
+  await page.getByRole("button", { name: "Comment on line 21", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Comment on line 21", exact: true })
+    .fill("Close the block.");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Stop session to revert" }).click();
+  await lines.getByRole("button", { name: "Revert the change at line 2" }).waitFor();
+  assert.equal(await reverts.count(), 2);
+  // The fold carried the next change's Revert; opened, that change gets its own band.
+  await unfold.click();
+  assert.equal(await lines.locator(".chat-diff-line").count(), 24);
+  assert.equal(await reverts.count(), 2);
+  await lines.getByRole("button", { name: "Revert the change at line 19" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("lines change back.", { exact: false }).waitFor();
+  assert.equal(await dialog.locator(".chat-diff-totals").textContent(), "+2 −1");
+  await settled(page);
+  const scan = await new AxeBuilder({ page })
+    .include("dialog[open]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(scan.violations, [], `${theme} hunk revert accessibility`);
+  await page.screenshot({ path: resolve(out, `hunk-revert-${theme}.png`) });
+  await dialog.getByRole("button", { name: "Revert change", exact: true }).click();
+  await page.getByText("Reverted the change in src/styles.css.", { exact: true }).waitFor();
+  // The other change stays, and the comment below the reverted one moved up with its line.
+  await lines.getByRole("button", { name: "Revert the change at line 2" }).waitFor();
+  assert.equal(await reverts.count(), 1);
+  assert.equal(
+    await page
+      .getByTestId("diff-comment")
+      .evaluate(
+        (node) =>
+          node.closest("tr")?.previousElementSibling?.querySelector('[data-side="new"]')
+            ?.textContent,
+      ),
+    "20",
+  );
+  await settled(page);
+  const panel = await new AxeBuilder({ page })
+    .include(".changes-panel")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(panel.violations, [], `${theme} folded changes accessibility`);
+  await page.screenshot({ path: resolve(out, `hunk-reverted-${theme}.png`) });
 }
 
 async function richAnswer(page, theme) {
@@ -576,6 +642,7 @@ async function inspect(engine, launcher) {
     for (const theme of ["light", "dark"]) await richAnswer(page, theme);
     for (const theme of ["light", "dark"]) await nativeRewind(page, theme);
     for (const theme of ["light", "dark"]) await reviewComments(page, theme);
+    for (const theme of ["light", "dark"]) await hunkRevert(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [

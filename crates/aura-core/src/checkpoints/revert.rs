@@ -9,12 +9,14 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use aura_protocol::changes::{RevertPreview, RevertResult};
+use aura_protocol::changes::{HunkRevert, LineHunk, RevertPreview, RevertResult};
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 
-use super::{CheckpointError, Checkpoints, Manifest, Result, changes, coordination, scan};
+use super::{
+    CheckpointError, Checkpoints, DIFF_TEXT_LIMIT, Manifest, Result, changes, coordination, scan,
+};
 use scan::Fingerprint;
 
 /// The name a revert's working folder takes at the root of the folder it reverts.
@@ -23,6 +25,10 @@ pub(super) const STAGING_PREFIX: &str = ".auracode-revert-";
 pub(super) struct Prepared {
     manifest: Manifest,
     current: BTreeMap<String, Option<Fingerprint>>,
+    /// A hunk revert's bytes, fixed by its preview against the content in `current`. The
+    /// recovery journal still binds the path to the checkpoint's own fingerprint, so if the
+    /// revert cannot finish, these bytes stay in the recovery copy rather than being discarded.
+    partial: BTreeMap<String, (Fingerprint, Vec<u8>)>,
     expires: Instant,
 }
 
@@ -84,7 +90,142 @@ impl Checkpoints {
         let token = crate::ids::new_id();
         let mut warnings = manifest.summary.warnings.clone();
         warnings.push("This restores the selected checkpoint bytes, including edits made outside the agent. Review each selected file before reverting.".into());
-        let expires = Instant::now() + Duration::from_secs(10 * 60);
+        self.hold(
+            token.clone(),
+            Prepared {
+                manifest,
+                current: fingerprints,
+                partial: BTreeMap::new(),
+                expires: Instant::now() + PREVIEW_LIFETIME,
+            },
+        )?;
+        Ok(RevertPreview {
+            token,
+            checkpoint_id: checkpoint_id.into(),
+            files,
+            expires_at: crate::time::now_millis().saturating_add(10 * 60 * 1000),
+            warnings,
+        })
+    }
+
+    /// One modified text file's hunks go back to the checkpoint's lines; the rest of the file
+    /// stays as it is. The hunks count lines of the text whose SHA-256 the selection names, which
+    /// must still be the file's; the preview fixes the resulting bytes, so an edit after it makes
+    /// the revert stale instead of mixing versions. The original is kept as for any revert.
+    pub async fn preview_hunk_revert(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+        checkpoint_id: &str,
+        selection: HunkRevert,
+    ) -> Result<RevertPreview> {
+        let HunkRevert {
+            path,
+            after_sha256,
+            hunks,
+        } = selection;
+        scan::validate(&path)?;
+        if hunks.is_empty() || hunks.len() > 10_000 {
+            return Err(CheckpointError::Message(
+                "Select a change to revert.".into(),
+            ));
+        }
+        let root = std::fs::canonicalize(folder)?;
+        let owner = coordination::acquire(&self.root, folder_id, &root).await?;
+        let context = owner.context();
+        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
+        if manifest.root != root {
+            return Err(CheckpointError::Message(
+                "The checkpoint folder changed while waiting. Refresh Changes.".into(),
+            ));
+        }
+        let operation = self
+            .operation(folder_id, &manifest.root, false, context.clone())
+            .await?;
+        self.sweep_reverts(&manifest.root, chat_id, folder_id, &context)
+            .await?;
+        let current = self.current(&operation, &manifest).await?;
+        let refresh = || {
+            CheckpointError::Message(format!(
+                "{path} changed since Changes showed it. Refresh Changes."
+            ))
+        };
+        if current.excluded.contains(&path) {
+            return Err(CheckpointError::Message(format!(
+                "{path} cannot be safely inspected and cannot be reverted."
+            )));
+        }
+        let (Some(saved), Some(scanned)) = (manifest.files.get(&path), current.files.get(&path))
+        else {
+            return Err(CheckpointError::Message(format!(
+                "Only a file that exists before and after can be reverted a change at a time. Revert {path} as a whole."
+            )));
+        };
+        if saved.fingerprint.binary || scanned.binary {
+            return Err(CheckpointError::Message(format!(
+                "{path} is not text. Revert it as a whole."
+            )));
+        }
+        if scanned.sha256 != after_sha256 || saved.fingerprint == *scanned {
+            return Err(refresh());
+        }
+        let before = self.blob(&operation, &manifest.root, saved).await?;
+        let read_root = manifest.root.clone();
+        let relative = path.clone();
+        let read_context = operation.context.clone();
+        let (fingerprint, after) = tokio::task::spawn_blocking(move || {
+            read_context.check()?;
+            scan::read(&read_root, &relative)
+        })
+        .await
+        .map_err(|_| CheckpointError::Message("Reading the changed file failed.".into()))??
+        .ok_or_else(refresh)?;
+        if fingerprint != *scanned {
+            return Err(refresh());
+        }
+        // Changes counts lines only in texts it gives whole.
+        if before.len() > DIFF_TEXT_LIMIT || after.len() > DIFF_TEXT_LIMIT {
+            return Err(CheckpointError::Message(format!(
+                "{path} is too long to revert a change at a time. Revert it as a whole."
+            )));
+        }
+        let bytes = revert_hunks(&after, &before, &hunks)?;
+        if bytes == after {
+            return Err(refresh());
+        }
+        let replacement = Fingerprint {
+            sha256: crate::chatstore::rows::hex(&Sha256::digest(&bytes)),
+            bytes: u32::try_from(bytes.len())
+                .map_err(|_| CheckpointError::Message(format!("{path} is too large to revert.")))?,
+            mode: fingerprint.mode,
+            binary: false,
+        };
+        let change = changes(&manifest.files, &current.files)
+            .into_iter()
+            .find(|file| file.path == path)
+            .ok_or_else(refresh)?;
+        let token = crate::ids::new_id();
+        self.hold(
+            token.clone(),
+            Prepared {
+                manifest,
+                current: BTreeMap::from([(path.clone(), Some(fingerprint))]),
+                partial: BTreeMap::from([(path, (replacement, bytes))]),
+                expires: Instant::now() + PREVIEW_LIFETIME,
+            },
+        )?;
+        Ok(RevertPreview {
+            token,
+            checkpoint_id: checkpoint_id.into(),
+            files: vec![change],
+            expires_at: crate::time::now_millis().saturating_add(10 * 60 * 1000),
+            warnings: Vec::new(),
+        })
+    }
+
+    /// Keeps a preview for its revert; a bounded number wait at once.
+    fn hold(&self, token: String, prepared: Prepared) -> Result<()> {
         let mut previews = self
             .previews
             .lock()
@@ -96,21 +237,8 @@ impl Checkpoints {
                     .into(),
             ));
         }
-        previews.insert(
-            token.clone(),
-            Prepared {
-                manifest,
-                current: fingerprints,
-                expires,
-            },
-        );
-        Ok(RevertPreview {
-            token,
-            checkpoint_id: checkpoint_id.into(),
-            files,
-            expires_at: crate::time::now_millis().saturating_add(10 * 60 * 1000),
-            warnings,
-        })
+        previews.insert(token, prepared);
+        Ok(())
     }
 
     /// A token is consumed once, including on failure. The UI must refresh after any failure.
@@ -162,12 +290,17 @@ impl Checkpoints {
             .await?;
         let mut replacements = BTreeMap::new();
         for path in prepared.current.keys() {
-            let bytes = match prepared.manifest.files.get(path) {
-                Some(file) => Some((
+            let bytes = match (
+                prepared.partial.get(path),
+                prepared.manifest.files.get(path),
+            ) {
+                // A hunk revert's bytes were fixed by its preview, against this very content.
+                (Some(partial), _) => Some(partial.clone()),
+                (None, Some(file)) => Some((
                     file.fingerprint.clone(),
                     self.blob(&operation, &prepared.manifest.root, file).await?,
                 )),
-                None => None,
+                (None, None) => None,
             };
             replacements.insert(path.clone(), bytes);
         }
@@ -192,6 +325,88 @@ impl Checkpoints {
 }
 
 type Replacement = Option<(Fingerprint, Vec<u8>)>;
+
+/// How long a revert preview's token stays usable.
+const PREVIEW_LIFETIME: Duration = Duration::from_secs(10 * 60);
+
+/// Lines of `bytes`, each with its own ending; the last may have none. They split as the app's
+/// diff splits text, so line counts agree with the hunks Changes shows.
+fn lines(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'\n' {
+            lines.push(&bytes[start..=index]);
+            start = index + 1;
+        }
+    }
+    if start < bytes.len() {
+        lines.push(&bytes[start..]);
+    }
+    lines
+}
+
+/// The current text with each hunk's lines replaced by the checkpoint's, every line keeping its
+/// own ending. A hunk that reaches the end of both texts also ends the result as the checkpoint
+/// ends, so reverting every hunk gives back the checkpoint's bytes exactly.
+pub(super) fn revert_hunks(
+    current: &[u8],
+    checkpoint: &[u8],
+    hunks: &[LineHunk],
+) -> Result<Vec<u8>> {
+    let new = lines(current);
+    let old = lines(checkpoint);
+    let invalid = || {
+        CheckpointError::Message("The change no longer matches the file. Refresh Changes.".into())
+    };
+    let mut result = Vec::with_capacity(current.len().max(checkpoint.len()));
+    let (mut next_old, mut next_new) = (0usize, 0usize);
+    let mut at_end = false;
+    for hunk in hunks {
+        let (old_start, new_start) = (hunk.old_start as usize, hunk.new_start as usize);
+        let old_end = old_start
+            .checked_add(hunk.old_lines as usize)
+            .ok_or_else(invalid)?;
+        let new_end = new_start
+            .checked_add(hunk.new_lines as usize)
+            .ok_or_else(invalid)?;
+        if (old_end == old_start && new_end == new_start)
+            || old_start < next_old
+            || new_start < next_new
+            || old_end > old.len()
+            || new_end > new.len()
+        {
+            return Err(invalid());
+        }
+        for line in &new[next_new..new_start] {
+            result.extend_from_slice(line);
+        }
+        for line in &old[old_start..old_end] {
+            result.extend_from_slice(line);
+        }
+        (next_old, next_new) = (old_end, new_end);
+        at_end = old_end == old.len() && new_end == new.len();
+    }
+    for line in &new[next_new..] {
+        result.extend_from_slice(line);
+    }
+    if at_end && !result.is_empty() {
+        // The checkpoint's last line decides how the text ends.
+        let ending: &[u8] = match old.last() {
+            Some(line) if line.ends_with(b"\r\n") => b"\r\n",
+            Some(line) if line.ends_with(b"\n") => b"\n",
+            _ => b"",
+        };
+        if result.ends_with(b"\n") {
+            result.pop();
+            if result.ends_with(b"\r") {
+                result.pop();
+            }
+        }
+        result.extend_from_slice(ending);
+    }
+    Ok(result)
+}
 
 fn apply(
     prepared: &Prepared,
@@ -403,6 +618,7 @@ mod tests {
                 },
             },
             current,
+            partial: BTreeMap::new(),
             expires: Instant::now() + Duration::from_secs(60),
         }
     }
@@ -563,5 +779,89 @@ mod tests {
         assert!(result.error.is_some());
         assert_eq!(std::fs::read(root.join("b")).unwrap(), b"concurrent writer");
         assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
+    }
+
+    fn hunk(old_start: u32, old_lines: u32, new_start: u32, new_lines: u32) -> LineHunk {
+        LineHunk {
+            old_start,
+            old_lines,
+            new_start,
+            new_lines,
+        }
+    }
+
+    fn reverted(current: &str, checkpoint: &str, hunks: &[LineHunk]) -> String {
+        String::from_utf8(revert_hunks(current.as_bytes(), checkpoint.as_bytes(), hunks).unwrap())
+            .unwrap()
+    }
+
+    #[test]
+    fn a_hunk_puts_back_the_checkpoint_lines_and_leaves_the_rest() {
+        let checkpoint = "1\n2\n3\n4\n5\n";
+        let current = "1\nX\n3\n4\nY\n";
+        assert_eq!(
+            reverted(current, checkpoint, &[hunk(4, 1, 4, 1)]),
+            "1\nX\n3\n4\n5\n"
+        );
+        assert_eq!(
+            reverted(current, checkpoint, &[hunk(1, 1, 1, 1)]),
+            "1\n2\n3\n4\nY\n"
+        );
+        assert_eq!(
+            reverted(current, checkpoint, &[hunk(1, 1, 1, 1), hunk(4, 1, 4, 1)]),
+            checkpoint
+        );
+        // Added lines go, removed lines come back.
+        assert_eq!(
+            reverted("a\nb\nc\n", "a\nc\n", &[hunk(1, 0, 1, 1)]),
+            "a\nc\n"
+        );
+        assert_eq!(
+            reverted("a\nc\n", "a\nb\nc\n", &[hunk(1, 1, 1, 0)]),
+            "a\nb\nc\n"
+        );
+        // A block with an unchanged line inside reverts as one.
+        assert_eq!(
+            reverted("a\nX\nm\nY\nz\n", "a\nb\nm\nc\nz\n", &[hunk(1, 3, 1, 3)]),
+            "a\nb\nm\nc\nz\n"
+        );
+    }
+
+    #[test]
+    fn line_endings_stay_and_the_end_follows_the_checkpoint() {
+        // Each line keeps its own ending.
+        assert_eq!(
+            reverted("a\r\nB\r\n", "a\r\nb\r\n", &[hunk(1, 1, 1, 1)]),
+            "a\r\nb\r\n"
+        );
+        // A hunk at the end of both texts ends the result as the checkpoint ends.
+        assert_eq!(reverted("a\nb\nc\n", "a\nb", &[hunk(2, 0, 2, 1)]), "a\nb");
+        assert_eq!(reverted("a\nb\nc", "a\nb\n", &[hunk(2, 0, 2, 1)]), "a\nb\n");
+        assert_eq!(
+            reverted("a\nb\n", "a\nb\nc", &[hunk(2, 1, 2, 0)]),
+            "a\nb\nc"
+        );
+        assert_eq!(
+            reverted("a\r\nb\r\nc\r\n", "a\r\nb", &[hunk(2, 0, 2, 1)]),
+            "a\r\nb"
+        );
+        // Every line removed, or every line new.
+        assert_eq!(reverted("x\ny\n", "", &[hunk(0, 0, 0, 2)]), "");
+        assert_eq!(reverted("", "x\ny", &[hunk(0, 2, 0, 0)]), "x\ny");
+        // A hunk short of the end leaves the end alone.
+        assert_eq!(reverted("A\nb", "a\nb", &[hunk(0, 1, 0, 1)]), "a\nb");
+    }
+
+    #[test]
+    fn hunks_out_of_order_overlapping_empty_or_past_the_end_are_refused() {
+        let refused = |hunks: &[LineHunk]| {
+            revert_hunks(b"1\n2\n3\n", b"1\n2\n3\n4\n", hunks).expect_err("invalid hunks")
+        };
+        refused(&[hunk(1, 0, 1, 0)]);
+        refused(&[hunk(3, 2, 3, 0)]);
+        refused(&[hunk(1, 0, 3, 1)]);
+        refused(&[hunk(2, 1, 2, 1), hunk(1, 1, 1, 1)]);
+        refused(&[hunk(1, 2, 1, 1), hunk(2, 1, 2, 1)]);
+        refused(&[hunk(u32::MAX, 1, 0, 1)]);
     }
 }

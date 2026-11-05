@@ -3,6 +3,7 @@
  * message, and the request for the agent to review its own changes.
  */
 import { useCallback, useSyncExternalStore } from "react";
+import type { LineHunk } from "../../bindings";
 
 /** A comment on one line of a changed file, by its line number in the new or the old text. */
 export interface DiffComment {
@@ -71,6 +72,29 @@ export function reviewRequest(since: string | null, files: readonly string[]): s
   if (files.length > LISTED_FILES) listed.push(`- and ${files.length - LISTED_FILES} more`);
   const where = listed.length ? `\n\nThe files that changed:\n${listed.join("\n")}` : "";
   return `Review ${scope}.${where}\n\nLook for bugs, regressions, missed cases and anything left unfinished, and list the problems by file and line, the most serious first. Don't change any files yet.`;
+}
+
+/**
+ * Comments once one change of `path` is reverted: those on its lines go, since the change they
+ * were about is gone, and those on later lines move with them. A removed line keeps its number,
+ * which counts the checkpoint's text.
+ */
+export function afterHunkRevert(
+  comments: readonly DiffComment[],
+  path: string,
+  hunk: LineHunk,
+): DiffComment[] {
+  const newEnd = hunk.new_start + hunk.new_lines;
+  const oldEnd = hunk.old_start + hunk.old_lines;
+  return comments.flatMap((comment) => {
+    if (comment.path !== path) return [comment];
+    if (comment.side === "old")
+      return comment.line > hunk.old_start && comment.line <= oldEnd ? [] : [comment];
+    if (comment.line > hunk.new_start && comment.line <= newEnd) return [];
+    return comment.line > newEnd
+      ? [{ ...comment, line: comment.line + hunk.old_lines - hunk.new_lines }]
+      : [comment];
+  });
 }
 
 /** Unsent comments by chat: they outlast the Changes panel and the chat's view, not auracode. */

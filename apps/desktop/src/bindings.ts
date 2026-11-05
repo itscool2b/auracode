@@ -287,6 +287,8 @@ export const commands = {
 	chatRewindFiles: (chatId: string, turnId: string, dryRun: boolean) => typedError<NativeRewind, AppError>(__TAURI_INVOKE("chat_rewind_files", { chatId, turnId, dryRun })),
 	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
 	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
+	/**  A revert of some hunks of one modified file; `checkpoint_revert` applies it. */
+	checkpointHunkRevertPreview: (chatId: string, checkpointId: string, selection: HunkRevert) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_hunk_revert_preview", { chatId, checkpointId, selection })),
 	checkpointRevert: (chatId: string, token: string) => typedError<RevertResult, AppError>(__TAURI_INVOKE("checkpoint_revert", { chatId, token })),
 	worktreeSetup: (chatId: string) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup", { chatId })),
 	worktreeSetupSave: (chatId: string, input: WorktreeSetupInput) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup_save", { chatId, input })),
@@ -1013,6 +1015,11 @@ export type ChangeDiff = {
 	after: string | null,
 	binary: boolean,
 	truncated: boolean,
+	/**
+	 *  The SHA-256 of the current file `after` was read from, `None` when it is absent. Reverting
+	 *  one hunk names it, so its line numbers count lines of this very text.
+	 */
+	after_sha256?: string | null,
 };
 
 export type ChangeKind = "added" | "modified" | "deleted";
@@ -1806,6 +1813,16 @@ export type HoldCause =
 /**  The agent reached its usage limit. Another account, or the reset, continues the chat. */
 "usage_limit";
 
+/**
+ *  Hunks of one modified text file to revert, counted in the texts its `ChangeDiff` gave, in
+ *  order and apart. The rest of the file stays as it is.
+ */
+export type HunkRevert = {
+	path: string,
+	after_sha256: string,
+	hunks: LineHunk[],
+};
+
 export type ImportProjectMemory = {
 	bundle: ProjectMemoryBundle,
 	expected_revision: string | null,
@@ -2194,6 +2211,18 @@ export type LimitWindow = {
 	label: string,
 	used_percent: number | null,
 	resets_at: number | null,
+};
+
+/**
+ *  A block of changed lines, by offsets: `old_start` lines of the checkpoint's text come before
+ *  it and `old_lines` belong to it; `new_start` and `new_lines` count the same in the current
+ *  text. Reverting it puts the checkpoint's lines back in place of the current ones.
+ */
+export type LineHunk = {
+	old_start: number,
+	old_lines: number,
+	new_start: number,
+	new_lines: number,
 };
 
 /**  Where one feature's entries came from this time. */

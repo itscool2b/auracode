@@ -1,6 +1,6 @@
 use crate::{error::AppError, state::AppState};
 use aura_protocol::changes::{
-    ChangeDiff, ChangesSnapshot, NativeRewind, RevertPreview, RevertResult,
+    ChangeDiff, ChangesSnapshot, HunkRevert, NativeRewind, RevertPreview, RevertResult,
 };
 use tauri::State;
 
@@ -51,6 +51,20 @@ pub async fn checkpoint_revert_preview(
     Ok(state
         .sessions()?
         .checkpoint_revert_preview(&chat_id, &checkpoint_id, paths)
+        .await?)
+}
+/// A revert of some hunks of one modified file; `checkpoint_revert` applies it.
+#[tauri::command]
+#[specta::specta]
+pub async fn checkpoint_hunk_revert_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    checkpoint_id: String,
+    selection: HunkRevert,
+) -> Result<RevertPreview, AppError> {
+    Ok(state
+        .sessions()?
+        .checkpoint_hunk_revert_preview(&chat_id, &checkpoint_id, selection)
         .await?)
 }
 #[tauri::command]

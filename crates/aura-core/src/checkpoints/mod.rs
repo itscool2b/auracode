@@ -587,8 +587,11 @@ impl Checkpoints {
             scan::read(&root, &relative)
         })
         .await
-        .map_err(|_| CheckpointError::Message("Reading the changed file failed.".into()))??
-        .map(|(_, bytes)| bytes);
+        .map_err(|_| CheckpointError::Message("Reading the changed file failed.".into()))??;
+        let after_sha256 = after
+            .as_ref()
+            .map(|(fingerprint, _)| fingerprint.sha256.clone());
+        let after = after.map(|(_, bytes)| bytes);
         let binary = before
             .as_ref()
             .into_iter()
@@ -598,14 +601,14 @@ impl Checkpoints {
             .as_ref()
             .into_iter()
             .chain(after.as_ref())
-            .any(|bytes| bytes.len() > 128 * 1024);
+            .any(|bytes| bytes.len() > DIFF_TEXT_LIMIT);
         let text = |bytes: Option<Vec<u8>>| -> Option<String> {
             if binary {
                 return None;
             }
             bytes.map(|bytes| {
                 let mut value = String::from_utf8_lossy(&bytes).into_owned();
-                let mut end = value.len().min(128 * 1024);
+                let mut end = value.len().min(DIFF_TEXT_LIMIT);
                 while !value.is_char_boundary(end) {
                     end -= 1;
                 }
@@ -619,6 +622,7 @@ impl Checkpoints {
             after: text(after),
             binary,
             truncated,
+            after_sha256,
         })
     }
 
@@ -931,6 +935,10 @@ impl Checkpoints {
         Ok(bytes)
     }
 }
+
+/// The most of each side a diff gives as text; a longer file's diff is marked truncated, and its
+/// hunks cannot be reverted one by one.
+pub(super) const DIFF_TEXT_LIMIT: usize = 128 * 1024;
 
 fn valid_id(id: &str) -> Result<()> {
     if uuid::Uuid::parse_str(id).is_err() {
