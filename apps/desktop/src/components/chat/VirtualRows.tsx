@@ -60,6 +60,7 @@ export function VirtualRows({
   focusedKey,
   onFocusKey,
   promptHost,
+  revealRow = null,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly leading?: ReactNode;
@@ -71,6 +72,11 @@ export function VirtualRows({
   readonly focusedKey: string | null;
   readonly onFocusKey: (key: string | null) => void;
   readonly promptHost: HTMLDivElement | null;
+  /**
+   * A row to bring into view and keep rendered (find in chat's current match). A new `nonce`
+   * scrolls to it again, even for the same row.
+   */
+  readonly revealRow?: { readonly key: string; readonly nonce: number } | null;
 }) {
   const reading = useRef<{ anchor: ReadingAnchor; revision: number } | null>(null);
   const viewportTop = useRef<number | null>(null);
@@ -88,8 +94,11 @@ export function VirtualRows({
     return () => observer.disconnect();
   }, []);
   const focused = rows.findIndex((row) => row.key === focusedKey);
+  const revealed = revealRow === null ? -1 : rows.findIndex((row) => row.key === revealRow.key);
   const retained = rows.flatMap((row, index) =>
-    row.retain || index === focused || row.key === reading.current?.anchor.key ? [index] : [],
+    row.retain || index === focused || index === revealed || row.key === reading.current?.anchor.key
+      ? [index]
+      : [],
   );
   const keyAt = useCallback((index: number) => rows[index]?.key ?? index, [rows]);
   // New rows of live output fade in and rise 2px; rows that only re-enter the virtual window, a
@@ -246,6 +255,26 @@ export function VirtualRows({
       stick.current?.acknowledgeAdjustment();
     }
   });
+  const revealNonce = revealRow?.nonce;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new nonce is the request; the row index is read as it is then.
+  useLayoutEffect(() => {
+    if (revealNonce === undefined || revealed < 0) return;
+    const element = scroller.current;
+    const key = rows[revealed]?.key;
+    const row = element
+      ? [...element.querySelectorAll<HTMLElement>("[data-row-key]")].find(
+          (node) => node.dataset.rowKey === key,
+        )
+      : undefined;
+    // A row already in full view stays put, and the transcript keeps following new output.
+    if (row && element) {
+      const box = row.getBoundingClientRect();
+      const view = element.getBoundingClientRect();
+      if (box.top >= view.top && box.bottom <= view.bottom) return;
+    }
+    stick.current?.release();
+    virtual.scrollToIndex(revealed, { align: "center" });
+  }, [revealNonce]);
   useLayoutEffect(() => {
     if (historyError !== null) reading.current = null;
     captureHistory.current = () => {

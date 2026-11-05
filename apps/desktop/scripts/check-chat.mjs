@@ -550,6 +550,78 @@ async function hunkRevert(page, theme) {
   await page.screenshot({ path: resolve(out, `hunk-reverted-${theme}.png`) });
 }
 
+/**
+ * Find in chat (missing features D): Ctrl+F opens a bar over the transcript that counts the
+ * query in messages and answers, steps through the matches with Enter and Shift+Enter, highlights
+ * them, and brings a match in a row the virtual list had not rendered into view.
+ */
+async function findInChat(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=settled`);
+  // The transcript, not just the phase: the chat's record can arrive a moment after it.
+  await page.getByTestId("prompt-text").first().waitFor();
+  await page.keyboard.press("Control+f");
+  const bar = page.getByTestId("find-bar");
+  await bar.waitFor();
+  const field = bar.getByRole("textbox", { name: "Find in chat" });
+  assert.ok(await field.evaluate((node) => node === document.activeElement), "find took no focus");
+  const count = page.getByTestId("find-count");
+  const highlights = () =>
+    page.evaluate(() => [
+      CSS.highlights.get("chat-find")?.size ?? 0,
+      CSS.highlights.get("chat-find-current")?.size ?? 0,
+    ]);
+  // The prompt and the answer, its code included; the tool output saying "chat" is not searched.
+  await page.keyboard.type("chat");
+  await count.getByText("1 of 5", { exact: true }).waitFor();
+  assert.deepEqual(await highlights(), [5, 1]);
+  await page.keyboard.press("Enter");
+  await count.getByText("2 of 5", { exact: true }).waitFor();
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Shift+Enter");
+  await count.getByText("5 of 5", { exact: true }).waitFor();
+  await bar.getByRole("button", { name: "Next match" }).click();
+  await count.getByText("1 of 5", { exact: true }).waitFor();
+  await settled(page);
+  const scan = await new AxeBuilder({ page })
+    .include("[data-testid=find-bar]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(scan.violations, [], `${theme} find bar accessibility`);
+  await page.screenshot({ path: resolve(out, `find-in-chat-${theme}.png`) });
+  await field.fill("no such words");
+  await count.getByText("No results", { exact: true }).waitFor();
+  assert.ok(await bar.getByRole("button", { name: "Next match" }).isDisabled());
+  assert.deepEqual(await highlights(), [0, 0]);
+  // Ctrl+F again keeps the bar and selects the query; Esc closes it and its highlights.
+  await page.keyboard.press("Control+f");
+  assert.equal(
+    await field.evaluate((node) => node.selectionEnd - node.selectionStart),
+    "no such words".length,
+  );
+  await field.fill("chat");
+  await count.getByText("1 of 5", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await bar.waitFor({ state: "detached" });
+  assert.deepEqual(await highlights(), [0, 0]);
+  // In a long history the match's row is not rendered until find brings it into view.
+  await page.goto(`${url}/?preview=history`);
+  await page.locator('[data-test-turn-id="history-499"]').first().waitFor();
+  await page.keyboard.press("Control+f");
+  await field.waitFor();
+  // Turn 259 is loaded (the first page holds 250 to 499) but far above the rendered rows.
+  assert.equal(await page.locator('[data-test-turn-id="history-259"]').count(), 0);
+  await page.keyboard.type("review 260:");
+  await count.getByText("1 of 1", { exact: true }).waitFor();
+  await page.waitForFunction(() => {
+    const range = [...(CSS.highlights.get("chat-find-current") ?? [])][0];
+    const view = document.querySelector("[data-testid=transcript]")?.getBoundingClientRect();
+    if (!range || !view) return false;
+    const box = range.getBoundingClientRect();
+    return box.height > 0 && box.top >= view.top && box.bottom <= view.bottom;
+  });
+}
+
 async function richAnswer(page, theme) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   // Under the app's own policy (tauri.conf.json), which forbids eval: the dev server applies none,
@@ -643,6 +715,7 @@ async function inspect(engine, launcher) {
     for (const theme of ["light", "dark"]) await nativeRewind(page, theme);
     for (const theme of ["light", "dark"]) await reviewComments(page, theme);
     for (const theme of ["light", "dark"]) await hunkRevert(page, theme);
+    for (const theme of ["light", "dark"]) await findInChat(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [

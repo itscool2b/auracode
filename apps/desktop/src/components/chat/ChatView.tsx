@@ -102,6 +102,8 @@ export function ChatView({
     () => false,
   );
   const [changesOpen, setChangesOpen] = useState(false);
+  // Ctrl+F (Cmd+F on macOS) opens find in chat, or focuses its field again.
+  const [findRequest, setFindRequest] = useState(0);
   // A Rewind on a sent message: Changes opens on the files before that turn, all selected.
   const [rewind, setRewind] = useState<RewindRequest | null>(null);
   // Comments on Changes' diffs, kept while the panel and this view close, until sent or discarded.
@@ -144,6 +146,18 @@ export function ChatView({
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "f" &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        setFindRequest((count) => count + 1);
+        return;
+      }
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "j" &&
@@ -744,6 +758,7 @@ export function ChatView({
                 live={live}
                 actions={actions}
                 onLoadEarlier={() => void store.loadEarlier()}
+                findRequest={findRequest}
               />
             </TaskLinkContext.Provider>
             <div className="chat-dock">

@@ -320,6 +320,8 @@ export function SettingsScreen({
     ["New chat", `${key} N`],
     ["Open chat 1 to 9 in the sidebar", `${key} 1–9`],
     ["Search chats, projects and files", `${key} K`],
+    ["Find in chat", `${key} F`],
+    ["Next or previous match", "Enter / Shift Enter"],
     ["Open context panel", `${key} J`],
     ["Show or hide the terminal", `${key} \``],
     ["New terminal", `${key} Shift \``],

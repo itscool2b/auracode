@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Find in chat: Ctrl+F (Cmd+F on macOS) opens a bar that counts a word or phrase in your messages and the agent's answers, highlights every match, and steps through them with Enter and Shift+Enter, scrolling to matches in long chats and opening folded work where one sits. ([#87](https://github.com/itscool2b/auracode/pull/87))
 - Commit and push from the Git workspace dialog: choose the changed files and write the message, review the exact commit (author, files, stat), then push the branch to its upstream or origin, fast-forward only, creating the remote branch and its upstream when needed. Git hooks do not run and nothing is staged unless the commit succeeds. ([#86](https://github.com/itscool2b/auracode/pull/86))
 - Changes shows each change with three lines around it and folds the rest, diffs long files line by line, and reverts one change on its own: Revert above a change puts back just its lines from before the turn, through the same preview and recovery as whole files. ([#85](https://github.com/itscool2b/auracode/pull/85))
 - Review in Changes: comment on any line of a diff, by pointer or keyboard, and send the comments to the agent as one message that quotes each line with its file and number; or ask the agent to review the changes and report problems before it changes anything. Unsent comments wait while the panel or the chat closes. ([#84](https://github.com/itscool2b/auracode/pull/84))
