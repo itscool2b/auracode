@@ -3546,3 +3546,45 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 :is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:focus-visible small {
   color: var(--g-fg-2);
 }
+
+/* An MCP server's form: fields in a column, each with its note and any mistake under it. */
+.chat-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-6);
+  min-width: 0;
+}
+
+.chat-form-label {
+  padding: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.chat-form-note,
+.chat-form-error {
+  margin: 0;
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-form-note {
+  color: var(--g-fg-3);
+}
+
+/* Where a browser step leads: the host set apart from the rest of the address. */
+.chat-link-target {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.chat-link-host {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}

@@ -1077,6 +1077,41 @@ fn fit_question(mut request: UiRequest) -> UiRequest {
                 questions,
             }
         }
+        // Drivers refuse a form too large to show; here only display text shrinks. Field ids,
+        // choice positions and bounds stay exact for the answer.
+        UiPrompt::Form {
+            message,
+            source,
+            mut fields,
+        } => {
+            for field in &mut fields {
+                field.label = cap_chars(std::mem::take(&mut field.label), OPTION_NAME_CHARS);
+                field.description = field
+                    .description
+                    .take()
+                    .map(|text| cap_escaped(text, MESSAGE_BYTES));
+                if let aura_protocol::forms::UiFieldKind::Choice { options, .. } = &mut field.kind {
+                    for option in options {
+                        *option = cap_chars(std::mem::take(option), OPTION_NAME_CHARS);
+                    }
+                }
+            }
+            UiPrompt::Form {
+                message: cap_escaped(message, MESSAGE_BYTES),
+                source: source.map(|name| cap_chars(name, OPTION_NAME_CHARS)),
+                fields,
+            }
+        }
+        // The address is never shortened: it is what opens. Drivers bound it.
+        UiPrompt::Link {
+            message,
+            source,
+            url,
+        } => UiPrompt::Link {
+            message: cap_escaped(message, MESSAGE_BYTES),
+            source: source.map(|name| cap_chars(name, OPTION_NAME_CHARS)),
+            url,
+        },
     };
     let size = |request: &UiRequest| json_len(request) + tag_len("ui_request");
     if size(&request) > EVENT_BUDGET && matches!(request.prompt, UiPrompt::Questions { .. }) {
@@ -1163,6 +1198,15 @@ fn fit_answer(answer: UiAnswer, request_id: &str, by: ResolvedBy) -> UiAnswer {
                 }
             }
             UiAnswer::Questions { answers }
+        }
+        // The record of a form's text answers is shortened; the agent got them whole.
+        UiAnswer::Form { accept, mut values } => {
+            for value in &mut values {
+                if let aura_protocol::forms::UiValue::Text { text } = &mut value.value {
+                    *text = cap_escaped(std::mem::take(text), MESSAGE_BYTES);
+                }
+            }
+            UiAnswer::Form { accept, values }
         }
         other => other,
     }

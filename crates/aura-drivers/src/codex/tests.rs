@@ -661,6 +661,107 @@ async fn secret_questions_are_cancelled_without_forwarding_a_persisted_prompt() 
 }
 
 #[tokio::test(start_paused = true)]
+async fn an_mcp_form_from_codex_is_shown_and_answered_with_the_mcp_result() {
+    use aura_protocol::forms::{UiFieldValue, UiValue};
+    use aura_protocol::{UiAnswer, UiPrompt};
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    h.send(
+        json!({"id":"form","method":"mcpServer/elicitation/request","params":{
+        "threadId":"thread-1","turnId":"turn-1","serverName":"tickets","mode":"form",
+        "message":"File the ticket","requestedSchema":{"type":"object","properties":{
+            "title":{"type":"string","maxLength":80},
+            "priority":{"type":"integer","minimum":1,"maximum":3}
+        },"required":["title"]}}}),
+    );
+    let request = loop {
+        if let DriverEvent::UiRequest { request, turn } = h.event().await {
+            assert!(turn.is_some(), "tied to the running turn");
+            break request;
+        }
+    };
+    assert!(
+        matches!(&request.prompt, UiPrompt::Form { source, .. } if source.as_deref() == Some("tickets"))
+    );
+    h.tx.send(DriverCommand::RespondUi {
+        request_id: request.request_id.clone(),
+        answer: Some(UiAnswer::Form {
+            accept: true,
+            values: vec![
+                UiFieldValue {
+                    id: "title".into(),
+                    value: UiValue::Text {
+                        text: "Login fails".into(),
+                    },
+                },
+                UiFieldValue {
+                    id: "priority".into(),
+                    value: UiValue::Number { number: 2.0 },
+                },
+            ],
+        }),
+    })
+    .unwrap();
+    assert_eq!(
+        h.wire().await,
+        json!({"id":"form","result":{"action":"accept","content":{"title":"Login fails","priority":2}}})
+    );
+    // Dismissing a second one cancels it, as the MCP result says.
+    h.send(json!({"id":"link","method":"mcpServer/elicitation/request","params":{
+        "threadId":"thread-1","turnId":null,"serverName":"tickets","mode":"url",
+        "message":"Approve in the browser","url":"https://tickets.example/approve","elicitationId":"e2"}}));
+    let request = loop {
+        if let DriverEvent::UiRequest { request, .. } = h.event().await {
+            break request;
+        }
+    };
+    h.tx.send(DriverCommand::RespondUi {
+        request_id: request.request_id,
+        answer: None,
+    })
+    .unwrap();
+    assert_eq!(
+        h.wire().await,
+        json!({"id":"link","result":{"action":"cancel","content":null}})
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn mcp_servers_starting_up_are_reported_as_loaded_for_this_thread_only() {
+    use aura_protocol::session::McpLoadState;
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.send(json!({"method":"mcpServer/startupStatus/updated","params":{"threadId":null,"name":"docs","status":"starting"}}));
+    h.send(json!({"method":"mcpServer/startupStatus/updated","params":{"threadId":"other","name":"foreign","status":"failed"}}));
+    h.send(json!({"method":"mcpServer/startupStatus/updated","params":{"threadId":"thread-1","name":"docs","status":"ready"}}));
+    h.send(json!({"method":"thread/name/updated","params":{"threadId":"thread-1","threadName":"barrier"}}));
+    let mut states = Vec::new();
+    loop {
+        match h.event().await {
+            DriverEvent::Loaded(loaded) => states.push(
+                loaded
+                    .mcp_servers
+                    .iter()
+                    .map(|server| (server.name.clone(), server.state))
+                    .collect::<Vec<_>>(),
+            ),
+            DriverEvent::Title(Some(title)) if title == "barrier" => break,
+            _ => {}
+        }
+    }
+    assert_eq!(
+        states,
+        [
+            vec![("docs".to_owned(), McpLoadState::Starting)],
+            vec![("docs".to_owned(), McpLoadState::Connected)],
+        ]
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn setting_default_effort_clears_previous_turn_override() {
     let mut h = Harness::start().await;
     h.ready().await;

@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- MCP servers' forms and browser steps now show in Claude and Codex chats (they were cancelled), checked field by field; and the Session tab lists what the session loaded: MCP servers with their state, skills, plugins and subagents, as each agent reports them. ([#82](https://github.com/itscool2b/auracode/pull/82))
 - Fork into a new chat from the latest answer continues Claude's or Pi's own session, with everything it knew; Rewind on a sent message restores the files from before it and goes on to edit it, from auracode's checkpoints or, in Claude chats, from Claude's own copies of what it edited; and Pi can be steered while it works. ([#81](https://github.com/itscool2b/auracode/pull/81))
 - Answers colour their code in the theme's colours, set math with KaTeX (inline and on its own line), and draw Mermaid diagrams, with their code a click away. ([#80](https://github.com/itscool2b/auracode/pull/80))
 - An opened tool call shows what it was given; a web search lists the pages it found as links; JSON and MCP replies are set out over lines; an edit's row counts its changed lines; Claude's to-do list shows as the turn's checklist; and a compacted conversation shows where it happened, with Compact conversation in the chat's menu. ([#79](https://github.com/itscool2b/auracode/pull/79))

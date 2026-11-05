@@ -626,6 +626,7 @@ fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
         | DriverEvent::PermissionWithdrawn { .. }
         | DriverEvent::UiWithdrawn { .. }
         | DriverEvent::Commands(_)
+        | DriverEvent::Loaded(_)
         | DriverEvent::Options(_)
         | DriverEvent::Autonomy(_)
         | DriverEvent::Title(_)

@@ -338,6 +338,8 @@ pub enum DriverEvent {
     },
     /// The full reduced list.
     Commands(Vec<SlashCommand>),
+    /// What the session loaded, in full each time (see [`aura_protocol::session::SessionLoaded`]).
+    Loaded(aura_protocol::session::SessionLoaded),
     /// The full list with current values.
     Options(Vec<ConfigOption>),
     Autonomy(AutonomyState),
@@ -551,7 +553,7 @@ pub struct ChannelClosed;
 
 /// Serializable mirror of [`DriverCommand`] (no reply channels), written as `cmd` log records and
 /// read by replay.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LoggedCommand {
     McpAction {

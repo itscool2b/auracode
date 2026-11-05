@@ -692,6 +692,13 @@ impl Session {
                             }
                             self.outbox
                                 .push_back(DriverEvent::Commands(metadata::commands(&data)));
+                            self.outbox.push_back(DriverEvent::Loaded(
+                                aura_protocol::session::SessionLoaded {
+                                    skills: metadata::skills(&data),
+                                    ..Default::default()
+                                }
+                                .bounded(),
+                            ));
                         }
                         Purpose::Stats => {
                             if self.stats_dirty {

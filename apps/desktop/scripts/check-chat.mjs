@@ -459,7 +459,12 @@ async function inspect(engine, launcher) {
         });
     });
     const page = await context.newPage();
-    page.on("pageerror", (error) => errors.push(error.message));
+    // WebKit reports a ResizeObserver callback that changes layout again within its frame as an
+    // error event, and delivers the remaining notifications next frame. That is the spec's notice,
+    // not a fault (it failed main about half its runs on 2026-11-05); every other error counts.
+    page.on("pageerror", (error) => {
+      if (!error.message.startsWith("ResizeObserver loop")) errors.push(error.message);
+    });
     for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
     for (const theme of ["light", "dark"]) await toolDetails(page, theme);
     for (const theme of ["light", "dark"]) await richAnswer(page, theme);
@@ -643,11 +648,10 @@ async function inspect(engine, launcher) {
           window.__chatFrames = 0;
         });
         await page.waitForTimeout(250);
-        assert.equal(
-          await page.evaluate(() => window.__chatFrames),
-          0,
-          `${mode}: frames under reduced motion`,
-        );
+        // Continuous animation draws every frame, about fifteen in 250ms. One frame is a single
+        // measurement (the virtual list reconciling after a running timer's text changed width).
+        const frames = await page.evaluate(() => window.__chatFrames);
+        assert.ok(frames <= 1, `${mode}: ${frames} frames under reduced motion`);
       }
     }
 
@@ -1372,6 +1376,19 @@ async function inspect(engine, launcher) {
     assert.equal(await page.getByTestId("composer-input").inputValue(), "Review ");
     for (const tab of ["Files", "Plan", "Session"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      if (tab === "Session") {
+        // What the session loaded: MCP servers open when one failed or waits for a sign-in.
+        const loaded = page.getByRole("region", { name: "Loaded", exact: true });
+        await loaded.getByText("MCP servers", { exact: false }).waitFor();
+        assert.equal(
+          await loaded.locator("[data-test-mcp-state=failed]").textContent(),
+          "plugin:context7:context7Failed · plugin",
+        );
+        await loaded.getByText("Needs sign-in · project", { exact: true }).waitFor();
+        await loaded.getByText("Skills", { exact: false }).click();
+        await loaded.getByText("release-notes", { exact: true }).waitFor();
+        await loaded.getByText("38 tools available, MCP tools included", { exact: true }).waitFor();
+      }
       if (tab === "Files") {
         await page
           .getByRole("region", { name: "Project files", exact: true })

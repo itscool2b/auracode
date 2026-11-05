@@ -81,6 +81,78 @@ pub struct SessionLists {
     pub options: Vec<ConfigOption>,
     pub commands: Vec<SlashCommand>,
     pub autonomy: AutonomyState,
+    /// What the running session loaded, where its agent reports it.
+    #[serde(default)]
+    pub loaded: Option<SessionLoaded>,
+}
+
+/// What a running session loaded, as its agent reports it once it starts: MCP servers with
+/// their state, skills, plugins and subagents. Each agent reports what it can: Claude all of it,
+/// Codex its MCP servers, Pi its skills.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SessionLoaded {
+    pub mcp_servers: Vec<LoadedMcpServer>,
+    pub skills: Vec<String>,
+    pub plugins: Vec<LoadedPlugin>,
+    pub agents: Vec<String>,
+    /// How many tools the agent offers, MCP tools included.
+    pub tools: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct LoadedMcpServer {
+    pub name: String,
+    pub state: McpLoadState,
+    /// Where it was configured (user, project, a plugin…), as the agent names it.
+    pub source: Option<String>,
+}
+
+/// An MCP server's state, in the few words every agent's states come to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum McpLoadState {
+    Connected,
+    Starting,
+    NeedsSignIn,
+    Failed,
+    Off,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct LoadedPlugin {
+    pub name: String,
+    pub version: Option<String>,
+}
+
+impl SessionLoaded {
+    /// Bounded, so a large setup cannot swell the session's lists: 64 servers, 256 skills, 128
+    /// plugins and 128 subagents, each name cut at 128 characters.
+    pub fn bounded(mut self) -> Self {
+        let cut = |text: &mut String| {
+            if let Some((at, _)) = text.char_indices().nth(128) {
+                text.truncate(at);
+            }
+        };
+        self.mcp_servers.truncate(64);
+        self.skills.truncate(256);
+        self.plugins.truncate(128);
+        self.agents.truncate(128);
+        for server in &mut self.mcp_servers {
+            cut(&mut server.name);
+            if let Some(source) = &mut server.source {
+                cut(source);
+            }
+        }
+        for plugin in &mut self.plugins {
+            cut(&mut plugin.name);
+            if let Some(version) = &mut plugin.version {
+                cut(version);
+            }
+        }
+        self.skills.iter_mut().chain(&mut self.agents).for_each(cut);
+        self
+    }
 }
 
 /// Runtime native control choices, independent from legacy autonomy.
@@ -474,6 +546,7 @@ mod tests {
     #[test]
     fn options_and_lists_round_trip() {
         let lists = SessionLists {
+            loaded: None,
             controls: Default::default(),
             revision: 3,
             capabilities: Some(Capabilities {

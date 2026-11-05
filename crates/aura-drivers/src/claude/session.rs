@@ -393,6 +393,11 @@ struct Questions {
     questions: Vec<UiQuestion>,
     turn: Option<String>,
 }
+/// An MCP server's form or browser step, which Claude asks its host to show.
+struct Elicit {
+    spec: crate::elicitation::Elicitation,
+    turn: Option<String>,
+}
 struct Session {
     sink: LineSink,
     log: ProtocolLog,
@@ -403,6 +408,9 @@ struct Session {
     pending: BTreeMap<String, Pending>,
     approvals: BTreeMap<String, Approval>,
     questions: BTreeMap<String, Questions>,
+    elicitations: BTreeMap<String, Elicit>,
+    /// The last report of what the session loaded.
+    loaded: Option<aura_protocol::session::SessionLoaded>,
     translator: translate::Translator,
     outbox: VecDeque<DriverEvent>,
     held: VecDeque<(Instant, DriverCommand)>,
@@ -575,6 +583,15 @@ impl Session {
         if init && !self.native_identity(frame) {
             return;
         }
+        // The first turn's init names what the session loaded; the initialize reply only its
+        // subagents. A report goes out only when it changes.
+        if init {
+            let loaded = translate::loaded(frame);
+            if self.loaded.as_ref() != Some(&loaded) {
+                self.loaded = Some(loaded.clone());
+                self.outbox.push_back(DriverEvent::Loaded(loaded));
+            }
+        }
         if init && let Some(model) = frame["model"].as_str().filter(|value| !value.is_empty()) {
             self.observed_model = Some(model.into());
             if self.apply_model(model) && self.ready {
@@ -730,6 +747,9 @@ impl Session {
             spawn_id: self.spawn_id.clone(),
             replay: None,
         }));
+        let loaded = translate::loaded(&self.init);
+        self.loaded = Some(loaded.clone());
+        self.outbox.push_back(DriverEvent::Loaded(loaded));
         self.refresh_telemetry();
     }
     /// A saved effort the model no longer offers (it was chosen for another model, or Claude
@@ -834,6 +854,7 @@ impl Session {
                     || self.turn.is_some()
                     || !self.approvals.is_empty()
                     || !self.questions.is_empty()
+                    || !self.elicitations.is_empty()
                 {
                     self.outbox.push_back(DriverEvent::TurnEnded {
                         turn_id: turn.turn_id,
@@ -901,6 +922,7 @@ impl Session {
                     || self.turn.is_some()
                     || !self.approvals.is_empty()
                     || !self.questions.is_empty()
+                    || !self.elicitations.is_empty()
                     || self.configuring()
                 {
                     Some("Wait for Claude to become idle before rewinding files.")
@@ -942,6 +964,17 @@ impl Session {
                 }
             }
             DriverCommand::RespondUi { request_id, answer } => {
+                // A form answer that does not fit keeps the form open (the session checks it
+                // first, so this is only a stale or forged answer).
+                if let Some(result) = self
+                    .elicitations
+                    .get(&request_id)
+                    .and_then(|pending| pending.spec.result(answer.as_ref()))
+                {
+                    self.elicitations.remove(&request_id);
+                    self.response(&request_id, result);
+                    return;
+                }
                 if let Some(pending) = self.questions.remove(&request_id) {
                     let mut input = pending.input;
                     let result = question_answers(&pending.questions, answer);
@@ -989,7 +1022,8 @@ impl Session {
                             && self.idle
                             && self.turn.is_none()
                             && self.approvals.is_empty()
-                            && self.questions.is_empty() =>
+                            && self.questions.is_empty()
+                            && self.elicitations.is_empty() =>
                     {
                         Ok(
                             json!({"subtype":"set_permission_mode","mode":if value == "plan" { "plan" } else { &self.execution_mode }}),
@@ -1086,7 +1120,7 @@ impl Session {
                 request_id: id.into(),
             });
         }
-        if self.questions.remove(id).is_some() {
+        if self.questions.remove(id).is_some() || self.elicitations.remove(id).is_some() {
             self.outbox.push_back(DriverEvent::UiWithdrawn {
                 request_id: id.into(),
             });
@@ -1119,8 +1153,23 @@ impl Session {
             );
             self.withdraw(&id);
         }
+        let ids: Vec<_> = self
+            .elicitations
+            .iter()
+            .filter(|(_, p)| p.turn.is_some() && p.turn == self.turn)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            self.response(&id, json!({"action":"cancel"}));
+            self.withdraw(&id);
+        }
     }
     fn withdraw_all(&mut self) {
+        let ids: Vec<_> = self.elicitations.keys().cloned().collect();
+        for id in ids {
+            self.response(&id, json!({"action":"cancel"}));
+            self.withdraw(&id);
+        }
         let ids = self
             .approvals
             .keys()
@@ -1146,7 +1195,80 @@ impl Session {
             wire::Incoming::Event(frame) => self.event(frame),
         }
     }
+    /// An MCP server's form or browser step. Claude cancels it itself if the reply is an error,
+    /// so one auracode cannot show is cancelled with a notice saying where to finish it.
+    fn elicitation(&mut self, id: String, request: &Value) {
+        if self.elicitations.contains_key(&id) {
+            return;
+        }
+        let source = request["display_name"]
+            .as_str()
+            .or(request["mcp_server_name"].as_str());
+        let message = request["message"]
+            .as_str()
+            .filter(|message| !message.trim().is_empty())
+            .unwrap_or("An MCP server needs your input.");
+        let parsed = if self.stopping || self.failure.is_some() {
+            Err(String::new())
+        } else {
+            match request["mode"].as_str() {
+                Some("url") => crate::elicitation::link(
+                    message,
+                    source,
+                    request["url"].as_str().unwrap_or_default(),
+                ),
+                None | Some("form") => {
+                    let order: Option<Vec<String>> =
+                        request["property_order"].as_array().map(|keys| {
+                            keys.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect()
+                        });
+                    crate::elicitation::form(
+                        message,
+                        source,
+                        &request["requested_schema"],
+                        order.as_deref(),
+                    )
+                }
+                Some(_) => Err("An MCP server asked for input auracode cannot show.".into()),
+            }
+        };
+        match parsed {
+            Ok((prompt, spec)) => {
+                self.outbox.push_back(DriverEvent::UiRequest {
+                    turn: self.turn.clone(),
+                    request: UiRequest {
+                        request_id: id.clone(),
+                        prompt,
+                    },
+                });
+                self.elicitations.insert(
+                    id,
+                    Elicit {
+                        spec,
+                        turn: self.turn.clone(),
+                    },
+                );
+            }
+            Err(reason) => {
+                if !self.sink.is_closed() {
+                    self.response(&id, json!({"action":"cancel"}));
+                }
+                if !reason.is_empty() {
+                    self.notice(format!(
+                        "{reason} It was cancelled; finish it in Claude Code's own terminal if you need it."
+                    ));
+                }
+            }
+        }
+    }
     fn approval(&mut self, id: String, request: Value) {
+        if request["subtype"] == "elicitation" {
+            self.elicitation(id, &request);
+            return;
+        }
         if request["subtype"] == "request_user_dialog" {
             // No dialog kinds were advertised by our initialize request. The native dialog
             // payload is opaque. Reject the control request explicitly so it cannot remain
@@ -1808,6 +1930,8 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         failure: None,
         stopping: false,
         questions: BTreeMap::new(),
+        elicitations: BTreeMap::new(),
+        loaded: None,
         usage: UsageInfo::default(),
         telemetry_dirty: [false; 2],
     };

@@ -867,6 +867,59 @@ fn content_text(content: Option<&Value>) -> String {
     }
 }
 
+/// What the session loaded, from Claude's `system/init`: MCP servers with their status and
+/// source, skills, plugins with their versions, subagents, and how many tools it offers.
+pub fn loaded(init: &Value) -> aura_protocol::session::SessionLoaded {
+    use aura_protocol::session::{LoadedMcpServer, LoadedPlugin, McpLoadState, SessionLoaded};
+    let names = |key: &str| -> Vec<String> {
+        init[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            // Names, or (in the initialize reply) entries that carry one.
+            .filter_map(|item| item.as_str().or(item["name"].as_str()).map(str::to_owned))
+            .collect()
+    };
+    SessionLoaded {
+        mcp_servers: init["mcp_servers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|server| {
+                Some(LoadedMcpServer {
+                    name: server["name"].as_str()?.to_owned(),
+                    state: match server["status"].as_str() {
+                        Some("connected") => McpLoadState::Connected,
+                        Some("pending") => McpLoadState::Starting,
+                        Some("needs-auth") => McpLoadState::NeedsSignIn,
+                        Some("failed") => McpLoadState::Failed,
+                        Some("disabled") => McpLoadState::Off,
+                        _ => McpLoadState::Unknown,
+                    },
+                    source: server["source"].as_str().map(str::to_owned),
+                })
+            })
+            .collect(),
+        skills: names("skills"),
+        plugins: init["plugins"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|plugin| {
+                Some(LoadedPlugin {
+                    name: plugin["name"].as_str()?.to_owned(),
+                    version: plugin["version"].as_str().map(str::to_owned),
+                })
+            })
+            .collect(),
+        agents: names("agents"),
+        tools: init["tools"]
+            .as_array()
+            .map(|tools| u32::try_from(tools.len()).unwrap_or(u32::MAX)),
+    }
+    .bounded()
+}
+
 /// Reduce an initialize/commands-changed payload or its command array using the shared limits.
 pub fn reduce_commands(value: &Value) -> Vec<SlashCommand> {
     let Some(commands) = value

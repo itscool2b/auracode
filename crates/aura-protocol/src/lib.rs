@@ -21,6 +21,7 @@ pub mod composer;
 pub mod config_vendor;
 pub mod conversation;
 pub mod folder_resolution;
+pub mod forms;
 pub mod git;
 mod lenient;
 pub mod local_import;
@@ -430,14 +431,14 @@ lenient_enum! {
 }
 
 /// An agent asks the UI for input that isn't a tool permission (Claude or Cursor questions,
-/// Pi extension UI, ACP elicitation). Never auto-answered.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Pi extension UI, ACP elicitation, MCP forms). Never auto-answered.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 pub struct UiRequest {
     pub request_id: String,
     pub prompt: UiPrompt,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UiPrompt {
     Confirm {
@@ -458,6 +459,21 @@ pub enum UiPrompt {
     },
     Notify {
         message: String,
+    },
+    /// An MCP server's form (MCP elicitation, form mode), answered with [`UiAnswer::Form`].
+    /// `source` names the server.
+    Form {
+        message: String,
+        source: Option<String>,
+        fields: Vec<forms::UiField>,
+    },
+    /// An MCP server asks the user to finish something in the browser (URL mode). Answered
+    /// with [`UiAnswer::Confirm`]: yes once the page is opened, no to decline.
+    Link {
+        message: String,
+        source: Option<String>,
+        /// http or https only.
+        url: String,
     },
 }
 
@@ -481,13 +497,26 @@ pub struct UiQuestionOption {
 }
 
 /// The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UiAnswer {
-    Confirm { yes: bool },
-    Select { index: u32 },
-    Input { text: String },
-    Questions { answers: Vec<UiQuestionAnswer> },
+    Confirm {
+        yes: bool,
+    },
+    Select {
+        index: u32,
+    },
+    Input {
+        text: String,
+    },
+    Questions {
+        answers: Vec<UiQuestionAnswer>,
+    },
+    /// A form submitted (`accept`) with its answered fields, or declined with none.
+    Form {
+        accept: bool,
+        values: Vec<forms::UiFieldValue>,
+    },
 }
 
 /// One answer per question. A single-select question accepts one option or free text; a
