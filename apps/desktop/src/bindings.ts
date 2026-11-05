@@ -2915,7 +2915,7 @@ export type SessionStatus =
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
 
-export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "theme"; value: ThemePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "appearance"; value: AppearancePreference } | { type: "theme"; value: ThemePreference } | { type: "text_size"; value: TextSizePreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
 /**
  *  Changing the agent clears the default model and thinking level, which belong to the
  *  previous agent.
@@ -2946,6 +2946,7 @@ export type SetupPreferences = {
 	motion: MotionPreference,
 	appearance: AppearancePreference,
 	theme: ThemePreference,
+	text_size: TextSizePreference,
 	completed: boolean,
 	first_project_id: string | null,
 	/**  Files written before these settings existed read their defaults ([`fill_defaults`]). */
@@ -3129,6 +3130,13 @@ export type TerminalChunk = {
 	exit_code: number | null,
 	truncated: boolean,
 };
+
+/**
+ *  How large the chat's text sets (owner, 4 November 2026: fit more text in, as Codex does).
+ *  Compact is the default; Comfortable keeps the earlier, larger size. A file written before this
+ *  setting existed, or naming a size this build lacks, reads as Compact ([`fill_defaults`]).
+ */
+export type TextSizePreference = "compact" | "comfortable";
 
 /**
  *  The desktop's theme: Aura's own neutral palette, or one per supported agent (owner,

@@ -3,7 +3,11 @@
  * defaults. Covers what the Instructions, Project memory and Customize previews change.
  */
 import type { GeneralPreferences, SetupSnapshot } from "../bindings";
-import { getAppearancePreference, getThemePreference } from "../lib/appearance";
+import {
+  getAppearancePreference,
+  getTextSizePreference,
+  getThemePreference,
+} from "../lib/appearance";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 
 export function createSetupFixture(): SetupApi & { readonly general: () => GeneralPreferences } {
@@ -16,6 +20,7 @@ export function createSetupFixture(): SetupApi & { readonly general: () => Gener
       motion: "full",
       appearance: getAppearancePreference(),
       theme: getThemePreference(),
+      text_size: getTextSizePreference(),
       completed: true,
       first_project_id: null,
       general: { ...DEFAULT_GENERAL },

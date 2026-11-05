@@ -15,6 +15,7 @@ import type { AccountStatus } from "../lib/account/bindings";
 import { accountResetApi } from "../lib/account/reset";
 import {
   getAppearancePreference,
+  getTextSizePreference,
   getThemePreference,
   rememberPreviewTheme,
 } from "../lib/appearance";
@@ -129,6 +130,7 @@ const preferences: SetupSnapshot = {
     motion: "full",
     appearance: getAppearancePreference(),
     theme: getThemePreference(),
+    text_size: getTextSizePreference(),
     completed: true,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },
@@ -152,6 +154,7 @@ const setup: SetupApi = {
       preferences.preferences.theme = action.value;
       rememberPreviewTheme(action.value);
     }
+    if (action.type === "text_size") preferences.preferences.text_size = action.value;
     if (action.type === "default_agent") {
       if (general.default_agent !== action.agent_id) {
         general.default_model = null;

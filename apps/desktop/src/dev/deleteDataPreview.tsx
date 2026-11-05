@@ -18,7 +18,11 @@ import type {
   UpdateStatus,
 } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
-import { getAppearancePreference, getThemePreference } from "../lib/appearance";
+import {
+  getAppearancePreference,
+  getTextSizePreference,
+  getThemePreference,
+} from "../lib/appearance";
 import type { DataCleanupApi } from "../lib/dataCleanup";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
@@ -145,6 +149,7 @@ const snapshot: SetupSnapshot = {
     first_project_id: null,
     appearance: getAppearancePreference(),
     theme: getThemePreference(),
+    text_size: getTextSizePreference(),
     general: { ...DEFAULT_GENERAL },
   },
 };

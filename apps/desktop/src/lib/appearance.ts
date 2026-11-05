@@ -1,5 +1,5 @@
 import { THEME_IDS } from "@auracode/ui/graphite";
-import type { AppearancePreference, ThemePreference } from "../bindings";
+import type { AppearancePreference, TextSizePreference, ThemePreference } from "../bindings";
 
 export type ResolvedAppearance = "light" | "dark";
 const PREVIEW_KEY = "auracode.preview.appearance";
@@ -23,6 +23,25 @@ export function setThemePreference(next: ThemePreference): void {
     else document.documentElement.dataset.palette = next;
   }
   for (const listener of themeListeners) listener();
+}
+
+/**
+ * The chat's text size (Settings > General > Text size). Compact, the default, is the tokens
+ * themselves and sets no attribute; Comfortable sets the chat at the prose size (tokens.css).
+ */
+export function setTextSizePreference(next: TextSizePreference): void {
+  textSize = next;
+  if (typeof document === "undefined") return;
+  if (next === "comfortable") document.documentElement.dataset.textSize = "comfortable";
+  else delete document.documentElement.dataset.textSize;
+}
+
+let textSize: TextSizePreference = "compact";
+
+/** The text size in effect; previews seed their saved preferences with it, as with the theme. */
+export function getTextSizePreference(): TextSizePreference {
+  initializeAppearance();
+  return textSize;
 }
 
 export function getThemePreference(): ThemePreference {
@@ -117,6 +136,8 @@ export function initializeAppearance(): void {
     }
     const palette = query.get("palette");
     setThemePreference(isTheme(palette) ? palette : isTheme(savedPalette) ? savedPalette : "aura");
+    // `&textSize=comfortable` previews the larger chat text.
+    if (query.get("textSize") === "comfortable") setTextSizePreference("comfortable");
   }
   controller = createAppearanceController(
     window.matchMedia("(prefers-color-scheme: dark)"),
@@ -156,12 +177,14 @@ export function setAppearancePreference(preference: AppearancePreference): void 
 export function applySetupAppearance(preferences: {
   readonly appearance: AppearancePreference;
   readonly theme?: ThemePreference;
+  readonly text_size?: TextSizePreference;
   readonly revision: number;
 }): void {
   if (preferences.revision < appliedRevision) return;
   appliedRevision = preferences.revision;
   setAppearancePreference(preferences.appearance);
   setThemePreference(isTheme(preferences.theme) ? preferences.theme : "aura");
+  setTextSizePreference(preferences.text_size === "comfortable" ? "comfortable" : "compact");
 }
 
 /** Previews keep the chosen theme across reloads, as they keep the appearance. */

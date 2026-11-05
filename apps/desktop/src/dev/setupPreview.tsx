@@ -5,7 +5,11 @@ import type { AgentEntry, ProjectSummary, SetupSnapshot } from "../bindings";
 import { ProjectDialog } from "../components/chat/ProjectDialog";
 import { AgentsScreen } from "../components/setup/AgentsScreen";
 import { Onboarding } from "../components/setup/Onboarding";
-import { getAppearancePreference, getThemePreference } from "../lib/appearance";
+import {
+  getAppearancePreference,
+  getTextSizePreference,
+  getThemePreference,
+} from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
@@ -205,6 +209,7 @@ const initial: SetupSnapshot = {
     motion: "full",
     appearance: getAppearancePreference(),
     theme: getThemePreference(),
+    text_size: getTextSizePreference(),
     completed: false,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },

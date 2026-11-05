@@ -458,6 +458,31 @@ export function GeneralPanel({
             </fieldset>
           </Row>
           <Row
+            title="Text size"
+            detail="Compact fits more of a chat on screen. Comfortable sets its text larger."
+          >
+            {/* Not disabled while a save runs, so arrow keys keep their focus on it. */}
+            <fieldset
+              className="settings-segmented settings-control"
+              disabled={!saved}
+              data-testid="settings-text-size"
+            >
+              <legend className="sr-only">Text size</legend>
+              {(["compact", "comfortable"] as const).map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="settings-text-size"
+                    value={value}
+                    checked={(saved?.preferences.text_size ?? "compact") === value}
+                    onChange={() => void change({ type: "text_size", value })}
+                  />
+                  <span>{value === "compact" ? "Compact" : "Comfortable"}</span>
+                </label>
+              ))}
+            </fieldset>
+          </Row>
+          <Row
             title="Welcome and setup"
             detail="Review your agents and pick a first project again."
           >
