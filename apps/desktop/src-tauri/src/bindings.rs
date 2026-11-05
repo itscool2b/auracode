@@ -131,6 +131,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::config_library::library_copy_history,
             crate::config_library::library_item_preview,
             crate::config_library::library_copy_preview,
+            crate::config_library::library_mcp_share,
             crate::config_library::library_copy_cancel,
             crate::config_library::library_copy_apply,
             crate::config_library::library_copy_rollback,

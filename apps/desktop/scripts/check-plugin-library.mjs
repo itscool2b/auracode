@@ -126,6 +126,22 @@ async function checkLibrary(page, engine) {
   assert.equal(await rowMenu.count(), 1, `${engine}: the menu closed on the click's own scroll`);
   await page.locator(".plugins-main").evaluate((node) => node.scrollBy(0, -120));
   await rowMenu.waitFor({ state: "detached" });
+  // An agent's own MCP server shares with every agent, through Shared MCP, after a review that
+  // says what is shared and what stays on this device; a copy to one agent stays blocked.
+  await page.getByRole("button", { name: "github actions" }).click();
+  await page.getByRole("menuitem", { name: "Preview and copy…" }).click();
+  const detail = page.getByRole("dialog", { name: "github" });
+  await detail.getByText("No values will be copied.", { exact: false }).waitFor();
+  await detail.getByRole("button", { name: "Share with every agent", exact: true }).click();
+  const share = page.getByRole("dialog", { name: "Share with every agent" });
+  await share
+    .getByText("Their values stay on this device as local credentials", { exact: false })
+    .waitFor();
+  await share.getByText("Antigravity and oh-my-pi", { exact: false }).waitFor();
+  await audit(page, `${engine} share an MCP server with every agent`);
+  await share.getByRole("button", { name: "Share", exact: true }).click();
+  await page.getByText("Shared github with every agent.", { exact: false }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.libraryShares), ["github"]);
   // Available plugins are searched, then installed through the same review.
   await page.getByLabel("Find an available Claude Code plugin").fill("security");
   await page.getByRole("button", { name: "Install security-review" }).click();

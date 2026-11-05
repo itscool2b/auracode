@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { McpSnapshot } from "../../bindings";
 import { toCommandError } from "../ipc";
 import type {
   LibraryCopyPreview,
@@ -30,6 +31,19 @@ export const libraryApi = {
     call<LibraryCopyReceipt[]>("library_copy_history", { folderId }),
   rollback: (folderId: string | null, sourceId: string, id: string) =>
     call<LibraryCopyResult>("library_copy_rollback", { folderId, sourceId, id }),
+  /**
+   * Shares an agent's MCP server with every agent, as a shared definition for all projects. Its
+   * env and header values stay on this device as local credentials; Rust checks the revision.
+   */
+  share: async (folderId: string | null, item: LibraryItemRef, revision: string) => {
+    const shared = await call<McpSnapshot>("shared_mcp_snapshot", {});
+    return call<McpSnapshot>("library_mcp_share", {
+      folderId,
+      item,
+      revision,
+      expected: shared.revision,
+    });
+  },
 };
 
 export type LibraryApi = typeof libraryApi;

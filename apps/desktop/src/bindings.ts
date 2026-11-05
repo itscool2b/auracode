@@ -107,6 +107,12 @@ export const commands = {
 	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
 	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
 	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
+	/**
+	 *  Shares an agent's MCP server with every agent: its entry, checked against the revision the
+	 *  person reviewed, becomes a shared definition for all projects through the same import as pasted
+	 *  native JSON. Values from its `env` and `headers` stay on this device as local credentials.
+	 */
+	libraryMcpShare: (folderId: string | null, item: LibraryItemRef, revision: string, expected: number) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("library_mcp_share", { folderId, item, revision, expected })),
 	libraryCopyCancel: (id: string) => __TAURI_INVOKE<void>("library_copy_cancel", { id }),
 	libraryCopyApply: (id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_apply", { id })),
 	libraryCopyRollback: (folderId: string | null, sourceId: string, id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_rollback", { folderId, sourceId, id })),

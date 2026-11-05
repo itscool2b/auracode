@@ -52,6 +52,7 @@ export function ItemDetail({
 }) {
   const [preview, setPreview] = useState<LibraryItemPreview | null>(null);
   const [plan, setPlan] = useState<LibraryCopyPreview | null>(null);
+  const [sharing, setSharing] = useState(false);
   const [target, setTarget] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,6 +137,26 @@ export function ItemDetail({
   );
   const managed =
     (item.item.kind === "plugin" || item.item.kind === "package") && item.provider !== "shared";
+  // Shared MCP reaches every agent auracode runs, where a copy reaches one agent's files.
+  const shareable = item.item.kind === "mcp_server" && item.provider !== "shared";
+  const share = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.share(folder, item.item, item.revision);
+      if (alive.current)
+        complete(
+          `Shared ${item.label} with every agent. Each gets it from its next session; one that already has a server named ${item.label} keeps its own.`,
+        );
+    } catch (reason) {
+      if (alive.current) {
+        setSharing(false);
+        setError(errorMessage(reason));
+      }
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  };
   return (
     <section className="library-detail" aria-label="Item preview">
       <header>
@@ -233,6 +254,61 @@ export function ItemDetail({
           </>
         )}
       </div>
+      {shareable ? (
+        <div className="library-copy-controls library-share">
+          <p>Give this server to every agent that takes shared servers, in every project.</p>
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-36"
+            disabled={busy || !preview}
+            onClick={() => setSharing(true)}
+          >
+            Share with every agent
+          </button>
+        </div>
+      ) : null}
+      {sharing ? (
+        <Modal
+          title="Share with every agent"
+          size="md"
+          className="library-review"
+          onClose={() => {
+            if (!busy) setSharing(false);
+          }}
+        >
+          <p className="library-review-intro">
+            <strong>{item.label}</strong> from{" "}
+            <strong>{sourceName(sources, item.item.source_id)}</strong> becomes a shared MCP server
+            in every project for Claude Code, Codex, Pi, OpenCode, Cursor, Grok Build and Hermes.
+            Antigravity and oh-my-pi, whose own servers auracode cannot check, start without it and
+            say so in their chats.
+          </p>
+          <p className="library-detail-note">
+            The shared definition keeps its command and arguments, or its address, and the names of
+            its environment variables and headers. Their values stay on this device as local
+            credentials, never exported or synced. {LABELS[item.provider]}'s own configuration is
+            left as it is.
+          </p>
+          <div className="g-dialog-actions library-actions">
+            <button
+              type="button"
+              className="g-button"
+              disabled={busy}
+              onClick={() => setSharing(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-primary"
+              disabled={busy}
+              onClick={() => void share()}
+            >
+              {busy ? "Sharing…" : "Share"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {plan ? (
         <Modal title="Review copy" size="lg" className="library-review" onClose={cancel}>
           <p className="library-review-intro">

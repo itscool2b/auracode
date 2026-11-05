@@ -167,6 +167,68 @@ fn value_json(value: &toml_edit::Value) -> Result<Value> {
     })
 }
 
+/// An agent's MCP server entry as one native `mcpServers` value that auracode's shared MCP can
+/// import for every agent. Wider than [`portable`]: `env` and `headers` are allowed, because the
+/// shared import keeps their values as this device's local credentials (never exported or synced)
+/// and only their names in the definition. The command, its arguments and the URL are checked as
+/// for a copy, since they become part of the shared definition. Vendor options still refuse.
+pub(crate) fn shareable(value: &Value, from: Provider) -> Result<Value> {
+    let object = value.as_object().ok_or(Error::Format)?;
+    if object.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "command" | "args" | "url" | "type" | "enabled" | "env" | "headers"
+        )
+    }) {
+        return Err(Error::Unsupported("This server has vendor options that every agent cannot take. Share it by entering a definition in Shared MCP.".into()));
+    }
+    let strings = |key: &str| -> Result<Option<Map<String, Value>>> {
+        match object.get(key) {
+            None => Ok(None),
+            Some(Value::Object(map))
+                if map.len() <= 128 && map.values().all(|value| value.is_string()) =>
+            {
+                Ok(Some(map.clone()))
+            }
+            Some(_) => Err(Error::Format),
+        }
+    };
+    let env = strings("env")?;
+    let headers = strings("headers")?;
+    let mut core = object.clone();
+    core.remove("env");
+    core.remove("headers");
+    let remote = object.contains_key("url");
+    // SSE is a transport shared MCP knows, though a copy between agents cannot carry it.
+    let sse = remote && object.get("type").and_then(Value::as_str) == Some("sse");
+    if sse {
+        core.insert("type".into(), Value::String("http".into()));
+    } else if remote && from == Provider::Claude && !core.contains_key("type") {
+        return Err(Error::Unsupported(
+            "This server's transport is not named. Review it in Claude Code's configuration."
+                .into(),
+        ));
+    }
+    let mut result = portable(&Value::Object(core), from, Provider::Pi)?;
+    let map = result.as_object_mut().ok_or(Error::Format)?;
+    if remote {
+        map.insert(
+            "type".into(),
+            Value::String(if sse { "sse" } else { "http" }.into()),
+        );
+    }
+    if headers.is_some() && !remote {
+        return Err(Error::Format);
+    }
+    if let Some(env) = env {
+        map.insert("env".into(), Value::Object(env));
+    }
+    if let Some(headers) = headers {
+        map.insert("headers".into(), Value::Object(headers));
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,6 +257,55 @@ mod tests {
                 Provider::Pi
             )
             .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod share_tests {
+    use super::*;
+
+    #[test]
+    fn a_server_shares_with_its_credentials_kept_apart_and_its_command_checked() {
+        let local = json!({
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "value-stays-on-this-device"}
+        });
+        assert_eq!(
+            shareable(&local, Provider::Claude).unwrap(),
+            json!({
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-github"],
+                "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "value-stays-on-this-device"}
+            })
+        );
+        let remote = json!({"type": "http", "url": "https://mcp.example.test/mcp", "headers": {"X-Key": "local"}});
+        assert_eq!(
+            shareable(&remote, Provider::Claude).unwrap(),
+            json!({"url": "https://mcp.example.test/mcp", "type": "http", "headers": {"X-Key": "local"}})
+        );
+        let events = json!({"type": "sse", "url": "https://mcp.example.test/sse"});
+        assert_eq!(
+            shareable(&events, Provider::Claude).unwrap()["type"],
+            json!("sse")
+        );
+        // Secrets in the command line or address would become part of the shared definition.
+        for refused in [
+            json!({"command": "server", "args": ["--token", "abc"]}),
+            json!({"url": "https://user:pass@example.test/mcp", "type": "http"}),
+            json!({"command": "server", "startup_timeout_sec": 30}),
+            json!({"command": "server", "env": {"KEY": 1}}),
+            json!({"command": "server", "headers": {"X": "y"}}),
+            json!({"url": "https://example.test/mcp"}),
+        ] {
+            assert!(shareable(&refused, Provider::Claude).is_err(), "{refused}");
+        }
+        // Codex names no transport for a URL; it is HTTP.
+        assert_eq!(
+            shareable(&json!({"url": "https://example.test/mcp"}), Provider::Codex).unwrap(),
+            json!({"url": "https://example.test/mcp", "type": "http"})
         );
     }
 }

@@ -842,6 +842,37 @@ fn marker(directory: &Dir, name: &str) -> Result<()> {
     Ok(())
 }
 
+impl Library {
+    /// An agent's MCP server as one native `mcpServers` value for auracode's shared MCP, which
+    /// gives it to every agent. Reparsed strictly and checked against the revision the person
+    /// reviewed, as a copy is; credentials in `env` and `headers` travel only to this device's
+    /// local credential store (`mcp::shareable`).
+    pub fn mcp_share(&self, reference: &ItemRef, revision: &str) -> Result<serde_json::Value> {
+        if reference.kind != Kind::McpServer {
+            return Err(Error::Unsupported(
+                "Only MCP servers are shared with every agent.".into(),
+            ));
+        }
+        let source = self
+            .sources
+            .iter()
+            .find(|source| source.id == reference.source_id)
+            .ok_or(Error::Unavailable)?;
+        let entry = self.entry(reference)?;
+        if entry.item.revision != revision {
+            return Err(Error::Stale);
+        }
+        let bytes = safe_fs::read(&inventory::open(source)?, &entry.item.relative_path)?
+            .ok_or(Error::Stale)?;
+        let value =
+            mcp_document::selected(&bytes, source.provider, &reference.key)?.ok_or(Error::Stale)?;
+        if safe_fs::hash(&serde_json::to_vec(&value).map_err(|_| Error::Format)?) != revision {
+            return Err(Error::Stale);
+        }
+        mcp::shareable(&value, source.provider)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
