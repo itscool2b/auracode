@@ -171,7 +171,18 @@ export function pluginFixture(mode: string): PluginLibrary {
       files(
         "mcp_servers",
         "`claude mcp list` connects to every server to check it, so these come from ~/.claude.json.",
-        [entry("docs", { kind: "http" })],
+        [
+          entry("docs", { kind: "http" }),
+          entry("github", {
+            kind: "stdio",
+            library: {
+              source_id: "user:claude",
+              kind: "mcp_server",
+              key: "github",
+              revision: "synthetic-mcp",
+            },
+          }),
+        ],
       ),
       files("commands", FOLDER, [entry("ship"), entry("team:review")]),
       files("subagents", FOLDER, [entry("reviewer")]),
@@ -662,9 +673,21 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
     bytes: 120,
     copy_blocked: null,
   };
+  // Claude Code's own GitHub server: its token is in env, so it shares but does not copy.
+  const server: LibraryItem = {
+    item: { source_id: "user:claude", kind: "mcp_server", key: "github" },
+    provider: "claude",
+    scope: "user",
+    label: "github",
+    relative_path: ".claude.json",
+    revision: "synthetic-mcp",
+    bytes: 132,
+    copy_blocked:
+      "This server has authentication, environment, or vendor options that require manual setup. No values will be copied.",
+  };
   const libraryApi: LibraryApi = {
     snapshot: async () => ({
-      items: [item],
+      items: [item, server],
       sources: ["claude", "codex", "pi"].map((provider) => ({
         id: `user:${provider}`,
         provider: provider as "claude",
@@ -675,12 +698,20 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
       notices: [],
     }),
     history: async () => [],
-    preview: async () => ({
-      item,
-      text: "# Review changes\n\nRead the surrounding code before suggesting a change.\n",
-      files: ["SKILL.md"],
-      notices: [],
-    }),
+    preview: async (_folder, requested) =>
+      requested.key === "github"
+        ? {
+            item: server,
+            text: '{\n  "command": "npx",\n  "args": ["-y", "@modelcontextprotocol/server-github"],\n  "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "(hidden)" }\n}',
+            files: [".claude.json"],
+            notices: [],
+          }
+        : {
+            item,
+            text: "# Review changes\n\nRead the surrounding code before suggesting a change.\n",
+            files: ["SKILL.md"],
+            notices: [],
+          },
     prepare: async () => {
       throw new Error("Synthetic fixture: copies are not prepared here.");
     },
@@ -690,6 +721,13 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
     },
     rollback: async () => {
       throw new Error("Synthetic fixture.");
+    },
+    share: async (_folder, shared) => {
+      const calls = (window as { libraryShares?: string[] }).libraryShares ?? [];
+      Object.assign(window, { libraryShares: [...calls, shared.key] });
+      return { revision: 1, servers: [], conflicts: [] } as unknown as Awaited<
+        ReturnType<LibraryApi["share"]>
+      >;
     },
   };
   const initial =

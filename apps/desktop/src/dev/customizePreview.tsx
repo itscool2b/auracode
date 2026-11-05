@@ -73,6 +73,7 @@ export function createCustomizeFixture() {
         cancel: async () => {},
         apply: unsupported,
         rollback: unsupported,
+        share: unsupported,
       },
       vendorApi: {
         capabilities: async () => [],

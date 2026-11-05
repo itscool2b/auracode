@@ -20,7 +20,15 @@ Aura owns stable server IDs and immutable definition revisions. New definitions 
 project, covering its folders and worktrees. All-projects definitions are optional. A project definition
 with the same ID replaces the all-projects definition, including when the override is disabled.
 Native server names are inspected before session launch. Conflicting names or an unreadable native
-configuration require review; native files and homes are never rewritten by shared MCP.
+configuration require review; native files and homes are never rewritten by shared MCP. Agents whose
+own MCP configuration auracode cannot read (Antigravity, oh-my-pi), restricted fallback connections and
+agents on another host start without shared servers, and their chat says which were left out.
+
+An agent's own MCP server can be shared with every agent from its preview (Preview and copy, then Share
+with every agent): its entry, checked against the reviewed revision, goes through the native import
+as an all-projects definition. Its command, arguments or address and the names of its environment
+variables and headers are shared; their values become this device's local credentials. Commands,
+arguments or addresses that look like they carry a secret, and vendor options, are refused.
 
 CRUD, explicit Aura/native JSON import, portable export, local credential setup, enable/disable,
 connection tests, session status, supported OAuth and idle restart are available from Shared MCP.

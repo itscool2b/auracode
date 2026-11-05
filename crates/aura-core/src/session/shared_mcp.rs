@@ -1,12 +1,18 @@
 use super::{SessionError, SessionManager};
 use aura_protocol::mcp::*;
 
+/// The shared MCP servers a launch takes, whether Aura's memory tools can join them, and a notice
+/// when shared servers were left out. Shared MCP applies to compatible agents: one whose own MCP
+/// configuration auracode cannot read (Antigravity, oh-my-pi), a restricted fallback connection
+/// and an agent on another host start without shared servers, and their chat says so. A
+/// compatible agent whose configuration cannot be read still requires review, since its own
+/// servers might clash with shared ones.
 pub(super) async fn prepare_launch(
     context: &super::workspace_folders::LaunchFolders,
     env: &aura_process::ResolvedEnv,
     spec: &aura_agents::AgentSpec,
     host: &aura_protocol::agents::AgentHost,
-) -> Result<(Vec<ResolvedMcpServer>, bool), String> {
+) -> Result<(Vec<ResolvedMcpServer>, bool, Option<String>), String> {
     let roots = super::config_library::roots(
         &env.vars,
         Some((
@@ -15,6 +21,10 @@ pub(super) async fn prepare_launch(
         )),
     );
     let provider = aura_agents::agent_of(spec.id).to_owned();
+    let compatible = matches!(
+        provider.as_str(),
+        "claude" | "codex" | "pi" | "opencode" | "cursor" | "grok" | "hermes" | "mock"
+    );
     let variables = env.vars.clone();
     let folder = context.chat.folder.clone();
     let (names, checked) = tokio::task::spawn_blocking(move || {
@@ -24,10 +34,7 @@ pub(super) async fn prepare_launch(
             aura_config::Provider::Pi => provider == "pi",
             _ => false,
         };
-        let mut checked = matches!(
-            provider.as_str(),
-            "claude" | "codex" | "pi" | "opencode" | "cursor" | "grok" | "hermes" | "mock"
-        );
+        let mut checked = compatible;
         let mut names = Vec::new();
         let mut selected = Vec::new();
         let mut native_roots = false;
@@ -125,18 +132,58 @@ pub(super) async fn prepare_launch(
         .map_err(|e| e.to_string())?
     {
         crate::mcp::Reply::Resolved(servers) => {
-            if !checked && !servers.is_empty() {
+            let left_out = |reason: &str| {
+                let names = servers
+                    .iter()
+                    .map(|server| server.definition.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Some(format!(
+                    "Shared MCP servers were not loaded in this chat ({names}): {reason}. It runs with {}'s own MCP servers.",
+                    spec.name
+                ))
+            };
+            if servers.is_empty() {
+                return Ok((servers, memory_available, None));
+            }
+            let native = *host == aura_protocol::agents::AgentHost::Native;
+            let headless = matches!(spec.kind, aura_protocol::DriverKind::Headless);
+            if let Some(reason) = left_out_because(native, headless, compatible) {
+                return Ok((Vec::new(), memory_available, left_out(reason)));
+            }
+            if !checked {
                 return Err("Native MCP configuration could not be fully inspected. Review its diagnostics before loading shared definitions; no native configuration was overwritten.".into());
             }
-            if *host != aura_protocol::agents::AgentHost::Native && !servers.is_empty() {
-                return Err("Shared MCP is not qualified for this execution host. Disable these project definitions or use a native connection.".into());
-            }
-            if matches!(spec.kind, aura_protocol::DriverKind::Headless) && !servers.is_empty() {
-                return Err("This restricted fallback connection cannot load shared MCP. Use its native customization route or a supported native or ACP connection.".into());
-            }
-            Ok((servers, memory_available))
+            Ok((servers, memory_available, None))
         }
         _ => Err("Unexpected shared MCP resolution response.".into()),
+    }
+}
+
+/// Why a launch takes no shared MCP servers at all, or `None` when it can take them.
+fn left_out_because(native: bool, headless: bool, compatible: bool) -> Option<&'static str> {
+    if !native {
+        Some("shared servers run only for agents on this device")
+    } else if headless {
+        Some("this restricted connection runs without MCP servers")
+    } else if !compatible {
+        Some("auracode cannot read this agent's own MCP configuration to rule out a server of the same name")
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::left_out_because;
+
+    #[test]
+    fn only_compatible_native_full_connections_take_shared_servers() {
+        assert_eq!(left_out_because(true, false, true), None);
+        // Antigravity and oh-my-pi start without them instead of failing to start.
+        assert!(left_out_because(true, false, false).unwrap().contains("cannot read"));
+        assert!(left_out_because(true, true, true).unwrap().contains("restricted"));
+        assert!(left_out_because(false, false, true).unwrap().contains("this device"));
     }
 }
 

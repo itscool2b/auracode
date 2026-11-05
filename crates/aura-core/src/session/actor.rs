@@ -448,6 +448,8 @@ struct Preparing {
 /// What a preparation produces.
 struct Prepared {
     memory_mcp_available: bool,
+    /// Shared MCP servers this agent cannot take, said in the chat as it starts.
+    mcp_notice: Option<String>,
     mcp_servers: Vec<aura_protocol::mcp::ResolvedMcpServer>,
     /// The connection the start uses.
     spec: Box<AgentSpec>,
@@ -3204,6 +3206,15 @@ impl ChatActor {
         self.mcp_pending = false;
         if !prepared.memory_mcp_available {
             self.push(AuraEvent::Notice{level:NoticeLevel::Info,message:"Project memory remains visible reference context. Optional memory tools were omitted because native MCP configuration needs review or uses Aura's reserved server name.".into()},None);
+        }
+        if let Some(message) = prepared.mcp_notice.clone() {
+            self.push(
+                AuraEvent::Notice {
+                    level: NoticeLevel::Info,
+                    message,
+                },
+                None,
+            );
         }
         // The connection the preparation chose is the one this start runs and its session records.
         let spec = (*prepared.spec).clone();
@@ -6427,7 +6438,7 @@ async fn prepare(
     let env = env.get().await;
     let account = start_account(accounts, &spec, &progress).await?;
     let (env, launch) = with_account(env, launch, account.as_ref());
-    let (mcp_servers, memory_mcp_available) =
+    let (mcp_servers, memory_mcp_available, mcp_notice) =
         super::shared_mcp::prepare_launch(&context, &env, &spec, &agent_host)
             .await
             .map_err(|message| StartFailure {
@@ -6448,6 +6459,7 @@ async fn prepare(
     })?;
     Ok(Prepared {
         memory_mcp_available,
+        mcp_notice,
         mcp_servers,
         spec,
         folder_context,

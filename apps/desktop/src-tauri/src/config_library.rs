@@ -253,3 +253,38 @@ pub async fn library_copy_rollback(
     .await
     .map_err(|_| task_error())?
 }
+
+/// Shares an agent's MCP server with every agent: its entry, checked against the revision the
+/// person reviewed, becomes a shared definition for all projects through the same import as pasted
+/// native JSON. Values from its `env` and `headers` stay on this device as local credentials.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_mcp_share(
+    state: State<'_, AppState>,
+    folder_id: Option<String>,
+    item: ItemRef,
+    revision: String,
+    expected: u32,
+) -> Result<aura_protocol::mcp::McpSnapshot, AppError> {
+    let manager = state.sessions()?;
+    let roots = manager.config_library_roots(folder_id.as_deref()).await?;
+    let key = item.key.clone();
+    let server = tauri::async_runtime::spawn_blocking(move || {
+        Library::new(roots.sources)
+            .map_err(config_error)?
+            .mcp_share(&item, &revision)
+            .map_err(config_error)
+    })
+    .await
+    .map_err(|_| task_error())??;
+    let mut servers = serde_json::Map::new();
+    servers.insert(key, server);
+    let document = serde_json::json!({ "mcpServers": servers }).to_string();
+    Ok(manager
+        .shared_mcp(aura_core::mcp::Command::ImportNative {
+            expected,
+            project_id: None,
+            document,
+        })
+        .await?)
+}
