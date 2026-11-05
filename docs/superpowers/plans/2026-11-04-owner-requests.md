@@ -76,9 +76,12 @@ and a hands-on walkthrough before merging.
 - [x] 1. Composer buttons and the model picker (#73, merged 2026-11-05)
 - [x] 2. Claude Code default theme (#74, merged 2026-11-05)
 - [x] 3. Denser transcript and the Text size setting (#75, merged 2026-11-05)
-- [x] 4. Worked-for fold and the changed-files card (this pull request). The switch to keep
+- [x] 4. Worked-for fold and the changed-files card (#76, merged 2026-11-05). The switch to keep
   steps open moves to item 6, Settings > Chats.
-- [ ] 5. Dictation
+- [x] 5. Dictation (this pull request): Parakeet 110M and Silero VAD bundled, live ghost text,
+  no limit, the sweep and the dissolve, failures in the bar. Two threads proved cooler than four.
+  Deferred: the optional multilingual Whisper download (transcribe.cpp runs Whisper models too),
+  and native macOS and Windows ARM64 runs, which need their builds.
 - [ ] 6. Settings
 - [ ] 7. Missing features A, B, C, D
 - [ ] 8. Linux
