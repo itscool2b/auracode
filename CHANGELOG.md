@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-05
+
+- More of a chat fits on screen: its text sets at 14/22 and answers run the whole column, with a Comfortable text size in Settings for the earlier size. ([#75](https://github.com/itscool2b/auracode/pull/75))
+
 ## 2026-11-04
 
 - Themes: Settings offers one for every supported agent (Claude Code, Codex, Grok Build, Pi, Antigravity, Cursor, OpenCode, oh-my-pi and Hermes) beside Aura, each in light and dark, applied at once and saved in the profile. ([#72](https://github.com/itscool2b/auracode/pull/72))
