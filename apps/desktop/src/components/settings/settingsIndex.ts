@@ -51,6 +51,7 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "general", title: "Thinking", words: "effort reasoning level default" },
   { page: "general", title: "Autonomy", words: "permissions ask auto-edit full auto approve" },
   { page: "general", title: "Notifications", words: "alerts background finished" },
+  { page: "general", title: "Sounds", words: "audio chime tone finished needs you" },
   { page: "general", title: "Keep awake", words: "sleep power" },
   {
     page: "general",

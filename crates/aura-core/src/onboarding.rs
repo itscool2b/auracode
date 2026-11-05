@@ -129,6 +129,9 @@ pub struct GeneralPreferences {
     pub automatic_checkpoints: bool,
     /// Notify when a background chat finishes, fails or needs you.
     pub notifications: bool,
+    /// Play a short sound when a chat finishes, fails or needs you. Off unless the person turns
+    /// it on.
+    pub sounds: bool,
     /// Keep the computer from idle sleep while an agent works.
     pub keep_awake: bool,
     /// Closing the window keeps auracode running in the tray or menu bar.
@@ -157,6 +160,7 @@ impl Default for GeneralPreferences {
             default_autonomy: Autonomy::FullAuto,
             automatic_checkpoints: false,
             notifications: true,
+            sounds: false,
             keep_awake: true,
             close_to_tray: true,
             config_sync_paused: Vec::new(),
@@ -217,6 +221,9 @@ pub enum SetupAction {
         enabled: bool,
     },
     Notifications {
+        enabled: bool,
+    },
+    Sounds {
         enabled: bool,
     },
     KeepAwake {
@@ -523,6 +530,7 @@ impl OnboardingStore {
             SetupAction::Notifications { enabled } => {
                 next.preferences.general.notifications = enabled;
             }
+            SetupAction::Sounds { enabled } => next.preferences.general.sounds = enabled,
             SetupAction::KeepAwake { enabled } => next.preferences.general.keep_awake = enabled,
             SetupAction::CloseToTray { enabled } => {
                 next.preferences.general.close_to_tray = enabled;
@@ -1073,6 +1081,7 @@ mod tests {
             },
             SetupAction::AutomaticCheckpoints { enabled: true },
             SetupAction::Notifications { enabled: false },
+            SetupAction::Sounds { enabled: true },
             SetupAction::KeepAwake { enabled: false },
             SetupAction::CloseToTray { enabled: false },
             SetupAction::ConfigSyncAgent {
@@ -1104,6 +1113,7 @@ mod tests {
                 default_autonomy: Autonomy::Ask,
                 automatic_checkpoints: true,
                 notifications: false,
+                sounds: true,
                 keep_awake: false,
                 close_to_tray: false,
                 config_sync_paused: vec!["codex".into()],

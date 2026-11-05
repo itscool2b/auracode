@@ -64,6 +64,7 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   default_autonomy: "full_auto",
   automatic_checkpoints: false,
   notifications: true,
+  sounds: false,
   keep_awake: true,
   close_to_tray: true,
   config_sync_paused: [],

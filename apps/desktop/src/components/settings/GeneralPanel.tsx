@@ -4,6 +4,7 @@ import type { AgentEntry, AppInfo, Autonomy, ConfigChoice } from "../../bindings
 import { getThemePreference } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
 import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
+import { playNotice } from "../../lib/sounds";
 import type { Preferences } from "./preferences";
 import { Row, Switch } from "./SettingsRow";
 import { ThemeGallery } from "./ThemeGallery";
@@ -276,6 +277,19 @@ export function GeneralPage({
               checked={general.notifications}
               disabled={disabled}
               onChange={(enabled) => prefs.change({ type: "notifications", enabled })}
+            />
+          </Row>
+          <Row title="Sounds" detail="A short sound when a chat finishes, fails or needs you.">
+            <Switch
+              label="Sounds"
+              testId="settings-sounds"
+              checked={general.sounds}
+              disabled={disabled}
+              onChange={(enabled) => {
+                // Turning them on plays one, so the choice is heard as it is made.
+                if (enabled) playNotice("finished");
+                prefs.change({ type: "sounds", enabled });
+              }}
             />
           </Row>
           <Row

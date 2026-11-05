@@ -1739,6 +1739,11 @@ export type GeneralPreferences = {
 	automatic_checkpoints: boolean,
 	/**  Notify when a background chat finishes, fails or needs you. */
 	notifications: boolean,
+	/**
+	 *  Play a short sound when a chat finishes, fails or needs you. Off unless the person turns
+	 *  it on.
+	 */
+	sounds: boolean,
 	/**  Keep the computer from idle sleep while an agent works. */
 	keep_awake: boolean,
 	/**  Closing the window keeps auracode running in the tray or menu bar. */
@@ -3084,7 +3089,7 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
  */
 { type: "default_agent"; agent_id: string | null } | 
 /**  Changing the model clears the default thinking level, which was chosen for the old one. */
-{ type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
+{ type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "sounds"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
 { type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */

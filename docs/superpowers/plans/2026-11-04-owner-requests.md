@@ -138,6 +138,7 @@ and a hands-on walkthrough before merging.
       sign-in, so a push needs Git's stored credentials.
   - [ ] D, in several pull requests.
     - [x] Find in chat (#87, merged 2026-11-05): Ctrl+F opens a solid bar at the transcript's top right that counts the query in messages and answers (tool calls and cards are not searched), highlights the matches with the CSS Custom Highlight API and the shown one in the theme's action colour, and steps with Enter and Shift+Enter. A match in a row the virtual list has not rendered is brought into view, and one in a finished turn's folded work opens the fold while it is shown. Matches count in the loaded messages; the bar says so when earlier ones are not loaded.
-    - [ ] Optional sounds, open a file at its line, worktree run scripts with ports, resume terminal sessions, share a native MCP server with every agent.
+    - [x] Optional sounds (#88, merged 2026-11-05): Settings > General > Sounds, off by default. The native shell already decides when a chat finished, failed or needs you (for notifications); with Sounds on it also tells the window, in front or not, and the window plays a short synthesized tone (Web Audio, so no sound file ships): rising for finished, falling for failed, two taps for needs you. Turning Sounds on plays one. Windows and macOS, where the native shell runs; Linux follows with item 8.
+    - [ ] Open a file at its line, worktree run scripts with ports, resume terminal sessions, share a native MCP server with every agent.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page
