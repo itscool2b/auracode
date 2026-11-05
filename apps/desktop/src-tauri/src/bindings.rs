@@ -224,6 +224,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::changes_commands::chat_rewind_files,
             crate::changes_commands::chat_change_diff,
             crate::changes_commands::checkpoint_revert_preview,
+            crate::changes_commands::checkpoint_hunk_revert_preview,
             crate::changes_commands::checkpoint_revert,
             crate::worktree_setup_commands::worktree_setup,
             crate::worktree_setup_commands::worktree_setup_save,

@@ -3590,7 +3590,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 }
 
 /* Comments on a diff's lines (Changes' review). A line's button shows on hover or focus. */
-.chat-diff-scroll[data-review] {
+.chat-diff-scroll[data-pinned] {
   container-type: inline-size;
 }
 
@@ -3698,4 +3698,49 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   padding: var(--g-space-8);
   list-style: none;
   border-top: 1px solid var(--g-line-faint);
+}
+
+/* Changes shows each change with three lines around it. An unchanged stretch between folds into a
+   band that opens it, and a change's band carries its Revert, at the right of the visible width. */
+.chat-diff-band-cell {
+  background-color: var(--g-diff-hunk);
+}
+
+.chat-diff-band-bar {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  width: 100cqi;
+  min-height: 28px;
+  padding: 0 var(--g-space-8);
+  font-family: var(--g-sans);
+}
+
+.chat-diff-unfold {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  height: 28px;
+  padding: 0 var(--g-space-4);
+  border: 0;
+  background: none;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-diff-unfold:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-diff-revert {
+  margin-left: auto;
 }

@@ -57,6 +57,30 @@ pub struct ChangeDiff {
     pub after: Option<String>,
     pub binary: bool,
     pub truncated: bool,
+    /// The SHA-256 of the current file `after` was read from, `None` when it is absent. Reverting
+    /// one hunk names it, so its line numbers count lines of this very text.
+    #[serde(default)]
+    pub after_sha256: Option<String>,
+}
+
+/// A block of changed lines, by offsets: `old_start` lines of the checkpoint's text come before
+/// it and `old_lines` belong to it; `new_start` and `new_lines` count the same in the current
+/// text. Reverting it puts the checkpoint's lines back in place of the current ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct LineHunk {
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+}
+
+/// Hunks of one modified text file to revert, counted in the texts its `ChangeDiff` gave, in
+/// order and apart. The rest of the file stays as it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct HunkRevert {
+    pub path: String,
+    pub after_sha256: String,
+    pub hunks: Vec<LineHunk>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

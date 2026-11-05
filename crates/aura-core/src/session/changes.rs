@@ -1,6 +1,6 @@
 use super::*;
 use aura_protocol::changes::{
-    ChangeDiff, ChangesSnapshot, NativeRewind, RevertPreview, RevertResult,
+    ChangeDiff, ChangesSnapshot, HunkRevert, NativeRewind, RevertPreview, RevertResult,
 };
 
 pub(super) struct FolderMutation {
@@ -103,6 +103,32 @@ impl SessionManager {
                 &chat.folder,
                 checkpoint_id,
                 paths,
+            )
+            .await
+            .map_err(checkpoint_error)
+    }
+
+    /// Previews putting back the checkpoint's lines for hunks of one modified file; its revert
+    /// goes through `checkpoint_revert` like any other.
+    pub async fn checkpoint_hunk_revert_preview(
+        &self,
+        chat_id: &str,
+        checkpoint_id: &str,
+        selection: HunkRevert,
+    ) -> Result<RevertPreview, SessionError> {
+        let (chat, _) = self
+            .deps()
+            .store
+            .checkpoint_context(chat_id, None)
+            .await
+            .map_err(|error| storage_error(&error))?;
+        self.checkpoint_service()?
+            .preview_hunk_revert(
+                chat_id,
+                folder_id(&chat)?,
+                &chat.folder,
+                checkpoint_id,
+                selection,
             )
             .await
             .map_err(checkpoint_error)

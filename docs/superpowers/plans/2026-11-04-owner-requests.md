@@ -111,7 +111,7 @@ and a hands-on walkthrough before merging.
       Client file access and client-run terminals stay off on purpose: the agents run commands
       and use files themselves, and auracode has no unsaved buffers to offer, the reason ACP has
       them.
-  - [ ] C, in two pull requests.
+  - [ ] C, in three pull requests.
     - [x] First part (#84, merged 2026-11-05): review in Changes. A comment on any diff line, by
       pointer or keyboard, waits until sent or discarded (also while the panel or the chat
       closes, until auracode quits); Send gives the agent one message quoting each line with its
@@ -119,7 +119,14 @@ and a hands-on walkthrough before merging.
       the most serious first, before any change. Sending follows the composer: queued while a
       turn runs, held while a request waits for its answer. Comments need a line diff, so a file
       over 400 lines, which Changes shows as a replacement, takes none.
-    - [ ] Second part: revert one hunk, and commit and push from the Git dialog.
+    - [x] Second part (#85, merged 2026-11-05): one change reverted on its own. Changes shows each
+      change with three lines around it and folds the unchanged stretches; Revert above a change
+      previews its lines alone (bound to the file's hash, so a later edit makes it stale) and goes
+      through the same one-use token, recovery copy and Stop rule as whole files. The line diff
+      now sets aside the lines both texts start and end with, so a long file's edit diffs line by
+      line (up to 2,000 changed lines a side, and Changes' 128 KiB per text), which also lifts
+      the comments' 400-line limit.
+    - [ ] Third part: commit and push from the Git dialog.
   - [ ] D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page

@@ -12,6 +12,7 @@ import type {
 import type { ChangesTransport } from "../../lib/changes";
 import type { ChatState } from "../../lib/chat/chatStore";
 import {
+  afterHunkRevert,
   type CommentsChange,
   type DiffComment,
   reviewMessage,
@@ -21,7 +22,7 @@ import { hasProcess, type Transcript } from "../../lib/chat/transcript";
 import type { ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
 import { ContextContents, type ContextTab } from "./ContextContents";
-import { DiffBlock } from "./DiffBlock";
+import { DiffBlock, type HunkChange } from "./DiffBlock";
 import { Modal } from "./Modal";
 
 /** Goes on to a sent message's Edit: a rewind's way to continue the conversation from there. */
@@ -103,6 +104,9 @@ export function ChangesPanel({
   const [acting, setActing] = useState(false);
   const [preview, setPreview] = useState<RevertPreview | null>(null);
   const [result, setResult] = useState<RevertResult | null>(null);
+  // A single change's revert: what the confirmation describes, then the file it was in.
+  const [hunk, setHunk] = useState<(HunkChange & { readonly path: string }) | null>(null);
+  const [revertedIn, setRevertedIn] = useState<string | null>(null);
   const [width, setWidth] = useState(380);
   const [tab, setTab] = useState<ContextTab>("Changes");
   // A rewind selects every file its own comparison lists (never an earlier scope's), and offers
@@ -205,6 +209,7 @@ export function ChangesPanel({
     if (!checkpoint || !selected.size || acting) return;
     setActing(true);
     setError(null);
+    setHunk(null);
     try {
       setPreview(await api.preview(chatId, checkpoint.id, [...selected]));
     } catch (error) {
@@ -226,17 +231,48 @@ export function ChangesPanel({
     try {
       const outcome = await api.revert(chatId, preview.token);
       setResult(outcome);
-      dropComments(outcome.applied);
-      setSelected(new Set());
+      setRevertedIn(hunk?.path ?? null);
+      if (hunk) {
+        const { path, hunk: range } = hunk;
+        if (outcome.applied.includes(path))
+          onCommentsChange?.((current) => afterHunkRevert(current, path, range));
+      } else {
+        dropComments(outcome.applied);
+        setSelected(new Set());
+      }
       setRevision((value) => value + 1);
       // A rewind goes on to the message's Edit only when every file came back.
-      if (editAfter && scope && onEditFrom && !outcome.error) onEditFrom(scope);
+      if (!hunk && editAfter && scope && onEditFrom && !outcome.error) onEditFrom(scope);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
       setPreview(null);
+      setHunk(null);
       setActing(false);
     }
+  };
+  // One change goes back on its own, through the same preview, revert and recovery as files.
+  const revertHunk = async (change: HunkChange) => {
+    if (!checkpoint || !diff?.after_sha256 || acting) return;
+    setActing(true);
+    setError(null);
+    try {
+      const value = await api.previewHunks(chatId, checkpoint.id, {
+        path: diff.path,
+        after_sha256: diff.after_sha256,
+        hunks: [change.hunk],
+      });
+      setHunk({ ...change, path: diff.path });
+      setPreview(value);
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setActing(false);
+    }
+  };
+  const closePreview = () => {
+    setPreview(null);
+    setHunk(null);
   };
   // Without auracode's checkpoint for the turn, an agent that keeps its own restores what its
   // edit tools changed. Its preview changes nothing; the session must be live and idle.
@@ -596,6 +632,17 @@ export function ChangesPanel({
                     ) : null}
                     <DiffBlock
                       wholeFile={!diff.truncated}
+                      context={3}
+                      // A change reverts alone in a file that is there before and after, as for
+                      // whole files only once no agent works in the folder.
+                      onRevertHunk={
+                        !live &&
+                        checkpoint &&
+                        diff.after_sha256 &&
+                        snapshot?.files.find((file) => file.path === diff.path)?.kind === "modified"
+                          ? (change) => void revertHunk(change)
+                          : undefined
+                      }
                       review={
                         // Comments need the file's own line numbers: a shortened diff has none.
                         onCommentsChange && !diff.truncated
@@ -631,8 +678,11 @@ export function ChangesPanel({
               {result ? (
                 <section className="changes-result" aria-label="Revert result">
                   <p role="status">
-                    Reverted {result.applied.length}{" "}
-                    {result.applied.length === 1 ? "file" : "files"}.
+                    {revertedIn
+                      ? result.applied.length
+                        ? `Reverted the change in ${revertedIn}.`
+                        : `The change in ${revertedIn} was not reverted.`
+                      : `Reverted ${result.applied.length} ${result.applied.length === 1 ? "file" : "files"}.`}
                   </p>
                   {result.error ? (
                     <p role="alert" className="ui-error">
@@ -832,11 +882,42 @@ export function ChangesPanel({
           </div>
         </Modal>
       ) : null}
-      {preview ? (
+      {preview && hunk ? (
+        <Modal
+          title="Revert this change?"
+          onClose={() => {
+            if (!acting) closePreview();
+          }}
+        >
+          <p className="changes-confirm-copy">
+            Put back the lines of <code>{hunk.path}</code> at line {hunk.line} as they were before
+            the selected turn. The rest of the file stays as it is.
+          </p>
+          <p className="changes-confirm-copy">
+            <span className="chat-diff-totals">
+              <span data-op="add">+{hunk.added}</span> <span data-op="remove">−{hunk.removed}</span>
+            </span>{" "}
+            lines change back. auracode keeps the file as it is now in its recovery folder.
+          </p>
+          <div className="g-dialog-actions">
+            <button type="button" className="g-button" disabled={acting} onClick={closePreview}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-danger"
+              disabled={acting}
+              onClick={() => void revert()}
+            >
+              {acting ? "Reverting…" : "Revert change"}
+            </button>
+          </div>
+        </Modal>
+      ) : preview ? (
         <Modal
           title="Revert selected files?"
           onClose={() => {
-            if (!acting) setPreview(null);
+            if (!acting) closePreview();
           }}
         >
           <p className="changes-confirm-copy">
@@ -867,12 +948,7 @@ export function ChangesPanel({
             </label>
           ) : null}
           <div className="g-dialog-actions">
-            <button
-              type="button"
-              className="g-button"
-              disabled={acting}
-              onClick={() => setPreview(null)}
-            >
+            <button type="button" className="g-button" disabled={acting} onClick={closePreview}>
               Cancel
             </button>
             <button

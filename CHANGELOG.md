@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Changes shows each change with three lines around it and folds the rest, diffs long files line by line, and reverts one change on its own: Revert above a change puts back just its lines from before the turn, through the same preview and recovery as whole files. ([#85](https://github.com/itscool2b/auracode/pull/85))
 - Review in Changes: comment on any line of a diff, by pointer or keyboard, and send the comments to the agent as one message that quotes each line with its file and number; or ask the agent to review the changes and report problems before it changes anything. Unsent comments wait while the panel or the chat closes. ([#84](https://github.com/itscool2b/auracode/pull/84))
 - ACP agents' commands show their output as it comes and their exit code, where they said "terminal output is not available". ([#83](https://github.com/itscool2b/auracode/pull/83))
 - MCP servers' forms and browser steps now show in Claude and Codex chats (they were cancelled), checked field by field; and the Session tab lists what the session loaded: MCP servers with their state, skills, plugins and subagents, as each agent reports them. ([#82](https://github.com/itscool2b/auracode/pull/82))

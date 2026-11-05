@@ -1,5 +1,11 @@
 /** In-memory context fixtures for the development harness. No filesystem or native calls. */
-import type { ComposerInput, ContinuationAction, PendingHandoff } from "../bindings";
+import type {
+  ComposerInput,
+  ContinuationAction,
+  HunkRevert,
+  LineHunk,
+  PendingHandoff,
+} from "../bindings";
 import type { ChangesTransport } from "../lib/changes";
 import type { Transport } from "../lib/chat/transport";
 import type { ComposerTransport } from "../lib/composer";
@@ -79,6 +85,57 @@ export function withPreviewContext<T extends Transport>(
     },
   ];
   let pendingRevert: string[] = [];
+  // The files' text before the turn, and as it is now; a hunk revert changes the latter.
+  const before: Record<string, string> = {
+    "src/components/Sidebar.tsx": "export function Sidebar() {\n  return <ChatList />;\n}",
+    "src/styles.css": [
+      ".sidebar {",
+      "  width: 240px;",
+      "  padding: 12px;",
+      "}",
+      "",
+      ".sidebar-header {",
+      "  display: flex;",
+      "  align-items: center;",
+      "  gap: 8px;",
+      "}",
+      "",
+      ".sidebar-list {",
+      "  margin: 0;",
+      "  padding: 0;",
+      "  list-style: none;",
+      "}",
+      "",
+      ".sidebar-item {",
+      "  color: var(--fg-2);",
+      "}",
+    ].join("\n"),
+  };
+  const after: Record<string, string> = {
+    "src/components/Sidebar.tsx":
+      "export function Sidebar() {\n  return (\n    <ProjectList>\n      <ChatList keepActiveVisible />\n    </ProjectList>\n  );\n}",
+    "src/styles.css": (before["src/styles.css"] ?? "")
+      .replace("  width: 240px;\n  padding: 12px;", "  width: 264px;\n  padding: 16px 12px;")
+      .replace("  color: var(--fg-2);", "  color: var(--fg-1);\n  font-weight: 500;"),
+  };
+  // Each text has its own version, as a file has its own hash.
+  const versions: Record<string, number> = {};
+  let pendingHunk: HunkRevert | null = null;
+  // The fixture's texts end without a newline, so lines join back with one between.
+  const revertHunks = (current: string, earlier: string, hunks: readonly LineHunk[]) => {
+    const now = current.split("\n");
+    const old = earlier.split("\n");
+    const result: string[] = [];
+    let next = 0;
+    for (const hunk of hunks) {
+      result.push(
+        ...now.slice(next, hunk.new_start),
+        ...old.slice(hunk.old_start, hunk.old_start + hunk.old_lines),
+      );
+      next = hunk.new_start + hunk.new_lines;
+    }
+    return [...result, ...now.slice(next)].join("\n");
+  };
   // What the agent's own checkpoints hold until a real rewind puts the files back.
   let agentEdits = ["src/components/Sidebar.tsx", "src/styles.css"];
   const changes: ChangesTransport = {
@@ -110,15 +167,24 @@ export function withPreviewContext<T extends Transport>(
           },
     diff: async (_chat, _checkpoint, path) => ({
       path,
-      before: path.endsWith("css")
-        ? ".sidebar {\n  width: 240px;\n  padding: 12px;\n}"
-        : "export function Sidebar() {\n  return <ChatList />;\n}",
-      after: path.endsWith("css")
-        ? ".sidebar {\n  width: 264px;\n  padding: 16px 12px;\n}"
-        : "export function Sidebar() {\n  return (\n    <ProjectList>\n      <ChatList keepActiveVisible />\n    </ProjectList>\n  );\n}",
+      before: before[path] ?? null,
+      after: after[path] ?? "",
       binary: false,
       truncated: false,
+      after_sha256: `preview-${path}-${versions[path] ?? 0}`,
     }),
+    previewHunks: async (_chat, checkpoint_id, selection) => {
+      if (selection.after_sha256 !== `preview-${selection.path}-${versions[selection.path] ?? 0}`)
+        throw new Error(`${selection.path} changed since Changes showed it. Refresh Changes.`);
+      pendingHunk = selection;
+      return {
+        token: "preview-hunk",
+        checkpoint_id,
+        files: files.filter((file) => file.path === selection.path),
+        expires_at: Date.now() + 600_000,
+        warnings: [],
+      };
+    },
     preview: async (_chat, checkpoint_id, paths) => {
       pendingRevert = paths;
       return {
@@ -130,6 +196,14 @@ export function withPreviewContext<T extends Transport>(
       };
     },
     revert: async () => {
+      if (pendingHunk) {
+        const { path, hunks } = pendingHunk;
+        pendingHunk = null;
+        after[path] = revertHunks(after[path] ?? "", before[path] ?? "", hunks);
+        versions[path] = (versions[path] ?? 0) + 1;
+        if (after[path] === before[path]) files = files.filter((file) => file.path !== path);
+        return { applied: [path], error: null, recovery_paths: [] };
+      }
       const applied = files
         .filter((file) => pendingRevert.includes(file.path))
         .map((file) => file.path);

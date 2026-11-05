@@ -1,8 +1,15 @@
 import { CopyButton } from "@auracode/ui/graphite";
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, RotateCcw, UnfoldVertical } from "lucide-react";
 import { Fragment, type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { LineHunk } from "../../bindings";
 import { type DiffComment, excerptOf } from "../../lib/chat/review";
-import { diffLines } from "../../lib/diff";
+import {
+  changeParts,
+  type DiffPart,
+  diffLines,
+  type NumberedLine,
+  numberLines,
+} from "../../lib/diff";
 import { useDisclosure } from "./DisclosureMemory";
 
 const COLLAPSED_ROWS = 14;
@@ -14,6 +21,26 @@ export interface DiffReview {
   readonly onRemove: (id: string) => void;
 }
 
+/** One change Changes can revert on its own, and where it starts in the current text. */
+export interface HunkChange {
+  readonly hunk: LineHunk;
+  readonly added: number;
+  readonly removed: number;
+  readonly line: number;
+}
+
+/** What the table lists: a line, a fold of unchanged lines, or the bar above a change. */
+type Item =
+  | { readonly kind: "row"; readonly row: NumberedLine }
+  | {
+      readonly kind: "fold";
+      readonly from: number;
+      readonly to: number;
+      /** The change right after the fold, whose Revert the fold's bar carries. */
+      readonly revert?: HunkChange;
+    }
+  | { readonly kind: "head"; readonly revert: HunkChange };
+
 /** The line a comment is on, as its buttons name it. */
 function place(comment: Pick<DiffComment, "side" | "line">): string {
   return comment.side === "old" ? `removed line ${comment.line}` : `line ${comment.line}`;
@@ -21,6 +48,17 @@ function place(comment: Pick<DiffComment, "side" | "line">): string {
 
 function commentCount(count: number): string {
   return `${count} ${count === 1 ? "comment" : "comments"}`;
+}
+
+function hunkChange(part: Extract<DiffPart, { kind: "change" }>): HunkChange {
+  const { hunk } = part;
+  return {
+    hunk,
+    added: part.added,
+    removed: part.removed,
+    // Removed lines alone sit after the line before them.
+    line: Math.max(1, hunk.new_lines > 0 ? hunk.new_start + 1 : hunk.new_start),
+  };
 }
 
 /** A comment being written under a line: Enter adds it, Shift+Enter starts a new line. */
@@ -82,6 +120,26 @@ function CommentEditor({
   );
 }
 
+function RevertHunk({
+  change,
+  onRevert,
+}: {
+  readonly change: HunkChange;
+  readonly onRevert: (change: HunkChange) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="g-button g-button-ghost g-button-24 chat-diff-revert"
+      aria-label={`Revert the change at line ${change.line}`}
+      onClick={() => onRevert(change)}
+    >
+      <RotateCcw size={12} aria-hidden="true" />
+      Revert
+    </button>
+  );
+}
+
 /** Line numbers refer to the supplied text, which may be a fragment of the named file. */
 export function DiffBlock({
   path,
@@ -91,6 +149,8 @@ export function DiffBlock({
   wholeFile = false,
   copyPath = true,
   review,
+  context,
+  onRevertHunk,
 }: {
   readonly path: string;
   readonly oldText: string | null;
@@ -101,51 +161,102 @@ export function DiffBlock({
   readonly copyPath?: boolean;
   /** Comments on lines, where line numbers are the file's own (Changes). */
   readonly review?: DiffReview;
+  /** Shows each change with this many unchanged lines around it, folding the rest (Changes). */
+  readonly context?: number;
+  /** A Revert above each change, where `context` shows a whole file's changes. */
+  readonly onRevertHunk?: (change: HunkChange) => void;
 }) {
   const [expanded, setExpanded] = useDisclosure(disclosureKey, "diff", false);
   const bodyId = useId();
   const noteId = useId();
   const scroller = useRef<HTMLElement>(null);
   const diff = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
-  const rows = useMemo(() => {
-    let oldLine = 0;
-    let newLine = 0;
-    return diff.lines.map((line) => {
-      const before = line.op === "add" ? null : ++oldLine;
-      const after = line.op === "remove" ? null : ++newLine;
-      return { ...line, oldLine: before, newLine: after, key: `${before}:${after}:${line.op}` };
-    });
-  }, [diff]);
-  const visible = expanded ? rows : rows.slice(0, COLLAPSED_ROWS);
-  const hidden = rows.length - COLLAPSED_ROWS;
-  // A shortened replacement view lists lines as removed and added that were not: no comments.
+  const rows = useMemo(() => numberLines(diff.lines), [diff]);
+  // A shortened replacement view lists lines as removed and added that were not: no comments,
+  // no folds and no reverts of single changes.
   const reviewing = diff.truncated ? undefined : review;
+  const parts = useMemo(
+    () => (context === undefined || diff.truncated ? null : changeParts(rows, context)),
+    [rows, context, diff.truncated],
+  );
+  // Folds opened, by their first line, which moves with the text if a change above is reverted.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   // The line whose comment is being written, and the line whose comment button Tab reaches.
   const [writing, setWriting] = useState<string | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
+  // Each comment's row, or -1 when the diff no longer has its line.
+  const commented = useMemo(() => {
+    const at = new Map<string, number>();
+    for (const comment of reviewing?.comments ?? []) {
+      at.set(
+        comment.id,
+        rows.findIndex((row) =>
+          comment.side === "old"
+            ? row.op === "remove" && row.oldLine === comment.line
+            : row.op !== "remove" && row.newLine === comment.line,
+        ),
+      );
+    }
+    return at;
+  }, [reviewing, rows]);
+  const reverting = onRevertHunk !== undefined && parts !== null;
+  const items = useMemo(() => {
+    const list: Item[] = [];
+    if (!parts) {
+      for (const row of expanded ? rows : rows.slice(0, COLLAPSED_ROWS))
+        list.push({ kind: "row", row });
+      return list;
+    }
+    parts.forEach((part, index) => {
+      if (part.kind === "fold") {
+        // A fold with a comment on one of its lines stays open, so the comment shows.
+        const open =
+          opened.has(rows[part.from]?.key ?? "") ||
+          [...commented.values()].some((row) => row >= part.from && row < part.to);
+        if (open) {
+          for (const row of rows.slice(part.from, part.to)) list.push({ kind: "row", row });
+          return;
+        }
+        const next = parts[index + 1];
+        list.push({
+          kind: "fold",
+          from: part.from,
+          to: part.to,
+          revert: reverting && next?.kind === "change" ? hunkChange(next) : undefined,
+        });
+        return;
+      }
+      const previous = list[list.length - 1];
+      if (reverting && !(previous?.kind === "fold" && previous.revert))
+        list.push({ kind: "head", revert: hunkChange(part) });
+      for (const row of rows.slice(part.from, part.to)) list.push({ kind: "row", row });
+    });
+    return list;
+  }, [parts, rows, expanded, opened, commented, reverting]);
+  const shown = useMemo(
+    () => items.flatMap((item) => (item.kind === "row" ? [item.row] : [])),
+    [items],
+  );
+  const hidden = parts ? 0 : rows.length - COLLAPSED_ROWS;
   // Each comment sits under its line. One on a folded line is counted on Show more lines; one
   // whose line has gone (the file changed since) is listed after the lines.
   const placement = useMemo(() => {
     const under = new Map<string, DiffComment[]>();
     const lost: DiffComment[] = [];
     let folded = 0;
+    const listed = new Set(shown.map((row) => row.key));
     for (const comment of reviewing?.comments ?? []) {
-      const index = rows.findIndex((row) =>
-        comment.side === "old"
-          ? row.op === "remove" && row.oldLine === comment.line
-          : row.op !== "remove" && row.newLine === comment.line,
-      );
-      const row = rows[index];
+      const row = rows[commented.get(comment.id) ?? -1];
       if (!row) lost.push(comment);
-      else if (index >= visible.length) folded += 1;
+      else if (!listed.has(row.key)) folded += 1;
       else under.set(row.key, [...(under.get(row.key) ?? []), comment]);
     }
     return { under, lost, folded };
-  }, [reviewing, rows, visible.length]);
+  }, [reviewing, rows, commented, shown]);
   // One comment button takes Tab, at first the first changed line's; arrows move between them.
   const tabStop =
-    visible.find((row) => row.key === current)?.key ??
-    (visible.find((row) => row.op !== "same") ?? visible[0])?.key;
+    shown.find((row) => row.key === current)?.key ??
+    (shown.find((row) => row.op !== "same") ?? shown[0])?.key;
   const commentButtons = () =>
     Array.from(
       scroller.current?.querySelectorAll<HTMLButtonElement>("button[data-comment-line]") ?? [],
@@ -234,7 +345,7 @@ export function DiffBlock({
         ref={scroller}
         className="chat-diff-scroll"
         id={bodyId}
-        data-review={reviewing ? "" : undefined}
+        data-pinned={reviewing || parts ? "" : undefined}
         aria-label={`Line changes for ${path || "supplied text"}`}
         aria-describedby={explain ? noteId : undefined}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll long code lines horizontally.
@@ -257,7 +368,48 @@ export function DiffBlock({
               </tr>
             </thead>
             <tbody>
-              {visible.map((line) => {
+              {items.map((item) => {
+                if (item.kind === "fold") {
+                  const count = item.to - item.from;
+                  return (
+                    <tr key={`fold:${item.from}`} className="chat-diff-band">
+                      <td colSpan={columns} className="chat-diff-band-cell">
+                        <div className="chat-diff-band-bar">
+                          <button
+                            type="button"
+                            className="chat-diff-unfold"
+                            onClick={() =>
+                              setOpened((value) => new Set(value).add(rows[item.from]?.key ?? ""))
+                            }
+                          >
+                            <UnfoldVertical size={13} aria-hidden="true" />
+                            Show {count} unchanged {count === 1 ? "line" : "lines"}
+                          </button>
+                          {item.revert && onRevertHunk ? (
+                            <RevertHunk change={item.revert} onRevert={onRevertHunk} />
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+                if (item.kind === "head") {
+                  return (
+                    <tr
+                      key={`head:${item.revert.hunk.old_start}:${item.revert.hunk.new_start}`}
+                      className="chat-diff-band"
+                    >
+                      <td colSpan={columns} className="chat-diff-band-cell">
+                        <div className="chat-diff-band-bar">
+                          {onRevertHunk ? (
+                            <RevertHunk change={item.revert} onRevert={onRevertHunk} />
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+                const line = item.row;
                 // A removed line exists only in the earlier text: its number is the old one.
                 const side = line.op === "remove" ? "old" : "new";
                 const number = (side === "old" ? line.oldLine : line.newLine) ?? 0;
