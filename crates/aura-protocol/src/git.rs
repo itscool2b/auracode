@@ -169,6 +169,10 @@ pub struct ManagedWorktree {
     #[serde(default)]
     pub recovery: Option<WorktreeRecovery>,
     pub created_at: Millis,
+    /// The first of ten consecutive local ports kept for this worktree's processes
+    /// (`AURACODE_PORT`), given the first time one is needed. Records from before have none yet.
+    #[serde(default)]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

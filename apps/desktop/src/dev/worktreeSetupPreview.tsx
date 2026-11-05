@@ -5,7 +5,7 @@ import { WorktreeSetupPanel } from "../components/chat/WorktreeSetupPanel";
 import type { WorktreeSetupApi } from "../lib/worktreeSetup";
 import "../components/chat/git-dialog.css";
 
-let saved: WorktreeSetupInput = { files: [], command: null };
+let saved: WorktreeSetupInput = { files: [], command: null, run: null };
 const calls: string[] = [];
 let read: ((chunk: TerminalChunk) => void) | null = null;
 const api: WorktreeSetupApi = {
@@ -13,6 +13,7 @@ const api: WorktreeSetupApi = {
   save: async (_chatId, input) => {
     calls.push("save");
     saved = input;
+    Object.assign(window, { setupSaved: input });
     return { source: "C:/Projects/orbit", input };
   },
   preview: async (_chatId, worktreeId, commandOnly) => {

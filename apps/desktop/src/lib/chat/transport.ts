@@ -63,6 +63,7 @@ import {
 } from "../ipc";
 import { type ProjectToolsApi, projectToolsApi } from "../projectTools";
 import { type SearchTransport, searchApi } from "../search";
+import { type WorktreeRunApi, worktreeRunApi } from "../worktreeRun";
 import { type WorktreeSetupApi, worktreeSetupApi } from "../worktreeSetup";
 import { type FileLinkApi, fileLinkApi } from "./fileLinks";
 
@@ -85,6 +86,8 @@ export interface Transport {
   readonly accounts?: AgentAccountsApi;
   /** A chat's file names, checked against its folder and opened in the person's editor. */
   readonly files?: FileLinkApi;
+  /** Run in a worktree chat: the folder setup's Run command, with the worktree's ports. */
+  readonly run?: WorktreeRunApi;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -140,6 +143,7 @@ export interface Transport {
 export const tauriTransport: Transport = {
   git: gitWorkspaceApi,
   files: fileLinkApi,
+  run: worktreeRunApi,
   conversation: conversationApi,
   search: searchApi,
   changes: changesApi,

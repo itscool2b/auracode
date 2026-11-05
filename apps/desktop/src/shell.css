@@ -1211,6 +1211,17 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-3);
 }
 
+/* Run in a worktree chat: a ghost pill with its icon; while it runs, Stop in the same place. */
+.chat-header-controls > .chat-run {
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-2);
+}
+
+.chat-header-controls > .chat-run[data-running] {
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-1);
+}
+
 .chat-header .g-button-icon[aria-expanded="true"] {
   background-color: var(--g-glass-control-active);
   color: var(--g-fg-1);

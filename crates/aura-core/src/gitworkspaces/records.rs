@@ -63,6 +63,7 @@ mod encrypted_tests {
             detail: None,
             recovery: Some(WorktreeRecovery::Create),
             created_at: 1,
+            port: None,
         };
         service.write_records(vec![item.clone()]).unwrap();
         item.state = WorktreeState::Retired;

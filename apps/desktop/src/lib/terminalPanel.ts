@@ -16,7 +16,7 @@ const TITLE_LIMIT = 40;
 export type TabStatus = { readonly state: "reviewing" } | TerminalState;
 
 export interface PanelTab {
-  readonly purpose?: "setup";
+  readonly purpose?: "setup" | "run";
   readonly id: string;
   readonly chatId: string;
   /** The shell's name ("PowerShell 2") or the name the user gave the tab. */
@@ -26,6 +26,8 @@ export interface PanelTab {
   /** The folder Rust reviewed: the chat's own folder, so a worktree chat opens in its worktree. */
   readonly folder: string | null;
   readonly status: TabStatus;
+  /** A Run tab's address: the worktree's first port on this machine. */
+  readonly url?: string;
 }
 
 export interface ChatPanel {
@@ -162,6 +164,68 @@ export class TerminalPanels {
       notice: null,
       focus: panel.focus + 1,
     });
+  }
+
+  /**
+   * Run: the command saved in the folder's setup, in a tab of its own in the chat's worktree. A
+   * chat runs it once at a time; asking again while it runs shows that tab.
+   */
+  runTab(chatId: string, transport: TerminalTransport, folder: string, url: string): void {
+    const panel = this.panel(chatId);
+    const running = this.runningTab(chatId);
+    if (running) {
+      this.#setPanel(chatId, { ...panel, active: running, open: true, focus: panel.focus + 1 });
+      return;
+    }
+    const open = [...this.#tabs.values()].filter((tab) => holdsShell(tab.status)).length;
+    if (open >= this.limit) {
+      this.#setPanel(chatId, {
+        ...panel,
+        open: true,
+        notice: `${this.limit === PANEL_TERMINAL_LIMIT ? "Eight" : this.limit} terminals are open. Close one before starting Run.`,
+      });
+      return;
+    }
+    const id = `run-${++this.#sequence}`;
+    this.#tabs.set(id, {
+      id,
+      chatId,
+      purpose: "run",
+      title: "Run",
+      named: false,
+      shell: null,
+      folder,
+      url,
+      status: { state: "starting" },
+    });
+    this.#runtimes.set(
+      id,
+      this.factory({
+        transport,
+        label: "Run terminal",
+        onStatus: (status) => {
+          if (this.#tabs.has(id)) this.#setTab(id, { status });
+        },
+      }),
+    );
+    this.#setPanel(chatId, {
+      ...panel,
+      tabs: [...panel.tabs, id],
+      active: id,
+      open: true,
+      notice: null,
+      focus: panel.focus + 1,
+    });
+  }
+
+  /** The chat's Run tab while its process runs, if there is one. */
+  runningTab(chatId: string): string | null {
+    return (
+      this.panel(chatId).tabs.find((id) => {
+        const tab = this.#tabs.get(id);
+        return tab?.purpose === "run" && holdsShell(tab.status);
+      }) ?? null
+    );
   }
 
   /** Opens setup review without starting a shell. Existing terminal output remains in its tab. */
@@ -307,7 +371,9 @@ export class TerminalPanels {
         ? nextTitle(tab.shell.label, taken)
         : tab.purpose === "setup"
           ? "Setup"
-          : "Terminal",
+          : tab.purpose === "run"
+            ? "Run"
+            : "Terminal",
       named: false,
     });
   }

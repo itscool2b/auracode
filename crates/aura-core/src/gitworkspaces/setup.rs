@@ -35,7 +35,7 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-async fn executable(
+pub(super) async fn executable(
     service: &GitWorkspaces,
     command: &Option<SetupCommand>,
 ) -> Result<Option<(PathBuf, u64, Option<SystemTime>)>> {
@@ -378,13 +378,19 @@ impl GitWorkspaces {
                 .starts_with("GIT_")
         });
         let folder = PathBuf::from(&plan.record.path);
+        // The worktree's first port, so setup can write it where the project reads one. Setup
+        // still runs if no block is free; it then has none.
+        let set_env = self
+            .port_under_gate(chat_id)
+            .map(|(_, port)| super::run::port_env(port, false))
+            .unwrap_or_default();
         Ok(aura_process::SpawnSpec {
             launch: aura_process::LaunchSpec {
                 label: "Worktree setup".into(),
                 program,
                 args: command.args.into_iter().map(Into::into).collect(),
                 cwd: aura_process::ProcessCwd::Fixed(folder.clone()),
-                set_env: vec![],
+                set_env,
                 daemons: vec![],
                 startup_timeout: Duration::from_secs(15),
             },
@@ -502,6 +508,7 @@ mod tests {
         let rig = super::super::tests::rig().await;
         let record = super::super::tests::isolated(&rig).await;
         let input = WorktreeSetupInput {
+            run: None,
             files: vec![],
             command: Some(SetupCommand {
                 program: std::env::current_exe().unwrap().to_string_lossy().into(),
@@ -597,6 +604,7 @@ mod tests {
         let record = super::super::tests::isolated(&rig).await;
         std::fs::write(rig.work.join(".env"), "FIXTURE=one").unwrap();
         let input = WorktreeSetupInput {
+            run: None,
             files: vec![".env".into()],
             command: Some(SetupCommand {
                 program: std::env::current_exe().unwrap().to_string_lossy().into(),
@@ -662,6 +670,7 @@ mod tests {
                 "chat",
                 &record.id,
                 WorktreeSetupInput {
+                    run: None,
                     files: vec![],
                     command: input.command,
                 },
@@ -704,6 +713,7 @@ mod tests {
             assert!(validate_path(path).is_err(), "{path}");
         }
         let input = WorktreeSetupInput {
+            run: None,
             files: vec![".env".into(), ".ENV".into()],
             command: None,
         };

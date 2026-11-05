@@ -329,6 +329,19 @@ export const commands = {
 	 *  editor (or the first one detected), and says which editor it was.
 	 */
 	chatFileOpen: (chatId: string, reference: string, line: number | null, column: number | null) => typedError<ProjectEditor, AppError>(__TAURI_INVOKE("chat_file_open", { chatId, reference, line, column })),
+	/**
+	 *  The URL that opens `path` in `editor`: a folder as `scheme://file/<folder>/`, a file as
+	 *  `scheme://file/<file>` with `:line` and `:line:column` when known, the form the VS Code
+	 *  builds and Cursor read.
+	 *  A worktree chat's Run: its saved command, if any, and its worktree's first port; `null` for a
+	 *  chat that does not work in a worktree of its own.
+	 */
+	worktreeRun: (chatId: string) => typedError<WorktreeRun | null, AppError>(__TAURI_INVOKE("worktree_run", { chatId })),
+	/**
+	 *  Starts Run in a reserved project terminal (`project_terminal_reserve`): the saved Run command
+	 *  in the chat's worktree, with `AURACODE_PORT` and `PORT`. Closing the terminal stops it.
+	 */
+	worktreeRunStart: (chatId: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_run_start", { chatId, terminalId, rows, cols })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	profileWorktrees: (projectId: string | null) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("profile_worktrees", { projectId })),
 	profileWorktreeRecoveryPreview: (worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("profile_worktree_recovery_preview", { worktreeId, action })),
@@ -2367,6 +2380,11 @@ export type ManagedWorktree = {
 	detail: string | null,
 	recovery?: WorktreeRecovery | null,
 	created_at: number,
+	/**
+	 *  The first of ten consecutive local ports kept for this worktree's processes
+	 *  (`AURACODE_PORT`), given the first time one is needed. Records from before have none yet.
+	 */
+	port?: number | null,
 };
 
 export type McpActionResult = {
@@ -3740,6 +3758,16 @@ export type WorktreeRelocationPreview = {
 	expires_at: number,
 };
 
+/**
+ *  A worktree chat's Run: the saved command, if any, and the first of the ten local ports the
+ *  worktree's processes get (`AURACODE_PORT`; Run also sets `PORT`).
+ */
+export type WorktreeRun = {
+	command: SetupCommand | null,
+	port: number,
+	folder: string,
+};
+
 export type WorktreeSetup = {
 	source: string,
 	input: WorktreeSetupInput,
@@ -3755,6 +3783,11 @@ export type WorktreeSetupAttempt = {
 export type WorktreeSetupInput = {
 	files: string[],
 	command: SetupCommand | null,
+	/**
+	 *  What Run starts in a worktree of this folder, with `AURACODE_PORT` and `PORT` set to the
+	 *  worktree's first port: a dev server, say. Recipes saved before Run have none.
+	 */
+	run?: SetupCommand | null,
 };
 
 export type WorktreeSetupPreview = {

@@ -364,6 +364,7 @@ pub(super) fn creating_record(
         ),
         created_at: now,
         recovery: Some(WorktreeRecovery::Create),
+        port: None,
     }
 }
 

@@ -247,6 +247,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::project_tools::editors_detected,
             crate::project_tools::chat_file_check,
             crate::project_tools::chat_file_open,
+            crate::project_tools::worktree_run,
+            crate::project_tools::worktree_run_start,
             crate::git_commands::managed_worktrees,
             crate::git_commands::profile_worktrees,
             crate::git_commands::profile_worktree_recovery_preview,

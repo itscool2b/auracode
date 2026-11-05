@@ -82,6 +82,49 @@ pub async fn project_terminal_start(
 /// The URL that opens `path` in `editor`: a folder as `scheme://file/<folder>/`, a file as
 /// `scheme://file/<file>` with `:line` and `:line:column` when known, the form the VS Code
 /// builds and Cursor read.
+/// A worktree chat's Run: its saved command, if any, and its worktree's first port; `null` for a
+/// chat that does not work in a worktree of its own.
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_run(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<Option<aura_protocol::worktree_setup::WorktreeRun>, AppError> {
+    current(&webview, &state)?;
+    Ok(state.sessions()?.worktree_run(&chat_id).await?)
+}
+
+/// Starts Run in a reserved project terminal (`project_terminal_reserve`): the saved Run command
+/// in the chat's worktree, with `AURACODE_PORT` and `PORT`. Closing the terminal stops it.
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_run_start(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+    terminal_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<String, AppError> {
+    current(&webview, &state)?;
+    let size = PtySize { rows, cols }
+        .validate()
+        .map_err(|_| TerminalError::Resize)?;
+    let ticket = state.terminals.claim(webview.label(), &terminal_id)?;
+    let admission = state.sessions()?;
+    let plan = admission.prepare_worktree_run(&chat_id).await?;
+    current(&webview, &state)?;
+    let chats = state.chats().ok_or(TerminalError::Closed)?;
+    let spawner = Spawner::new(
+        chats.registry.clone(),
+        tauri::async_runtime::handle().inner().clone(),
+    );
+    Ok(ticket
+        .start_project(spawner, plan.spec, size, Box::new((plan.guard, admission)))
+        .await?)
+}
+
 fn editor_url(editor: ProjectEditor, path: &str, target: UrlTarget) -> Result<Url, AppError> {
     let scheme = match editor {
         ProjectEditor::Cursor => "cursor",

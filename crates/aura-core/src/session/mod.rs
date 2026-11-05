@@ -51,6 +51,7 @@ mod workspace;
 mod workspace_folders;
 mod workspace_removal;
 mod worktree_chat;
+mod worktree_run;
 mod worktree_setup;
 
 pub use config_library::LibraryRoots;

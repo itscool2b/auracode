@@ -257,6 +257,36 @@ async function inspect(engine, launcher) {
     );
     await audit(page, "refused", engine, scans);
 
+    // Run, in a worktree chat whose folder setup saved a command: one tab of its own with the
+    // worktree's address, and Stop in the same place while it runs.
+    await page.goto(`${url}/?preview=terminal-panel&tabs=1&run=1`);
+    const run = page.getByTestId("chat-run");
+    await run.getByText("Run", { exact: true }).waitFor();
+    assert.equal(
+      await run.getAttribute("title"),
+      "Run cmd /d /c pnpm dev in this worktree, on localhost:25040",
+    );
+    await run.click();
+    await shows(page, "Local:   http://localhost:25040/");
+    const runTab = tabs(page).filter({ hasText: "Run" });
+    assert.equal(await runTab.getAttribute("aria-selected"), "true");
+    const address = page.locator(".terminal-panel-url");
+    assert.equal(await address.textContent(), "localhost:25040");
+    assert.equal(await address.getAttribute("href"), "http://localhost:25040");
+    assert.equal(await address.getAttribute("target"), "_blank");
+    await run.getByText("Stop", { exact: true }).waitFor();
+    await audit(page, "run", engine, scans);
+    assert.equal(await tabs(page).count(), 2);
+    assert.deepEqual(
+      (await calls(page)).filter((call) => call.startsWith("run:")),
+      ["run:reserve", "run:start"],
+    );
+    // Stop closes its tab and stops its process; Run is offered again.
+    await run.getByText("Stop", { exact: true }).click();
+    await run.getByText("Run", { exact: true }).waitFor();
+    assert.equal(await tabs(page).count(), 1);
+    await page.waitForFunction(() => window.terminalPanelFixture.calls().includes("run:close"));
+
     // The narrow window keeps the panel inside it.
     await page.setViewportSize({ width: 1024, height: 700 });
     await page.goto(`${url}/?preview=terminal-panel&tabs=3`);
@@ -270,7 +300,7 @@ async function inspect(engine, launcher) {
 
     assert.deepEqual(errors, [], "browser errors");
     console.log(
-      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); toggle, focus, menu, palette, tabs, rename, resize, close, exit, limit and refusal passed`,
+      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); toggle, focus, menu, palette, tabs, rename, resize, close, exit, limit, refusal and Run passed`,
     );
   } finally {
     await browser.close();

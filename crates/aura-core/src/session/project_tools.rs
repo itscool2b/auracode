@@ -143,6 +143,14 @@ pub(super) fn display_path(path: &std::path::Path) -> Result<String, SessionErro
     Ok(value.to_owned())
 }
 
+/// Whether two spellings name one folder (their canonical forms are equal).
+fn same_folder(left: &std::path::Path, right: &std::path::Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 fn shell(env: &ResolvedEnv) -> Vec<Shell> {
     let mut choices = Vec::<(ProjectShell, &str, PathBuf, Vec<&str>)>::new();
     #[cfg(windows)]
@@ -225,6 +233,42 @@ fn editors(env: &ResolvedEnv) -> Vec<PreparedEditor> {
 }
 
 impl SessionManager {
+    /// `AURACODE_PORT` (and `PORT` for Run) when `folder` is the chat's ready worktree; nothing
+    /// otherwise, or when no port block is free.
+    pub(super) async fn worktree_port_env(
+        &self,
+        chat_id: &str,
+        folder: &std::path::Path,
+        run: bool,
+    ) -> Vec<(OsString, OsString)> {
+        let Ok(service) = self.worktrees() else {
+            return Vec::new();
+        };
+        match service.worktree_port(chat_id).await {
+            Ok((record, port)) if same_folder(std::path::Path::new(&record.path), folder) => {
+                crate::gitworkspaces::run::port_env(port, run)
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Holds `folder` as a project terminal does, so worktree changes wait until the process ends.
+    pub(super) fn hold_folder(&self, folder: &std::path::Path) -> Result<Box<dyn Send + Sync>, SessionError> {
+        let identity = Handle::from_path(folder)
+            .map_err(|_| invalid("The project folder could not be inspected."))?;
+        let folder_key = live::normalize_path(folder.to_path_buf());
+        if !self.shared().live.begin_folder_use(folder_key.clone()) {
+            return Err(invalid(
+                "A folder operation or application transition is in progress. Finish it before starting Run.",
+            ));
+        }
+        Ok(Box::new(FolderUse {
+            shared: self.shared().clone(),
+            folder: folder_key,
+            _identity: identity,
+        }))
+    }
+
     pub async fn project_tools_review(
         &self,
         chat_id: &str,
@@ -319,6 +363,8 @@ impl SessionManager {
                 "The shell changed after review. Review project tools again.",
             ));
         }
+        // A worktree chat's shell knows the worktree's first port, as its setup and Run do.
+        let set_env = self.worktree_port_env(chat_id, &prepared.folder, false).await;
         let folder_key = live::normalize_path(prepared.folder.clone());
         if !self.shared().live.begin_folder_use(folder_key.clone()) {
             return Err(invalid(
@@ -340,7 +386,7 @@ impl SessionManager {
                 program: crate::fsutil::plain_path(&shell.program),
                 args: shell.choice.args.into_iter().map(Into::into).collect(),
                 cwd: ProcessCwd::Fixed(crate::fsutil::plain_path(&prepared.folder)),
-                set_env: Vec::new(),
+                set_env,
                 daemons: Vec::new(),
                 startup_timeout: Duration::from_secs(15),
             },

@@ -6,6 +6,7 @@
 import type { ProjectShell, ProjectShellChoice, TerminalChunk } from "../bindings";
 import type { ProjectToolsApi } from "../lib/projectTools";
 import type { TerminalTransport } from "../lib/terminal";
+import type { WorktreeRunApi } from "../lib/worktreeRun";
 
 const FOLDER = "C:\\auracode\\worktrees\\sidebar-scan";
 const POWERSHELL: ProjectShellChoice = {
@@ -131,6 +132,59 @@ function fixtureTransport(shell: ProjectShellChoice, refuse: string | null): Ter
         state.done = true;
         state.wake?.();
       }
+    },
+  };
+}
+
+/**
+ * Run in the preview (`&run=1`): a saved `cmd.exe /d /c pnpm dev` on the worktree's port 25040,
+ * which prints what a dev server prints and keeps running until its tab closes.
+ */
+export function runFixture(): WorktreeRunApi {
+  return {
+    info: async () => ({
+      command: { program: "C:\\Windows\\System32\\cmd.exe", args: ["/d", "/c", "pnpm dev"] },
+      port: 25040,
+      folder: FOLDER,
+    }),
+    terminal: () => {
+      let output = "";
+      let done = false;
+      let wake: (() => void) | null = null;
+      return {
+        reserve: async () => {
+          calls.push("run:reserve");
+          return "fixture-run";
+        },
+        start: async (id) => {
+          calls.push("run:start");
+          output =
+            "\r\n  VITE v8.3.5  ready in 214 ms\r\n\r\n  ➜  Local:   http://localhost:25040/\r\n";
+          wake?.();
+          return id;
+        },
+        read: async (): Promise<TerminalChunk> => {
+          if (!output && !done)
+            await new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, 20_000);
+              wake = () => {
+                clearTimeout(timer);
+                wake = null;
+                resolve();
+              };
+            });
+          const bytes = Array.from(encoder.encode(output));
+          output = "";
+          return { bytes, done, exit_code: done ? 0 : null, truncated: false };
+        },
+        write: async () => {},
+        resize: async () => {},
+        close: async () => {
+          calls.push("run:close");
+          done = true;
+          wake?.();
+        },
+      };
     },
   };
 }

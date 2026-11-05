@@ -27,6 +27,8 @@ export function WorktreeSetupPanel({
   const [files, setFiles] = useState("");
   const [program, setProgram] = useState("");
   const [args, setArgs] = useState("");
+  const [runProgram, setRunProgram] = useState("");
+  const [runArgs, setRunArgs] = useState("");
   const [review, setReview] = useState<WorktreeSetupPreview | null>(null);
   const [result, setResult] = useState<WorktreeSetupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export function WorktreeSetupPanel({
         setFiles(value.input.files.join("\n"));
         setProgram(value.input.command?.program ?? "");
         setArgs(value.input.command?.args.join("\n") ?? "");
+        setRunProgram(value.input.run?.program ?? "");
+        setRunArgs(value.input.run?.args.join("\n") ?? "");
       },
       (failure) => {
         if (live.current) setError(errorMessage(failure));
@@ -64,6 +68,12 @@ export function WorktreeSetupPanel({
       .filter(Boolean),
     command: program.trim()
       ? { program: program.trim(), args: args.split(/\r?\n/).filter((value) => value.length > 0) }
+      : null,
+    run: runProgram.trim()
+      ? {
+          program: runProgram.trim(),
+          args: runArgs.split(/\r?\n/).filter((value) => value.length > 0),
+        }
       : null,
   };
   const dirty = JSON.stringify(saved?.input) !== JSON.stringify(input);
@@ -169,6 +179,34 @@ export function WorktreeSetupPanel({
           <p className="git-help">
             Each line is one argument. For a script, choose its interpreter as the program and its
             path as an argument.
+          </p>
+          <label className="ui-field">
+            Run program
+            <input
+              className="g-input"
+              value={runProgram}
+              disabled={busy}
+              maxLength={4096}
+              placeholder="What Run starts, such as a dev server"
+              onChange={(event) => setRunProgram(event.currentTarget.value)}
+            />
+          </label>
+          <label className="ui-field">
+            Run arguments, one per line
+            <textarea
+              className="g-textarea git-pr-body"
+              value={runArgs}
+              disabled={busy}
+              maxLength={32768}
+              onChange={(event) => setRunArgs(event.currentTarget.value)}
+            />
+          </label>
+          <p className="git-help">
+            Run starts this in the chat's worktree, in its terminal panel, until you stop it. Each
+            worktree keeps ten local ports: the first is in AURACODE_PORT for setup, Run and the
+            worktree's terminals, and in PORT for Run. A server that reads neither can take it
+            through a shell: cmd.exe with <code>/c</code> and{" "}
+            <code>pnpm dev --port %AURACODE_PORT%</code>, say.
           </p>
           <div className="git-actions">
             <button className="g-button" type="submit" disabled={busy || !dirty}>

@@ -14,6 +14,7 @@ import type {
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { levelName, levelShortName, orderedOptions, pendingLabel } from "../../lib/chat/present";
 import { agentVersion } from "../../lib/format";
+import { useMediaQuery } from "../../lib/hooks";
 import { AccessPicker } from "./AccessPicker";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
@@ -193,6 +194,10 @@ export function Pickers({
   const level = levelChoice ? levelName(levelChoice) : null;
   // The pill names a level only when one was chosen: "Opus 5.5 · Max", never "· Default".
   const pillLevel = level && levelChoice?.value.toLowerCase() !== "default" ? level : null;
+  // Narrow windows show the level shortened (chat.css); the name says what is shown, so speech
+  // control finds the pill by its visible words.
+  const narrow = useMediaQuery("(max-width: 1100px)");
+  const namedLevel = pillLevel && narrow ? levelShortName(pillLevel) : level;
   const others = options.filter(
     (option) => option.category !== "model" && option.category !== "effort",
   );
@@ -248,7 +253,7 @@ export function Pickers({
         {account}
         <Popover
           label="Agent, model and thinking"
-          triggerLabel={`${[agent?.name, modelLabel, level ? `${level} thinking` : null]
+          triggerLabel={`${[agent?.name, modelLabel, namedLevel ? `${namedLevel} thinking` : null]
             .filter(Boolean)
             .join(", ")}. Agent, model and thinking`}
           tip={`Agent, model and thinking (${shortcutKey} .)`}
