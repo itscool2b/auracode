@@ -178,6 +178,8 @@ pub(super) fn without_credentials(url: &str) -> String {
 /// Signing programs Git would run for `commit -S`.
 pub(super) const SIGNING_PROGRAMS: &str =
     r"^gpg\.(program|openpgp\.program|x509\.program|ssh\.program|ssh\.defaultkeycommand)$";
+/// Clean, smudge and process filters Git would run while staging files.
+pub(super) const FILTER_PROGRAMS: &str = r"^filter\..*\.(clean|smudge|process)$";
 /// Programs Git would run to reach a remote.
 pub(super) const REMOTE_PROGRAMS: &str = r"^(core\.(sshcommand|askpass|gitproxy)|credential\..*helper|remote\..*\.(receivepack|uploadpack|vcs)|protocol\..*allow)$";
 
@@ -227,6 +229,142 @@ pub(super) async fn refuse_repository_programs(
     )))
 }
 
+/// The person's own values of `key`, from their system and then global configuration, in the
+/// order Git reads them.
+async fn own_values(git: &Git, root: &Path, key: &str) -> Result<Vec<String>> {
+    let output = git
+        .output(
+            root,
+            args(&["config", "--show-scope", "--includes", "--get-all", key]),
+            64 * 1024,
+        )
+        .await?;
+    if !matches!(exit(&output), Some(0 | 1)) {
+        return Err(invalid("Git could not read your Git settings."));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (scope, value) = line.split_once('\t')?;
+            matches!(scope, "system" | "global").then(|| value.to_owned())
+        })
+        .collect())
+}
+
+/// Settings given on Git's own command line, which outrank every configuration file: each
+/// program setting takes the person's own value or Git's default, so nothing the repository's
+/// configuration says (even if it changed after it was checked) chooses what runs.
+async fn pin(git: &Git, root: &Path, settings: &[(String, String)]) -> Result<Vec<OsString>> {
+    let mut pinned = Vec::new();
+    for (key, default) in settings {
+        let value = own_values(git, root, key)
+            .await?
+            .pop()
+            .unwrap_or_else(|| default.clone());
+        pinned.extend([OsString::from("-c"), format!("{key}={value}").into()]);
+    }
+    Ok(pinned)
+}
+
+/// The signing programs, pinned for `commit-tree -S`.
+async fn signing_pins(git: &Git, root: &Path) -> Result<Vec<OsString>> {
+    // gpg.program is the older name for gpg.openpgp.program; both name the same program.
+    let openpgp = match own_values(git, root, "gpg.openpgp.program").await?.pop() {
+        Some(program) => program,
+        None => own_values(git, root, "gpg.program")
+            .await?
+            .pop()
+            .unwrap_or_else(|| "gpg".into()),
+    };
+    let mut pinned = pin(
+        git,
+        root,
+        &[
+            ("gpg.x509.program".into(), "gpgsm".into()),
+            ("gpg.ssh.program".into(), "ssh-keygen".into()),
+            ("gpg.ssh.defaultKeyCommand".into(), String::new()),
+        ],
+    )
+    .await?;
+    for key in ["gpg.program", "gpg.openpgp.program"] {
+        pinned.extend([OsString::from("-c"), format!("{key}={openpgp}").into()]);
+    }
+    Ok(pinned)
+}
+
+/// The programs Git runs to reach a remote, pinned. `remote` names the remote when Git reaches
+/// it by name, whose own upload and receive programs then apply.
+pub(super) async fn remote_pins(
+    git: &Git,
+    root: &Path,
+    remote: Option<&str>,
+) -> Result<Vec<OsString>> {
+    let mut settings = vec![
+        ("core.sshCommand".to_owned(), "ssh".to_owned()),
+        ("core.askPass".to_owned(), String::new()),
+        ("core.gitProxy".to_owned(), "none".to_owned()),
+    ];
+    if let Some(remote) = remote {
+        settings.push((
+            format!("remote.{remote}.uploadpack"),
+            "git-upload-pack".into(),
+        ));
+        settings.push((
+            format!("remote.{remote}.receivepack"),
+            "git-receive-pack".into(),
+        ));
+    }
+    let mut pinned = pin(git, root, &settings).await?;
+    pinned.extend(args(&["-c", "protocol.ext.allow=never"]));
+    // An empty helper empties the list, as Git reads it; then the person's own helpers follow.
+    let mut helpers: Vec<String> = Vec::new();
+    for helper in own_values(git, root, "credential.helper").await? {
+        if helper.is_empty() {
+            helpers.clear();
+        } else {
+            helpers.push(helper);
+        }
+    }
+    pinned.extend(args(&["-c", "credential.helper="]));
+    for helper in helpers {
+        pinned.extend([
+            OsString::from("-c"),
+            format!("credential.helper={helper}").into(),
+        ]);
+    }
+    Ok(pinned)
+}
+
+/// Whether a push address is a folder on this computer, where pushing runs that repository's
+/// own hooks. `host:path` is SSH; a drive letter is a folder.
+fn local_address(url: &str) -> bool {
+    if url.starts_with("file://") {
+        return true;
+    }
+    if url.contains("://") {
+        return false;
+    }
+    let bytes = url.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return true;
+    }
+    match url.find(':') {
+        Some(colon) => url[..colon].contains(['/', '\\']),
+        None => true,
+    }
+}
+
+/// A `helper::address` push address, which runs the Git remote helper it names.
+fn remote_helper(url: &str) -> Option<&str> {
+    let (helper, _) = url.split_once("::")?;
+    (!helper.is_empty()
+        && !helper.contains("://")
+        && helper
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"+-._".contains(&byte)))
+    .then_some(helper)
+}
+
 /// Every address `remote` pushes to, as Git resolves them.
 async fn push_urls(git: &Git, root: &Path, remote: &str) -> Result<Vec<String>> {
     let output = git
@@ -244,6 +382,11 @@ async fn push_urls(git: &Git, root: &Path, remote: &str) -> Result<Vec<String>> 
     if urls.is_empty() {
         return Err(invalid(format!(
             "This repository has no {remote} remote to push to. Add one with git remote add."
+        )));
+    }
+    if let Some(helper) = urls.iter().find_map(|url| remote_helper(url)) {
+        return Err(invalid(format!(
+            "The {remote} remote is reached through a Git remote helper ({helper}::), a program auracode does not run. Push it with Git directly."
         )));
     }
     Ok(urls)
@@ -290,6 +433,7 @@ impl GitWorkspaces {
         let source = inspect(&git, folder).await?;
         let branch = ready(&source)?;
         let (files, paths) = chosen(&source, &input.paths)?;
+        refuse_repository_programs(&git, &source.root, FILTER_PROGRAMS, "commit").await?;
         let parent = source.view.head.clone();
         let author = git
             .output(&source.root, args(&["var", "GIT_AUTHOR_IDENT"]), 4096)
@@ -383,6 +527,7 @@ impl GitWorkspaces {
                 "The branch moved since the review. Review the commit again.",
             ));
         }
+        refuse_repository_programs(&git, &source.root, FILTER_PROGRAMS, "commit").await?;
         let (tree, _) = self
             .stage(
                 &git,
@@ -396,13 +541,17 @@ impl GitWorkspaces {
                 "The files changed since the review. Review the commit again.",
             ));
         }
-        let mut command = args(&["commit-tree", &tree]);
+        let mut command = Vec::new();
+        if prepared.signed {
+            refuse_repository_programs(&git, &source.root, SIGNING_PROGRAMS, "sign commits")
+                .await?;
+            command = signing_pins(&git, &source.root).await?;
+        }
+        command.extend(args(&["commit-tree", &tree]));
         if let Some(parent) = &prepared.parent {
             command.extend(args(&["-p", parent]));
         }
         if prepared.signed {
-            refuse_repository_programs(&git, &source.root, SIGNING_PROGRAMS, "sign commits")
-                .await?;
             command.push("-S".into());
         }
         let made = git
@@ -539,7 +688,8 @@ impl GitWorkspaces {
             invalid("The remote branch's name is unsupported. Push it with Git directly.")
         })?;
         let urls = push_urls(&git, &root, &remote).await?;
-        let remote_head = remote_head(&git, &root, &remote, &target).await.map_err(|_| {
+        let pins = remote_pins(&git, &root, Some(&remote)).await?;
+        let remote_head = remote_head(&git, &root, &remote, &target, &pins).await.map_err(|_| {
             invalid(format!(
                 "Git could not reach {remote}. If it needs a sign-in, run git fetch {remote} in a terminal once so Git keeps it, then try again."
             ))
@@ -587,7 +737,10 @@ impl GitWorkspaces {
             .map(str::to_owned)
             .collect();
         let token = crate::ids::new_id();
-        let warnings = vec!["Push sends only these commits. It never forces: if the remote branch moves first, Git refuses and nothing changes.".to_owned()];
+        let mut warnings = vec!["Push sends only these commits. It never forces: if the remote branch moves first, Git refuses and nothing changes.".to_owned()];
+        if urls.iter().any(|url| local_address(url)) {
+            warnings.push("This remote is a folder on this computer. Pushing to it runs that repository's own Git hooks, outside any agent's sandbox, so push there only if you trust it.".into());
+        }
         hold(
             &self.pushes,
             token.clone(),
@@ -647,20 +800,22 @@ impl GitWorkspaces {
             prepared.target,
             prepared.remote_head.as_deref().unwrap_or_default()
         );
+        let mut command = remote_pins(&git, &prepared.root, Some(&prepared.remote)).await?;
+        command.extend(args(&[
+            "-c",
+            "push.followTags=false",
+            "-c",
+            "push.recurseSubmodules=no",
+            "push",
+            "--porcelain",
+            &lease,
+            &prepared.remote,
+            &format!("{}:refs/heads/{}", prepared.head, prepared.target),
+        ]));
         let output = git
             .output_with(
                 &prepared.root,
-                args(&[
-                    "-c",
-                    "push.followTags=false",
-                    "-c",
-                    "push.recurseSubmodules=no",
-                    "push",
-                    "--porcelain",
-                    &lease,
-                    &prepared.remote,
-                    &format!("{}:refs/heads/{}", prepared.head, prepared.target),
-                ]),
+                command,
                 32 * 1024,
                 Extra {
                     timeout: Some(Duration::from_secs(180)),

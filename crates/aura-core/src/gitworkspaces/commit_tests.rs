@@ -242,6 +242,14 @@ async fn a_push_only_fast_forwards_and_sets_the_upstream_it_creates() {
     );
     assert!(preview.sets_upstream);
     assert_eq!(preview.remote_head, None);
+    assert!(
+        preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("folder on this computer")),
+        "{:?}",
+        preview.warnings
+    );
     assert_eq!(preview.count, 2);
     assert_eq!(preview.commits.len(), 2);
     assert!(
@@ -438,4 +446,113 @@ async fn a_push_shows_every_address_and_is_refused_if_they_change() {
         .await
         .is_empty()
     );
+}
+
+#[test]
+fn folder_addresses_and_remote_helpers_are_recognized() {
+    for folder in [
+        "/srv/git/repo.git",
+        "../repo.git",
+        "C:\\work\\repo.git",
+        "C:/work/repo.git",
+        "\\\\server\\share\\repo.git",
+        "file:///srv/git/repo.git",
+    ] {
+        assert!(local_address(folder), "{folder}");
+    }
+    for remote in [
+        "git@github.com:owner/repo.git",
+        "https://github.com/owner/repo.git",
+        "ssh://git@host.example/repo",
+    ] {
+        assert!(!local_address(remote), "{remote}");
+    }
+    assert_eq!(remote_helper("ext::sh -c true"), Some("ext"));
+    assert_eq!(
+        remote_helper("persistent-https::host/repo"),
+        Some("persistent-https")
+    );
+    assert_eq!(remote_helper("https://host/a::b"), None);
+    assert_eq!(remote_helper("git@github.com:owner/repo.git"), None);
+}
+
+#[tokio::test]
+async fn a_repository_filter_stops_a_commit_and_a_helper_remote_stops_a_push() {
+    let rig = rig().await;
+    std::fs::write(rig.work.join("file.txt"), "filtered?\n").unwrap();
+    output(
+        &rig,
+        &rig.work,
+        &["config", "filter.fixture.clean", "not-a-filter"],
+    )
+    .await;
+    let error = rig
+        .service
+        .commit_preview(&rig.work, input("Filtered", &["file.txt"]))
+        .await
+        .expect_err("a repository-chosen filter");
+    assert!(
+        error.to_string().contains("filter.fixture.clean"),
+        "{error}"
+    );
+    output(
+        &rig,
+        &rig.work,
+        &["config", "--unset", "filter.fixture.clean"],
+    )
+    .await;
+    output(
+        &rig,
+        &rig.work,
+        &["remote", "add", "origin", "ext::not-a-command"],
+    )
+    .await;
+    let error = rig
+        .service
+        .push_preview(&rig.work)
+        .await
+        .expect_err("a remote helper");
+    assert!(
+        error.to_string().contains("remote helper (ext::)"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn remote_programs_are_pinned_to_the_persons_own_or_gits_defaults() {
+    let rig = rig().await;
+    // Even a setting that slipped past the check is outranked by the command line.
+    output(
+        &rig,
+        &rig.work,
+        &["config", "remote.origin.uploadpack", "not-upload-pack"],
+    )
+    .await;
+    let pins: Vec<String> = remote_pins(&rig.git, &rig.work, Some("origin"))
+        .await
+        .expect("pins")
+        .into_iter()
+        .map(|pin| pin.to_string_lossy().into_owned())
+        .collect();
+    for expected in [
+        "core.askPass=",
+        "core.gitProxy=none",
+        "remote.origin.receivepack=git-receive-pack",
+        "protocol.ext.allow=never",
+        "credential.helper=",
+    ] {
+        assert!(
+            pins.iter().any(|pin| pin == expected),
+            "{expected} missing from {pins:?}"
+        );
+    }
+    assert!(pins.iter().any(|pin| pin.starts_with("core.sshCommand=")));
+    assert!(
+        pins.iter()
+            .any(|pin| pin.starts_with("remote.origin.uploadpack=")
+                && !pin.contains("not-upload-pack")),
+        "{pins:?}"
+    );
+    // Every value follows its own -c.
+    assert!(pins.chunks(2).all(|pair| pair[0] == "-c"));
 }

@@ -263,7 +263,7 @@ async fn the_native_creation_lease_never_changes_an_existing_remote_ref() {
             .is_err()
     );
     assert_eq!(
-        remote_head(&rig.git, &rig.work, &destination, "aura/reviewed")
+        remote_head(&rig.git, &rig.work, &destination, "aura/reviewed", &[])
             .await
             .expect("remote head"),
         Some(before)
