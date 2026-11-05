@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { AgentEntry, AppInfo } from "../../bindings";
 import { DEFAULT_GENERAL, preselectAgent } from "../../lib/setup";
 import {
+  AppearancePage,
   autonomyDetail,
+  ChatsPage,
   defaultAgentChoices,
   defaultLevelChoices,
   defaultModelChoices,
-  GeneralPanel,
+  GeneralPage,
 } from "./GeneralPanel";
+import type { Preferences } from "./preferences";
 
 const ready = { state: "ready", version: "1.0.0", path: "/bin/agent" } as const;
 const agent = (id: string, availability: AgentEntry["availability"] = ready): AgentEntry => ({
@@ -37,6 +40,7 @@ describe("Settings' General defaults", () => {
       config_sync_paused: [],
       copy_instructions_to_worktrees: true,
       agent_memory_writes: true,
+      keep_steps_open: false,
     });
   });
 
@@ -98,37 +102,67 @@ describe("Settings' General defaults", () => {
     expect(preselectAgent(null, agents, null)).toBeNull();
   });
 
-  it("keeps checkpoint opt-in separate from new-chat defaults and explains missing file undo", () => {
+  it("splits General, Appearance and Chats, and disables nothing but loading", () => {
     const info = { os: "windows", data_dir: "C:/data" } as AppInfo;
-    const html = renderToStaticMarkup(
-      <GeneralPanel
-        info={info}
-        api={{ snapshot: () => new Promise(() => {}), apply: () => new Promise(() => {}) }}
-        general={{ agents: async () => [], models: async () => [], thinking: async () => [] }}
-        onSetup={() => {}}
-        reveal={async () => {}}
-      />,
+    // Not loaded yet: nothing is editable.
+    const loading: Preferences = {
+      saved: null,
+      shown: null,
+      error: null,
+      change: () => {},
+      reload: () => {},
+    };
+    const lists = { agents: async () => [], models: async () => [], thinking: async () => [] };
+    const general = renderToStaticMarkup(
+      <GeneralPage info={info} prefs={loading} lists={lists} onSetup={() => {}} />,
     );
-    expect(html).toContain('aria-label="Default agent"');
-    expect(html).toContain('name="settings-appearance"');
-    for (const appearance of ["System", "Light", "Dark"])
-      expect(html).toContain(`>${appearance}</span>`);
-    expect(html).toContain(">Choose each time</option>");
+    const appearance = renderToStaticMarkup(<AppearancePage prefs={loading} />);
+    const chats = renderToStaticMarkup(<ChatsPage prefs={loading} />);
+    expect(general).toContain('aria-label="Default agent"');
+    expect(general).toContain(">Choose each time</option>");
     // No default agent yet: no model row.
-    expect(html).not.toContain('aria-label="Default model"');
+    expect(general).not.toContain('aria-label="Default model"');
     for (const level of ["Ask", "Auto-edit", "Full auto"])
-      expect(html).toContain(`>${level}</span>`);
-    expect(html.match(/role="switch"/g)).toHaveLength(4);
-    for (const name of [
-      "Automatic checkpoints",
-      "Notifications",
-      "Keep awake",
-      "Keep running in the tray",
+      expect(general).toContain(`>${level}</span>`);
+    for (const name of ["Notifications", "Keep awake", "Keep running in the tray"])
+      expect(general).toContain(`aria-label="${name}"`);
+    expect(appearance).toContain('name="settings-appearance"');
+    for (const value of ["System", "Light", "Dark", "Compact", "Comfortable"])
+      expect(appearance).toContain(`>${value}</span>`);
+    for (const name of ["Keep steps open", "Automatic checkpoints"])
+      expect(chats).toContain(`aria-label="${name}"`);
+    expect(chats).toContain("folds its work under Worked for");
+    expect(chats).toContain("per-turn file undo is unavailable for new messages");
+    expect(chats).toContain("Saved checkpoints remain available in Changes");
+    for (const html of [general, appearance, chats])
+      expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
+    // Loaded and saving: every control stays enabled, so keyboard focus never drops.
+    const saved = {
+      cold_start: false,
+      notice: null,
+      preferences: {
+        revision: 3,
+        step: "project",
+        motion: "full",
+        appearance: "system",
+        theme: "claude",
+        text_size: "compact",
+        completed: true,
+        first_project_id: null,
+        general: { ...DEFAULT_GENERAL, keep_steps_open: true },
+      },
+    } as const;
+    const ready: Preferences = { ...loading, saved, shown: saved.preferences };
+    for (const html of [
+      renderToStaticMarkup(
+        <GeneralPage info={info} prefs={ready} lists={lists} onSetup={() => {}} />,
+      ),
+      renderToStaticMarkup(<AppearancePage prefs={ready} />),
+      renderToStaticMarkup(<ChatsPage prefs={ready} />),
     ])
-      expect(html).toContain(`aria-label="${name}"`);
-    expect(html).toContain("per-turn file undo is unavailable for new messages");
-    expect(html).toContain("Saved checkpoints remain available in Changes");
-    // Nothing is editable before the saved preferences load.
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(5);
+      expect(html).not.toContain('disabled=""');
+    expect(renderToStaticMarkup(<ChatsPage prefs={ready} />)).toContain(
+      "shows its messages, tools and thinking",
+    );
   });
 });

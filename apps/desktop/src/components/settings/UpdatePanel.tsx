@@ -81,7 +81,7 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
   const working = busy || (phase !== undefined && updateBusy(phase));
   const action = "g-button g-button-outline g-button-28";
   return (
-    <section className="settings-row" aria-label="Application updates">
+    <section className="settings-row" aria-label="Application updates" data-setting="Updates">
       <div className="settings-row-text">
         <div>
           <strong role="status">

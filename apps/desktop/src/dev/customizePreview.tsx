@@ -1,7 +1,12 @@
-/** Synthetic service data, real Customize navigation and panels. No native operations run. */
+/**
+ * Synthetic service data for Settings' Plugins & MCP, Instructions and Project memory pages (what
+ * Customize held). No native operations run.
+ */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { CustomizeScreen, type CustomizeServices } from "../components/customize/CustomizeScreen";
+import type { AppInfo } from "../bindings";
+import { type CustomizeServices, SettingsScreen } from "../components/settings/SettingsScreen";
+import type { SetupApi } from "../lib/setup";
 import { WorkspaceStore } from "../lib/workspace";
 import { createInstructionsFixture } from "./instructionsFixture";
 import { pluginFixture } from "./pluginLibraryPreview";
@@ -50,7 +55,7 @@ export function createCustomizeFixture() {
     preview: unsupported,
     createChat: unsupported,
   });
-  const services: CustomizeServices = {
+  const services: CustomizeServices & { readonly setup: SetupApi } = {
     instructions: createInstructionsFixture("universal").api,
     setup: createSetupFixture(),
     memory: createProjectMemoryFixture().api,
@@ -95,21 +100,35 @@ export function createCustomizeFixture() {
   return { workspace, services };
 }
 
+const info = {
+  os: "windows",
+  os_version: "11",
+  arch: "x86_64",
+  app_version: "0.1.0",
+  data_dir: null,
+  profile: null,
+  profile_locked: false,
+  device: null,
+} as unknown as AppInfo;
+
+/** `?preview=customize`: Settings opened from the sidebar's Customize, on Plugins & MCP. */
 export function mountCustomizePreview(container: HTMLElement) {
   const { workspace, services } = createCustomizeFixture();
   Object.assign(window, { customizeFixture: { refresh: () => workspace.refresh() } });
   createRoot(container).render(
     <StrictMode>
-      <CustomizeScreen
+      <SettingsScreen
+        info={info}
+        initialPage="plugins"
         workspace={workspace}
-        initialProjectId="fixture-project"
+        projectId="fixture-project"
         services={services}
+        setup={services.setup}
         onBack={() => {
           location.href = "/?preview=settled";
         }}
-        onAgents={() => {
-          location.href = "/?preview=agents";
-        }}
+        onSetup={() => {}}
+        onDiagnostics={() => {}}
       />
     </StrictMode>,
   );

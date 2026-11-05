@@ -38,6 +38,7 @@ export function ProjectMemoryPanel({
   api = projectMemoryApi,
   setup = setupApi,
   chats = NO_CHATS,
+  titled = true,
 }: {
   readonly projects: readonly Project[];
   readonly initialProjectId?: string;
@@ -48,6 +49,8 @@ export function ProjectMemoryPanel({
   readonly setup?: SetupApi;
   /** The chats agents' revisions name. */
   readonly chats?: MemoryChats;
+  /** Settings names the page itself: the panel then keeps only its description. */
+  readonly titled?: boolean;
 }) {
   const [projectId, setProjectId] = useState(initialProjectId ?? projects[0]?.id ?? "");
   // The revision the editor edits against, and the newest one read since.
@@ -270,7 +273,7 @@ export function ProjectMemoryPanel({
   return (
     <section className="project-memory" aria-label="Project memory">
       <div className="settings-section-heading">
-        <h2>Project memory</h2>
+        {titled ? <h2>Project memory</h2> : null}
         <p>
           One Markdown memory for every folder and worktree in a project. Agents see the current
           revision as reference context on the first real message of each session and after memory

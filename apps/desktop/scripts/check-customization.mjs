@@ -108,14 +108,15 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .getByRole("status")
         .filter({ hasText: "Chat created in the project folder." })
         .waitFor();
+      // Customize is a shortcut into Settings, on Plugins & MCP.
       await page.getByRole("button", { name: "Customize", exact: true }).click();
-      await page.getByRole("heading", { name: "Customize", exact: true }).waitFor();
+      await page.getByRole("heading", { name: "Plugins & MCP", exact: true, level: 1 }).waitFor();
       await page.locator(".plugins-agent").waitFor();
       await capture("customize-plugins");
-      const tabs = page.getByRole("navigation", { name: "Customize sections" });
+      const tabs = page.getByRole("navigation", { name: "Settings sections" });
       await tabs.getByRole("button", { name: "Project memory", exact: true }).click();
       const memory = page.getByRole("textbox", { name: "Markdown", exact: true });
-      await memory.fill("# Unsaved project note\n\nKeep this draft when changing Customize tabs.");
+      await memory.fill("# Unsaved project note\n\nKeep this draft when changing Settings pages.");
       await tabs.getByRole("button", { name: "Instructions", exact: true }).click();
       await page
         .getByRole("heading", { name: "How instructions are shared", exact: true })

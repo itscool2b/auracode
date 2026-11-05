@@ -88,13 +88,14 @@ try {
       page.on("pageerror", (error) => errors.push(error.message));
       for (const theme of ["light", "dark"]) {
         await page.emulateMedia({ colorScheme: theme });
-        await page.goto(`${url}/?preview=settings&theme=system`);
-        await page.getByRole("radio", { name: "System", exact: true }).waitFor();
+        await page.goto(`${url}/?preview=settings&theme=system&page=chats`);
+        await page.getByRole("switch", { name: "Automatic checkpoints", exact: true }).waitFor();
         assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
         await checkAutomaticCheckpoints(page, out, `${engine}-${theme}`);
       }
       await checkSettingsNavigation(page, url);
-      await page.goto(`${url}/?preview=settings`);
+      // Appearance, motion and text size apply as they are chosen and save in turn.
+      await page.goto(`${url}/?preview=settings&page=appearance`);
       await page.getByRole("radio", { name: "Reduced", exact: true }).check();
       assert.equal(await page.evaluate(() => window.settingsFixture.motion()), "reduced");
       await page.evaluate(() => sessionStorage.setItem("settings-fail-save", "yes"));
@@ -156,6 +157,10 @@ try {
       await page.waitForFunction(() => window.settingsFixture.textSize() === "compact");
       assert.equal(await sizeAttribute(), "compact");
       // General's defaults for new chats and the background switches save at once.
+      await page
+        .getByRole("navigation", { name: "Settings sections" })
+        .getByRole("button", { name: "General", exact: true })
+        .click();
       const general = () => page.evaluate(() => window.settingsFixture.general());
       assert.equal(await page.getByLabel("Default model").count(), 0);
       await page.getByLabel("Default agent").selectOption("codex");
@@ -167,7 +172,21 @@ try {
         .getByText("Codex lists this model's thinking levels once it has run it.")
         .waitFor();
       assert.equal(await page.getByLabel("Default thinking level").count(), 0);
-      await page.getByRole("radio", { name: "Ask", exact: true }).check();
+      // Every control stays enabled while a save runs, so arrow keys keep their focus: the
+      // owner's radio focus loss (4 November 2026). The latest choice is the one saved.
+      await page.evaluate(() => sessionStorage.setItem("settings-slow-save", "yes"));
+      const autonomy = (name) => page.getByRole("radio", { name, exact: true });
+      await autonomy("Full auto").focus();
+      await page.keyboard.press("ArrowLeft");
+      await page.keyboard.press("ArrowLeft");
+      assert.equal(
+        await autonomy("Ask").evaluate((node) => node === document.activeElement && node.checked),
+        true,
+        "focus and the choice stay on the radio while it saves",
+      );
+      assert.equal(await autonomy("Ask").isDisabled(), false);
+      await page.waitForFunction(() => window.settingsFixture.general().default_autonomy === "ask");
+      await page.evaluate(() => sessionStorage.removeItem("settings-slow-save"));
       await page.getByRole("switch", { name: "Notifications" }).uncheck();
       await page.getByRole("switch", { name: "Keep awake" }).uncheck();
       await page.getByRole("switch", { name: "Keep running in the tray" }).uncheck();
@@ -184,6 +203,7 @@ try {
         config_sync_paused: [],
         copy_instructions_to_worktrees: true,
         agent_memory_writes: true,
+        keep_steps_open: false,
       });
       // Another agent clears the model, which belonged to Codex; it has not listed its own.
       await page.getByLabel("Default agent").selectOption("claude");
@@ -200,7 +220,10 @@ try {
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-general.png`) });
-      await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "Settings sections" })
+        .getByRole("button", { name: "Shortcuts", exact: true })
+        .click();
       // Settings moves focus to the new heading in the next animation frame. Wait for the heading
       // itself: in Chromium the clicked "Shortcuts" button holds focus until then.
       await page.waitForFunction(
@@ -218,7 +241,10 @@ try {
       );
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      await page.getByRole("button", { name: "About", exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "Settings sections" })
+        .getByRole("button", { name: "About", exact: true })
+        .click();
       await page.getByRole("button", { name: "Check for updates" }).waitFor();
       assert.deepEqual(
         await page.evaluate(() =>

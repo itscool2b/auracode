@@ -1,7 +1,6 @@
 import { Keycap, Logo } from "@auracode/ui/graphite";
 import {
   ArrowLeft,
-  ArrowUpRight,
   BookOpen,
   Bot,
   CircleUser,
@@ -9,41 +8,90 @@ import {
   Info,
   Keyboard,
   type LucideIcon,
+  MessageSquare,
+  Mic,
+  Palette,
   Puzzle,
-  RefreshCcw,
+  Search,
+  ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { AppInfo, InstructionsTarget } from "../../bindings";
+import type { AppStore } from "../../lib/chat/appStore";
+import type { Transport } from "../../lib/chat/transport";
 import type { DataCleanupApi } from "../../lib/dataCleanup";
+import { type DictationApi, dictationApi } from "../../lib/dictation";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
+import { memoryChats } from "../../lib/projectMemory";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
-import type { CustomizeSection } from "../customize/CustomizeScreen";
+import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { PluginLibraryScreen } from "../library/PluginLibraryScreen";
+import { AgentsScreen } from "../setup/AgentsScreen";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { DeleteDataDialog } from "./DeleteDataDialog";
-import { GeneralPanel } from "./GeneralPanel";
+import { AppearancePage, ChatsPage, GeneralPage } from "./GeneralPanel";
 import { type InstructionsFolder, InstructionsPanel } from "./InstructionsPanel";
 import { LocalImportPanel } from "./LocalImportPanel";
 import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
+import { ProjectMemoryPanel } from "./ProjectMemoryPanel";
+import { usePreferences } from "./preferences";
 import { Row } from "./SettingsRow";
+import {
+  PAGE_GROUPS,
+  PAGE_LABELS,
+  type Page,
+  type SettingEntry,
+  searchSettings,
+} from "./settingsIndex";
 import { UpdatePanel } from "./UpdatePanel";
+import { VoicePage } from "./VoicePage";
 import "./settings.css";
 
 export { Row } from "./SettingsRow";
+export type { Page } from "./settingsIndex";
 
-export type Page = "general" | "instructions" | "account" | "configuration" | "shortcuts" | "about";
-const PAGES: readonly (readonly [Page, string, LucideIcon])[] = [
-  ["general", "General", SlidersHorizontal],
-  ["instructions", "Instructions", FileText],
-  ["account", "Account", CircleUser],
-  ["configuration", "Configuration sync", RefreshCcw],
-  ["shortcuts", "Shortcuts", Keyboard],
-  ["about", "About", Info],
-];
+const ICONS: Readonly<Record<Page, LucideIcon>> = {
+  general: SlidersHorizontal,
+  appearance: Palette,
+  chats: MessageSquare,
+  voice: Mic,
+  shortcuts: Keyboard,
+  agents: Bot,
+  plugins: Puzzle,
+  instructions: FileText,
+  memory: BookOpen,
+  account: CircleUser,
+  privacy: ShieldCheck,
+  about: Info,
+};
+
+/** Pages laid out wider than the reading column: lists and libraries with columns of their own. */
+const WIDE: ReadonlySet<Page> = new Set(["agents", "plugins"]);
+
+/** Fixture services for the pages Customize used to hold (development previews only). */
+export interface CustomizeServices {
+  readonly plugins?: Pick<
+    ComponentProps<typeof PluginLibraryScreen>,
+    "api" | "libraryApi" | "vendorApi" | "mcpApi"
+  >;
+  readonly instructions?: ComponentProps<typeof InstructionsPanel>["api"];
+  readonly memory?: ComponentProps<typeof ProjectMemoryPanel>["api"];
+}
 
 /** One keycap per key in a chord; a repeated key shows twice. */
 function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
@@ -69,42 +117,52 @@ function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
   );
 }
 
+const noSubscribe = () => () => {};
+const emptyWorkspace = () => EMPTY_WORKSPACE;
+
+/**
+ * Settings: one screen for the app, the agents and what they use, and the person's account and
+ * data, with a search across every page (owner, 4 November 2026: "make the settings more
+ * intuitive"). Customize and Agents open here on their pages.
+ */
 export function SettingsScreen({
   info,
   onBack,
-  onAgents,
-  onLibrary,
-  onCustomize,
   onSetup,
   onDiagnostics,
   onImported,
   setup = setupApi,
   general = generalApi,
   updates = updatesApi,
+  dictation = dictationApi,
   reveal = revealDataDir,
   initialPage = "general",
   navigationId = "settings",
   initialEmail = "",
   backLabel = "Back to chats",
   instructions = instructionsApi,
-  instructionsTarget = GLOBAL,
-  instructionFolders = [],
+  instructionsTarget,
+  instructionFolders,
   chatLabel,
   instructionsOpenOnLoad,
+  workspace,
+  projectId = null,
+  activeChatId,
+  memoryRevision,
+  services,
+  agents,
   dataCleanup,
   deleteDataOpenOnLoad = false,
 }: {
   readonly info: AppInfo;
   readonly onBack: () => void;
-  readonly onAgents: () => void;
-  readonly onLibrary?: () => void;
-  readonly onCustomize?: (section: CustomizeSection) => void;
   readonly onSetup: () => void;
   readonly onDiagnostics: () => void;
   readonly onImported?: () => Promise<void>;
   readonly setup?: SetupApi;
   readonly general?: GeneralApi;
   readonly updates?: UpdatesApi;
+  readonly dictation?: DictationApi;
   readonly reveal?: () => Promise<void>;
   readonly initialPage?: Page;
   readonly navigationId?: string;
@@ -113,29 +171,77 @@ export function SettingsScreen({
   readonly instructions?: InstructionsApi;
   /** The scope Instructions opens on: global, a project folder, or a chat's own folder. */
   readonly instructionsTarget?: InstructionsTarget;
+  /** Instructions' folder choices; without them, the workspace's project folders. */
   readonly instructionFolders?: readonly InstructionsFolder[];
   readonly chatLabel?: string;
   /** Development previews only (see InstructionsPanel). */
-  readonly instructionsOpenOnLoad?: Parameters<typeof InstructionsPanel>[0]["openOnLoad"];
+  readonly instructionsOpenOnLoad?: ComponentProps<typeof InstructionsPanel>["openOnLoad"];
+  /** Projects and chats for Plugins & MCP, Instructions and Project memory. */
+  readonly workspace?: WorkspaceStore;
+  /** The project those pages open on, when Settings opened from one. */
+  readonly projectId?: string | null;
+  readonly activeChatId?: string;
+  /** Project memory opens this revision with its changes (an agent edit's Review). */
+  readonly memoryRevision?: string;
+  readonly services?: CustomizeServices;
+  /** The agents' store and transport for the Agents page; without them it is not offered. */
+  readonly agents?: { readonly app: AppStore; readonly transport: Transport };
   /** "Delete all auracode data"; previews pass a synthetic one. */
   readonly dataCleanup?: DataCleanupApi;
-  /** Development previews only: About opens with the review already showing. */
+  /** Development previews only: Data & privacy opens with the review already showing. */
   readonly deleteDataOpenOnLoad?: boolean;
 }) {
   const [page, setPage] = useState<Page>(initialPage);
+  const [visited, setVisited] = useState<ReadonlySet<Page>>(() => new Set([initialPage]));
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<{ readonly entry: SettingEntry; readonly id: number } | null>(
+    null,
+  );
   const [notices, setNotices] = useState(false);
   const [deleting, setDeleting] = useState(deleteDataOpenOnLoad);
+  const prefs = usePreferences(setup);
   const heading = useRef<HTMLHeadingElement>(null);
+  const main = useRef<HTMLElement>(null);
   const previousFocus = useRef<Element | null>(null);
   const restoreFocus = useRef<number | null>(null);
-  const customize = useRef(onCustomize);
-  customize.current = onCustomize;
+  const organization = useSyncExternalStore(
+    workspace?.subscribe ?? noSubscribe,
+    workspace?.getSnapshot ?? emptyWorkspace,
+    workspace?.getSnapshot ?? emptyWorkspace,
+  );
+  const projects = organization.data?.projects;
+  const savedChats = organization.data?.chats;
+  const chats = useMemo(
+    () => memoryChats(savedChats?.map((entry) => entry.chat) ?? []),
+    [savedChats],
+  );
+  const folders =
+    instructionFolders ??
+    (projects ?? []).flatMap((project) =>
+      project.folders.map((folder) => ({
+        id: folder.id,
+        label:
+          project.folders.length > 1 ? `${project.name} / ${folder.display_name}` : project.name,
+      })),
+    );
+  // Instructions open on the scope Settings was opened for: a chat, a project's first folder,
+  // or every agent.
+  const [target, setTarget] = useState<InstructionsTarget | null>(instructionsTarget ?? null);
   useEffect(() => {
     void navigationId;
-    // A new website link selects Account without destroying an existing code/key setup.
+    // A new entry (a website link, a chat's Instructions) selects its page without destroying an
+    // account code or key setup in progress on another.
     setPage(initialPage);
-    if (initialPage === "instructions") customize.current?.("instructions");
-  }, [navigationId, initialPage]);
+    setVisited((current) => new Set([...current, initialPage]));
+    setTarget(instructionsTarget ?? null);
+  }, [navigationId, initialPage, instructionsTarget]);
+  useEffect(() => {
+    if (target || (projectId && !organization.data)) return;
+    const folder = (projects ?? [])
+      .find((project) => project.id === projectId)
+      ?.folders.find((entry) => entry.folder_state === "ok");
+    setTarget(folder ? { type: "folder", folder_id: folder.id } : GLOBAL);
+  }, [target, projects, projectId, organization.data]);
   useLayoutEffect(() => {
     if (restoreFocus.current !== null) {
       cancelAnimationFrame(restoreFocus.current);
@@ -166,10 +272,48 @@ export function SettingsScreen({
     document.addEventListener("keydown", dismiss);
     return () => document.removeEventListener("keydown", dismiss);
   }, [onBack]);
-  const open = (next: Page) => {
+  const open = (next: Page, entry?: SettingEntry) => {
     setPage(next);
-    requestAnimationFrame(() => heading.current?.focus());
+    setVisited((current) => (current.has(next) ? current : new Set([...current, next])));
+    setFound(entry ? { entry, id: Date.now() } : null);
+    if (!entry)
+      requestAnimationFrame(() => {
+        main.current?.scrollTo({ top: 0 });
+        heading.current?.focus();
+      });
   };
+  // A search result opens its page with its row in view, marked a moment, and its control focused.
+  useEffect(() => {
+    if (!found) return;
+    const entry = found.entry;
+    const frame = requestAnimationFrame(() => {
+      const pane = main.current?.querySelector(`[data-settings-page="${entry.page}"]`);
+      const row = [...(pane?.querySelectorAll<HTMLElement>("[data-setting]") ?? [])].find(
+        (node) => node.dataset.setting === entry.title,
+      );
+      if (!row) {
+        main.current?.scrollTo({ top: 0 });
+        heading.current?.focus();
+        return;
+      }
+      row.scrollIntoView({ block: "center" });
+      row.dataset.found = "";
+      const control = row.querySelector<HTMLElement>(
+        "input:not([disabled]), select:not([disabled]), button:not([disabled])",
+      );
+      (control ?? heading.current)?.focus({ preventScroll: true });
+    });
+    const clear = window.setTimeout(() => {
+      for (const node of main.current?.querySelectorAll<HTMLElement>("[data-found]") ?? [])
+        delete node.dataset.found;
+    }, 1600);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(clear);
+    };
+  }, [found]);
+  const results = useMemo(() => searchSettings(query), [query]);
+  const offered = (value: Page) => value !== "agents" || agents !== undefined;
   const mac = info.os === "macos";
   const key = mac ? "⌘" : "Ctrl";
   const shortcuts = [
@@ -184,12 +328,20 @@ export function SettingsScreen({
     ["Open settings", `${key} ,`],
     ["Send message", "Enter"],
     ["New line", "Shift Enter"],
+    ["Finish dictation", "Enter"],
+    ["Cancel dictation", "Esc"],
     ["Interrupt agent", "Esc"],
     ["Force stop after interrupt", "Esc again"],
     ["Move through a menu", "↑ ↓"],
     ["Close a menu or dialog", "Esc"],
   ];
-  const title = PAGES.find(([value]) => value === page)?.[1] ?? "";
+  const title = PAGE_LABELS[page];
+  const pane = (id: Page, content: ReactNode) =>
+    visited.has(id) ? (
+      <div key={id} className="settings-page" data-settings-page={id} hidden={page !== id}>
+        {content}
+      </div>
+    ) : null;
   return (
     <div className="settings-shell g-root" data-os={info.os}>
       <aside className="settings-sidebar" aria-label="Settings navigation">
@@ -199,57 +351,87 @@ export function SettingsScreen({
           <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </button>
         <h2>Settings</h2>
-        <nav>
-          {PAGES.filter(([value]) => value !== "instructions" || !onCustomize).map(
-            ([value, label, Icon]) => (
-              <button
-                key={value}
-                type="button"
-                aria-current={page === value ? "page" : undefined}
-                onClick={() => open(value)}
-              >
-                <Icon size={16} aria-hidden="true" />
-                <span className="settings-nav-label">{label}</span>
-              </button>
-            ),
-          )}
-          <hr />
-          <button type="button" onClick={onAgents}>
-            <Bot size={16} aria-hidden="true" />
-            <span className="settings-nav-label">Agents</span>
-            <ArrowUpRight size={14} aria-hidden="true" />
-          </button>
-          {onCustomize ? (
-            (
-              [
-                ["plugins", "Plugins & MCP", Puzzle],
-                ["instructions", "Instructions", FileText],
-                ["memory", "Project memory", BookOpen],
-              ] as const
-            ).map(([section, label, Icon]) => (
-              <button key={section} type="button" onClick={() => onCustomize(section)}>
-                <Icon size={16} aria-hidden="true" />
-                <span className="settings-nav-label">{label}</span>
-                <ArrowUpRight size={14} aria-hidden="true" />
-              </button>
-            ))
-          ) : onLibrary ? (
-            <button type="button" onClick={onLibrary}>
-              <Puzzle size={16} aria-hidden="true" />
-              <span className="settings-nav-label">Plugins &amp; MCP</span>
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </button>
-          ) : null}
-        </nav>
+        <div className="settings-search">
+          <Search size={14} className="settings-search-icon" aria-hidden="true" />
+          <input
+            className="settings-search-input"
+            type="search"
+            aria-label="Search settings"
+            placeholder="Search settings"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query) {
+                // Clears the search; the next Esc leaves Settings.
+                event.preventDefault();
+                setQuery("");
+              } else if (event.key === "Enter" && results[0]) {
+                event.preventDefault();
+                const first = results[0];
+                setQuery("");
+                open(first.page, first);
+              }
+            }}
+          />
+        </div>
+        {query ? (
+          <nav aria-label="Matching settings" className="settings-results">
+            {results.filter((entry) => offered(entry.page)).length ? (
+              results
+                .filter((entry) => offered(entry.page))
+                .map((entry) => (
+                  <button
+                    key={`${entry.page}:${entry.title}`}
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      open(entry.page, entry);
+                    }}
+                  >
+                    <span className="settings-nav-label">{entry.title}</span>
+                    {entry.title === PAGE_LABELS[entry.page] ? null : (
+                      <span className="settings-result-page">{PAGE_LABELS[entry.page]}</span>
+                    )}
+                  </button>
+                ))
+            ) : (
+              <p className="settings-no-results" role="status">
+                No setting matches “{query}”.
+              </p>
+            )}
+          </nav>
+        ) : (
+          <nav aria-label="Settings sections">
+            {PAGE_GROUPS.map((group, index) => (
+              <Fragment key={group[0]}>
+                {index ? <hr /> : null}
+                {group.filter(offered).map((value) => {
+                  const Icon = ICONS[value];
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-current={page === value ? "page" : undefined}
+                      onClick={() => open(value)}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                      <span className="settings-nav-label">{PAGE_LABELS[value]}</span>
+                    </button>
+                  );
+                })}
+              </Fragment>
+            ))}
+          </nav>
+        )}
       </aside>
-      <main className="settings-main">
+      <main className="settings-main" ref={main} data-page={page}>
         <nav className="settings-breadcrumb" aria-label="Settings breadcrumbs">
           <div className="settings-breadcrumb-drag" data-tauri-drag-region="" aria-hidden="true" />
           <span>Settings</span>
           <span aria-hidden="true">/</span>
           <span aria-current="page">{title}</span>
         </nav>
-        <div className="settings-content">
+        <div className="settings-content" data-wide={WIDE.has(page) ? "" : undefined}>
           {page === "about" ? (
             <header className="settings-identity">
               <Logo size={40} />
@@ -265,47 +447,16 @@ export function SettingsScreen({
               {title}
             </h1>
           )}
-          {page === "general" ? (
-            <GeneralPanel
-              info={info}
-              api={setup}
-              general={general}
-              onSetup={onSetup}
-              reveal={reveal}
-            />
-          ) : null}
-          {page === "instructions" && !onCustomize ? (
-            <InstructionsPanel
-              api={instructions}
-              setup={setup}
-              initialTarget={instructionsTarget}
-              folders={instructionFolders}
-              chatLabel={chatLabel}
-              openOnLoad={instructionsOpenOnLoad}
-            />
-          ) : null}
-          {page === "account" ? (
-            <>
-              <ProfilePicker activeId={info.profile?.id ?? null} />
-              <AccountPanel
-                initialEmail={initialEmail}
-                deviceName={info.device?.name ?? "My computer"}
-                activeProfileId={info.profile?.id ?? null}
-              />
-              {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
-                <LocalImportPanel key={info.profile.id} onImported={onImported} />
-              ) : null}
-            </>
-          ) : null}
-          {page === "configuration" ? (
-            <ConfigSyncPanel
-              profileId={info.profile?.id ?? null}
-              active={info.profile?.kind === "account" && !info.profile_locked}
-              onAccount={() => open("account")}
-            />
-          ) : null}
-          {page === "shortcuts" ? (
-            <dl className="settings-group settings-shortcuts">
+          {pane(
+            "general",
+            <GeneralPage info={info} prefs={prefs} lists={general} onSetup={onSetup} />,
+          )}
+          {pane("appearance", <AppearancePage prefs={prefs} />)}
+          {pane("chats", <ChatsPage prefs={prefs} />)}
+          {pane("voice", <VoicePage api={dictation} />)}
+          {pane(
+            "shortcuts",
+            <dl className="settings-group settings-shortcuts" data-setting="Shortcuts">
               {shortcuts.map(([action, keys]) => (
                 <div key={action}>
                   <dt>{action}</dt>
@@ -314,9 +465,137 @@ export function SettingsScreen({
                   </dd>
                 </div>
               ))}
-            </dl>
-          ) : null}
-          {page === "about" ? (
+            </dl>,
+          )}
+          {agents
+            ? pane(
+                "agents",
+                <AgentsScreen
+                  embedded
+                  app={agents.app}
+                  transport={agents.transport}
+                  onBack={onBack}
+                  onSetup={onSetup}
+                />,
+              )
+            : null}
+          {pane(
+            "plugins",
+            <PluginLibraryScreen
+              {...services?.plugins}
+              embedded
+              titled={false}
+              initialProjectId={projectId}
+              projects={projects ?? []}
+              activeChatId={activeChatId}
+              onBack={onBack}
+              onAgents={() => open("agents")}
+            />,
+          )}
+          {pane(
+            "instructions",
+            <>
+              <p className="settings-lead">
+                Tell agents how to work. Review the files and who reads them before applying
+                changes.
+              </p>
+              {target ? (
+                <InstructionsPanel
+                  api={services?.instructions ?? instructions}
+                  setup={setup}
+                  initialTarget={target}
+                  folders={folders}
+                  chatLabel={chatLabel}
+                  openOnLoad={instructionsOpenOnLoad}
+                />
+              ) : (
+                <p role="status">Loading instruction scope…</p>
+              )}
+            </>,
+          )}
+          {pane(
+            "memory",
+            <ProjectMemoryPanel
+              titled={false}
+              api={services?.memory}
+              setup={setup}
+              chats={chats}
+              projects={projects ?? []}
+              initialProjectId={projectId ?? undefined}
+              initialRevision={memoryRevision}
+            />,
+          )}
+          {pane(
+            "account",
+            <>
+              <div data-setting="Account">
+                <ProfilePicker activeId={info.profile?.id ?? null} />
+                <AccountPanel
+                  initialEmail={initialEmail}
+                  deviceName={info.device?.name ?? "My computer"}
+                  activeProfileId={info.profile?.id ?? null}
+                />
+                {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
+                  <LocalImportPanel key={info.profile.id} onImported={onImported} />
+                ) : null}
+              </div>
+              <section
+                className="settings-section"
+                aria-labelledby="settings-config-sync"
+                data-setting="Configuration sync"
+              >
+                <h2 id="settings-config-sync">Configuration sync</h2>
+                <ConfigSyncPanel
+                  profileId={info.profile?.id ?? null}
+                  active={info.profile?.kind === "account" && !info.profile_locked}
+                  onAccount={() => open("account")}
+                />
+              </section>
+            </>,
+          )}
+          {pane(
+            "privacy",
+            <div className="settings-group">
+              <Row
+                title="Data folder"
+                detail={
+                  info.data_dir ? (
+                    <span className="settings-mono">{info.data_dir}</span>
+                  ) : (
+                    "Chats stay on this device."
+                  )
+                }
+              >
+                <button
+                  className="g-button g-button-outline g-button-28"
+                  type="button"
+                  disabled={!info.data_dir}
+                  onClick={() => void reveal().catch(() => {})}
+                >
+                  Open folder
+                </button>
+              </Row>
+              <Row
+                title="What stays on this device"
+                detail="Chats, drafts and attachments stay in the data folder. Dictation's audio is never saved or uploaded. Your agents talk to their own services as they always do."
+              />
+              <Row
+                title="Delete all auracode data"
+                detail="As if auracode was never installed. Your agents and repositories stay."
+              >
+                <button
+                  className="g-button g-button-outline g-button-28"
+                  type="button"
+                  data-testid="settings-delete-data"
+                  onClick={() => setDeleting(true)}
+                >
+                  Review
+                </button>
+              </Row>
+            </div>,
+          )}
+          {pane(
+            "about",
             <>
               <div className="settings-group">
                 <UpdatePanel api={updates} />
@@ -347,32 +626,20 @@ export function SettingsScreen({
                 <div className="settings-group">
                   <Row
                     title={info.os === "macos" ? "macOS" : "Windows"}
+                    setting="This device"
                     detail={
                       <>
                         {info.os_version} · <span className="settings-mono">{info.arch}</span>
                       </>
                     }
                   />
-                  <Row
-                    title="Delete all auracode data"
-                    detail="As if auracode was never installed. Your agents and repositories stay."
-                  >
-                    <button
-                      className="g-button g-button-outline g-button-28"
-                      type="button"
-                      data-testid="settings-delete-data"
-                      onClick={() => setDeleting(true)}
-                    >
-                      Review
-                    </button>
-                  </Row>
                 </div>
               </section>
-              {notices ? <NoticesDialog onClose={() => setNotices(false)} /> : null}
-              {deleting ? (
-                <DeleteDataDialog api={dataCleanup} onClose={() => setDeleting(false)} />
-              ) : null}
-            </>
+            </>,
+          )}
+          {notices ? <NoticesDialog onClose={() => setNotices(false)} /> : null}
+          {deleting ? (
+            <DeleteDataDialog api={dataCleanup} onClose={() => setDeleting(false)} />
           ) : null}
         </div>
       </main>

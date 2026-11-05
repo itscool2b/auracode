@@ -73,7 +73,6 @@ export function mountInstructionsPreview(container: HTMLElement, mode: string): 
               : undefined
         }
         onBack={blocked}
-        onAgents={blocked}
         onSetup={blocked}
         onDiagnostics={blocked}
       />

@@ -180,6 +180,7 @@ export function PluginLibraryScreen({
   vendorApi = nativeVendorApi,
   now = Date.now,
   embedded = false,
+  titled = true,
   initialProjectId = null,
   projects = [],
   mcpApi,
@@ -193,6 +194,8 @@ export function PluginLibraryScreen({
   readonly vendorApi?: VendorApi;
   readonly now?: () => number;
   readonly embedded?: boolean;
+  /** Settings names the page itself: the library then shows only its description and Refresh. */
+  readonly titled?: boolean;
   readonly initialProjectId?: string | null;
   readonly projects?: readonly McpProject[];
   readonly mcpApi?: SharedMcpApi;
@@ -317,7 +320,7 @@ export function PluginLibraryScreen({
       ) : null}
       <div className="library-heading">
         <div>
-          <h1>Plugins & MCP</h1>
+          {titled ? <h1>Plugins & MCP</h1> : null}
           <p>
             Plugins stay with their agent. Shared MCP applies to compatible agents in the selected
             scope. Server definitions can sync; authentication stays on each device.

@@ -1,30 +1,10 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { useEffect, useRef, useState } from "react";
-import type {
-  AgentEntry,
-  AppInfo,
-  Autonomy,
-  ConfigChoice,
-  GeneralPreferences,
-  SetupAction,
-  SetupSnapshot,
-  TextSizePreference,
-  ThemePreference,
-} from "../../bindings";
-import {
-  applySetupAppearance,
-  getThemePreference,
-  setTextSizePreference,
-  setThemePreference,
-} from "../../lib/appearance";
+import { useEffect, useState } from "react";
+import type { AgentEntry, AppInfo, Autonomy, ConfigChoice } from "../../bindings";
+import { getThemePreference } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
-import { errorMessage } from "../../lib/errors";
-import {
-  DEFAULT_GENERAL,
-  type GeneralApi,
-  type SetupApi,
-  setMotionPreference,
-} from "../../lib/setup";
+import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
+import type { Preferences } from "./preferences";
 import { Row, Switch } from "./SettingsRow";
 import { ThemeGallery } from "./ThemeGallery";
 
@@ -88,55 +68,22 @@ export function defaultLevelChoices(
 
 /**
  * Settings' General page: what new chats start with, what auracode does while agents work in the
- * background, and the app's own preferences. One control per row; each change saves at once.
+ * background, and setup. One control per row; each change shows at once and saves in turn.
  */
-export function GeneralPanel({
+export function GeneralPage({
   info,
-  api,
-  general: lists,
+  prefs,
+  lists,
   onSetup,
-  reveal,
 }: {
   readonly info: AppInfo;
-  readonly api: SetupApi;
-  readonly general: GeneralApi;
+  readonly prefs: Preferences;
+  readonly lists: GeneralApi;
   readonly onSetup: () => void;
-  readonly reveal: () => Promise<void>;
 }) {
-  const [saved, setSaved] = useState<SetupSnapshot | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
   const [agents, setAgents] = useState<readonly AgentEntry[]>([]);
   const [models, setModels] = useState<readonly ConfigChoice[]>([]);
-  const mounted = useRef(false);
-  const saving = useRef(false);
-  // The theme chosen but not saved yet, and the latest choice made while another save ran.
-  const [theme, setTheme] = useState<ThemePreference | null>(null);
-  const queuedTheme = useRef<ThemePreference | null>(null);
-  // The text size, like the theme, applies the moment it is chosen and saves after.
-  const [textSize, setTextSize] = useState<TextSizePreference | null>(null);
-  const queuedTextSize = useRef<TextSizePreference | null>(null);
-  useEffect(() => {
-    void reload;
-    mounted.current = true;
-    let live = true;
-    api.snapshot().then(
-      (next) => {
-        if (live) {
-          setSaved(next);
-          setError(null);
-        }
-      },
-      (failure) => {
-        if (live) setError(errorMessage(failure));
-      },
-    );
-    return () => {
-      live = false;
-      mounted.current = false;
-    };
-  }, [api, reload]);
+  const [levels, setLevels] = useState<readonly ConfigChoice[]>([]);
   useEffect(() => {
     let live = true;
     lists.agents().then(
@@ -151,7 +98,7 @@ export function GeneralPanel({
       live = false;
     };
   }, [lists]);
-  const general: GeneralPreferences = saved?.preferences.general ?? DEFAULT_GENERAL;
+  const general = prefs.shown?.general ?? DEFAULT_GENERAL;
   const agentId = general.default_agent;
   useEffect(() => {
     let live = true;
@@ -170,7 +117,6 @@ export function GeneralPanel({
     };
   }, [lists, agentId]);
   const defaultModel = general.default_model;
-  const [levels, setLevels] = useState<readonly ConfigChoice[]>([]);
   useEffect(() => {
     let live = true;
     setLevels([]);
@@ -187,66 +133,8 @@ export function GeneralPanel({
       live = false;
     };
   }, [lists, agentId, defaultModel]);
-  const change = async (action: SetupAction) => {
-    if (!saved || saving.current) return;
-    saving.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await api.apply(saved.preferences.revision, action);
-      setMotionPreference(next.preferences.motion);
-      applySetupAppearance(next.preferences);
-      if (mounted.current) setSaved(next);
-    } catch (failure) {
-      if (mounted.current) setError(errorMessage(failure));
-    } finally {
-      saving.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  };
-  // A theme paints the moment it is chosen and keyboard focus stays on it: a save in flight never
-  // disables the gallery, so arrow keys can run through the themes. The latest choice saves once
-  // that save ends; one that fails returns to the saved theme beside the error.
-  const chooseTheme = (value: ThemePreference) => {
-    setTheme(value);
-    setThemePreference(value);
-    if (saving.current) queuedTheme.current = value;
-    else void change({ type: "theme", value });
-  };
-  useEffect(() => {
-    if (busy || !saved || theme === null) return;
-    const queued = queuedTheme.current;
-    queuedTheme.current = null;
-    if (queued !== null && queued !== saved.preferences.theme) {
-      setThemePreference(queued);
-      void change({ type: "theme", value: queued });
-      return;
-    }
-    if (theme !== saved.preferences.theme) setThemePreference(saved.preferences.theme);
-    setTheme(null);
-  });
-  // A text size sets at once, as a theme paints at once; the latest one saves once a save in
-  // flight ends, and one that fails returns to the saved size beside the error.
-  const chooseTextSize = (value: TextSizePreference) => {
-    setTextSize(value);
-    setTextSizePreference(value);
-    if (saving.current) queuedTextSize.current = value;
-    else void change({ type: "text_size", value });
-  };
-  useEffect(() => {
-    if (busy || saving.current || !saved || textSize === null) return;
-    const queued = queuedTextSize.current;
-    queuedTextSize.current = null;
-    if (queued !== null && queued !== saved.preferences.text_size) {
-      setTextSizePreference(queued);
-      void change({ type: "text_size", value: queued });
-      return;
-    }
-    if (textSize !== saved.preferences.text_size)
-      setTextSizePreference(saved.preferences.text_size);
-    setTextSize(null);
-  });
-  const disabled = !saved || busy;
+  // Only loading disables a control: a save in flight never takes keyboard focus away.
+  const disabled = !prefs.saved;
   const agentChoices = defaultAgentChoices(agents, agentId);
   const agentName = agentChoices.find((agent) => agent.id === agentId)?.name ?? agentId ?? "";
   const modelChoices = defaultModelChoices(models, general.default_model);
@@ -272,7 +160,7 @@ export function GeneralPanel({
                 value={agentId ?? ""}
                 disabled={disabled}
                 onChange={(event) =>
-                  void change({
+                  prefs.change({
                     type: "default_agent",
                     agent_id: event.currentTarget.value || null,
                   })
@@ -304,7 +192,10 @@ export function GeneralPanel({
                   value={general.default_model ?? ""}
                   disabled={disabled}
                   onChange={(event) =>
-                    void change({ type: "default_model", model: event.currentTarget.value || null })
+                    prefs.change({
+                      type: "default_model",
+                      model: event.currentTarget.value || null,
+                    })
                   }
                 >
                   <option value="">The agent's default</option>
@@ -334,7 +225,7 @@ export function GeneralPanel({
                   value={general.default_effort ?? ""}
                   disabled={disabled}
                   onChange={(event) =>
-                    void change({
+                    prefs.change({
                       type: "default_effort",
                       effort: event.currentTarget.value || null,
                     })
@@ -360,7 +251,7 @@ export function GeneralPanel({
                     name="settings-autonomy"
                     value={value}
                     checked={general.default_autonomy === value}
-                    onChange={() => void change({ type: "default_autonomy", value })}
+                    onChange={() => prefs.change({ type: "default_autonomy", value })}
                   />
                   <span>{autonomyLabel(value)}</span>
                 </label>
@@ -371,6 +262,179 @@ export function GeneralPanel({
         <p className="settings-footnote">
           Applies to new chats. A project's own model comes first.
         </p>
+      </section>
+      <section className="settings-section" aria-labelledby="settings-background">
+        <h2 id="settings-background">While agents work</h2>
+        <div className="settings-group">
+          <Row
+            title="Notifications"
+            detail="When a chat you are not looking at finishes, fails or needs you."
+          >
+            <Switch
+              label="Notifications"
+              testId="settings-notifications"
+              checked={general.notifications}
+              disabled={disabled}
+              onChange={(enabled) => prefs.change({ type: "notifications", enabled })}
+            />
+          </Row>
+          <Row
+            title="Keep awake"
+            detail="No idle sleep while an agent works. The screen can still turn off."
+          >
+            <Switch
+              label="Keep awake"
+              testId="settings-keep-awake"
+              checked={general.keep_awake}
+              disabled={disabled}
+              onChange={(enabled) => prefs.change({ type: "keep_awake", enabled })}
+            />
+          </Row>
+          <Row
+            title={`Keep running in the ${tray}`}
+            setting="Keep running in the background"
+            detail="Closing the window leaves agents working. Off, closing quits."
+          >
+            <Switch
+              label={`Keep running in the ${tray}`}
+              testId="settings-close-to-tray"
+              checked={general.close_to_tray}
+              disabled={disabled}
+              onChange={(enabled) => prefs.change({ type: "close_to_tray", enabled })}
+            />
+          </Row>
+        </div>
+      </section>
+      <section className="settings-section" aria-labelledby="settings-setup">
+        <h2 id="settings-setup">Setup</h2>
+        <div className="settings-group">
+          <Row
+            title="Welcome and setup"
+            detail="Review your agents and pick a first project again."
+          >
+            <button
+              className="g-button g-button-outline g-button-28"
+              type="button"
+              onClick={onSetup}
+            >
+              Run setup
+            </button>
+          </Row>
+        </div>
+      </section>
+      {prefs.saved?.notice ? <p className="settings-footnote">{prefs.saved.notice}</p> : null}
+      <PreferencesError prefs={prefs} />
+    </>
+  );
+}
+
+/** Settings' Appearance page: light or dark, the theme, motion and text size. */
+export function AppearancePage({ prefs }: { readonly prefs: Preferences }) {
+  const shown = prefs.shown;
+  const disabled = !prefs.saved;
+  return (
+    <>
+      <div className="settings-group">
+        <Row title="Appearance" detail="System follows your device's light or dark appearance.">
+          <fieldset className="settings-segmented settings-control" disabled={disabled}>
+            <legend className="sr-only">Appearance</legend>
+            {(["system", "light", "dark"] as const).map((value) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="settings-appearance"
+                  value={value}
+                  checked={(shown?.appearance ?? "system") === value}
+                  onChange={() => prefs.change({ type: "appearance", value })}
+                />
+                <span>{value === "system" ? "System" : value === "light" ? "Light" : "Dark"}</span>
+              </label>
+            ))}
+          </fieldset>
+        </Row>
+        <Row
+          title="Theme"
+          detail="Aura is auracode's own. Each agent's theme carries its colours through the whole app, in light and dark."
+        >
+          <ThemeGallery
+            value={shown?.theme ?? getThemePreference()}
+            disabled={disabled}
+            onChange={(value) => prefs.change({ type: "theme", value })}
+          />
+        </Row>
+        <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
+          <fieldset className="settings-segmented settings-control" disabled={disabled}>
+            <legend className="sr-only">Motion</legend>
+            {(["full", "reduced", "off"] as const).map((value) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="settings-motion"
+                  value={value}
+                  checked={shown?.motion === value}
+                  onChange={() => prefs.change({ type: "motion", value })}
+                />
+                <span>{value === "full" ? "Full" : value === "reduced" ? "Reduced" : "Off"}</span>
+              </label>
+            ))}
+          </fieldset>
+        </Row>
+        <Row
+          title="Text size"
+          detail="Compact fits more of a chat on screen. Comfortable sets its text larger."
+        >
+          <fieldset
+            className="settings-segmented settings-control"
+            disabled={disabled}
+            data-testid="settings-text-size"
+          >
+            <legend className="sr-only">Text size</legend>
+            {(["compact", "comfortable"] as const).map((value) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="settings-text-size"
+                  value={value}
+                  checked={(shown?.text_size ?? "compact") === value}
+                  onChange={() => prefs.change({ type: "text_size", value })}
+                />
+                <span>{value === "compact" ? "Compact" : "Comfortable"}</span>
+              </label>
+            ))}
+          </fieldset>
+        </Row>
+      </div>
+      <PreferencesError prefs={prefs} />
+    </>
+  );
+}
+
+/** Settings' Chats page: whether finished turns fold, and checkpoints before each message. */
+export function ChatsPage({ prefs }: { readonly prefs: Preferences }) {
+  const general = prefs.shown?.general ?? DEFAULT_GENERAL;
+  const disabled = !prefs.saved;
+  return (
+    <>
+      <section className="settings-section" aria-labelledby="settings-turns">
+        <h2 id="settings-turns">Finished turns</h2>
+        <div className="settings-group">
+          <Row
+            title="Keep steps open"
+            detail={
+              general.keep_steps_open
+                ? "A finished turn shows its messages, tools and thinking above its answer."
+                : "A finished turn folds its work under Worked for, above its answer."
+            }
+          >
+            <Switch
+              label="Keep steps open"
+              testId="settings-keep-steps-open"
+              checked={general.keep_steps_open}
+              disabled={disabled}
+              onChange={(enabled) => prefs.change({ type: "keep_steps_open", enabled })}
+            />
+          </Row>
+        </div>
       </section>
       <section className="settings-section" aria-labelledby="settings-checkpoints">
         <h2 id="settings-checkpoints">Checkpoints</h2>
@@ -388,7 +452,7 @@ export function GeneralPanel({
               testId="settings-automatic-checkpoints"
               checked={general.automatic_checkpoints}
               disabled={disabled}
-              onChange={(enabled) => void change({ type: "automatic_checkpoints", enabled })}
+              onChange={(enabled) => prefs.change({ type: "automatic_checkpoints", enabled })}
             />
           </Row>
         </div>
@@ -397,168 +461,20 @@ export function GeneralPanel({
           Changes.
         </p>
       </section>
-      <section className="settings-section" aria-labelledby="settings-background">
-        <h2 id="settings-background">While agents work</h2>
-        <div className="settings-group">
-          <Row
-            title="Notifications"
-            detail="When a chat you are not looking at finishes, fails or needs you."
-          >
-            <Switch
-              label="Notifications"
-              testId="settings-notifications"
-              checked={general.notifications}
-              disabled={disabled}
-              onChange={(enabled) => void change({ type: "notifications", enabled })}
-            />
-          </Row>
-          <Row
-            title="Keep awake"
-            detail="No idle sleep while an agent works. The screen can still turn off."
-          >
-            <Switch
-              label="Keep awake"
-              testId="settings-keep-awake"
-              checked={general.keep_awake}
-              disabled={disabled}
-              onChange={(enabled) => void change({ type: "keep_awake", enabled })}
-            />
-          </Row>
-          <Row
-            title={`Keep running in the ${tray}`}
-            detail="Closing the window leaves agents working. Off, closing quits."
-          >
-            <Switch
-              label={`Keep running in the ${tray}`}
-              testId="settings-close-to-tray"
-              checked={general.close_to_tray}
-              disabled={disabled}
-              onChange={(enabled) => void change({ type: "close_to_tray", enabled })}
-            />
-          </Row>
-        </div>
-      </section>
-      <section className="settings-section" aria-labelledby="settings-app">
-        <h2 id="settings-app">App</h2>
-        <div className="settings-group">
-          <Row title="Appearance" detail="System follows your device's light or dark appearance.">
-            <fieldset className="settings-segmented settings-control" disabled={disabled}>
-              <legend className="sr-only">Appearance</legend>
-              {(["system", "light", "dark"] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="settings-appearance"
-                    value={value}
-                    checked={(saved?.preferences.appearance ?? "system") === value}
-                    onChange={() => void change({ type: "appearance", value })}
-                  />
-                  <span>
-                    {value === "system" ? "System" : value === "light" ? "Light" : "Dark"}
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          </Row>
-          <Row
-            title="Theme"
-            detail="Aura is auracode's own. Each agent's theme carries its colours through the whole app, in light and dark."
-          >
-            <ThemeGallery
-              value={theme ?? saved?.preferences.theme ?? getThemePreference()}
-              disabled={!saved}
-              onChange={chooseTheme}
-            />
-          </Row>
-          <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
-            <fieldset className="settings-segmented settings-control" disabled={disabled}>
-              <legend className="sr-only">Motion</legend>
-              {(["full", "reduced", "off"] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="settings-motion"
-                    value={value}
-                    checked={saved?.preferences.motion === value}
-                    onChange={() => void change({ type: "motion", value })}
-                  />
-                  <span>{value === "full" ? "Full" : value === "reduced" ? "Reduced" : "Off"}</span>
-                </label>
-              ))}
-            </fieldset>
-          </Row>
-          <Row
-            title="Text size"
-            detail="Compact fits more of a chat on screen. Comfortable sets its text larger."
-          >
-            {/* Not disabled while a save runs, so arrow keys keep their focus on it. */}
-            <fieldset
-              className="settings-segmented settings-control"
-              disabled={!saved}
-              data-testid="settings-text-size"
-            >
-              <legend className="sr-only">Text size</legend>
-              {(["compact", "comfortable"] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="settings-text-size"
-                    value={value}
-                    checked={(textSize ?? saved?.preferences.text_size ?? "compact") === value}
-                    onChange={() => chooseTextSize(value)}
-                  />
-                  <span>{value === "compact" ? "Compact" : "Comfortable"}</span>
-                </label>
-              ))}
-            </fieldset>
-          </Row>
-          <Row
-            title="Welcome and setup"
-            detail="Review your agents and pick a first project again."
-          >
-            <button
-              className="g-button g-button-outline g-button-28"
-              type="button"
-              onClick={onSetup}
-            >
-              Run setup
-            </button>
-          </Row>
-          <Row
-            title="Data folder"
-            detail={
-              info.data_dir ? (
-                <span className="settings-mono">{info.data_dir}</span>
-              ) : (
-                "Chats stay on this device."
-              )
-            }
-          >
-            <button
-              className="g-button g-button-outline g-button-28"
-              type="button"
-              disabled={!info.data_dir}
-              onClick={() => void reveal().catch((failure) => setError(errorMessage(failure)))}
-            >
-              Open folder
-            </button>
-          </Row>
-        </div>
-      </section>
-      {saved?.notice ? <p className="settings-footnote">{saved.notice}</p> : null}
-      {error ? (
-        <div className="settings-error" role="alert">
-          <p>{error}</p>
-          <button
-            className="g-button g-button-28"
-            type="button"
-            disabled={busy}
-            onClick={() => setReload((value) => value + 1)}
-          >
-            Reload preferences
-          </button>
-        </div>
-      ) : null}
+      <PreferencesError prefs={prefs} />
     </>
+  );
+}
+
+/** A preference that would not load or save, with the way back to what is saved. */
+export function PreferencesError({ prefs }: { readonly prefs: Preferences }) {
+  if (!prefs.error) return null;
+  return (
+    <div className="settings-error" role="alert">
+      <p>{prefs.error}</p>
+      <button className="g-button g-button-28" type="button" onClick={prefs.reload}>
+        Reload preferences
+      </button>
+    </div>
   );
 }

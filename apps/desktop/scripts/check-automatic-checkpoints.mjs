@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
-/** Production General controls, with synthetic persistence and failed-save responses. */
+/** Settings > Chats, with synthetic persistence and failed-save responses. */
 export async function checkAutomaticCheckpoints(page, out, label) {
   const checkpoints = page.getByRole("switch", { name: "Automatic checkpoints", exact: true });
   await checkpoints.waitFor();
@@ -18,9 +18,10 @@ export async function checkAutomaticCheckpoints(page, out, label) {
   await page.waitForFunction(() => window.settingsFixture.general().automatic_checkpoints);
   await page.getByText("Saving delays sending.", { exact: false }).waitFor();
 
-  // Saved state comes back when the General component remounts.
-  await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  // Saved state is what the page shows after visiting another.
+  const sections = page.getByRole("navigation", { name: "Settings sections" });
+  await sections.getByRole("button", { name: "Shortcuts", exact: true }).click();
+  await sections.getByRole("button", { name: "Chats", exact: true }).click();
   await checkpoints.waitFor();
   assert.equal(await checkpoints.isChecked(), true);
 
@@ -39,8 +40,8 @@ export async function checkAutomaticCheckpoints(page, out, label) {
 
   await checkpoints.uncheck();
   await page.waitForFunction(() => !window.settingsFixture.general().automatic_checkpoints);
-  await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await sections.getByRole("button", { name: "Shortcuts", exact: true }).click();
+  await sections.getByRole("button", { name: "Chats", exact: true }).click();
   await checkpoints.waitFor();
   assert.equal(await checkpoints.isChecked(), false);
   await page

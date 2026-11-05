@@ -67,7 +67,7 @@ export async function checkThemes(browser, url, out, engine) {
         );
       };
 
-      await page.goto(`${url}/?preview=settings&theme=system`);
+      await page.goto(`${url}/?preview=settings&theme=system&page=appearance`);
       const gallery = page.getByTestId("settings-themes");
       // Loaded: the gallery is disabled until the saved preferences arrive.
       const loaded = () =>
