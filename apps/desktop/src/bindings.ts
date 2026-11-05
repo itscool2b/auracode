@@ -3133,8 +3133,9 @@ export type TerminalChunk = {
 /**
  *  The desktop's theme: Aura's own neutral palette, or one per supported agent (owner,
  *  3 November 2026). It belongs to the profile on this device, like appearance, and works in both
- *  appearances. A file from a newer build that names a theme this build lacks reads as Aura
- *  ([`fill_defaults`]).
+ *  appearances. Claude Code's is the default (owner, 4 November 2026): a profile that never chose
+ *  one, or a file from a newer build that names a theme this build lacks, reads as it
+ *  ([`fill_defaults`]). A saved choice, Aura included, is kept.
  */
 export type ThemePreference = "aura" | "claude" | "codex" | "grok" | "pi" | "antigravity" | "cursor" | "opencode" | "oh_my_pi" | "hermes";
 
