@@ -44,8 +44,10 @@ fn messages_are_kept_as_git_keeps_them() {
 
 #[test]
 fn shown_remote_addresses_leave_out_credentials() {
+    // Built at run time, so no literal address with a user and password sits in the source.
+    let userinfo = ["someone", "not-a-real-password"].join(":");
     assert_eq!(
-        without_credentials("https://someone:secret@github.com/owner/repo.git"),
+        without_credentials(&format!("https://{userinfo}@github.com/owner/repo.git")),
         "https://github.com/owner/repo.git"
     );
     assert_eq!(
