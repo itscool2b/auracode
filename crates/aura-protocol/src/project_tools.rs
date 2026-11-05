@@ -50,3 +50,11 @@ pub struct ProjectToolsReview {
     pub editors: Vec<ProjectEditor>,
     pub expires_at: Millis,
 }
+
+/// The editors found in their standard install locations, and the one a chat's files open in:
+/// Settings' choice when it is installed, otherwise the first one found.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct DetectedEditors {
+    pub editors: Vec<ProjectEditor>,
+    pub opens_in: Option<ProjectEditor>,
+}

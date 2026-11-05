@@ -2133,6 +2133,45 @@
   }
 }
 
+/* A file name an agent wrote, as a link that opens it in the person's editor (FileLink.tsx). */
+.chat-app .file-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--g-fg-4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--g-dur-fast) var(--g-ease);
+}
+
+.chat-app .file-link-icon {
+  margin-inline-end: var(--g-space-4);
+  color: var(--g-fg-3);
+  vertical-align: -2px;
+}
+
+/* In a changed file's pill the name keeps its ellipsis and is underlined only under the pointer. */
+.chat-changed-list .file-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration-color: transparent;
+}
+
+@media (hover: hover) {
+  .chat-app .file-link:hover {
+    text-decoration-color: var(--g-fg-1);
+  }
+}
+
 .chat-app .answer blockquote {
   padding-left: var(--g-space-12);
   border-left: 2px solid var(--g-line-strong);

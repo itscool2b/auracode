@@ -93,6 +93,14 @@ try {
         assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
         await checkAutomaticCheckpoints(page, out, `${engine}-${theme}`);
       }
+      // Files open in the first editor detected until another is chosen; the choice saves.
+      const editor = page.getByLabel("Open files in");
+      await editor.waitFor();
+      assert.equal(await editor.inputValue(), "cursor");
+      assert.deepEqual(await editor.locator("option").allTextContents(), ["Cursor", "Zed"]);
+      await editor.selectOption("zed");
+      await page.waitForFunction(() => window.settingsFixture.general().editor === "zed");
+      assert.equal(await editor.inputValue(), "zed");
       await checkSettingsNavigation(page, url);
       // Appearance, motion and text size apply as they are chosen and save in turn.
       await page.goto(`${url}/?preview=settings&page=appearance`);
@@ -205,6 +213,7 @@ try {
         copy_instructions_to_worktrees: true,
         agent_memory_writes: true,
         keep_steps_open: false,
+        editor: null,
       });
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use aura_protocol::Autonomy;
+use aura_protocol::project_tools::ProjectEditor;
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil::{quarantine_file, write_json_atomic};
@@ -149,6 +150,9 @@ pub struct GeneralPreferences {
     /// A finished turn shows its work (interim messages, tools, thinking) instead of folding it
     /// under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
     pub keep_steps_open: bool,
+    /// The editor a chat's files open in, at their line. `None`, or an editor that is no longer
+    /// installed: the first one detected.
+    pub editor: Option<ProjectEditor>,
 }
 
 impl Default for GeneralPreferences {
@@ -167,6 +171,7 @@ impl Default for GeneralPreferences {
             copy_instructions_to_worktrees: true,
             agent_memory_writes: true,
             keep_steps_open: false,
+            editor: None,
         }
     }
 }
@@ -225,6 +230,9 @@ pub enum SetupAction {
     },
     Sounds {
         enabled: bool,
+    },
+    Editor {
+        editor: Option<ProjectEditor>,
     },
     KeepAwake {
         enabled: bool,
@@ -531,6 +539,7 @@ impl OnboardingStore {
                 next.preferences.general.notifications = enabled;
             }
             SetupAction::Sounds { enabled } => next.preferences.general.sounds = enabled,
+            SetupAction::Editor { editor } => next.preferences.general.editor = editor,
             SetupAction::KeepAwake { enabled } => next.preferences.general.keep_awake = enabled,
             SetupAction::CloseToTray { enabled } => {
                 next.preferences.general.close_to_tray = enabled;
@@ -618,6 +627,13 @@ fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
     if let Some(general) = general.as_object_mut() {
         for (key, default) in defaults {
             general.entry(key).or_insert(default);
+        }
+        // An editor a newer build added reads as none, the first detected, instead of failing
+        // the whole file.
+        if let Some(editor) = general.get_mut("editor")
+            && serde_json::from_value::<Option<ProjectEditor>>(editor.clone()).is_err()
+        {
+            *editor = serde_json::Value::Null;
         }
         // A default saved as a connection (`claude-acp`) names its agent.
         if let Some(serde_json::Value::String(agent)) = general.get_mut("default_agent") {
@@ -850,6 +866,25 @@ mod tests {
         assert!(snapshot.notice.is_none(), "{:?}", snapshot.notice);
         assert_eq!(snapshot.preferences.theme, ThemePreference::Claude);
         assert_eq!(snapshot.preferences.appearance, AppearancePreference::Light);
+        // So does an editor from a newer build; a known one is kept.
+        for (saved, expected) in [
+            (r#""future_editor""#, None),
+            (r#""cursor""#, Some(ProjectEditor::Cursor)),
+        ] {
+            std::fs::write(
+                dir.path().join("onboarding.json"),
+                format!(
+                    r#"{{"version":1,"boot_seen":true,"preferences":{{"revision":5,"step":"project","motion":"full","appearance":"light","completed":true,"first_project_id":null,"general":{{"editor":{saved}}}}}}}"#
+                ),
+            )
+            .unwrap();
+            let snapshot = OnboardingStore::open(dir.path())
+                .unwrap()
+                .snapshot()
+                .unwrap();
+            assert!(snapshot.notice.is_none(), "{:?}", snapshot.notice);
+            assert_eq!(snapshot.preferences.general.editor, expected);
+        }
     }
 
     #[test]
@@ -1082,6 +1117,9 @@ mod tests {
             SetupAction::AutomaticCheckpoints { enabled: true },
             SetupAction::Notifications { enabled: false },
             SetupAction::Sounds { enabled: true },
+            SetupAction::Editor {
+                editor: Some(ProjectEditor::Zed),
+            },
             SetupAction::KeepAwake { enabled: false },
             SetupAction::CloseToTray { enabled: false },
             SetupAction::ConfigSyncAgent {
@@ -1120,6 +1158,7 @@ mod tests {
                 copy_instructions_to_worktrees: true,
                 agent_memory_writes: true,
                 keep_steps_open: false,
+                editor: Some(ProjectEditor::Zed),
             }
         );
         assert!(

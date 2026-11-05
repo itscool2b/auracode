@@ -73,6 +73,11 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     words: "worked for fold folding thinking tools interim messages",
   },
   { page: "chats", title: "Automatic checkpoints", words: "undo files changes snapshot" },
+  {
+    page: "chats",
+    title: "Open files in",
+    words: "editor cursor vs code visual studio zed jetbrains intellij line links",
+  },
   { page: "voice", title: "Dictation", words: "speech voice talk parakeet transcribe" },
   { page: "voice", title: "Microphone", words: "input audio device mic" },
   { page: "voice", title: "Test your microphone", words: "mic level check speech" },

@@ -397,6 +397,34 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // File names an agent writes, as links to the files (missing features D, owner's plan).
+  if (mode === "file-links")
+    return [
+      ...events,
+      ev.turnStarted("files"),
+      ev.user("u-files", "Where did the scroll jump come from?"),
+      ev.toolCall("files-edit", {
+        kind: "edit",
+        title: "Edit src/styles.css",
+        status: "completed",
+        locations: [{ path: "src/styles.css", line: 4 }],
+        content: [
+          {
+            type: "diff",
+            path: "src/styles.css",
+            old_text: ".row {\n  display: flex;\n  gap: 8px;\n  height: auto;\n}",
+            new_text: ".row {\n  display: flex;\n  gap: 8px;\n  height: 32px;\n}",
+            truncated: null,
+          },
+        ],
+      }),
+      ev.message(
+        "files-answer",
+        "The jump came from `src/components/Sidebar.tsx:18`, where the list rendered again, so src/styles.css:4 now fixes the row height. [ChatView.tsx:120](src/components/ChatView.tsx#L120) passes the selected id, and `Sidebar.tsx` is the only component that changed shape.\n\nNot files: `console.log`, `src/missing.ts` and version 1.2.3. The old helper was in src/removed.ts:9.",
+      ),
+      ev.messageDone("files-answer"),
+      ev.turnEnded("files", "end_turn", { durationMs: 9200 }),
+    ];
   // Code colours, math and a diagram in one answer (missing features A, owner's plan).
   if (mode === "rich-answer")
     return [
@@ -766,6 +794,7 @@ function Preview() {
     "tasks-many",
     "tool-details",
     "rich-answer",
+    "file-links",
     ...Object.keys(NEW_CHAT_SCENARIOS),
     ...Object.keys(QUEUE_PREVIEWS),
   ].includes(requested)

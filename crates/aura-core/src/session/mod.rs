@@ -22,6 +22,7 @@ mod config_library;
 mod config_vendor;
 mod conversation;
 mod editors;
+mod file_open;
 mod folder_resolution;
 mod gitworkspaces;
 mod images;
@@ -55,7 +56,7 @@ mod worktree_setup;
 pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
 pub use plugin_library::{PluginFacts, PluginRefreshPause, assemble as assemble_plugin_library};
-pub use project_tools::{EditorLaunch, EditorOpen};
+pub use project_tools::{EditorLaunch, EditorOpen, UrlTarget};
 pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;

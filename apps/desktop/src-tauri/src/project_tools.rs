@@ -3,11 +3,13 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::session::EditorOpen;
+use aura_core::session::{EditorOpen, UrlTarget};
 use aura_core::terminal::TerminalError;
 use aura_process::{Spawner, pty::PtySize};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
-use aura_protocol::project_tools::{ProjectEditor, ProjectShell, ProjectToolsReview};
+use aura_protocol::project_tools::{
+    DetectedEditors, ProjectEditor, ProjectShell, ProjectToolsReview,
+};
 use tauri::{AppHandle, State, Url, Webview};
 use tauri_plugin_opener::OpenerExt;
 
@@ -77,7 +79,10 @@ pub async fn project_terminal_start(
         .await?)
 }
 
-fn editor_url(editor: ProjectEditor, folder: &str) -> Result<Url, AppError> {
+/// The URL that opens `path` in `editor`: a folder as `scheme://file/<folder>/`, a file as
+/// `scheme://file/<file>` with `:line` and `:line:column` when known, the form the VS Code
+/// builds and Cursor read.
+fn editor_url(editor: ProjectEditor, path: &str, target: UrlTarget) -> Result<Url, AppError> {
     let scheme = match editor {
         ProjectEditor::Cursor => "cursor",
         ProjectEditor::VsCode => "vscode",
@@ -104,14 +109,14 @@ fn editor_url(editor: ProjectEditor, folder: &str) -> Result<Url, AppError> {
     })?;
     // Preserve a native path as one URI path, never an authority, query, fragment or command.
     let path = if cfg!(windows) {
-        folder.replace('\\', "/")
+        path.replace('\\', "/")
     } else {
-        folder.into()
+        path.into()
     };
     if path.is_empty() || path.contains('\0') {
         return Err(AppError::new(
             AppErrorCode::InvalidArgument,
-            "This folder cannot be opened in an editor.",
+            "This path cannot be opened in an editor.",
         ));
     }
     let path = if path.starts_with('/') {
@@ -119,11 +124,53 @@ fn editor_url(editor: ProjectEditor, folder: &str) -> Result<Url, AppError> {
     } else {
         format!("/{path}")
     };
-    url.set_path(&format!(
-        "{}/",
-        path.trim_end_matches('/').replace('%', "%25")
-    ));
+    let path = path.trim_end_matches('/').replace('%', "%25");
+    let place = match target {
+        UrlTarget::Folder => "/".to_owned(),
+        UrlTarget::File { line: None, .. } => String::new(),
+        UrlTarget::File {
+            line: Some(line),
+            column: None,
+        } => format!(":{line}"),
+        UrlTarget::File {
+            line: Some(line),
+            column: Some(column),
+        } => format!(":{line}:{column}"),
+    };
+    url.set_path(&format!("{path}{place}"));
     Ok(url)
+}
+
+/// Hands `open` to the operating system: a URL to its handler, or the detected launcher started
+/// detached. The editor is the person's, never an owned process.
+async fn dispatch(app: &AppHandle, editor: ProjectEditor, open: EditorOpen) -> Result<(), AppError> {
+    match open {
+        EditorOpen::Url { path, target } => {
+            let url = editor_url(editor, &path, target)?;
+            app.opener()
+                .open_url(url.as_str(), None::<&str>)
+                .map_err(|_| {
+                    AppError::new(
+                        AppErrorCode::AgentUnavailable,
+                        "The operating system could not open this editor. Install or repair its URL handler, then try again.",
+                    )
+                })
+        }
+        EditorOpen::Launch(launch) => tauri::async_runtime::spawn_blocking(move || launch.spawn())
+            .await
+            .map_err(|_| {
+                AppError::new(
+                    AppErrorCode::AgentUnavailable,
+                    "The editor launch stopped unexpectedly.",
+                )
+            })?
+            .map_err(|_| {
+                AppError::new(
+                    AppErrorCode::AgentUnavailable,
+                    "The operating system could not start this editor. Check its installation, then try again.",
+                )
+            }),
+    }
 }
 
 #[tauri::command]
@@ -142,20 +189,76 @@ pub async fn project_editor_open(
         .project_editor_open(&chat_id, &token, editor)
         .await?;
     current(&webview, &state)?;
-    match open {
-        EditorOpen::Url { folder } => {
-            let url = editor_url(editor, &folder)?;
-            app.opener().open_url(url.as_str(),None::<&str>).map_err(|_|AppError::new(AppErrorCode::AgentUnavailable,"The operating system could not open this editor. Install or repair its URL handler, then review the folder again."))?;
-        }
-        // The detected launcher, detached: the editor is the person's, never an owned process.
-        EditorOpen::Launch(launch) => tauri::async_runtime::spawn_blocking(move || launch.spawn())
-            .await
-            .map_err(|_| AppError::new(AppErrorCode::AgentUnavailable, "The editor launch stopped unexpectedly."))?
-            .map_err(|_| AppError::new(AppErrorCode::AgentUnavailable, "The operating system could not start this editor. Check its installation, then review the folder again."))?,
-    }
+    dispatch(&app, editor, open).await?;
     // The profile lease stays alive through the OS dispatch receipt, not the editor's lifetime.
     drop(admission);
     Ok(())
+}
+
+/// Settings' Editor, when the profile's preferences can be read.
+fn preferred_editor(state: &AppState) -> Option<ProjectEditor> {
+    state
+        .setup_service()
+        .and_then(|service| service.preferences().ok())
+        .and_then(|preferences| preferences.general.editor)
+}
+
+/// The editors installed in their standard locations, for Settings' Editor, and the one a chat's
+/// files open in.
+#[tauri::command]
+#[specta::specta]
+pub async fn editors_detected(
+    webview: Webview,
+    state: State<'_, AppState>,
+) -> Result<DetectedEditors, AppError> {
+    current(&webview, &state)?;
+    let editors = state.sessions()?.detected_editors().await;
+    let opens_in = preferred_editor(&state)
+        .filter(|editor| editors.contains(editor))
+        .or_else(|| editors.first().copied());
+    Ok(DetectedEditors { editors, opens_in })
+}
+
+/// For each of a chat's file references (from answers, tool rows and Changes), the
+/// folder-relative path of the file it names in the chat's folder, or `null`. Up to 200 at once.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_file_check(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+    references: Vec<String>,
+) -> Result<Vec<Option<String>>, AppError> {
+    current(&webview, &state)?;
+    Ok(state
+        .sessions()?
+        .chat_file_check(&chat_id, references)
+        .await?)
+}
+
+/// Opens the file a chat's reference names, at its line and column when given, in Settings'
+/// editor (or the first one detected), and says which editor it was.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_file_open(
+    app: AppHandle,
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+    reference: String,
+    line: Option<u32>,
+    column: Option<u32>,
+) -> Result<ProjectEditor, AppError> {
+    current(&webview, &state)?;
+    let preferred = preferred_editor(&state);
+    let admission = state.sessions()?;
+    let (editor, open) = admission
+        .chat_file_open(&chat_id, reference, line, column, preferred)
+        .await?;
+    current(&webview, &state)?;
+    dispatch(&app, editor, open).await?;
+    drop(admission);
+    Ok(editor)
 }
 
 #[cfg(test)]
@@ -168,7 +271,7 @@ mod tests {
             ProjectEditor::VsCode,
             ProjectEditor::VsCodeInsiders,
         ] {
-            let url = editor_url(editor, "/project/a # ? % folder").unwrap();
+            let url = editor_url(editor, "/project/a # ? % folder", UrlTarget::Folder).unwrap();
             assert_eq!(url.host_str(), Some("file"));
             assert!(url.query().is_none());
             assert!(url.fragment().is_none());
@@ -177,11 +280,31 @@ mod tests {
             assert!(url.as_str().contains("%25"));
         }
         assert!(
-            editor_url(ProjectEditor::Cursor, "//server/share/a%2Fb")
+            editor_url(ProjectEditor::Cursor, "//server/share/a%2Fb", UrlTarget::Folder)
                 .unwrap()
                 .as_str()
                 .ends_with("//server/share/a%252Fb/")
         );
+        // A file has no trailing slash and takes its place after a colon.
+        let file = |line, column| {
+            editor_url(
+                ProjectEditor::VsCode,
+                "/project/src/a #1.ts",
+                UrlTarget::File { line, column },
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            file(None, None).as_str(),
+            "vscode://file/project/src/a%20%231.ts"
+        );
+        assert_eq!(
+            file(Some(42), None).as_str(),
+            "vscode://file/project/src/a%20%231.ts:42"
+        );
+        let place = file(Some(42), Some(7));
+        assert_eq!(place.as_str(), "vscode://file/project/src/a%20%231.ts:42:7");
+        assert!(place.query().is_none() && place.fragment().is_none());
         // Zed and the JetBrains IDEs never open through a URL, only their detected launcher.
         for editor in [
             ProjectEditor::Zed,
@@ -192,7 +315,7 @@ mod tests {
             ProjectEditor::GoLand,
             ProjectEditor::CLion,
         ] {
-            assert!(editor_url(editor, "/project").is_err());
+            assert!(editor_url(editor, "/project", UrlTarget::Folder).is_err());
         }
     }
 }

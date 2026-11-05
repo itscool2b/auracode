@@ -1,5 +1,7 @@
 import { createContext, Fragment, memo, type ReactNode, useContext, useMemo, useRef } from "react";
+import { FileLinkContext } from "../lib/chat/fileLinks";
 import { imageSource } from "../lib/chatImages";
+import { codeFileRef, proseFileRefs } from "../lib/fileRefs";
 import {
   type Block,
   EMPTY_SPLIT,
@@ -11,6 +13,7 @@ import {
 } from "../lib/markdown";
 import { EMPTY_IMAGE_PATHS, imagePathsIncremental } from "../lib/markdownImages";
 import { ChatImageTile } from "./chat/ChatImages";
+import { FileLink } from "./chat/FileLink";
 import { CodeBlock, MathView, MermaidBlock } from "./RichBlocks";
 
 /**
@@ -197,9 +200,24 @@ function InlineNodes({ nodes }: { readonly nodes: readonly Inline[] }) {
 function inlineNode(node: Inline): ReactNode {
   switch (node.kind) {
     case "text":
-      return node.text;
-    case "code":
-      return <code>{node.text}</code>;
+      return <Prose text={node.text} />;
+    case "code": {
+      const ref = codeFileRef(node.text);
+      const code = <code>{node.text}</code>;
+      return ref ? (
+        <FileLink reference={ref.path} line={ref.line} column={ref.column}>
+          {code}
+        </FileLink>
+      ) : (
+        code
+      );
+    }
+    case "file":
+      return (
+        <FileLink reference={node.ref.path} line={node.ref.line} column={node.ref.column}>
+          <InlineNodes nodes={node.children} />
+        </FileLink>
+      );
     case "math":
       return <MathView tex={node.tex} display={false} />;
     case "image":
@@ -225,10 +243,36 @@ function inlineNode(node: Inline): ReactNode {
       // webview, which opens no new windows (none is allowed without an on_new_window handler).
       return (
         <a href={node.href} target="_blank" rel="noreferrer noopener">
-          <InlineNodes nodes={node.children} />
+          {/* A link holds no file link: a control inside a control is neither. */}
+          <FileLinkContext.Provider value={null}>
+            <InlineNodes nodes={node.children} />
+          </FileLinkContext.Provider>
         </a>
       );
   }
+}
+
+/**
+ * Prose, with the file paths it names (`src/app.ts`, `app.ts:42`) as links in a chat. Outside a chat
+ * the text is not even searched for them.
+ */
+function Prose({ text }: { readonly text: string }) {
+  const linking = useContext(FileLinkContext) !== null;
+  const refs = useMemo(() => (linking ? proseFileRefs(text) : []), [linking, text]);
+  if (refs.length === 0) return text;
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (const { start, end, ref } of refs) {
+    if (start > at) parts.push(text.slice(at, start));
+    parts.push(
+      <FileLink key={start} reference={ref.path} line={ref.line} column={ref.column} icon={false}>
+        {text.slice(start, end)}
+      </FileLink>,
+    );
+    at = end;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return parts;
 }
 
 function InlineImage({ node }: { readonly node: Extract<Inline, { kind: "image" }> }) {

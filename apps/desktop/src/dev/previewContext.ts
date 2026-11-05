@@ -7,6 +7,7 @@ import type {
   PendingHandoff,
 } from "../bindings";
 import type { ChangesTransport } from "../lib/changes";
+import type { FileLinkApi } from "../lib/chat/fileLinks";
 import type { Transport } from "../lib/chat/transport";
 import type { ComposerTransport } from "../lib/composer";
 import type { ConversationTransport } from "../lib/conversation";
@@ -24,6 +25,7 @@ export function withPreviewContext<T extends Transport>(
   changes: ChangesTransport;
   search: SearchTransport;
   conversation: ConversationTransport;
+  files: FileLinkApi;
 } {
   let input: ComposerInput = { text: "", attachments: [], mentions: [] };
   const attachment = {
@@ -288,5 +290,40 @@ export function withPreviewContext<T extends Transport>(
       return { chat_id: chat, prompt: prompt === null ? null : await transport.send(chat, prompt) };
     },
   };
-  return Object.assign(transport, { composer, changes, search, conversation });
+  return Object.assign(transport, { composer, changes, search, conversation, files: previewFiles });
 }
+
+/** The preview folder's files. `src/removed.ts` is there when checked and gone when opened. */
+const PREVIEW_FILES = [
+  "src/components/Sidebar.tsx",
+  "src/components/ChatView.tsx",
+  "src/styles.css",
+  "src/removed.ts",
+  "README.md",
+];
+
+/** A reference as Rust resolves it: the path itself, without a diff's `a/` or `b/`, or the one file ending with it. */
+function previewFile(reference: string): string | null {
+  const path = reference.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const candidate of [path, path.replace(/^[ab]\//, "")])
+    if (PREVIEW_FILES.includes(candidate)) return candidate;
+  if (path.startsWith("/") || path.startsWith("./")) return null;
+  const ending = PREVIEW_FILES.filter((file) => file === path || file.endsWith(`/${path}`));
+  return ending.length === 1 ? (ending[0] ?? null) : null;
+}
+
+/**
+ * Checks names against `PREVIEW_FILES`, and records each open in `window.fileOpens` instead of
+ * starting an editor. Cursor and Visual Studio Code are installed; files open in Cursor.
+ */
+const previewFiles: FileLinkApi = {
+  check: async (_chat, references) => references.map(previewFile),
+  open: async (_chat, reference, line, column) => {
+    const shown = window as { fileOpens?: unknown[] };
+    shown.fileOpens = [...(shown.fileOpens ?? []), { reference, line, column }];
+    if (reference === "src/removed.ts")
+      throw new Error("This file is no longer in the chat's folder.");
+    return "cursor";
+  },
+  editors: async () => ({ editors: ["cursor", "vs_code"], opens_in: "cursor" }),
+};

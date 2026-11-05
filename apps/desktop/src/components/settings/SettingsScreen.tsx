@@ -454,7 +454,7 @@ export function SettingsScreen({
             <GeneralPage info={info} prefs={prefs} lists={general} onSetup={onSetup} />,
           )}
           {pane("appearance", <AppearancePage prefs={prefs} />)}
-          {pane("chats", <ChatsPage prefs={prefs} />)}
+          {pane("chats", <ChatsPage prefs={prefs} editors={general.editors} />)}
           {pane("voice", <VoicePage api={dictation} />)}
           {pane(
             "shortcuts",

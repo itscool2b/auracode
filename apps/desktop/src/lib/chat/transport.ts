@@ -64,6 +64,7 @@ import {
 import { type ProjectToolsApi, projectToolsApi } from "../projectTools";
 import { type SearchTransport, searchApi } from "../search";
 import { type WorktreeSetupApi, worktreeSetupApi } from "../worktreeSetup";
+import { type FileLinkApi, fileLinkApi } from "./fileLinks";
 
 /**
  * Everything the chat screens ask of the shell. The stores take this interface, so Vitest drives
@@ -82,6 +83,8 @@ export interface Transport {
   readonly projectTools?: ProjectToolsApi;
   /** Added agent accounts, for continuing a chat past a usage limit on another one. */
   readonly accounts?: AgentAccountsApi;
+  /** A chat's file names, checked against its folder and opened in the person's editor. */
+  readonly files?: FileLinkApi;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -136,6 +139,7 @@ export interface Transport {
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
   git: gitWorkspaceApi,
+  files: fileLinkApi,
   conversation: conversationApi,
   search: searchApi,
   changes: changesApi,

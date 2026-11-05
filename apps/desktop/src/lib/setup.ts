@@ -3,6 +3,7 @@ import {
   type AgentEntry,
   type ConfigChoice,
   commands,
+  type DetectedEditors,
   type GeneralPreferences,
   type SetupAction,
 } from "../bindings";
@@ -34,6 +35,8 @@ export const generalApi = {
   models: (agentId: string): Promise<ConfigChoice[]> => settle(commands.agentModels(agentId)),
   thinking: (agentId: string, model: string | null): Promise<ConfigChoice[]> =>
     settle(commands.agentThinkingLevels(agentId, model)),
+  /** The installed editors, for Settings > Chats > Open files in. */
+  editors: (): Promise<DetectedEditors> => settle(commands.editorsDetected()),
 };
 export type GeneralApi = typeof generalApi;
 
@@ -71,4 +74,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   copy_instructions_to_worktrees: true,
   agent_memory_writes: true,
   keep_steps_open: false,
+  editor: null,
 };

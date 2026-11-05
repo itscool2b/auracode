@@ -1,5 +1,5 @@
 //! Explicit project utilities share the native profile and folder admission rules.
-use super::editors::{self, Detected, Platform, Roots};
+use super::editors::{self, Detected, Platform, Roots, Target};
 use super::*;
 use aura_process::{LaunchSpec, ProcessCwd, ResolvedEnv, SpawnSpec};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
@@ -24,13 +24,23 @@ struct PreparedEditor {
     identity: Handle,
 }
 
-/// How the desktop opens a reviewed folder in the chosen editor. No `Debug`: the launch carries
-/// the resolved environment, whose values can hold keys.
+/// How the desktop opens a reviewed folder, or a chat's file, in the chosen editor. No `Debug`:
+/// the launch carries the resolved environment, whose values can hold keys.
 pub enum EditorOpen {
-    /// Hand the folder to the editor's registered URL handler.
-    Url { folder: String },
-    /// Run the detected launcher with the folder as its last argument.
+    /// Hand the folder or file to the editor's registered URL handler.
+    Url { path: String, target: UrlTarget },
+    /// Run the detected launcher with the folder or file as its last argument.
     Launch(EditorLaunch),
+}
+
+/// What a URL handler is given: a folder, or a file at its line and column when known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UrlTarget {
+    Folder,
+    File {
+        line: Option<u32>,
+        column: Option<u32>,
+    },
 }
 
 /// A detected editor's launcher. The editor belongs to the person: auracode starts it detached,
@@ -39,11 +49,26 @@ pub struct EditorLaunch {
     pub program: PathBuf,
     pub args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
+    /// Only `/usr/bin/open`, whose status is Launch Services' receipt, is waited for.
+    wait: bool,
 }
 
 impl EditorLaunch {
-    /// Starts the launcher. On macOS `open` returns once Launch Services has the request, and its
-    /// status is the receipt; on Windows a started process is the receipt. Blocking.
+    pub(super) fn new(command: editors::Command, env: &ResolvedEnv) -> EditorLaunch {
+        EditorLaunch {
+            program: command.program,
+            args: command.args,
+            env: env
+                .vars
+                .iter()
+                .map(|(key, value)| (key.as_os_str().to_owned(), value.clone()))
+                .collect(),
+            wait: command.wait,
+        }
+    }
+
+    /// Starts the launcher. `open` returns once Launch Services has the request, and its status
+    /// is the receipt; otherwise a started process is the receipt. Blocking.
     pub fn spawn(&self) -> std::io::Result<()> {
         let mut command = std::process::Command::new(&self.program);
         command
@@ -59,14 +84,25 @@ impl EditorLaunch {
             // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: no console, and no shared Ctrl+C.
             command.creation_flags(0x0000_0008 | 0x0000_0200);
         }
+        #[cfg(unix)]
+        if !self.wait {
+            use std::os::unix::process::CommandExt;
+            // Its own process group, so the editor never shares auracode's signals.
+            command.process_group(0);
+        }
         let mut child = aura_process::spawn_command(&mut command)?;
-        if cfg!(target_os = "macos") {
+        if self.wait {
             let status = child.wait()?;
             if !status.success() {
                 return Err(std::io::Error::other(format!(
                     "Launch Services refused the request ({status})."
                 )));
             }
+        } else if cfg!(unix) {
+            // Reaped whenever it exits, so a launcher that hands off never lingers as a zombie.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
         }
         Ok(())
     }
@@ -95,7 +131,7 @@ impl Drop for FolderUse {
 fn invalid(message: impl Into<String>) -> SessionError {
     SessionError::Organization(message.into())
 }
-fn display_path(path: &std::path::Path) -> Result<String, SessionError> {
+pub(super) fn display_path(path: &std::path::Path) -> Result<String, SessionError> {
     let value = path.to_str().ok_or_else(|| {
         invalid("This folder's name cannot be represented by the editor or terminal interface.")
     })?;
@@ -171,11 +207,15 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
 
 // Metadata-only detection of standard native application locations (editors.rs). Custom installs
 // may still be opened manually. A detected application is not a claim that it can dispatch.
-fn editors(env: &ResolvedEnv) -> Vec<PreparedEditor> {
+pub(super) fn detected(env: &ResolvedEnv) -> Vec<Detected> {
     let Some(platform) = Platform::current() else {
         return Vec::new();
     };
     editors::detect(platform, &Roots::from_env(platform, env))
+}
+
+fn editors(env: &ResolvedEnv) -> Vec<PreparedEditor> {
+    detected(env)
         .into_iter()
         .filter_map(|detected| {
             let identity = Handle::from_path(&detected.file).ok()?;
@@ -342,19 +382,15 @@ impl SessionManager {
             ));
         }
         let folder = display_path(&prepared.folder)?;
-        Ok(match editors::command(&reviewed.detected.opener, &folder) {
-            None => EditorOpen::Url { folder },
-            Some((program, args)) => EditorOpen::Launch(EditorLaunch {
-                program,
-                args,
-                env: prepared
-                    .env
-                    .vars
-                    .iter()
-                    .map(|(key, value)| (key.as_os_str().to_owned(), value.clone()))
-                    .collect(),
-            }),
-        })
+        Ok(
+            match editors::command(&reviewed.detected, Target::Folder(&folder)) {
+                None => EditorOpen::Url {
+                    path: folder,
+                    target: UrlTarget::Folder,
+                },
+                Some(command) => EditorOpen::Launch(EditorLaunch::new(command, &prepared.env)),
+            },
+        )
     }
 
     pub async fn git_initialize_preview(

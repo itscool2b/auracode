@@ -33,6 +33,7 @@ import { type Inline, parseInline } from "../../lib/markdown";
 import { ChatImageTile } from "./ChatImages";
 import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
+import { FileLink } from "./FileLink";
 import { TerminalOutput } from "./TerminalOutput";
 import { TaskLinkContext } from "./taskLinks";
 import { RevealContext } from "./VirtualRows";
@@ -353,7 +354,9 @@ export function Locations({ locations }: { readonly locations: readonly ToolLoca
       {locations.map((location, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: locations are positional.
         <li key={index}>
-          {location.line === null ? location.path : `${location.path}:${location.line}`}
+          <FileLink reference={location.path} line={location.line}>
+            {location.line === null ? location.path : `${location.path}:${location.line}`}
+          </FileLink>
         </li>
       ))}
     </ul>

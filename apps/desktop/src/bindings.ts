@@ -314,6 +314,21 @@ export const commands = {
 	projectTerminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_reserve")),
 	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
 	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
+	/**
+	 *  The editors installed in their standard locations, for Settings' Editor, and the one a chat's
+	 *  files open in.
+	 */
+	editorsDetected: () => typedError<DetectedEditors, AppError>(__TAURI_INVOKE("editors_detected")),
+	/**
+	 *  For each of a chat's file references (from answers, tool rows and Changes), the
+	 *  folder-relative path of the file it names in the chat's folder, or `null`. Up to 200 at once.
+	 */
+	chatFileCheck: (chatId: string, references: string[]) => typedError<(string | null)[], AppError>(__TAURI_INVOKE("chat_file_check", { chatId, references })),
+	/**
+	 *  Opens the file a chat's reference names, at its line and column when given, in Settings'
+	 *  editor (or the first one detected), and says which editor it was.
+	 */
+	chatFileOpen: (chatId: string, reference: string, line: number | null, column: number | null) => typedError<ProjectEditor, AppError>(__TAURI_INVOKE("chat_file_open", { chatId, reference, line, column })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	profileWorktrees: (projectId: string | null) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("profile_worktrees", { projectId })),
 	profileWorktreeRecoveryPreview: (worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("profile_worktree_recovery_preview", { worktreeId, action })),
@@ -1596,6 +1611,15 @@ export type DemoKind =
 /**  A long, fast markdown answer of exactly `total_tokens` tokens, for the stress view. */
 { type: "stress"; total_tokens: number };
 
+/**
+ *  The editors found in their standard install locations, and the one a chat's files open in:
+ *  Settings' choice when it is installed, otherwise the first one found.
+ */
+export type DetectedEditors = {
+	editors: ProjectEditor[],
+	opens_in: ProjectEditor | null,
+};
+
 /**  Who this machine is, as stored in `device.json`. */
 export type DeviceIdentity = {
 	/**  Lowercase hyphenated UUIDv7, generated once per machine. */
@@ -1767,6 +1791,11 @@ export type GeneralPreferences = {
 	 *  under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
 	 */
 	keep_steps_open: boolean,
+	/**
+	 *  The editor a chat's files open in, at their line. `None`, or an editor that is no longer
+	 *  installed: the first one detected.
+	 */
+	editor: ProjectEditor | null,
 };
 
 export type GitFileState = {
@@ -3089,7 +3118,7 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
  */
 { type: "default_agent"; agent_id: string | null } | 
 /**  Changing the model clears the default thinking level, which was chosen for the old one. */
-{ type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "sounds"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
+{ type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "sounds"; enabled: boolean } | { type: "editor"; editor: ProjectEditor | null } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
 /**  Turns configuration sync on or off for one agent on this device. */
 { type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
