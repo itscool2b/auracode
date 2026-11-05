@@ -10,6 +10,7 @@ import {
 } from "react";
 import { chatActivity, lastToolKind, streamingText } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
+import { useKeepStepsOpen } from "../../lib/chat/stepsPreference";
 import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
 import { changedFiles, workedLabel, workFold } from "../../lib/chat/workFold";
 import { workingContext, workingSince } from "../../lib/chat/working";
@@ -80,8 +81,10 @@ export function Transcript({
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
   const [groups, setGroups] = useState<DisclosureChoices>(() => new Map());
-  // Finished turns whose "Worked for" row was opened, by segment; every other one stays folded.
+  // Finished turns whose "Worked for" row was opened or closed, by segment; every other one
+  // follows Settings > Chats > Keep steps open (folded unless it is on).
   const [folds, setFolds] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const keepStepsOpen = useKeepStepsOpen();
   const [reveals, setReveals] = useState<ReadonlyMap<string, Reveal>>(() => new Map());
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
@@ -180,7 +183,7 @@ export function Transcript({
     let prompt: TranscriptRow["prompt"];
     // A finished turn's work folds under one "Worked for" row above its final answer.
     const fold = workFold(segment);
-    const foldOpen = fold !== null && folds.get(segment.key) === true;
+    const foldOpen = fold !== null && (folds.get(segment.key) ?? keepStepsOpen);
     const addItem = (
       index: number,
       item: RenderedItem,

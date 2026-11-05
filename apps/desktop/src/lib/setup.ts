@@ -7,11 +7,13 @@ import {
   type SetupAction,
 } from "../bindings";
 import { applySetupAppearance } from "./appearance";
+import { applyStepsPreference } from "./chat/stepsPreference";
 import { agentsList, settle } from "./ipc";
 
 async function withAppearance(result: ReturnType<typeof commands.setupSnapshot>) {
   const snapshot = await settle(result);
   applySetupAppearance(snapshot.preferences);
+  applyStepsPreference(snapshot.preferences);
   return snapshot;
 }
 
@@ -67,4 +69,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   config_sync_paused: [],
   copy_instructions_to_worktrees: true,
   agent_memory_writes: true,
+  keep_steps_open: false,
 };
