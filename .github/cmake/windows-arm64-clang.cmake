@@ -1,5 +1,7 @@
-# whisper.cpp's ARM backend requires Clang rather than MSVC cl.exe. Use the MSVC ABI,
-# headers, and libraries supplied by the Windows runner, with an explicit cross target.
+# ggml (inside transcribe.cpp, dictation's speech engine) accepts MSVC cl.exe on ARM only when it
+# tunes itself to the build machine (GGML_NATIVE), which a distributed build must not, so the
+# ARM64 bundle compiles it with clang-cl. Use the MSVC ABI, headers, and libraries supplied by the
+# Windows runner, with an explicit cross target.
 # This file is selected only for the Windows ARM64 bundle, after host binding generation.
 # cmake-rs obtains the ARM64 MSVC/SDK LIB, INCLUDE, and PATH from cc and forwards them to
 # both configure and Ninja. Keep normal executable compiler/link checks enabled here.
