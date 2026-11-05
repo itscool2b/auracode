@@ -1,4 +1,5 @@
 import { ChevronRight, FileDiff } from "lucide-react";
+import { FileLink } from "./FileLink";
 
 /**
  * The row a finished turn's work folds under, above its final answer (owner, 4 November 2026,
@@ -41,7 +42,8 @@ function basename(path: string): string {
 
 /**
  * The files a finished turn changed, under its answer, so folding the work never hides what it
- * did: their names, the full path in each tooltip, and Review, which opens Changes.
+ * did: their names, the full path in each tooltip, each opening in the person's editor, and Review,
+ * which opens Changes.
  */
 export function ChangedFiles({
   files,
@@ -61,7 +63,9 @@ export function ChangedFiles({
       <ul className="chat-changed-list" aria-label="Changed files">
         {shown.map((path) => (
           <li key={path} title={path}>
-            {basename(path)}
+            <FileLink reference={path} icon={false}>
+              {basename(path)}
+            </FileLink>
           </li>
         ))}
         {more > 0 ? <li className="chat-changed-more">{more} more</li> : null}

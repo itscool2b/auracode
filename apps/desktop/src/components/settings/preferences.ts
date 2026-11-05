@@ -75,6 +75,8 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       return { ...preferences, general: { ...general, notifications: action.enabled } };
     case "sounds":
       return { ...preferences, general: { ...general, sounds: action.enabled } };
+    case "editor":
+      return { ...preferences, general: { ...general, editor: action.editor } };
     case "keep_awake":
       return { ...preferences, general: { ...general, keep_awake: action.enabled } };
     case "close_to_tray":

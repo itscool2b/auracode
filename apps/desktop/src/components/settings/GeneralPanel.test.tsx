@@ -42,6 +42,7 @@ describe("Settings' General defaults", () => {
       copy_instructions_to_worktrees: true,
       agent_memory_writes: true,
       keep_steps_open: false,
+      editor: null,
     });
   });
 
@@ -113,7 +114,12 @@ describe("Settings' General defaults", () => {
       change: () => {},
       reload: () => {},
     };
-    const lists = { agents: async () => [], models: async () => [], thinking: async () => [] };
+    const lists = {
+      agents: async () => [],
+      models: async () => [],
+      thinking: async () => [],
+      editors: async () => ({ editors: [], opens_in: null }),
+    };
     const general = renderToStaticMarkup(
       <GeneralPage info={info} prefs={loading} lists={lists} onSetup={() => {}} />,
     );

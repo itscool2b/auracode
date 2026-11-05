@@ -173,6 +173,7 @@ const setup: SetupApi = {
     if (action.type === "automatic_checkpoints") general.automatic_checkpoints = action.enabled;
     if (action.type === "notifications") general.notifications = action.enabled;
     if (action.type === "sounds") general.sounds = action.enabled;
+    if (action.type === "editor") general.editor = action.editor;
     if (action.type === "keep_awake") general.keep_awake = action.enabled;
     if (action.type === "close_to_tray") general.close_to_tray = action.enabled;
     if (action.type === "copy_instructions_to_worktrees")
@@ -219,6 +220,8 @@ const general: GeneralApi = {
           group: null,
         }))
       : [],
+  // Cursor and Zed are installed; files open in Cursor until Settings picks another.
+  editors: async () => ({ editors: ["cursor", "zed"], opens_in: "cursor" }),
 };
 let status: UpdateStatus = {
   channel: new URLSearchParams(location.search).has("staging") ? "staging" : "stable",

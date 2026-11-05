@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- File names open in your editor at their line: paths an agent writes in its answers (`src/app.ts:42`, a link to a file, or a path in a sentence), a step's files, the changed-files card and a diff's Open, once auracode has checked the file is in the chat's folder. Settings > Chats chooses the editor. On Windows, Cursor and Visual Studio Code now open directly, without their confirmation prompt. ([#89](https://github.com/itscool2b/auracode/pull/89))
 - Sounds: a setting (Settings > General, off by default) plays a short, quiet tone when a chat finishes, fails or needs you, rising, falling or two taps, for the same moments as notifications but also while auracode is in front. ([#88](https://github.com/itscool2b/auracode/pull/88))
 - Find in chat: Ctrl+F (Cmd+F on macOS) opens a bar that counts a word or phrase in your messages and the agent's answers, highlights every match, and steps through them with Enter and Shift+Enter, scrolling to matches in long chats and opening folded work where one sits. ([#87](https://github.com/itscool2b/auracode/pull/87))
 - Commit and push from the Git workspace dialog: choose the changed files and write the message, review the exact commit (author, files, stat), then push the branch to its upstream or origin, fast-forward only, creating the remote branch and its upstream when needed. Git hooks do not run and nothing is staged unless the commit succeeds. ([#86](https://github.com/itscool2b/auracode/pull/86))

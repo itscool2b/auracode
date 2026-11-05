@@ -325,6 +325,7 @@ export function parseBlock(source: string): Block[] {
 }
 
 import { localImagePath } from "./chatImages";
+import { type FileRef, hrefFileRef } from "./fileRefs";
 
 export type Inline =
   | { readonly kind: "text"; readonly text: string }
@@ -333,6 +334,8 @@ export type Inline =
   | { readonly kind: "strong"; readonly children: readonly Inline[] }
   | { readonly kind: "em"; readonly children: readonly Inline[] }
   | { readonly kind: "link"; readonly href: string; readonly children: readonly Inline[] }
+  /** A link to a path (`[app.ts:42](src/app.ts#L42)`): a file in the chat's folder, if it is one. */
+  | { readonly kind: "file"; readonly ref: FileRef; readonly children: readonly Inline[] }
   /** Inline math, `$…$` or `\(…\)`, in TeX. */
   | { readonly kind: "math"; readonly tex: string };
 
@@ -367,7 +370,7 @@ function dollarClose(text: string, index: number): number {
   return -1;
 }
 
-/** Inline markdown: `code`, **strong**, *em* / _em_, [text](https://...), $math$. */
+/** Inline markdown: `code`, **strong**, *em* / _em_, [text](https://...) or a path, $math$. */
 export function parseInline(text: string, depth = 0): Inline[] {
   const nodes: Inline[] = [];
   let plain = "";
@@ -485,10 +488,19 @@ export function parseInline(text: string, depth = 0): Inline[] {
       const closeParen = closeBracket === -1 ? -1 : text.indexOf(")", closeBracket + 2);
       if (closeBracket !== -1 && closeParen !== -1) {
         const label = text.slice(index + 1, closeBracket);
-        const href = safeHref(text.slice(closeBracket + 2, closeParen));
+        const target = text.slice(closeBracket + 2, closeParen);
+        const href = safeHref(target);
         if (href !== null && !label.includes("]")) {
           pushPlain();
           nodes.push({ kind: "link", href, children: parseInline(label, depth + 1) });
+          index = closeParen + 1;
+          continue;
+        }
+        // Agents link files by their path (Claude Code's `[app.ts:42](src/app.ts#L42)`).
+        const ref = href === null && label ? hrefFileRef(target) : null;
+        if (ref !== null && !label.includes("]")) {
+          pushPlain();
+          nodes.push({ kind: "file", ref, children: parseInline(label, depth + 1) });
           index = closeParen + 1;
           continue;
         }

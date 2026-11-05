@@ -161,6 +161,7 @@ const general: GeneralApi = {
   agents: async () => [],
   models: async () => [],
   thinking: async () => [],
+  editors: async () => ({ editors: [], opens_in: null }),
 };
 const status: UpdateStatus = {
   channel: "stable",

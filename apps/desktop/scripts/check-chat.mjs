@@ -622,6 +622,103 @@ async function findInChat(page, theme) {
   });
 }
 
+/**
+ * File names an agent wrote open in the person's editor, at their line (missing features D):
+ * inline code, prose and Markdown links in the answer, the changed-files card, a tool's location
+ * and a diff's Open. The fixture records each open in `window.fileOpens` instead of starting one.
+ */
+async function fileLinks(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=file-links`);
+  const answer = page.locator("[data-answer]").filter({ hasText: "The jump came from" });
+  await answer.waitFor();
+  const links = answer.getByTestId("file-link");
+  await links.first().waitFor();
+  assert.deepEqual(await links.evaluateAll((nodes) => nodes.map((node) => node.dataset.file)), [
+    "src/components/Sidebar.tsx",
+    "src/styles.css",
+    "src/components/ChatView.tsx",
+    "src/components/Sidebar.tsx",
+    "src/removed.ts",
+  ]);
+  // Names that are not the chat's files stay as written.
+  for (const text of ["console.log", "src/missing.ts"])
+    assert.equal(await answer.locator("code", { hasText: text }).count(), 1, text);
+  assert.equal(await answer.getByRole("button", { name: /1\.2\.3/ }).count(), 0);
+  const opens = () => page.evaluate(() => window.fileOpens ?? []);
+  const note = page.getByTestId("file-note");
+  await links.nth(0).click();
+  await note.getByText("Opened src/components/Sidebar.tsx in Cursor.", { exact: true }).waitFor();
+  assert.equal(
+    await links.nth(0).getAttribute("title"),
+    "Open src/components/Sidebar.tsx, line 18, in Cursor",
+  );
+  // The keyboard reaches them as buttons.
+  await links.nth(1).focus();
+  await page.keyboard.press("Enter");
+  await links.nth(2).click();
+  await links.nth(3).click();
+  assert.deepEqual((await opens()).slice(0, 4), [
+    { reference: "src/components/Sidebar.tsx", line: 18, column: null },
+    { reference: "src/styles.css", line: 4, column: null },
+    { reference: "src/components/ChatView.tsx", line: 120, column: null },
+    { reference: "src/components/Sidebar.tsx", line: null, column: null },
+  ]);
+  // A file gone since the check says so, as an alert.
+  await links.nth(4).click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "This file is not in the chat's folder." })
+    .waitFor();
+  // The changed-files card names the file the turn edited, and its step names it at its line.
+  const card = page.getByTestId("changed-files").last();
+  await card.getByTestId("file-link").click();
+  await openWork(page);
+  // Each step opens: its group, then the call itself.
+  const closedGroups = page.locator('[data-testid="tool-group"][aria-expanded="false"]');
+  for (let left = await closedGroups.count(); left > 0; left -= 1)
+    await closedGroups.first().click();
+  await page.evaluate(() => {
+    for (const summary of document.querySelectorAll(".chat-tool-head"))
+      if (summary.parentElement && !summary.parentElement.open) summary.click();
+  });
+  // The edited step is in the last turn: at the end, where the virtual list renders it.
+  await page.getByTestId("transcript").evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  const location = page
+    .getByTestId("tool-locations")
+    .getByRole("button", { name: "src/styles.css:4", exact: true });
+  await location.waitFor();
+  await location.click();
+  // The step's own diff opens the file too, without a line: its numbers are the excerpt's.
+  await page.getByRole("button", { name: "Open src/styles.css in Cursor", exact: true }).click();
+  assert.deepEqual((await opens()).slice(5), [
+    { reference: "src/styles.css", line: null, column: null },
+    { reference: "src/styles.css", line: 4, column: null },
+    { reference: "src/styles.css", line: null, column: null },
+  ]);
+  // In Changes the line numbers are the file's own, so Open goes to the first change.
+  await card.getByRole("button", { name: "Review", exact: true }).click();
+  await page.locator(".changes-file-list button", { hasText: "src/styles.css" }).click();
+  await page
+    .locator(".changes-panel")
+    .getByRole("region", { name: "Line changes for src/styles.css" })
+    .waitFor();
+  await page
+    .locator(".changes-panel")
+    .getByRole("button", { name: "Open src/styles.css, line 2, in Cursor", exact: true })
+    .click();
+  assert.deepEqual((await opens()).at(-1), { reference: "src/styles.css", line: 2, column: null });
+  await settled(page);
+  const scan = await new AxeBuilder({ page })
+    .include("[data-testid=transcript]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(scan.violations, [], `${theme} file links accessibility`);
+  await page.screenshot({ path: resolve(out, `file-links-${theme}.png`) });
+}
+
 async function richAnswer(page, theme) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   // Under the app's own policy (tauri.conf.json), which forbids eval: the dev server applies none,
@@ -716,6 +813,7 @@ async function inspect(engine, launcher) {
     for (const theme of ["light", "dark"]) await reviewComments(page, theme);
     for (const theme of ["light", "dark"]) await hunkRevert(page, theme);
     for (const theme of ["light", "dark"]) await findInChat(page, theme);
+    for (const theme of ["light", "dark"]) await fileLinks(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [

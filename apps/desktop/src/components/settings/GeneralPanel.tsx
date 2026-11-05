@@ -1,8 +1,16 @@
 import { AgentMark } from "@auracode/ui/graphite";
 import { useEffect, useState } from "react";
-import type { AgentEntry, AppInfo, Autonomy, ConfigChoice } from "../../bindings";
+import type {
+  AgentEntry,
+  AppInfo,
+  Autonomy,
+  ConfigChoice,
+  DetectedEditors,
+  ProjectEditor,
+} from "../../bindings";
 import { getThemePreference } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
+import { editorName } from "../../lib/projectTools";
 import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
 import { playNotice } from "../../lib/sounds";
 import type { Preferences } from "./preferences";
@@ -423,10 +431,40 @@ export function AppearancePage({ prefs }: { readonly prefs: Preferences }) {
   );
 }
 
-/** Settings' Chats page: whether finished turns fold, and checkpoints before each message. */
-export function ChatsPage({ prefs }: { readonly prefs: Preferences }) {
+/**
+ * Settings' Chats page: whether finished turns fold, the editor a chat's files open in, and
+ * checkpoints before each message.
+ */
+export function ChatsPage({
+  prefs,
+  editors,
+}: {
+  readonly prefs: Preferences;
+  /** The installed editors; without it the page has no editor row. */
+  readonly editors?: () => Promise<DetectedEditors>;
+}) {
   const general = prefs.shown?.general ?? DEFAULT_GENERAL;
   const disabled = !prefs.saved;
+  const [installed, setInstalled] = useState<readonly ProjectEditor[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    editors?.().then(
+      (found) => {
+        if (live) setInstalled(found.editors);
+      },
+      () => {
+        if (live) setInstalled([]);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [editors]);
+  // A saved editor that is no longer installed shows as the one files now open in.
+  const chosen =
+    installed && general.editor !== null && installed.includes(general.editor)
+      ? general.editor
+      : (installed?.[0] ?? null);
   return (
     <>
       <section className="settings-section" aria-labelledby="settings-turns">
@@ -450,6 +488,43 @@ export function ChatsPage({ prefs }: { readonly prefs: Preferences }) {
           </Row>
         </div>
       </section>
+      {installed ? (
+        <section className="settings-section" aria-labelledby="settings-files">
+          <h2 id="settings-files">Files</h2>
+          <div className="settings-group">
+            <Row
+              title="Open files in"
+              detail={
+                chosen
+                  ? "File names in answers, steps and Changes open in this editor, at their line."
+                  : "No supported editor was found in its standard location (Cursor, Visual Studio Code, Zed or a JetBrains IDE). File names stay text until one is installed."
+              }
+            >
+              {chosen ? (
+                <select
+                  className="g-select settings-control settings-select"
+                  aria-label="Open files in"
+                  data-testid="settings-editor"
+                  value={chosen}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    prefs.change({
+                      type: "editor",
+                      editor: event.currentTarget.value as ProjectEditor,
+                    })
+                  }
+                >
+                  {installed.map((editor) => (
+                    <option key={editor} value={editor}>
+                      {editorName[editor]}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </Row>
+          </div>
+        </section>
+      ) : null}
       <section className="settings-section" aria-labelledby="settings-checkpoints">
         <h2 id="settings-checkpoints">Checkpoints</h2>
         <div className="settings-group">

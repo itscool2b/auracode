@@ -11,6 +11,7 @@ import {
   numberLines,
 } from "../../lib/diff";
 import { useDisclosure } from "./DisclosureMemory";
+import { OpenFileButton } from "./FileLink";
 
 const COLLAPSED_ROWS = 14;
 
@@ -172,6 +173,15 @@ export function DiffBlock({
   const scroller = useRef<HTMLElement>(null);
   const diff = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
   const rows = useMemo(() => numberLines(diff.lines), [diff]);
+  // The new text's line where the first change starts: where Open puts the cursor.
+  const firstChange = useMemo(() => {
+    let line = 0;
+    for (const row of rows) {
+      if (row.op !== "same") return line + 1;
+      line += 1;
+    }
+    return null;
+  }, [rows]);
   // A shortened replacement view lists lines as removed and added that were not: no comments,
   // no folds and no reverts of single changes.
   const reviewing = diff.truncated ? undefined : review;
@@ -330,7 +340,13 @@ export function DiffBlock({
             />
           ))}
         </span>
-        {copyPath ? <CopyButton text={path} label="Copy path" caption="Copy path" /> : null}
+        {copyPath ? (
+          <>
+            {/* At the first change, where the line numbers are the file's own. */}
+            <OpenFileButton reference={path} line={wholeFile ? firstChange : null} />
+            <CopyButton text={path} label="Copy path" caption="Copy path" />
+          </>
+        ) : null}
       </figcaption>
       {explain ? (
         <p className="chat-diff-note" id={noteId}>

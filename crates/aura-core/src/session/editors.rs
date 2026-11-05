@@ -1,12 +1,18 @@
-//! Metadata-only detection of installed editors, and the exact way each one opens a folder.
+//! Metadata-only detection of installed editors, and the exact way each one opens a folder or a
+//! file at a line.
 //!
 //! Only standard install locations are checked, by file metadata; no editor configuration, state
-//! or credential is read. Cursor and the VS Code builds open through their registered URL
-//! handler, as before. Zed and the JetBrains IDEs open through the launcher found here, given the
-//! folder as one argument: on Windows the IDE's own executable, on macOS its application bundle
-//! through Launch Services (`/usr/bin/open -a`). A JetBrains Toolbox shell script on Windows is
-//! read (a few KiB at most) only for the absolute path of the IDE executable it starts; the script
-//! itself never runs. Custom installs stay manual.
+//! or credential is read. On Windows every editor opens through the executable found here, given
+//! the folder or file as its argument: Cursor and the VS Code builds read a file's place as
+//! `--goto path:line:column` and take it without the confirmation their URL handler asks for
+//! every time. On macOS Cursor and the VS Code builds open through their registered URL handler
+//! (which asks, until the person allows local paths), and Zed and the JetBrains IDEs through their
+//! application bundle (`/usr/bin/open -a`). A file at a line goes to Zed as `path:line:column`
+//! (on macOS through the bundle's own `cli`), and to a JetBrains IDE as `--line` and
+//! `--column` before the path (on macOS to the bundle's executable itself, since Launch Services
+//! drops arguments for a running app). A JetBrains Toolbox shell script on Windows is read (a few
+//! KiB at most) only for the absolute path of the IDE executable it starts; the script itself never
+//! runs. Custom installs stay manual.
 use aura_process::ResolvedEnv;
 use aura_protocol::project_tools::ProjectEditor;
 use std::{
@@ -73,12 +79,12 @@ impl Roots {
     }
 }
 
-/// How a detected editor opens a folder.
+/// How a detected editor opens a folder or a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Opener {
-    /// The editor's registered `scheme://file/<folder>/` URL handler.
+    /// macOS, Cursor and the VS Code builds: the registered `scheme://file/<path>` URL handler.
     Url,
-    /// Windows: this executable, with the folder as its one argument.
+    /// Windows: this executable, with the folder or file as its argument.
     Executable(PathBuf),
     /// macOS: `/usr/bin/open -a <bundle> <folder>`.
     Bundle(PathBuf),
@@ -93,16 +99,99 @@ pub(super) struct Detected {
     pub file: PathBuf,
 }
 
-/// The program and arguments that open `folder`, or `None` for a URL handler.
-pub(super) fn command(opener: &Opener, folder: &str) -> Option<(PathBuf, Vec<OsString>)> {
-    match opener {
-        Opener::Url => None,
-        Opener::Executable(executable) => Some((executable.clone(), vec![folder.into()])),
-        // The folder is a canonical absolute path, so it can never read as an option.
-        Opener::Bundle(bundle) => Some((
-            PathBuf::from("/usr/bin/open"),
-            vec!["-a".into(), bundle.into(), folder.into()],
-        )),
+/// A place in a file, counted from 1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Position {
+    pub line: u32,
+    pub column: Option<u32>,
+}
+
+/// What an editor opens: a folder, or a file, at a position when one is known. The path is
+/// always absolute, so it can never read as an option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Target<'a> {
+    Folder(&'a str),
+    File {
+        path: &'a str,
+        position: Option<Position>,
+    },
+}
+
+/// How a launch is started.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Command {
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+    /// `/usr/bin/open` answers once Launch Services has the request, so its status is the
+    /// receipt. Anything else may be the editor itself, which auracode never waits for.
+    pub wait: bool,
+}
+
+/// `path:line:column`, as Zed and the VS Code builds read a place on their command line.
+fn colon_place(path: &str, position: Position) -> OsString {
+    match position.column {
+        Some(column) => format!("{path}:{}:{column}", position.line),
+        None => format!("{path}:{}", position.line),
+    }
+    .into()
+}
+
+/// `--line N [--column N] path`, as JetBrains launchers read a place.
+fn jetbrains_place(path: &str, position: Position) -> Vec<OsString> {
+    let mut args = vec!["--line".into(), position.line.to_string().into()];
+    if let Some(column) = position.column {
+        args.extend(["--column".into(), column.to_string().into()]);
+    }
+    args.push(path.into());
+    args
+}
+
+/// The program and arguments that open `target` in `detected`, or `None` for a URL handler.
+pub(super) fn command(detected: &Detected, target: Target<'_>) -> Option<Command> {
+    let (path, position) = match target {
+        Target::Folder(path) => (path, None),
+        Target::File { path, position } => (path, position),
+    };
+    let zed = detected.editor == ProjectEditor::Zed;
+    let code = matches!(
+        detected.editor,
+        ProjectEditor::Cursor | ProjectEditor::VsCode | ProjectEditor::VsCodeInsiders
+    );
+    match (&detected.opener, position) {
+        (Opener::Url, _) => None,
+        (Opener::Executable(executable), None) => Some(Command {
+            program: executable.clone(),
+            args: vec![path.into()],
+            wait: false,
+        }),
+        (Opener::Executable(executable), Some(position)) => Some(Command {
+            program: executable.clone(),
+            args: if code {
+                vec!["--goto".into(), colon_place(path, position)]
+            } else if zed {
+                vec![colon_place(path, position)]
+            } else {
+                jetbrains_place(path, position)
+            },
+            wait: false,
+        }),
+        (Opener::Bundle(bundle), None) => Some(Command {
+            program: PathBuf::from("/usr/bin/open"),
+            args: vec!["-a".into(), bundle.into(), path.into()],
+            wait: true,
+        }),
+        // Launch Services passes no arguments to an app that already runs, so a place goes to
+        // the bundle's own command-line program, which hands it to the running editor.
+        (Opener::Bundle(bundle), Some(position)) if zed => Some(Command {
+            program: bundle.join("Contents/MacOS/cli"),
+            args: vec![colon_place(path, position)],
+            wait: false,
+        }),
+        (Opener::Bundle(_), Some(position)) => Some(Command {
+            program: detected.file.clone(),
+            args: jetbrains_place(path, position),
+            wait: false,
+        }),
     }
 }
 
@@ -216,7 +305,7 @@ fn candidates(platform: Platform, roots: &Roots) -> Vec<Detected> {
                         "Microsoft VS Code Insiders/Code - Insiders.exe",
                     ),
                 ] {
-                    out.push(url(editor, root.join(file)));
+                    out.push(executable(editor, root.join(file)));
                 }
             }
             for root in &installs {
@@ -380,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn windows_detects_zed_and_toolbox_ides_and_keeps_url_editors() {
+    fn windows_detects_editors_and_starts_each_from_its_executable() {
         let local = tempfile::tempdir().unwrap();
         let program_files = tempfile::tempdir().unwrap();
         let roots = Roots {
@@ -404,19 +493,105 @@ mod tests {
                 ProjectEditor::RustRover
             ]
         );
-        assert_eq!(found[0].opener, Opener::Url);
+        assert_eq!(
+            found[0].opener,
+            Opener::Executable(programs.join("cursor/Cursor.exe"))
+        );
         assert_eq!(
             found[1].opener,
             Opener::Executable(programs.join("Zed").join("Zed.exe"))
         );
+        let idea = programs.join("IntelliJ IDEA Ultimate/bin/idea64.exe");
         assert_eq!(
-            command(&found[2].opener, r"C:\work\my project"),
-            Some((
-                programs.join("IntelliJ IDEA Ultimate/bin/idea64.exe"),
-                vec![OsString::from(r"C:\work\my project")]
-            ))
+            command(&found[2], Target::Folder(r"C:\work\my project")),
+            Some(Command {
+                program: idea.clone(),
+                args: vec![OsString::from(r"C:\work\my project")],
+                wait: false,
+            })
         );
-        assert_eq!(command(&found[0].opener, r"C:\work"), None);
+        assert_eq!(
+            command(&found[0], Target::Folder(r"C:\work")).unwrap().args,
+            [OsString::from(r"C:\work")]
+        );
+        // A file at a place: JetBrains takes --line and --column before the path, Zed one
+        // `path:line:column` argument and Cursor `--goto` before it; without a place each takes
+        // the path alone.
+        let place = Some(Position {
+            line: 42,
+            column: Some(7),
+        });
+        let file = r"C:\work\src\main.rs";
+        assert_eq!(
+            command(
+                &found[2],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            )
+            .unwrap()
+            .args,
+            ["--line", "42", "--column", "7", file].map(OsString::from)
+        );
+        assert_eq!(
+            command(
+                &found[2],
+                Target::File {
+                    path: file,
+                    position: Some(Position {
+                        line: 3,
+                        column: None
+                    })
+                }
+            )
+            .unwrap()
+            .args,
+            ["--line", "3", file].map(OsString::from)
+        );
+        assert_eq!(
+            command(
+                &found[1],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            ),
+            Some(Command {
+                program: programs.join("Zed").join("Zed.exe"),
+                args: vec![OsString::from(format!("{file}:42:7"))],
+                wait: false,
+            })
+        );
+        assert_eq!(
+            command(
+                &found[1],
+                Target::File {
+                    path: file,
+                    position: None
+                }
+            )
+            .unwrap()
+            .args,
+            [OsString::from(file)]
+        );
+        assert_eq!(
+            command(
+                &found[0],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            ),
+            Some(Command {
+                program: programs.join("cursor/Cursor.exe"),
+                args: vec![
+                    OsString::from("--goto"),
+                    OsString::from(format!("{file}:42:7"))
+                ],
+                wait: false,
+            })
+        );
     }
 
     #[test]
@@ -527,15 +702,75 @@ mod tests {
         let clion = home.path().join("Applications").join("CLion.app");
         assert_eq!(found[3].opener, Opener::Bundle(clion.clone()));
         assert_eq!(
-            command(&found[3].opener, "/Users/me/my project"),
-            Some((
-                PathBuf::from("/usr/bin/open"),
-                vec![
+            command(&found[3], Target::Folder("/Users/me/my project")),
+            Some(Command {
+                program: PathBuf::from("/usr/bin/open"),
+                args: vec![
                     OsString::from("-a"),
-                    clion.into_os_string(),
+                    clion.clone().into_os_string(),
                     OsString::from("/Users/me/my project")
-                ]
-            ))
+                ],
+                wait: true,
+            })
+        );
+        // Visual Studio Code opens through its URL handler on macOS, a place and all.
+        assert_eq!(found[0].opener, Opener::Url);
+        assert_eq!(
+            command(
+                &found[0],
+                Target::File {
+                    path: "/Users/me/a.ts",
+                    position: None
+                }
+            ),
+            None
+        );
+        // A file without a place opens as a folder does; with one, the bundle's executable takes
+        // it, and Zed's bundle hands it to its cli.
+        let file = "/Users/me/my project/src/main.c";
+        assert_eq!(
+            command(
+                &found[3],
+                Target::File {
+                    path: file,
+                    position: None
+                }
+            )
+            .unwrap()
+            .program,
+            PathBuf::from("/usr/bin/open")
+        );
+        let place = Some(Position {
+            line: 9,
+            column: None,
+        });
+        assert_eq!(
+            command(
+                &found[3],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            ),
+            Some(Command {
+                program: clion.join("Contents/MacOS").join("clion"),
+                args: ["--line", "9", file].map(OsString::from).to_vec(),
+                wait: false,
+            })
+        );
+        assert_eq!(
+            command(
+                &found[1],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            ),
+            Some(Command {
+                program: system.path().join("Zed.app").join("Contents/MacOS/cli"),
+                args: vec![OsString::from(format!("{file}:9"))],
+                wait: false,
+            })
         );
         // The same roots on Windows find nothing: each platform checks only its own layout.
         assert!(detect(Platform::Windows, &roots).is_empty());
