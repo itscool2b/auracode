@@ -107,6 +107,54 @@ try {
       await page.evaluate(() => sessionStorage.removeItem("settings-fail-save"));
       await page.getByRole("button", { name: "Reload preferences" }).click();
       await page.getByRole("alert").waitFor({ state: "hidden" });
+      // Text size sets the chat at once, like a theme, keeps its focus through a slow save, saves
+      // the latest choice and returns to the saved size when a save fails (the Rust onboarding
+      // tests cover keeping it across restarts; this fixture holds preferences in memory).
+      const textSize = () => page.evaluate(() => window.settingsFixture.textSize());
+      const sizeAttribute = () =>
+        page.evaluate(() => document.documentElement.dataset.textSize ?? "compact");
+      const sizes = page.getByTestId("settings-text-size");
+      assert.equal(await textSize(), "compact");
+      await page.evaluate(() => sessionStorage.setItem("settings-slow-save", "yes"));
+      await sizes.getByRole("radio", { name: "Comfortable", exact: true }).check();
+      assert.equal(
+        await sizeAttribute(),
+        "comfortable",
+        "Comfortable applies before its save ends",
+      );
+      // WebKit does not focus a radio it clicks, as Safari does not; arrow keys start from focus.
+      await sizes.getByRole("radio", { name: "Comfortable", exact: true }).focus();
+      await page.keyboard.press("ArrowLeft");
+      assert.equal(await sizeAttribute(), "compact");
+      assert.equal(
+        await sizes
+          .getByRole("radio", { name: "Compact", exact: true })
+          .evaluate((node) => node === document.activeElement),
+        true,
+        "focus stays on the text size while it saves",
+      );
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(() => window.settingsFixture.textSize() === "comfortable");
+      await settled(page);
+      assert.equal(await sizeAttribute(), "comfortable");
+      await page.evaluate(() => sessionStorage.removeItem("settings-slow-save"));
+      await page.evaluate(() => sessionStorage.setItem("settings-fail-save", "yes"));
+      await sizes.getByRole("radio", { name: "Compact", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "Preferences could not be saved" }).waitFor();
+      await page.waitForFunction(() => document.documentElement.dataset.textSize === "comfortable");
+      assert.equal(await textSize(), "comfortable");
+      // A failed save returns the radio to the saved size once React has rendered the rollback.
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="settings-text-size"] input[value="comfortable"]')
+            ?.checked === true,
+      );
+      await page.evaluate(() => sessionStorage.removeItem("settings-fail-save"));
+      await page.getByRole("button", { name: "Reload preferences" }).click();
+      await page.getByRole("alert").waitFor({ state: "hidden" });
+      await sizes.getByRole("radio", { name: "Compact", exact: true }).check();
+      await page.waitForFunction(() => window.settingsFixture.textSize() === "compact");
+      assert.equal(await sizeAttribute(), "compact");
       // General's defaults for new chats and the background switches save at once.
       const general = () => page.evaluate(() => window.settingsFixture.general());
       assert.equal(await page.getByLabel("Default model").count(), 0);

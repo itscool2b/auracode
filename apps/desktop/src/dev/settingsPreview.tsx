@@ -263,6 +263,7 @@ Object.assign(window, {
     calls: () => [...calls],
     motion: () => preferences.preferences.motion,
     theme: () => preferences.preferences.theme,
+    textSize: () => preferences.preferences.text_size,
     general: () => structuredClone(preferences.preferences.general),
   },
 });

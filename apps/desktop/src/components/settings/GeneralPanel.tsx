@@ -8,9 +8,15 @@ import type {
   GeneralPreferences,
   SetupAction,
   SetupSnapshot,
+  TextSizePreference,
   ThemePreference,
 } from "../../bindings";
-import { applySetupAppearance, getThemePreference, setThemePreference } from "../../lib/appearance";
+import {
+  applySetupAppearance,
+  getThemePreference,
+  setTextSizePreference,
+  setThemePreference,
+} from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
 import { errorMessage } from "../../lib/errors";
 import {
@@ -108,6 +114,9 @@ export function GeneralPanel({
   // The theme chosen but not saved yet, and the latest choice made while another save ran.
   const [theme, setTheme] = useState<ThemePreference | null>(null);
   const queuedTheme = useRef<ThemePreference | null>(null);
+  // The text size, like the theme, applies the moment it is chosen and saves after.
+  const [textSize, setTextSize] = useState<TextSizePreference | null>(null);
+  const queuedTextSize = useRef<TextSizePreference | null>(null);
   useEffect(() => {
     void reload;
     mounted.current = true;
@@ -215,6 +224,27 @@ export function GeneralPanel({
     }
     if (theme !== saved.preferences.theme) setThemePreference(saved.preferences.theme);
     setTheme(null);
+  });
+  // A text size sets at once, as a theme paints at once; the latest one saves once a save in
+  // flight ends, and one that fails returns to the saved size beside the error.
+  const chooseTextSize = (value: TextSizePreference) => {
+    setTextSize(value);
+    setTextSizePreference(value);
+    if (saving.current) queuedTextSize.current = value;
+    else void change({ type: "text_size", value });
+  };
+  useEffect(() => {
+    if (busy || saving.current || !saved || textSize === null) return;
+    const queued = queuedTextSize.current;
+    queuedTextSize.current = null;
+    if (queued !== null && queued !== saved.preferences.text_size) {
+      setTextSizePreference(queued);
+      void change({ type: "text_size", value: queued });
+      return;
+    }
+    if (textSize !== saved.preferences.text_size)
+      setTextSizePreference(saved.preferences.text_size);
+    setTextSize(null);
   });
   const disabled = !saved || busy;
   const agentChoices = defaultAgentChoices(agents, agentId);
@@ -474,8 +504,8 @@ export function GeneralPanel({
                     type="radio"
                     name="settings-text-size"
                     value={value}
-                    checked={(saved?.preferences.text_size ?? "compact") === value}
-                    onChange={() => void change({ type: "text_size", value })}
+                    checked={(textSize ?? saved?.preferences.text_size ?? "compact") === value}
+                    onChange={() => chooseTextSize(value)}
                   />
                   <span>{value === "compact" ? "Compact" : "Comfortable"}</span>
                 </label>
