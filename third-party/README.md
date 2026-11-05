@@ -23,6 +23,12 @@ the desktop bundles as resources are listed in `models.json`, and
 record keeps the model's license, its converter's NOTICE and an attribution, from texts preserved
 in `upstream/`. The generator fails when the pinned models and that list disagree.
 
+An npm package whose package.json names no license gets the license its own license file states,
+reviewed into `NPM_LICENSES` (khroma, MIT); any other stops the refresh. `NPM_EXCLUDED` lists packages
+a dependency names that auracode does not ship, with why and what keeps them out: elkjs (EPL-2.0 or
+GPL-3.0), which Mermaid imports only for its optional ELK layout, is replaced by a stub through the
+desktop's Vite alias, and the generator fails if that alias goes.
+
 Some published Rust archives omit their license files. `overrides.json` identifies the exact
 `.cargo_vcs_info.json` revision and the authoritative upstream source used for each replacement.
 `upstream/` preserves those texts with hashes. The standard MPL-2.0 text for selectors is identical

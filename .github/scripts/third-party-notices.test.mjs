@@ -100,6 +100,18 @@ test("the bundled dictation models keep their licenses, conversion notices and a
   assert.match(texts(models[1]), /Modifications: handy-computer converted/);
 });
 
+test("every desktop npm record names its license, and elkjs stays out of what ships", () => {
+  const catalogue = verifiedCatalogue();
+  const npm = catalogue.records.filter((r) => r.ecosystem === "npm");
+  assert.deepEqual(
+    npm.filter((r) => typeof r.license !== "string" || !r.license).map((r) => r.name),
+    [],
+  );
+  assert.equal(npm.find((r) => r.name === "khroma")?.license, "MIT");
+  assert.ok(!catalogue.records.some((r) => r.name === "elkjs"));
+  assert.ok(!npm.some((r) => /GPL|EPL/.test(r.license)), "no copyleft npm package ships");
+});
+
 test("both outputs say the agent marks are their owners' trademarks and point at their sources", () => {
   for (const distribution of ["web", "desktop"]) {
     const text = renderText(verifiedCatalogue(), distribution);

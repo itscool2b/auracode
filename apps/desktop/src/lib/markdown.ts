@@ -154,7 +154,16 @@ export type Block =
       readonly align: readonly Align[];
       readonly rows: readonly (readonly string[])[];
     }
-  | { readonly kind: "rule" };
+  | { readonly kind: "rule" }
+  /** Display math: a paragraph that is only `$$…$$` or `\[…\]`, in TeX. */
+  | { readonly kind: "math"; readonly tex: string };
+
+/** A paragraph that is only display math, as `$$…$$` or `\[…\]`: its TeX, or `null`. */
+function displayMath(text: string): string | null {
+  const match = /^\s*\$\$([\s\S]+?)\$\$\s*$/.exec(text) ?? /^\s*\\\[([\s\S]+?)\\\]\s*$/.exec(text);
+  const tex = match?.[1]?.trim();
+  return tex ? tex : null;
+}
 
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*#*[ \t]*$/;
 const RULE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
@@ -223,7 +232,9 @@ export function parseBlock(source: string): Block[] {
   let paragraph: string[] = [];
   const flushParagraph = (): void => {
     if (paragraph.length > 0) {
-      blocks.push({ kind: "paragraph", text: paragraph.join("\n") });
+      const text = paragraph.join("\n");
+      const tex = displayMath(text);
+      blocks.push(tex === null ? { kind: "paragraph", text } : { kind: "math", tex });
       paragraph = [];
     }
   };
@@ -321,7 +332,9 @@ export type Inline =
   | { readonly kind: "image"; readonly path: string; readonly alt: string }
   | { readonly kind: "strong"; readonly children: readonly Inline[] }
   | { readonly kind: "em"; readonly children: readonly Inline[] }
-  | { readonly kind: "link"; readonly href: string; readonly children: readonly Inline[] };
+  | { readonly kind: "link"; readonly href: string; readonly children: readonly Inline[] }
+  /** Inline math, `$…$` or `\(…\)`, in TeX. */
+  | { readonly kind: "math"; readonly tex: string };
 
 /** Nesting deeper than this is shown as plain text: bounded recursion whatever the input. */
 const MAX_INLINE_DEPTH = 8;
@@ -336,7 +349,25 @@ export function safeHref(href: string): string | null {
   return /^https?:\/\/[^\s]+$/i.test(trimmed) ? trimmed : null;
 }
 
-/** Inline markdown: `code`, **strong**, *em* / _em_, [text](https://...). */
+/**
+ * Where inline math `$…$` that opens at `index` closes, by Pandoc's rule: the opening `$` has a
+ * character other than a space right after it, the closing one has one right before it and no
+ * digit right after it, and both are on one line. So "$5 and $10" stays text. `-1`: no math.
+ */
+function dollarClose(text: string, index: number): number {
+  const after = text[index + 1];
+  if (after === undefined || after === "$" || /\s/.test(after)) return -1;
+  for (let close = index + 1; close < text.length; close++) {
+    const char = text[close];
+    if (char === "\n") return -1;
+    if (char !== "$" || text[close - 1] === "\\") continue;
+    if (/\s/.test(text[close - 1] ?? " ") || /\d/.test(text[close + 1] ?? "")) continue;
+    return close;
+  }
+  return -1;
+}
+
+/** Inline markdown: `code`, **strong**, *em* / _em_, [text](https://...), $math$. */
 export function parseInline(text: string, depth = 0): Inline[] {
   const nodes: Inline[] = [];
   let plain = "";
@@ -366,6 +397,34 @@ export function parseInline(text: string, depth = 0): Inline[] {
       plain += marker;
       index += ticks;
       continue;
+    }
+
+    // An escaped dollar is a dollar, never math.
+    if (char === "\\" && text[index + 1] === "$") {
+      plain += "$";
+      index += 2;
+      continue;
+    }
+
+    if (char === "\\" && text[index + 1] === "(") {
+      const close = text.indexOf("\\)", index + 2);
+      const tex = close === -1 ? "" : text.slice(index + 2, close).trim();
+      if (tex && !tex.includes("\n")) {
+        pushPlain();
+        nodes.push({ kind: "math", tex });
+        index = close + 2;
+        continue;
+      }
+    }
+
+    if (char === "$") {
+      const close = dollarClose(text, index);
+      if (close !== -1) {
+        pushPlain();
+        nodes.push({ kind: "math", tex: text.slice(index + 1, close) });
+        index = close + 1;
+        continue;
+      }
     }
 
     if ((char === "*" || char === "_") && text[index + 1] === char) {
@@ -451,7 +510,9 @@ export function plainText(nodes: readonly Inline[]): string {
         ? node.text
         : node.kind === "image"
           ? node.alt
-          : plainText(node.children),
+          : node.kind === "math"
+            ? node.tex
+            : plainText(node.children),
     )
     .join("");
 }

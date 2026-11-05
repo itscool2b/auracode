@@ -326,6 +326,38 @@ async function toolDetails(page, theme) {
     `tool details, ${theme}`,
   );
 }
+/**
+ * Code colours, math and a diagram in one answer (missing features A): highlight.js's colours as
+ * elements, KaTeX's inline and display math, and a Mermaid drawing with its code a click away.
+ */
+async function richAnswer(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=rich-answer`);
+  const ts = page.locator("code.hljs").filter({ hasText: "export function reveal" });
+  await ts.waitFor();
+  assert.ok((await ts.locator(".hljs-keyword").count()) >= 3, "TypeScript keywords are coloured");
+  assert.equal(await ts.locator(".hljs-string").first().textContent(), '"row is not in the list"');
+  await page.locator(".math-block .katex-display").waitFor();
+  assert.ok((await page.locator(".math-inline .katex").count()) >= 3, "inline math is set");
+  const diagram = page.locator(".mermaid-block");
+  await diagram.locator(".mermaid-diagram svg").waitFor();
+  assert.match(await diagram.locator(".mermaid-diagram svg").textContent(), /Reveal row/);
+  assert.equal(await diagram.locator("script, foreignObject").count(), 0);
+  await diagram.getByRole("button", { name: "Code", exact: true }).click();
+  assert.match(await diagram.locator("pre code").textContent(), /flowchart LR/);
+  await diagram.getByRole("button", { name: "Diagram", exact: true }).click();
+  await diagram.locator(".mermaid-diagram svg").waitFor();
+  await settled(page);
+  assert.deepEqual(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze()
+    ).violations.map((violation) => violation.id),
+    [],
+    `rich answer, ${theme}`,
+  );
+}
 async function inspect(engine, launcher) {
   const browser = await launcher.launch({ headless: true });
   const errors = [];
@@ -354,6 +386,7 @@ async function inspect(engine, launcher) {
     page.on("pageerror", (error) => errors.push(error.message));
     for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
     for (const theme of ["light", "dark"]) await toolDetails(page, theme);
+    for (const theme of ["light", "dark"]) await richAnswer(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [
