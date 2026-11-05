@@ -105,11 +105,21 @@ and a hands-on walkthrough before merging.
       a session loaded, in the Session tab: Claude reports MCP servers with their state, skills,
       plugins, subagents and its tool count; Codex its MCP servers as they start; Pi its
       skills. No agent is asked anything new for it.
-    - [x] Third part (this pull request): ACP agents' terminals, which showed "terminal output
-      is not available": auracode advertises Zed's display-only terminals, so an agent such as
-      codex-acp streams a command's output to it, shown live and with its exit code. Client file
-      access and client-run terminals stay off on purpose: the agents run commands and use
-      files themselves, and auracode has no unsaved buffers to offer, the reason ACP has them.
-  - [ ] C, D.
+    - [x] Third part (#83, merged 2026-11-05): ACP agents' terminals, which showed "terminal
+      output is not available": auracode advertises Zed's display-only terminals, so an agent
+      such as codex-acp streams a command's output to it, shown live and with its exit code.
+      Client file access and client-run terminals stay off on purpose: the agents run commands
+      and use files themselves, and auracode has no unsaved buffers to offer, the reason ACP has
+      them.
+  - [ ] C, in two pull requests.
+    - [x] First part (#84, merged 2026-11-05): review in Changes. A comment on any diff line, by
+      pointer or keyboard, waits until sent or discarded (also while the panel or the chat
+      closes, until auracode quits); Send gives the agent one message quoting each line with its
+      file and number. Ask the agent to review sends a request for problems by file and line,
+      the most serious first, before any change. Sending follows the composer: queued while a
+      turn runs, held while a request waits for its answer. Comments need a line diff, so a file
+      over 400 lines, which Changes shows as a replacement, takes none.
+    - [ ] Second part: revert one hunk, and commit and push from the Git dialog.
+  - [ ] D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page

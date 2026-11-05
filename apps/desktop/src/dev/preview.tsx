@@ -943,6 +943,8 @@ function Preview() {
       : [];
     let wait: QueueWait | null = queued?.wait ?? null;
     const queueCalls: string[] = [];
+    // Each preview send is its own turn, as a session would make it.
+    let sends = 0;
     Object.assign(window, { queuePreview: { calls: () => [...queueCalls] } });
     const header = () =>
       sessionInfo({
@@ -1201,17 +1203,17 @@ function Preview() {
         respondPermission: async (_chatId, requestId, optionId) =>
           publish([ev.permissionResolved(requestId, optionId)]),
         send: async (_chatId, text) => {
+          sends += 1;
+          const turn = sends === 1 ? "preview-send" : `preview-send-${sends}`;
+          const answer = sends === 1 ? "preview-answer" : `preview-answer-${sends}`;
           publish([
-            ev.turnStarted("preview-send"),
-            ev.user("preview-user", text),
-            ev.message(
-              "preview-answer",
-              "This is a local UI preview. No prompt was sent to an agent.",
-            ),
-            ev.messageDone("preview-answer"),
-            ev.turnEnded("preview-send"),
+            ev.turnStarted(turn),
+            ev.user(sends === 1 ? "preview-user" : `preview-user-${sends}`, text),
+            ev.message(answer, "This is a local UI preview. No prompt was sent to an agent."),
+            ev.messageDone(answer),
+            ev.turnEnded(turn),
           ]);
-          return { prompt_id: "preview-send", queued: false };
+          return { prompt_id: turn, queued: false };
         },
       }),
       { nativeRewind },

@@ -378,6 +378,112 @@ async function nativeRewind(page, theme) {
   await page.getByText("Nothing to restore", { exact: true }).waitFor();
 }
 
+/**
+ * Review in Changes (missing features C): comments on a diff's lines, by keyboard and pointer, kept
+ * while the panel closes, then sent as one message; and asking the agent to review the changes.
+ */
+async function reviewComments(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=settled`);
+  await page.locator('[data-test-phase="live"]').waitFor();
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.getByRole("table", { name: "File line changes" }).waitFor();
+  const bar = page.getByTestId("changes-review");
+  await bar.getByText("Comment on any line", { exact: true }).waitFor();
+  const focused = () =>
+    page.evaluate(
+      () =>
+        `${document.activeElement?.tagName}:${document.activeElement?.getAttribute("aria-label")}`,
+    );
+  const lines = page.getByRole("region", { name: "Line changes for src/components/Sidebar.tsx" });
+  // One comment button takes Tab, the first changed line's; the arrows move between lines.
+  await lines.focus();
+  await page.keyboard.press("Tab");
+  assert.equal(await focused(), "BUTTON:Comment on removed line 2");
+  for (const key of ["ArrowDown", "ArrowDown", "ArrowDown"]) await page.keyboard.press(key);
+  assert.equal(await focused(), "BUTTON:Comment on line 4");
+  await page.keyboard.press("Enter");
+  assert.equal(await focused(), "TEXTAREA:Comment on line 4", "the editor did not take focus");
+  await page.keyboard.type("Keep the active chat in view.");
+  await page.keyboard.press("Enter");
+  await page.getByTestId("diff-comment").first().waitFor();
+  assert.equal(await focused(), "BUTTON:Comment on line 4", "focus did not return to the line");
+  // Esc closes only the editor, never the panel.
+  await page.getByRole("button", { name: "Comment on removed line 2" }).click();
+  await page.getByRole("textbox", { name: "Comment on removed line 2" }).fill("Why did this go?");
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator(".changes-panel").count(), 1, "Esc closed the panel");
+  assert.equal(await focused(), "BUTTON:Comment on removed line 2");
+  await page.getByRole("button", { name: "Comment on removed line 2" }).click();
+  await page.getByRole("textbox", { name: "Comment on removed line 2" }).fill("Why did this go?");
+  await page.getByRole("button", { name: "Add comment", exact: true }).click();
+  await bar.getByText("2 comments", { exact: true }).waitFor();
+  // A comment stays inside the visible width, however long its file's lines.
+  const view = await lines.boundingBox();
+  for (const box of await page.getByTestId("diff-comment").all()) {
+    const edge = await box.boundingBox();
+    assert.ok(edge && view && edge.x + edge.width <= view.x + view.width + 1, "comment overflows");
+  }
+  await page.getByRole("button", { name: "Comment on line 3" }).click();
+  await settled(page);
+  const scan = await new AxeBuilder({ page })
+    .include(".changes-panel")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(scan.violations, [], `${theme} review comments accessibility`);
+  await page.screenshot({ path: resolve(out, `review-comments-${theme}.png`) });
+  await page.keyboard.press("Escape");
+  // The comments wait while the panel is closed.
+  await page.getByRole("button", { name: "Close Changes" }).click();
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.getByRole("table", { name: "File line changes" }).waitFor();
+  assert.equal(await page.getByTestId("diff-comment").count(), 2, "comments were lost");
+  await page.getByRole("button", { name: "Delete the comment on removed line 2" }).click();
+  assert.equal(await page.getByTestId("diff-comment").count(), 1);
+  assert.equal(await focused(), "BUTTON:Comment on removed line 2");
+  await bar.getByRole("button", { name: "Send comment", exact: true }).click();
+  await bar.getByText("Comment sent.", { exact: true }).waitFor();
+  assert.equal(await page.getByTestId("diff-comment").count(), 0, "sent comments stayed");
+  const prompts = page.getByTestId("prompt-text");
+  assert.equal(
+    await prompts.last().textContent(),
+    "Please address this comment on your changes:\n\nsrc/components/Sidebar.tsx:4\n> <ChatList keepActiveVisible />\nKeep the active chat in view.",
+  );
+  await bar.getByRole("button", { name: /^Ask .+ to review$/ }).click();
+  await bar.getByText("Review requested.", { exact: true }).waitFor();
+  const request = await prompts.last().textContent();
+  assert.ok(
+    request?.startsWith(
+      "Review the changes from your last turn.\n\nThe files that changed:\n- src/components/Sidebar.tsx\n- src/styles.css\n",
+    ),
+    `review request: ${request}`,
+  );
+  // A comment on a file put back goes with it: the changes it was about no longer exist.
+  await page.locator(".changes-file-list button", { hasText: "src/styles.css" }).click();
+  await page.getByRole("region", { name: "Line changes for src/styles.css" }).waitFor();
+  await page.getByRole("button", { name: "Comment on line 2" }).click();
+  await page.getByRole("textbox", { name: "Comment on line 2" }).fill("Keep 240px.");
+  await page.keyboard.press("Enter");
+  await bar.getByText("1 comment", { exact: true }).waitFor();
+  await page.getByRole("checkbox", { name: "Select src/styles.css for revert" }).check();
+  await page.getByRole("button", { name: "Stop session to revert" }).click();
+  await page.getByRole("button", { name: "Review revert" }).click();
+  await page.getByRole("button", { name: "Revert 1 file", exact: true }).click();
+  await page.getByText("Reverted 1 file.", { exact: true }).waitFor();
+  await bar.getByText("Comment on any line", { exact: true }).waitFor();
+  // While a request waits for its answer, nothing is sent: the comments wait, and the bar says why.
+  await page.goto(`${url}/?preview=permission`);
+  await page.locator('[data-test-phase="live"]').waitFor();
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.getByRole("table", { name: "File line changes" }).waitFor();
+  await bar.getByText(/^Answer .+'s request first$/).waitFor();
+  assert.ok(await bar.getByRole("button", { name: /^Ask .+ to review$/ }).isDisabled());
+  await page.getByRole("button", { name: "Comment on line 4" }).click();
+  await page.getByRole("textbox", { name: "Comment on line 4" }).fill("Later.");
+  await page.keyboard.press("Enter");
+  assert.ok(await bar.getByRole("button", { name: "Send comment", exact: true }).isDisabled());
+}
+
 async function richAnswer(page, theme) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   // Under the app's own policy (tauri.conf.json), which forbids eval: the dev server applies none,
@@ -469,6 +575,7 @@ async function inspect(engine, launcher) {
     for (const theme of ["light", "dark"]) await toolDetails(page, theme);
     for (const theme of ["light", "dark"]) await richAnswer(page, theme);
     for (const theme of ["light", "dark"]) await nativeRewind(page, theme);
+    for (const theme of ["light", "dark"]) await reviewComments(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [
