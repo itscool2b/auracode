@@ -809,8 +809,8 @@
   color: var(--g-fg-1);
 }
 
-.context-loaded-group > summary small,
-.context-loaded-group li small {
+.context-loaded-count,
+.context-loaded-note {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -822,7 +822,7 @@
   list-style: none;
 }
 
-.context-loaded-group li {
+.context-loaded-item {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -833,7 +833,7 @@
   overflow-wrap: anywhere;
 }
 
-.context-loaded-group li small {
+.context-loaded-note {
   margin-left: auto;
   white-space: nowrap;
 }

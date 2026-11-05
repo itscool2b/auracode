@@ -275,7 +275,7 @@ export function LinkAnswers({
       <p className="chat-link-target" title={url} data-testid="link-target">
         {parsed ? (
           <>
-            <strong>{parsed.host}</strong>
+            <strong className="chat-link-host">{parsed.host}</strong>
             <span>{`${parsed.pathname === "/" ? "" : parsed.pathname}${parsed.search}`}</span>
           </>
         ) : (

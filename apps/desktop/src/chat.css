@@ -3584,7 +3584,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   overflow-wrap: anywhere;
 }
 
-.chat-link-target strong {
+.chat-link-host {
   color: var(--g-fg-1);
   font-weight: 500;
 }

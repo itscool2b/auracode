@@ -409,6 +409,8 @@ struct Session {
     approvals: BTreeMap<String, Approval>,
     questions: BTreeMap<String, Questions>,
     elicitations: BTreeMap<String, Elicit>,
+    /// The last report of what the session loaded.
+    loaded: Option<aura_protocol::session::SessionLoaded>,
     translator: translate::Translator,
     outbox: VecDeque<DriverEvent>,
     held: VecDeque<(Instant, DriverCommand)>,
@@ -581,6 +583,15 @@ impl Session {
         if init && !self.native_identity(frame) {
             return;
         }
+        // The first turn's init names what the session loaded; the initialize reply only its
+        // subagents. A report goes out only when it changes.
+        if init {
+            let loaded = translate::loaded(frame);
+            if self.loaded.as_ref() != Some(&loaded) {
+                self.loaded = Some(loaded.clone());
+                self.outbox.push_back(DriverEvent::Loaded(loaded));
+            }
+        }
         if init && let Some(model) = frame["model"].as_str().filter(|value| !value.is_empty()) {
             self.observed_model = Some(model.into());
             if self.apply_model(model) && self.ready {
@@ -736,8 +747,9 @@ impl Session {
             spawn_id: self.spawn_id.clone(),
             replay: None,
         }));
-        self.outbox
-            .push_back(DriverEvent::Loaded(translate::loaded(&self.init)));
+        let loaded = translate::loaded(&self.init);
+        self.loaded = Some(loaded.clone());
+        self.outbox.push_back(DriverEvent::Loaded(loaded));
         self.refresh_telemetry();
     }
     /// A saved effort the model no longer offers (it was chosen for another model, or Claude
@@ -1919,6 +1931,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         stopping: false,
         questions: BTreeMap::new(),
         elicitations: BTreeMap::new(),
+        loaded: None,
         usage: UsageInfo::default(),
         telemetry_dirty: [false; 2],
     };

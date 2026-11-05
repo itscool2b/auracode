@@ -293,12 +293,14 @@ function LoadedGroup({
   return (
     <details className="context-loaded-group">
       <summary>
-        {name} <small>{items.length}</small>
+        {name} <small className="context-loaded-count">{items.length}</small>
       </summary>
       <ul>
         {items.map((item, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: an agent can list one name twice.
-          <li key={`${index}:${item}`}>{item}</li>
+          <li key={`${index}:${item}`} className="context-loaded-item">
+            {item}
+          </li>
         ))}
       </ul>
     </details>
@@ -333,9 +335,7 @@ function Loaded({
       </h3>
       {empty || !loaded ? (
         <p className="context-hint">
-          {loaded
-            ? "The agent reported nothing loaded."
-            : "This agent does not say what it loaded."}
+          {loaded ? "The agent reported nothing loaded." : "The agent has reported nothing yet."}
         </p>
       ) : (
         <>
@@ -347,18 +347,23 @@ function Loaded({
               )}
             >
               <summary>
-                MCP servers <small>{loaded.mcp_servers.length}</small>
+                MCP servers{" "}
+                <small className="context-loaded-count">{loaded.mcp_servers.length}</small>
               </summary>
               <ul>
                 {loaded.mcp_servers.map((server) => (
-                  <li key={server.name} data-test-mcp-state={server.state}>
+                  <li
+                    key={server.name}
+                    className="context-loaded-item"
+                    data-test-mcp-state={server.state}
+                  >
                     <span
                       className="context-loaded-state"
                       data-state={server.state}
                       aria-hidden="true"
                     />
                     <span>{server.name}</span>
-                    <small>
+                    <small className="context-loaded-note">
                       {MCP_STATE[server.state]}
                       {server.source ? ` · ${server.source}` : ""}
                     </small>

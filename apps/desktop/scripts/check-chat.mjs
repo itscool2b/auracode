@@ -459,7 +459,12 @@ async function inspect(engine, launcher) {
         });
     });
     const page = await context.newPage();
-    page.on("pageerror", (error) => errors.push(error.message));
+    // WebKit reports a ResizeObserver callback that changes layout again within its frame as an
+    // error event, and delivers the remaining notifications next frame. That is the spec's notice,
+    // not a fault (it failed main about half its runs on 2026-11-05); every other error counts.
+    page.on("pageerror", (error) => {
+      if (!error.message.startsWith("ResizeObserver loop")) errors.push(error.message);
+    });
     for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
     for (const theme of ["light", "dark"]) await toolDetails(page, theme);
     for (const theme of ["light", "dark"]) await richAnswer(page, theme);
@@ -643,11 +648,10 @@ async function inspect(engine, launcher) {
           window.__chatFrames = 0;
         });
         await page.waitForTimeout(250);
-        assert.equal(
-          await page.evaluate(() => window.__chatFrames),
-          0,
-          `${mode}: frames under reduced motion`,
-        );
+        // Continuous animation draws every frame, about fifteen in 250ms. One frame is a single
+        // measurement (the virtual list reconciling after a running timer's text changed width).
+        const frames = await page.evaluate(() => window.__chatFrames);
+        assert.ok(frames <= 1, `${mode}: ${frames} frames under reduced motion`);
       }
     }
 

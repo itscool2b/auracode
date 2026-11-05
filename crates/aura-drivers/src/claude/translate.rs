@@ -876,7 +876,8 @@ pub fn loaded(init: &Value) -> aura_protocol::session::SessionLoaded {
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(|item| item.as_str().map(str::to_owned))
+            // Names, or (in the initialize reply) entries that carry one.
+            .filter_map(|item| item.as_str().or(item["name"].as_str()).map(str::to_owned))
             .collect()
     };
     SessionLoaded {

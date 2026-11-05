@@ -130,3 +130,32 @@ async fn a_browser_step_opens_and_a_form_auracode_cannot_show_is_cancelled_with_
     }
     h.stop().await;
 }
+
+/// Claude names what the session loaded in the first turn's init frame; the report follows it.
+#[tokio::test(start_paused = true)]
+async fn the_first_turns_init_reports_what_the_session_loaded() {
+    use aura_protocol::session::McpLoadState;
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    h.wire().await;
+    let session = h.native_id().to_owned();
+    h.send(
+        json!({"type":"system","subtype":"init","session_id":session,
+        "mcp_servers":[{"name":"docs","status":"connected","source":"user"}],
+        "skills":["deploy"],"tools":["Bash","Read"]}),
+    )
+    .await;
+    loop {
+        if let DriverEvent::Loaded(loaded) = h.event().await
+            && !loaded.mcp_servers.is_empty()
+        {
+            assert_eq!(loaded.mcp_servers[0].name, "docs");
+            assert_eq!(loaded.mcp_servers[0].state, McpLoadState::Connected);
+            assert_eq!(loaded.skills, ["deploy"]);
+            assert_eq!(loaded.tools, Some(2));
+            break;
+        }
+    }
+    h.stop().await;
+}
