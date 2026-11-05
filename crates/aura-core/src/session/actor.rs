@@ -21,6 +21,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 mod controls;
 mod options;
+mod rewind;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
@@ -186,6 +187,12 @@ pub(crate) enum ChatMsg {
         parts: Vec<PromptPart>,
         reply: oneshot::Sender<Result<aura_protocol::composer::SteeringAck, SessionError>>,
     },
+    /// Restores files from the agent's own checkpoints to before a turn's message.
+    RewindFiles {
+        turn_id: String,
+        dry_run: bool,
+        reply: oneshot::Sender<Result<aura_protocol::changes::NativeRewind, SessionError>>,
+    },
     CancelQueued {
         prompt_id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
@@ -300,6 +307,7 @@ impl ChatMsg {
             ChatMsg::McpAction { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Send { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Steer { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::RewindFiles { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::SetControl { reply, .. }
             | ChatMsg::SetOption { reply, .. }
             | ChatMsg::SetAutonomy { reply, .. } => {
@@ -517,6 +525,7 @@ enum Done {
         reply: oneshot::Sender<Result<bool, SessionError>>,
     },
     Steering(Box<steering::Completion>),
+    Rewind(Box<rewind::Completion>),
     Conversation {
         result: Result<crate::chatstore::conversation::ConversationReply, SessionError>,
         reply: oneshot::Sender<
@@ -725,6 +734,8 @@ pub(crate) struct ChatActor {
     controls: aura_protocol::session::SessionControlPreferences,
     control_pending: Option<(String, ConfigValue)>,
     mcp_pending: bool,
+    /// A native file rewind awaits the agent's reply.
+    rewind_pending: bool,
     implementation_approved: bool,
     desired: BTreeMap<String, ConfigValue>,
     options: Vec<ConfigOption>,
@@ -874,6 +885,7 @@ impl ChatActor {
             controls,
             control_pending: None,
             mcp_pending: false,
+            rewind_pending: false,
             implementation_approved: false,
             desired,
             options: Vec::new(),
@@ -1268,6 +1280,11 @@ impl ChatActor {
                 parts,
                 reply,
             } => self.steer(expected_turn_id, text, parts, reply),
+            ChatMsg::RewindFiles {
+                turn_id,
+                dry_run,
+                reply,
+            } => self.rewind_files(turn_id, dry_run, reply),
             ChatMsg::CancelQueued { prompt_id, reply } => {
                 let result = self.cancel_queued(&prompt_id);
                 drop(reply.send(result));
@@ -3192,11 +3209,7 @@ impl ChatActor {
             .as_ref()
             .map(|account| (account.account_id.clone(), account.name.clone()));
         self.usage_limit = None;
-        let native_start = self
-            .continuation
-            .as_ref()
-            .map(|value| value.native_start.clone())
-            .unwrap_or_default();
+        let native_start = native_start(spec.kind, self.continuation.as_ref());
         let resume = if let Some(source) = self
             .continuation
             .as_ref()
@@ -3747,6 +3760,7 @@ impl ChatActor {
             #[cfg(feature = "account-sync")]
             Done::SyncImported { result, reply } => self.sync_imported(result, reply),
             Done::Steering(completion) => self.steering_done(*completion),
+            Done::Rewind(completion) => self.rewind_done(*completion),
             Done::Conversation { result, reply } => {
                 drop(reply.send(result));
             }
@@ -6500,6 +6514,43 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
             ),
             folder: Some(FolderState::NotAllowed),
         }),
+    }
+}
+
+/// A start's native options: a continuation's (a fork, say), and for Claude its own file
+/// checkpointing. Claude copies a file just before its edit tools change it, which costs far less
+/// than auracode's automatic checkpoints (off by default), so a sent message's Rewind can restore
+/// what Claude edited in any Claude chat.
+fn native_start(
+    kind: aura_protocol::DriverKind,
+    continuation: Option<&crate::chatstore::conversation::PendingContinuation>,
+) -> aura_drivers::driver::NativeStartOptions {
+    let mut options = continuation
+        .map(|value| value.native_start.clone())
+        .unwrap_or_default();
+    if kind == aura_protocol::DriverKind::Claude {
+        options.file_checkpointing = true;
+    }
+    options
+}
+
+#[cfg(test)]
+mod native_start_tests {
+    use super::native_start;
+    use aura_protocol::DriverKind;
+
+    #[test]
+    fn only_claude_starts_with_its_own_file_checkpointing() {
+        assert!(native_start(DriverKind::Claude, None).file_checkpointing);
+        for kind in [
+            DriverKind::Acp,
+            DriverKind::Codex,
+            DriverKind::Pi,
+            DriverKind::Headless,
+            DriverKind::Mock,
+        ] {
+            assert!(!native_start(kind, None).file_checkpointing, "{kind:?}");
+        }
     }
 }
 

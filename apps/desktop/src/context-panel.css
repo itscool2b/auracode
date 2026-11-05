@@ -776,3 +776,11 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
+
+/* A rewind through the agent's own checkpoints: what they cover, then the files they hold. */
+.changes-native-copy {
+  margin: 0 0 var(--g-space-12);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}

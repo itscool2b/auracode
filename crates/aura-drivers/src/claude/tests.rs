@@ -168,8 +168,12 @@ impl Harness {
                         crate::driver::ResumeOutcome::Resumed
                     }
                 );
-                // Native fork is offered; file rewind stays with auracode's own checkpoints.
-                assert!(info.capabilities.fork && !info.capabilities.rewind);
+                // Native fork is offered; file rewind only where Claude was started checkpointing.
+                let checkpointing = self.end.spec.launch.set_env.iter().any(|(key, value)| {
+                    key == "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING" && value == "true"
+                });
+                assert!(info.capabilities.fork);
+                assert_eq!(info.capabilities.rewind, checkpointing);
                 break;
             }
         }

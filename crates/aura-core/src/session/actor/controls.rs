@@ -166,6 +166,7 @@ impl ChatActor {
             && self.control_pending.is_none()
             && !self.organizing
             && !self.mcp_pending
+            && !self.rewind_pending
             && !self.steering_pending
             && self.git_reservation.is_none()
             && self.checkpointing.is_none()

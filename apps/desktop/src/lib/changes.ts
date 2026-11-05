@@ -2,6 +2,7 @@ import {
   type ChangeDiff,
   type ChangesSnapshot,
   commands,
+  type NativeRewind,
   type RevertPreview,
   type RevertResult,
 } from "../bindings";
@@ -12,6 +13,8 @@ export interface ChangesTransport {
   diff(chatId: string, checkpointId: string, path: string): Promise<ChangeDiff>;
   preview(chatId: string, checkpointId: string, paths: string[]): Promise<RevertPreview>;
   revert(chatId: string, token: string): Promise<RevertResult>;
+  /** The agent's own checkpoints (Claude's file rewind): with `dryRun`, only which files. */
+  rewindFiles(chatId: string, turnId: string, dryRun: boolean): Promise<NativeRewind>;
 }
 export const changesApi: ChangesTransport = {
   snapshot: async (chat, turn) => settle(commands.chatChanges(chat, turn)),
@@ -19,4 +22,5 @@ export const changesApi: ChangesTransport = {
   preview: async (chat, checkpoint, paths) =>
     settle(commands.checkpointRevertPreview(chat, checkpoint, paths)),
   revert: async (chat, token) => settle(commands.checkpointRevert(chat, token)),
+  rewindFiles: async (chat, turn, dryRun) => settle(commands.chatRewindFiles(chat, turn, dryRun)),
 };

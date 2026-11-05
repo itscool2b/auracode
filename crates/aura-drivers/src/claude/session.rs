@@ -711,6 +711,7 @@ impl Session {
                 interrupt: true,
                 resume: true,
                 fork: true,
+                rewind: self.setup.native_start.file_checkpointing,
                 set_model: true,
                 set_effort: true,
                 permissions: true,

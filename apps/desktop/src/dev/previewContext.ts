@@ -6,8 +6,13 @@ import type { ComposerTransport } from "../lib/composer";
 import type { ConversationTransport } from "../lib/conversation";
 import type { SearchTransport } from "../lib/search";
 
+/**
+ * `nativeRewind`: a chat whose earlier turns have no auracode checkpoint and whose agent keeps
+ * its own (Claude's file rewind), as with Automatic checkpoints off.
+ */
 export function withPreviewContext<T extends Transport>(
   transport: T,
+  { nativeRewind = false }: { readonly nativeRewind?: boolean } = {},
 ): T & {
   composer: ComposerTransport;
   changes: ChangesTransport;
@@ -74,19 +79,34 @@ export function withPreviewContext<T extends Transport>(
     },
   ];
   let pendingRevert: string[] = [];
+  // What the agent's own checkpoints hold until a real rewind puts the files back.
+  let agentEdits = ["src/components/Sidebar.tsx", "src/styles.css"];
   const changes: ChangesTransport = {
-    snapshot: async () => ({
-      checkpoint: {
-        id: "preview-checkpoint",
-        turn_id: "preview-turn",
-        created_at: 0,
-        file_count: 12,
-        total_bytes: 8000,
-        warnings: [],
-      },
-      files,
-      unavailable_reason: null,
-    }),
+    rewindFiles: async (_chat, _turn, dryRun) => {
+      const restored = agentEdits;
+      if (!dryRun) agentEdits = [];
+      return {
+        files: restored,
+        insertions: restored.length ? 9 : 0,
+        deletions: restored.length ? 4 : 0,
+        skipped_links: null,
+      };
+    },
+    snapshot: async (_chat, turn) =>
+      nativeRewind && turn !== null
+        ? { checkpoint: null, files: [], unavailable_reason: "This turn has no saved checkpoint." }
+        : {
+            checkpoint: {
+              id: "preview-checkpoint",
+              turn_id: "preview-turn",
+              created_at: 0,
+              file_count: 12,
+              total_bytes: 8000,
+              warnings: [],
+            },
+            files,
+            unavailable_reason: null,
+          },
     diff: async (_chat, _checkpoint, path) => ({
       path,
       before: path.endsWith("css")

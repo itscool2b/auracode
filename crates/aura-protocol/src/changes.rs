@@ -31,6 +31,17 @@ pub struct ChangedFile {
     pub binary: bool,
 }
 
+/// Files an agent's own checkpoints restore (Claude's file rewind), to before a sent message.
+/// A preview changes nothing. They cover only the files the agent's edit tools changed; a real
+/// rewind can skip links for safety, and says how many.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct NativeRewind {
+    pub files: Vec<String>,
+    pub insertions: Option<u32>,
+    pub deletions: Option<u32>,
+    pub skipped_links: Option<u32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeKind {

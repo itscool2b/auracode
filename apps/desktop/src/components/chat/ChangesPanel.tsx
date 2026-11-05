@@ -4,6 +4,7 @@ import type {
   AgentEntry,
   ChangeDiff,
   ChangesSnapshot,
+  NativeRewind,
   RevertPreview,
   RevertResult,
   SessionStatus,
@@ -16,6 +17,20 @@ import { errorMessage } from "../../lib/errors";
 import { ContextContents, type ContextTab } from "./ContextContents";
 import { DiffBlock } from "./DiffBlock";
 import { Modal } from "./Modal";
+
+/** Goes on to a sent message's Edit: a rewind's way to continue the conversation from there. */
+function EditThisMessage({ onEdit }: { readonly onEdit: () => void }) {
+  return (
+    <>
+      {" "}
+      <button type="button" className="g-link changes-inline-action" onClick={onEdit}>
+        Edit this message
+      </button>
+    </>
+  );
+}
+
+const fileCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
 
 /** A Rewind from a sent message. `nonce` changes with each request, so asking again re-applies it. */
 export interface RewindRequest {
@@ -78,6 +93,12 @@ export function ChangesPanel({
   const selectAllFor = useRef<string | null>(rewind?.turnId ?? null);
   const [editAfter, setEditAfter] = useState(rewind !== null && onEditFrom !== undefined);
   const applied = useRef(rewind?.nonce ?? 0);
+  // The agent's own checkpoints (Claude's file rewind), for a turn auracode saved none for.
+  const [nativePreview, setNativePreview] = useState<NativeRewind | null>(null);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [nativeBusy, setNativeBusy] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restored, setRestored] = useState<NativeRewind | null>(null);
   const live = hasProcess(status);
 
   const rewindTurn = rewind?.turnId;
@@ -96,6 +117,7 @@ export function ChangesPanel({
     setPath(null);
     setDiff(null);
     setResult(null);
+    setRestored(null);
     setEditAfter(canEdit);
     setRevision((value) => value + 1);
   }, [rewindTurn, rewindNonce, canEdit]);
@@ -188,6 +210,53 @@ export function ChangesPanel({
       setError(errorMessage(error));
     } finally {
       setPreview(null);
+      setActing(false);
+    }
+  };
+  // Without auracode's checkpoint for the turn, an agent that keeps its own restores what its
+  // edit tools changed. Its preview changes nothing; the session must be live and idle.
+  const agentName = agent?.name ?? state.chat?.agent_name ?? "The agent";
+  const native =
+    scope !== "" &&
+    snapshot !== null &&
+    !snapshot.checkpoint &&
+    live &&
+    state.lists?.capabilities?.rewind === true;
+  useEffect(() => {
+    void revision;
+    let stale = false;
+    setNativePreview(null);
+    setNativeError(null);
+    if (!native) return;
+    setNativeBusy(true);
+    void api
+      .rewindFiles(chatId, scope, true)
+      .then((value) => {
+        if (!stale) setNativePreview(value);
+      })
+      .catch((error) => {
+        if (!stale) setNativeError(errorMessage(error));
+      })
+      .finally(() => {
+        if (!stale) setNativeBusy(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [api, chatId, scope, native, revision]);
+  const restore = async () => {
+    if (!nativePreview?.files.length || acting) return;
+    setActing(true);
+    setNativeError(null);
+    try {
+      const outcome = await api.rewindFiles(chatId, scope, false);
+      setRestored(outcome);
+      setRevision((value) => value + 1);
+      if (editAfter && onEditFrom) onEditFrom(scope);
+    } catch (error) {
+      setNativeError(errorMessage(error));
+    } finally {
+      setConfirmRestore(false);
       setActing(false);
     }
   };
@@ -326,6 +395,7 @@ export function ChangesPanel({
                 onChange={(event) => {
                   setScope(event.currentTarget.value);
                   setEditAfter(false);
+                  setRestored(null);
                   setSelected(new Set());
                   setSnapshot(null);
                   setPath(null);
@@ -351,23 +421,56 @@ export function ChangesPanel({
                   {error}
                 </p>
               ) : null}
-              {snapshot?.unavailable_reason ? (
-                <p className="changes-empty">{snapshot.unavailable_reason}</p>
+              {snapshot?.unavailable_reason && !native ? (
+                <p className="changes-empty">
+                  {snapshot.unavailable_reason}
+                  {scope
+                    ? " Automatic checkpoints in Settings > General save one before each message."
+                    : null}
+                  {scope && onEditFrom ? (
+                    <EditThisMessage onEdit={() => onEditFrom(scope)} />
+                  ) : null}
+                </p>
+              ) : null}
+              {native ? (
+                <section className="changes-native" aria-label={`Restore with ${agentName}`}>
+                  <p className="changes-native-copy">
+                    {agentName} kept a copy of each file its edit tools changed. Restoring puts them
+                    back as they were before this message; changes made by commands it ran stay as
+                    they are.
+                  </p>
+                  {nativeBusy ? (
+                    <p className="changes-empty" role="status">
+                      Asking {agentName} which files it changed…
+                    </p>
+                  ) : null}
+                  {nativeError ? (
+                    <p className="ui-error" role="alert">
+                      {nativeError}
+                    </p>
+                  ) : null}
+                  {nativePreview && nativePreview.files.length === 0 ? (
+                    <p className="changes-empty">
+                      {agentName} has changed no files since this message.
+                      {onEditFrom ? <EditThisMessage onEdit={() => onEditFrom(scope)} /> : null}
+                    </p>
+                  ) : null}
+                  {nativePreview?.files.length ? (
+                    <ul className="changes-confirm-files" aria-label="Files to restore">
+                      {nativePreview.files.map((file) => (
+                        <li key={file}>
+                          <code>{file}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
               ) : null}
               {!busy && checkpoint && snapshot?.files.length === 0 ? (
                 <p className="changes-empty">
                   No file changes since this checkpoint.
                   {scope && onEditFrom ? (
-                    <>
-                      {" "}
-                      <button
-                        type="button"
-                        className="g-link changes-inline-action"
-                        onClick={() => onEditFrom(scope)}
-                      >
-                        Edit this message
-                      </button>
-                    </>
+                    <EditThisMessage onEdit={() => onEditFrom(scope)} />
                   ) : null}
                 </p>
               ) : null}
@@ -457,28 +560,118 @@ export function ChangesPanel({
                   ) : null}
                 </section>
               ) : null}
+              {restored ? (
+                <section className="changes-result" aria-label="Restore result">
+                  <p role="status">Restored {fileCount(restored.files.length)}.</p>
+                  {restored.skipped_links ? (
+                    <p className="changes-warning">
+                      {agentName} left {restored.skipped_links} linked{" "}
+                      {restored.skipped_links === 1 ? "path" : "paths"} as they are, for safety.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
-            <footer className="changes-panel-footer">
-              <span>{selected.size ? `${selected.size} selected` : "Select files to revert"}</span>
-              {live ? (
-                <button type="button" className="g-button g-button-28" onClick={onStop}>
-                  Stop session to revert
-                </button>
-              ) : (
+            {native ? (
+              <footer className="changes-panel-footer">
+                <span>
+                  {nativePreview?.files.length
+                    ? `${fileCount(nativePreview.files.length)} to restore`
+                    : "Nothing to restore"}
+                </span>
                 <button
                   type="button"
                   className="g-button g-button-28"
-                  disabled={!selected.size || busy || acting || error !== null}
-                  onClick={() => void review()}
+                  disabled={!nativePreview?.files.length || nativeBusy || acting}
+                  onClick={() => setConfirmRestore(true)}
                 >
                   <RotateCcw size={13} />
-                  Review revert
+                  Review restore
                 </button>
-              )}
-            </footer>
+              </footer>
+            ) : (
+              <footer className="changes-panel-footer">
+                <span>
+                  {selected.size ? `${selected.size} selected` : "Select files to revert"}
+                </span>
+                {live ? (
+                  <button type="button" className="g-button g-button-28" onClick={onStop}>
+                    Stop session to revert
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="g-button g-button-28"
+                    disabled={!selected.size || busy || acting || error !== null}
+                    onClick={() => void review()}
+                  >
+                    <RotateCcw size={13} />
+                    Review revert
+                  </button>
+                )}
+              </footer>
+            )}
           </>
         )}
       </div>
+      {confirmRestore && nativePreview ? (
+        <Modal
+          title={`Restore files with ${agentName}?`}
+          onClose={() => {
+            if (!acting) setConfirmRestore(false);
+          }}
+        >
+          <p className="changes-confirm-copy">
+            Put these files back as they were before the selected message. Changes made by commands{" "}
+            {agentName} ran stay as they are.
+          </p>
+          <ul className="changes-confirm-files">
+            {nativePreview.files.map((file) => (
+              <li key={file}>
+                <code>{file}</code>
+              </li>
+            ))}
+          </ul>
+          {nativePreview.insertions !== null || nativePreview.deletions !== null ? (
+            <p className="changes-confirm-copy">
+              <span className="chat-diff-totals">
+                <span data-op="add">+{nativePreview.insertions ?? 0}</span>{" "}
+                <span data-op="remove">−{nativePreview.deletions ?? 0}</span>
+              </span>{" "}
+              lines change back.
+            </p>
+          ) : null}
+          {onEditFrom ? (
+            <label className="changes-edit-after">
+              <input
+                type="checkbox"
+                checked={editAfter}
+                disabled={acting}
+                onChange={(event) => setEditAfter(event.currentTarget.checked)}
+              />
+              Then edit this message to continue from there
+            </label>
+          ) : null}
+          <div className="g-dialog-actions">
+            <button
+              type="button"
+              className="g-button"
+              disabled={acting}
+              onClick={() => setConfirmRestore(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-danger"
+              disabled={acting}
+              onClick={() => void restore()}
+            >
+              {acting ? "Restoring…" : `Restore ${fileCount(nativePreview.files.length)}`}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {preview ? (
         <Modal
           title="Revert selected files?"

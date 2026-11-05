@@ -1,5 +1,7 @@
 use super::*;
-use aura_protocol::changes::{ChangeDiff, ChangesSnapshot, RevertPreview, RevertResult};
+use aura_protocol::changes::{
+    ChangeDiff, ChangesSnapshot, NativeRewind, RevertPreview, RevertResult,
+};
 
 pub(super) struct FolderMutation {
     shared: Arc<Shared>,
@@ -13,6 +15,26 @@ impl Drop for FolderMutation {
 }
 
 impl SessionManager {
+    /// Restores, or with `dry_run` lists, the files the agent's own checkpoints hold for before
+    /// `turn_id`'s message (Claude's file rewind). The session must be running and idle.
+    pub async fn chat_rewind_files(
+        &self,
+        chat_id: &str,
+        turn_id: String,
+        dry_run: bool,
+    ) -> Result<NativeRewind, SessionError> {
+        tokio::time::timeout(
+            super::OPTION_TIMEOUT,
+            self.ask(chat_id, |reply| super::actor::ChatMsg::RewindFiles {
+                turn_id: turn_id.clone(),
+                dry_run,
+                reply,
+            }),
+        )
+        .await
+        .unwrap_or(Err(SessionError::SessionNotReady))
+    }
+
     pub async fn chat_changes(
         &self,
         chat_id: &str,

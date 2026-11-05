@@ -1,5 +1,7 @@
 use crate::{error::AppError, state::AppState};
-use aura_protocol::changes::{ChangeDiff, ChangesSnapshot, RevertPreview, RevertResult};
+use aura_protocol::changes::{
+    ChangeDiff, ChangesSnapshot, NativeRewind, RevertPreview, RevertResult,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -10,6 +12,20 @@ pub async fn chat_changes(
     turn_id: Option<String>,
 ) -> Result<ChangesSnapshot, AppError> {
     Ok(state.sessions()?.chat_changes(&chat_id, turn_id).await?)
+}
+/// A sent message's Rewind through the agent's own checkpoints; `dry_run` only lists the files.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_rewind_files(
+    state: State<'_, AppState>,
+    chat_id: String,
+    turn_id: String,
+    dry_run: bool,
+) -> Result<NativeRewind, AppError> {
+    Ok(state
+        .sessions()?
+        .chat_rewind_files(&chat_id, turn_id, dry_run)
+        .await?)
 }
 #[tauri::command]
 #[specta::specta]
