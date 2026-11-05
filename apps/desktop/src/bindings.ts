@@ -2769,8 +2769,8 @@ export type PushPreview = {
 	token: string,
 	branch: string,
 	remote: string,
-	/**  The remote's push address, without any user name or password in it. */
-	remote_url: string,
+	/**  Every address the remote pushes to, without any user name or password in them. */
+	remote_urls: string[],
 	target: string,
 	head: string,
 	/**  The remote branch's commit now, `None` when the push creates it. */

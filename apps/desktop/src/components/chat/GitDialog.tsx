@@ -485,7 +485,7 @@ export function GitDialog({
                   <dd>{preview.value.branch}</dd>
                   <dt>Remote</dt>
                   <dd>
-                    {preview.value.remote}, {preview.value.remote_url}
+                    {preview.value.remote}, {preview.value.remote_urls.join(", ")}
                   </dd>
                   <dt>Remote branch</dt>
                   <dd>

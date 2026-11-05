@@ -4,6 +4,10 @@
 //! written them) nor asks for credentials. A commit records exactly the reviewed files' contents:
 //! its tree is built in a private index, and the branch moves only from the reviewed commit, so
 //! nothing is staged unless it succeeds. A push only ever fast-forwards the remote branch.
+//!
+//! The repository's own configuration can name programs Git runs (a signing program, an SSH
+//! command, a credential helper). An agent working in the folder could have written it, so a
+//! commit is not signed and a push is not made while such a setting comes from there.
 
 #[cfg(test)]
 #[path = "commit_tests.rs"]
@@ -44,6 +48,8 @@ pub(super) struct PreparedPush {
     branch: String,
     head: String,
     remote: String,
+    /// Every address Git pushes to, as reviewed; the push is refused if they change.
+    urls: Vec<String>,
     target: String,
     remote_head: Option<String>,
     sets_upstream: bool,
@@ -169,6 +175,80 @@ pub(super) fn without_credentials(url: &str) -> String {
     }
 }
 
+/// Signing programs Git would run for `commit -S`.
+pub(super) const SIGNING_PROGRAMS: &str =
+    r"^gpg\.(program|openpgp\.program|x509\.program|ssh\.program|ssh\.defaultkeycommand)$";
+/// Programs Git would run to reach a remote.
+pub(super) const REMOTE_PROGRAMS: &str = r"^(core\.(sshcommand|askpass|gitproxy)|credential\..*helper|remote\..*\.(receivepack|uploadpack|vcs)|protocol\..*allow)$";
+
+/// The settings matching `keys` that the repository's own configuration (its `.git/config`,
+/// a worktree's, or a file either includes) sets, which an agent in the folder could have
+/// written. Settings of the person's own (global or system) configuration are theirs to keep.
+pub(super) async fn repository_programs(git: &Git, root: &Path, keys: &str) -> Result<Vec<String>> {
+    let output = git
+        .output(
+            root,
+            args(&["config", "--show-scope", "--includes", "--get-regexp", keys]),
+            64 * 1024,
+        )
+        .await?;
+    // Git exits 1 when nothing matches.
+    if !matches!(exit(&output), Some(0 | 1)) {
+        return Err(invalid("Git could not read this repository's settings."));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (scope, setting) = line.split_once('\t')?;
+            matches!(scope, "local" | "worktree").then(|| {
+                setting
+                    .split_once(' ')
+                    .map_or(setting, |(key, _)| key)
+                    .to_owned()
+            })
+        })
+        .collect())
+}
+
+/// Refuses when the repository's own configuration names a program for this operation.
+pub(super) async fn refuse_repository_programs(
+    git: &Git,
+    root: &Path,
+    keys: &str,
+    what: &str,
+) -> Result<()> {
+    let found = repository_programs(git, root, keys).await?;
+    if found.is_empty() {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "This repository's own Git settings choose a program Git would run to {what} ({}). auracode does not run programs an agent could have set; {what} from a terminal instead, or move the setting to your global Git configuration.",
+        found.join(", ")
+    )))
+}
+
+/// Every address `remote` pushes to, as Git resolves them.
+async fn push_urls(git: &Git, root: &Path, remote: &str) -> Result<Vec<String>> {
+    let output = git
+        .output(
+            root,
+            args(&["remote", "get-url", "--push", "--all", remote]),
+            8192,
+        )
+        .await?;
+    let urls = text(&output.stdout)
+        .ok()
+        .filter(|_| exit(&output) == Some(0))
+        .map(|value| value.lines().map(str::to_owned).collect::<Vec<_>>())
+        .unwrap_or_default();
+    if urls.is_empty() {
+        return Err(invalid(format!(
+            "This repository has no {remote} remote to push to. Add one with git remote add."
+        )));
+    }
+    Ok(urls)
+}
+
 fn take<T>(
     reviews: &std::sync::Mutex<HashMap<String, T>>,
     token: &str,
@@ -229,6 +309,10 @@ impl GitWorkspaces {
             )
             .await
             .is_ok_and(|output| text(&output.stdout).is_ok_and(|value| value == "true"));
+        if signed {
+            refuse_repository_programs(&git, &source.root, SIGNING_PROGRAMS, "sign commits")
+                .await?;
+        }
         let (tree, diff_stat) = self
             .stage(&git, &source.root, parent.as_deref(), &paths)
             .await?;
@@ -317,6 +401,8 @@ impl GitWorkspaces {
             command.extend(args(&["-p", parent]));
         }
         if prepared.signed {
+            refuse_repository_programs(&git, &source.root, SIGNING_PROGRAMS, "sign commits")
+                .await?;
             command.push("-S".into());
         }
         let made = git
@@ -447,21 +533,12 @@ impl GitWorkspaces {
             _ => ("origin".to_owned(), branch.clone(), true),
         };
         validate_remote(&remote)?;
+        // Before Git reaches the remote, which runs any program the settings name.
+        refuse_repository_programs(&git, &root, REMOTE_PROGRAMS, "push").await?;
         validate_branch(&target).map_err(|_| {
             invalid("The remote branch's name is unsupported. Push it with Git directly.")
         })?;
-        let url = git
-            .output(&root, args(&["remote", "get-url", "--push", &remote]), 8192)
-            .await?;
-        let remote_url = text(&url.stdout)
-            .ok()
-            .filter(|_| exit(&url) == Some(0))
-            .and_then(|value| value.lines().next().map(without_credentials))
-            .ok_or_else(|| {
-                invalid(format!(
-                    "This repository has no {remote} remote to push to. Add one with git remote add."
-                ))
-            })?;
+        let urls = push_urls(&git, &root, &remote).await?;
         let remote_head = remote_head(&git, &root, &remote, &target).await.map_err(|_| {
             invalid(format!(
                 "Git could not reach {remote}. If it needs a sign-in, run git fetch {remote} in a terminal once so Git keeps it, then try again."
@@ -519,6 +596,7 @@ impl GitWorkspaces {
                 branch: branch.clone(),
                 head: head.clone(),
                 remote: remote.clone(),
+                urls: urls.clone(),
                 target: target.clone(),
                 remote_head: remote_head.clone(),
                 sets_upstream,
@@ -530,7 +608,7 @@ impl GitWorkspaces {
             token,
             branch,
             remote,
-            remote_url,
+            remote_urls: urls.iter().map(|url| without_credentials(url)).collect(),
             target,
             head,
             remote_head,
@@ -556,6 +634,19 @@ impl GitWorkspaces {
                 "The branch moved since the review. Review the push again.",
             ));
         }
+        refuse_repository_programs(&git, &prepared.root, REMOTE_PROGRAMS, "push").await?;
+        if push_urls(&git, &prepared.root, &prepared.remote).await? != prepared.urls {
+            return Err(invalid(
+                "The remote's address changed since the review. Review the push again.",
+            ));
+        }
+        // The remote branch must still be as reviewed (absent for a new one). The reviewed
+        // commit descends from it, so this lease never lets the push replace anything.
+        let lease = format!(
+            "--force-with-lease=refs/heads/{}:{}",
+            prepared.target,
+            prepared.remote_head.as_deref().unwrap_or_default()
+        );
         let output = git
             .output_with(
                 &prepared.root,
@@ -566,6 +657,7 @@ impl GitWorkspaces {
                     "push.recurseSubmodules=no",
                     "push",
                     "--porcelain",
+                    &lease,
                     &prepared.remote,
                     &format!("{}:refs/heads/{}", prepared.head, prepared.target),
                 ]),

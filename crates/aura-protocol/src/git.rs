@@ -329,8 +329,8 @@ pub struct PushPreview {
     pub token: String,
     pub branch: String,
     pub remote: String,
-    /// The remote's push address, without any user name or password in it.
-    pub remote_url: String,
+    /// Every address the remote pushes to, without any user name or password in them.
+    pub remote_urls: Vec<String>,
     pub target: String,
     pub head: String,
     /// The remote branch's commit now, `None` when the push creates it.

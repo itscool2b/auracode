@@ -152,7 +152,7 @@ const api: GitWorkspaceApi = {
       token: `push-${++sequence}`,
       branch: workspace.branch ?? "main",
       remote: "origin",
-      remote_url: "https://github.com/fixture/orbit.git",
+      remote_urls: ["https://github.com/fixture/orbit.git"],
       target: workspace.branch ?? "main",
       head: workspace.head ?? "",
       remote_head: "5a4d64755cbb57ee734ad9502760eb225274491a",

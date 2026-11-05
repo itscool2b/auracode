@@ -181,6 +181,13 @@ impl GitWorkspaces {
         let git = self.git().await?;
         let source = inspect(&git, Path::new(&record.path)).await?;
         publishable(&record, &source)?;
+        super::commit::refuse_repository_programs(
+            &git,
+            &source.root,
+            super::commit::REMOTE_PROGRAMS,
+            "push",
+        )
+        .await?;
         let (remote, repository) = remote(&git, &source.root).await?;
         let metadata = cli
             .command(
@@ -324,6 +331,13 @@ impl GitWorkspaces {
         let git = self.git().await?;
         let current = inspect(&git, &prepared.source.root).await?;
         publishable(&record, &current)?;
+        super::commit::refuse_repository_programs(
+            &git,
+            &current.root,
+            super::commit::REMOTE_PROGRAMS,
+            "push",
+        )
+        .await?;
         if record != prepared.record
             || current.fingerprint != prepared.source.fingerprint
             || current.common != prepared.source.common

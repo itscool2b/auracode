@@ -326,3 +326,116 @@ async fn a_push_only_fast_forwards_and_sets_the_upstream_it_creates() {
         .expect_err("unseen remote commits");
     assert!(error.to_string().contains("Fetch with Git"), "{error}");
 }
+
+#[tokio::test]
+async fn programs_set_by_the_repository_itself_stop_signing_and_pushing() {
+    let rig = rig().await;
+    std::fs::write(rig.work.join("file.txt"), "signed?\n").unwrap();
+    output(&rig, &rig.work, &["config", "commit.gpgSign", "true"]).await;
+    // Through a file the repository's configuration includes, as an agent could arrange it.
+    std::fs::write(
+        rig.work.join("signing.inc"),
+        "[gpg]\n\tprogram = not-a-signer\n",
+    )
+    .unwrap();
+    let include = rig.work.join("signing.inc");
+    output(
+        &rig,
+        &rig.work,
+        &["config", "include.path", include.to_str().unwrap()],
+    )
+    .await;
+    let error = rig
+        .service
+        .commit_preview(&rig.work, input("Signed", &["file.txt"]))
+        .await
+        .expect_err("a repository-chosen signing program");
+    assert!(error.to_string().contains("gpg.program"), "{error}");
+    output(&rig, &rig.work, &["config", "--unset", "include.path"]).await;
+    output(&rig, &rig.work, &["config", "commit.gpgSign", "false"]).await;
+    let parent = rig.work.parent().unwrap().to_owned();
+    let remote = parent.join("remote.git");
+    output(
+        &rig,
+        &parent,
+        &["init", "--bare", "-b", "main", remote.to_str().unwrap()],
+    )
+    .await;
+    output(
+        &rig,
+        &rig.work,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    )
+    .await;
+    output(&rig, &rig.work, &["config", "core.sshCommand", "not-ssh"]).await;
+    let error = rig
+        .service
+        .push_preview(&rig.work)
+        .await
+        .expect_err("a repository-chosen SSH command");
+    assert!(error.to_string().contains("core.sshcommand"), "{error}");
+}
+
+#[tokio::test]
+async fn a_push_shows_every_address_and_is_refused_if_they_change() {
+    let rig = rig().await;
+    let parent = rig.work.parent().unwrap().to_owned();
+    let [one, two, three] = ["one.git", "two.git", "three.git"].map(|name| parent.join(name));
+    for remote in [&one, &two, &three] {
+        output(
+            &rig,
+            &parent,
+            &["init", "--bare", "-b", "main", remote.to_str().unwrap()],
+        )
+        .await;
+    }
+    output(
+        &rig,
+        &rig.work,
+        &["remote", "add", "origin", one.to_str().unwrap()],
+    )
+    .await;
+    for remote in [&one, &two] {
+        output(
+            &rig,
+            &rig.work,
+            &[
+                "config",
+                "--add",
+                "remote.origin.pushurl",
+                remote.to_str().unwrap(),
+            ],
+        )
+        .await;
+    }
+    let preview = rig.service.push_preview(&rig.work).await.expect("preview");
+    assert_eq!(preview.remote_urls.len(), 2, "{:?}", preview.remote_urls);
+    output(
+        &rig,
+        &rig.work,
+        &[
+            "remote",
+            "set-url",
+            "--push",
+            "--add",
+            "origin",
+            three.to_str().unwrap(),
+        ],
+    )
+    .await;
+    let error = rig
+        .service
+        .push_apply(&rig.work, &preview.token)
+        .await
+        .expect_err("a changed address");
+    assert!(error.to_string().contains("address changed"), "{error}");
+    assert!(
+        output(
+            &rig,
+            &parent,
+            &["--git-dir", three.to_str().unwrap(), "for-each-ref"]
+        )
+        .await
+        .is_empty()
+    );
+}
