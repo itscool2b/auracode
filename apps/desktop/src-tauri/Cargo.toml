@@ -59,10 +59,11 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
-# Native microphone capture and CPU-only, statically linked offline speech recognition.
+# Native microphone capture and statically linked offline speech recognition: transcribe.cpp
+# runs the bundled Parakeet and Silero VAD models on the CPU (Metal on Apple silicon).
 cpal = "=0.18.2"
 rubato = "=0.16.2"
-whisper-rs = { version = "=0.16.0", default-features = false }
+transcribe-cpp = "=0.4.1"
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 keepawake = "=0.6.1"

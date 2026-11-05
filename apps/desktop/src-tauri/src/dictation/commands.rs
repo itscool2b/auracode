@@ -5,17 +5,22 @@ use crate::{
 };
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{State, Webview, ipc::Channel};
+use tauri::{Manager, State, Webview, ipc::Channel};
 
 fn error(message: String) -> AppError {
     AppError::new(AppErrorCode::InvalidArgument, message)
 }
-fn root(state: &AppState) -> Result<PathBuf, AppError> {
-    state
-        .data_dir()
-        .map(PathBuf::from)
-        .ok_or_else(|| error("The local data folder is unavailable.".into()))
+
+/// Where the bundled models are: `dictation/` in the app's resources (tauri.conf.json).
+fn models(webview: &Webview) -> Option<PathBuf> {
+    webview
+        .app_handle()
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|resources| resources.join("dictation"))
 }
+
 fn operation(
     view: &Webview,
     state: &AppState,
@@ -40,44 +45,35 @@ fn operation(
 
 #[tauri::command]
 #[specta::specta]
-pub fn dictation_model(state: State<'_, AppState>) -> Result<DictationModel, AppError> {
-    Ok(model::status(&root(&state)?))
+pub fn dictation_model(webview: Webview) -> DictationModel {
+    model::status(models(&webview).as_deref())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn dictation_download(
-    webview: Webview,
-    state: State<'_, AppState>,
-    id: String,
-    channel: Channel<DictationEvent>,
-) -> Result<(), AppError> {
-    let root = root(&state)?;
-    let operation = operation(&webview, &state, id, channel)?;
-    // Own the task even if an invoke future is abandoned. Page/quit cancellation is explicit.
-    tauri::async_runtime::spawn(async move {
-        let result = model::download(root, &operation).await;
-        operation.finish(result);
-    });
-    Ok(())
-}
-
-/// `language`: the person's language tag (the webview's `navigator.language`). Whisper hears that
-/// language, or detects one itself when it does not know the tag.
+/// Opens the microphone at once and streams the live text until `dictation_stop` (finish) or
+/// `dictation_cancel`. The bundled models are English; there is no time limit.
 #[tauri::command]
 #[specta::specta]
 pub fn dictation_start(
     webview: Webview,
     state: State<'_, AppState>,
     id: String,
-    language: Option<String>,
     channel: Channel<DictationEvent>,
 ) -> Result<(), AppError> {
-    let root = root(&state)?;
+    let folder = models(&webview);
     let operation = operation(&webview, &state, id, channel)?;
     tauri::async_runtime::spawn_blocking(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            audio::run(&root, &operation, language.as_deref())
+            if !audio::cpu_supported() {
+                return Err(Failure::unsupported());
+            }
+            let folder = folder.ok_or_else(|| {
+                Failure::model("auracode could not find its dictation models. Reinstall auracode.")
+            })?;
+            if !operation.emit(DictationEvent::Preparing) {
+                return Err(Failure::cancelled());
+            }
+            let engine = model::engine(&folder)?;
+            audio::run(&engine, &operation)
         }))
         .unwrap_or_else(|_| {
             Err(Failure::other(

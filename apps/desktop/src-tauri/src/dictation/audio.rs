@@ -1,19 +1,23 @@
-use super::{DictationEvent, Failure, Operation, model};
+//! Recording with live text: the microphone streams into a 16 kHz converter, voice activity
+//! detection and [`Live`], which turns phrases into text while the person talks. There is no time
+//! limit; only the phrase in progress is held, so memory stays bounded (docs/local-dictation.md).
+use super::engine::Engine;
+use super::live::{Live, LiveConfig, LiveText, SAMPLE_RATE};
+use super::{DictationEvent, Failure, Operation};
 use crate::sync::lock;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rubato::{FftFixedInOut, Resampler};
-use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-use zeroize::{Zeroize, Zeroizing};
+use transcribe_cpp::{CancelToken, VadSession};
+use zeroize::Zeroize;
 
-const SAMPLE_RATE: usize = 16_000;
-const MAX_SECONDS: u32 = 120;
-/// whisper.cpp stops gaining from threads past about the physical core count. Measured on an
-/// 8-core, 16-thread Ryzen: 4 threads took 1.7 s for 11 s of speech, 8 took 1.1 s, 16 took 1.1 s.
-const MAX_THREADS: usize = 8;
+/// How often the loop takes the microphone's audio and reports the level and text.
+const TICK: Duration = Duration::from_millis(80);
+/// Audio the capture callback holds before the loop takes it; past this it is dropped, so a
+/// stalled loop cannot grow memory.
+const BACKLOG_SECONDS: usize = 4;
 /// A stream that delivered audio and then nothing for this long has stopped.
 const STALL: Duration = Duration::from_secs(3);
 /// A stream that delivers no audio at all within this long cannot be used.
@@ -74,10 +78,12 @@ fn open_failure(kind: cpal::ErrorKind) -> Failure {
     })
 }
 
+/// What the capture callback has delivered since the loop last took it.
 struct Capture {
     samples: Vec<f32>,
     limit: usize,
-    level: f32,
+    /// Every sample delivered so far, taken or dropped: what the watchdog follows.
+    delivered: usize,
 }
 impl Drop for Capture {
     fn drop(&mut self) {
@@ -89,159 +95,132 @@ impl Capture {
     where
         f32: cpal::FromSample<T>,
     {
-        let mut power = 0.0;
-        let mut count = 0;
         for frame in data.chunks_exact(channels) {
+            self.delivered += 1;
             if self.samples.len() >= self.limit {
-                break;
+                continue;
             }
             let sample = frame
                 .iter()
                 .map(|sample| sample.to_sample::<f32>())
                 .sum::<f32>()
                 / channels as f32;
-            let sample = if sample.is_finite() {
+            self.samples.push(if sample.is_finite() {
                 sample.clamp(-1.0, 1.0)
             } else {
                 0.0
+            });
+        }
+    }
+}
+
+/// The root-mean-square level of `samples`, 0 to 1.
+fn level(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    (samples.iter().map(|sample| sample * sample).sum::<f32>() / samples.len() as f32).sqrt()
+}
+
+/// The default microphone, open and delivering into a [`Capture`] until dropped.
+struct Microphone {
+    stream: cpal::Stream,
+    capture: Arc<Mutex<Capture>>,
+    fault: Arc<AtomicU8>,
+    rate: usize,
+}
+
+impl Microphone {
+    fn open() -> Result<Self, Failure> {
+        let host = cpal::default_host();
+        let device = host.default_input_device().ok_or_else(|| {
+            Failure::microphone("No microphone was found. Connect one and try again.")
+        })?;
+        let supported = device
+            .default_input_config()
+            .map_err(|error| open_failure(error.kind()))?;
+        let config = supported.config();
+        let rate = config.sample_rate as usize;
+        if !(8_000..=192_000).contains(&rate) || !(1..=8).contains(&config.channels) {
+            return Err(open_failure(cpal::ErrorKind::UnsupportedConfig));
+        }
+        let capture = Arc::new(Mutex::new(Capture {
+            samples: Vec::with_capacity(rate),
+            limit: rate * BACKLOG_SECONDS,
+            delivered: 0,
+        }));
+        let fault = Arc::new(AtomicU8::new(FAULT_NONE));
+        macro_rules! stream {
+            ($sample:ty) => {
+                input_stream::<$sample>(&device, config, capture.clone(), fault.clone())
             };
-            self.samples.push(sample);
-            power += sample * sample;
-            count += 1;
         }
-        self.level = if count > 0 {
-            (power / count as f32).sqrt()
-        } else {
-            0.0
-        };
-    }
-}
-
-pub fn run(
-    root: &Path,
-    operation: &Operation,
-    language: Option<&str>,
-) -> Result<DictationEvent, Failure> {
-    if !cpu_supported() {
-        return Err(Failure::unsupported());
-    }
-    if !operation.emit(DictationEvent::Preparing) {
-        return Err(Failure::cancelled());
-    }
-    let path = model::path(root);
-    model::verify(&path, operation)?;
-    let context = load_context(&path)?;
-    if operation.cancelled() {
-        return Err(Failure::cancelled());
-    }
-    let (samples, rate) = record(operation)?;
-    if operation.cancelled() {
-        return Err(Failure::cancelled());
-    }
-    let audio = resample(&samples, rate).map_err(Failure::other)?;
-    drop(samples);
-    if !has_signal(&audio) {
-        return Err(Failure::no_speech(
-            "No speech was detected. Check that the right microphone is selected and not muted.",
-        ));
-    }
-    if !operation.emit(DictationEvent::Transcribing { percent: 0 }) {
-        return Err(Failure::cancelled());
-    }
-    transcribe(&context, &audio, operation, whisper_language(language))
-        .map(|text| DictationEvent::Complete { text })
-}
-
-fn load_context(path: &Path) -> Result<WhisperContext, Failure> {
-    // With no whisper-rs logging backend enabled these hooks discard native logs, including
-    // debug-build token traces. Print flags alone do not prevent transcript text on stderr.
-    whisper_rs::install_logging_hooks();
-    let mut parameters = WhisperContextParameters::default();
-    parameters.use_gpu(false);
-    WhisperContext::new_with_params(path, parameters).map_err(|_| {
-        Failure::model(
-            "The dictation model could not be loaded. Download it again or free some memory.",
-        )
-    })
-}
-
-fn record(operation: &Operation) -> Result<(Zeroizing<Vec<f32>>, usize), Failure> {
-    let host = cpal::default_host();
-    let device = host.default_input_device().ok_or_else(|| {
-        Failure::microphone("No microphone was found. Connect one and try again.")
-    })?;
-    let supported = device
-        .default_input_config()
+        let stream = match supported.sample_format() {
+            cpal::SampleFormat::F32 => stream!(f32),
+            cpal::SampleFormat::F64 => stream!(f64),
+            cpal::SampleFormat::I8 => stream!(i8),
+            cpal::SampleFormat::I16 => stream!(i16),
+            cpal::SampleFormat::I32 => stream!(i32),
+            cpal::SampleFormat::I64 => stream!(i64),
+            cpal::SampleFormat::U8 => stream!(u8),
+            cpal::SampleFormat::U16 => stream!(u16),
+            cpal::SampleFormat::U32 => stream!(u32),
+            cpal::SampleFormat::U64 => stream!(u64),
+            _ => return Err(open_failure(cpal::ErrorKind::UnsupportedConfig)),
+        }
         .map_err(|error| open_failure(error.kind()))?;
-    let config = supported.config();
-    let rate = config.sample_rate as usize;
-    if !(8_000..=192_000).contains(&rate) || !(1..=8).contains(&config.channels) {
-        return Err(open_failure(cpal::ErrorKind::UnsupportedConfig));
+        stream.play().map_err(|error| open_failure(error.kind()))?;
+        Ok(Self {
+            stream,
+            capture,
+            fault,
+            rate,
+        })
     }
-    let limit = rate * MAX_SECONDS as usize;
-    let capture = Arc::new(Mutex::new(Capture {
-        samples: Vec::with_capacity(limit),
-        limit,
-        level: 0.0,
-    }));
-    let fault = Arc::new(AtomicU8::new(FAULT_NONE));
-    macro_rules! stream {
-        ($sample:ty) => {
-            input_stream::<$sample>(&device, config, capture.clone(), fault.clone())
-        };
+
+    /// The audio delivered since the last call, and how much has been delivered in all.
+    fn take(&self) -> (Vec<f32>, usize) {
+        let mut capture = lock(&self.capture);
+        (std::mem::take(&mut capture.samples), capture.delivered)
     }
-    let stream = match supported.sample_format() {
-        cpal::SampleFormat::F32 => stream!(f32),
-        cpal::SampleFormat::F64 => stream!(f64),
-        cpal::SampleFormat::I8 => stream!(i8),
-        cpal::SampleFormat::I16 => stream!(i16),
-        cpal::SampleFormat::I32 => stream!(i32),
-        cpal::SampleFormat::I64 => stream!(i64),
-        cpal::SampleFormat::U8 => stream!(u8),
-        cpal::SampleFormat::U16 => stream!(u16),
-        cpal::SampleFormat::U32 => stream!(u32),
-        cpal::SampleFormat::U64 => stream!(u64),
-        _ => return Err(open_failure(cpal::ErrorKind::UnsupportedConfig)),
+
+    fn check(&self) -> Result<(), Failure> {
+        match self.fault.load(Ordering::Acquire) {
+            FAULT_NONE => Ok(()),
+            FAULT_PERMISSION => Err(Failure::microphone(PRIVACY_ERROR)),
+            _ => Err(Failure::microphone(STOPPED_ERROR)),
+        }
     }
-    .map_err(|error| open_failure(error.kind()))?;
-    stream.play().map_err(|error| open_failure(error.kind()))?;
-    let began = Instant::now();
-    let mut watch = Watchdog::new(began);
-    loop {
-        if operation.cancelled() {
-            return Err(Failure::cancelled());
-        }
-        match fault.load(Ordering::Acquire) {
-            FAULT_NONE => {}
-            FAULT_PERMISSION => return Err(Failure::microphone(PRIVACY_ERROR)),
-            _ => return Err(Failure::microphone(STOPPED_ERROR)),
-        }
-        let (count, level) = {
-            let capture = lock(&capture);
-            (capture.samples.len(), capture.level)
-        };
-        if !operation.emit(DictationEvent::Recording {
-            seconds: (count / rate) as u32,
-            level: (level * 8.0).clamp(0.0, 1.0),
-            limit_seconds: MAX_SECONDS,
-        }) {
-            return Err(Failure::cancelled());
-        }
-        if operation.stop.load(Ordering::Acquire)
-            || count >= limit
-            || began.elapsed() >= Duration::from_secs(u64::from(MAX_SECONDS))
-        {
-            break;
-        }
-        if let Some(message) = watch.check(count, Instant::now()) {
-            return Err(Failure::microphone(message));
-        }
-        std::thread::sleep(Duration::from_millis(100));
+
+    /// Closes the native stream, releasing the microphone.
+    fn close(self) {
+        drop(self.stream);
     }
-    // Closing the native stream releases the microphone before any transcription begins.
-    drop(stream);
-    let samples = Zeroizing::new(std::mem::take(&mut lock(&capture).samples));
-    Ok((samples, rate))
+}
+
+fn input_stream<T: cpal::SizedSample>(
+    device: &cpal::Device,
+    config: cpal::StreamConfig,
+    capture: Arc<Mutex<Capture>>,
+    fault: Arc<AtomicU8>,
+) -> Result<cpal::Stream, cpal::Error>
+where
+    f32: cpal::FromSample<T>,
+{
+    let channels = usize::from(config.channels);
+    device.build_input_stream(
+        config,
+        move |samples: &[T], _| lock(&capture).push(samples, channels),
+        move |error: cpal::Error| {
+            let code = stream_fault(error.kind());
+            if code != FAULT_NONE {
+                // Keep the first failure: the capture thread ends after it.
+                let _ =
+                    fault.compare_exchange(FAULT_NONE, code, Ordering::AcqRel, Ordering::Acquire);
+            }
+        },
+        Some(Duration::from_secs(5)),
+    )
 }
 
 /// Notices a stream that never starts delivering audio, or stops partway: some drivers end a
@@ -273,224 +252,253 @@ impl Watchdog {
     }
 }
 
-fn input_stream<T: cpal::SizedSample>(
-    device: &cpal::Device,
-    config: cpal::StreamConfig,
-    capture: Arc<Mutex<Capture>>,
-    fault: Arc<AtomicU8>,
-) -> Result<cpal::Stream, cpal::Error>
-where
-    f32: cpal::FromSample<T>,
-{
-    let channels = usize::from(config.channels);
-    device.build_input_stream(
-        config,
-        move |samples: &[T], _| lock(&capture).push(samples, channels),
-        move |error: cpal::Error| {
-            let code = stream_fault(error.kind());
-            if code != FAULT_NONE {
-                // Keep the first failure: the capture thread ends after it.
-                let _ =
-                    fault.compare_exchange(FAULT_NONE, code, Ordering::AcqRel, Ordering::Acquire);
+/// Anti-aliased, streaming conversion to the models' mono 16 kHz input. The FFT's delay is
+/// dropped from the start and flushed at the end, so the first and last words survive.
+struct Converter {
+    resampler: Option<FftFixedInOut<f32>>,
+    pending: Vec<f32>,
+    /// Output samples still to drop: the resampler's delay.
+    delay: usize,
+    taken: usize,
+    produced: usize,
+    rate: usize,
+}
+
+const CONVERT_ERROR: &str = "The microphone audio could not be converted.";
+
+/// Appends converted audio, dropping what remains of the resampler's delay first.
+fn emit(delay: &mut usize, converted: Vec<Vec<f32>>, out: &mut Vec<f32>) {
+    for mut channel in converted {
+        let skip = (*delay).min(channel.len());
+        *delay -= skip;
+        out.extend_from_slice(&channel[skip..]);
+        channel.zeroize();
+    }
+}
+
+impl Converter {
+    fn new(rate: usize) -> Result<Self, Failure> {
+        let resampler = if rate == SAMPLE_RATE {
+            None
+        } else {
+            Some(
+                FftFixedInOut::<f32>::new(rate, SAMPLE_RATE, 1024, 1)
+                    .map_err(|_| Failure::other(CONVERT_ERROR))?,
+            )
+        };
+        let delay = resampler
+            .as_ref()
+            .map_or(0, |resampler| resampler.output_delay());
+        Ok(Self {
+            resampler,
+            pending: Vec::new(),
+            delay,
+            taken: 0,
+            produced: 0,
+            rate,
+        })
+    }
+
+    /// Converts `input`, returning every whole output sample it completes.
+    fn push(&mut self, input: &[f32]) -> Result<Vec<f32>, Failure> {
+        self.taken += input.len();
+        let Some(resampler) = self.resampler.as_mut() else {
+            self.produced += input.len();
+            return Ok(input.to_vec());
+        };
+        self.pending.extend_from_slice(input);
+        let mut out = Vec::new();
+        loop {
+            let chunk = resampler.input_frames_next();
+            if self.pending.len() < chunk {
+                break;
             }
-        },
-        Some(Duration::from_secs(5)),
-    )
+            let converted = resampler
+                .process(&[&self.pending[..chunk]], None)
+                .map_err(|_| Failure::other(CONVERT_ERROR))?;
+            self.pending.drain(..chunk);
+            emit(&mut self.delay, converted, &mut out);
+        }
+        self.produced += out.len();
+        Ok(out)
+    }
+
+    /// The rest of the audio once the microphone has closed, trimmed to the input's length.
+    fn finish(&mut self) -> Result<Vec<f32>, Failure> {
+        let Some(resampler) = self.resampler.as_mut() else {
+            return Ok(Vec::new());
+        };
+        let total = self.taken * SAMPLE_RATE / self.rate;
+        let mut out = Vec::new();
+        let rest = std::mem::take(&mut self.pending);
+        let converted = resampler
+            .process_partial(Some(&[&rest[..]]), None)
+            .map_err(|_| Failure::other(CONVERT_ERROR))?;
+        emit(&mut self.delay, converted, &mut out);
+        // Flush the FFT's delay until the output covers the whole input.
+        while self.produced + out.len() < total
+            && let Some(resampler) = self.resampler.as_mut()
+        {
+            let converted = resampler
+                .process_partial::<&[f32]>(None, None)
+                .map_err(|_| Failure::other(CONVERT_ERROR))?;
+            let before = out.len();
+            emit(&mut self.delay, converted, &mut out);
+            if out.len() == before {
+                break;
+            }
+        }
+        out.truncate(total.saturating_sub(self.produced));
+        self.produced += out.len();
+        Ok(out)
+    }
 }
 
-/// Anti-aliased conversion to Whisper's mono 16 kHz input. Flush the FFT's delay, then trim
-/// padding so the first and last words survive conversion from 44.1/48 kHz microphones.
-fn resample(input: &[f32], rate: usize) -> Result<Zeroizing<Vec<f32>>, String> {
-    if rate == SAMPLE_RATE {
-        return Ok(Zeroizing::new(input.to_vec()));
+/// Scores `samples` for voice activity and feeds every completed frame to `live`; `pending`
+/// holds the samples of the frame still open.
+fn score<D: super::live::Decoder>(
+    vad: &mut VadSession,
+    pending: &mut Vec<f32>,
+    samples: &[f32],
+    frame: usize,
+    live: &mut Live<D>,
+    text: &mut LiveText,
+) -> Result<(), Failure> {
+    if samples.is_empty() {
+        return Ok(());
     }
-    let mut resampler = FftFixedInOut::<f32>::new(rate, SAMPLE_RATE, 1024, 1)
-        .map_err(|_| "The microphone audio could not be converted.".to_string())?;
-    let chunk = resampler.input_frames_next();
-    let delay = resampler.output_delay();
-    let length = input.len() * SAMPLE_RATE / rate;
-    let mut result = Zeroizing::new(Vec::with_capacity(length + delay + 2048));
-    for samples in input.chunks(chunk) {
-        let converted = resampler
-            .process_partial(Some(&[samples]), None)
-            .map_err(|_| "The microphone audio could not be converted.".to_string())?;
-        for mut channel in converted {
-            result.extend_from_slice(&channel);
-            channel.zeroize();
+    pending.extend_from_slice(samples);
+    let scored = vad
+        .stream_feed(samples)
+        .map_err(|_| Failure::other("Voice detection stopped. Try again."))?;
+    for probability in scored.probs {
+        if pending.len() < frame {
+            break;
+        }
+        let block: Vec<f32> = pending.drain(..frame).collect();
+        if let Some(next) = live.feed(&block, probability)? {
+            *text = next;
         }
     }
-    while result.len() < length + delay {
-        let converted = resampler
-            .process_partial::<&[f32]>(None, None)
-            .map_err(|_| "The microphone audio could not be converted.".to_string())?;
-        for mut channel in converted {
-            result.extend_from_slice(&channel);
-            channel.zeroize();
+    Ok(())
+}
+
+/// Records from the default microphone until the person finishes or cancels, reporting the level
+/// and the live text as it goes, and returns the finished text.
+pub fn run(engine: &Engine, operation: &Operation) -> Result<DictationEvent, Failure> {
+    let cancel = CancelToken::new();
+    let decoder = engine.decoder(&cancel)?;
+    let mut vad = engine.vad()?;
+    let frame = engine.frame_samples();
+    let mut live = Live::new(LiveConfig::default(), decoder);
+    let microphone = Microphone::open()?;
+    let mut converter = Converter::new(microphone.rate)?;
+    let mut pending = Vec::new();
+    let mut text = LiveText::default();
+    let began = Instant::now();
+    let mut watch = Watchdog::new(began);
+    // Cancelling also aborts a pass in flight, so the microphone closes at once.
+    let aborted = || {
+        let cancelled = operation.cancelled();
+        if cancelled {
+            cancel.cancel();
+        }
+        cancelled
+    };
+    loop {
+        if aborted() {
+            return Err(Failure::cancelled());
+        }
+        microphone.check()?;
+        let (mut chunk, delivered) = microphone.take();
+        if let Some(message) = watch.check(delivered, Instant::now()) {
+            return Err(Failure::microphone(message));
+        }
+        let loudness = level(&chunk);
+        let samples = converter.push(&chunk)?;
+        chunk.zeroize();
+        score(
+            &mut vad,
+            &mut pending,
+            &samples,
+            frame,
+            &mut live,
+            &mut text,
+        )?;
+        if aborted() {
+            return Err(Failure::cancelled());
+        }
+        if !operation.emit(DictationEvent::Listening {
+            seconds: began.elapsed().as_secs() as u32,
+            level: (loudness * 8.0).clamp(0.0, 1.0),
+            speaking: live.speaking(),
+            text: text.clone(),
+        }) {
+            return Err(Failure::cancelled());
+        }
+        if operation.stop.load(Ordering::Acquire) {
+            break;
+        }
+        std::thread::sleep(TICK);
+    }
+    // The microphone closes before the last pass: the person is done talking.
+    let (mut chunk, _) = microphone.take();
+    microphone.close();
+    let mut samples = converter.push(&chunk)?;
+    chunk.zeroize();
+    samples.extend(converter.finish()?);
+    score(
+        &mut vad,
+        &mut pending,
+        &samples,
+        frame,
+        &mut live,
+        &mut text,
+    )?;
+    if let Ok(flushed) = vad.stream_flush()
+        && let Some(probability) = flushed.probs.first()
+        && !pending.is_empty()
+    {
+        let block = std::mem::take(&mut pending);
+        if let Some(next) = live.feed(&block, *probability)? {
+            text = next;
         }
     }
-    result.drain(..delay);
-    result.truncate(length);
-    Ok(result)
-}
-
-fn has_signal(audio: &[f32]) -> bool {
-    audio.len() >= SAMPLE_RATE / 3 && audio.iter().any(|sample| sample.abs() > 0.002)
-}
-
-/// Whisper's code for the person's language (`en-US` becomes `en`), or `auto` when Whisper does
-/// not know it. Whisper's own detection misreads short clips, so the system language comes first.
-fn whisper_language(requested: Option<&str>) -> &'static str {
-    let Some(tag) = requested else {
-        return "auto";
-    };
-    let primary = tag
-        .split(['-', '_'])
-        .next()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    // Only plain ISO 639 codes reach whisper-rs, whose lookup panics on a NUL byte.
-    if !(2..=3).contains(&primary.len()) || !primary.bytes().all(|byte| byte.is_ascii_lowercase()) {
-        return "auto";
-    }
-    // Language tags whose Whisper name differs.
-    let code = match primary.as_str() {
-        "nb" => "no",
-        "fil" => "tl",
-        "jv" => "jw",
-        "iw" => "he",
-        "in" => "id",
-        other => other,
-    };
-    whisper_rs::get_lang_id(code)
-        .and_then(whisper_rs::get_lang_str)
-        .unwrap_or("auto")
-}
-
-/// Decoder settings for one recording.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Decode {
-    threads: i32,
-    /// Encoder frames to process (50 per second); `None` encodes Whisper's full 30 s window.
-    /// Shrinking it saved a third of the time but misheard words, so production keeps `None`.
-    audio_ctx: Option<i32>,
-    language: &'static str,
-}
-
-fn decode_threads() -> i32 {
-    std::thread::available_parallelism().map_or(2, |n| n.get().min(MAX_THREADS)) as i32
-}
-
-fn transcribe(
-    context: &WhisperContext,
-    audio: &[f32],
-    operation: &Operation,
-    language: &'static str,
-) -> Result<String, Failure> {
-    transcribe_with(
-        context,
-        audio,
-        operation,
-        Decode {
-            threads: decode_threads(),
-            audio_ctx: None,
-            language,
-        },
-    )
-}
-
-fn transcribe_with(
-    context: &WhisperContext,
-    audio: &[f32],
-    operation: &Operation,
-    decode: Decode,
-) -> Result<String, Failure> {
-    let mut state = context.create_state().map_err(|_| {
-        Failure::other("Not enough memory to transcribe. Close other applications and retry.")
-    })?;
-    let mut parameters = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    parameters.set_n_threads(decode.threads);
-    if let Some(frames) = decode.audio_ctx {
-        parameters.set_audio_ctx(frames);
-    }
-    parameters.set_language(Some(decode.language));
-    parameters.set_translate(false);
-    parameters.set_no_context(true);
-    parameters.set_no_timestamps(true);
-    parameters.set_suppress_blank(true);
-    parameters.set_suppress_nst(true);
-    parameters.set_print_progress(false);
-    parameters.set_print_realtime(false);
-    parameters.set_print_timestamps(false);
-    super::callbacks::run(&mut state, parameters, audio, operation)
-        .map_err(|_| Failure::other("Dictation could not transcribe this recording. Try again."))?;
-    if operation.cancelled() {
+    if !operation.emit(DictationEvent::Finishing { text }) {
         return Err(Failure::cancelled());
     }
-    // whisper.cpp already leaves out a segment it judges silent (no-speech probability above 0.6
-    // and low confidence, OpenAI's rule). Dropping segments again on the probability alone threw
-    // away clear speech.
-    let mut text = String::new();
-    for segment in state.as_iter() {
-        // A token can end partway through a multi-byte character; keep the rest of the text.
-        let part = segment
-            .to_str_lossy()
-            .map_err(|_| Failure::other("The transcription could not be read. Try again."))?;
-        text.push_str(&part);
+    let text = live.finish()?;
+    if aborted() {
+        return Err(Failure::cancelled());
     }
-    let text = without_annotations(&text);
-    if text.is_empty() {
-        return Err(Failure::no_speech(
-            "No speech was detected. Try speaking closer to your microphone.",
-        ));
-    }
-    Ok(text)
-}
-
-/// Removes Whisper's non-speech markers (`[BLANK_AUDIO]`, `[MUSIC]`), which are never dictation.
-fn without_annotations(text: &str) -> String {
-    let mut kept = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find('[') {
-        let Some(length) = rest[start..].find(']') else {
-            break;
-        };
-        let inner = &rest[start + 1..start + length];
-        kept.push_str(&rest[..start]);
-        if inner.is_empty()
-            || !inner
-                .bytes()
-                .all(|byte| byte.is_ascii_uppercase() || byte == b'_' || byte == b' ')
-        {
-            kept.push_str(&rest[start..=start + length]);
-        }
-        rest = &rest[start + length + 1..];
-    }
-    kept.push_str(rest);
-    kept.split_whitespace().collect::<Vec<_>>().join(" ")
+    Ok(DictationEvent::Complete { text })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn downmix_normalizes_samples_and_bounds_memory() {
+    fn downmix_normalizes_samples_and_drops_a_backlog_the_loop_never_took() {
         let mut capture = Capture {
             samples: Vec::new(),
             limit: 2,
-            level: 0.0,
+            delivered: 0,
         };
         capture.push(&[i16::MAX, i16::MIN, i16::MAX, i16::MAX, 0, 0], 2);
-        assert_eq!(capture.samples.len(), 2);
+        assert_eq!(capture.samples.len(), 2, "the backlog is bounded");
+        assert_eq!(capture.delivered, 3, "the watchdog still sees every frame");
         assert!(capture.samples[0].abs() < 0.001);
         assert!(capture.samples[1] > 0.99);
         let mut floats = Capture {
             samples: Vec::new(),
             limit: 10,
-            level: 0.0,
+            delivered: 0,
         };
         floats.push(&[f32::NAN, f32::INFINITY, 2.0], 1);
         assert_eq!(floats.samples, vec![0.0, 0.0, 1.0]);
     }
+
     #[test]
     fn glitches_and_reroutes_keep_recording_and_failures_end_it() {
         use cpal::ErrorKind as K;
@@ -534,55 +542,27 @@ mod tests {
     }
 
     #[test]
-    fn the_system_language_is_mapped_to_whisper_or_detected() {
-        assert_eq!(whisper_language(Some("en-US")), "en");
-        assert_eq!(whisper_language(Some("pt_BR")), "pt");
-        assert_eq!(whisper_language(Some("zh-Hant-TW")), "zh");
-        assert_eq!(whisper_language(Some("nb-NO")), "no");
-        assert_eq!(whisper_language(Some("DE")), "de");
-        assert_eq!(whisper_language(None), "auto");
-        for unknown in ["xx", "english", "", "e\0n", "-", "en\u{0}-US"] {
-            assert_eq!(whisper_language(Some(unknown)), "auto", "{unknown:?}");
-        }
-    }
-
-    #[test]
-    fn non_speech_markers_are_removed_and_text_is_kept() {
-        assert_eq!(without_annotations(" [BLANK_AUDIO]"), "");
-        assert_eq!(without_annotations("Hello [MUSIC] world."), "Hello world.");
-        assert_eq!(without_annotations("[Laughter] fine"), "[Laughter] fine");
-        assert_eq!(
-            without_annotations("an array [i] here"),
-            "an array [i] here"
-        );
-        assert_eq!(without_annotations("open [ bracket"), "open [ bracket");
-        assert_eq!(without_annotations("  spaced   out  "), "spaced out");
-    }
-
-    #[test]
-    fn silence_and_too_short_audio_are_not_transcribed() {
-        assert!(!has_signal(&vec![0.0; SAMPLE_RATE]));
-        assert!(!has_signal(&[0.2; 50]));
-        assert!(has_signal(&vec![0.2; SAMPLE_RATE]));
-    }
-    #[test]
-    fn resampling_preserves_duration_and_speech_band_signal() {
+    fn streaming_conversion_keeps_duration_and_speech_band_signal_in_any_chunks() {
         for rate in [16_000, 44_100, 48_000, 96_000] {
             let input: Vec<f32> = (0..rate)
                 .map(|n| (n as f32 * 440.0 * std::f32::consts::TAU / rate as f32).sin() * 0.2)
                 .collect();
-            let output = resample(&input, rate).unwrap();
-            assert_eq!(output.len(), SAMPLE_RATE);
-            assert!(has_signal(&output));
-            let rms = (output.iter().map(|sample| sample * sample).sum::<f32>()
-                / SAMPLE_RATE as f32)
-                .sqrt();
+            let mut converter = Converter::new(rate).unwrap();
+            let mut output = Vec::new();
+            // Uneven chunks, as the microphone delivers them between ticks.
+            for chunk in input.chunks(rate / 13 + 7) {
+                output.extend(converter.push(chunk).unwrap());
+            }
+            output.extend(converter.finish().unwrap());
+            assert_eq!(output.len(), SAMPLE_RATE, "{rate}");
+            let middle = &output[SAMPLE_RATE / 10..SAMPLE_RATE * 9 / 10];
+            let rms = level(middle);
             assert!((0.13..0.15).contains(&rms), "{rate}: {rms}");
         }
     }
 
     /// 16 kHz mono signed 16-bit PCM from a fixture WAV. Not a general WAV decoder.
-    fn fixture_pcm(path: &Path) -> Vec<f32> {
+    fn fixture_pcm(path: &std::path::Path) -> Vec<f32> {
         let wav = std::fs::read(path).expect("fixture WAV");
         assert_eq!(&wav[..4], b"RIFF");
         assert_eq!(&wav[8..12], b"WAVE");
@@ -604,34 +584,23 @@ mod tests {
             .collect()
     }
 
-    fn fixture_root() -> std::path::PathBuf {
-        std::path::PathBuf::from(
-            std::env::var_os("AURACODE_DICTATION_FIXTURE_DIR")
-                .expect("explicit scratch fixture directory"),
-        )
-    }
-
-    /// Opt-in timing: transcribes every 16 kHz mono `*.wav` in the fixture folder with the
-    /// production parameters and prints how long each took. Needs the model in the fixture
-    /// folder already (run `offline_model_fixture` once).
+    /// Opt-in engine acceptance with the real bundled models, separate from microphone hardware
+    /// verification: streams every 16 kHz mono `*.wav` in `AURACODE_DICTATION_FIXTURE_DIR`
+    /// through voice detection and live text in 80 ms ticks, as a recording does, and prints the
+    /// text, the passes' time and the share of real time they took. `jfk.wav` must come out as
+    /// its famous line. The models come from `resources/dictation` (run
+    /// `node apps/desktop/scripts/dictation-models.mjs` once).
     #[test]
-    #[ignore = "requires AURACODE_DICTATION_FIXTURE_DIR with WAVs and the model"]
-    fn offline_model_timing() {
-        let root = fixture_root();
-        let service = Arc::new(super::super::Dictation::default());
-        let operation = service
-            .begin(
-                "timing",
-                uuid::Uuid::new_v4().to_string(),
-                Arc::new(|_| true),
-                Box::new(|| true),
-            )
-            .unwrap();
-        let began = std::time::Instant::now();
-        model::verify(&model::path(&root), &operation).expect("model digest");
-        let context = load_context(&model::path(&root)).expect("CPU model");
-        println!("verify+load: {:?}", began.elapsed());
-        let mut wavs: Vec<_> = std::fs::read_dir(&root)
+    #[ignore = "requires the bundled models and AURACODE_DICTATION_FIXTURE_DIR with WAVs"]
+    fn bundled_models_transcribe_fixture_audio_live() {
+        let fixtures = std::path::PathBuf::from(
+            std::env::var_os("AURACODE_DICTATION_FIXTURE_DIR").expect("fixture directory"),
+        );
+        let models = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/dictation");
+        let began = Instant::now();
+        let engine = super::super::model::engine(&models).expect("bundled models");
+        println!("load: {:?}", began.elapsed());
+        let mut wavs: Vec<_> = std::fs::read_dir(&fixtures)
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| entry.path())
@@ -641,74 +610,43 @@ mod tests {
         for wav in wavs {
             let audio = fixture_pcm(&wav);
             let seconds = audio.len() as f32 / SAMPLE_RATE as f32;
-            for threads in [4, decode_threads()] {
-                let began = std::time::Instant::now();
-                let text = transcribe_with(
-                    &context,
-                    &audio,
-                    &operation,
-                    Decode {
-                        threads,
-                        audio_ctx: None,
-                        language: "en",
-                    },
-                );
-                let audio_ctx: Option<i32> = None;
-                println!(
-                    "{} ({seconds:.1}s) threads={threads} audio_ctx={audio_ctx:?}: {:?} {text:?}",
-                    wav.file_name().unwrap().to_string_lossy(),
-                    began.elapsed()
+            let cancel = CancelToken::new();
+            let mut live = Live::new(LiveConfig::default(), engine.decoder(&cancel).unwrap());
+            let mut vad = engine.vad().unwrap();
+            let mut pending = Vec::new();
+            let mut text = LiveText::default();
+            let mut updates = 0;
+            let started = Instant::now();
+            for tick in audio.chunks(SAMPLE_RATE * 80 / 1000) {
+                let before = text.clone();
+                score(
+                    &mut vad,
+                    &mut pending,
+                    tick,
+                    engine.frame_samples(),
+                    &mut live,
+                    &mut text,
+                )
+                .unwrap();
+                if text != before {
+                    updates += 1;
+                }
+            }
+            let result = live.finish().unwrap();
+            let spent = started.elapsed().as_secs_f32();
+            println!(
+                "{} ({seconds:.1}s): {spent:.2}s of passes ({:.1}% of real time), {updates} live updates: {result}",
+                wav.file_name().unwrap().to_string_lossy(),
+                spent / seconds * 100.0,
+            );
+            if wav.file_name().is_some_and(|name| name == "jfk.wav") {
+                assert!(
+                    result
+                        .to_lowercase()
+                        .contains("ask not what your country can do for you"),
+                    "{result}"
                 );
             }
         }
-    }
-
-    /// Opt-in engine acceptance, separate from microphone hardware verification. The fixture
-    /// folder must contain upstream whisper.cpp's 16 kHz PCM `jfk.wav`. The production downloader
-    /// installs the pinned model there if missing; subsequent runs need no network connection.
-    #[tokio::test]
-    #[ignore = "requires AURACODE_DICTATION_FIXTURE_DIR with jfk.wav; downloads 142 MiB once"]
-    async fn offline_model_fixture() {
-        let root = fixture_root();
-        let audio = fixture_pcm(&root.join("jfk.wav"));
-        let service = Arc::new(super::super::Dictation::default());
-        let operation = service
-            .begin(
-                "fixture",
-                uuid::Uuid::new_v4().to_string(),
-                Arc::new(|_| true),
-                Box::new(|| true),
-            )
-            .unwrap();
-        if !model::status(&root).installed {
-            model::download(root.clone(), &operation)
-                .await
-                .expect("verified model download");
-        }
-        model::verify(&model::path(&root), &operation).expect("model digest");
-        let context = load_context(&model::path(&root)).expect("CPU model");
-        let result = transcribe(
-            &context,
-            &audio,
-            &operation,
-            whisper_language(Some("en-US")),
-        )
-        .expect("offline transcription");
-        assert!(
-            result
-                .to_lowercase()
-                .contains("ask not what your country can do for you"),
-            "{result}"
-        );
-        // Cancel after inference starts, exercising the native callback bridge, not just the
-        // controller. No text may escape a cancelled operation.
-        let cancel = operation.cancel.clone();
-        std::thread::scope(|scope| {
-            scope.spawn(move || {
-                std::thread::sleep(Duration::from_millis(250));
-                cancel.cancel();
-            });
-            assert!(transcribe(&context, &audio, &operation, "en").is_err());
-        });
     }
 }

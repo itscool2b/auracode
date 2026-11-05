@@ -1,13 +1,13 @@
-//! App-owned, explicitly started dictation. Audio lives only in memory. The sole network
-//! operation downloads a pinned model; transcription never makes a network request.
+//! App-owned, explicitly started dictation (docs/local-dictation.md). The bundled models run
+//! offline: audio lives only in memory, and nothing makes a network request.
 mod audio;
-mod callbacks;
-#[allow(dead_code)] // Wired into the capture loop with the new engine in this branch.
-mod live;
 pub mod commands;
+mod engine;
+mod live;
 mod model;
 
 use crate::sync::lock;
+pub use live::LiveText;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,19 +18,19 @@ pub(crate) type Sink = Arc<dyn Fn(DictationEvent) -> bool + Send + Sync>;
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum DictationEvent {
-    Downloading {
-        received: u32,
-        total: u32,
-    },
-    ModelReady,
+    /// The engine is loading, the first time a recording starts.
     Preparing,
-    Recording {
+    /// The microphone is open: the time so far, its level (0 to 1), whether a phrase is in
+    /// progress, and the text so far.
+    Listening {
         seconds: u32,
         level: f32,
-        limit_seconds: u32,
+        speaking: bool,
+        text: LiveText,
     },
-    Transcribing {
-        percent: u8,
+    /// The microphone has closed and the last phrase is settling.
+    Finishing {
+        text: LiveText,
     },
     Complete {
         text: String,
@@ -46,7 +46,7 @@ pub enum DictationEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DictationFailure {
-    /// The model is missing, damaged, failed to download or failed to load: download it again.
+    /// The bundled models are missing or failed to load: reinstalling restores them.
     Model,
     /// The microphone is missing, blocked, busy or stopped.
     Microphone,

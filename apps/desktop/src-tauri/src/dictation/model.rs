@@ -1,186 +1,93 @@
-use super::{DictationEvent, DictationModel, Failure, Operation};
-use sha2::{Digest, Sha256};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+//! The dictation models auracode bundles (docs/local-dictation.md): Parakeet TDT-CTC 110M for
+//! English speech, with punctuation and capitals, and Silero VAD v6.2 for voice activity. They ship
+//! in the app's resources, so dictation needs no download. A release bundle refuses to build
+//! without the pinned files (apps/desktop/scripts/dictation-models.mjs verifies their SHA-256);
+//! the installer and updater signatures cover them from there, so the app checks only their sizes.
+use super::engine::Engine;
+use super::{DictationModel, Failure};
+use std::path::Path;
+use std::sync::Arc;
 
-// Upstream GGML conversion of multilingual Whisper base. Pin both revision and LFS SHA-256.
-// https://huggingface.co/ggerganov/whisper.cpp/blob/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin
-pub const MODEL_BYTES: u32 = 147_951_465;
-const MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
-const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin";
-
-pub fn path(root: &Path) -> PathBuf {
-    root.join("models").join("dictation").join("ggml-base.bin")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bundled {
+    pub file: &'static str,
+    pub bytes: u64,
 }
-pub fn status(root: &Path) -> DictationModel {
+
+pub const ASR: Bundled = Bundled {
+    file: "parakeet-tdt_ctc-110m-Q6_K.gguf",
+    bytes: 112_311_264,
+};
+pub const VAD: Bundled = Bundled {
+    file: "silero-vad-v6.2-F32.gguf",
+    bytes: 1_241_056,
+};
+/// Kept in step with `MODELS` in apps/desktop/scripts/dictation-models.mjs (tested below).
+pub const BUNDLED: [Bundled; 2] = [ASR, VAD];
+
+/// Whether `folder` holds every bundled model at its pinned size.
+pub fn present(folder: &Path) -> bool {
+    BUNDLED.iter().all(|model| {
+        std::fs::metadata(folder.join(model.file))
+            .is_ok_and(|meta| meta.is_file() && meta.len() == model.bytes)
+    })
+}
+
+pub fn status(folder: Option<&Path>) -> DictationModel {
     DictationModel {
-        installed: std::fs::metadata(path(root))
-            .is_ok_and(|m| m.is_file() && m.len() == u64::from(MODEL_BYTES)),
-        name: "Whisper base (multilingual)".into(),
-        bytes: MODEL_BYTES,
+        installed: folder.is_some_and(present),
+        name: "Parakeet TDT-CTC 110M".into(),
+        bytes: BUNDLED.iter().map(|model| model.bytes).sum::<u64>() as u32,
         supported: super::audio::cpu_supported(),
     }
 }
-pub fn verify(path: &Path, operation: &Operation) -> Result<(), Failure> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|_| Failure::model("Download the dictation model before recording."))?;
-    let mut digest = Sha256::new();
-    let mut bytes = 0u64;
-    let mut buffer = [0u8; 65536];
-    loop {
-        if operation.cancelled() {
-            return Err(Failure::cancelled());
-        }
-        let count = file.read(&mut buffer).map_err(|_| {
-            Failure::model("The dictation model could not be read. Download it again.")
-        })?;
-        if count == 0 {
-            break;
-        }
-        bytes += count as u64;
-        if bytes > u64::from(MODEL_BYTES) {
-            return Err(Failure::model(
-                "The dictation model is damaged. Download it again.",
-            ));
-        }
-        digest.update(&buffer[..count]);
-    }
-    validate(
-        bytes,
-        &format!("{:x}", digest.finalize()),
-        u64::from(MODEL_BYTES),
-        MODEL_SHA256,
-    )
-    .map_err(Failure::model)
-}
-fn validate(
-    bytes: u64,
-    hash: &str,
-    expected_bytes: u64,
-    expected_hash: &str,
-) -> Result<(), String> {
-    if bytes != expected_bytes || hash != expected_hash {
-        return Err(
-            "The dictation model did not pass its integrity check. Download it again.".into(),
-        );
-    }
-    Ok(())
-}
 
-pub async fn download(root: PathBuf, operation: &Operation) -> Result<DictationEvent, Failure> {
-    fetch(root, operation)
-        .await
-        .map_err(|failure| match failure {
-            Fetch::Cancelled => Failure::cancelled(),
-            Fetch::Failed(message) => Failure::model(message),
-        })
-}
-
-enum Fetch {
-    Cancelled,
-    Failed(String),
-}
-impl From<String> for Fetch {
-    fn from(message: String) -> Self {
-        Fetch::Failed(message)
+/// The engine for the bundled models in `folder`, loaded the first time it is asked for.
+pub fn engine(folder: &Path) -> Result<Arc<Engine>, Failure> {
+    if !present(folder) {
+        return Err(Failure::model(
+            "This build of auracode is missing its dictation models. Reinstall auracode to restore them.",
+        ));
     }
-}
-impl From<&str> for Fetch {
-    fn from(message: &str) -> Self {
-        Fetch::Failed(message.into())
-    }
-}
-
-async fn fetch(root: PathBuf, operation: &Operation) -> Result<DictationEvent, Fetch> {
-    let path = path(&root);
-    let directory = path.parent().ok_or("The model folder is unavailable.")?;
-    std::fs::create_dir_all(directory).map_err(|_| {
-        "The model folder could not be created. Check disk access and space.".to_string()
-    })?;
-    // The random temporary file is removed on failure/cancel. A valid model is replaced only
-    // after the entire new file passes its size and digest check, on the same filesystem.
-    let mut temporary = tempfile::NamedTempFile::new_in(directory)
-        .map_err(|_| "The model download could not be saved. Check disk space.".to_string())?;
-    let client = reqwest::Client::builder()
-        .https_only(true)
-        .connect_timeout(Duration::from_secs(20))
-        .read_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(1800))
-        .build()
-        .map_err(|_| "The model downloader could not start.".to_string())?;
-    let mut response = tokio::select! {
-        _ = operation.cancel.cancelled() => return Err(Fetch::Cancelled),
-        response = client.get(MODEL_URL).send() => response.map_err(|_| "The model could not be downloaded. Check your connection and retry.".to_string())?
-            .error_for_status().map_err(|_| "The model server refused the download. Try again later.".to_string())?,
-    };
-    let mut received = 0u64;
-    let mut digest = Sha256::new();
-    let mut last = std::time::Instant::now() - Duration::from_secs(1);
-    loop {
-        if operation.cancelled() {
-            return Err(Fetch::Cancelled);
-        }
-        let chunk = tokio::select! {
-            _ = operation.cancel.cancelled() => return Err(Fetch::Cancelled),
-            chunk = response.chunk() => chunk.map_err(|_| "The model download was interrupted. Retry when connected.".to_string())?,
-        };
-        let Some(chunk) = chunk else {
-            break;
-        };
-        received += chunk.len() as u64;
-        if received > u64::from(MODEL_BYTES) {
-            return Err("The model server returned an unexpected file.".into());
-        }
-        temporary
-            .write_all(&chunk)
-            .map_err(|_| "The model could not be saved. Check disk space and retry.".to_string())?;
-        digest.update(&chunk);
-        if last.elapsed() >= Duration::from_millis(100) {
-            if !operation.emit(DictationEvent::Downloading {
-                received: received as u32,
-                total: MODEL_BYTES,
-            }) {
-                return Err(Fetch::Cancelled);
-            }
-            last = std::time::Instant::now();
-        }
-    }
-    validate(
-        received,
-        &format!("{:x}", digest.finalize()),
-        u64::from(MODEL_BYTES),
-        MODEL_SHA256,
-    )?;
-    if operation.cancelled() {
-        return Err(Fetch::Cancelled);
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|_| "The model could not be saved to disk.".to_string())?;
-    temporary.persist(path).map_err(|_| {
-        "The model could not be installed. Check folder access and retry.".to_string()
-    })?;
-    Ok(DictationEvent::ModelReady)
+    Engine::shared(folder, ASR.file, VAD.file)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn both_size_and_digest_must_match() {
-        assert!(validate(3, "abc", 3, "abc").is_ok());
-        assert!(validate(2, "abc", 3, "abc").is_err());
-        assert!(validate(3, "bad", 3, "abc").is_err());
-        assert!(validate(4, "abc", 3, "abc").is_err());
+    fn the_bundled_models_match_the_release_fetch_script() {
+        let script = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/dictation-models.mjs"),
+        )
+        .unwrap();
+        for model in BUNDLED {
+            assert!(
+                script.contains(&format!("file: \"{}\"", model.file)),
+                "{}",
+                model.file
+            );
+            assert!(
+                script.contains(&format!("size: {},", model.bytes)),
+                "{}",
+                model.file
+            );
+        }
     }
+
     #[test]
-    fn a_partial_download_is_not_installed() {
-        let root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(path(root.path()).parent().unwrap()).unwrap();
-        std::fs::write(path(root.path()), b"partial").unwrap();
-        assert!(!status(root.path()).installed);
-        assert!(!path(root.path()).starts_with(root.path().join("profiles")));
+    fn a_folder_without_the_pinned_files_is_not_ready() {
+        let folder = tempfile::tempdir().unwrap();
+        assert!(!present(folder.path()));
+        assert!(!status(Some(folder.path())).installed);
+        assert!(!status(None).installed);
+        std::fs::write(folder.path().join(ASR.file), b"short").unwrap();
+        std::fs::write(folder.path().join(VAD.file), b"short").unwrap();
+        assert!(!present(folder.path()), "sizes must match");
+        assert_eq!(
+            engine(folder.path()).err().map(|failure| failure.reason),
+            Some(super::super::DictationFailure::Model)
+        );
     }
 }

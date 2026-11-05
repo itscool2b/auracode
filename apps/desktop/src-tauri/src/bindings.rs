@@ -215,7 +215,6 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::composer_commands::composer_draft,
             crate::composer_commands::composer_save_draft,
             crate::dictation::commands::dictation_model,
-            crate::dictation::commands::dictation_download,
             crate::dictation::commands::dictation_start,
             crate::dictation::commands::dictation_stop,
             crate::dictation::commands::dictation_cancel,
