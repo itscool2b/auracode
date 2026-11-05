@@ -5,7 +5,7 @@ use super::{
 };
 use crate::driver::{
     DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
-    LoggedCommand, ReadyInfo, ResumeOutcome, SessionSetup, StopPlan,
+    LoggedCommand, ReadyInfo, ResumeOutcome, SessionSetup, SteerResult, StopPlan,
 };
 use aura_process::{
     LineSink, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES,
@@ -13,7 +13,7 @@ use aura_process::{
 };
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
-    StopReason, UiRequest, UsageInfo,
+    PromptPart, StopReason, UiRequest, UsageInfo,
 };
 use futures::future::BoxFuture;
 use serde_json::{Value, json};
@@ -25,6 +25,9 @@ use std::{
 use tokio::{sync::oneshot, time::Instant};
 
 type Reply = oneshot::Sender<Result<(), DriverError>>;
+/// Said when Pi settled or stopped with a steering message it had queued but not yet read: the
+/// queue is cleared so the message cannot open the next prompt.
+const STEER_DROPPED: &str = "Pi finished before it read your steering message, so it was not delivered. Send it again as a new message.";
 fn error(message: impl Into<String>) -> DriverError {
     DriverError {
         kind: ErrorKind::ProtocolError,
@@ -137,6 +140,16 @@ enum Purpose {
     Clear,
     Abort,
     Setting(Option<Reply>),
+    /// A steer for this aura turn. Pi queues it and reads it before its next model call.
+    Steer {
+        turn: String,
+        reply: Option<oneshot::Sender<SteerResult>>,
+    },
+    /// Clears steering Pi queued after the turn it was meant for settled. `notify` says the
+    /// message was already reported delivered, so dropping it needs a notice.
+    Strand {
+        notify: bool,
+    },
 }
 struct Pending {
     command: String,
@@ -186,6 +199,8 @@ struct Session {
     usage: UsageInfo,
     last_error: Option<String>,
     run_failed: bool,
+    /// Steering messages Pi last reported in its queue (`queue_update`).
+    queued_steering: usize,
 }
 impl Session {
     fn send(&mut self, frame: Value) {
@@ -288,7 +303,7 @@ impl Session {
             || self.pending.values().any(|p| {
                 matches!(
                     p.purpose,
-                    Purpose::Setting(_) | Purpose::Clear | Purpose::Abort
+                    Purpose::Setting(_) | Purpose::Clear | Purpose::Abort | Purpose::Strand { .. }
                 ) || (self.ready && matches!(p.purpose, Purpose::State | Purpose::Levels))
             })
     }
@@ -331,8 +346,10 @@ impl Session {
             },
             capabilities: Capabilities {
                 images: true,
+                steer: true,
                 interrupt: true,
                 resume: true,
+                fork: true,
                 set_model: !self.metadata.models.is_empty(),
                 set_effort: !self.metadata.levels.is_empty(),
                 usage: true,
@@ -429,6 +446,71 @@ impl Session {
         self.interrupted = true;
         // Clearing first prevents a queued follow-up from starting after abort reaches idle.
         self.query("clear_queue", Purpose::Clear, false);
+    }
+    /// Pi takes a steer for the run in progress and reads it after the current tool calls, before
+    /// its next model call; a run that would end continues for it. Only a running, unstopped turn
+    /// whose prompt Pi has accepted can be steered.
+    fn steer(
+        &mut self,
+        turn_id: String,
+        parts: &[PromptPart],
+        reply: oneshot::Sender<SteerResult>,
+    ) {
+        if reply.is_closed() {
+            return;
+        }
+        let running = self.ready
+            && !self.stopping
+            && self.failure.is_none()
+            && !self.interrupted
+            && self.run_active
+            && self.turn.as_deref() == Some(turn_id.as_str())
+            && !self.pending.values().any(|p| {
+                matches!(
+                    p.purpose,
+                    Purpose::Prompt | Purpose::Clear | Purpose::Abort | Purpose::Steer { .. }
+                )
+            });
+        if !running {
+            let _ = reply.send(SteerResult::Rejected {
+                message: "The selected turn is no longer running or has not started yet.".into(),
+            });
+            return;
+        }
+        let mut request = match crate::attachments::pi_with_reader(
+            parts,
+            self.setup.attachment_dir.as_deref(),
+            self.setup.attachment_reader.as_deref(),
+        ) {
+            Ok(request) => request,
+            Err(message) => {
+                let _ = reply.send(SteerResult::Rejected { message });
+                return;
+            }
+        };
+        request["type"] = json!("steer");
+        self.request(
+            request,
+            Purpose::Steer {
+                turn: turn_id,
+                reply: Some(reply),
+            },
+            false,
+            None,
+        );
+    }
+    /// Clears steering Pi still holds once nothing will read it, unless a clear is already due.
+    fn clear_stranded(&mut self, notify: bool) {
+        if self.queued_steering == 0
+            || self.stopping
+            || self
+                .pending
+                .values()
+                .any(|p| matches!(p.purpose, Purpose::Clear | Purpose::Strand { .. }))
+        {
+            return;
+        }
+        self.query("clear_queue", Purpose::Strand { notify }, false);
     }
     fn ui(&mut self, frame: Value) {
         let method = wire::text(&frame, "method").unwrap_or_default();
@@ -547,6 +629,18 @@ impl Session {
                             self.failure = Some(err)
                         }
                         Purpose::Clear | Purpose::Abort => self.failure = Some(err),
+                        Purpose::Steer { reply, .. } => {
+                            if let Some(reply) = reply {
+                                let _ = reply.send(SteerResult::Rejected {
+                                    message: err.detail.unwrap_or_else(|| {
+                                        "Pi did not take the steering message.".into()
+                                    }),
+                                });
+                            }
+                        }
+                        // Pi may still hold the message; a prompt waits for the clear, so
+                        // failing to clear must stop the session rather than send it.
+                        Purpose::Strand { .. } => self.failure = Some(err),
                         _ => self.notice(format!("Pi could not provide {command}.")),
                     }
                 } else {
@@ -646,7 +740,44 @@ impl Session {
                                     Some(error("Pi returned an unknown prompt disposition."))
                             }
                         },
-                        Purpose::Clear => self.query("abort", Purpose::Abort, false),
+                        Purpose::Steer { turn, reply } => {
+                            let current = self.run_active
+                                && !self.interrupted
+                                && self.turn.as_deref() == Some(turn.as_str());
+                            let result = match wire::text(&data, "disposition") {
+                                // An input handler took it, or Pi queued it for this run.
+                                Some("handled") => SteerResult::Accepted,
+                                Some("queued") if current => SteerResult::Accepted,
+                                Some("queued") => {
+                                    // The turn settled while Pi took the message: nothing
+                                    // will read it now, so it is cleared, never kept for later.
+                                    self.clear_stranded(false);
+                                    SteerResult::Rejected {
+                                        message: "The turn finished before Pi read this message, so it was not delivered.".into(),
+                                    }
+                                }
+                                _ => SteerResult::Unconfirmed {
+                                    message: "Pi returned an unknown steering outcome. It was not retried.".into(),
+                                },
+                            };
+                            if let Some(reply) = reply {
+                                let _ = reply.send(result);
+                            }
+                        }
+                        Purpose::Strand { notify } => {
+                            self.queued_steering = 0;
+                            if notify && data["steering"].as_array().is_some_and(|s| !s.is_empty())
+                            {
+                                self.notice(STEER_DROPPED);
+                            }
+                        }
+                        Purpose::Clear => {
+                            self.queued_steering = 0;
+                            if data["steering"].as_array().is_some_and(|s| !s.is_empty()) {
+                                self.notice("Pi had not read your steering message yet, so stopping dropped it.");
+                            }
+                            self.query("abort", Purpose::Abort, false)
+                        }
                         Purpose::Abort => {
                             // The pinned RPC contract waits for the session to become idle. A handled
                             // prompt or extension-only run need not emit another agent_settled.
@@ -740,6 +871,9 @@ impl Session {
                 self.finish(reason, failure);
                 self.idle(!self.compacting);
                 self.interrupted = false;
+                // Pi runs again for steering it holds before settling, so any left now came too
+                // late for this turn.
+                self.clear_stranded(true);
                 if !self.stopping {
                     self.refresh();
                 }
@@ -779,6 +913,12 @@ impl Session {
                 }
             }
             Some("extension_error") => self.notice("A Pi extension reported an error."),
+            Some("queue_update") => {
+                self.queued_steering = frame["steering"].as_array().map_or(0, Vec::len);
+                if !self.run_active {
+                    self.clear_stranded(false);
+                }
+            }
             _ => {}
         }
     }
@@ -796,11 +936,12 @@ impl Session {
                 }
             }
             DriverCommand::RespondPermission { .. } => {}
-            DriverCommand::Steer { reply, .. } => {
-                let _ = reply.send(crate::driver::SteerResult::Rejected {
-                    message: "This agent cannot steer an exact running turn.".into(),
-                });
-            }
+            DriverCommand::Steer {
+                turn_id,
+                parts,
+                reply,
+                ..
+            } => self.steer(turn_id, &parts, reply),
             DriverCommand::RewindFiles { reply, .. } => {
                 let _ = reply.send(Err(error(
                     "Pi does not support file rewind through this driver.",
@@ -915,8 +1056,17 @@ impl Session {
                     {
                         self.failure = Some(error("Pi session state timed out."))
                     }
-                    Purpose::Prompt | Purpose::Clear | Purpose::Abort => {
+                    Purpose::Prompt | Purpose::Clear | Purpose::Abort | Purpose::Strand { .. } => {
                         self.failure = Some(error("Pi did not acknowledge a required command."))
+                    }
+                    Purpose::Steer { reply, .. } => {
+                        if let Some(reply) = reply {
+                            let _ = reply.send(SteerResult::Unconfirmed {
+                                message:
+                                    "Pi did not confirm the steering message. It was not retried."
+                                        .into(),
+                            });
+                        }
                     }
                     _ => self.notice(format!(
                         "Pi did not answer {} before its deadline.",
@@ -1097,6 +1247,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         usage: UsageInfo::default(),
         last_error: None,
         run_failed: false,
+        queued_steering: 0,
     };
     s.outbox
         .push_back(DriverEvent::Status(DriverStatus::Initializing));

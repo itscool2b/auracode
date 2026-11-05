@@ -756,3 +756,36 @@
 .context-panel-tabs button[aria-selected="true"] small {
   color: inherit;
 }
+
+/* A rewind with nothing to restore goes straight on to editing its message, from the sentence. */
+.changes-inline-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* A rewind's last step, offered in its confirmation: edit the message to continue from there. */
+.changes-edit-after {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  margin: 0 0 var(--g-space-16);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* A rewind through the agent's own checkpoints: what they cover, then the files they hold. */
+.changes-native-copy {
+  margin: 0 0 var(--g-space-12);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* Its notes start where its copy does. */
+.changes-native .changes-empty {
+  padding-inline: 0;
+}

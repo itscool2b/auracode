@@ -221,6 +221,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::processes::processes_snapshot,
             crate::processes::process_stop,
             crate::changes_commands::chat_changes,
+            crate::changes_commands::chat_rewind_files,
             crate::changes_commands::chat_change_diff,
             crate::changes_commands::checkpoint_revert_preview,
             crate::changes_commands::checkpoint_revert,

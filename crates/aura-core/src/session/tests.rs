@@ -12,6 +12,7 @@ mod memory;
 mod new_chat_defaults;
 mod project_tools;
 mod queue_changes;
+mod rewind;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;

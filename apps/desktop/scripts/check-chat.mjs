@@ -330,6 +330,54 @@ async function toolDetails(page, theme) {
  * Code colours, math and a diagram in one answer (missing features A): highlight.js's colours as
  * elements, KaTeX's inline and display math, and a Mermaid drawing with its code a click away.
  */
+/**
+ * Rewind where the turn has no auracode checkpoint (Automatic checkpoints off) but the agent keeps
+ * its own (Claude's file rewind): its preview lists the files, the confirmation restores them and
+ * goes on to the message's Edit, and the next preview finds nothing left to restore.
+ */
+async function nativeRewind(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=settled&native-rewind`);
+  await page.locator('[data-test-phase="live"]').waitFor();
+  await page.locator(".chat-user-wrap").first().hover();
+  await page.getByRole("button", { name: "Rewind to before this message" }).first().click();
+  const section = page.getByRole("region", { name: /^Restore with / });
+  await section
+    .getByText("kept a copy of each file its edit tools changed", { exact: false })
+    .waitFor();
+  assert.deepEqual(
+    await section
+      .getByRole("list", { name: "Files to restore" })
+      .getByRole("listitem")
+      .allInnerTexts(),
+    ["src/components/Sidebar.tsx", "src/styles.css"],
+  );
+  await page.getByText("2 files to restore", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Stop session to revert" }).count(), 0);
+  await page.getByRole("button", { name: "Review restore" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("lines change back.", { exact: false }).waitFor();
+  assert.ok(
+    await dialog
+      .getByRole("checkbox", { name: "Then edit this message to continue from there" })
+      .isChecked(),
+    "native restore did not offer its Edit",
+  );
+  await settled(page);
+  const scan = await new AxeBuilder({ page })
+    .include("dialog[open]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  assert.deepEqual(scan.violations, [], `${theme} native restore accessibility`);
+  await page.screenshot({ path: resolve(out, `native-rewind-${theme}.png`) });
+  await dialog.getByRole("button", { name: "Restore 2 files", exact: true }).click();
+  await page.getByRole("button", { name: "Review edited prompt", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByText("Restored 2 files.", { exact: true }).waitFor();
+  await section.getByText("has changed no files since this message", { exact: false }).waitFor();
+  await page.getByText("Nothing to restore", { exact: true }).waitFor();
+}
+
 async function richAnswer(page, theme) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   // Under the app's own policy (tauri.conf.json), which forbids eval: the dev server applies none,
@@ -415,6 +463,7 @@ async function inspect(engine, launcher) {
     for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
     for (const theme of ["light", "dark"]) await toolDetails(page, theme);
     for (const theme of ["light", "dark"]) await richAnswer(page, theme);
+    for (const theme of ["light", "dark"]) await nativeRewind(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [
@@ -1338,6 +1387,38 @@ async function inspect(engine, launcher) {
       const scan = await new AxeBuilder({ page }).include(".changes-panel").analyze();
       assert.deepEqual(scan.violations, [], `${tab} context accessibility`);
     }
+    await page.getByRole("button", { name: "Close Changes" }).click();
+    // Rewind on a sent message: Changes against the files before that turn with every change
+    // selected, then that message's Edit once the files are back.
+    await page.locator(".chat-user-wrap").first().hover();
+    await page.getByRole("button", { name: "Rewind to before this message" }).first().click();
+    await page.getByText("1 selected", { exact: true }).waitFor();
+    assert.ok(
+      await page
+        .getByRole("checkbox", { name: "Select src/components/Sidebar.tsx for revert" })
+        .isChecked(),
+      "Rewind did not select the changed file",
+    );
+    await page.getByRole("button", { name: "Review revert" }).click();
+    const editAfter = page.getByRole("checkbox", {
+      name: "Then edit this message to continue from there",
+    });
+    assert.ok(await editAfter.isChecked(), "Rewind did not offer its Edit");
+    await settled(page);
+    const rewindScan = await new AxeBuilder({ page })
+      .include("dialog[open]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    assert.deepEqual(rewindScan.violations, [], "Rewind confirmation accessibility");
+    await page.getByRole("button", { name: "Revert 1 file", exact: true }).click();
+    await page.getByRole("button", { name: "Review edited prompt", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // Nothing left to restore: the message's Edit is one step away.
+    await page.locator(".chat-user-wrap").first().hover();
+    await page.getByRole("button", { name: "Rewind to before this message" }).first().click();
+    await page.getByRole("button", { name: "Edit this message", exact: true }).click();
+    await page.getByRole("button", { name: "Review edited prompt", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Close Changes" }).click();
     await page.getByRole("button", { name: "Fork", exact: true }).click();
     await page.getByRole("region", { name: "Exact continuation context" }).waitFor();

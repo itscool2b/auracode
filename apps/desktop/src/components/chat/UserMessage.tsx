@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react";
+import { History, Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { ChatImageContext } from "../../bindings";
 import { steeringState, type UserItem } from "../../lib/chat/transcript";
@@ -9,11 +9,14 @@ import { useDisclosure } from "./DisclosureMemory";
 export function UserMessage({
   item,
   onEdit,
+  onRewind,
   settled = false,
   images,
 }: {
   readonly item: UserItem;
   readonly onEdit?: () => void;
+  /** Opens Changes against the files as they were before this message (ChangesPanel.tsx). */
+  readonly onRewind?: () => void;
   readonly settled?: boolean;
   readonly images?: ChatImageContext;
 }) {
@@ -71,6 +74,17 @@ export function UserMessage({
             onClick={onEdit}
           >
             <Pencil size={16} />
+          </button>
+        ) : null}
+        {onRewind && !item.steering ? (
+          <button
+            type="button"
+            className="chat-action"
+            aria-label="Rewind to before this message"
+            title="Rewind files to before this message"
+            onClick={onRewind}
+          >
+            <History size={16} />
           </button>
         ) : null}
         <CopyAction text={item.text} label="Copy prompt" />

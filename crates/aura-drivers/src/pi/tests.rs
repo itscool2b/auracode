@@ -1,17 +1,20 @@
 use super::*;
 use crate::driver::{
-    AgentSpawner, DriverCommand, DriverEvent, DriverTimings, EventReceiver, SessionSetup, StopPlan,
-    TurnRef, event_channel,
+    AgentSpawner, DriverCommand, DriverEvent, DriverTimings, EventReceiver, SessionSetup,
+    SteerResult, StopPlan, TurnRef, event_channel,
 };
 use aura_process::testing::{FakeAgentEnd, FakeLine, FakeSpawner};
 use aura_process::{
     EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
     ShutdownPlan, SpawnError, SpawnSpec, SpawnedProcess,
 };
-use aura_protocol::{Autonomy, PromptPart, StopReason};
+use aura_protocol::{AuraEvent, Autonomy, PromptPart, StopReason};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
-use tokio::{sync::mpsc, time::timeout};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::timeout,
+};
 
 struct Quiet(Arc<FakeSpawner>);
 impl AgentSpawner for Quiet {
@@ -124,6 +127,9 @@ impl Harness {
     }
     async fn answer_query(&mut self) {
         let query = self.wire().await;
+        self.answer(&query);
+    }
+    fn answer(&self, query: &Value) {
         let data = match query["type"].as_str().unwrap() {
             "get_state" => self.state(),
             "get_available_models" => {
@@ -136,7 +142,7 @@ impl Harness {
             }
             other => panic!("unexpected query {other}"),
         };
-        self.reply(&query, data);
+        self.reply(query, data);
     }
     async fn ready(&mut self) {
         for _ in 0..5 {
@@ -146,8 +152,8 @@ impl Harness {
             if let DriverEvent::Ready(info) = self.event().await {
                 assert_eq!(info.native_session_id, Some(self.id()));
                 assert!(
-                    !info.capabilities.fork
-                        && !info.capabilities.steer
+                    info.capabilities.fork
+                        && info.capabilities.steer
                         && !info.capabilities.permissions
                 );
                 break;
@@ -165,6 +171,59 @@ impl Harness {
                 }],
             })
             .unwrap();
+    }
+    /// A prompt Pi accepted and began, with output that proves the driver saw the run start.
+    async fn running(&mut self) {
+        self.prompt();
+        let prompt = self.wire().await;
+        self.reply(&prompt, json!({"disposition":"started"}));
+        self.send(json!({"type":"agent_start"}));
+        self.send(json!({"type":"message_start","message":{"role":"assistant"}}));
+        self.send(json!({"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Working"}}));
+        loop {
+            if let DriverEvent::Event {
+                event: AuraEvent::MessageDelta { .. },
+                ..
+            } = self.event().await
+            {
+                break;
+            }
+        }
+    }
+    fn steer(&self, turn: &str) -> oneshot::Receiver<SteerResult> {
+        let (reply, receive) = oneshot::channel();
+        self.tx
+            .send(DriverCommand::Steer {
+                turn_id: turn.into(),
+                message_id: "m1".into(),
+                parts: vec![PromptPart::Text {
+                    text: "also check the tests".into(),
+                }],
+                reply,
+            })
+            .unwrap();
+        receive
+    }
+    /// Answers the refresh queries Pi's driver sends after a turn, until `kind` arrives.
+    async fn wire_until(&mut self, kind: &str) -> Value {
+        loop {
+            let frame = self.wire().await;
+            if frame["type"] == kind {
+                return frame;
+            }
+            self.answer(&frame);
+        }
+    }
+    async fn notice(&mut self) -> String {
+        loop {
+            if let DriverEvent::Event {
+                event: AuraEvent::Notice { message, .. },
+                ..
+            } = self.event().await
+            {
+                return message;
+            }
+        }
     }
     async fn stop(mut self) {
         self.tx
@@ -204,6 +263,140 @@ async fn prompt_acceptance_and_agent_end_are_not_completion() {
     assert_eq!(ends, 1);
     h.stop().await;
 }
+#[tokio::test(start_paused = true)]
+async fn a_steer_reaches_the_running_turn_and_counts_once_pi_queues_it() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    // Nothing is running yet, and nothing is sent.
+    assert!(matches!(
+        h.steer("turn").await.unwrap(),
+        SteerResult::Rejected { .. }
+    ));
+    h.running().await;
+    assert!(matches!(
+        h.steer("another").await.unwrap(),
+        SteerResult::Rejected { .. }
+    ));
+    let reply = h.steer("turn");
+    let steer = h.wire().await;
+    assert_eq!(steer["type"], "steer");
+    assert_eq!(steer["message"], "also check the tests");
+    h.send(json!({"type":"queue_update","steering":["also check the tests"],"followUp":[]}));
+    h.reply(&steer, json!({"disposition":"queued"}));
+    assert_eq!(reply.await.unwrap(), SteerResult::Accepted);
+    // Pi reads it before its next model call, then settles: nothing is left to clear.
+    h.send(json!({"type":"queue_update","steering":[],"followUp":[]}));
+    h.send(json!({"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"also check the tests"}]}}));
+    h.send(json!({"type":"agent_settled"}));
+    loop {
+        if let DriverEvent::TurnEnded { stop_reason, .. } = h.event().await {
+            assert_eq!(stop_reason, StopReason::EndTurn);
+            break;
+        }
+    }
+    for _ in 0..4 {
+        let query = h.wire().await;
+        assert_ne!(query["type"], "clear_queue");
+        h.answer(&query);
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn pi_refusing_a_steer_is_reported_with_its_reason() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.running().await;
+    let reply = h.steer("turn");
+    let steer = h.wire().await;
+    h.send(json!({"type":"response","id":steer["id"],"command":"steer","success":false,"error":"Extension command \"/deploy\" cannot be queued."}));
+    assert_eq!(
+        reply.await.unwrap(),
+        SteerResult::Rejected {
+            message: "Extension command \"/deploy\" cannot be queued.".into()
+        }
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_steer_pi_takes_after_the_turn_settled_is_cleared_and_not_delivered() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.running().await;
+    let reply = h.steer("turn");
+    let steer = h.wire().await;
+    // Pi settled before it read the steer, then queued it with nothing left to read it.
+    h.send(json!({"type":"agent_settled"}));
+    h.send(json!({"type":"queue_update","steering":["also check the tests"],"followUp":[]}));
+    h.reply(&steer, json!({"disposition":"queued"}));
+    assert!(matches!(reply.await.unwrap(), SteerResult::Rejected { .. }));
+    let clear = h.wire_until("clear_queue").await;
+    // The next prompt waits until Pi confirms the queue is empty.
+    h.prompt();
+    let mut early = Vec::new();
+    while let Ok(Some(line)) = timeout(Duration::from_millis(5), h.end.from_client.recv()).await {
+        early.push(serde_json::from_str::<Value>(&line).unwrap());
+    }
+    assert!(early.iter().all(|frame| frame["type"] != "prompt"));
+    for frame in &early {
+        h.answer(frame);
+    }
+    h.reply(
+        &clear,
+        json!({"steering":["also check the tests"],"followUp":[]}),
+    );
+    assert_eq!(h.wire_until("prompt").await["message"], "hello");
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_steer_still_queued_when_pi_settles_is_cleared_with_a_notice() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.running().await;
+    let reply = h.steer("turn");
+    let steer = h.wire().await;
+    h.send(json!({"type":"queue_update","steering":["also check the tests"],"followUp":[]}));
+    h.reply(&steer, json!({"disposition":"queued"}));
+    assert_eq!(reply.await.unwrap(), SteerResult::Accepted);
+    h.send(json!({"type":"agent_settled"}));
+    let clear = h.wire_until("clear_queue").await;
+    h.reply(
+        &clear,
+        json!({"steering":["also check the tests"],"followUp":[]}),
+    );
+    assert!(h.notice().await.contains("was not delivered"));
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn stopping_says_when_pi_had_not_read_a_steer() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.running().await;
+    let reply = h.steer("turn");
+    let steer = h.wire().await;
+    h.send(json!({"type":"queue_update","steering":["also check the tests"],"followUp":[]}));
+    h.reply(&steer, json!({"disposition":"queued"}));
+    assert_eq!(reply.await.unwrap(), SteerResult::Accepted);
+    h.tx.send(DriverCommand::Interrupt).unwrap();
+    let clear = h.wire().await;
+    assert_eq!(clear["type"], "clear_queue");
+    // A stop never steers.
+    assert!(matches!(
+        h.steer("turn").await.unwrap(),
+        SteerResult::Rejected { .. }
+    ));
+    h.reply(
+        &clear,
+        json!({"steering":["also check the tests"],"followUp":[]}),
+    );
+    assert!(h.notice().await.contains("stopping dropped it"));
+    assert_eq!(h.wire().await["type"], "abort");
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn missing_mcp_extension_api_omits_only_optional_memory_tools_without_failing_session() {
     let mut setup = setup();

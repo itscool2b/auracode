@@ -147,6 +147,7 @@ struct Shared {
     arrived: watch::Sender<usize>,
     option_reply: Mutex<Result<(), DriverError>>,
     steer_reply: Mutex<crate::driver::SteerResult>,
+    rewind_reply: Mutex<Result<crate::driver::FileRewindResult, DriverError>>,
     /// `None`: the requested level, no native mode, `Never`.
     autonomy_reply: Mutex<Option<Result<AutonomyState, DriverError>>>,
 }
@@ -172,6 +173,11 @@ impl ScriptedDriver {
             steer_reply: Mutex::new(crate::driver::SteerResult::Rejected {
                 message: "The scripted agent does not steer turns.".into(),
             }),
+            rewind_reply: Mutex::new(Err(DriverError {
+                kind: ErrorKind::ProtocolError,
+                message: "The scripted agent does not rewind files.".into(),
+                detail: None,
+            })),
             autonomy_reply: Mutex::new(None),
         });
         let (inject, injected) = mpsc::unbounded_channel();
@@ -236,6 +242,10 @@ impl ScriptHandle {
     }
     pub fn set_steer_reply(&self, reply: crate::driver::SteerResult) {
         *lock(&self.shared.steer_reply) = reply;
+    }
+    /// What `RewindFiles` answers from now on; by default the scripted agent refuses.
+    pub fn set_rewind_reply(&self, reply: Result<crate::driver::FileRewindResult, DriverError>) {
+        *lock(&self.shared.rewind_reply) = reply;
     }
 
     /// What `SetAutonomy` answers from now on. The default is the requested level, no native mode,
@@ -524,11 +534,7 @@ impl Runner {
                 let _ = reply.send(self.shared.autonomy_reply(autonomy));
             }
             DriverCommand::RewindFiles { reply, .. } => {
-                let _ = reply.send(Err(DriverError {
-                    kind: ErrorKind::ProtocolError,
-                    message: "The scripted agent does not rewind files.".into(),
-                    detail: None,
-                }));
+                let _ = reply.send(lock(&self.shared.rewind_reply).clone());
             }
             DriverCommand::Interrupt
             | DriverCommand::RespondPermission { .. }

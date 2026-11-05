@@ -283,6 +283,8 @@ export const commands = {
 	/**  Stops `pid` and everything under it, if it runs under one of `chat_id`'s agents. */
 	processStop: (chatId: string, pid: number) => typedError<null, AppError>(__TAURI_INVOKE("process_stop", { chatId, pid })),
 	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
+	/**  A sent message's Rewind through the agent's own checkpoints; `dry_run` only lists the files. */
+	chatRewindFiles: (chatId: string, turnId: string, dryRun: boolean) => typedError<NativeRewind, AppError>(__TAURI_INVOKE("chat_rewind_files", { chatId, turnId, dryRun })),
 	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
 	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
 	checkpointRevert: (chatId: string, token: string) => typedError<RevertResult, AppError>(__TAURI_INVOKE("checkpoint_revert", { chatId, token })),
@@ -2345,6 +2347,18 @@ export type NativeCustomizationRoute = {
 	id: string,
 	label: string,
 	instructions: string,
+};
+
+/**
+ *  Files an agent's own checkpoints restore (Claude's file rewind), to before a sent message.
+ *  A preview changes nothing. They cover only the files the agent's edit tools changed; a real
+ *  rewind can skip links for safety, and says how many.
+ */
+export type NativeRewind = {
+	files: string[],
+	insertions: number | null,
+	deletions: number | null,
+	skipped_links: number | null,
 };
 
 export type NoticeLevel = "info" | "warning" | "error";

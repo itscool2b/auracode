@@ -4,6 +4,7 @@ import type {
   AgentEntry,
   ChangeDiff,
   ChangesSnapshot,
+  NativeRewind,
   RevertPreview,
   RevertResult,
   SessionStatus,
@@ -17,6 +18,26 @@ import { ContextContents, type ContextTab } from "./ContextContents";
 import { DiffBlock } from "./DiffBlock";
 import { Modal } from "./Modal";
 
+/** Goes on to a sent message's Edit: a rewind's way to continue the conversation from there. */
+function EditThisMessage({ onEdit }: { readonly onEdit: () => void }) {
+  return (
+    <>
+      {" "}
+      <button type="button" className="g-link changes-inline-action" onClick={onEdit}>
+        Edit this message
+      </button>
+    </>
+  );
+}
+
+const fileCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
+
+/** A Rewind from a sent message. `nonce` changes with each request, so asking again re-applies it. */
+export interface RewindRequest {
+  readonly turnId: string;
+  readonly nonce: number;
+}
+
 export function ChangesPanel({
   chatId,
   api,
@@ -27,6 +48,8 @@ export function ChangesPanel({
   state,
   composer,
   agent,
+  rewind = null,
+  onEditFrom,
 }: {
   readonly chatId: string;
   readonly api: ChangesTransport;
@@ -37,6 +60,10 @@ export function ChangesPanel({
   readonly state: ChatState;
   readonly composer?: ComposerTransport;
   readonly agent: AgentEntry | null;
+  /** Compares with the files before this turn and selects every change, for one Review revert. */
+  readonly rewind?: RewindRequest | null;
+  /** Continues the conversation from a turn: its Edit, as a rewind's last step. */
+  readonly onEditFrom?: (turnId: string) => void;
 }) {
   const title = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -47,7 +74,8 @@ export function ChangesPanel({
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
-  const [scope, setScope] = useState("");
+  // A rewind opens on the files before its turn; otherwise Changes compares with the latest turn.
+  const [scope, setScope] = useState(rewind?.turnId ?? "");
   const [revision, setRevision] = useState(0);
   const [snapshot, setSnapshot] = useState<ChangesSnapshot | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -60,7 +88,39 @@ export function ChangesPanel({
   const [result, setResult] = useState<RevertResult | null>(null);
   const [width, setWidth] = useState(380);
   const [tab, setTab] = useState<ContextTab>("Changes");
+  // A rewind selects every file its own comparison lists (never an earlier scope's), and offers
+  // its message's Edit once they are back.
+  const selectAllFor = useRef<string | null>(rewind?.turnId ?? null);
+  const [editAfter, setEditAfter] = useState(rewind !== null && onEditFrom !== undefined);
+  const applied = useRef(rewind?.nonce ?? 0);
+  // The agent's own checkpoints (Claude's file rewind), for a turn auracode saved none for.
+  const [nativePreview, setNativePreview] = useState<NativeRewind | null>(null);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [nativeBusy, setNativeBusy] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restored, setRestored] = useState<NativeRewind | null>(null);
   const live = hasProcess(status);
+
+  const rewindTurn = rewind?.turnId;
+  const rewindNonce = rewind?.nonce;
+  const canEdit = onEditFrom !== undefined;
+  useEffect(() => {
+    // The request the panel opened with is already its state; a later one, even for the same
+    // turn, compares again from scratch.
+    if (!rewindTurn || rewindNonce === undefined || rewindNonce === applied.current) return;
+    applied.current = rewindNonce;
+    selectAllFor.current = rewindTurn;
+    setTab("Changes");
+    setScope(rewindTurn);
+    setSelected(new Set());
+    setSnapshot(null);
+    setPath(null);
+    setDiff(null);
+    setResult(null);
+    setRestored(null);
+    setEditAfter(canEdit);
+    setRevision((value) => value + 1);
+  }, [rewindTurn, rewindNonce, canEdit]);
 
   useEffect(() => {
     // A status transition or explicit refresh scans the current files once.
@@ -74,10 +134,16 @@ export function ChangesPanel({
       .then((value) => {
         if (stale) return;
         setSnapshot(value);
-        setSelected(
-          (current) =>
-            new Set([...current].filter((path) => value.files.some((file) => file.path === path))),
-        );
+        if (selectAllFor.current !== null && selectAllFor.current === scope) {
+          selectAllFor.current = null;
+          setSelected(new Set(value.files.map((file) => file.path)));
+        } else
+          setSelected(
+            (current) =>
+              new Set(
+                [...current].filter((path) => value.files.some((file) => file.path === path)),
+              ),
+          );
         setPath((current) =>
           value.files.some((file) => file.path === current)
             ? current
@@ -134,13 +200,74 @@ export function ChangesPanel({
     if (!preview || acting) return;
     setActing(true);
     try {
-      setResult(await api.revert(chatId, preview.token));
+      const outcome = await api.revert(chatId, preview.token);
+      setResult(outcome);
       setSelected(new Set());
       setRevision((value) => value + 1);
+      // A rewind goes on to the message's Edit only when every file came back.
+      if (editAfter && scope && onEditFrom && !outcome.error) onEditFrom(scope);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
       setPreview(null);
+      setActing(false);
+    }
+  };
+  // Without auracode's checkpoint for the turn, an agent that keeps its own restores what its
+  // edit tools changed. Its preview changes nothing; the session must be live and idle.
+  const agentName = agent?.name ?? state.chat?.agent_name ?? "The agent";
+  const native =
+    scope !== "" &&
+    snapshot !== null &&
+    !snapshot.checkpoint &&
+    live &&
+    state.lists?.capabilities?.rewind === true;
+  useEffect(() => {
+    void revision;
+    let stale = false;
+    setNativePreview(null);
+    setNativeError(null);
+    if (!native) return;
+    setNativeBusy(true);
+    void api
+      .rewindFiles(chatId, scope, true)
+      .then((value) => {
+        if (!stale) setNativePreview(value);
+      })
+      .catch((error) => {
+        if (!stale) setNativeError(errorMessage(error));
+      })
+      .finally(() => {
+        if (!stale) setNativeBusy(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [api, chatId, scope, native, revision]);
+  const restore = async () => {
+    if (!nativePreview?.files.length || acting) return;
+    setActing(true);
+    setNativeError(null);
+    try {
+      const outcome = await api.rewindFiles(chatId, scope, false);
+      // Claude confirms a restore without naming the files again: they are those its preview
+      // listed, from the same checkpoint moments before.
+      setRestored(
+        outcome.files.length
+          ? outcome
+          : {
+              ...outcome,
+              files: nativePreview.files,
+              insertions: outcome.insertions ?? nativePreview.insertions,
+              deletions: outcome.deletions ?? nativePreview.deletions,
+            },
+      );
+      setRevision((value) => value + 1);
+      if (editAfter && onEditFrom) onEditFrom(scope);
+    } catch (error) {
+      setNativeError(errorMessage(error));
+    } finally {
+      setConfirmRestore(false);
       setActing(false);
     }
   };
@@ -278,6 +405,8 @@ export function ChangesPanel({
                 value={scope}
                 onChange={(event) => {
                   setScope(event.currentTarget.value);
+                  setEditAfter(false);
+                  setRestored(null);
                   setSelected(new Set());
                   setSnapshot(null);
                   setPath(null);
@@ -303,11 +432,58 @@ export function ChangesPanel({
                   {error}
                 </p>
               ) : null}
-              {snapshot?.unavailable_reason ? (
-                <p className="changes-empty">{snapshot.unavailable_reason}</p>
+              {snapshot?.unavailable_reason && !native ? (
+                <p className="changes-empty">
+                  {snapshot.unavailable_reason}
+                  {scope
+                    ? " Automatic checkpoints in Settings > General save one before each message."
+                    : null}
+                  {scope && onEditFrom ? (
+                    <EditThisMessage onEdit={() => onEditFrom(scope)} />
+                  ) : null}
+                </p>
+              ) : null}
+              {native ? (
+                <section className="changes-native" aria-label={`Restore with ${agentName}`}>
+                  <p className="changes-native-copy">
+                    {agentName} kept a copy of each file its edit tools changed. Restoring puts them
+                    back as they were before this message; changes made by commands it ran stay as
+                    they are.
+                  </p>
+                  {nativeBusy ? (
+                    <p className="changes-empty" role="status">
+                      Asking {agentName} which files it changed…
+                    </p>
+                  ) : null}
+                  {nativeError ? (
+                    <p className="ui-error" role="alert">
+                      {nativeError}
+                    </p>
+                  ) : null}
+                  {nativePreview && nativePreview.files.length === 0 ? (
+                    <p className="changes-empty">
+                      {agentName} has changed no files since this message.
+                      {onEditFrom ? <EditThisMessage onEdit={() => onEditFrom(scope)} /> : null}
+                    </p>
+                  ) : null}
+                  {nativePreview?.files.length ? (
+                    <ul className="changes-confirm-files" aria-label="Files to restore">
+                      {nativePreview.files.map((file) => (
+                        <li key={file}>
+                          <code>{file}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
               ) : null}
               {!busy && checkpoint && snapshot?.files.length === 0 ? (
-                <p className="changes-empty">No file changes since this checkpoint.</p>
+                <p className="changes-empty">
+                  No file changes since this checkpoint.
+                  {scope && onEditFrom ? (
+                    <EditThisMessage onEdit={() => onEditFrom(scope)} />
+                  ) : null}
+                </p>
               ) : null}
               {checkpoint?.warnings.length ? (
                 <details className="changes-warnings">
@@ -395,28 +571,118 @@ export function ChangesPanel({
                   ) : null}
                 </section>
               ) : null}
+              {restored ? (
+                <section className="changes-result" aria-label="Restore result">
+                  <p role="status">Restored {fileCount(restored.files.length)}.</p>
+                  {restored.skipped_links ? (
+                    <p className="changes-warning">
+                      {agentName} left {restored.skipped_links} linked{" "}
+                      {restored.skipped_links === 1 ? "path" : "paths"} as they are, for safety.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
-            <footer className="changes-panel-footer">
-              <span>{selected.size ? `${selected.size} selected` : "Select files to revert"}</span>
-              {live ? (
-                <button type="button" className="g-button g-button-28" onClick={onStop}>
-                  Stop session to revert
-                </button>
-              ) : (
+            {native ? (
+              <footer className="changes-panel-footer">
+                <span>
+                  {nativePreview?.files.length
+                    ? `${fileCount(nativePreview.files.length)} to restore`
+                    : "Nothing to restore"}
+                </span>
                 <button
                   type="button"
                   className="g-button g-button-28"
-                  disabled={!selected.size || busy || acting || error !== null}
-                  onClick={() => void review()}
+                  disabled={!nativePreview?.files.length || nativeBusy || acting}
+                  onClick={() => setConfirmRestore(true)}
                 >
                   <RotateCcw size={13} />
-                  Review revert
+                  Review restore
                 </button>
-              )}
-            </footer>
+              </footer>
+            ) : (
+              <footer className="changes-panel-footer">
+                <span>
+                  {selected.size ? `${selected.size} selected` : "Select files to revert"}
+                </span>
+                {live ? (
+                  <button type="button" className="g-button g-button-28" onClick={onStop}>
+                    Stop session to revert
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="g-button g-button-28"
+                    disabled={!selected.size || busy || acting || error !== null}
+                    onClick={() => void review()}
+                  >
+                    <RotateCcw size={13} />
+                    Review revert
+                  </button>
+                )}
+              </footer>
+            )}
           </>
         )}
       </div>
+      {confirmRestore && nativePreview ? (
+        <Modal
+          title={`Restore files with ${agentName}?`}
+          onClose={() => {
+            if (!acting) setConfirmRestore(false);
+          }}
+        >
+          <p className="changes-confirm-copy">
+            Put these files back as they were before the selected message. Changes made by commands{" "}
+            {agentName} ran stay as they are.
+          </p>
+          <ul className="changes-confirm-files">
+            {nativePreview.files.map((file) => (
+              <li key={file}>
+                <code>{file}</code>
+              </li>
+            ))}
+          </ul>
+          {nativePreview.insertions !== null || nativePreview.deletions !== null ? (
+            <p className="changes-confirm-copy">
+              <span className="chat-diff-totals">
+                <span data-op="add">+{nativePreview.insertions ?? 0}</span>{" "}
+                <span data-op="remove">−{nativePreview.deletions ?? 0}</span>
+              </span>{" "}
+              lines change back.
+            </p>
+          ) : null}
+          {onEditFrom ? (
+            <label className="changes-edit-after">
+              <input
+                type="checkbox"
+                checked={editAfter}
+                disabled={acting}
+                onChange={(event) => setEditAfter(event.currentTarget.checked)}
+              />
+              Then edit this message to continue from there
+            </label>
+          ) : null}
+          <div className="g-dialog-actions">
+            <button
+              type="button"
+              className="g-button"
+              disabled={acting}
+              onClick={() => setConfirmRestore(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-danger"
+              disabled={acting}
+              onClick={() => void restore()}
+            >
+              {acting ? "Restoring…" : `Restore ${fileCount(nativePreview.files.length)}`}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {preview ? (
         <Modal
           title="Revert selected files?"
@@ -440,6 +706,17 @@ export function ChangesPanel({
               {warning}
             </p>
           ))}
+          {scope && onEditFrom ? (
+            <label className="changes-edit-after">
+              <input
+                type="checkbox"
+                checked={editAfter}
+                disabled={acting}
+                onChange={(event) => setEditAfter(event.currentTarget.checked)}
+              />
+              Then edit this message to continue from there
+            </label>
+          ) : null}
           <div className="g-dialog-actions">
             <button
               type="button"

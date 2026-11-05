@@ -12,6 +12,18 @@ remain persisted. These turns have no Aura file-undo baseline; native harness re
 universal substitute. Earlier saved checkpoints remain available for Changes and selected-file
 revert, and are never presented as the baseline of a later turn that has no checkpoint.
 
+A sent message's Rewind (since 2026-11-05) opens Changes on the files before that message. Where
+the turn has an Aura checkpoint, that is what it restores: every file, including changes made by
+commands, with the session stopped. Where it has none, a Claude chat falls back to Claude's own
+file checkpointing, which every Claude session starts with (`CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING`):
+Claude copies a file just before its edit tools change it, so the cost follows the files it edits,
+not each prompt. Its restore (`rewind_files`, for the turn's message UUID, previewed with a dry
+run first) runs while the session is idle and covers only what Claude's edit tools changed;
+changes made by commands it ran stay, and the panel says so. A real restore Claude does not
+confirm stops the session, as files may have changed. Claude keeps these copies across a
+resumed session. Other agents' turns without a checkpoint show the reason, where Automatic
+checkpoints are, and Edit this message.
+
 When enabled, Aura saves a checkpoint before dispatching an ordinary queued prompt. This provides
 consistent Changes and selected-file revert across native harnesses, with a delay before sending.
 The harness still owns model execution and its native tools. A failed capture holds the prompt;

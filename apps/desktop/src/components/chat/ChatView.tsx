@@ -21,7 +21,7 @@ import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { AccountPicker } from "./AccountPicker";
 import { BackgroundTasks } from "./BackgroundTasks";
-import { ChangesPanel } from "./ChangesPanel";
+import { ChangesPanel, type RewindRequest } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
 import { ChatImagesProvider } from "./ChatImages";
@@ -101,6 +101,8 @@ export function ChatView({
     () => false,
   );
   const [changesOpen, setChangesOpen] = useState(false);
+  // A Rewind on a sent message: Changes opens on the files before that turn, all selected.
+  const [rewind, setRewind] = useState<RewindRequest | null>(null);
   // The background task the right panel follows; it and the Changes panel share the panel's place.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [gitOpen, setGitOpen] = useState(false);
@@ -517,6 +519,12 @@ export function ChatView({
       canResume: !live,
       onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
       onOpenChanges: transport.changes ? () => setChangesOpen(true) : undefined,
+      onRewind: transport.changes
+        ? (turnId) => {
+            setRewind((current) => ({ turnId, nonce: (current?.nonce ?? 0) + 1 }));
+            setChangesOpen(true);
+          }
+        : undefined,
     }),
     [
       transport.changes,
@@ -994,8 +1002,17 @@ export function ChatView({
               api={transport.changes}
               status={status}
               transcript={state.transcript}
-              onClose={() => setChangesOpen(false)}
+              onClose={() => {
+                setChangesOpen(false);
+                setRewind(null);
+              }}
               onStop={() => void store.stop()}
+              rewind={rewind}
+              onEditFrom={
+                transport.conversation
+                  ? (turnId) => setContinuation({ type: "edit", turn_id: turnId })
+                  : undefined
+              }
             />
           ) : openTaskItem && !openTaskItem.placeholder ? (
             <TaskPanel

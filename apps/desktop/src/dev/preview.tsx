@@ -6,6 +6,7 @@ import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/reco
 import type {
   AgentEntry,
   AuraEvent,
+  Capabilities,
   EventBatch,
   QueuedPrompt,
   QueueWait,
@@ -112,6 +113,25 @@ const AGENT: AgentEntry = {
 };
 
 /** The models Claude Code 2.1.310 listed (docs/spikes/claude-control/fixtures/turn-basic.jsonl). */
+/** A Claude session as its driver reports it, with its own file checkpointing on. */
+const NATIVE_REWIND_CAPABILITIES: Capabilities = {
+  images: true,
+  steer: false,
+  interrupt: true,
+  resume: true,
+  fork: true,
+  rewind: true,
+  set_model: true,
+  set_effort: true,
+  permissions: true,
+  plans: false,
+  usage: true,
+  limits: true,
+  slash_commands: true,
+  add_dirs: true,
+  autonomy_levels: ["full_auto", "auto_edit", "ask"],
+};
+
 const PREVIEW_MODELS: readonly (readonly [string, string, string])[] = [
   ["default", "Default (recommended)", "Opus 5.5 · Best for everyday, complex tasks"],
   ["opus", "Opus 5.5", "For complex work and everyday tasks"],
@@ -793,6 +813,9 @@ function Preview() {
   );
   // `&stopped`: the settled chat after its agent stopped, its last models and levels still offered.
   const stopped = mode === "settled" && new URLSearchParams(location.search).has("stopped");
+  // Earlier turns without auracode checkpoints, in a chat whose agent keeps its own (Claude).
+  const nativeRewind =
+    mode === "settled" && new URLSearchParams(location.search).has("native-rewind");
   const status: SessionStatus =
     queued?.status ??
     (stopped
@@ -942,6 +965,7 @@ function Preview() {
     let receive: ((batch: EventBatch) => void) | null = null;
     let currentStatus: SessionStatus = status;
     let choices = lists(1, {
+      capabilities: nativeRewind ? NATIVE_REWIND_CAPABILITIES : null,
       // Claude Code lists /compact, which the header menu offers as Compact conversation.
       commands:
         mode === "tool-details"
@@ -1175,11 +1199,12 @@ function Preview() {
           return { prompt_id: "preview-send", queued: false };
         },
       }),
+      { nativeRewind },
     );
     return shown === "missing-worktree"
       ? Object.assign(context, { git: missingWorktreeGit() })
       : context;
-  }, [mode, shown, queued, status, chat]);
+  }, [mode, shown, queued, status, chat, nativeRewind]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
     <div
