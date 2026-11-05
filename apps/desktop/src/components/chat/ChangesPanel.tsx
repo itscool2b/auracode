@@ -250,7 +250,18 @@ export function ChangesPanel({
     setNativeError(null);
     try {
       const outcome = await api.rewindFiles(chatId, scope, false);
-      setRestored(outcome);
+      // Claude confirms a restore without naming the files again: they are those its preview
+      // listed, from the same checkpoint moments before.
+      setRestored(
+        outcome.files.length
+          ? outcome
+          : {
+              ...outcome,
+              files: nativePreview.files,
+              insertions: outcome.insertions ?? nativePreview.insertions,
+              deletions: outcome.deletions ?? nativePreview.deletions,
+            },
+      );
       setRevision((value) => value + 1);
       if (editAfter && onEditFrom) onEditFrom(scope);
     } catch (error) {

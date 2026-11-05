@@ -85,8 +85,9 @@ export function withPreviewContext<T extends Transport>(
     rewindFiles: async (_chat, _turn, dryRun) => {
       const restored = agentEdits;
       if (!dryRun) agentEdits = [];
+      // As Claude does, a real restore confirms without naming the files again.
       return {
-        files: restored,
+        files: dryRun ? restored : [],
         insertions: restored.length ? 9 : 0,
         deletions: restored.length ? 4 : 0,
         skipped_links: null,

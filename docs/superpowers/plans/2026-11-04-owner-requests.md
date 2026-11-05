@@ -94,10 +94,11 @@ and a hands-on walkthrough before merging.
     and Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
   - [ ] B, in three pull requests.
     - [x] First part (this pull request): native fork for Claude and Pi from the latest answer;
-      Rewind on every sent message, on auracode's own checkpoints, which cover every agent and
-      changes made by shell commands (Claude's `rewind_files` covers only Claude's edit tools,
-      so it stays unused); Pi steering. Native fork from an earlier answer waits: Claude resumes
-      at a transcript entry id that auracode does not store per turn yet.
+      Rewind on every sent message, on auracode's own checkpoints where the turn has one (every
+      agent, shell changes too) and otherwise, in Claude chats, on Claude's `rewind_files`,
+      since Automatic checkpoints are off by default; Pi steering. Native fork from an earlier
+      answer waits: Claude resumes at a transcript entry id that auracode does not store per
+      turn yet.
     - [ ] Second part: MCP input forms for Claude and Codex (Claude answers them with an error
       today, which it turns into a silent cancel; Codex cancels them), and what a session
       loaded: MCP status, skills, plugins and subagents.

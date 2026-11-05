@@ -784,3 +784,8 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
+
+/* Its notes start where its copy does. */
+.changes-native .changes-empty {
+  padding-inline: 0;
+}
