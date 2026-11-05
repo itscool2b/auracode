@@ -6152,6 +6152,11 @@ fn fits(prompt: &UiPrompt, answer: &UiAnswer) -> bool {
         (UiPrompt::Select { options, .. }, UiAnswer::Select { index }) => {
             (*index as usize) < options.len()
         }
+        // A browser step is opened (yes) or declined (no).
+        (UiPrompt::Link { .. }, UiAnswer::Confirm { .. }) => true,
+        (UiPrompt::Form { fields, .. }, UiAnswer::Form { accept, values }) => {
+            aura_protocol::forms::check_form(fields, *accept, values).is_ok()
+        }
         (UiPrompt::Questions { questions, .. }, UiAnswer::Questions { answers }) => {
             !questions.is_empty()
                 && questions.len() == answers.len()
@@ -6195,6 +6200,8 @@ fn prompt_message(prompt: &UiPrompt) -> &str {
         | UiPrompt::Select { message, .. }
         | UiPrompt::Input { message, .. }
         | UiPrompt::Questions { message, .. }
+        | UiPrompt::Form { message, .. }
+        | UiPrompt::Link { message, .. }
         | UiPrompt::Notify { message } => message,
     }
 }
@@ -6592,7 +6599,53 @@ mod dropped_ops_tests {
 #[cfg(test)]
 mod question_validation_tests {
     use super::fits;
+    use aura_protocol::forms::{UiField, UiFieldKind, UiFieldValue, UiValue};
     use aura_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionAnswer};
+
+    #[test]
+    fn a_form_takes_only_answers_its_fields_allow_and_a_link_takes_yes_or_no() {
+        let form = UiPrompt::Form {
+            message: "Deploy".into(),
+            source: Some("deploy".into()),
+            fields: vec![UiField {
+                id: "count".into(),
+                label: "Count".into(),
+                description: None,
+                required: true,
+                kind: UiFieldKind::Number {
+                    integer: true,
+                    minimum: Some(1.0),
+                    maximum: Some(3.0),
+                    default: None,
+                },
+            }],
+        };
+        let answer = |number: f64| UiAnswer::Form {
+            accept: true,
+            values: vec![UiFieldValue {
+                id: "count".into(),
+                value: UiValue::Number { number },
+            }],
+        };
+        assert!(fits(&form, &answer(2.0)));
+        assert!(!fits(&form, &answer(4.0)));
+        assert!(!fits(&form, &answer(1.5)));
+        assert!(fits(
+            &form,
+            &UiAnswer::Form {
+                accept: false,
+                values: Vec::new()
+            }
+        ));
+        assert!(!fits(&form, &UiAnswer::Confirm { yes: true }));
+        let link = UiPrompt::Link {
+            message: "Sign in".into(),
+            source: None,
+            url: "https://example.com".into(),
+        };
+        assert!(fits(&link, &UiAnswer::Confirm { yes: false }));
+        assert!(!fits(&link, &answer(2.0)));
+    }
 
     #[test]
     fn empty_or_ambiguous_question_ids_never_accept_an_answer() {

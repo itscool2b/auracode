@@ -84,30 +84,113 @@ function Preview() {
         if (sent) return;
         sent = true;
         const prompt: UiPrompt =
-          scenario === "startup"
+          scenario === "form"
             ? {
-                type: "select",
-                message:
-                  "Codex could not open this session: original startup error. Try the advertised default?",
-                options: ["Use advertised default", "Keep current model and stop"],
-              }
-            : {
-                type: "questions",
-                message: "Choose the review scope",
-                questions: [
+                type: "form",
+                message: "Set up the deployment",
+                source: "deploy",
+                fields: [
                   {
-                    id: "scope",
-                    header: "Scope",
-                    question: "Which tests should run?",
-                    options: [
-                      { label: "Unit tests", description: "Run the focused suite" },
-                      { label: "All tests", description: "Run all suites" },
-                    ],
-                    multi_select: false,
-                    allow_free_text: true,
+                    id: "name",
+                    label: "Project name",
+                    description: "Lowercase letters and dashes.",
+                    required: true,
+                    kind: {
+                      type: "text",
+                      format: null,
+                      min_length: 2,
+                      max_length: 40,
+                      default: null,
+                    },
+                  },
+                  {
+                    id: "region",
+                    label: "Region",
+                    description: null,
+                    required: true,
+                    kind: {
+                      type: "choice",
+                      options: ["Ireland", "Virginia", "Tokyo"],
+                      multiple: false,
+                      min_items: null,
+                      max_items: null,
+                      default: [],
+                    },
+                  },
+                  {
+                    id: "replicas",
+                    label: "Replicas",
+                    description: null,
+                    required: false,
+                    kind: { type: "number", integer: true, minimum: 1, maximum: 5, default: 2 },
+                  },
+                  {
+                    id: "notify",
+                    label: "Email me when it is live",
+                    description: null,
+                    required: false,
+                    kind: { type: "boolean", default: null },
+                  },
+                  {
+                    id: "email",
+                    label: "Email",
+                    description: null,
+                    required: false,
+                    kind: {
+                      type: "text",
+                      format: "email",
+                      min_length: null,
+                      max_length: null,
+                      default: null,
+                    },
+                  },
+                  {
+                    id: "features",
+                    label: "Features",
+                    description: "Up to two.",
+                    required: false,
+                    kind: {
+                      type: "choice",
+                      options: ["Logs", "Metrics", "Tracing"],
+                      multiple: true,
+                      min_items: null,
+                      max_items: 2,
+                      default: [0],
+                    },
                   },
                 ],
-              };
+              }
+            : scenario === "link"
+              ? {
+                  type: "link",
+                  message: "Sign in to GitHub to continue",
+                  source: "github",
+                  url: "https://github.com/login/device?code=AB12",
+                }
+              : scenario === "startup"
+                ? {
+                    type: "select",
+                    message:
+                      "Codex could not open this session: original startup error. Try the advertised default?",
+                    options: ["Use advertised default", "Keep current model and stop"],
+                  }
+                : {
+                    type: "questions",
+                    message: "Choose the review scope",
+                    questions: [
+                      {
+                        id: "scope",
+                        header: "Scope",
+                        question: "Which tests should run?",
+                        options: [
+                          { label: "Unit tests", description: "Run the focused suite" },
+                          { label: "All tests", description: "Run all suites" },
+                        ],
+                        multi_select: false,
+                        allow_free_text: true,
+                      },
+                    ],
+                  };
         if (scenario === "group" && prompt.type === "questions")
           prompt.questions.push(
             {

@@ -3,11 +3,13 @@ import type { UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { questionResolutionLabel } from "../../lib/chat/present";
 import type { QuestionItem } from "../../lib/chat/transcript";
+import { FormAnswers, LinkAnswers } from "./FormAnswers";
 import { QuestionGroup } from "./QuestionGroup";
 
 /**
  * An answer as `data-test-answer` carries it: `confirm:yes`, `confirm:no`, `select:<index>`,
- * `input:<text>`, `questions:<JSON answers>`, or `dismissed` for none.
+ * `input:<text>`, `questions:<JSON answers>`, `form:<JSON values>` or `form:declined`, or
+ * `dismissed` for none.
  */
 export function answerMark(answer: UiAnswer | null): string {
   if (answer === null) return "dismissed";
@@ -20,6 +22,8 @@ export function answerMark(answer: UiAnswer | null): string {
       return `input:${answer.text}`;
     case "questions":
       return `questions:${JSON.stringify(answer.answers)}`;
+    case "form":
+      return answer.accept ? `form:${JSON.stringify(answer.values)}` : "form:declined";
   }
 }
 
@@ -104,6 +108,19 @@ function Answers({
   switch (prompt.type) {
     case "questions":
       return <QuestionGroup questions={prompt.questions} busy={busy} onRespond={onRespond} />;
+    case "form":
+      return (
+        <FormAnswers
+          source={prompt.source}
+          fields={prompt.fields}
+          busy={busy}
+          onRespond={onRespond}
+        />
+      );
+    case "link":
+      return (
+        <LinkAnswers source={prompt.source} url={prompt.url} busy={busy} onRespond={onRespond} />
+      );
     case "confirm":
       return (
         <div className="ui-row">

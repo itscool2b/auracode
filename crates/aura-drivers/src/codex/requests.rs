@@ -13,6 +13,8 @@ pub(super) enum Callback {
         decisions: BTreeSet<String>,
     },
     Questions(Vec<UiQuestion>),
+    /// An MCP server's form or browser step (`mcpServer/elicitation/request`).
+    Elicitation(crate::elicitation::Elicitation),
 }
 
 impl Callback {
@@ -26,6 +28,7 @@ impl Callback {
                 permissions: None, ..
             } => json!({"decision":"cancel"}),
             Self::Questions(_) => json!({"answers":{}}),
+            Self::Elicitation(_) => json!({"action":"cancel","content":null}),
         }
     }
 
@@ -50,6 +53,9 @@ impl Callback {
     }
 
     pub fn question_answer(&self, answer: &UiAnswer) -> Option<Value> {
+        if let Self::Elicitation(spec) = self {
+            return spec.result(Some(answer));
+        }
         let (Self::Questions(questions), UiAnswer::Questions { answers }) = (self, answer) else {
             return None;
         };

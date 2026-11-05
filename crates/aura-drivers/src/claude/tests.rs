@@ -14,6 +14,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
+mod elicitation;
 mod failures;
 mod identity;
 mod results;

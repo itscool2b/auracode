@@ -241,6 +241,81 @@ export async function checkQuestions(browser, url, out, engine) {
         { id: "question-2", answer: { type: "input", text: "All set" } },
       ]);
 
+      // An MCP server's form: each mistake at its field, focus on the first, the exact answer.
+      await open("form");
+      await page.getByRole("button", { name: "Ask question", exact: true }).click();
+      const form = question.getByTestId("question-form");
+      await form.getByText("From the deploy MCP server.", { exact: true }).waitFor();
+      const fieldInput = (id) => form.locator(`[data-test-field="${id}"]`).first();
+      await form.getByRole("button", { name: "Submit", exact: true }).click();
+      await form.getByText("Project name is required.", { exact: true }).waitFor();
+      await form.getByText("Choose one for Region.", { exact: true }).waitFor();
+      assert.equal(
+        await fieldInput("name").evaluate((node) => node === document.activeElement),
+        true,
+        "focus did not go to the first mistake",
+      );
+      assert.deepEqual(await page.evaluate(() => window.questionCalls), []);
+      await fieldInput("name").fill("aura-web");
+      await form.getByRole("radio", { name: "Virginia", exact: true }).check();
+      await fieldInput("email").fill("not an email");
+      await form.getByRole("button", { name: "Submit", exact: true }).click();
+      await form.getByText("Email must be an email address.", { exact: true }).waitFor();
+      await fieldInput("email").fill("ops@example.com");
+      await form.getByRole("checkbox", { name: "Email me when it is live" }).check();
+      await form.getByRole("checkbox", { name: "Tracing", exact: true }).check();
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).include("[data-testid=question-form]").analyze())
+          .violations,
+        [],
+        `${theme} form accessibility`,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-mcp-form.png`) });
+      await form.getByRole("button", { name: "Submit", exact: true }).click();
+      assert.deepEqual(await page.evaluate(() => window.questionCalls), [
+        {
+          id: "question-1",
+          answer: {
+            type: "form",
+            accept: true,
+            values: [
+              { id: "name", value: { type: "text", text: "aura-web" } },
+              { id: "region", value: { type: "choices", selected: [1] } },
+              { id: "replicas", value: { type: "number", number: 2 } },
+              { id: "notify", value: { type: "boolean", value: true } },
+              { id: "email", value: { type: "text", text: "ops@example.com" } },
+              { id: "features", value: { type: "choices", selected: [0, 2] } },
+            ],
+          },
+        },
+      ]);
+      await page.getByRole("button", { name: "Resolve answer", exact: true }).click();
+      await dock.waitFor({ state: "detached" });
+      await page.getByText("Project name: aura-web", { exact: false }).waitFor();
+
+      // A step in the browser: where it leads, set apart; Decline refuses.
+      await open("link");
+      await page.getByRole("button", { name: "Ask question", exact: true }).click();
+      await question.getByTestId("link-target").getByText("github.com", { exact: true }).waitFor();
+      assert.equal(
+        await question.getByRole("link", { name: "Open in browser" }).getAttribute("href"),
+        "https://github.com/login/device?code=AB12",
+      );
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).include('[data-test-request-id="question-1"]').analyze())
+          .violations,
+        [],
+        `${theme} browser step accessibility`,
+      );
+      await question.getByRole("button", { name: "Decline", exact: true }).click();
+      assert.deepEqual(await page.evaluate(() => window.questionCalls), [
+        { id: "question-1", answer: { type: "confirm", yes: false } },
+      ]);
+      await page.getByRole("button", { name: "Resolve answer", exact: true }).click();
+      await dock.waitFor({ state: "detached" });
+
       await open("turn");
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole("button", { name: "Ask question", exact: true }).click();

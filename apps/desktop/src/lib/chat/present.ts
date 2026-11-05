@@ -100,7 +100,34 @@ export function permissionResolutionLabel(
 export function answerLabel(answer: UiAnswer, prompt: UiPrompt): string {
   switch (answer.type) {
     case "confirm":
+      if (prompt.type === "link") return answer.yes ? "Opened in the browser" : "Declined";
       return answer.yes ? "Yes" : "No";
+    case "form": {
+      if (!answer.accept) return "Declined";
+      const fields = prompt.type === "form" ? prompt.fields : [];
+      const shown = answer.values.map((item) => {
+        const field = fields.find((candidate) => candidate.id === item.id);
+        const value = item.value;
+        const text =
+          value.type === "text"
+            ? value.text
+            : value.type === "number"
+              ? String(value.number)
+              : value.type === "boolean"
+                ? value.value
+                  ? "Yes"
+                  : "No"
+                : value.selected
+                    .map((index) =>
+                      field?.kind.type === "choice"
+                        ? (field.kind.options[index] ?? `Choice ${index + 1}`)
+                        : `Choice ${index + 1}`,
+                    )
+                    .join(", ");
+        return `${field?.label ?? item.id}: ${text}`;
+      });
+      return shown.length ? shown.join("; ") : "Submitted";
+    }
     case "select":
       return prompt.type === "select"
         ? (prompt.options[answer.index] ?? `Choice ${answer.index + 1}`)

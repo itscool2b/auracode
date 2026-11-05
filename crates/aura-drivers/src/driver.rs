@@ -551,7 +551,7 @@ pub struct ChannelClosed;
 
 /// Serializable mirror of [`DriverCommand`] (no reply channels), written as `cmd` log records and
 /// read by replay.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LoggedCommand {
     McpAction {

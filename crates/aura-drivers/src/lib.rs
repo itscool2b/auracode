@@ -20,6 +20,7 @@ pub mod batch;
 pub mod claude;
 pub mod codex;
 pub mod driver;
+pub mod elicitation;
 pub mod factory;
 pub mod headless;
 pub mod jsonrpc;

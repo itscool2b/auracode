@@ -864,10 +864,7 @@ impl Session {
             return;
         }
         if method == "mcpServer/elicitation/request" {
-            self.respond(id, json!({"action":"cancel","content":null}));
-            self.notice(
-                "This Codex MCP input request is not supported here; continue it in the Codex CLI.",
-            );
+            self.elicitation(id, &params);
             return;
         }
         if self.thread.as_deref() != params["threadId"].as_str() || self.thread.is_none() {
@@ -946,6 +943,72 @@ impl Session {
         );
         self.outbox.push_back(event);
     }
+    /// An MCP server's form or browser step, which Codex asks its client to show. One auracode
+    /// cannot show is cancelled with a notice saying where to finish it.
+    fn elicitation(&mut self, id: Value, params: &Value) {
+        if self.thread.is_none() || self.thread.as_deref() != params["threadId"].as_str() {
+            self.reject(id, "The callback does not belong to this thread.");
+            return;
+        }
+        let source = params["serverName"].as_str();
+        let message = params["message"]
+            .as_str()
+            .filter(|message| !message.trim().is_empty())
+            .unwrap_or("An MCP server needs your input.");
+        let parsed = if self.stopping {
+            Err(String::new())
+        } else {
+            match params["mode"].as_str() {
+                Some("form") => {
+                    crate::elicitation::form(message, source, &params["requestedSchema"], None)
+                }
+                Some("url") => crate::elicitation::link(
+                    message,
+                    source,
+                    params["url"].as_str().unwrap_or_default(),
+                ),
+                _ => Err("An MCP server asked for input auracode cannot show.".into()),
+            }
+        };
+        let (prompt, spec) = match parsed {
+            Ok(parsed) => parsed,
+            Err(reason) => {
+                self.respond(id, json!({"action":"cancel","content":null}));
+                if !reason.is_empty() {
+                    self.notice(format!(
+                        "{reason} It was cancelled; finish it in the Codex CLI if you need it."
+                    ));
+                }
+                return;
+            }
+        };
+        self.next_callback += 1;
+        let key = format!("{}.request.{}", self.spawn_id, self.next_callback);
+        let native_turn = params["turnId"]
+            .as_str()
+            .filter(|turn| !turn.is_empty())
+            .map(str::to_owned);
+        let turn = self.active.as_ref().and_then(|active| {
+            (native_turn.is_some() && active.native_id == native_turn)
+                .then(|| active.aura_id.clone())
+        });
+        self.outbox.push_back(DriverEvent::UiRequest {
+            turn: turn.clone(),
+            request: UiRequest {
+                request_id: key.clone(),
+                prompt,
+            },
+        });
+        self.callbacks.insert(
+            key,
+            Callback {
+                id,
+                turn,
+                native_turn,
+                body: requests::Callback::Elicitation(spec),
+            },
+        );
+    }
     fn withdraw(&mut self, key: &str, respond: bool) {
         if let Some(callback) = self.callbacks.remove(key) {
             if respond {
@@ -955,9 +1018,11 @@ impl Session {
                 requests::Callback::Approval { .. } => DriverEvent::PermissionWithdrawn {
                     request_id: key.into(),
                 },
-                requests::Callback::Questions(_) => DriverEvent::UiWithdrawn {
-                    request_id: key.into(),
-                },
+                requests::Callback::Questions(_) | requests::Callback::Elicitation(_) => {
+                    DriverEvent::UiWithdrawn {
+                        request_id: key.into(),
+                    }
+                }
             });
         }
     }

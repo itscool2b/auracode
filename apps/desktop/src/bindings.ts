@@ -3266,9 +3266,45 @@ export type TurnAgent = {
 };
 
 /**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */
-export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string } | { type: "questions"; answers: UiQuestionAnswer[] };
+export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string } | { type: "questions"; answers: UiQuestionAnswer[] } | 
+/**  A form submitted (`accept`) with its answered fields, or declined with none. */
+{ type: "form"; accept: boolean; values: UiFieldValue[] };
 
-export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "questions"; message: string; questions: UiQuestion[] } | { type: "notify"; message: string };
+/**  One field of a form. `id` is the schema property's name, which answers use. */
+export type UiField = {
+	id: string,
+	label: string,
+	description: string | null,
+	required: boolean,
+	kind: UiFieldKind,
+};
+
+export type UiFieldKind = { type: "text"; format: UiTextFormat | null; min_length: number | null; max_length: number | null; default: string | null } | { type: "number"; integer: boolean; minimum: number | null; maximum: number | null; default: number | null } | { type: "boolean"; default: boolean | null } | 
+/**
+ *  One choice or, with `multiple`, any number within the bounds. Answers name choices by
+ *  position, so shortening a label for display never changes what is sent.
+ */
+{ type: "choice"; options: string[]; multiple: boolean; min_items: number | null; max_items: number | null; default: number[] };
+
+/**  One answered field. A field left empty has no value at all. */
+export type UiFieldValue = {
+	id: string,
+	value: UiValue,
+};
+
+export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "questions"; message: string; questions: UiQuestion[] } | { type: "notify"; message: string } | 
+/**
+ *  An MCP server's form (MCP elicitation, form mode), answered with [`UiAnswer::Form`].
+ *  `source` names the server.
+ */
+{ type: "form"; message: string; source: string | null; fields: UiField[] } | 
+/**
+ *  An MCP server asks the user to finish something in the browser (URL mode). Answered
+ *  with [`UiAnswer::Confirm`]: yes once the page is opened, no to decline.
+ */
+{ type: "link"; message: string; source: string | null; 
+/**  http or https only. */
+url: string };
 
 /**
  *  One question in a grouped prompt. The driver keeps the original native question and maps it by
@@ -3303,12 +3339,19 @@ export type UiQuestionOption = {
 
 /**
  *  An agent asks the UI for input that isn't a tool permission (Claude or Cursor questions,
- *  Pi extension UI, ACP elicitation). Never auto-answered.
+ *  Pi extension UI, ACP elicitation, MCP forms). Never auto-answered.
  */
 export type UiRequest = {
 	request_id: string,
 	prompt: UiPrompt,
 };
+
+/**  The string formats MCP forms can ask for. */
+export type UiTextFormat = "email" | "uri" | "date" | "date_time";
+
+export type UiValue = { type: "text"; text: string } | { type: "number"; number: number | null } | { type: "boolean"; value: boolean } | 
+/**  Positions in the field's options, each at most once. */
+{ type: "choices"; selected: number[] };
 
 export type UpdateError = {
 	message: string,
