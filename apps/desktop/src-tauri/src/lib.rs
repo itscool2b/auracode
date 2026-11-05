@@ -139,7 +139,7 @@ pub fn run() {
             .menu(macos::app_menu)
             .on_menu_event(macos::on_menu_event);
     }
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     {
         builder = builder.plugin(tauri_plugin_notification::init());
     }

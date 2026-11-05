@@ -25,15 +25,18 @@ use std::{
 pub(super) enum Platform {
     Windows,
     MacOs,
+    Linux,
 }
 
 impl Platform {
-    /// The release targets Windows and macOS; elsewhere nothing is detected.
+    /// The release targets Windows, macOS and Linux; elsewhere nothing is detected.
     pub(super) fn current() -> Option<Platform> {
         if cfg!(windows) {
             Some(Platform::Windows)
         } else if cfg!(target_os = "macos") {
             Some(Platform::MacOs)
+        } else if cfg!(target_os = "linux") {
+            Some(Platform::Linux)
         } else {
             None
         }
@@ -49,6 +52,9 @@ pub(super) struct Roots {
     pub program_files: Vec<PathBuf>,
     /// `/Applications` and `~/Applications` (where JetBrains Toolbox installs on macOS).
     pub applications: Vec<PathBuf>,
+    /// Linux: the system root packages install under (`/`), and the home folder.
+    pub system: Option<PathBuf>,
+    pub home: Option<PathBuf>,
 }
 
 impl Roots {
@@ -67,6 +73,7 @@ impl Roots {
                     .filter_map(var)
                     .collect(),
                 applications: Vec::new(),
+                ..Roots::default()
             },
             Platform::MacOs => Roots {
                 local_app_data: None,
@@ -74,6 +81,12 @@ impl Roots {
                 applications: std::iter::once(PathBuf::from("/Applications"))
                     .chain(var("HOME").map(|home| home.join("Applications")))
                     .collect(),
+                ..Roots::default()
+            },
+            Platform::Linux => Roots {
+                system: Some(PathBuf::from("/")),
+                home: var("HOME"),
+                ..Roots::default()
             },
         }
     }
@@ -344,6 +357,30 @@ fn candidates(platform: Platform, roots: &Roots) -> Vec<Detected> {
                 }
             }
         }
+        Platform::Linux => {
+            // The VS Code builds' and Cursor's own executables from their .deb and .rpm packages,
+            // started like Windows' with --goto; and Zed's command line from its install script.
+            // Snaps and Flatpaks run confined, and JetBrains IDEs have no standard place: they
+            // stay manual.
+            if let Some(system) = &roots.system {
+                for (editor, file) in [
+                    (ProjectEditor::Cursor, "usr/share/cursor/cursor"),
+                    (ProjectEditor::VsCode, "usr/share/code/code"),
+                    (
+                        ProjectEditor::VsCodeInsiders,
+                        "usr/share/code-insiders/code-insiders",
+                    ),
+                ] {
+                    out.push(executable(editor, system.join(file)));
+                }
+            }
+            if let Some(home) = &roots.home {
+                out.push(executable(
+                    ProjectEditor::Zed,
+                    home.join(".local/zed.app/bin/zed"),
+                ));
+            }
+        }
         Platform::MacOs => {
             for root in &roots.applications {
                 for (editor, bundle, file) in [
@@ -476,6 +513,7 @@ mod tests {
             local_app_data: Some(local.path().into()),
             program_files: vec![program_files.path().into()],
             applications: Vec::new(),
+            ..Roots::default()
         };
         assert!(detect(Platform::Windows, &roots).is_empty());
         let programs = local.path().join("Programs");
@@ -602,6 +640,7 @@ mod tests {
             local_app_data: None,
             program_files: vec![program_files.path().into()],
             applications: Vec::new(),
+            ..Roots::default()
         };
         // A folder that only starts with the name, or lacks its executable, is not an install.
         touch(&jetbrains.join("GoLand Helper 2025.1/bin/goland64.exe"));
@@ -655,6 +694,7 @@ mod tests {
             local_app_data: Some(local.path().into()),
             program_files: Vec::new(),
             applications: Vec::new(),
+            ..Roots::default()
         };
         let found = detect(Platform::Windows, &roots);
         assert_eq!(editors(&found), [ProjectEditor::GoLand]);
@@ -669,6 +709,7 @@ mod tests {
             local_app_data: None,
             program_files: Vec::new(),
             applications: vec![system.path().into(), home.path().join("Applications")],
+            ..Roots::default()
         };
         touch(
             &system
@@ -773,6 +814,55 @@ mod tests {
             })
         );
         // The same roots on Windows find nothing: each platform checks only its own layout.
+        assert!(detect(Platform::Windows, &roots).is_empty());
+    }
+
+    #[test]
+    fn linux_finds_packaged_editors_and_zeds_command_line() {
+        let system = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let roots = Roots {
+            system: Some(system.path().into()),
+            home: Some(home.path().into()),
+            ..Roots::default()
+        };
+        assert!(detect(Platform::Linux, &roots).is_empty());
+        touch(&system.path().join("usr/share/code/code"));
+        touch(&home.path().join(".local/zed.app/bin/zed"));
+        let found = detect(Platform::Linux, &roots);
+        assert_eq!(editors(&found), [ProjectEditor::VsCode, ProjectEditor::Zed]);
+        let file = "/home/me/project/src/main.rs";
+        let place = Some(Position {
+            line: 7,
+            column: None,
+        });
+        assert_eq!(
+            command(
+                &found[0],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            ),
+            Some(Command {
+                program: system.path().join("usr/share/code/code"),
+                args: vec![OsString::from("--goto"), OsString::from(format!("{file}:7"))],
+                wait: false,
+            })
+        );
+        assert_eq!(
+            command(
+                &found[1],
+                Target::File {
+                    path: file,
+                    position: place
+                }
+            )
+            .unwrap()
+            .args,
+            [OsString::from(format!("{file}:7"))]
+        );
+        // The Windows layout finds nothing in a Linux system root.
         assert!(detect(Platform::Windows, &roots).is_empty());
     }
 

@@ -2,7 +2,7 @@
   "version": 1,
   "scope": "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher, Windows vendored OpenSSL, transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
   "inputs": {
-    "Cargo.lock": "789f4d82a13954f5778efaaca968cbadf07cffbae469d483b41de8777c1ce288",
+    "Cargo.lock": "b58a20df9cbc47782ed27b275e5f60e79f3401cf6ab4485cb4e7738cd9f6b4cf",
     "Cargo.toml": "fa7a4ad1ae18ee6891bc86117d7a9d6e4e712e9fe15d5e658cf715c859a69d6f",
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",

@@ -189,7 +189,31 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
             vec!["--noprofile", "--norc", "-i"],
         ));
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    // Linux: Bash first, as most distributions set it, then Zsh when installed. Both start
+    // without startup files, as on macOS: the reviewed environment already carries the login PATH.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = env;
+        for (id, label, places, args) in [
+            (
+                ProjectShell::Bash,
+                "Bash",
+                ["/usr/bin/bash", "/bin/bash"],
+                vec!["--noprofile", "--norc", "-i"],
+            ),
+            (
+                ProjectShell::Zsh,
+                "Zsh",
+                ["/usr/bin/zsh", "/bin/zsh"],
+                vec!["-f", "-i"],
+            ),
+        ] {
+            if let Some(path) = places.into_iter().map(PathBuf::from).find(|path| path.is_file()) {
+                choices.push((id, label, path, args));
+            }
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let _ = env;
     choices
         .into_iter()
