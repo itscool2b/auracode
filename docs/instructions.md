@@ -118,7 +118,7 @@ file is kept), for a chat isolated into a worktree, and for a recreated worktree
   yet) is taken back out, so the new worktree never shows changes of its own.
 - A folder ignored whole (`.claude/`) counts for the files inside it.
 
-The switch is Instructions' **Worktree chats** section (Settings and Customize), stored as the
+The switch is Instructions' **Worktree chats** section (Settings > Instructions), stored as the
 profile preference `copy_instructions_to_worktrees` and on unless turned off; profiles from before
 it read it as on. A problem copying never fails the chat: a new worktree chat or an isolation shows
 it as a warning, and a recreate logs it.

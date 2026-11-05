@@ -3,7 +3,6 @@ import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
-import { CustomizeScreen, type CustomizeSection } from "./components/customize/CustomizeScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
 import { ProcessesScreen } from "./components/processes/ProcessesScreen";
@@ -15,8 +14,7 @@ import {
   recoverProfileConfiguration,
 } from "./components/settings/ConfigurationRecovery";
 import { LockedProfile } from "./components/settings/LockedProfile";
-import { SettingsScreen } from "./components/settings/SettingsScreen";
-import { AgentsScreen } from "./components/setup/AgentsScreen";
+import { type Page as SettingsPage, SettingsScreen } from "./components/settings/SettingsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
 import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
@@ -43,15 +41,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View =
-  | "chats"
-  | "diagnostics"
-  | "stress"
-  | "setup"
-  | "agents"
-  | "processes"
-  | "settings"
-  | "library";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "processes" | "settings";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -79,30 +69,33 @@ export function App({
   bootRef.current = boot;
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
-  const [customizeEntry, setCustomizeEntry] = useState<{
-    id: number;
-    section: CustomizeSection;
-    projectId: string | null;
-    target?: InstructionsTarget;
-    chatLabel?: string;
-    activeChatId?: string;
-    /** A memory revision to open with its changes (an agent edit's Review). */
-    memoryRevision?: string;
-  }>({ id: 0, section: "plugins", projectId: null });
   const viewRef = useRef(view);
   viewRef.current = view;
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
+  /** Where Settings opens: its page, and the project, chat or revision a page opens on. */
   const [settingsEntry, setSettingsEntry] = useState<{
     id: string;
-    page: "general" | "account" | "instructions";
+    page: SettingsPage;
     email: string;
     target?: InstructionsTarget;
     chatLabel?: string;
+    projectId?: string | null;
+    activeChatId?: string;
+    memoryRevision?: string;
   }>({
     id: "initial",
     page: "general",
     email: "",
   });
+  /** Opens Settings from the chats on `page`, with what that page should open on. */
+  const openSettings = (
+    page: SettingsPage,
+    entry: Omit<typeof settingsEntry, "id" | "page" | "email"> = {},
+  ) => {
+    setSettingsReturn("chats");
+    setSettingsEntry({ id: String(Date.now()), page, email: "", ...entry });
+    setView("settings");
+  };
   useEffect(
     () =>
       subscribeSignInLinks((link) => {
@@ -398,24 +391,9 @@ export function App({
         }}
       />
     );
-  // Agents and the Plugin library stand alone in the inset pane (shell.css, .pane-shell).
-  if (view === "agents")
-    return (
-      <div className="pane-shell g-root">
-        <AgentsScreen
-          app={chats}
-          transport={transport}
-          onBack={() => setView("chats")}
-          onSetup={() => {
-            setRestartSetup(true);
-            setView("setup");
-          }}
-        />
-      </div>
-    );
-  // Settings, Customize and Processes keep the chats mounted behind them: the open chat and its
-  // draft survive the visit.
-  if (view === "chats" || view === "settings" || view === "library" || view === "processes") {
+  // Settings and Processes keep the chats mounted behind them: the open chat and its draft survive
+  // the visit.
+  if (view === "chats" || view === "settings" || view === "processes") {
     return (
       <>
         <div hidden={view !== "chats"} className="app-view">
@@ -428,26 +406,15 @@ export function App({
             info={info}
             onRecoveryDismissed={onRecoveryDismissed}
             onDiagnostics={() => setView("diagnostics")}
-            onAgents={() => setView("agents")}
+            onAgents={() => openSettings("agents")}
             onProcesses={() => setView("processes")}
-            onCustomize={(projectId, activeChatId) => {
-              setCustomizeEntry({ id: Date.now(), section: "plugins", projectId, activeChatId });
-              setView("library");
-            }}
-            onReviewMemory={(projectId, revision) => {
-              setCustomizeEntry({
-                id: Date.now(),
-                section: "memory",
-                projectId,
-                memoryRevision: revision,
-              });
-              setView("library");
-            }}
-            onSettings={() => {
-              setSettingsReturn("chats");
-              setSettingsEntry({ id: "chats", page: "general", email: "" });
-              setView("settings");
-            }}
+            onCustomize={(projectId, activeChatId) =>
+              openSettings("plugins", { projectId, activeChatId })
+            }
+            onReviewMemory={(projectId, revision) =>
+              openSettings("memory", { projectId, memoryRevision: revision })
+            }
+            onSettings={() => openSettings("general")}
             onInstructions={(target, chatLabel) => {
               const organization = workspace?.getSnapshot().data;
               const projectId =
@@ -459,15 +426,12 @@ export function App({
                         project.folders.some((folder) => folder.id === target.folder_id),
                       )?.id
                     : null;
-              setCustomizeEntry({
-                id: Date.now(),
-                section: "instructions",
+              openSettings("instructions", {
                 projectId: projectId ?? null,
                 activeChatId: target.type === "chat" ? target.chat_id : undefined,
                 target,
                 chatLabel,
               });
-              setView("library");
             }}
           />
         </div>
@@ -478,63 +442,22 @@ export function App({
             initialEmail={settingsEntry.email}
             instructionsTarget={settingsEntry.target}
             chatLabel={settingsEntry.chatLabel}
-            instructionFolders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
-              project.folders.map((folder) => ({
-                id: folder.id,
-                label:
-                  project.folders.length > 1
-                    ? `${project.name} / ${folder.display_name}`
-                    : project.name,
-              })),
-            )}
+            workspace={workspace}
+            projectId={settingsEntry.projectId ?? null}
+            activeChatId={settingsEntry.activeChatId}
+            memoryRevision={settingsEntry.memoryRevision}
+            agents={{ app: chats, transport }}
             backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}
             onImported={async () => {
               await Promise.all([chats.reloadChats(), workspace?.refresh()]);
             }}
             onBack={() => setView(settingsReturn)}
-            onAgents={() => setView("agents")}
-            onCustomize={(section) => {
-              const target = settingsEntry.target;
-              const organization = workspace?.getSnapshot().data;
-              const projectId =
-                target?.type === "chat"
-                  ? organization?.chats.find((entry) => entry.chat.id === target.chat_id)
-                      ?.project_id
-                  : target?.type === "folder"
-                    ? organization?.projects.find((project) =>
-                        project.folders.some((folder) => folder.id === target.folder_id),
-                      )?.id
-                    : null;
-              setCustomizeEntry({
-                id: Date.now(),
-                section,
-                projectId: projectId ?? null,
-                target,
-                activeChatId: target?.type === "chat" ? target.chat_id : undefined,
-                chatLabel: settingsEntry.chatLabel,
-              });
-              setView("library");
-            }}
             onDiagnostics={() => setView("diagnostics")}
             onSetup={() => {
               setRestartSetup(true);
               setView("setup");
             }}
-          />
-        ) : null}
-        {view === "library" ? (
-          <CustomizeScreen
-            key={customizeEntry.id}
-            workspace={workspace}
-            initialProjectId={customizeEntry.projectId}
-            initialSection={customizeEntry.section}
-            instructionsTarget={customizeEntry.target}
-            chatLabel={customizeEntry.chatLabel}
-            activeChatId={customizeEntry.activeChatId}
-            initialMemoryRevision={customizeEntry.memoryRevision}
-            onBack={() => setView("chats")}
-            onAgents={() => setView("agents")}
           />
         ) : null}
         {view === "processes" ? (

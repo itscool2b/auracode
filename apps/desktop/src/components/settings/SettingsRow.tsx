@@ -1,17 +1,22 @@
 import type { ReactNode } from "react";
 
-/** A settings row: the label, an optional one-line description, and at most one control. */
+/**
+ * A settings row: the label, an optional one-line description, and at most one control. Settings'
+ * search finds it by `setting`, its title unless the title varies (settingsIndex.ts).
+ */
 export function Row({
   title,
   detail,
   children,
+  setting = title,
 }: {
   readonly title: string;
   readonly detail?: ReactNode;
   readonly children?: ReactNode;
+  readonly setting?: string;
 }) {
   return (
-    <div className="settings-row">
+    <div className="settings-row" data-setting={setting}>
       <div className="settings-row-text">
         <div>
           <strong>{title}</strong>

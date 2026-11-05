@@ -1711,6 +1711,11 @@ export type GeneralPreferences = {
 	 *  (the owner reversed the earlier review-only decision on 1 November 2026).
 	 */
 	agent_memory_writes: boolean,
+	/**
+	 *  A finished turn shows its work (interim messages, tools, thinking) instead of folding it
+	 *  under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
+	 */
+	keep_steps_open: boolean,
 };
 
 export type GitFileState = {
@@ -2946,7 +2951,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
 { type: "copy_instructions_to_worktrees"; enabled: boolean } | 
 /**  Turns on or off agents' direct edits to project memory. Off keeps review-only proposals. */
-{ type: "agent_memory_writes"; enabled: boolean };
+{ type: "agent_memory_writes"; enabled: boolean } | 
+/**  Turns on or off showing a finished turn's work instead of folding it. */
+{ type: "keep_steps_open"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,

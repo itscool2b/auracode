@@ -1107,3 +1107,137 @@ h1 + .settings-group {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/*
+ * One screen (owner's plan, 4 November 2026): the search under Settings' title finds any row on
+ * any page, and its matches take the sections' place while it holds text.
+ */
+.settings-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: var(--g-space-4) 0 var(--g-space-8);
+}
+
+.settings-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--g-fg-3);
+  pointer-events: none;
+}
+
+.settings-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-32);
+  border: 1px solid var(--g-glass-rim);
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.settings-search-input::placeholder {
+  color: var(--g-fg-3);
+  opacity: 1;
+}
+
+.settings-search-input:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 1px;
+}
+
+.settings-result-page {
+  flex: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.settings-no-results {
+  margin: var(--g-space-8);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+/* A page keeps its place once opened, so a library or a half-written instruction survives a visit. */
+.settings-page[hidden] {
+  display: none;
+}
+
+/* Agents and Plugins & MCP have columns of their own, so their pages run wider. */
+.settings-content[data-wide] {
+  width: min(100%, 1080px);
+}
+
+.settings-page .agents-page[data-embedded] {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-page .agents-page[data-embedded] > .agents-head {
+  margin: 0 0 var(--g-space-24);
+}
+
+.settings-page .plugins-screen[data-embedded] .library-heading,
+.settings-page .plugins-screen[data-embedded] .plugins-body {
+  padding-inline: 0;
+}
+
+.settings-page .plugins-screen[data-embedded] .library-heading {
+  padding-top: 0;
+}
+
+/* A search's row, tinted with the theme's mark a moment as its page opens. */
+.settings-row[data-found],
+.settings-section[data-found] {
+  border-radius: var(--g-radius-12);
+  animation: settings-found var(--g-dur-found) var(--g-ease) both;
+}
+
+@keyframes settings-found {
+  from {
+    background-color: var(--g-volt-tint);
+  }
+}
+
+/* Voice's microphone test: the button in its row; while it runs, the bar and the words beneath. */
+.settings-mic-test {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.settings-row > .settings-mic-test[data-open] {
+  grid-column: 1 / -1;
+  align-items: stretch;
+}
+
+.settings-mic-test[data-open] > .g-button {
+  align-self: flex-end;
+}
+
+.settings-mic-bar {
+  padding: 0;
+}
+
+.settings-mic-words {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
+}
+
+.settings-mic-problem {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}

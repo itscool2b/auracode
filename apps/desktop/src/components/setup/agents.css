@@ -223,8 +223,9 @@
   color: var(--g-volt);
 }
 
+/* Small type: red-hover is the red that holds 4.5:1 on the row in both appearances. */
 .agent-row-status[data-phase="broken"] {
-  color: var(--g-red);
+  color: var(--g-red-hover);
 }
 
 /*

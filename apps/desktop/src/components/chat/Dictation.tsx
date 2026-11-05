@@ -382,7 +382,7 @@ export function DictationBar({ dictation }: { readonly dictation: DictationView 
  * The microphone's level over the last 13 seconds, newest at the right: a bar per report, dark
  * where voice detection heard speech. Each report slides the row one bar to the left.
  */
-function Wave({
+export function Wave({
   wave,
   tick,
   quiet,

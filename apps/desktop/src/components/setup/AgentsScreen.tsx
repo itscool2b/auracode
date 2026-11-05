@@ -65,23 +65,86 @@ export function AgentsScreen({
   transport,
   onBack,
   onSetup,
+  embedded = false,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
   readonly onBack: () => void;
   readonly onSetup: () => void;
+  /**
+   * Settings > Agents: no bar or title of its own, and the store keeps running for the chats
+   * mounted behind Settings, so this page neither starts nor stops it.
+   */
+  readonly embedded?: boolean;
 }) {
   const state = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   useEffect(() => {
+    if (embedded) return;
     app.start();
     return () => app.stop();
-  }, [app]);
+  }, [app, embedded]);
   const agents = state.agents;
   // The counts are about this computer, as setup's are: the built-in demo is not installed here.
   const counted = agents === null ? null : realAgents(agents);
   const installed = counted?.filter((agent) => agent.availability.state === "ready").length ?? 0;
   const looking = counted?.filter((agent) => agent.availability.state === "checking").length ?? 0;
   const refresh = () => void app.refreshAgents();
+  const summary = (
+    <p aria-live="polite">
+      {agents === null
+        ? "Looking for the agents on this computer."
+        : looking > 0
+          ? `${installed} found so far. Still looking for ${looking}.`
+          : `${installed} of ${counted?.length ?? 0} installed on this computer.`}
+    </p>
+  );
+  const refreshButton = (
+    <button
+      type="button"
+      className="g-button g-button-outline"
+      disabled={state.agentsRefreshing}
+      onClick={refresh}
+    >
+      {state.agentsRefreshing ? (
+        <span className="agents-refreshing" aria-hidden="true">
+          <span className="ui-pulse" />
+        </span>
+      ) : (
+        <RefreshCw size={14} aria-hidden="true" />
+      )}
+      {state.agentsRefreshing ? "Refreshing…" : "Refresh"}
+    </button>
+  );
+  const list =
+    agents === null ? (
+      <div className="agent-list-empty" role="status">
+        <span className="ui-pulse" aria-hidden="true" />
+        <p>Looking for agents…</p>
+      </div>
+    ) : (
+      <ul className="agent-list">
+        {agents.map((agent, index) => (
+          <AgentRow
+            key={agent.id}
+            agent={agent}
+            transport={transport}
+            onRefresh={refresh}
+            onConnection={(agentId, connection) => app.setAgentConnection(agentId, connection)}
+            index={index}
+          />
+        ))}
+      </ul>
+    );
+  if (embedded)
+    return (
+      <div className="agents-page" data-embedded="" data-setting="Agents">
+        <div className="agents-head">
+          {summary}
+          {refreshButton}
+        </div>
+        {list}
+      </div>
+    );
   return (
     <main className="setup-shell g-root agents-screen">
       <div className="setup-drag" data-tauri-drag-region="" />
@@ -97,49 +160,11 @@ export function AgentsScreen({
         <div className="agents-head">
           <div>
             <h1>Agents</h1>
-            <p aria-live="polite">
-              {agents === null
-                ? "Looking for the agents on this computer."
-                : looking > 0
-                  ? `${installed} found so far. Still looking for ${looking}.`
-                  : `${installed} of ${counted?.length ?? 0} installed on this computer.`}
-            </p>
+            {summary}
           </div>
-          <button
-            type="button"
-            className="g-button g-button-outline"
-            disabled={state.agentsRefreshing}
-            onClick={refresh}
-          >
-            {state.agentsRefreshing ? (
-              <span className="agents-refreshing" aria-hidden="true">
-                <span className="ui-pulse" />
-              </span>
-            ) : (
-              <RefreshCw size={14} aria-hidden="true" />
-            )}
-            {state.agentsRefreshing ? "Refreshing…" : "Refresh"}
-          </button>
+          {refreshButton}
         </div>
-        {agents === null ? (
-          <div className="agent-list-empty" role="status">
-            <span className="ui-pulse" aria-hidden="true" />
-            <p>Looking for agents…</p>
-          </div>
-        ) : (
-          <ul className="agent-list">
-            {agents.map((agent, index) => (
-              <AgentRow
-                key={agent.id}
-                agent={agent}
-                transport={transport}
-                onRefresh={refresh}
-                onConnection={(agentId, connection) => app.setAgentConnection(agentId, connection)}
-                index={index}
-              />
-            ))}
-          </ul>
-        )}
+        {list}
       </div>
     </main>
   );

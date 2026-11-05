@@ -696,22 +696,24 @@ async function openSettings(): Promise<HTMLElement> {
   );
 }
 
-async function customizeDestination(label: string): Promise<HTMLElement> {
-  const screen = await waitFor("Customize", () => one("customize-screen"));
-  await waitFor(`Customize to select ${label} and focus its heading`, () => {
+/** The Settings page `label` (Customize's sections are Settings pages now), its heading focused. */
+async function settingsDestination(label: string): Promise<HTMLElement> {
+  const navigation = await waitFor("Settings", () =>
+    document.querySelector<HTMLElement>('aside[aria-label="Settings navigation"]'),
+  );
+  return waitFor(`Settings to open ${label} and focus its heading`, () => {
     const selected = namedButton(
       label,
-      screen.querySelector('nav[aria-label="Customize sections"]') ?? screen,
+      navigation.querySelector('nav[aria-label="Settings sections"]') ?? navigation,
     );
-    return (
-      selected?.getAttribute("aria-current") === "page" &&
-      document.activeElement === screen.querySelector("h1")
-    );
+    const page = document.querySelector<HTMLElement>(".settings-page:not([hidden])");
+    const heading = document.querySelector<HTMLElement>(".settings-content h1");
+    return selected?.getAttribute("aria-current") === "page" &&
+      page !== null &&
+      document.activeElement === heading
+      ? page
+      : null;
   });
-  if (document.querySelector('aside[aria-label="Settings navigation"]')) {
-    throw new StepError("Settings remained mounted behind Customize");
-  }
-  return screen;
 }
 
 async function returnToRetainedChat(
@@ -719,20 +721,26 @@ async function returnToRetainedChat(
   input: HTMLTextAreaElement,
   draft: string,
 ): Promise<void> {
-  click(namedButton("Back to chats", one("customize-screen") ?? document), "Back to chats");
+  click(
+    namedButton(
+      "Back to chats",
+      document.querySelector('aside[aria-label="Settings navigation"]') ?? document,
+    ),
+    "Back to chats",
+  );
   await waitFor("the original chat to become visible", () => {
     const view = one("chat-view");
     return (
       view &&
       !view.closest("[hidden]") &&
       attr(view, "chat-id") === chatId &&
-      one("customize-screen") === null
+      document.querySelector('aside[aria-label="Settings navigation"]') === null
     );
   });
   if (one("composer-input") !== input || input.value !== draft) {
-    throw new StepError("Customize navigation replaced the composer or lost its unsent draft");
+    throw new StepError("Settings navigation replaced the composer or lost its unsent draft");
   }
-  if (status() !== "ready") throw new StepError("Customize navigation changed the running session");
+  if (status() !== "ready") throw new StepError("Settings navigation changed the running session");
 }
 
 async function settingsCustomize(chatId: string, appearance: "light" | "dark"): Promise<string> {
@@ -743,7 +751,11 @@ async function settingsCustomize(chatId: string, appearance: "light" | "dark"): 
   setValue(input, draft);
   try {
     return await withAppearanceRestored(setupApi, async () => {
-      let navigation = await openSettings();
+      const navigation = await openSettings();
+      const sections = () =>
+        navigation.querySelector('nav[aria-label="Settings sections"]') ?? navigation;
+      click(namedButton("Appearance", sections()), "Settings' Appearance");
+      await settingsDestination("Appearance");
       const appearanceControls = await waitFor("Appearance controls to load", () => {
         const group = document
           .querySelector('input[name="settings-appearance"]')
@@ -755,20 +767,22 @@ async function settingsCustomize(chatId: string, appearance: "light" | "dark"): 
         const choice = document.querySelector<HTMLInputElement>(
           `input[name="settings-appearance"][value="${appearance}"]`,
         );
-        return (
-          choice?.checked &&
-          !choice.matches(":disabled") &&
-          document.documentElement.dataset.theme === appearance
-        );
+        return choice?.checked && document.documentElement.dataset.theme === appearance;
       });
-      if ((await setupApi.snapshot()).preferences.appearance !== appearance) {
-        throw new StepError(`the ${appearance} preference was not persisted by the native backend`);
+      // The choice applies at once and saves in turn: wait for the native backend to hold it.
+      const persisted = Date.now() + 10_000;
+      while ((await setupApi.snapshot()).preferences.appearance !== appearance) {
+        if (Date.now() > persisted)
+          throw new StepError(
+            `the ${appearance} preference was not persisted by the native backend`,
+          );
+        await new Promise((done) => setTimeout(done, 100));
       }
       for (const label of ["Plugins & MCP", "Instructions", "Project memory"]) {
-        const link = namedButton(label, navigation);
+        const link = namedButton(label, sections());
         link?.focus();
-        click(link, `Settings' ${label} link`);
-        const destination = await customizeDestination(label);
+        click(link, `Settings' ${label}`);
+        const destination = await settingsDestination(label);
         if (label === "Instructions") {
           await waitFor(
             "global Instructions scope",
@@ -778,12 +792,11 @@ async function settingsCustomize(chatId: string, appearance: "light" | "dark"): 
           );
         }
         if (document.documentElement.dataset.theme !== appearance) {
-          throw new StepError("Customize lost the selected appearance");
+          throw new StepError(`Settings' ${label} lost the selected appearance`);
         }
-        await returnToRetainedChat(chatId, input, draft);
-        if (label !== "Project memory") navigation = await openSettings();
       }
-      return `${appearance}: all three Settings links opened their Customize section with heading focus; chat ${chatId}, session and draft stayed mounted`;
+      await returnToRetainedChat(chatId, input, draft);
+      return `${appearance}: Appearance saved natively, and Plugins & MCP, Instructions and Project memory opened in Settings with heading focus; chat ${chatId}, session and draft stayed mounted`;
     });
   } finally {
     if (input.isConnected) setValue(input, previousDraft);
@@ -812,7 +825,7 @@ async function customizeScopes(chatId: string): Promise<string> {
       ),
     );
     click(result, "Edit this chat's instructions");
-    let destination = await customizeDestination("Instructions");
+    let destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact chat Instructions scope",
       () =>
@@ -836,7 +849,7 @@ async function customizeScopes(chatId: string): Promise<string> {
     await clickWhenEnabled("the project folder's Instructions", () =>
       namedButton(`Instructions for ${folder.display_name}`),
     );
-    destination = await customizeDestination("Instructions");
+    destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact project folder Instructions scope",
       () =>
@@ -844,7 +857,7 @@ async function customizeScopes(chatId: string): Promise<string> {
         `folder:${folder.id}`,
     );
     await returnToRetainedChat(chatId, input, draft);
-    return "chat command and project folder action retained their exact Instructions scope, destination focus and unsent chat draft";
+    return "chat command and project folder action opened Settings' Instructions on their exact scope, with destination focus and the unsent chat draft retained";
   } finally {
     if (input.isConnected) setValue(input, previousDraft);
   }
@@ -859,6 +872,12 @@ async function chatScenario(
   const folder = plan.folder ?? "";
   const agentId = plan.agent_id ?? "mock";
   let chatId = "";
+
+  // Finished turns fold their steps under "Worked for" by default (#76). This scenario reads every
+  // step of its turns, so its scratch profile keeps them open; check-chat.mjs covers the fold.
+  const preferences = (await setupApi.snapshot()).preferences;
+  if (!preferences.general.keep_steps_open)
+    await setupApi.apply(preferences.revision, { type: "keep_steps_open", enabled: true });
 
   await checks.run("chats-screen", async () => {
     const option = await agentOption(agentId);

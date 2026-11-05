@@ -1,7 +1,7 @@
 # Plugins & MCP
 
-Customize, below Search and New chat, opens Plugins & MCP. The existing Settings entry remains
-available. Shared MCP has its own section, followed by one section per agent. Each agent section shows
+Customize, below Search and New chat, opens Settings on Plugins & MCP, which Settings also lists
+beside its other pages. Shared MCP has its own section, followed by one section per agent. Each agent section shows
 what that agent supports, read from the agent's own CLI where the CLI has a reviewed,
 machine-readable listing, and from the agent's files where it does not. It also shows the
 harness's update status and the device's sync switch for that agent. Every change runs the

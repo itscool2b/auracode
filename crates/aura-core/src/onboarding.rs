@@ -143,6 +143,9 @@ pub struct GeneralPreferences {
     /// agents propose updates for review. On unless the person turns it off in Project memory
     /// (the owner reversed the earlier review-only decision on 1 November 2026).
     pub agent_memory_writes: bool,
+    /// A finished turn shows its work (interim messages, tools, thinking) instead of folding it
+    /// under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
+    pub keep_steps_open: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -159,6 +162,7 @@ impl Default for GeneralPreferences {
             config_sync_paused: Vec::new(),
             copy_instructions_to_worktrees: true,
             agent_memory_writes: true,
+            keep_steps_open: false,
         }
     }
 }
@@ -232,6 +236,10 @@ pub enum SetupAction {
     },
     /// Turns on or off agents' direct edits to project memory. Off keeps review-only proposals.
     AgentMemoryWrites {
+        enabled: bool,
+    },
+    /// Turns on or off showing a finished turn's work instead of folding it.
+    KeepStepsOpen {
         enabled: bool,
     },
 }
@@ -537,6 +545,9 @@ impl OnboardingStore {
             }
             SetupAction::AgentMemoryWrites { enabled } => {
                 next.preferences.general.agent_memory_writes = enabled;
+            }
+            SetupAction::KeepStepsOpen { enabled } => {
+                next.preferences.general.keep_steps_open = enabled;
             }
         }
         next.preferences.revision = revision
@@ -1014,6 +1025,39 @@ mod tests {
     }
 
     #[test]
+    fn finished_turns_fold_unless_steps_are_kept_open_and_old_profiles_read_folded() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(!store.preferences().general.keep_steps_open);
+        let next = store
+            .apply(0, SetupAction::KeepStepsOpen { enabled: true })
+            .unwrap();
+        assert!(next.preferences.general.keep_steps_open);
+        drop(store);
+        assert!(
+            OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .general
+                .keep_steps_open
+        );
+        // A profile saved before the setting existed folds, as it did.
+        let older = tempfile::tempdir().unwrap();
+        std::fs::write(
+            older.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":2,"step":"project","motion":"full","appearance":"light","completed":true,"first_project_id":null,"general":{"default_agent":null,"default_model":null,"default_effort":null,"default_autonomy":"full_auto","automatic_checkpoints":false,"notifications":true,"keep_awake":true,"close_to_tray":true,"config_sync_paused":[],"copy_instructions_to_worktrees":true,"agent_memory_writes":true}}}"#,
+        )
+        .unwrap();
+        assert!(
+            !OnboardingStore::open(older.path())
+                .unwrap()
+                .preferences()
+                .general
+                .keep_steps_open
+        );
+    }
+
+    #[test]
     fn general_preferences_are_saved_and_reopen() {
         let dir = tempfile::tempdir().unwrap();
         let store = OnboardingStore::open(dir.path()).unwrap();
@@ -1065,6 +1109,7 @@ mod tests {
                 config_sync_paused: vec!["codex".into()],
                 copy_instructions_to_worktrees: true,
                 agent_memory_writes: true,
+                keep_steps_open: false,
             }
         );
         assert!(

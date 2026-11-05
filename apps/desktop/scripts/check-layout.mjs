@@ -66,6 +66,14 @@ export const MODES = [
   "settings",
   // General with a default agent chosen: its Model row and the agent's reported models.
   "settings#defaults",
+  // Settings' other pages (one screen since the owner's plan of 4 November 2026).
+  "settings&page=appearance",
+  "settings&page=chats",
+  "settings&page=voice",
+  "settings&page=agents",
+  "settings&page=plugins",
+  "settings&page=memory&scope=folder",
+  "settings&page=privacy",
   "setup",
   "agents",
   // An agent's details opened on the Agents page, in each state they take: ready on its direct

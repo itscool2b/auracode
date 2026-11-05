@@ -8,8 +8,7 @@ import type {
   SetupSnapshot,
   UpdateStatus,
 } from "../bindings";
-import { CustomizeScreen, type CustomizeSection } from "../components/customize/CustomizeScreen";
-import { SettingsScreen } from "../components/settings/SettingsScreen";
+import { type Page, SettingsScreen } from "../components/settings/SettingsScreen";
 import { accountApi } from "../lib/account/api";
 import type { AccountStatus } from "../lib/account/bindings";
 import { accountResetApi } from "../lib/account/reset";
@@ -19,6 +18,9 @@ import {
   getThemePreference,
   rememberPreviewTheme,
 } from "../lib/appearance";
+import { AppStore } from "../lib/chat/appStore";
+import { FakeTransport } from "../lib/chat/testing";
+import type { DictationApi } from "../lib/dictation";
 import { profileApi } from "../lib/profiles";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
@@ -267,13 +269,68 @@ Object.assign(window, {
     general: () => structuredClone(preferences.preferences.general),
   },
 });
+// Settings > Agents lists these through the same store the chats use; nothing is installed.
+function agentsFixture() {
+  const listed = [
+    agent("claude", "Claude Code", true),
+    agent("codex", "Codex", true),
+    agent("pi", "Pi", false),
+  ];
+  const transport = new FakeTransport({
+    agentsList: async () => listed,
+    agentsRefresh: async () => listed,
+    agentSetConnection: async () => listed,
+    agentMaintenance: async () => ({
+      auth_status: false,
+      login_available: false,
+      update_unavailable: "Synthetic fixture: no vendor command can run here.",
+    }),
+  });
+  const app = new AppStore(transport);
+  app.start();
+  return { app, transport };
+}
+
+// Voice's microphone test: the words of one sentence, then what finishing heard. No audio.
+let heard: (event: Parameters<Parameters<DictationApi["start"]>[1]>[0]) => void = () => {};
+const dictation: DictationApi = {
+  model: async () => ({
+    installed: true,
+    name: "Parakeet TDT-CTC 110M",
+    bytes: 113552320,
+    supported: true,
+  }),
+  start: async (_id, receive) => {
+    heard = receive;
+    receive({ state: "preparing" });
+    receive({
+      state: "listening",
+      seconds: 1,
+      level: 0.4,
+      speaking: true,
+      text: { settled: "", stable: "Testing one", tentative: "two" },
+    });
+  },
+  // As the engine does: finishing settles the words, cancelling ends the recording.
+  stop: async () => {
+    heard({ state: "finishing", text: { settled: "Testing one two", stable: "", tentative: "" } });
+  },
+  cancel: async () => {
+    heard({ state: "cancelled" });
+  },
+};
+Object.assign(window, {
+  dictationFixture: {
+    complete: () => heard({ state: "complete", text: "Testing one, two, three." }),
+  },
+});
+
 function Preview() {
   const params = new URLSearchParams(location.search);
-  const transition = params.has("customize-navigation");
   const legacy = params.has("legacy-instructions");
-  const [closed, setClosed] = useState(transition && !legacy);
-  const [section, setSection] = useState<CustomizeSection | null>(null);
-  const [customize] = useState(() => (transition ? createCustomizeFixture() : null));
+  const [closed, setClosed] = useState(false);
+  const [customize] = useState(() => createCustomizeFixture());
+  const [agents] = useState(() => agentsFixture());
   const target: InstructionsTarget =
     params.get("scope") === "chat"
       ? { type: "chat", chat_id: "fixture-chat" }
@@ -286,33 +343,36 @@ function Preview() {
       open: (email: string) => setEntry((previous) => ({ id: previous.id + 1, email })),
     },
   });
-  if (closed && !transition)
+  if (closed)
     return (
       <main className="g-root">
         <h1>Back to workspace</h1>
       </main>
     );
-  const settings = (
+  const page =
+    (params.get("page") as Page | null) ??
+    (signInFixture ? "account" : legacy ? "instructions" : "general");
+  return (
     <SettingsScreen
       navigationId={String(entry.id)}
-      initialPage={signInFixture ? "account" : legacy ? "instructions" : "general"}
+      initialPage={page}
       initialEmail={signInFixture ? entry.email : ""}
       instructionsTarget={target}
       info={info}
       setup={setup}
       general={general}
       updates={updates}
+      dictation={dictation}
+      workspace={customize.workspace}
+      projectId={target.type === "global" ? null : "fixture-project"}
+      activeChatId={target.type === "chat" ? target.chat_id : undefined}
+      chatLabel={target.type === "chat" ? "Fixture chat folder" : undefined}
+      services={customize.services}
+      agents={agents}
       reveal={async () => {
         calls.push("reveal");
       }}
       onBack={() => setClosed(true)}
-      onAgents={() => {
-        calls.push("agents");
-      }}
-      onCustomize={(section) => {
-        calls.push(`customize:${section}`);
-        if (transition) setSection(section);
-      }}
       onSetup={() => {
         calls.push("setup");
       }}
@@ -320,36 +380,6 @@ function Preview() {
         calls.push("diagnostics");
       }}
     />
-  );
-  if (!customize) return settings;
-  return (
-    <>
-      {/* Mirrors App's retained chat view. The uncontrolled draft exposes an accidental remount. */}
-      <main hidden={!closed || section !== null} className="g-root">
-        <h1>Back to workspace</h1>
-        <textarea aria-label="Chat draft" defaultValue="An unsent chat draft" />
-        <button type="button" onClick={() => setClosed(false)}>
-          Open Settings
-        </button>
-      </main>
-      {!closed && section === null ? settings : null}
-      {section ? (
-        <CustomizeScreen
-          workspace={customize.workspace}
-          services={customize.services}
-          initialSection={section}
-          instructionsTarget={target}
-          initialProjectId={target.type === "global" ? null : "fixture-project"}
-          activeChatId={target.type === "chat" ? target.chat_id : undefined}
-          chatLabel="Fixture chat folder"
-          onBack={() => {
-            setSection(null);
-            setClosed(true);
-          }}
-          onAgents={() => calls.push("agents")}
-        />
-      ) : null}
-    </>
   );
 }
 export function mountSettingsPreview(container: HTMLElement): void {

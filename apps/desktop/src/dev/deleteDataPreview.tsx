@@ -191,7 +191,7 @@ function Preview({ mode }: { readonly mode: Mode }) {
   return (
     <SettingsScreen
       info={info(mode)}
-      initialPage="about"
+      initialPage="privacy"
       setup={setup}
       general={general}
       updates={updates}
@@ -199,7 +199,6 @@ function Preview({ mode }: { readonly mode: Mode }) {
       dataCleanup={api(mode)}
       deleteDataOpenOnLoad
       onBack={() => setBack(true)}
-      onAgents={() => {}}
       onSetup={() => {}}
       onDiagnostics={() => {}}
     />
