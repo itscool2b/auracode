@@ -710,6 +710,7 @@ impl Session {
                 images: true,
                 interrupt: true,
                 resume: true,
+                fork: true,
                 set_model: true,
                 set_effort: true,
                 permissions: true,

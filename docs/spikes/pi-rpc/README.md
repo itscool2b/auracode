@@ -39,7 +39,13 @@ extension select/confirm/input dialogs require a user answer. Unsupported editor
 cancelled explicitly; terminal widgets, titles and composer replacements have no product surface.
 Dialogs that exceed the UI's message, option-label, placeholder or event-size limits are cancelled
 with a notice before display. The adapter never asks for approval with shortened native text.
-The driver does not advertise images, steer, fork, rewind or permission-policy enforcement.
+The driver does not advertise rewind or permission-policy enforcement. Since 2026-11-05 it
+advertises steering and native fork (images were already sent). A steer is Pi's `steer` command for
+the running turn: Pi reads it after the current tool calls, before its next model call, and runs
+again for it rather than settle. It counts as delivered only when Pi queues it while that turn
+runs. Steering Pi still holds when it settles, or takes after settling, is cleared with
+`clear_queue` before any later prompt, so it can never open the next turn, and the chat says it was
+not delivered; a stop says so too.
 Fresh starts allocate transcript IDs independently of chat IDs. Native fork startup preserves its
 source. Resume paths resolve to the real native ID before Ready; unexpected later session changes
 close the driver rather than replacing the chat's transcript silently.

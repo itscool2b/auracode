@@ -168,7 +168,8 @@ impl Harness {
                         crate::driver::ResumeOutcome::Resumed
                     }
                 );
-                assert!(!info.capabilities.fork && !info.capabilities.rewind);
+                // Native fork is offered; file rewind stays with auracode's own checkpoints.
+                assert!(info.capabilities.fork && !info.capabilities.rewind);
                 break;
             }
         }
