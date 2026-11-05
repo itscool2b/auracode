@@ -485,6 +485,91 @@
   margin: 0;
 }
 
+/*
+ * What the call was given (owner's plan, 4 November 2026, missing features A): each input by its
+ * name, short values beside it and long ones (code, JSON, multi-line text) on their own lines.
+ */
+.chat-tool-input {
+  display: grid;
+  gap: var(--g-space-4);
+  margin: 0;
+}
+
+.chat-tool-input > div {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--g-space-12);
+  min-width: 0;
+}
+
+.chat-tool-input > div[data-block] {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--g-space-2);
+}
+
+.chat-tool-input dt {
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-tool-input dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-input-code {
+  max-height: 240px;
+  margin: 0;
+  overflow: auto;
+}
+
+/* A web search's pages: each title opens in the browser, its site beside it. */
+.chat-tool-links {
+  display: grid;
+  gap: var(--g-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-tool-links li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.chat-tool-links a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-decoration: underline;
+  text-decoration-color: var(--g-line-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tool-links span {
+  flex: none;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* An edit's line counts in its row, as the diff's own head shows them. */
+.chat-tool-delta {
+  flex: none;
+}
+
 .chat-tool-well .chat-segment {
   gap: var(--g-space-8);
 }

@@ -260,6 +260,72 @@ async function workingLifecycle(page, engine, theme) {
   assert.deepEqual(scan.violations, [], `${engine}/${theme}: live-turn accessibility`);
 }
 
+/**
+ * What a call shows besides its output (missing features A): Claude's to-do list as the turn's
+ * plan, a web search's links in place of their JSON, an MCP call's input and JSON reply set out
+ * over lines, an edit's line counts, a long command on its own lines, a compacted conversation
+ * as a notice, and Compact conversation where the agent lists /compact.
+ */
+async function toolDetails(page, theme) {
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  await page.goto(`${url}/?preview=tool-details`);
+  await page
+    .getByText("Claude Code compacted the conversation from 153k tokens", { exact: false })
+    .waitFor();
+  for (const entry of [
+    "Search for open sidebar bugs",
+    "Fix the scroll position bug",
+    "Run the sidebar tests",
+  ])
+    await page.getByText(entry, { exact: true }).first().waitFor();
+  await page.getByText("Read 2 files, browsed 1 page", { exact: false }).click();
+  const call = (name) =>
+    page.locator(".chat-tool").filter({ has: page.locator(".chat-tool-head", { hasText: name }) });
+  await page.evaluate(() => {
+    for (const summary of document.querySelectorAll(".chat-tool-head")) {
+      const details = summary.parentElement;
+      if (details && !details.open) summary.click();
+    }
+  });
+  const search = call("Searched the web");
+  const links = search.getByTestId("tool-links").getByRole("link");
+  assert.deepEqual(
+    await links.evaluateAll((nodes) =>
+      nodes.map((node) => [node.textContent, node.getAttribute("href")]),
+    ),
+    [
+      [
+        "Element: scrollIntoView() method",
+        "https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView",
+      ],
+      [
+        "Keeping the selected item visible [React]",
+        "https://react.dev/learn/manipulating-the-dom-with-refs",
+      ],
+    ],
+  );
+  assert.doesNotMatch(await search.getByTestId("tool-text").textContent(), /Links:/);
+  const mcp = call("search_issues");
+  const input = mcp.getByTestId("tool-input");
+  assert.match(await input.textContent(), /queryis:open label:sidebar/);
+  assert.match(await input.textContent(), /limit5/);
+  assert.match(await mcp.getByTestId("tool-text").textContent(), /\{\n {2}"total_count": 2,/);
+  assert.equal((await call("Edited").locator(".chat-tool-delta").textContent()).trim(), "+2 −1");
+  assert.match(await call("Ran").getByTestId("tool-input").textContent(), /vitest run \\\n/);
+  await page.locator('summary[aria-label="Chat details and controls"]').click();
+  await page.getByTestId("chat-compact").waitFor();
+  await page.keyboard.press("Escape");
+  await settled(page);
+  assert.deepEqual(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze()
+    ).violations.map((violation) => violation.id),
+    [],
+    `tool details, ${theme}`,
+  );
+}
 async function inspect(engine, launcher) {
   const browser = await launcher.launch({ headless: true });
   const errors = [];
@@ -287,6 +353,7 @@ async function inspect(engine, launcher) {
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     for (const theme of ["light", "dark"]) await workingLifecycle(page, engine, theme);
+    for (const theme of ["light", "dark"]) await toolDetails(page, theme);
     for (const theme of ["light", "dark"]) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
       for (const mode of [

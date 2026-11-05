@@ -377,6 +377,117 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // What a call shows besides its output: Claude's to-do list as the turn's plan, a web search's
+  // links, an MCP call's input and JSON reply, an edit's line counts, a long command, and a
+  // compacted conversation (missing features A, owner's plan of 4 November 2026).
+  if (mode === "tool-details")
+    return [
+      ...events,
+      {
+        type: "notice",
+        level: "info",
+        message:
+          "Claude Code compacted the conversation from 153k tokens as its context filled, and continues from its summary.",
+      },
+      ev.turnStarted("details"),
+      ev.user("u-details", "Find the open sidebar bugs and fix the first one."),
+      ev.toolCall("todo", {
+        title: "Update the to-do list",
+        status: "completed",
+        tool_name: "TodoWrite",
+        raw_input: {
+          todos: [
+            {
+              content: "Search for open sidebar bugs",
+              status: "completed",
+              activeForm: "Searching",
+            },
+            { content: "Fix the scroll position bug", status: "in_progress", activeForm: "Fixing" },
+            { content: "Run the sidebar tests", status: "pending", activeForm: "Running tests" },
+          ],
+        },
+      }),
+      {
+        type: "plan_updated",
+        entries: [
+          { content: "Search for open sidebar bugs", status: "completed", priority: null },
+          { content: "Fix the scroll position bug", status: "in_progress", priority: null },
+          { content: "Run the sidebar tests", status: "pending", priority: null },
+        ],
+      },
+      ev.toolCall("search", {
+        kind: "fetch",
+        title: "Search the web for react sidebar scroll into view",
+        status: "completed",
+        tool_name: "WebSearch",
+        raw_input: { query: "react sidebar scroll into view" },
+        content: [
+          {
+            type: "text",
+            text: 'Web search results for query: "react sidebar scroll into view"\n\nLinks: [{"title":"Element: scrollIntoView() method","url":"https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView"},{"title":"Keeping the selected item visible [React]","url":"https://react.dev/learn/manipulating-the-dom-with-refs"}]\n\nscrollIntoView with block nearest keeps the item visible without jumping.',
+            truncated: null,
+          },
+        ],
+      }),
+      ev.toolCall("issues", {
+        title: "github: search_issues",
+        status: "completed",
+        tool_name: "mcp__github__search_issues",
+        raw_input: {
+          query: "is:open label:sidebar",
+          limit: 5,
+          sort: { by: "updated", order: "desc" },
+        },
+        content: [
+          {
+            type: "text",
+            text: '{"total_count":2,"items":[{"number":412,"title":"Sidebar loses the open chat","state":"open"},{"number":398,"title":"Project headers wrap","state":"open"}]}',
+            truncated: null,
+          },
+        ],
+      }),
+      ev.toolCall("fix", {
+        kind: "edit",
+        title: "Edit Sidebar.tsx",
+        status: "completed",
+        tool_name: "Edit",
+        locations: [{ path: "src/components/Sidebar.tsx", line: 24 }],
+        raw_input: {
+          file_path: "src/components/Sidebar.tsx",
+          old_string: "selected",
+          new_string: "selected",
+        },
+        content: [
+          {
+            type: "diff",
+            path: "src/components/Sidebar.tsx",
+            old_text: "const row = rows[selected];\nrow.focus();\n",
+            new_text:
+              'const row = rows[selected];\nrow.scrollIntoView({ block: "nearest" });\nrow.focus({ preventScroll: true });\n',
+            truncated: null,
+          },
+        ],
+      }),
+      ev.toolCall("check", {
+        kind: "execute",
+        title: "pnpm --filter @auracode/desktop exec vitest run …",
+        status: "completed",
+        tool_name: "Bash",
+        raw_input: {
+          command:
+            "pnpm --filter @auracode/desktop exec vitest run \\\n  src/components/Sidebar.test.tsx \\\n  --reporter dot",
+          description: "Run the sidebar tests",
+        },
+        content: [
+          { type: "terminal", output: "..\n\n2 tests passed", exit_code: 0, truncated: null },
+        ],
+      }),
+      ev.message(
+        "details-answer",
+        "Fixed #412: the open chat now scrolls into view without stealing focus, and the sidebar tests pass.",
+      ),
+      ev.messageDone("details-answer"),
+    ];
   // A running turn that started subagents and background commands (tasksPreview.ts).
   if (mode === "tasks" || mode === "tasks-many")
     return [...events, ...taskPreviewEvents(mode === "tasks-many")];
@@ -615,6 +726,7 @@ function Preview() {
     "missing-worktree",
     "tasks",
     "tasks-many",
+    "tool-details",
     ...Object.keys(NEW_CHAT_SCENARIOS),
     ...Object.keys(QUEUE_PREVIEWS),
   ].includes(requested)
@@ -811,6 +923,17 @@ function Preview() {
     let receive: ((batch: EventBatch) => void) | null = null;
     let currentStatus: SessionStatus = status;
     let choices = lists(1, {
+      // Claude Code lists /compact, which the header menu offers as Compact conversation.
+      commands:
+        mode === "tool-details"
+          ? [
+              {
+                name: "compact",
+                description: "Summarize the conversation to free context",
+                input_hint: null,
+              },
+            ]
+          : [],
       controls: {
         version: 1,
         access: {

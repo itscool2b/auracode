@@ -32,6 +32,8 @@ import { chromium, webkit } from "playwright";
 /** Every ?preview= mode main.tsx routes, the chat harness's own and the other screens'. */
 export const MODES = [
   "settled",
+  // A call's input, a web search's links, JSON replies, edit counts, Claude's plan, compaction.
+  "tool-details",
   "streaming",
   "thinking",
   "permission",
