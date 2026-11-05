@@ -29,6 +29,7 @@ describe("native smoke appearance restoration", () => {
         revision,
         appearance,
         theme: "aura",
+        text_size: "compact",
         motion: "full",
         step: "motion",
         completed: true,

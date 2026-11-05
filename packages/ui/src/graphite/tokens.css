@@ -134,6 +134,13 @@
   --g-leading-ui: 20px;
   --g-text-prose: 15px;
   --g-leading-prose: 24px;
+  /*
+   * The chat's own text: answers, sent messages, questions and the composer (owner, 4 November
+   * 2026: fit more text in, as Codex does). Compact by default; the Comfortable text size sets it
+   * at the prose size instead.
+   */
+  --g-text-chat: 14px;
+  --g-leading-chat: 22px;
   --g-text-meta: 12px;
   --g-leading-meta: 16px;
   --g-text-heading: 16px;
@@ -539,4 +546,10 @@
   --g-stagger: 0ms;
   --g-stagger-letter: 0ms;
   --g-stagger-row: 0ms;
+}
+
+/* Settings > General > Text size, Comfortable: the chat sets at the prose size, as it once did. */
+:root[data-text-size="comfortable"] {
+  --g-text-chat: var(--g-text-prose);
+  --g-leading-chat: var(--g-leading-prose);
 }

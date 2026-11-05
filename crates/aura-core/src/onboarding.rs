@@ -46,6 +46,22 @@ pub enum AppearancePreference {
     Dark,
 }
 
+/// How large the chat's text sets (owner, 4 November 2026: fit more text in, as Codex does).
+/// Compact is the default; Comfortable keeps the earlier, larger size. A file written before this
+/// setting existed, or naming a size this build lacks, reads as Compact ([`fill_defaults`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TextSizePreference {
+    #[default]
+    Compact,
+    Comfortable,
+}
+
+impl TextSizePreference {
+    /// Every size's saved name, as serde writes it.
+    pub const NAMES: [&'static str; 2] = ["compact", "comfortable"];
+}
+
 /// The desktop's theme: Aura's own neutral palette, or one per supported agent (owner,
 /// 3 November 2026). It belongs to the profile on this device, like appearance, and works in both
 /// appearances. Claude Code's is the default (owner, 4 November 2026): a profile that never chose
@@ -90,6 +106,7 @@ pub struct SetupPreferences {
     pub motion: MotionPreference,
     pub appearance: AppearancePreference,
     pub theme: ThemePreference,
+    pub text_size: TextSizePreference,
     pub completed: bool,
     pub first_project_id: Option<String>,
     /// Files written before these settings existed read their defaults ([`fill_defaults`]).
@@ -169,6 +186,9 @@ pub enum SetupAction {
     Theme {
         value: ThemePreference,
     },
+    TextSize {
+        value: TextSizePreference,
+    },
     Project {
         project_id: String,
     },
@@ -234,6 +254,7 @@ impl Default for Record {
                 motion: MotionPreference::Full,
                 appearance: AppearancePreference::System,
                 theme: ThemePreference::default(),
+                text_size: TextSizePreference::default(),
                 completed: false,
                 first_project_id: None,
                 general: GeneralPreferences::default(),
@@ -432,6 +453,7 @@ impl OnboardingStore {
             SetupAction::Motion { value } => next.preferences.motion = value,
             SetupAction::Appearance { value } => next.preferences.appearance = value,
             SetupAction::Theme { value } => next.preferences.theme = value,
+            SetupAction::TextSize { value } => next.preferences.text_size = value,
             SetupAction::Project { project_id } => {
                 if project_id.is_empty()
                     || project_id.len() > 128
@@ -555,6 +577,16 @@ fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
         .is_some_and(|name| ThemePreference::NAMES.contains(&name))
     {
         *theme = default_theme();
+    }
+    // No text size yet, or one a newer build added: Compact.
+    let text_size = preferences
+        .entry("text_size")
+        .or_insert_with(|| serde_json::Value::String("compact".into()));
+    if !text_size
+        .as_str()
+        .is_some_and(|name| TextSizePreference::NAMES.contains(&name))
+    {
+        *text_size = serde_json::Value::String("compact".into());
     }
     let Ok(serde_json::Value::Object(defaults)) =
         serde_json::to_value(GeneralPreferences::default())
@@ -799,6 +831,59 @@ mod tests {
         assert!(snapshot.notice.is_none(), "{:?}", snapshot.notice);
         assert_eq!(snapshot.preferences.theme, ThemePreference::Claude);
         assert_eq!(snapshot.preferences.appearance, AppearancePreference::Light);
+    }
+
+    #[test]
+    fn text_size_defaults_to_compact_changes_and_survives_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":2,"step":"project","motion":"full","appearance":"dark","theme":"cursor","completed":true,"first_project_id":null}}"#,
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert_eq!(
+            store.preferences().text_size,
+            TextSizePreference::Compact,
+            "files from before the setting read as Compact"
+        );
+        let next = store
+            .apply(
+                2,
+                SetupAction::TextSize {
+                    value: TextSizePreference::Comfortable,
+                },
+            )
+            .unwrap();
+        assert_eq!(next.preferences.text_size, TextSizePreference::Comfortable);
+        assert_eq!(next.preferences.theme, ThemePreference::Cursor, "kept");
+        assert_eq!(
+            OnboardingStore::open(dir.path())
+                .unwrap()
+                .preferences()
+                .text_size,
+            TextSizePreference::Comfortable
+        );
+        for name in TextSizePreference::NAMES {
+            let value: TextSizePreference =
+                serde_json::from_value(serde_json::json!(name)).unwrap();
+            assert_eq!(
+                serde_json::to_value(value).unwrap(),
+                serde_json::json!(name)
+            );
+        }
+        // A size from a newer build reads as Compact instead of failing the whole file.
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":5,"step":"project","motion":"full","appearance":"light","text_size":"huge","completed":true,"first_project_id":null}}"#,
+        )
+        .unwrap();
+        let snapshot = OnboardingStore::open(dir.path())
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        assert!(snapshot.notice.is_none(), "{:?}", snapshot.notice);
+        assert_eq!(snapshot.preferences.text_size, TextSizePreference::Compact);
     }
 
     #[test]

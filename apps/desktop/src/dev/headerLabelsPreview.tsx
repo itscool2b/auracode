@@ -3,7 +3,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppInfo, ProjectFolder, ProjectSummary, WorkspaceSnapshot } from "../bindings";
 import { ChatsScreen } from "../components/chat/ChatsScreen";
-import { getAppearancePreference, getThemePreference } from "../lib/appearance";
+import {
+  getAppearancePreference,
+  getTextSizePreference,
+  getThemePreference,
+} from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
 import {
   attachResult,
@@ -111,6 +115,7 @@ const setup: SetupApi = {
       motion: "off",
       appearance: getAppearancePreference(),
       theme: getThemePreference(),
+      text_size: getTextSizePreference(),
       completed: true,
       first_project_id: "client",
       general: { ...DEFAULT_GENERAL },

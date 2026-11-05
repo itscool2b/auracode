@@ -125,6 +125,39 @@ describe("appearance preferences", () => {
     expect((await start("?preview=settings&palette=nope")).getThemePreference()).toBe("cursor");
   });
 
+  it("sets the chat's text size from the profile, Compact as none, and previews Comfortable", async () => {
+    vi.resetModules();
+    const os = system(false);
+    const root: { dataset: Record<string, string>; style: object } = { dataset: {}, style: {} };
+    const localStorage = { getItem: vi.fn(() => null), setItem: vi.fn() };
+    vi.stubGlobal("window", { location: { search: "" }, localStorage, matchMedia: () => os.media });
+    vi.stubGlobal("document", { documentElement: root });
+    const appearance = await import("./appearance");
+    appearance.initializeAppearance();
+    expect(appearance.getTextSizePreference()).toBe("compact");
+    expect(root.dataset.textSize).toBeUndefined();
+    appearance.applySetupAppearance({ revision: 1, appearance: "dark", text_size: "comfortable" });
+    expect(root.dataset.textSize).toBe("comfortable");
+    expect(appearance.getTextSizePreference()).toBe("comfortable");
+    // A profile without the setting, or an older snapshot, reads as Compact.
+    appearance.applySetupAppearance({ revision: 2, appearance: "dark" });
+    expect(root.dataset.textSize).toBeUndefined();
+    expect(appearance.getTextSizePreference()).toBe("compact");
+    // Development previews take `&textSize=comfortable`.
+    vi.resetModules();
+    vi.stubEnv("DEV", true);
+    root.dataset = {};
+    vi.stubGlobal("window", {
+      location: { search: "?preview=settled&textSize=comfortable" },
+      localStorage,
+      matchMedia: () => os.media,
+    });
+    const preview = await import("./appearance");
+    preview.initializeAppearance();
+    expect(root.dataset.textSize).toBe("comfortable");
+    expect(preview.getTextSizePreference()).toBe("comfortable");
+  });
+
   it("names every theme it knows and nothing else", () => {
     for (const valid of ["aura", "claude", "codex", "grok", "pi", "antigravity", "cursor"])
       expect(isTheme(valid)).toBe(true);

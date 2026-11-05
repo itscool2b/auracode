@@ -89,15 +89,15 @@
   background-color: var(--g-glass-control-hover);
   box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
-  font-size: var(--g-text-prose);
-  line-height: var(--g-leading-prose);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 /* Folded at ten whole lines, cut cleanly on a line; "Show all" opens the rest. */
 .chat-user[data-folded="true"] .chat-user-text {
-  max-height: 240px;
+  max-height: calc(var(--g-leading-chat) * 10);
   overflow: hidden;
 }
 
@@ -1284,8 +1284,8 @@
   gap: var(--g-space-2);
   min-width: 0;
   color: var(--g-fg-1);
-  font-size: var(--g-text-prose);
-  line-height: var(--g-leading-prose);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
   overflow-wrap: anywhere;
 }
 
@@ -1840,17 +1840,20 @@
 
 /* ---------- The answer: markdown (6.4) ---------- */
 
+/*
+ * The answer runs the whole column, as Codex's does, at the chat's own size (owner, 4 November
+ * 2026: fit more text in). Before, each paragraph stopped at 600px at the prose size.
+ */
 .chat-app .answer {
   padding-left: var(--ui-gutter);
   color: var(--g-fg-1);
-  font-size: var(--g-text-prose);
-  line-height: var(--g-leading-prose);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
   user-select: text;
   overflow-wrap: anywhere;
 }
 
 .chat-app .answer :is(p, ul, ol, blockquote, h3, h4) {
-  max-width: 600px;
   margin: 0;
 }
 
@@ -1889,7 +1892,7 @@
 }
 
 .chat-app .answer li + li {
-  margin-top: var(--g-space-4);
+  margin-top: var(--g-space-2);
 }
 
 .chat-app .answer li::marker {
@@ -1935,7 +1938,6 @@
 }
 
 .chat-app .answer hr {
-  max-width: 600px;
   height: 1px;
   margin: var(--g-space-20) 0;
   border: 0;
@@ -2235,8 +2237,8 @@
   border-radius: var(--g-radius-22) var(--g-radius-22) 0 0;
   background: transparent;
   box-shadow: none;
-  font-size: var(--g-text-prose);
-  line-height: var(--g-leading-prose);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
   resize: none;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
