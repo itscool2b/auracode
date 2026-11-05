@@ -176,6 +176,18 @@ pub fn commands(value: &Value) -> Vec<SlashCommand> {
     )
 }
 
+/// The skills among Pi's commands (`source: "skill"`), named without their `skill:` prefix.
+pub fn skills(value: &Value) -> Vec<String> {
+    value["commands"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|command| command["source"] == "skill")
+        .filter_map(|command| text(command, "name"))
+        .map(|name| name.strip_prefix("skill:").unwrap_or(name).to_owned())
+        .collect()
+}
+
 /// Context occupancy may explicitly become unknown after compaction. Do not substitute cumulative
 /// session token counts for occupancy or preserve an outdated pre-compaction count.
 pub fn usage(value: &Value) -> UsageInfo {
@@ -207,6 +219,16 @@ pub fn tokens(value: &Value, scope: UsageScope) -> Option<TokenUsage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skills_are_the_commands_pi_marks_as_skills() {
+        let commands = serde_json::json!({"commands": [
+            {"name": "skill:deploy", "source": "skill"},
+            {"name": "fix-tests", "source": "prompt"},
+            {"name": "review", "source": "extension"}
+        ]});
+        assert_eq!(skills(&commands), ["deploy"]);
+    }
     #[test]
     fn model_choices_keep_current_valid_and_never_export_auth_or_source_fields() {
         let mut m = Metadata::default();

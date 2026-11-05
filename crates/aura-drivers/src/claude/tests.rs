@@ -612,6 +612,54 @@ async fn questions_return_selected_labels_and_free_text_with_original_input() {
 }
 
 #[test]
+fn init_reports_what_the_session_loaded() {
+    use aura_protocol::session::{LoadedPlugin, McpLoadState};
+    let loaded = super::translate::loaded(&json!({
+        "tools": ["Bash", "Read", "mcp__docs__search"],
+        "mcp_servers": [
+            {"name": "docs", "status": "connected", "source": "user"},
+            {"name": "broken", "status": "failed", "source": "plugin"},
+            {"name": "auth", "status": "needs-auth"},
+            {"status": "connected"}
+        ],
+        "skills": ["deploy"],
+        "agents": ["Explore", "Plan"],
+        "plugins": [
+            {"name": "vercel", "version": "0.50.0", "path": "/x"},
+            {"name": "context7", "path": "/y"}
+        ]
+    }));
+    assert_eq!(loaded.tools, Some(3));
+    assert_eq!(
+        loaded
+            .mcp_servers
+            .iter()
+            .map(|server| (server.name.as_str(), server.state, server.source.as_deref()))
+            .collect::<Vec<_>>(),
+        [
+            ("docs", McpLoadState::Connected, Some("user")),
+            ("broken", McpLoadState::Failed, Some("plugin")),
+            ("auth", McpLoadState::NeedsSignIn, None),
+        ]
+    );
+    assert_eq!(
+        loaded.plugins,
+        [
+            LoadedPlugin {
+                name: "vercel".into(),
+                version: Some("0.50.0".into())
+            },
+            LoadedPlugin {
+                name: "context7".into(),
+                version: None
+            },
+        ]
+    );
+    assert_eq!(loaded.skills, ["deploy"]);
+    assert_eq!(loaded.agents, ["Explore", "Plan"]);
+}
+
+#[test]
 fn launch_preserves_harness_and_uses_unambiguous_resume_values() {
     let mut settings = setup();
     settings.resume = Some("--a-native-id".into());

@@ -93,15 +93,18 @@ and a hands-on walkthrough before merging.
   - [x] A, second part (#80, merged 2026-11-05): syntax highlighting (highlight.js), math (KaTeX)
     and Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
   - [ ] B, in three pull requests.
-    - [x] First part (this pull request): native fork for Claude and Pi from the latest answer;
+    - [x] First part (#81, merged 2026-11-05): native fork for Claude and Pi from the latest answer;
       Rewind on every sent message, on auracode's own checkpoints where the turn has one (every
       agent, shell changes too) and otherwise, in Claude chats, on Claude's `rewind_files`,
       since Automatic checkpoints are off by default; Pi steering. Native fork from an earlier
       answer waits: Claude resumes at a transcript entry id that auracode does not store per
       turn yet.
-    - [ ] Second part: MCP input forms for Claude and Codex (Claude answers them with an error
-      today, which it turns into a silent cancel; Codex cancels them), and what a session
-      loaded: MCP status, skills, plugins and subagents.
+    - [x] Second part (this pull request): MCP input forms for Claude and Codex, which before
+      were a silent cancel (Claude) or a cancel with a notice (Codex): forms from the MCP form
+      schema and browser steps, checked by one rule in the session and both drivers. And what
+      a session loaded, in the Session tab: Claude reports MCP servers with their state, skills,
+      plugins, subagents and its tool count; Codex its MCP servers as they start; Pi its
+      skills. No agent is asked anything new for it.
     - [ ] Third part: terminals and file access for the ACP agents.
   - [ ] C, D.
 - [ ] 8. Linux

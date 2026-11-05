@@ -1,7 +1,13 @@
 import { AgentMark, CopyButton } from "@auracode/ui/graphite";
 import { Check, Circle, FileText, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { AgentEntry, FileMention, ProjectFilePreview } from "../../bindings";
+import { useEffect, useId, useMemo, useState } from "react";
+import type {
+  AgentEntry,
+  FileMention,
+  McpLoadState,
+  ProjectFilePreview,
+  SessionLoaded,
+} from "../../bindings";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { autonomyLabel, costLabel, levelName, tokensLabel } from "../../lib/chat/present";
 import type { ComposerTransport } from "../../lib/composer";
@@ -266,6 +272,120 @@ function Files({ state, api }: { readonly state: ChatState; readonly api?: Compo
   );
 }
 
+const MCP_STATE: Record<McpLoadState, string> = {
+  connected: "Connected",
+  starting: "Starting",
+  needs_sign_in: "Needs sign-in",
+  failed: "Failed",
+  off: "Off",
+  unknown: "State not reported",
+};
+
+/** One kind of thing a session loaded, folded to its count until opened. */
+function LoadedGroup({
+  name,
+  items,
+}: {
+  readonly name: string;
+  readonly items: readonly string[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <details className="context-loaded-group">
+      <summary>
+        {name} <small>{items.length}</small>
+      </summary>
+      <ul>
+        {items.map((item, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: an agent can list one name twice.
+          <li key={`${index}:${item}`}>{item}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * What the running session loaded, as its agent reports it: MCP servers with their state (a dot
+ * and its word), skills, plugins and subagents, each folded to its count. MCP servers open when
+ * one failed or waits for a sign-in.
+ */
+function Loaded({
+  loaded,
+  started,
+}: {
+  readonly loaded: SessionLoaded | null;
+  readonly started: boolean;
+}) {
+  const heading = useId();
+  if (!started) return null;
+  const empty =
+    !loaded ||
+    (loaded.mcp_servers.length === 0 &&
+      loaded.skills.length === 0 &&
+      loaded.plugins.length === 0 &&
+      loaded.agents.length === 0 &&
+      loaded.tools === null);
+  return (
+    <section className="context-loaded" aria-labelledby={heading}>
+      <h3 id={heading} className="context-group-label">
+        Loaded
+      </h3>
+      {empty || !loaded ? (
+        <p className="context-hint">
+          {loaded
+            ? "The agent reported nothing loaded."
+            : "This agent does not say what it loaded."}
+        </p>
+      ) : (
+        <>
+          {loaded.mcp_servers.length ? (
+            <details
+              className="context-loaded-group"
+              open={loaded.mcp_servers.some(
+                (server) => server.state === "failed" || server.state === "needs_sign_in",
+              )}
+            >
+              <summary>
+                MCP servers <small>{loaded.mcp_servers.length}</small>
+              </summary>
+              <ul>
+                {loaded.mcp_servers.map((server) => (
+                  <li key={server.name} data-test-mcp-state={server.state}>
+                    <span
+                      className="context-loaded-state"
+                      data-state={server.state}
+                      aria-hidden="true"
+                    />
+                    <span>{server.name}</span>
+                    <small>
+                      {MCP_STATE[server.state]}
+                      {server.source ? ` · ${server.source}` : ""}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          <LoadedGroup name="Skills" items={loaded.skills} />
+          <LoadedGroup
+            name="Plugins"
+            items={loaded.plugins.map((plugin) =>
+              plugin.version ? `${plugin.name} ${plugin.version}` : plugin.name,
+            )}
+          />
+          <LoadedGroup name="Subagents" items={loaded.agents} />
+          {loaded.tools !== null ? (
+            <p className="context-hint">
+              {loaded.tools} {loaded.tools === 1 ? "tool" : "tools"} available, MCP tools included
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 function Session({
   state,
   agent,
@@ -369,6 +489,10 @@ function Session({
           </span>
         </div>
       ))}
+      <Loaded
+        loaded={state.lists?.loaded ?? null}
+        started={state.lists?.capabilities != null || state.lists?.loaded != null}
+      />
       <p className="context-hint">
         {state.queue.length} queued {state.queue.length === 1 ? "message" : "messages"}
         {session?.queue_held ? " · paused" : ""}

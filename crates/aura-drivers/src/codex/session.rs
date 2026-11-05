@@ -141,6 +141,8 @@ struct Session {
     effort: Option<String>,
     workflow: String,
     collaboration_modes: BTreeSet<String>,
+    /// Its MCP servers states as it reported them starting (`mcpServer/startupStatus/updated`).
+    mcp_states: Vec<aura_protocol::session::LoadedMcpServer>,
     version: Option<String>,
     limits: BTreeMap<String, Value>,
     limits_dirty: bool,
@@ -693,6 +695,42 @@ impl Session {
             }
         }
     }
+    /// Codex reports each MCP server's state as it starts; the session shows the latest.
+    fn mcp_startup(&mut self, params: &Value) {
+        use aura_protocol::session::{LoadedMcpServer, McpLoadState, SessionLoaded};
+        let Some(name) = params["name"].as_str().filter(|name| !name.is_empty()) else {
+            return;
+        };
+        let state = match params["status"].as_str() {
+            Some("ready") => McpLoadState::Connected,
+            Some("starting") => McpLoadState::Starting,
+            Some("failed") => McpLoadState::Failed,
+            Some("cancelled") => McpLoadState::Off,
+            _ => McpLoadState::Unknown,
+        };
+        if let Some(server) = self
+            .mcp_states
+            .iter_mut()
+            .find(|server| server.name == name)
+        {
+            server.state = state;
+        } else if self.mcp_states.len() < 64 {
+            self.mcp_states.push(LoadedMcpServer {
+                name: name.to_owned(),
+                state,
+                source: None,
+            });
+        } else {
+            return;
+        }
+        self.outbox.push_back(DriverEvent::Loaded(
+            SessionLoaded {
+                mcp_servers: self.mcp_states.clone(),
+                ..Default::default()
+            }
+            .bounded(),
+        ));
+    }
     fn notification(&mut self, method: &str, params: Value) {
         if !self.ready && !matches!(method, "warning" | "configWarning") {
             let bytes: usize = self
@@ -725,6 +763,14 @@ impl Session {
             return;
         }
         // Only the owned native thread can update this chat, including subagent traffic.
+        // A server can be shared by every thread, when its report names none.
+        if method == "mcpServer/startupStatus/updated" {
+            if params["threadId"].is_null() || params["threadId"].as_str() == self.thread.as_deref()
+            {
+                self.mcp_startup(&params);
+            }
+            return;
+        }
         if self.thread.as_deref() != params["threadId"].as_str() || self.thread.is_none() {
             return;
         }
@@ -1526,6 +1572,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         effort: None,
         workflow: "execute".into(),
         collaboration_modes: BTreeSet::new(),
+        mcp_states: Vec::new(),
         version: None,
         limits: BTreeMap::new(),
         limits_dirty: false,

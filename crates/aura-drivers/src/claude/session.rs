@@ -736,6 +736,8 @@ impl Session {
             spawn_id: self.spawn_id.clone(),
             replay: None,
         }));
+        self.outbox
+            .push_back(DriverEvent::Loaded(translate::loaded(&self.init)));
         self.refresh_telemetry();
     }
     /// A saved effort the model no longer offers (it was chosen for another model, or Claude

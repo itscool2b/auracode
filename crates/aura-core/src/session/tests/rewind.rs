@@ -93,3 +93,39 @@ async fn a_session_without_native_rewind_refuses_before_asking_the_agent() {
             .any(|command| matches!(command, LoggedCommand::RewindFiles { .. }))
     );
 }
+
+/// What the session loaded reaches its lists once the agent reports it, and a new process starts
+/// without the last one's.
+#[tokio::test]
+async fn what_the_session_loaded_reaches_its_lists() {
+    use aura_protocol::session::{LoadedMcpServer, McpLoadState, SessionLoaded};
+    let Step::Emit(DriverEvent::Ready(ready)) = ready_step("loaded-native") else {
+        unreachable!()
+    };
+    let loaded = SessionLoaded {
+        mcp_servers: vec![LoadedMcpServer {
+            name: "docs".into(),
+            state: McpLoadState::Connected,
+            source: Some("user".into()),
+        }],
+        skills: vec!["deploy".into()],
+        ..Default::default()
+    };
+    let (driver, _handle) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        Step::Emit(DriverEvent::Ready(ready)),
+        Step::Emit(DriverEvent::Loaded(loaded.clone())),
+    ]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let mut lists = rig.manager.lists(&chat.id).await.unwrap();
+    for _ in 0..50 {
+        if lists.loaded.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        lists = rig.manager.lists(&chat.id).await.unwrap();
+    }
+    assert_eq!(lists.loaded, Some(loaded));
+}

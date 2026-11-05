@@ -277,7 +277,8 @@
 }
 
 .changes-result summary,
-.changes-warnings > summary {
+.changes-warnings > summary,
+.context-loaded-group > summary {
   display: flex;
   align-items: center;
   gap: var(--g-space-6);
@@ -286,12 +287,16 @@
   cursor: pointer;
 }
 
-:is(.changes-result summary, .changes-warnings > summary)::-webkit-details-marker {
+:is(
+  .changes-result summary,
+  .changes-warnings > summary,
+  .context-loaded-group > summary
+)::-webkit-details-marker {
   display: none;
 }
 
 /* Graphite's quiet chevron in place of the browser's triangle (New chat's), turning down open. */
-:is(.changes-result summary, .changes-warnings > summary)::before {
+:is(.changes-result summary, .changes-warnings > summary, .context-loaded-group > summary)::before {
   content: "";
   flex: none;
   width: 12px;
@@ -302,7 +307,7 @@
   transition: transform var(--g-dur-base) var(--g-ease-quint);
 }
 
-:is(.changes-result details, .changes-warnings)[open] > summary::before {
+:is(.changes-result details, .changes-warnings, .context-loaded-group)[open] > summary::before {
   transform: rotate(90deg);
 }
 
@@ -788,4 +793,68 @@
 /* Its notes start where its copy does. */
 .changes-native .changes-empty {
   padding-inline: 0;
+}
+
+/* What the session loaded (Session tab): groups folded to their counts, opened in place. */
+.context-loaded {
+  margin: 0 0 var(--g-space-16);
+}
+
+.context-loaded-group {
+  padding: 0 var(--g-space-8);
+}
+
+.context-loaded-group > summary {
+  min-height: 32px;
+  color: var(--g-fg-1);
+}
+
+.context-loaded-group > summary small,
+.context-loaded-group li small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-loaded-group ul {
+  margin: 0 0 var(--g-space-8);
+  padding: 0 0 0 var(--g-space-20);
+  list-style: none;
+}
+
+.context-loaded-group li {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 28px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.context-loaded-group li small {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* An MCP server's state as a dot beside its word, never the colour alone. */
+.context-loaded-state {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-4);
+}
+
+.context-loaded-state[data-state="connected"] {
+  background-color: var(--g-green);
+}
+
+.context-loaded-state:is([data-state="starting"], [data-state="needs_sign_in"]) {
+  background-color: var(--g-warning);
+}
+
+.context-loaded-state[data-state="failed"] {
+  background-color: var(--g-red);
 }

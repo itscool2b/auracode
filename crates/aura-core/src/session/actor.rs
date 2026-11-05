@@ -747,6 +747,8 @@ pub(crate) struct ChatActor {
     /// model decide the thinking level the next start restores.
     model_change: Option<(u64, String, String)>,
     commands: Vec<SlashCommand>,
+    /// What the running session loaded, as its agent reported it after starting.
+    loaded: Option<aura_protocol::session::SessionLoaded>,
     capabilities: Option<Capabilities>,
     agent_name: Option<String>,
     agent_version: Option<String>,
@@ -893,6 +895,7 @@ impl ChatActor {
             default_shown: false,
             model_change: None,
             commands: Vec::new(),
+            loaded: None,
             capabilities: None,
             agent_name: None,
             agent_version: None,
@@ -1664,6 +1667,7 @@ impl ChatActor {
             self.options_generation = 0;
             self.model_change = None;
             self.commands.clear();
+            self.loaded = None;
             self.capabilities = None;
             self.native_session_id = None;
             self.agent_name = None;
@@ -1798,6 +1802,7 @@ impl ChatActor {
             commands: self.commands.clone(),
             autonomy: self.autonomy_state.clone(),
             controls: self.control_lists(),
+            loaded: self.loaded.clone(),
         }
     }
 
@@ -3203,6 +3208,8 @@ impl ChatActor {
         // The connection the preparation chose is the one this start runs and its session records.
         let spec = (*prepared.spec).clone();
         self.spec = Some(spec.clone());
+        // A new process reports what it loaded as it opens.
+        self.loaded = None;
         // A new process: its own account, and no limit until it reports one.
         let account = prepared.account.clone();
         self.account = account
@@ -4304,6 +4311,12 @@ impl ChatActor {
             DriverEvent::UiWithdrawn { request_id } => self.on_withdrawn(&request_id, true),
             DriverEvent::Commands(commands) => {
                 self.commands = commands;
+                self.revision = self.revision.wrapping_add(1);
+                self.info_dirty = true;
+                self.schedule_flush();
+            }
+            DriverEvent::Loaded(loaded) => {
+                self.loaded = Some(loaded.bounded());
                 self.revision = self.revision.wrapping_add(1);
                 self.info_dirty = true;
                 self.schedule_flush();

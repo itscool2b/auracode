@@ -338,6 +338,8 @@ pub enum DriverEvent {
     },
     /// The full reduced list.
     Commands(Vec<SlashCommand>),
+    /// What the session loaded, in full each time (see [`aura_protocol::session::SessionLoaded`]).
+    Loaded(aura_protocol::session::SessionLoaded),
     /// The full list with current values.
     Options(Vec<ConfigOption>),
     Autonomy(AutonomyState),

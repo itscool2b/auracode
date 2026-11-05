@@ -2217,6 +2217,18 @@ export type LiveText = {
 	tentative: string,
 };
 
+export type LoadedMcpServer = {
+	name: string,
+	state: McpLoadState,
+	/**  Where it was configured (user, project, a plugin…), as the agent names it. */
+	source: string | null,
+};
+
+export type LoadedPlugin = {
+	name: string,
+	version: string | null,
+};
+
 export type LocalImportPreview = {
 	projects: LocalImportProject[],
 	notices: string[],
@@ -2288,6 +2300,9 @@ export type McpDefinition = {
 	env_keys: string[],
 	header_keys: string[],
 };
+
+/**  An MCP server's state, in the few words every agent's states come to. */
+export type McpLoadState = "connected" | "starting" | "needs_sign_in" | "failed" | "off" | "unknown";
 
 export type McpRecord = {
 	definition: McpDefinition,
@@ -2935,6 +2950,22 @@ export type SessionLists = {
 	options: ConfigOption[],
 	commands: SlashCommand[],
 	autonomy: AutonomyState,
+	/**  What the running session loaded, where its agent reports it. */
+	loaded?: SessionLoaded | null,
+};
+
+/**
+ *  What a running session loaded, as its agent reports it once it starts: MCP servers with
+ *  their state, skills, plugins and subagents. Each agent reports what it can: Claude all of it,
+ *  Codex its MCP servers, Pi its skills.
+ */
+export type SessionLoaded = {
+	mcp_servers: LoadedMcpServer[],
+	skills: string[],
+	plugins: LoadedPlugin[],
+	agents: string[],
+	/**  How many tools the agent offers, MCP tools included. */
+	tools: number | null,
 };
 
 /**  Where a chat's agent is in its life. */

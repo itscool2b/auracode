@@ -1372,6 +1372,19 @@ async function inspect(engine, launcher) {
     assert.equal(await page.getByTestId("composer-input").inputValue(), "Review ");
     for (const tab of ["Files", "Plan", "Session"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      if (tab === "Session") {
+        // What the session loaded: MCP servers open when one failed or waits for a sign-in.
+        const loaded = page.getByRole("region", { name: "Loaded", exact: true });
+        await loaded.getByText("MCP servers", { exact: false }).waitFor();
+        assert.equal(
+          await loaded.locator("[data-test-mcp-state=failed]").textContent(),
+          "plugin:context7:context7Failed · plugin",
+        );
+        await loaded.getByText("Needs sign-in · project", { exact: true }).waitFor();
+        await loaded.getByText("Skills", { exact: false }).click();
+        await loaded.getByText("release-notes", { exact: true }).waitFor();
+        await loaded.getByText("38 tools available, MCP tools included", { exact: true }).waitFor();
+      }
       if (tab === "Files") {
         await page
           .getByRole("region", { name: "Project files", exact: true })

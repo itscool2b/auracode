@@ -148,6 +148,7 @@ export function lists(revision: number, overrides: Partial<SessionLists> = {}): 
     capabilities: null,
     options: [],
     commands: [],
+    loaded: null,
     autonomy: autonomyState(),
     controls: {
       version: 1,

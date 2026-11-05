@@ -966,6 +966,21 @@ function Preview() {
     let currentStatus: SessionStatus = status;
     let choices = lists(1, {
       capabilities: nativeRewind ? NATIVE_REWIND_CAPABILITIES : null,
+      // What Claude Code reports loading: the Session tab lists it.
+      loaded: {
+        mcp_servers: [
+          { name: "docs", state: "connected", source: "user" },
+          { name: "tickets", state: "needs_sign_in", source: "project" },
+          { name: "plugin:context7:context7", state: "failed", source: "plugin" },
+        ],
+        skills: ["deploy", "release-notes"],
+        plugins: [
+          { name: "vercel", version: "0.50.0" },
+          { name: "code-simplifier", version: null },
+        ],
+        agents: ["Explore", "Plan", "general-purpose"],
+        tools: 38,
+      },
       // Claude Code lists /compact, which the header menu offers as Compact conversation.
       commands:
         mode === "tool-details"
