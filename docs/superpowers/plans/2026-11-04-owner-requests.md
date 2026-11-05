@@ -86,9 +86,12 @@ and a hands-on walkthrough before merging.
   Customize and Agents open on their pages; Voice with a microphone test; Chats with Keep steps
   open; every change saves in turn without disabling its control, which fixes the radio focus
   loss. Also: the Agents page's red status text meets 4.5:1 in Claude dark.
-- [ ] 7. Missing features A, B, C, D. A, first part (this pull request): tool inputs, web search
-  links, formatted JSON and MCP replies, edit line counts, Claude's to-do list as the plan,
-  compaction notices and Compact conversation. Inline diffs were already there. Left in A:
-  syntax highlighting, Mermaid and LaTeX.
+- [ ] 7. Missing features A, B, C, D.
+  - [x] A, first part (#79, merged 2026-11-05): tool inputs, web search links, formatted JSON and
+    MCP replies, edit line counts, Claude's to-do list as the plan, compaction notices and
+    Compact conversation. Inline diffs were already there.
+  - [x] A, second part (this pull request): syntax highlighting (highlight.js), math (KaTeX) and
+    Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
+  - [ ] B, C, D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page
