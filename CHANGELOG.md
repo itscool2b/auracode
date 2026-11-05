@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Fork into a new chat from the latest answer continues Claude's or Pi's own session, with everything it knew; Rewind on a sent message restores the files from before it and goes on to edit it, for every agent; and Pi can be steered while it works. ([#81](https://github.com/itscool2b/auracode/pull/81))
 - Answers colour their code in the theme's colours, set math with KaTeX (inline and on its own line), and draw Mermaid diagrams, with their code a click away. ([#80](https://github.com/itscool2b/auracode/pull/80))
 - An opened tool call shows what it was given; a web search lists the pages it found as links; JSON and MCP replies are set out over lines; an edit's row counts its changed lines; Claude's to-do list shows as the turn's checklist; and a compacted conversation shows where it happened, with Compact conversation in the chat's menu. ([#79](https://github.com/itscool2b/auracode/pull/79))
 - Settings is one screen with a search that finds any setting: General, Appearance, Chats, Voice and Shortcuts, then Agents, Plugins & MCP, Instructions and Project memory (Customize opens there), then Account & sync, Data & privacy and About. Chats can keep finished turns' steps open, Voice tests the microphone, and controls keep keyboard focus while they save. ([#78](https://github.com/itscool2b/auracode/pull/78))

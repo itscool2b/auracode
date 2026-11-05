@@ -90,8 +90,18 @@ and a hands-on walkthrough before merging.
   - [x] A, first part (#79, merged 2026-11-05): tool inputs, web search links, formatted JSON and
     MCP replies, edit line counts, Claude's to-do list as the plan, compaction notices and
     Compact conversation. Inline diffs were already there.
-  - [x] A, second part (this pull request): syntax highlighting (highlight.js), math (KaTeX) and
-    Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
-  - [ ] B, C, D.
+  - [x] A, second part (#80, merged 2026-11-05): syntax highlighting (highlight.js), math (KaTeX)
+    and Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
+  - [ ] B, in three pull requests.
+    - [x] First part (this pull request): native fork for Claude and Pi from the latest answer;
+      Rewind on every sent message, on auracode's own checkpoints, which cover every agent and
+      changes made by shell commands (Claude's `rewind_files` covers only Claude's edit tools,
+      so it stays unused); Pi steering. Native fork from an earlier answer waits: Claude resumes
+      at a transcript entry id that auracode does not store per turn yet.
+    - [ ] Second part: MCP input forms for Claude and Codex (Claude answers them with an error
+      today, which it turns into a silent cancel; Codex cancels them), and what a session
+      loaded: MCP status, skills, plugins and subagents.
+    - [ ] Third part: terminals and file access for the ACP agents.
+  - [ ] C, D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page
