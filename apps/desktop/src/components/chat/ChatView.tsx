@@ -138,6 +138,10 @@ export function ChatView({
     () => terminals?.runningTab(chatId) ?? null,
     () => null,
   );
+  // What this chat's terminal panel had open when auracode last closed, offered back once.
+  useEffect(() => {
+    terminals?.restore(chatId);
+  }, [terminals, chatId]);
   const startRun = useCallback(() => {
     if (!terminals || !transport.run || !run?.command) return;
     terminals.runTab(

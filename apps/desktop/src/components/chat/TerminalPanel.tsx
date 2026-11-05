@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { rememberedNames } from "../../lib/terminalMemory";
 import {
   CLOSED_PANEL,
   clampHeight,
@@ -70,6 +71,8 @@ export function TerminalPanel({
   const [renaming, setRenaming] = useState<string | null>(null);
   const base = useId();
   const active = panel.active ? snapshot.tabs.get(panel.active) : undefined;
+  // Run comes back only where the chat can still run it.
+  const offer = panel.resume?.filter((tab) => tab.kind !== "run" || onRun);
   const runtime = panel.active && panel.open ? panels.runtime(panel.active) : undefined;
   const max = clampHeight(PANEL_HEIGHT_MAX, room - PANEL_ROOM_ABOVE);
   const height = clampHeight(panel.height, room - PANEL_ROOM_ABOVE);
@@ -354,6 +357,28 @@ export function TerminalPanel({
           <p className="terminal-panel-status" role="alert" data-outcome="failed">
             {panel.notice}
           </p>
+        ) : null}
+        {offer?.length ? (
+          <div className="terminal-panel-status" role="status" data-testid="terminal-resume">
+            <span>
+              {rememberedNames(offer)} {offer.length === 1 ? "was" : "were"} open when auracode last
+              closed. Output from then was not kept.
+            </span>
+            <button
+              type="button"
+              className="g-button g-button-24"
+              onClick={() => void panels.resume(chatId, onRun)}
+            >
+              Resume
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-ghost g-button-24"
+              onClick={() => panels.dismissResume(chatId)}
+            >
+              Not now
+            </button>
+          </div>
         ) : null}
         {status !== null && active ? (
           <div

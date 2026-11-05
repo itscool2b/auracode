@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Terminals come back after a restart: a chat's terminal panel offers the shells it had open, under their names, and Run, and starts them again on Resume. Nothing starts by itself, and their earlier output is not kept. ([#91](https://github.com/itscool2b/auracode/pull/91))
 - Run in worktree chats: a Run command saved in the folder's setup, beside its setup command, starts from the chat's header in the worktree's terminal panel, with its address to open, until Stop. Each worktree keeps ten local ports of its own, the first in AURACODE_PORT for setup, Run and the worktree's terminals and in PORT for Run, so worktrees can serve side by side. ([#90](https://github.com/itscool2b/auracode/pull/90))
 - File names open in your editor at their line: paths an agent writes in its answers (`src/app.ts:42`, a link to a file, or a path in a sentence), a step's files, the changed-files card and a diff's Open, once auracode has checked the file is in the chat's folder. Settings > Chats chooses the editor. On Windows, Cursor and Visual Studio Code now open directly, without their confirmation prompt. ([#89](https://github.com/itscool2b/auracode/pull/89))
 - Sounds: a setting (Settings > General, off by default) plays a short, quiet tone when a chat finishes, fails or needs you, rising, falling or two taps, for the same moments as notifications but also while auracode is in front. ([#88](https://github.com/itscool2b/auracode/pull/88))
