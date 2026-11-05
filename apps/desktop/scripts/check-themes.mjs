@@ -91,9 +91,9 @@ export async function checkThemes(browser, url, out, engine) {
       );
       // Each choice is named by its theme alone, never by its mark's "Claude Code, Idle".
       for (const [id, name] of THEMES) assert.equal(await radio(name).getAttribute("value"), id);
-      // A fresh profile starts on Aura, which is the base palette and sets no attribute.
-      await chosen("aura");
-      assert.equal(await page.locator("html").getAttribute("data-palette"), null);
+      // A fresh profile starts on the default, Claude Code's (owner, 4 November 2026).
+      await chosen("claude");
+      assert.equal(await page.locator("html").getAttribute("data-palette"), "claude");
       await gallery.scrollIntoViewIfNeeded();
       await settled(page);
       await gallery.screenshot({ path: resolve(out, `${engine}-${appearance}-gallery.png`) });
