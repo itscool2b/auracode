@@ -242,6 +242,85 @@ impl SessionManager {
         Ok(chat)
     }
 
+    /// Reviews committing chosen files of the chat's folder as they are now.
+    pub async fn git_commit_preview(
+        &self,
+        chat_id: &str,
+        input: aura_protocol::git::CommitInput,
+    ) -> Result<aura_protocol::git::CommitPreview, SessionError> {
+        let chat = self.git_chat(chat_id).await?;
+        self.worktrees()?
+            .commit_preview(&chat.folder, input)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    /// Commits a reviewed commit, with no agent working in the folder.
+    pub async fn git_commit_apply(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<aura_protocol::git::CommitResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let token = token.to_owned();
+        self.deps()
+            .rt
+            .spawn(async move {
+                let _organization = manager.shared().organization.lock().await;
+                let chat = manager.git_chat(&chat_id).await?;
+                let _reservations = manager
+                    .reserve_git_folders(vec![chat.folder.clone()])
+                    .await?;
+                manager
+                    .worktrees()?
+                    .commit_apply(&chat.folder, &token)
+                    .await
+                    .map_err(|error| invalid(error.to_string()))
+            })
+            .await
+            .map_err(|_| {
+                invalid("The commit ended unexpectedly. Refresh the Git workspace before retrying.")
+            })?
+    }
+
+    /// Reviews a fast-forward push of the chat folder's branch.
+    pub async fn git_push_preview(
+        &self,
+        chat_id: &str,
+    ) -> Result<aura_protocol::git::PushPreview, SessionError> {
+        let chat = self.git_chat(chat_id).await?;
+        self.worktrees()?
+            .push_preview(&chat.folder)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    /// Pushes a reviewed push, with no agent working in the folder.
+    pub async fn git_push_apply(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<aura_protocol::git::PushResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let token = token.to_owned();
+        self.deps()
+            .rt
+            .spawn(async move {
+                let _organization = manager.shared().organization.lock().await;
+                let chat = manager.git_chat(&chat_id).await?;
+                let _reservations = manager.reserve_git_folders(vec![chat.folder.clone()]).await?;
+                manager
+                    .worktrees()?
+                    .push_apply(&chat.folder, &token)
+                    .await
+                    .map_err(|error| invalid(error.to_string()))
+            })
+            .await
+            .map_err(|_| invalid("The push ended unexpectedly. Refresh the Git workspace and check the remote before retrying."))?
+    }
+
     pub async fn git_workspace(&self, chat_id: &str) -> Result<GitWorkspace, SessionError> {
         let chat = self.git_chat(chat_id).await?;
         self.worktrees()?

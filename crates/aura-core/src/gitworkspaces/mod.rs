@@ -1,6 +1,7 @@
 //! Explicit local worktree lifecycle. No operation calls an agent or infers user confirmation.
 
 mod actions;
+mod commit;
 mod create;
 mod git;
 mod identity;
@@ -61,6 +62,8 @@ pub struct GitWorkspaces {
     setups: std::sync::Mutex<HashMap<String, setup::Prepared>>,
     initializations: std::sync::Mutex<HashMap<String, initialize::Prepared>>,
     publications: std::sync::Mutex<HashMap<String, publication::Prepared>>,
+    commits: std::sync::Mutex<HashMap<String, commit::PreparedCommit>>,
+    pushes: std::sync::Mutex<HashMap<String, commit::PreparedPush>>,
 }
 
 impl GitWorkspaces {
@@ -148,6 +151,8 @@ impl GitWorkspaces {
             setups: std::sync::Mutex::new(HashMap::new()),
             initializations: std::sync::Mutex::new(HashMap::new()),
             publications: std::sync::Mutex::new(HashMap::new()),
+            commits: std::sync::Mutex::new(HashMap::new()),
+            pushes: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

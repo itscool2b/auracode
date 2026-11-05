@@ -1,4 +1,5 @@
 import {
+  type CommitInput,
   commands,
   type IsolationInput,
   type PullRequestInput,
@@ -16,6 +17,13 @@ export const gitWorkspaceApi = {
   initializeApply: (chatId: string, token: string) =>
     settle(commands.gitInitializeApply(chatId, token)),
   list: (chatId: string) => settle(commands.managedWorktrees(chatId)),
+  /** The chosen files of the chat's folder, committed exactly as reviewed; hooks do not run. */
+  commitPreview: (chatId: string, input: CommitInput) =>
+    settle(commands.gitCommitPreview(chatId, input)),
+  commitApply: (chatId: string, token: string) => settle(commands.gitCommitApply(chatId, token)),
+  /** A fast-forward push of the folder's branch to its upstream, or to origin. */
+  pushPreview: (chatId: string) => settle(commands.gitPushPreview(chatId)),
+  pushApply: (chatId: string, token: string) => settle(commands.gitPushApply(chatId, token)),
   isolationPreview: (chatId: string, input: IsolationInput) =>
     settle(commands.isolationPreview(chatId, input)),
   isolationApply: (chatId: string, token: string) => settle(commands.isolationApply(chatId, token)),

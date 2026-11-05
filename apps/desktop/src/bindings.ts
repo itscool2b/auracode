@@ -298,6 +298,12 @@ export const commands = {
 	worktreeSetupStart: (chatId: string, token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_start", { chatId, token, terminalId, rows, cols })),
 	worktreeSetupReserve: (chatId: string, token: string) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_reserve", { chatId, token })),
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
+	/**  Reviews committing chosen files of the chat's folder as they are now. */
+	gitCommitPreview: (chatId: string, input: CommitInput) => typedError<CommitPreview, AppError>(__TAURI_INVOKE("git_commit_preview", { chatId, input })),
+	gitCommitApply: (chatId: string, token: string) => typedError<CommitResult, AppError>(__TAURI_INVOKE("git_commit_apply", { chatId, token })),
+	/**  Reviews a fast-forward push of the chat folder's branch. */
+	gitPushPreview: (chatId: string) => typedError<PushPreview, AppError>(__TAURI_INVOKE("git_push_preview", { chatId })),
+	gitPushApply: (chatId: string, token: string) => typedError<PushResult, AppError>(__TAURI_INVOKE("git_push_apply", { chatId, token })),
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
 	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
@@ -1265,6 +1271,37 @@ export type CloneState = "running" | "ready" | "canceled" | "failed" |
 "cleanup_pending" | 
 /**  A prior process stopped before the clone's lifecycle was settled. Its folder is preserved. */
 "interrupted";
+
+/**  Files of the chat's folder to commit, as they are in the folder, and the message. */
+export type CommitInput = {
+	message: string,
+	paths: string[],
+};
+
+/**  The commit a review describes: exactly these files' current contents on top of `parent`. */
+export type CommitPreview = {
+	token: string,
+	branch: string,
+	/**  `None` for a repository's first commit. */
+	parent: string | null,
+	/**  The person's Git identity, as `Name <email>`. */
+	author: string,
+	/**  Whether the person's Git settings sign commits. */
+	signed: boolean,
+	/**  The files committed; a renamed file brings its old path. */
+	files: GitFileState[],
+	message: string,
+	diff_stat: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type CommitResult = {
+	commit: string,
+	branch: string,
+	/**  Set when the commit was made but something after it was not. */
+	warning: string | null,
+};
 
 export type ComposerAttachment = {
 	id: string,
@@ -2724,6 +2761,34 @@ export type PullRequestResult = {
 	url: string,
 	created: boolean,
 	head_commit: string,
+	warning: string | null,
+};
+
+/**  A fast-forward push of the folder's branch: the remote, its branch and the commits it gains. */
+export type PushPreview = {
+	token: string,
+	branch: string,
+	remote: string,
+	/**  The remote's push address, without any user name or password in it. */
+	remote_url: string,
+	target: string,
+	head: string,
+	/**  The remote branch's commit now, `None` when the push creates it. */
+	remote_head: string | null,
+	/**  The commits the remote gains, newest first, as `abc1234 Subject`, at most twenty. */
+	commits: string[],
+	count: number,
+	/**  Whether the push makes the remote branch this branch's upstream. */
+	sets_upstream: boolean,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type PushResult = {
+	remote: string,
+	target: string,
+	head: string,
+	created: boolean,
 	warning: string | null,
 };
 

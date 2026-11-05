@@ -50,6 +50,10 @@ export function missingWorktreeGit(): GitWorkspaceApi {
     relocationApply: unused,
     pullRequestPreview: unused,
     pullRequestApply: unused,
+    commitPreview: unused,
+    commitApply: unused,
+    pushPreview: unused,
+    pushApply: unused,
     recreatePreview: async () => {
       calls.push("review-recreate");
       return {

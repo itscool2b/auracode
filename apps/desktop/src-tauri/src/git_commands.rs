@@ -98,6 +98,50 @@ pub async fn git_workspace(
     Ok(state.sessions()?.git_workspace(&chat_id).await?)
 }
 
+/// Reviews committing chosen files of the chat's folder as they are now.
+#[tauri::command]
+#[specta::specta]
+pub async fn git_commit_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    input: aura_protocol::git::CommitInput,
+) -> Result<aura_protocol::git::CommitPreview, AppError> {
+    Ok(state
+        .sessions()?
+        .git_commit_preview(&chat_id, input)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn git_commit_apply(
+    state: State<'_, AppState>,
+    chat_id: String,
+    token: String,
+) -> Result<aura_protocol::git::CommitResult, AppError> {
+    Ok(state.sessions()?.git_commit_apply(&chat_id, &token).await?)
+}
+
+/// Reviews a fast-forward push of the chat folder's branch.
+#[tauri::command]
+#[specta::specta]
+pub async fn git_push_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<aura_protocol::git::PushPreview, AppError> {
+    Ok(state.sessions()?.git_push_preview(&chat_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn git_push_apply(
+    state: State<'_, AppState>,
+    chat_id: String,
+    token: String,
+) -> Result<aura_protocol::git::PushResult, AppError> {
+    Ok(state.sessions()?.git_push_apply(&chat_id, &token).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn managed_worktrees(

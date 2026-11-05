@@ -528,7 +528,7 @@ fn repository_from_remote(remote: &str) -> Result<String> {
     Ok(path.into())
 }
 
-async fn remote_head(
+pub(super) async fn remote_head(
     git: &Git,
     folder: &Path,
     remote: &str,
@@ -611,7 +611,7 @@ fn validate_input(input: &PullRequestInput) -> Result<()> {
     Ok(())
 }
 
-fn validate_branch(branch: &str) -> Result<()> {
+pub(super) fn validate_branch(branch: &str) -> Result<()> {
     if branch.is_empty()
         || branch.len() > 200
         || branch.starts_with('-')

@@ -8,6 +8,10 @@ use super::{
     git::{Git, args, oid, text},
 };
 
+/// The blocker a repository without a commit shows; a first commit is still allowed.
+pub(super) const NO_COMMIT: &str =
+    "This repository has no commit yet. Create its first commit before isolation.";
+
 #[derive(Debug, Clone)]
 pub(super) struct Inspection {
     pub(super) view: GitWorkspace,
@@ -71,9 +75,7 @@ pub(super) async fn inspect(git: &Git, folder: &Path) -> Result<Inspection> {
         blockers.push("HEAD is detached. Switch to a branch before using Git actions.".into());
     }
     if head.is_none() {
-        blockers.push(
-            "This repository has no commit yet. Create its first commit before isolation.".into(),
-        );
+        blockers.push(NO_COMMIT.into());
     }
     for (name, reason) in [
         ("MERGE_HEAD", "A merge is in progress."),

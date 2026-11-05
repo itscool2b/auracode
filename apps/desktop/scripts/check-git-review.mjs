@@ -329,6 +329,61 @@ export async function checkWorktreeRecreate(page, url, out, engine) {
   ]);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
+  await commitAndPush(page, url, out, engine);
+}
+
+/**
+ * Commit and push from the dialog (missing features C): only the chosen files go into the
+ * reviewed commit, a stale review is refused, and a push shows its remote, branch and commits.
+ */
+async function commitAndPush(page, url, out, engine) {
+  await page.goto(`${url}/?preview=git&changes&live`);
+  const form = page.getByRole("form", { name: "Commit changes" });
+  await form.waitFor();
+  const review = form.getByRole("button", { name: "Review commit", exact: true });
+  assert.equal(await review.isDisabled(), true, "a live session allowed a commit");
+  await page.getByRole("button", { name: "Stop session", exact: true }).click();
+  // A file left out of the commit stays out; a renamed file shows where it came from.
+  await form.getByText("src/start.rs → src/launch.rs", { exact: true }).waitFor();
+  await form.getByRole("checkbox", { name: /docs\/checklist\.md/ }).uncheck();
+  await form.getByLabel("Commit message").fill("Add the release checklist");
+  await review.click();
+  await page.getByRole("heading", { name: "Review commit", exact: true }).waitFor();
+  await page.getByText("Fixture <fixture@localhost>", { exact: true }).waitFor();
+  await page.getByText("Git hooks do not run", { exact: false }).waitFor();
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-git-commit-review.png`) });
+  // A review the folder outgrew is refused, and nothing is committed.
+  await page.evaluate(() => sessionStorage.setItem("git-stale", "yes"));
+  await page.getByRole("button", { name: "Commit reviewed files", exact: true }).click();
+  await page
+    .getByText("The files changed since the review. Review the commit again.", { exact: true })
+    .waitFor();
+  await page.evaluate(() => sessionStorage.removeItem("git-stale"));
+  await review.click();
+  await page.getByRole("button", { name: "Commit reviewed files", exact: true }).click();
+  await page.getByRole("heading", { name: "Committed on main", exact: true }).waitFor();
+  // Only the file left out is still there to commit.
+  assert.equal(await form.getByRole("checkbox").count(), 1);
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), [
+    "stop",
+    "review-commit:src/orbit.rs,src/launch.rs",
+    "apply-commit:commit-1",
+    "refresh-chat",
+    "review-commit:src/orbit.rs,src/launch.rs",
+    "apply-commit:commit-2",
+    "refresh-chat",
+  ]);
+  await page.getByRole("button", { name: "Review push", exact: true }).click();
+  await page.getByRole("heading", { name: "Review push", exact: true }).waitFor();
+  await page.getByText("origin, https://github.com/fixture/orbit.git", { exact: true }).waitFor();
+  await page.getByText("7e1f0c9 Add the release checklist", { exact: false }).waitFor();
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-git-push-review.png`) });
+  await page.getByRole("button", { name: "Push reviewed commits", exact: true }).click();
+  await page.getByRole("heading", { name: "Pushed origin/main", exact: true }).waitFor();
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
