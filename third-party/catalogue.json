@@ -9,7 +9,7 @@
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
     "apps/desktop/package.json": "227e95acbb737dc26fb88ed4640a54b77adc8a053aaf507852c9fed0214c6fed",
     "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
-    "apps/desktop/src-tauri/Cargo.toml": "fc69ac5ff922f75a5e920c7075471f9274891bbe8aa1864924b49a9d1367c469",
+    "apps/desktop/src-tauri/Cargo.toml": "762ad53105c0b5a74fea2b21d7a5de3786820cb18ae09b934bd91b7cc617bb6e",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "da8b90bdbbaac48eaee5314720ecb0fe235972affbabb6ff87291eb13ba66e00",
@@ -25,7 +25,7 @@
     "packages/ui/package.json": "aa571a30eac1836db5311e26622541afce99b0c0fb8db4269ae5b647a2260970",
     "pnpm-lock.yaml": "8bb51794484bbdb6bacf19f6cfd4b07b568f5609624e4432e968a6afe42c53e4",
     "third-party/models.json": "6c702b42c6052f5e9da76f4c4fd770fe1133326d960df4323a13835a73e856da",
-    "third-party/overrides.json": "edce265ea4418c0f0a5f044120c0db7ec4c23e2b80413beadfefdf01a0ef839b"
+    "third-party/overrides.json": "afbc29886b3d5703468c5c869c5c0b77ce5fef1aee2bac8be889a88fc36387b2"
   },
   "records": [
     {
@@ -39,7 +39,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -67,7 +68,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -91,7 +93,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -115,7 +118,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -135,7 +139,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -155,7 +160,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -170,6 +176,40 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "alsa-sys",
+      "version": "0.4.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/alsa-sys/0.4.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "219766b3420f49f6204143c5f3ef750888fb6de29ce5f63e909f146e90b375a2",
+          "source": "https://crates.io/api/v1/crates/alsa-sys/0.4.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "alsa",
+      "version": "0.11.0",
+      "license": "Apache-2.0/MIT",
+      "source": "https://crates.io/api/v1/crates/alsa/0.11.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "source": "https://crates.io/api/v1/crates/alsa/0.11.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "3cc33f8e76680b9cba2e2a5bc94de5a92420045863ab2fadbef290a55b4d8530",
+          "source": "https://crates.io/api/v1/crates/alsa/0.11.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "ambient-authority",
       "version": "0.0.2",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
@@ -179,7 +219,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -207,7 +248,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -250,7 +292,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -265,6 +308,226 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "async-broadcast",
+      "version": "0.7.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/async-broadcast/0.7.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "e4705ddab847449a2cdcb3c88b005ea10330aa249d9148ca2eef9c84c5d29895",
+          "source": "https://crates.io/api/v1/crates/async-broadcast/0.7.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "24e5860bf589d8501643e6ea51ffb3df66db2867492b09033d486183efbfa970",
+          "source": "https://crates.io/api/v1/crates/async-broadcast/0.7.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-channel",
+      "version": "2.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-channel/2.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-channel/2.5.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-channel/2.5.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-executor",
+      "version": "1.14.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-executor/1.14.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-executor/1.14.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-executor/1.14.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-io",
+      "version": "2.6.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-io/2.6.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-io/2.6.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-io/2.6.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-lock",
+      "version": "3.4.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-lock/3.4.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-lock/3.4.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-lock/3.4.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-process",
+      "version": "2.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-process/2.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-process/2.5.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-process/2.5.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-recursion",
+      "version": "1.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/async-recursion/1.2.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "b8601fc79bdf8d8088f0938bea861ffc63ed0eebbedf25f44ab2cf2e85bd7edc",
+          "source": "https://crates.io/api/v1/crates/async-recursion/1.2.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "cdbd06e25b8c9c5d6019949d2de8123f56d29cee4166396423d2ba8c81700845",
+          "source": "https://crates.io/api/v1/crates/async-recursion/1.2.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-signal",
+      "version": "0.2.14",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-signal/0.2.14/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-signal/0.2.14/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-signal/0.2.14/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-task",
+      "version": "4.7.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/async-task/4.7.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/async-task/4.7.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-task/4.7.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "async-trait",
+      "version": "0.1.92",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/async-trait/0.1.92/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source": "https://crates.io/api/v1/crates/async-trait/0.1.92/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/async-trait/0.1.92/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "atk-sys",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/atk-sys/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/atk-sys/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "atk",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/atk/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/atk/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "atomic-waker",
       "version": "1.1.2",
       "license": "Apache-2.0 OR MIT",
@@ -274,7 +537,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -321,7 +585,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -345,7 +610,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -369,7 +635,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -393,7 +660,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -417,7 +685,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -441,7 +710,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -465,7 +735,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -489,7 +760,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -513,7 +785,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -537,7 +810,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -567,6 +841,25 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "blocking",
+      "version": "1.7.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/blocking/1.7.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/blocking/1.7.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/blocking/1.7.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "brotli-decompressor",
       "version": "6.0.1",
       "license": "BSD-3-Clause/MIT",
@@ -576,7 +869,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -596,7 +890,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -620,7 +915,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -644,7 +940,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -672,7 +969,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -711,12 +1009,43 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42",
           "source": "https://crates.io/api/v1/crates/bytes/1.12.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "cairo-rs",
+      "version": "0.18.5",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/cairo-rs/0.18.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/cairo-rs/0.18.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "cairo-sys-rs",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/cairo-sys-rs/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/cairo-sys-rs/0.18.2/download#LICENSE"
         }
       ]
     },
@@ -731,7 +1060,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -755,7 +1085,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -783,7 +1114,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -811,7 +1143,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -839,7 +1172,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -859,7 +1193,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -883,7 +1218,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -903,7 +1239,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -927,7 +1264,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -951,7 +1289,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -975,7 +1314,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -995,7 +1335,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1019,7 +1360,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1043,12 +1385,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "592dc80f1a865d20d61a2006a2d29ce34a2bc28cd7e868ab300fdeed6da154ca",
           "source": "https://crates.io/api/v1/crates/color_quant/1.1.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "concurrent-queue",
+      "version": "2.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/concurrent-queue/2.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/concurrent-queue/2.5.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/concurrent-queue/2.5.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -1063,7 +1425,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1078,6 +1441,25 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "const-random",
+      "version": "0.1.18",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/const-random/0.1.18/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/const-random/0.1.18/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+          "source": "https://crates.io/api/v1/crates/const-random/0.1.18/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "cookie",
       "version": "0.18.2",
       "license": "MIT OR Apache-2.0",
@@ -1087,7 +1469,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1225,7 +1608,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1245,7 +1629,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1269,7 +1654,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1293,7 +1679,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1317,7 +1704,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1345,7 +1733,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1369,7 +1758,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1393,7 +1783,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1417,7 +1808,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1437,7 +1829,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1461,7 +1854,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1481,7 +1875,7 @@
       "license": "MIT/Apache-2.0",
       "source": "https://crates.io/api/v1/crates/curve25519-dalek-derive/0.1.1/download",
       "distributions": ["desktop"],
-      "targets": ["x86_64-apple-darwin", "x86_64-pc-windows-msvc"],
+      "targets": ["x86_64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -1504,7 +1898,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1524,7 +1919,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1544,7 +1940,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1564,12 +1961,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "b1d6df41ed3aa96806e74c729444d7c121d90e6660a6aed01d298e03fde475a0",
           "source": "https://raw.githubusercontent.com/RustAudio/dasp/97c3bb9b2363c0b46ac1633858bf1054fd02a980/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "dbus",
+      "version": "0.9.12",
+      "license": "Apache-2.0/MIT",
+      "source": "https://crates.io/api/v1/crates/dbus/0.9.12/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "453745410e3be8cf25d56872ea2aec975a78e6c9f217443d0bf908a5bce7c8ff",
+          "source": "https://crates.io/api/v1/crates/dbus/0.9.12/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "de3911c2d98c8bd2d701ee721347053d9b55995a11f9a8c955e44d3ca1b376bf",
+          "source": "https://crates.io/api/v1/crates/dbus/0.9.12/download#LICENSE-MIT"
         }
       ]
     },
@@ -1584,7 +2001,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1608,7 +2026,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1632,7 +2051,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1656,7 +2076,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1680,7 +2101,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1704,7 +2126,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1724,7 +2147,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1748,7 +2172,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1772,7 +2197,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1796,7 +2222,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1820,7 +2247,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1844,7 +2272,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1883,7 +2312,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1898,6 +2328,40 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "dlopen2",
+      "version": "0.8.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/dlopen2/0.8.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
+          "source": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "dlv-list",
+      "version": "0.5.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/dlv-list/0.5.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "95bd3988beee069fa2848f648dab43cc6e0b2add2ad6bcb17360caf749802bcc",
+          "source": "https://crates.io/api/v1/crates/dlv-list/0.5.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "77adcddfe9e50acd2df63ddbb8e566bb8d34b4d02a9d92e7a5c1b9c2225eda9f",
+          "source": "https://crates.io/api/v1/crates/dlv-list/0.5.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "dom_query",
       "version": "0.28.0",
       "license": "MIT",
@@ -1907,7 +2371,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1927,7 +2392,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1951,7 +2417,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1971,7 +2438,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -1995,7 +2463,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2015,7 +2484,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2049,6 +2519,40 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "endi",
+      "version": "1.1.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/endi/1.1.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/endi/1.1.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "enumflags2",
+      "version": "0.7.12",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/enumflags2/0.7.12/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "41ba8a366e4129d0b7551f8b98211f59635b2e30c0a3c7845e828e2a7ce42064",
+          "source": "https://crates.io/api/v1/crates/enumflags2/0.7.12/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "2e3edd2716fb15616e867bd53f724f0906732242e9ae76bb1faad1d88f7eeebd",
+          "source": "https://crates.io/api/v1/crates/enumflags2/0.7.12/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "equivalent",
       "version": "1.0.3",
       "license": "Apache-2.0 OR MIT",
@@ -2058,7 +2562,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2082,7 +2587,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2102,7 +2608,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/errno/0.3.14/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -2111,6 +2617,44 @@
         {
           "sha256": "8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2",
           "source": "https://crates.io/api/v1/crates/errno/0.3.14/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "event-listener-strategy",
+      "version": "0.5.4",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/event-listener-strategy/0.5.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/event-listener-strategy/0.5.4/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/event-listener-strategy/0.5.4/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "event-listener",
+      "version": "5.4.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/event-listener/5.4.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/event-listener/5.4.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/event-listener/5.4.2/download#LICENSE-MIT"
         }
       ]
     },
@@ -2125,7 +2669,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2149,7 +2694,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2173,7 +2719,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2197,7 +2744,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2212,12 +2760,31 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "field-offset",
+      "version": "0.3.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/field-offset/0.3.6/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+          "source": "https://crates.io/api/v1/crates/field-offset/0.3.6/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "9dd44491b4cf95dcfa2963943b3ae91bff9a78d13049a9e0b53e0d0b0a9c8f4e",
+          "source": "https://crates.io/api/v1/crates/field-offset/0.3.6/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "filetime",
       "version": "0.2.29",
       "license": "MIT/Apache-2.0",
       "source": "https://crates.io/api/v1/crates/filetime/0.2.29/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -2240,7 +2807,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2264,7 +2832,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2288,12 +2857,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744",
           "source": "https://crates.io/api/v1/crates/foldhash/0.2.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "foreign-types-shared",
+      "version": "0.1.1",
+      "license": "MIT/Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/foreign-types-shared/0.1.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "source": "https://crates.io/api/v1/crates/foreign-types-shared/0.1.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734",
+          "source": "https://crates.io/api/v1/crates/foreign-types-shared/0.1.1/download#LICENSE-MIT"
         }
       ]
     },
@@ -2313,6 +2902,25 @@
         {
           "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734",
           "source": "https://crates.io/api/v1/crates/foreign-types-shared/0.3.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "foreign-types",
+      "version": "0.3.2",
+      "license": "MIT/Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/foreign-types/0.3.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "source": "https://crates.io/api/v1/crates/foreign-types/0.3.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "333ea3aaa3cadb819f4acd9f9153f9feee060a995ca8710f32bc5bd9a4b91734",
+          "source": "https://crates.io/api/v1/crates/foreign-types/0.3.2/download#LICENSE-MIT"
         }
       ]
     },
@@ -2346,7 +2954,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2370,7 +2979,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2398,7 +3008,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2422,7 +3033,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2446,7 +3058,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2470,7 +3083,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2485,6 +3099,29 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "futures-lite",
+      "version": "2.6.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/futures-lite/2.6.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/futures-lite/2.6.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/futures-lite/2.6.1/download#LICENSE-MIT"
+        },
+        {
+          "sha256": "6226d0632e2e1a80c23597e964da9812ae193c535fe058154afb034e94167aa5",
+          "source": "https://crates.io/api/v1/crates/futures-lite/2.6.1/download#LICENSE-THIRD-PARTY"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "futures-sink",
       "version": "0.3.34",
       "license": "MIT OR Apache-2.0",
@@ -2494,7 +3131,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2518,7 +3156,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2542,7 +3181,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2566,7 +3206,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2581,6 +3222,111 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "gdk-pixbuf-sys",
+      "version": "0.18.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdk-pixbuf-sys/0.18.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdk-pixbuf-sys/0.18.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdk-pixbuf",
+      "version": "0.18.5",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdk-pixbuf/0.18.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdk-pixbuf/0.18.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdk-sys",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdk-sys/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdk-sys/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdk",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdk/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdk/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdkwayland-sys",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdkwayland-sys/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdkwayland-sys/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdkx11-sys",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdkx11-sys/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdkx11-sys/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gdkx11",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gdkx11/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gdkx11/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "generic-array",
       "version": "0.14.7",
       "license": "MIT",
@@ -2590,7 +3336,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2610,7 +3357,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2634,7 +3382,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2658,7 +3407,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2673,6 +3423,81 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "gio-sys",
+      "version": "0.18.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gio-sys/0.18.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gio-sys/0.18.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gio",
+      "version": "0.18.4",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gio/0.18.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gio/0.18.4/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "glib-macros",
+      "version": "0.18.5",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/glib-macros/0.18.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/glib-macros/0.18.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "glib-sys",
+      "version": "0.18.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/glib-sys/0.18.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/glib-sys/0.18.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "glib",
+      "version": "0.18.5",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/glib/0.18.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/glib/0.18.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "glob",
       "version": "0.3.4",
       "license": "MIT OR Apache-2.0",
@@ -2682,7 +3507,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2697,6 +3523,51 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "gobject-sys",
+      "version": "0.18.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gobject-sys/0.18.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gobject-sys/0.18.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gtk-sys",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gtk-sys/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gtk-sys/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "gtk",
+      "version": "0.18.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/gtk/0.18.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/gtk/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "hashbrown",
       "version": "0.12.3",
       "license": "MIT OR Apache-2.0",
@@ -2706,7 +3577,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2722,6 +3594,25 @@
     {
       "ecosystem": "cargo",
       "name": "hashbrown",
+      "version": "0.14.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/hashbrown/0.14.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/hashbrown/0.14.5/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+          "source": "https://crates.io/api/v1/crates/hashbrown/0.14.5/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "hashbrown",
       "version": "0.17.1",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/hashbrown/0.17.1/download",
@@ -2730,7 +3621,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2754,7 +3646,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2770,6 +3663,25 @@
     {
       "ecosystem": "cargo",
       "name": "heck",
+      "version": "0.4.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/heck/0.4.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/heck/0.4.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+          "source": "https://crates.io/api/v1/crates/heck/0.4.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "heck",
       "version": "0.5.0",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/heck/0.5.0/download",
@@ -2778,7 +3690,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2802,7 +3715,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2826,7 +3740,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2850,7 +3765,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2874,7 +3790,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2894,7 +3811,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2918,7 +3836,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2938,7 +3857,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2958,7 +3878,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -2982,7 +3903,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3006,7 +3928,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3030,7 +3953,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3054,7 +3978,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3074,7 +3999,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3090,7 +4016,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/iana-time-zone/0.1.65/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "696759d65dfe558ff7d9f031c76db19ec5c0767470fb67c4e8d990820d1e99c9",
@@ -3113,7 +4039,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3133,7 +4060,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3153,7 +4081,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3173,7 +4102,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3193,7 +4123,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3213,7 +4144,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3233,7 +4165,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3253,7 +4186,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3273,7 +4207,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3297,7 +4232,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3321,7 +4257,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3345,7 +4282,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3369,7 +4307,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3393,7 +4332,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3417,7 +4357,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3437,7 +4378,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3461,7 +4403,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3489,7 +4432,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3517,7 +4461,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3545,7 +4490,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3560,6 +4506,36 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "is-docker",
+      "version": "0.2.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/is-docker/0.2.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "7377e48a67377f0baa9ccee6425e125eb7b96d5b8e706f4c99479ca4ffa21b77",
+          "source": "https://crates.io/api/v1/crates/is-docker/0.2.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "is-wsl",
+      "version": "0.4.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/is-wsl/0.4.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "7377e48a67377f0baa9ccee6425e125eb7b96d5b8e706f4c99479ca4ffa21b77",
+          "source": "https://crates.io/api/v1/crates/is-wsl/0.4.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "itoa",
       "version": "1.0.18",
       "license": "MIT OR Apache-2.0",
@@ -3569,7 +4545,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3584,6 +4561,36 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "javascriptcore-rs-sys",
+      "version": "1.1.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/javascriptcore-rs-sys/1.1.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31",
+          "source": "https://crates.io/api/v1/crates/javascriptcore-rs-sys/1.1.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "javascriptcore-rs",
+      "version": "1.1.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/javascriptcore-rs/1.1.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "5444779e62a6f136892955bab2727694509b2cc1c0cd0f394d5edc7ff9203cd1",
+          "source": "https://crates.io/api/v1/crates/javascriptcore-rs/1.1.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "jiff-core",
       "version": "0.1.1",
       "license": "Unlicense OR MIT",
@@ -3593,7 +4600,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3655,7 +4663,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3679,7 +4688,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3703,7 +4713,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3727,7 +4738,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3747,7 +4759,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3771,7 +4784,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3795,7 +4809,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3810,6 +4825,44 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "libappindicator-sys",
+      "version": "0.9.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/libappindicator-sys/0.9.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "eb227437252b2a7a9c1fc342c93ade1f3d7ce38cc6dd754f613db07d53ceff0b",
+          "source": "https://raw.githubusercontent.com/tauri-apps/libappindicator-rs/eafd1e3682a1247f595410266091e9684021cb6f/LICENSE-MIT"
+        },
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://raw.githubusercontent.com/tauri-apps/libappindicator-rs/eafd1e3682a1247f595410266091e9684021cb6f/LICENSE-APACHE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "libappindicator",
+      "version": "0.9.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/libappindicator/0.9.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/libappindicator/0.9.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "eb227437252b2a7a9c1fc342c93ade1f3d7ce38cc6dd754f613db07d53ceff0b",
+          "source": "https://crates.io/api/v1/crates/libappindicator/0.9.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "libc",
       "version": "0.2.191",
       "license": "MIT OR Apache-2.0",
@@ -3819,7 +4872,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3834,6 +4888,40 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "libdbus-sys",
+      "version": "0.2.7",
+      "license": "Apache-2.0/MIT",
+      "source": "https://crates.io/api/v1/crates/libdbus-sys/0.2.7/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "453745410e3be8cf25d56872ea2aec975a78e6c9f217443d0bf908a5bce7c8ff",
+          "source": "https://crates.io/api/v1/crates/libdbus-sys/0.2.7/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "de3911c2d98c8bd2d701ee721347053d9b55995a11f9a8c955e44d3ca1b376bf",
+          "source": "https://crates.io/api/v1/crates/libdbus-sys/0.2.7/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "libloading",
+      "version": "0.7.4",
+      "license": "ISC",
+      "source": "https://crates.io/api/v1/crates/libloading/0.7.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f",
+          "source": "https://crates.io/api/v1/crates/libloading/0.7.4/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "libsqlite3-sys",
       "version": "0.38.2",
       "license": "MIT",
@@ -3843,12 +4931,36 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "c10c1f27337546471e5f7e4e97fdd398b35b9d4e126115dcd22de8d8e65abf6f",
           "source": "https://crates.io/api/v1/crates/libsqlite3-sys/0.38.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "linux-raw-sys",
+      "version": "0.12.1",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download#LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download#LICENSE-MIT"
         }
       ]
     },
@@ -3863,7 +4975,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3883,7 +4996,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3907,7 +5021,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3973,7 +5088,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -3997,7 +5113,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4017,7 +5134,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4041,7 +5159,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4056,6 +5175,21 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "memoffset",
+      "version": "0.9.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/memoffset/0.9.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "3234ac55816264ee7b6c7ee27efd61cf0a1fe775806870e3d9b4c41ea73c5cb1",
+          "source": "https://crates.io/api/v1/crates/memoffset/0.9.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "mime",
       "version": "0.3.17",
       "license": "MIT OR Apache-2.0",
@@ -4065,7 +5199,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4089,7 +5224,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4109,7 +5245,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4141,7 +5278,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4173,7 +5311,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4193,7 +5332,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4217,7 +5357,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4245,7 +5386,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4269,7 +5411,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4285,7 +5428,7 @@
       "license": "MIT",
       "source": "https://crates.io/api/v1/crates/nix/0.31.3/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "66e3ee1fa7f909ad3c612d556f2a0cdabcd809ad6e66f3b0605015ac64841b70",
@@ -4304,7 +5447,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4328,7 +5472,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4348,7 +5493,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4372,7 +5518,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4396,7 +5543,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4420,7 +5568,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4669,7 +5818,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4693,12 +5843,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "e63690624d604aa626c3c62b6ead1a9f4a916d2260ac8132022acbafe2556045",
           "source": "https://crates.io/api/v1/crates/open/5.4.5/download#LICENSE.md"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "openssl-probe",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/openssl-probe/0.2.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/openssl-probe/0.2.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "source": "https://crates.io/api/v1/crates/openssl-probe/0.2.1/download#LICENSE-MIT"
         }
       ]
     },
@@ -4713,12 +5883,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
           "source": "https://crates.io/api/v1/crates/openssl-sys/0.9.117/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "openssl",
+      "version": "0.10.81",
+      "license": "Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/openssl/0.10.81/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "f3d4287b4a21c5176fea2f9bd4ae800696004e2fb8e05cbc818be513f188a941",
+          "source": "https://crates.io/api/v1/crates/openssl/0.10.81/download#LICENSE"
+        },
+        {
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "source": "https://crates.io/api/v1/crates/openssl/0.10.81/download#LICENSE-APACHE"
         }
       ]
     },
@@ -4733,12 +5923,47 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172",
           "source": "https://crates.io/api/v1/crates/option-ext/0.2.0/download#LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "ordered-multimap",
+      "version": "0.7.3",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/ordered-multimap/0.7.3/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "047c1d2f1c28c30ced89bd0740ff251d8f51512e81b142711f958a0551729ec4",
+          "source": "https://crates.io/api/v1/crates/ordered-multimap/0.7.3/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "ordered-stream",
+      "version": "0.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/ordered-stream/0.2.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/ordered-stream/0.2.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/ordered-stream/0.2.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -4763,6 +5988,36 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "pango-sys",
+      "version": "0.18.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/pango-sys/0.18.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/pango-sys/0.18.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "pango",
+      "version": "0.18.3",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/pango/0.18.3/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+          "source": "https://crates.io/api/v1/crates/pango/0.18.3/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "parking_lot_core",
       "version": "0.9.12",
       "license": "MIT OR Apache-2.0",
@@ -4772,7 +6027,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4796,7 +6052,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4811,6 +6068,29 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "parking",
+      "version": "2.2.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/parking/2.2.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/parking/2.2.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/parking/2.2.1/download#LICENSE-MIT"
+        },
+        {
+          "sha256": "9a6d7a3c1b8edcc706c4b6c37f8dae9a77f02c7f9051df603f975db136b55419",
+          "source": "https://crates.io/api/v1/crates/parking/2.2.1/download#LICENSE-THIRD-PARTY"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "password-hash",
       "version": "0.6.1",
       "license": "MIT OR Apache-2.0",
@@ -4820,7 +6100,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4844,7 +6125,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4868,7 +6150,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4892,7 +6175,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4916,7 +6200,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4936,7 +6221,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4956,7 +6242,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -4971,6 +6258,25 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "piper",
+      "version": "0.2.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/piper/0.2.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/piper/0.2.5/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/piper/0.2.5/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "plist",
       "version": "1.10.3",
       "license": "MIT",
@@ -4980,7 +6286,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5000,7 +6307,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5015,6 +6323,25 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "polling",
+      "version": "3.11.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/polling/3.11.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/polling/3.11.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/polling/3.11.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "poly1305",
       "version": "0.9.1",
       "license": "Apache-2.0 OR MIT",
@@ -5024,7 +6351,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5048,7 +6376,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5068,7 +6397,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5092,7 +6422,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5116,7 +6447,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5136,7 +6468,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5151,6 +6484,82 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "proc-macro-crate",
+      "version": "2.0.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/proc-macro-crate/2.0.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb",
+          "source": "https://crates.io/api/v1/crates/proc-macro-crate/2.0.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/proc-macro-crate/2.0.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "proc-macro-crate",
+      "version": "3.5.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/proc-macro-crate/3.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb",
+          "source": "https://crates.io/api/v1/crates/proc-macro-crate/3.5.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/proc-macro-crate/3.5.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "proc-macro-error-attr",
+      "version": "1.0.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/proc-macro-error-attr/1.0.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "6fd0f3522047150ca7c1939f02bc4a15662a4741a89bc03ae784eefa18caa299",
+          "source": "https://crates.io/api/v1/crates/proc-macro-error-attr/1.0.4/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde",
+          "source": "https://crates.io/api/v1/crates/proc-macro-error-attr/1.0.4/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "proc-macro-error",
+      "version": "1.0.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/proc-macro-error/1.0.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "4665f973ccb9393807a7fb1264add6b3513d19abc6b357e4cb52c6fe59cc6a3b",
+          "source": "https://crates.io/api/v1/crates/proc-macro-error/1.0.4/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde",
+          "source": "https://crates.io/api/v1/crates/proc-macro-error/1.0.4/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "proc-macro2",
       "version": "1.0.107",
       "license": "MIT OR Apache-2.0",
@@ -5160,7 +6569,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5184,7 +6594,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5208,7 +6619,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5232,7 +6644,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5256,7 +6669,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5276,7 +6690,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5300,7 +6715,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5324,7 +6740,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5348,7 +6765,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5372,7 +6790,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5396,7 +6815,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5424,7 +6844,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5444,7 +6865,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5468,7 +6890,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5492,7 +6915,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5516,7 +6940,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5540,7 +6965,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5564,7 +6990,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5584,7 +7011,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5604,7 +7032,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5624,12 +7053,28 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "c10c1f27337546471e5f7e4e97fdd398b35b9d4e126115dcd22de8d8e65abf6f",
           "source": "https://crates.io/api/v1/crates/rusqlite/0.40.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "rust-ini",
+      "version": "0.21.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/rust-ini/0.21.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "ccf6244964385d34fef3799aa7792e9f8d35517de026f39a4f43f0e89b2079eb",
+          "source": "https://crates.io/api/v1/crates/rust-ini/0.21.1/download#LICENSE"
         }
       ]
     },
@@ -5644,7 +7089,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5668,7 +7114,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5683,12 +7130,35 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "rustix-linux-procfs",
+      "version": "0.1.1",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/rustix-linux-procfs/0.1.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/rustix-linux-procfs/0.1.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source": "https://crates.io/api/v1/crates/rustix-linux-procfs/0.1.1/download#LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/rustix-linux-procfs/0.1.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "rustix",
       "version": "1.1.5",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "source": "https://crates.io/api/v1/crates/rustix/1.1.5/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -5715,7 +7185,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5739,7 +7210,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5778,7 +7250,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5798,7 +7271,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5818,7 +7292,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5838,7 +7313,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5900,7 +7376,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5920,7 +7397,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5944,7 +7422,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5968,7 +7447,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -5992,7 +7472,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6008,6 +7489,25 @@
     {
       "ecosystem": "cargo",
       "name": "serde_spanned",
+      "version": "0.6.9",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/serde_spanned/0.6.9/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "source": "https://crates.io/api/v1/crates/serde_spanned/0.6.9/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6",
+          "source": "https://crates.io/api/v1/crates/serde_spanned/0.6.9/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "serde_spanned",
       "version": "1.1.2",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/serde_spanned/1.1.2/download",
@@ -6016,7 +7516,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6040,7 +7541,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6064,7 +7566,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6088,7 +7591,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6112,7 +7616,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6136,7 +7641,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6160,7 +7666,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6184,7 +7691,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6208,7 +7716,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6232,7 +7741,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6248,7 +7758,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/signal-hook-registry/1.4.8/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -6271,7 +7781,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6291,7 +7802,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6319,7 +7831,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6339,7 +7852,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6363,7 +7877,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6397,6 +7912,36 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "soup3-sys",
+      "version": "0.5.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/soup3-sys/0.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31",
+          "source": "https://crates.io/api/v1/crates/soup3-sys/0.5.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "soup3",
+      "version": "0.5.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/soup3/0.5.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "7ade43ec5e1a5e43000aa871d290dff4c0e9e2e16b7f6bea2ecf091e3d056d31",
+          "source": "https://crates.io/api/v1/crates/soup3/0.5.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "specta-serde",
       "version": "0.0.13",
       "license": "MIT",
@@ -6406,7 +7951,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6426,7 +7972,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6446,7 +7993,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6466,7 +8014,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6486,7 +8035,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6510,7 +8060,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6534,7 +8085,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6558,7 +8110,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6578,7 +8131,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6609,6 +8163,25 @@
     {
       "ecosystem": "cargo",
       "name": "syn",
+      "version": "1.0.109",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/syn/1.0.109/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/syn/1.0.109/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/syn/1.0.109/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "syn",
       "version": "2.0.119",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/syn/2.0.119/download",
@@ -6617,7 +8190,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6641,7 +8215,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6665,7 +8240,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6685,7 +8261,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6743,7 +8320,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6763,7 +8341,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/tar/0.4.46/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -6786,7 +8364,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6814,7 +8393,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6842,7 +8422,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6870,7 +8451,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6898,7 +8480,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6926,7 +8509,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6954,7 +8538,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -6982,7 +8567,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7010,7 +8596,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7034,7 +8621,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7058,7 +8646,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7078,7 +8667,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7125,7 +8715,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7149,7 +8740,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7173,7 +8765,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7189,6 +8782,25 @@
     {
       "ecosystem": "cargo",
       "name": "thiserror",
+      "version": "1.0.69",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/thiserror/1.0.69/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source": "https://crates.io/api/v1/crates/thiserror/1.0.69/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/thiserror/1.0.69/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "thiserror",
       "version": "2.0.21",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/thiserror/2.0.21/download",
@@ -7197,7 +8809,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7221,7 +8834,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7245,7 +8859,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7269,7 +8884,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7293,7 +8909,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7313,7 +8930,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7341,7 +8959,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7361,7 +8980,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7381,12 +9001,32 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
           "source": "https://crates.io/api/v1/crates/tokio/1.54.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "toml_datetime",
+      "version": "0.6.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/toml_datetime/0.6.3/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/toml_datetime/0.6.3/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "source": "https://crates.io/api/v1/crates/toml_datetime/0.6.3/download#LICENSE-MIT"
         }
       ]
     },
@@ -7401,7 +9041,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7417,6 +9058,25 @@
     {
       "ecosystem": "cargo",
       "name": "toml_edit",
+      "version": "0.20.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/toml_edit/0.20.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "source": "https://crates.io/api/v1/crates/toml_edit/0.20.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6",
+          "source": "https://crates.io/api/v1/crates/toml_edit/0.20.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "toml_edit",
       "version": "0.25.17+spec-1.1.0",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/toml_edit/0.25.17+spec-1.1.0/download",
@@ -7425,7 +9085,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7449,7 +9110,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7473,7 +9135,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7497,7 +9160,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7521,7 +9185,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7541,7 +9206,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7561,7 +9227,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7581,7 +9248,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7601,7 +9269,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7621,7 +9290,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7641,7 +9311,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7661,7 +9332,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7681,7 +9353,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7701,7 +9374,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7721,7 +9395,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7741,7 +9416,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7765,7 +9441,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7784,6 +9461,21 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "trim-in-place",
+      "version": "0.1.8",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/trim-in-place/0.1.8/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "b65c9ac375b3b6c538efe6253131c44a73b50c5ee0c48a34319e766633bfee02",
+          "source": "https://crates.io/api/v1/crates/trim-in-place/0.1.8/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "try-lock",
       "version": "0.2.5",
       "license": "MIT",
@@ -7793,7 +9485,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7813,7 +9506,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7837,7 +9531,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7865,7 +9560,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7893,7 +9589,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7917,7 +9614,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7941,7 +9639,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7965,7 +9664,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -7985,7 +9685,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8009,7 +9710,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8033,7 +9735,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8057,7 +9760,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8077,7 +9781,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8101,7 +9806,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8111,6 +9817,36 @@
         {
           "sha256": "f428305bbf2e70fbd807af0f3c7ac1b7acfb95311640f451e9d2e48db6d7e96b",
           "source": "https://crates.io/api/v1/crates/web-time/1.1.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "webkit2gtk-sys",
+      "version": "2.0.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/webkit2gtk-sys/2.0.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "281b72cb008466810da31680e72005b9899c7e9d7705b909c86098260e12aa7d",
+          "source": "https://crates.io/api/v1/crates/webkit2gtk-sys/2.0.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "webkit2gtk",
+      "version": "2.0.2",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/webkit2gtk/2.0.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "3f39c032be4639be635da96d77c4d0f4393c3595a164450ffd86f3d17701ec10",
+          "source": "https://crates.io/api/v1/crates/webkit2gtk/2.0.2/download#LICENSE"
         }
       ]
     },
@@ -8155,7 +9891,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8617,6 +10354,21 @@
     {
       "ecosystem": "cargo",
       "name": "winnow",
+      "version": "0.5.40",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/winnow/0.5.40/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d",
+          "source": "https://crates.io/api/v1/crates/winnow/0.5.40/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "winnow",
       "version": "1.0.4",
       "license": "MIT",
       "source": "https://crates.io/api/v1/crates/winnow/1.0.4/download",
@@ -8625,7 +10377,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8675,7 +10428,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8695,7 +10449,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8714,6 +10469,36 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "x11-dl",
+      "version": "2.21.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/x11-dl/2.21.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/x11-dl/2.21.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "x11",
+      "version": "2.21.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/x11/2.21.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/x11/2.21.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "x25519-dalek",
       "version": "3.0.0",
       "license": "BSD-3-Clause",
@@ -8723,7 +10508,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8739,7 +10525,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/xattr/1.6.1/download",
       "distributions": ["desktop"],
-      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      "targets": ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
       "files": [
         {
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
@@ -8762,7 +10548,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8782,12 +10569,73 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
           "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
           "source": "https://crates.io/api/v1/crates/yoke/0.8.4/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zbus_macros",
+      "version": "5.19.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zbus_macros/5.19.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "source": "https://crates.io/api/v1/crates/zbus_macros/5.19.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zbus_names",
+      "version": "4.3.5",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zbus_names/4.3.5/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "source": "https://crates.io/api/v1/crates/zbus_names/4.3.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zbus",
+      "version": "5.19.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zbus/5.19.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "source": "https://crates.io/api/v1/crates/zbus/5.19.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zcheapstr",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zcheapstr/1.1.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "59871bb1612f8a0569655c10b995636827eceab42c6578cebdc45ad2922e0142",
+          "source": "https://crates.io/api/v1/crates/zcheapstr/1.1.0/download#LICENSE"
         }
       ]
     },
@@ -8802,7 +10650,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8830,7 +10679,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8850,7 +10700,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8870,7 +10721,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8894,7 +10746,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8914,7 +10767,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8934,7 +10788,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8969,7 +10824,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -8989,7 +10845,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9009,7 +10866,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9037,7 +10895,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9055,6 +10914,51 @@
       ]
     },
     {
+      "ecosystem": "cargo",
+      "name": "zvariant_derive",
+      "version": "5.15.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zvariant_derive/5.15.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "source": "https://crates.io/api/v1/crates/zvariant_derive/5.15.1/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zvariant_utils",
+      "version": "4.2.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zvariant_utils/4.2.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source": "https://crates.io/api/v1/crates/zvariant_utils/4.2.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zvariant",
+      "version": "5.15.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/zvariant/5.15.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
+          "source": "https://crates.io/api/v1/crates/zvariant/5.15.1/download#LICENSE"
+        }
+      ]
+    },
+    {
       "ecosystem": "model",
       "name": "Parakeet TDT-CTC 110M speech model (parakeet-tdt_ctc-110m-Q6_K.gguf)",
       "version": "1c3f0d5378fdd358905cc410a93ed9e64f52d170",
@@ -9065,7 +10969,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9093,7 +10998,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9121,7 +11027,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9141,7 +11048,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9176,7 +11084,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
@@ -9196,7 +11105,8 @@
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
         "x86_64-apple-darwin",
-        "x86_64-pc-windows-msvc"
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
       ],
       "files": [
         {
