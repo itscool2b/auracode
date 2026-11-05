@@ -92,7 +92,7 @@ and a hands-on walkthrough before merging.
     Compact conversation. Inline diffs were already there.
   - [x] A, second part (#80, merged 2026-11-05): syntax highlighting (highlight.js), math (KaTeX)
     and Mermaid diagrams. Mermaid's optional ELK layout is left out: elkjs is EPL-2.0 or GPL-3.0.
-  - [ ] B, in three pull requests.
+  - [x] B, in three pull requests.
     - [x] First part (#81, merged 2026-11-05): native fork for Claude and Pi from the latest answer;
       Rewind on every sent message, on auracode's own checkpoints where the turn has one (every
       agent, shell changes too) and otherwise, in Claude chats, on Claude's `rewind_files`,
