@@ -258,6 +258,11 @@
   --g-dur-cycle: 3000ms;
   --g-dur-timer: 7500ms;
   --g-dur-exit: 120ms;
+  /* Dictation: one step of the waveform (the microphone's 80 ms report), the sweep that sets
+     dictated words in ink, and the dissolve that takes cancelled ones back. */
+  --g-dur-wave: 80ms;
+  --g-dur-ink: 560ms;
+  --g-dur-dissolve: 320ms;
   --g-stagger: 0ms;
   --g-stagger-letter: 0ms;
   --g-stagger-row: 0ms;
@@ -516,6 +521,9 @@
     --g-dur-shimmer: 0ms;
     --g-dur-glint: 0ms;
     --g-dur-exit: 0ms;
+    --g-dur-wave: 0ms;
+    --g-dur-ink: 0ms;
+    --g-dur-dissolve: 0ms;
     --g-stagger: 0ms;
     --g-stagger-letter: 0ms;
     --g-stagger-row: 0ms;
@@ -543,6 +551,9 @@
   --g-dur-shimmer: 0ms;
   --g-dur-glint: 0ms;
   --g-dur-exit: 0ms;
+  --g-dur-wave: 0ms;
+  --g-dur-ink: 0ms;
+  --g-dur-dissolve: 0ms;
   --g-stagger: 0ms;
   --g-stagger-letter: 0ms;
   --g-stagger-row: 0ms;

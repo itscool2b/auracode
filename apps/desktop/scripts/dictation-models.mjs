@@ -20,8 +20,8 @@ import {
   statSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
 export const MODEL_DIR = resolve(

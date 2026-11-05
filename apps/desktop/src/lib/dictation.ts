@@ -1,75 +1,206 @@
 import { Channel } from "@tauri-apps/api/core";
-import { commands, type DictationEvent, type DictationModel } from "../bindings";
+import {
+  commands,
+  type DictationEvent,
+  type DictationFailure,
+  type DictationModel,
+  type LiveText,
+} from "../bindings";
 import { errorMessage } from "./errors";
 import { settle } from "./ipc";
 
+/**
+ * Dictation in the composer (docs/local-dictation.md). The bundled models run on this device: the
+ * microphone streams live text until the person finishes or cancels, with no time limit, and only
+ * the finished text joins the draft. Nothing here can send a message.
+ */
 export interface DictationApi {
   model(): Promise<DictationModel>;
-  download(id: string, event: (event: DictationEvent) => void): Promise<void>;
   start(id: string, event: (event: DictationEvent) => void): Promise<void>;
   stop(id: string): Promise<void>;
   cancel(id: string): Promise<void>;
 }
-/** The person's language tag, which Whisper hears in place of guessing from a short clip. */
-export function systemLanguage(): string | null {
-  return typeof navigator === "undefined" ? null : navigator.language || null;
-}
 
 export const dictationApi: DictationApi = {
-  model: () => settle(commands.dictationModel()),
-  download: async (id, onmessage) => {
-    await settle(commands.dictationDownload(id, new Channel(onmessage)));
-  },
+  model: () => commands.dictationModel(),
   start: async (id, onmessage) => {
-    await settle(commands.dictationStart(id, systemLanguage(), new Channel(onmessage)));
+    await settle(commands.dictationStart(id, new Channel(onmessage)));
   },
-  stop: async (id) => {
-    await commands.dictationStop(id);
-  },
-  cancel: async (id) => {
-    await commands.dictationCancel(id);
-  },
+  stop: (id) => commands.dictationStop(id),
+  cancel: (id) => commands.dictationCancel(id),
 };
 
-/** What Rust reports for a processor without AVX2; the panel says it before any command runs. */
+/** What Rust reports for a processor without AVX2; the bar says it before any command runs. */
 export const UNSUPPORTED_MESSAGE =
   "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of auracode works as usual.";
+export const MISSING_MESSAGE =
+  "This build of auracode is missing its dictation models. Reinstall auracode to restore them.";
+/** Said after a failure when the words heard before it were kept in the draft. */
+export const KEPT_MESSAGE = "What it heard so far is in your draft.";
+
+export const NO_TEXT: LiveText = { settled: "", stable: "", tentative: "" };
+
+/** Samples of microphone level the waveform keeps: 160 ticks of 80 ms, about 13 seconds. */
+export const WAVE_SAMPLES = 160;
+
+export interface WaveSample {
+  /** Shown height, 0 to 1. */
+  readonly level: number;
+  /** Voice detection heard speech at this tick. */
+  readonly voiced: boolean;
+}
 
 export type DictationState =
-  | { state: "idle" | "checking" | "needs_model" | "ready" }
-  | { state: "cancelling"; message?: string }
-  | DictationEvent;
-
-/** A new model download helps only when the model itself failed. */
-export function offersModelDownload(value: DictationState): boolean {
-  return value.state === "failed" && value.reason === "model";
-}
+  | { readonly state: "idle" }
+  /** Checking the models, loading them the first time, and opening the microphone. */
+  | { readonly state: "starting" }
+  | {
+      readonly state: "listening";
+      readonly seconds: number;
+      readonly speaking: boolean;
+      readonly text: LiveText;
+      readonly wave: readonly WaveSample[];
+      /** Counts the microphone's reports, so each waveform sample keeps its identity. */
+      readonly tick: number;
+    }
+  | {
+      readonly state: "finishing";
+      readonly seconds: number;
+      readonly text: LiveText;
+      readonly wave: readonly WaveSample[];
+      readonly tick: number;
+    }
+  | { readonly state: "cancelling"; readonly text: LiveText; readonly message?: string }
+  | {
+      readonly state: "failed";
+      readonly message: string;
+      readonly reason: DictationFailure;
+      /** The words heard before the failure went into the draft. */
+      readonly kept: boolean;
+    };
 
 /** Retrying cannot help a processor that lacks the engine's instructions. */
 export function offersRetry(value: DictationState): boolean {
   return value.state === "failed" && value.reason !== "unsupported";
 }
+
+/** A recording is starting, running, finishing or stopping: the draft is the dictation's. */
 export function dictationBusy(value: DictationState): boolean {
-  return [
-    "checking",
-    "downloading",
-    "preparing",
-    "recording",
-    "transcribing",
-    "cancelling",
-  ].includes(value.state);
+  return ["starting", "listening", "finishing", "cancelling"].includes(value.state);
 }
 
-/** Owns one recording/download. Late events and invoke completions cannot edit another chat. */
+/** The live text the state carries, if any. */
+export function liveTextOf(value: DictationState): LiveText {
+  return value.state === "listening" || value.state === "finishing" || value.state === "cancelling"
+    ? value.text
+    : NO_TEXT;
+}
+
+export type WordKind = "settled" | "stable" | "tentative";
+export interface LiveWord {
+  readonly text: string;
+  readonly kind: WordKind;
+}
+
+/** The live text as words in reading order, each marked with how final it is. */
+export function liveWords(text: LiveText): LiveWord[] {
+  const words: LiveWord[] = [];
+  for (const kind of ["settled", "stable", "tentative"] as const) {
+    for (const word of text[kind].split(/\s+/)) if (word) words.push({ text: word, kind });
+  }
+  return words;
+}
+
+/** The live text as one string, as the draft would take it. */
+export function joinLive(text: LiveText): string {
+  return liveWords(text)
+    .map((word) => word.text)
+    .join(" ");
+}
+
+/**
+ * A microphone level (Rust reports 0 to 1, about eight times the RMS) as a bar height: room noise
+ * stays flat and speech fills most of the bar.
+ */
+export function waveLevel(level: number | null): number {
+  if (level === null || !Number.isFinite(level)) return 0;
+  return Math.min(1, Math.sqrt(Math.max(0, level - 0.03) / 0.97));
+}
+
+/** The time a recording has run, as `m:ss`. */
+export function recordingTime(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** Where dictation goes in the draft: the text around the captured selection. */
+export interface DictationFrame {
+  readonly before: string;
+  readonly after: string;
+}
+
+/**
+ * The draft around the selection captured when dictation began. If the draft changed since, the
+ * words go at its end, so nothing typed or restored in the meantime is overwritten.
+ */
+export function dictationFrame(
+  current: string,
+  original: string,
+  start: number,
+  end: number,
+): DictationFrame {
+  return current === original
+    ? { before: current.slice(0, start), after: current.slice(end) }
+    : { before: current, after: "" };
+}
+
+/** The spaces that keep dictated words apart from the draft around them. */
+export function dictationSpacing(frame: DictationFrame): { left: string; right: string } {
+  return {
+    left: frame.before && !/\s$/.test(frame.before) ? " " : "",
+    right: frame.after && !/^\s/.test(frame.after) ? " " : "",
+  };
+}
+
+export interface Placement {
+  readonly text: string;
+  /** The dictated words' range in `text`, without the spaces around them. */
+  readonly start: number;
+  readonly end: number;
+}
+
+/** The draft with `transcript` in place, and where it went. An empty transcript changes nothing. */
+export function placeDictation(
+  current: string,
+  transcript: string,
+  original: string,
+  start: number,
+  end: number,
+): Placement {
+  const words = transcript.trim();
+  if (!words) return { text: current, start: current.length, end: current.length };
+  const frame = dictationFrame(current, original, start, end);
+  const { left, right } = dictationSpacing(frame);
+  const from = frame.before.length + left.length;
+  return {
+    text: `${frame.before}${left}${words}${right}${frame.after}`,
+    start: from,
+    end: from + words.length,
+  };
+}
+
+/** Owns one recording. Late events and invoke completions cannot edit another chat. */
 export class DictationController {
   #state: DictationState = { state: "idle" };
   #listeners = new Set<() => void>();
   #active: string | null = null;
   #cancelled: string | null = null;
+  #stopping: string | null = null;
   #disposed = false;
   #generation = 0;
   constructor(
     readonly api: DictationApi,
+    /** Puts finished words into the draft. */
     readonly insert: (text: string) => void,
   ) {}
   readonly subscribe = (listener: () => void) => {
@@ -84,85 +215,139 @@ export class DictationController {
     this.#state = value;
     for (const listener of this.#listeners) listener();
   }
+  /** Checks the bundled models and starts listening. */
   async open() {
-    if (dictationBusy(this.#state) || this.#disposed) return;
+    if (this.#disposed || this.#active || dictationBusy(this.#state)) return;
     const generation = ++this.#generation;
-    this.#set({ state: "checking" });
+    this.#set({ state: "starting" });
     try {
       const model = await this.api.model();
       if (this.#disposed || generation !== this.#generation) return;
-      if (model.supported === false)
-        this.#set({ state: "failed", message: UNSUPPORTED_MESSAGE, reason: "unsupported" });
-      else if (model.installed) await this.start();
-      else this.#set({ state: "needs_model" });
+      if (!model.supported)
+        this.#set({
+          state: "failed",
+          message: UNSUPPORTED_MESSAGE,
+          reason: "unsupported",
+          kept: false,
+        });
+      else if (!model.installed)
+        this.#set({ state: "failed", message: MISSING_MESSAGE, reason: "model", kept: false });
+      else await this.#start();
     } catch (error) {
       if (generation === this.#generation)
-        this.#set({ state: "failed", message: errorMessage(error), reason: "other" });
+        this.#set({ state: "failed", message: errorMessage(error), reason: "other", kept: false });
     }
   }
-  async #run(kind: "download" | "start") {
+  async #start() {
     if (this.#active || this.#disposed) return;
     const id = crypto.randomUUID();
     this.#active = id;
     this.#cancelled = null;
-    this.#set(
-      kind === "download"
-        ? { state: "downloading", received: 0, total: 147951465 }
-        : { state: "preparing" },
-    );
+    this.#stopping = null;
+    this.#set({ state: "starting" });
     try {
-      await this.api[kind](id, (event) => {
-        if (this.#disposed || this.#active !== id) return;
-        if (
-          this.#cancelled === id &&
-          !["cancelled", "complete", "failed", "model_ready"].includes(event.state)
-        )
-          return;
-        if (["complete", "cancelled", "failed", "model_ready"].includes(event.state)) {
-          this.#active = null;
-          if (this.#cancelled === id) {
-            this.#set({ state: "idle" });
-            return;
-          }
-        }
-        if (event.state === "complete") {
-          if (event.text.trim()) this.insert(event.text.trim());
-          this.#set({ state: "idle" });
-        } else if (event.state === "model_ready") this.#set({ state: "ready" });
-        else if (event.state === "cancelled") this.#set({ state: "idle" });
-        else this.#set(event);
-      });
-      // The user can cancel/unmount while the native command is still being admitted.
-      if (this.#disposed || this.#active !== id) {
-        await this.api.cancel(id);
-      } else if (this.#cancelled === id) await this.cancel();
+      await this.api.start(id, (event) => this.#receive(id, event));
+      // The person can cancel, or the chat unmount, while the command is still being admitted.
+      if (this.#disposed || this.#active !== id) await this.api.cancel(id);
+      else if (this.#cancelled === id) await this.cancel();
     } catch (error) {
       if (this.#active !== id) return;
       this.#active = null;
       this.#set(
         this.#cancelled === id
           ? { state: "idle" }
-          : { state: "failed", message: errorMessage(error), reason: "other" },
+          : { state: "failed", message: errorMessage(error), reason: "other", kept: false },
       );
     }
   }
-  download() {
-    return this.#run("download");
+  #receive(id: string, event: DictationEvent) {
+    if (this.#disposed || this.#active !== id) return;
+    const cancelled = this.#cancelled === id;
+    const previous = this.#state;
+    const recorded =
+      previous.state === "listening" || previous.state === "finishing" ? previous : null;
+    switch (event.state) {
+      case "preparing":
+        if (!cancelled) this.#set({ state: "starting" });
+        return;
+      case "listening": {
+        if (cancelled) return;
+        const sample = { level: waveLevel(event.level), voiced: event.speaking };
+        const wave = [...(recorded?.wave ?? []).slice(1 - WAVE_SAMPLES), sample];
+        const tick = (recorded?.tick ?? -1) + 1;
+        // Finishing was asked for: the microphone's last report only updates the words.
+        if (this.#stopping === id)
+          this.#set({ state: "finishing", seconds: event.seconds, text: event.text, wave, tick });
+        else
+          this.#set({
+            state: "listening",
+            seconds: event.seconds,
+            speaking: event.speaking,
+            text: event.text,
+            wave,
+            tick,
+          });
+        return;
+      }
+      case "finishing":
+        if (cancelled) return;
+        this.#set({
+          state: "finishing",
+          seconds: recorded?.seconds ?? 0,
+          text: event.text,
+          wave: recorded?.wave ?? [],
+          tick: recorded?.tick ?? 0,
+        });
+        return;
+      case "complete":
+        this.#active = null;
+        if (!cancelled && event.text.trim()) this.insert(event.text.trim());
+        this.#set({ state: "idle" });
+        return;
+      case "cancelled":
+        this.#active = null;
+        this.#set({ state: "idle" });
+        return;
+      case "failed": {
+        this.#active = null;
+        if (cancelled) {
+          this.#set({ state: "idle" });
+          return;
+        }
+        // A microphone that stops mid-sentence keeps what was already heard.
+        const heard = joinLive(liveTextOf(previous));
+        if (heard) this.insert(heard);
+        this.#set({
+          state: "failed",
+          message: event.message,
+          reason: event.reason,
+          kept: heard !== "",
+        });
+      }
+    }
   }
-  start() {
-    return this.#run("start");
-  }
+  /** Closes the microphone; the last words settle and join the draft. */
   async stop() {
-    if (!this.#active || this.#state.state !== "recording") return;
     const id = this.#active;
+    const current = this.#state;
+    if (!id || current.state !== "listening") return;
+    this.#stopping = id;
+    this.#set({
+      state: "finishing",
+      seconds: current.seconds,
+      text: current.text,
+      wave: current.wave,
+      tick: current.tick,
+    });
     try {
       await this.api.stop(id);
     } catch (error) {
       if (this.#active !== id) return;
-      this.#set({ state: "failed", message: errorMessage(error), reason: "other" });
+      this.#set({ state: "failed", message: errorMessage(error), reason: "other", kept: false });
       await this.cancel();
     }
   }
+  /** Discards the recording and its words. */
   async cancel() {
     ++this.#generation;
     const id = this.#active;
@@ -171,16 +356,21 @@ export class DictationController {
       return;
     }
     this.#cancelled = id;
-    this.#set({ state: "cancelling" });
+    this.#set({ state: "cancelling", text: liveTextOf(this.#state) });
     try {
       await this.api.cancel(id);
     } catch (error) {
       if (this.#active !== id) return;
       this.#set({
         state: "cancelling",
+        text: NO_TEXT,
         message: `Could not stop dictation. ${errorMessage(error)}`,
       });
     }
+  }
+  /** Closes a failure's message. */
+  dismiss() {
+    if (this.#state.state === "failed") this.#set({ state: "idle" });
   }
   dispose() {
     void this.cancel();
@@ -194,22 +384,4 @@ export class DictationController {
       this.#set({ state: "idle" });
     }
   }
-}
-
-/** Use the original selection only if typing has not changed the draft in the meantime. */
-export function insertDictation(
-  current: string,
-  transcript: string,
-  original: string,
-  start: number,
-  end: number,
-): string {
-  const text = transcript.trim();
-  if (!text) return current;
-  const unchanged = current === original;
-  const before = unchanged ? current.slice(0, start) : current;
-  const after = unchanged ? current.slice(end) : "";
-  const left = before && !/\s$/.test(before) ? " " : "";
-  const right = after && !/^\s/.test(after) ? " " : "";
-  return `${before}${left}${text}${right}${after}`;
 }

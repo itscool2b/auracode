@@ -6,7 +6,13 @@ import { composerPlaceholder } from "../../lib/chat/queueWait";
 import type { ComposerContext, ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
-import { DictationControl } from "./DictationControl";
+import {
+  DictationBar,
+  DictationButton,
+  DictationGhost,
+  revealDictation,
+  useDictation,
+} from "./Dictation";
 import { SlashMenu } from "./SlashMenu";
 import { type CompanionVariant, companionVariant, WorkingCompanion } from "./WorkingCompanion";
 
@@ -50,10 +56,18 @@ export function Composer({
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
   const [sending, setSending] = useState(false);
-  const [dictating, setDictating] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const ghostNode = useRef<HTMLDivElement>(null);
   const context = useComposerContext(chatId, contextApi);
   const { text, setText } = context;
+  const dictation = useDictation({
+    api: contextApi?.dictation,
+    input,
+    text,
+    setText,
+    disabled: blocked || sending || !context.ready,
+  });
+  const dictating = dictation?.busy ?? false;
   const [mentionItems, setMentionItems] = useState<FileMention[]>([]);
   const [mentionError, setMentionError] = useState<string | null>(null);
   const mentionQuery =
@@ -78,12 +92,17 @@ export function Composer({
       window.clearTimeout(timer);
     };
   }, [contextApi, chatId, mentionQuery]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: The value changes scrollHeight after React commits the textarea.
+  // The box grows with the draft, and with dictated words still in its ghost, up to 240px.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The value and the ghost change scrollHeight after React commits them.
   useLayoutEffect(() => {
-    if (!input.current) return;
-    input.current.style.height = "0px";
-    input.current.style.height = `${Math.min(240, Math.max(48, input.current.scrollHeight))}px`;
-  }, [text]);
+    const field = input.current;
+    if (!field) return;
+    field.style.height = "0px";
+    const ghost = ghostNode.current;
+    const natural = Math.max(field.scrollHeight, ghost?.scrollHeight ?? 0);
+    field.style.height = `${Math.min(240, Math.max(48, natural))}px`;
+    if (ghost) revealDictation(ghost, field);
+  }, [text, dictation?.layout]);
   const fieldId = useId();
   const menuId = useId();
   const mentionId = useId();
@@ -162,84 +181,104 @@ export function Composer({
       <label htmlFor={fieldId} className="sr-only">
         Message
       </label>
-      <textarea
-        ref={input}
-        id={fieldId}
-        className="g-textarea"
-        data-testid="composer-input"
-        value={text}
-        disabled={!context.ready}
-        onBlur={() => void context.flush()}
-        placeholder={composerPlaceholder(status, agentName)}
-        title="Enter sends, Shift+Enter adds a line, / lists commands, @ mentions a file"
-        aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
-        onPaste={(event) => {
-          if (!contextApi) return;
-          const image = Array.from(event.clipboardData.files).find((file) =>
-            file.type.startsWith("image/"),
-          );
-          if (image) {
-            event.preventDefault();
-            void context.paste(image);
-          }
-        }}
-        onChange={(event) => {
-          setText(event.currentTarget.value);
-          setMenuClosed(false);
-          setActive(0);
-        }}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (mentionOpen) {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      <div className="chat-composer-field" data-ghost={dictation?.ghost ? "" : undefined}>
+        <textarea
+          ref={input}
+          id={fieldId}
+          className="g-textarea"
+          data-testid="composer-input"
+          value={text}
+          disabled={!context.ready}
+          readOnly={dictating}
+          onBlur={() => void context.flush()}
+          placeholder={composerPlaceholder(status, agentName)}
+          title="Enter sends, Shift+Enter adds a line, / lists commands, @ mentions a file"
+          aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
+          onPaste={(event) => {
+            if (!contextApi) return;
+            const image = Array.from(event.clipboardData.files).find((file) =>
+              file.type.startsWith("image/"),
+            );
+            if (image) {
               event.preventDefault();
-              const step = event.key === "ArrowDown" ? 1 : -1;
-              setActive((value) => (value + step + mentionItems.length) % mentionItems.length);
+              void context.paste(image);
+            }
+          }}
+          onChange={(event) => {
+            dictation?.interrupt();
+            setText(event.currentTarget.value);
+            setMenuClosed(false);
+            setActive(0);
+          }}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            // While dictating, the draft is the dictation's: Enter finishes it, as on its button.
+            if (dictating) {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                dictation?.finish();
+              }
               return;
             }
-            if (event.key === "Enter" || event.key === "Tab") {
-              const item = mentionItems[Math.min(active, mentionItems.length - 1)];
-              if (item) {
+            if (mentionOpen) {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
-                chooseMention(item);
+                const step = event.key === "ArrowDown" ? 1 : -1;
+                setActive((value) => (value + step + mentionItems.length) % mentionItems.length);
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                const item = mentionItems[Math.min(active, mentionItems.length - 1)];
+                if (item) {
+                  event.preventDefault();
+                  chooseMention(item);
+                  return;
+                }
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setMenuClosed(true);
                 return;
               }
             }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setMenuClosed(true);
-              return;
-            }
-          }
-          if (menuOpen) {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              const step = event.key === "ArrowDown" ? 1 : -1;
-              setActive((current) => (current + step + matches.length) % matches.length);
-              return;
-            }
-            if (event.key === "Enter" || event.key === "Tab") {
-              const command = matches[Math.min(active, matches.length - 1)];
-              if (command) {
+            if (menuOpen) {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
-                choose(command);
+                const step = event.key === "ArrowDown" ? 1 : -1;
+                setActive((current) => (current + step + matches.length) % matches.length);
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                const command = matches[Math.min(active, matches.length - 1)];
+                if (command) {
+                  event.preventDefault();
+                  choose(command);
+                  return;
+                }
+              }
+              if (event.key === "Escape") {
+                // Closes the menu; the Esc that stops a turn is the next one.
+                event.preventDefault();
+                setMenuClosed(true);
                 return;
               }
             }
-            if (event.key === "Escape") {
-              // Closes the menu; the Esc that stops a turn is the next one.
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
-              setMenuClosed(true);
-              return;
+              void send();
             }
-          }
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            void send();
-          }
-        }}
-      />
-      <div className="chat-composer-controls">
+          }}
+        />
+        {dictation?.ghost ? (
+          <DictationGhost
+            key={dictation.ghost.key}
+            ghost={dictation.ghost}
+            node={ghostNode}
+            onSettled={dictation.settled}
+          />
+        ) : null}
+      </div>
+      <div className="chat-composer-controls" hidden={dictation?.open}>
         {contextApi ? (
           <button
             type="button"
@@ -254,14 +293,10 @@ export function Composer({
         ) : null}
         {controls}
         <div className="chat-composer-actions" data-running={working ? "" : undefined}>
-          {contextApi?.dictation ? (
-            <DictationControl
-              api={contextApi.dictation}
-              input={input}
-              text={text}
-              setText={setText}
+          {dictation ? (
+            <DictationButton
+              dictation={dictation}
               disabled={blocked || sending || !context.ready}
-              onBusy={setDictating}
             />
           ) : null}
           <StopButton
@@ -283,6 +318,7 @@ export function Composer({
           )}
         </div>
       </div>
+      {dictation?.open ? <DictationBar dictation={dictation} /> : null}
       {error !== null || context.error !== null || mentionError !== null ? (
         <span role="alert" className="ui-error" data-testid="composer-error">
           {context.error ?? mentionError ?? error}
