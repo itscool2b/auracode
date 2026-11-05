@@ -2,6 +2,8 @@
 //! operation downloads a pinned model; transcription never makes a network request.
 mod audio;
 mod callbacks;
+#[allow(dead_code)] // Wired into the capture loop with the new engine in this branch.
+mod live;
 pub mod commands;
 mod model;
 
