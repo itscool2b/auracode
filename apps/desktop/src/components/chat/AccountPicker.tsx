@@ -1,6 +1,6 @@
-import { Check, ChevronDown, Plus, Settings2, UserRound } from "lucide-react";
+import { Check, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
-import type { SessionStatus } from "../../bindings";
+import type { AccountUsage, SessionStatus } from "../../bindings";
 import {
   type AgentAccountsApi,
   accountName,
@@ -16,6 +16,59 @@ import { AccountUsageMeters } from "../setup/AccountUsageMeters";
 import { AddAccountDialog } from "../setup/AddAccountDialog";
 import { movePickerFocus } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
+
+/** The share of the account's fullest usage window, or `null` before any report. */
+export function usagePeak(usage: AccountUsage | null): number | null {
+  if (!usage?.windows.length) return null;
+  return usage.windows.reduce((most, window) => Math.max(most, window.used_percent ?? 0), 0);
+}
+
+const RING_RADIUS = 10;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+/**
+ * The chip's face: the account's initial in a disc, ringed by its fullest usage window, so the
+ * composer says which account answers and how much of it is left without spelling either out.
+ */
+export function AccountAvatar({
+  name,
+  peak,
+}: {
+  readonly name: string;
+  readonly peak: number | null;
+}) {
+  const initial = Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?";
+  const share = peak === null ? null : Math.min(1, Math.max(0, peak / 100));
+  return (
+    <span
+      className="chat-account-avatar"
+      data-full={share !== null && share >= 1 ? "" : undefined}
+      aria-hidden="true"
+    >
+      <svg
+        className="chat-account-rings"
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        focusable="false"
+        aria-hidden="true"
+      >
+        <circle className="chat-account-ring-track" cx="12" cy="12" r={RING_RADIUS} />
+        {share ? (
+          <circle
+            className="chat-account-ring"
+            cx="12"
+            cy="12"
+            r={RING_RADIUS}
+            strokeDasharray={`${share * RING_LENGTH} ${RING_LENGTH}`}
+            transform="rotate(-90 12 12)"
+          />
+        ) : null}
+      </svg>
+      <span className="chat-account-initial">{initial}</span>
+    </span>
+  );
+}
 
 /**
  * The account this chat's agent signs in with (docs/agent-accounts.md), beside the access and
@@ -68,12 +121,15 @@ export function AccountPicker({
     null,
     ...(accounts?.accounts.map((account) => account.id) ?? []),
   ];
+  const currentUsage = accountUsage(usage, current);
+  const peak = usagePeak(currentUsage);
   return (
     <>
       <Popover
         label="Account"
         triggerLabel={`Account: ${name}`}
-        className="chat-account-popover"
+        tip={`Account: ${name}${peak === null ? "" : ` · ${Math.round(peak)}% used`}`}
+        className={`chat-account-popover${busy ? " chat-account-busy" : ""}`}
         onOpenChange={(open) => {
           if (open) {
             setError(null);
@@ -82,10 +138,8 @@ export function AccountPicker({
         }}
         trigger={
           <>
-            <UserRound size={14} aria-hidden="true" />
-            <span className="chat-account-name">{name}</span>
+            <AccountAvatar name={name} peak={peak} />
             {busy ? <span className="chat-control-pending">Switching…</span> : null}
-            <ChevronDown size={12} />
           </>
         }
       >

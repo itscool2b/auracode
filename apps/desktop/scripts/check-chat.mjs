@@ -979,7 +979,8 @@ async function inspect(engine, launcher) {
 
     // The agent, model and thinking menu, on Claude Code's dozen models in a 900px window. It
     // opens on the current model; the preview answers a change with the old lists and sends the
-    // new ones after, as the real drivers do, and the choice must never snap back.
+    // new ones after, as the real drivers do, and the choice must never snap back. It reads model,
+    // thinking, then agents (owner, 4 November 2026), and none of them needs a scroll to reach.
     await page.goto(`${url}/?preview=settled`);
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.keyboard.press("Control+.");
@@ -1013,27 +1014,44 @@ async function inspect(engine, launcher) {
       ["Haiku 5.5|haiku"],
       `${engine}: the model switch snapped back or flickered: ${states.join(" > ")}`,
     );
-    // The thinking level is in view without scrolling: no part of the menu has scrolled.
-    const thinking = await page.evaluate(() => {
-      const panel = document.querySelector(".chat-model-popover > .chat-popover-panel");
-      const row = document.querySelector(".chat-picker-thinking");
-      const box = row?.getBoundingClientRect();
-      const frame = panel?.getBoundingClientRect();
-      return {
-        inside:
-          !!box && !!frame && box.top >= frame.top && box.bottom <= frame.bottom && box.top >= 0,
-        panelScrolled: panel?.scrollTop ?? -1,
-        listScrolls: (() => {
-          const list = document.querySelector(".chat-model-scroll");
-          return !!list && list.scrollHeight > list.clientHeight;
-        })(),
-      };
-    });
+    // The thinking level and every agent are in view without scrolling: no part of the menu has
+    // scrolled, and the folded model list (five, the chosen one and "More models") fits whole.
+    const inView = () =>
+      page.evaluate(() => {
+        const panel = document.querySelector(".chat-model-popover > .chat-popover-panel");
+        const frame = panel?.getBoundingClientRect();
+        const inside = (selector) => {
+          const box = document.querySelector(selector)?.getBoundingClientRect();
+          return (
+            !!box && !!frame && box.top >= frame.top && box.bottom <= frame.bottom && box.top >= 0
+          );
+        };
+        const list = document.querySelector(".chat-model-scroll");
+        const order = [".chat-picker-models", ".chat-picker-thinking", ".chat-picker-agents"].map(
+          (selector) => document.querySelector(selector)?.getBoundingClientRect().top ?? -1,
+        );
+        return {
+          thinking: inside(".chat-picker-thinking"),
+          agents: inside(".chat-picker-agents"),
+          ordered: order.every((top, index) => top >= 0 && (index === 0 || top > order[index - 1])),
+          panelScrolled: panel?.scrollTop ?? -1,
+          listScrolls: !!list && list.scrollHeight > list.clientHeight + 1,
+        };
+      });
     assert.deepEqual(
-      thinking,
-      { inside: true, panelScrolled: 0, listScrolls: true },
-      `${engine}: the thinking level is not in view above a scrolling model list`,
+      await inView(),
+      { thinking: true, agents: true, ordered: true, panelScrolled: 0, listScrolls: false },
+      `${engine}: the thinking level or the agents are not in view below a folded model list`,
     );
+    // "More models" opens the rest in place: the list scrolls on its own, the rest stay put.
+    await page.getByTestId("picker-more-models").click();
+    await page.locator('[data-picker-value="claude-sonnet-4-6"]').waitFor();
+    assert.deepEqual(
+      await inView(),
+      { thinking: true, agents: true, ordered: true, panelScrolled: 0, listScrolls: true },
+      `${engine}: an opened model list pushed the thinking level or the agents out of view`,
+    );
+    await page.locator('[data-picker-value="haiku"]').focus();
     await page.keyboard.press("4");
     await page.waitForFunction(
       () =>
