@@ -17,6 +17,13 @@ const workspace: GitWorkspace = {
   has_submodules: false,
   is_linked_worktree: false,
 };
+/** `&changes`: the folder has a modified file, a renamed one and a new one to commit. */
+if (params.has("changes"))
+  workspace.files = [
+    { path: "src/orbit.rs", index: ".", worktree: "M", original_path: null },
+    { path: "src/launch.rs", index: "R", worktree: ".", original_path: "src/start.rs" },
+    { path: "docs/checklist.md", index: "?", worktree: "?", original_path: null },
+  ];
 /** `?preview=git-missing`: the chat's worktree folder was deleted by hand; its branch remains. */
 const missing = params.get("preview") === "git-missing";
 /**
@@ -112,6 +119,62 @@ const api: GitWorkspaceApi = {
     return structuredClone(workspace);
   },
   list: async () => structuredClone(worktrees),
+  commitPreview: async (_chat, input) => {
+    calls.push(`review-commit:${input.paths.join(",")}`);
+    const files = workspace.files.filter((file) => input.paths.includes(file.path));
+    return {
+      token: `commit-${++sequence}`,
+      branch: workspace.branch ?? "main",
+      parent: workspace.head,
+      author: "Fixture <fixture@localhost>",
+      signed: params.has("signed"),
+      files,
+      message: `${input.message.trim()}\n`,
+      diff_stat: `${files.map((file) => ` ${file.path} | 4 ++--`).join("\n")}\n ${files.length} files changed`,
+      warnings: [
+        "Git hooks do not run: auracode commits exactly the reviewed files. Run your project's checks yourself if it relies on them.",
+      ],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  commitApply: async (_chat, token) => {
+    calls.push(`apply-commit:${token}`);
+    if (sessionStorage.getItem("git-stale"))
+      throw new Error("The files changed since the review. Review the commit again.");
+    const commit = "7e1f0c9a3b5d2e8f4a6c1b9d0e3f5a7c2b4d6e8f";
+    workspace.files = workspace.files.filter((file) => file.path === "docs/checklist.md");
+    workspace.head = commit;
+    return { commit, branch: workspace.branch ?? "main", warning: null };
+  },
+  pushPreview: async () => {
+    calls.push("review-push");
+    return {
+      token: `push-${++sequence}`,
+      branch: workspace.branch ?? "main",
+      remote: "origin",
+      remote_urls: ["https://github.com/fixture/orbit.git"],
+      target: workspace.branch ?? "main",
+      head: workspace.head ?? "",
+      remote_head: "5a4d64755cbb57ee734ad9502760eb225274491a",
+      commits: ["7e1f0c9 Add the release checklist"],
+      count: 1,
+      sets_upstream: false,
+      warnings: [
+        "Push sends only these commits. It never forces: if the remote branch moves first, Git refuses and nothing changes.",
+      ],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  pushApply: async (_chat, token) => {
+    calls.push(`apply-push:${token}`);
+    return {
+      remote: "origin",
+      target: workspace.branch ?? "main",
+      head: workspace.head ?? "",
+      created: false,
+      warning: null,
+    };
+  },
   isolationPreview: async (_chat, input) => {
     calls.push("review-isolation");
     return {

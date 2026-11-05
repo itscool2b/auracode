@@ -111,7 +111,7 @@ and a hands-on walkthrough before merging.
       Client file access and client-run terminals stay off on purpose: the agents run commands
       and use files themselves, and auracode has no unsaved buffers to offer, the reason ACP has
       them.
-  - [ ] C, in three pull requests.
+  - [x] C, in three pull requests.
     - [x] First part (#84, merged 2026-11-05): review in Changes. A comment on any diff line, by
       pointer or keyboard, waits until sent or discarded (also while the panel or the chat
       closes, until auracode quits); Send gives the agent one message quoting each line with its
@@ -126,7 +126,16 @@ and a hands-on walkthrough before merging.
       now sets aside the lines both texts start and end with, so a long file's edit diffs line by
       line (up to 2,000 changed lines a side, and Changes' 128 KiB per text), which also lifts
       the comments' 400-line limit.
-    - [ ] Third part: commit and push from the Git dialog.
+    - [x] Third part (#86, merged 2026-11-05): commit and push from the Git workspace dialog, so
+      the pull request flow no longer needs a terminal first. Commit changes lists the changed
+      files to choose from and a message; its review shows the branch, parent, author, signing
+      and stat. The commit is built in a private index and recorded with `commit-tree` and a
+      compare-and-swap `update-ref`, so it holds exactly the reviewed contents, nothing is staged
+      unless it succeeds, and the person's other staged work stays. Push this branch reviews a
+      fast-forward to the upstream (or origin, setting the upstream), with the remote's address
+      shown without credentials, and never forces. As with every Git command auracode runs, the
+      repository's hooks do not run (an agent could have written them) and Git asks for no
+      sign-in, so a push needs Git's stored credentials.
   - [ ] D.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page

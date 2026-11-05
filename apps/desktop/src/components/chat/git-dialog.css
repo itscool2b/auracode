@@ -441,3 +441,43 @@
 .git-recreate-actions {
   margin-top: var(--g-space-24);
 }
+
+/* Commit: the changed files, each chosen or left out, then the message. */
+.git-commit-files {
+  max-height: 200px;
+  margin: var(--g-space-8) 0 var(--g-space-12);
+  padding: 0;
+  overflow: auto;
+  border: 0;
+}
+
+.git-commit-file {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-space-8);
+  padding: var(--g-space-4) 0;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-term);
+  cursor: pointer;
+}
+
+.git-commit-file input {
+  align-self: center;
+  margin: 0;
+}
+
+.git-commit-file code {
+  min-width: 2ch;
+  white-space: pre;
+}
+
+.git-commit-file span {
+  overflow-wrap: anywhere;
+}
+
+.git-commit-message {
+  min-height: 88px;
+  resize: vertical;
+}

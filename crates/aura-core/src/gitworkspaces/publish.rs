@@ -82,7 +82,10 @@ impl Publisher for GithubCli {
         remote: &'a str,
         branch: &'a str,
     ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(remote_head(git, folder, remote, branch))
+        Box::pin(async move {
+            let pins = super::commit::remote_pins(git, folder, None).await?;
+            remote_head(git, folder, remote, branch, &pins).await
+        })
     }
     fn push<'a>(
         &'a self,
@@ -90,7 +93,11 @@ impl Publisher for GithubCli {
         folder: &'a Path,
         args: Vec<OsString>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { git.run(folder, args, 32 * 1024).await.map(|_| ()) })
+        Box::pin(async move {
+            let mut command = super::commit::remote_pins(git, folder, None).await?;
+            command.extend(args);
+            git.run(folder, command, 32 * 1024).await.map(|_| ())
+        })
     }
 }
 
@@ -181,6 +188,13 @@ impl GitWorkspaces {
         let git = self.git().await?;
         let source = inspect(&git, Path::new(&record.path)).await?;
         publishable(&record, &source)?;
+        super::commit::refuse_repository_programs(
+            &git,
+            &source.root,
+            super::commit::REMOTE_PROGRAMS,
+            "push",
+        )
+        .await?;
         let (remote, repository) = remote(&git, &source.root).await?;
         let metadata = cli
             .command(
@@ -324,6 +338,13 @@ impl GitWorkspaces {
         let git = self.git().await?;
         let current = inspect(&git, &prepared.source.root).await?;
         publishable(&record, &current)?;
+        super::commit::refuse_repository_programs(
+            &git,
+            &current.root,
+            super::commit::REMOTE_PROGRAMS,
+            "push",
+        )
+        .await?;
         if record != prepared.record
             || current.fingerprint != prepared.source.fingerprint
             || current.common != prepared.source.common
@@ -528,16 +549,18 @@ fn repository_from_remote(remote: &str) -> Result<String> {
     Ok(path.into())
 }
 
-async fn remote_head(
+/// The commit a remote branch is at, with `pins` (see `commit::remote_pins`) before the command.
+pub(super) async fn remote_head(
     git: &Git,
     folder: &Path,
     remote: &str,
     branch: &str,
+    pins: &[OsString],
 ) -> Result<Option<String>> {
     let name = format!("refs/heads/{branch}");
-    let bytes = git
-        .run(folder, args(&["ls-remote", "--refs", remote, &name]), 8192)
-        .await?;
+    let mut command = pins.to_vec();
+    command.extend(args(&["ls-remote", "--refs", remote, &name]));
+    let bytes = git.run(folder, command, 8192).await?;
     let value = text(&bytes)?;
     if value.is_empty() {
         return Ok(None);
@@ -611,7 +634,7 @@ fn validate_input(input: &PullRequestInput) -> Result<()> {
     Ok(())
 }
 
-fn validate_branch(branch: &str) -> Result<()> {
+pub(super) fn validate_branch(branch: &str) -> Result<()> {
     if branch.is_empty()
         || branch.len() > 200
         || branch.starts_with('-')

@@ -1,12 +1,16 @@
 import { GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
+  CommitPreview,
+  CommitResult,
   GitInitializePreview,
   GitWorkspace,
   IsolationPreview,
   ManagedWorktree,
   PullRequestPreview,
   PullRequestResult,
+  PushPreview,
+  PushResult,
   WorktreeActionPreview,
   WorktreeActionResult,
   WorktreeDestination,
@@ -31,7 +35,61 @@ type Preview =
   | { type: "action"; value: WorktreeActionPreview }
   | { type: "recovery"; value: WorktreeRecoveryPreview }
   | { type: "pull_request"; value: PullRequestPreview }
-  | { type: "relocate"; value: WorktreeRelocationPreview };
+  | { type: "relocate"; value: WorktreeRelocationPreview }
+  | { type: "commit"; value: CommitPreview }
+  | { type: "push"; value: PushPreview };
+
+function reviewTitle(preview: Preview): string {
+  switch (preview.type) {
+    case "initialize":
+      return "Review Git initialization";
+    case "isolate":
+      return "Review isolation";
+    case "pull_request":
+      return "Review pull request";
+    case "relocate":
+      return "Review moving this chat";
+    case "commit":
+      return "Review commit";
+    case "push":
+      return "Review push";
+    case "recovery":
+      return preview.value.action === "restore" ? "Review restoration" : "Review recovery";
+    case "action":
+      return preview.value.action.type === "merge" ? "Review merge" : "Review retirement";
+  }
+}
+
+function applyLabel(preview: Preview): string {
+  switch (preview.type) {
+    case "initialize":
+      return "Initialize reviewed folder";
+    case "isolate":
+      return "Create isolated workspace";
+    case "pull_request":
+      return preview.value.existing_url
+        ? "Use existing pull request"
+        : "Publish reviewed pull request";
+    case "relocate":
+      return "Move chat to reviewed folder";
+    case "commit":
+      return "Commit reviewed files";
+    case "push":
+      return "Push reviewed commits";
+    case "recovery":
+      return preview.value.action === "restore"
+        ? "Restore retained worktree"
+        : "Reconcile reviewed state";
+    case "action":
+      return preview.value.action.type === "merge"
+        ? "Merge reviewed changes"
+        : "Retire and keep files";
+  }
+}
+
+function commitCount(count: number): string {
+  return `${count} ${count === 1 ? "commit" : "commits"}`;
+}
 
 function Repository({ workspace }: { readonly workspace: GitWorkspace }) {
   return (
@@ -131,6 +189,11 @@ export function GitDialog({
   );
   const [message, setMessage] = useState(`Merge ${title || "isolated work"}`);
   const [bringChanges, setBringChanges] = useState(false);
+  // Changed files left out of the next commit; any other changed file goes in.
+  const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set());
+  const [commitMessage, setCommitMessage] = useState(title);
+  const [committed, setCommitted] = useState<CommitResult | null>(null);
+  const [pushed, setPushed] = useState<PushResult | null>(null);
   const [revision, setRevision] = useState(0);
   const alive = useRef(false);
   const acting = useRef(false);
@@ -210,7 +273,22 @@ export function GitDialog({
       const chosen = preview;
       setPreview(null);
       try {
-        if (chosen.type === "pull_request") {
+        if (chosen.type === "commit") {
+          const value = await api.commitApply(chatId, chosen.value.token);
+          if (alive.current) {
+            setCommitted(value);
+            setPushed(null);
+            setResult(null);
+            setSkipped(new Set());
+          }
+        } else if (chosen.type === "push") {
+          const value = await api.pushApply(chatId, chosen.value.token);
+          if (alive.current) {
+            setPushed(value);
+            setCommitted(null);
+            setResult(null);
+          }
+        } else if (chosen.type === "pull_request") {
           const value = await api.pullRequestApply(chatId, chosen.value.token);
           if (alive.current) {
             setPullRequest(value);
@@ -288,6 +366,30 @@ export function GitDialog({
       }
     });
   const blocked = busy || loading || live;
+  const chosenFiles = workspace?.files.filter((file) => !skipped.has(file.path)) ?? [];
+  const reviewCommit = () =>
+    run(async () => {
+      const value = await api.commitPreview(chatId, {
+        message: commitMessage,
+        paths: chosenFiles.map((file) => file.path),
+      });
+      if (alive.current) {
+        setPreview({ type: "commit", value });
+        setCommitted(null);
+        setPushed(null);
+        setResult(null);
+      }
+    });
+  const reviewPush = () =>
+    run(async () => {
+      const value = await api.pushPreview(chatId);
+      if (alive.current) {
+        setPreview({ type: "push", value });
+        setCommitted(null);
+        setPushed(null);
+        setResult(null);
+      }
+    });
   const reviewPullRequest = () =>
     run(async () => {
       if (!prDraft) return;
@@ -354,24 +456,56 @@ export function GitDialog({
           />
         ) : preview ? (
           <section className="git-review" aria-label="Review Git operation">
-            <h3>
-              {preview.type === "initialize"
-                ? "Review Git initialization"
-                : preview.type === "isolate"
-                  ? "Review isolation"
-                  : preview.type === "pull_request"
-                    ? "Review pull request"
-                    : preview.type === "relocate"
-                      ? "Review moving this chat"
-                      : preview.type === "recovery"
-                        ? preview.value.action === "restore"
-                          ? "Review restoration"
-                          : "Review recovery"
-                        : preview.value.action.type === "merge"
-                          ? "Review merge"
-                          : "Review retirement"}
-            </h3>
-            {preview.type === "initialize" ? (
+            <h3>{reviewTitle(preview)}</h3>
+            {preview.type === "commit" ? (
+              <>
+                <dl>
+                  <dt>Branch</dt>
+                  <dd>{preview.value.branch}</dd>
+                  <dt>Parent</dt>
+                  <dd>{preview.value.parent ?? "None: this is the first commit"}</dd>
+                  <dt>Author</dt>
+                  <dd>{preview.value.author}</dd>
+                  {preview.value.signed ? (
+                    <>
+                      <dt>Signature</dt>
+                      <dd>Signed by your Git settings</dd>
+                    </>
+                  ) : null}
+                </dl>
+                <h4>Message</h4>
+                <pre>{preview.value.message}</pre>
+                <h4>Files</h4>
+                <pre>{preview.value.diff_stat}</pre>
+              </>
+            ) : preview.type === "push" ? (
+              <>
+                <dl>
+                  <dt>Branch</dt>
+                  <dd>{preview.value.branch}</dd>
+                  <dt>Remote</dt>
+                  <dd>
+                    {preview.value.remote}, {preview.value.remote_urls.join(", ")}
+                  </dd>
+                  <dt>Remote branch</dt>
+                  <dd>
+                    {preview.value.target}
+                    {preview.value.sets_upstream ? ", which becomes this branch's upstream" : ""}
+                  </dd>
+                  <dt>Remote now</dt>
+                  <dd>{preview.value.remote_head ?? "No such branch yet: the push creates it"}</dd>
+                  <dt>Pushes</dt>
+                  <dd>{commitCount(preview.value.count)}</dd>
+                </dl>
+                <h4>Commits</h4>
+                <pre>
+                  {preview.value.commits.join("\n")}
+                  {preview.value.count > preview.value.commits.length
+                    ? `\nand ${commitCount(preview.value.count - preview.value.commits.length)} more`
+                    : ""}
+                </pre>
+              </>
+            ) : preview.type === "initialize" ? (
               <dl>
                 <dt>Folder</dt>
                 <dd>{preview.value.folder}</dd>
@@ -508,23 +642,7 @@ export function GitDialog({
                 disabled={blocked || conflict}
                 onClick={() => void apply()}
               >
-                {preview.type === "initialize"
-                  ? "Initialize reviewed folder"
-                  : preview.type === "isolate"
-                    ? "Create isolated workspace"
-                    : preview.type === "pull_request"
-                      ? preview.value.existing_url
-                        ? "Use existing pull request"
-                        : "Publish reviewed pull request"
-                      : preview.type === "relocate"
-                        ? "Move chat to reviewed folder"
-                        : preview.type === "recovery"
-                          ? preview.value.action === "restore"
-                            ? "Restore retained worktree"
-                            : "Reconcile reviewed state"
-                          : preview.value.action.type === "merge"
-                            ? "Merge reviewed changes"
-                            : "Retire and keep files"}
+                {applyLabel(preview)}
               </button>
             </div>
           </section>
@@ -555,6 +673,92 @@ export function GitDialog({
                 >
                   Review Git initialization
                 </button>
+              </section>
+            ) : null}
+            {workspace?.branch && workspace.files.length > 0 ? (
+              <form
+                className="git-section"
+                aria-label="Commit changes"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void reviewCommit();
+                }}
+              >
+                <h3>Commit changes</h3>
+                <p>
+                  The chosen files go into one commit on {workspace.branch}, as they are in the
+                  folder. Files you leave out stay as they are.
+                </p>
+                <fieldset className="git-commit-files">
+                  <legend className="sr-only">Files to commit</legend>
+                  {workspace.files.map((file) => (
+                    <label key={file.path} className="git-commit-file">
+                      <input
+                        type="checkbox"
+                        checked={!skipped.has(file.path)}
+                        disabled={busy}
+                        onChange={(event) => {
+                          const next = new Set(skipped);
+                          if (event.currentTarget.checked) next.delete(file.path);
+                          else next.add(file.path);
+                          setSkipped(next);
+                        }}
+                      />
+                      <code>
+                        {file.index}
+                        {file.worktree}
+                      </code>
+                      <span>
+                        {file.original_path ? `${file.original_path} → ${file.path}` : file.path}
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+                <label className="ui-field">
+                  Commit message
+                  <textarea
+                    className="g-textarea git-commit-message"
+                    value={commitMessage}
+                    maxLength={65536}
+                    disabled={busy}
+                    onChange={(event) => setCommitMessage(event.currentTarget.value)}
+                  />
+                </label>
+                <div className="git-actions">
+                  <button
+                    type="submit"
+                    className="g-button"
+                    disabled={
+                      blocked ||
+                      chosenFiles.length === 0 ||
+                      !commitMessage.trim() ||
+                      workspace.blockers.some(
+                        (blocker) => !blocker.startsWith("This repository has no commit yet"),
+                      )
+                    }
+                  >
+                    Review commit
+                  </button>
+                </div>
+              </form>
+            ) : null}
+            {workspace?.branch && workspace.head ? (
+              <section className="git-section" aria-label="Push">
+                <h3>Push this branch</h3>
+                <p>
+                  Send {workspace.branch}'s commits to its remote. A push only adds commits on top
+                  of the remote branch; it never replaces it.
+                </p>
+                <div className="git-actions">
+                  <button
+                    type="button"
+                    className="g-button"
+                    disabled={blocked || workspace.blockers.length > 0}
+                    onClick={() => void reviewPush()}
+                  >
+                    Review push
+                  </button>
+                </div>
               </section>
             ) : null}
             {allowIsolation && workspace ? (
@@ -797,6 +1001,30 @@ export function GitDialog({
             <p>{result.recovery}</p>
             <p className="git-path">{result.worktree.path}</p>
             {result.commit ? <code>{result.commit}</code> : null}
+          </section>
+        ) : null}
+        {committed ? (
+          <section className="git-result" aria-label="Commit result">
+            <h3>Committed on {committed.branch}</h3>
+            <code>{committed.commit}</code>
+            {committed.warning ? (
+              <p className="git-warning" role="status">
+                {committed.warning}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+        {pushed ? (
+          <section className="git-result" aria-label="Push result">
+            <h3>
+              {pushed.created ? "Created" : "Pushed"} {pushed.remote}/{pushed.target}
+            </h3>
+            <p className="git-path">{pushed.head}</p>
+            {pushed.warning ? (
+              <p className="git-warning" role="status">
+                {pushed.warning}
+              </p>
+            ) : null}
           </section>
         ) : null}
         {pullRequest ? (

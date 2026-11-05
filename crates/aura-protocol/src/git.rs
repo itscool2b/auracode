@@ -288,3 +288,67 @@ pub struct WorktreeActionResult {
     pub commit: Option<String>,
     pub error: Option<String>,
 }
+
+/// Files of the chat's folder to commit, as they are in the folder, and the message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CommitInput {
+    pub message: String,
+    pub paths: Vec<String>,
+}
+
+/// The commit a review describes: exactly these files' current contents on top of `parent`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CommitPreview {
+    pub token: String,
+    pub branch: String,
+    /// `None` for a repository's first commit.
+    pub parent: Option<String>,
+    /// The person's Git identity, as `Name <email>`.
+    pub author: String,
+    /// Whether the person's Git settings sign commits.
+    pub signed: bool,
+    /// The files committed; a renamed file brings its old path.
+    pub files: Vec<GitFileState>,
+    pub message: String,
+    pub diff_stat: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CommitResult {
+    pub commit: String,
+    pub branch: String,
+    /// Set when the commit was made but something after it was not.
+    pub warning: Option<String>,
+}
+
+/// A fast-forward push of the folder's branch: the remote, its branch and the commits it gains.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PushPreview {
+    pub token: String,
+    pub branch: String,
+    pub remote: String,
+    /// Every address the remote pushes to, without any user name or password in them.
+    pub remote_urls: Vec<String>,
+    pub target: String,
+    pub head: String,
+    /// The remote branch's commit now, `None` when the push creates it.
+    pub remote_head: Option<String>,
+    /// The commits the remote gains, newest first, as `abc1234 Subject`, at most twenty.
+    pub commits: Vec<String>,
+    pub count: u32,
+    /// Whether the push makes the remote branch this branch's upstream.
+    pub sets_upstream: bool,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PushResult {
+    pub remote: String,
+    pub target: String,
+    pub head: String,
+    pub created: bool,
+    pub warning: Option<String>,
+}

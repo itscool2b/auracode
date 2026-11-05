@@ -67,6 +67,7 @@ export const MODES = [
   "data-transfer",
   "keep-local",
   "git",
+  "git&changes",
   "settings",
   // General with a default agent chosen: its Model row and the agent's reported models.
   "settings#defaults",

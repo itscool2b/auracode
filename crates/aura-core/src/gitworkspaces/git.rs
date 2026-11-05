@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use aura_process::{
     EnvKey, EnvResolver, HelperEnv, HelperOutput, HelperSpec, LeftoverRegistry, ResolvedEnv,
-    find_exe, run_helper,
+    find_exe, run_helper, run_helper_input,
 };
 
 use super::{GitError, Result};
@@ -87,6 +87,18 @@ impl Git {
         args: Vec<OsString>,
         maximum: usize,
     ) -> Result<HelperOutput> {
+        self.output_with(cwd, args, maximum, Extra::default()).await
+    }
+
+    /// As `output`, with variables such as a private `GIT_INDEX_FILE`, text on standard input,
+    /// or a longer wait for a network operation.
+    pub(super) async fn output_with(
+        &self,
+        cwd: &Path,
+        args: Vec<OsString>,
+        maximum: usize,
+        extra: Extra,
+    ) -> Result<HelperOutput> {
         let mut command = vec![
             "--no-pager".into(),
             "--literal-pathspecs".into(),
@@ -102,25 +114,27 @@ impl Git {
             "diff.autoRefreshIndex=false".into(),
         ];
         command.extend(args);
-        let output = run_helper(
-            &self.registry,
-            HelperSpec {
-                program: self.program.clone(),
-                args: command,
-                cwd: cwd.into(),
-                env: HelperEnv::Resolved(Arc::clone(&self.env)),
-                set: vec![
-                    ("GIT_OPTIONAL_LOCKS".into(), "0".into()),
-                    ("GIT_TERMINAL_PROMPT".into(), "0".into()),
-                    ("GIT_ASKPASS".into(), OsString::new()),
-                    ("GCM_INTERACTIVE".into(), "never".into()),
-                ],
-                new_session: true,
-                timeout: Duration::from_secs(30),
-                max_stdout: maximum,
-            },
-        )
-        .await
+        let mut set: Vec<(OsString, OsString)> = vec![
+            ("GIT_OPTIONAL_LOCKS".into(), "0".into()),
+            ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+            ("GIT_ASKPASS".into(), OsString::new()),
+            ("GCM_INTERACTIVE".into(), "never".into()),
+        ];
+        set.extend(extra.set);
+        let spec = HelperSpec {
+            program: self.program.clone(),
+            args: command,
+            cwd: cwd.into(),
+            env: HelperEnv::Resolved(Arc::clone(&self.env)),
+            set,
+            new_session: true,
+            timeout: extra.timeout.unwrap_or(Duration::from_secs(30)),
+            max_stdout: maximum,
+        };
+        let output = match extra.input {
+            Some(input) => run_helper_input(&self.registry, spec, input).await,
+            None => run_helper(&self.registry, spec).await,
+        }
         .map_err(|_| GitError::Message("The owned Git helper could not start.".into()))?;
         if output.timed_out {
             return Err(GitError::Message(
@@ -150,6 +164,14 @@ impl Git {
         }
         Ok(output.stdout)
     }
+}
+
+/// What one Git command adds to the owned defaults.
+#[derive(Default)]
+pub(super) struct Extra {
+    pub(super) set: Vec<(OsString, OsString)>,
+    pub(super) input: Option<Vec<u8>>,
+    pub(super) timeout: Option<Duration>,
 }
 
 /// The commit a full reference names. A missing reference or a non-commit is an error.
