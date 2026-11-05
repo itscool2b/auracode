@@ -11,7 +11,9 @@ import {
 import { chatActivity, lastToolKind, streamingText } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
+import { changedFiles, workedLabel, workFold } from "../../lib/chat/workFold";
 import { workingContext, workingSince } from "../../lib/chat/working";
+import { formatDuration } from "../../lib/format";
 import { useStickToBottom } from "../../lib/hooks";
 import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
@@ -19,6 +21,7 @@ import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
 import { UserMessage } from "./UserMessage";
 import { type TranscriptRow, VirtualRows } from "./VirtualRows";
+import { ChangedFiles, WorkedFor } from "./WorkedFor";
 import { type LiveTail, NowLine } from "./WorkingLine";
 
 /** A disclosure the reader toggled, while its rows glide: until when, and which way. */
@@ -77,6 +80,8 @@ export function Transcript({
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
   const [groups, setGroups] = useState<DisclosureChoices>(() => new Map());
+  // Finished turns whose "Worked for" row was opened, by segment; every other one stays folded.
+  const [folds, setFolds] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [reveals, setReveals] = useState<ReadonlyMap<string, Reveal>>(() => new Map());
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
@@ -173,6 +178,9 @@ export function Transcript({
         : turnAgent.agent_name;
     const active = status === "running" && segment === last && segment.end === null;
     let prompt: TranscriptRow["prompt"];
+    // A finished turn's work folds under one "Worked for" row above its final answer.
+    const fold = workFold(segment);
+    const foldOpen = fold !== null && folds.get(segment.key) === true;
     const addItem = (
       index: number,
       item: RenderedItem,
@@ -207,6 +215,25 @@ export function Transcript({
     for (let index = 0; index < segment.items.length; index++) {
       const item = segment.items[index];
       if (!item) continue;
+      if (fold !== null && index === fold.from) {
+        rows.push({
+          key: JSON.stringify([segment.key, "work"]),
+          estimate: 32,
+          prompt,
+          content: (
+            <WorkedFor
+              label={workedLabel(fold.steps, segment.end?.durationMs ?? null, formatDuration)}
+              open={foldOpen}
+              agentName={agentName}
+              onToggle={() => setFolds((current) => new Map(current).set(segment.key, !foldOpen))}
+            />
+          ),
+        });
+        if (!foldOpen) {
+          index = fold.to - 1;
+          continue;
+        }
+      }
       if (
         (item.kind === "permission" || item.kind === "question") &&
         dockedRequests?.has(item.request.request_id)
@@ -294,6 +321,15 @@ export function Transcript({
                 since: workingSince(`${state.chatId}:${segment.key}`, Date.now()),
                 model: state.session?.model ?? null,
               };
+    // What the turn changed, under its answer, so a folded turn still says what it did.
+    const changed = segment.end !== null ? changedFiles(segment) : [];
+    if (changed.length > 0)
+      rows.push({
+        key: JSON.stringify([segment.key, "changed"]),
+        estimate: 36,
+        prompt,
+        content: <ChangedFiles files={changed} onReview={actions.onOpenChanges} />,
+      });
     if (segment.end !== null || (segment.plan?.length ?? 0) > 0 || tail !== undefined)
       rows.push({
         key: JSON.stringify([segment.key, "footer"]),

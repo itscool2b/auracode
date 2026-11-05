@@ -40,6 +40,8 @@ export interface TurnActions extends BlobProps {
   readonly onRecreateFolder?: () => void;
   /** The session has no process: a turn interrupted when auracode closed offers Resume session. */
   readonly canResume: boolean;
+  /** Opens the Changes panel: the Review beside a finished turn's changed files. */
+  readonly onOpenChanges?: () => void;
 }
 
 /** One turn (or the events between turns): its items in order, its plan, and its footer. */

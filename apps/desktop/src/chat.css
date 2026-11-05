@@ -1658,6 +1658,123 @@
 /* ---------- Receipt (6.4) and plan ---------- */
 
 /*
+ * A finished turn's work, folded above its final answer (owner, 4 November 2026, after Codex):
+ * one quiet line, "Worked for 1 min 42 s · 12 steps", whose text starts on the answer's edge.
+ * Its chevron turns down while the work is open.
+ */
+.chat-worked {
+  padding-left: var(--ui-gutter);
+}
+
+.chat-worked-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--g-space-4);
+  min-height: 28px;
+  margin-left: calc(var(--g-space-8) * -1);
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-worked-toggle:hover {
+    background-color: var(--g-glass-control-hover);
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-worked-toggle[aria-expanded="true"] {
+  color: var(--g-fg-2);
+}
+
+.chat-worked-chevron {
+  flex: none;
+  transition: transform var(--g-dur-fast) var(--g-ease);
+}
+
+.chat-worked-toggle[aria-expanded="true"] .chat-worked-chevron {
+  transform: rotate(90deg);
+}
+
+/*
+ * What a finished turn changed, under its answer, so a folded turn still says what it did: a
+ * hairline card with the count, each file's name (its path in the tooltip) and Review.
+ */
+.chat-changed {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-6);
+  margin-left: var(--ui-gutter);
+  padding: var(--g-space-4) var(--g-space-4) var(--g-space-4) var(--g-space-12);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.chat-changed-icon {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.chat-changed-count {
+  flex: none;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.chat-changed-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--g-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-changed-list > li {
+  max-width: 220px;
+  overflow: hidden;
+  padding: var(--g-space-2) var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-changed-list > li.chat-changed-more {
+  background-color: transparent;
+  color: var(--g-fg-3);
+  font-family: var(--g-sans);
+}
+
+.chat-changed-review {
+  flex: none;
+  margin-left: auto;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-worked-chevron {
+  transition: none;
+}
+
+/*
  * Grok's action row under an answer: copy, retry, fork and the receipt as quiet 28px icons, then
  * the time in mono. The first icon's glyph lines up with the prose (x 22); there is no tear line.
  */
