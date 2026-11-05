@@ -4,6 +4,7 @@ import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "re
 import type {
   AgentEntry,
   Autonomy,
+  ConfigChoice,
   ConfigOption,
   ConfigValue,
   SessionControlChange,
@@ -88,12 +89,42 @@ function shownChoice(option: ConfigOption, saving: ConfigValue | null) {
 }
 
 /**
+ * The model the pill names. An alias such as Claude Code's "Default (recommended)" says in its
+ * description which model it stands for ("Opus 5.5 · Best for everyday, complex tasks"); when that
+ * name is another model the agent lists, the pill shows it. Otherwise the choice's own name.
+ */
+export function shownModelName(option: ConfigOption, choice: ConfigChoice): string {
+  if (option.kind.type !== "select") return choice.name;
+  const named = /^(.+?) · /.exec(choice.description ?? "")?.[1]?.trim();
+  if (!named || named === choice.name) return choice.name;
+  return option.kind.choices.some((other) => other.value !== choice.value && other.name === named)
+    ? named
+    : choice.name;
+}
+
+/** Models listed before "More models": agents list their newest first. */
+const MODEL_ROWS = 5;
+
+/** The choices a long model list shows folded: the first few, and the chosen one wherever it is. */
+export function foldedModels<T extends { readonly value: string }>(
+  choices: readonly T[],
+  chosen: string,
+  rows = MODEL_ROWS,
+): readonly T[] {
+  // One more row than the fold is no fold: it would only trade a model for "More models".
+  if (choices.length <= rows + 1) return choices;
+  return choices.filter((choice, index) => index < rows || choice.value === chosen);
+}
+
+/**
  * The agent, model and thinking picker, beside the access and native workflow controls. Live
  * descriptors determine the choices; pending changes keep the requested value visible. While the
  * agent is not running, its last known models and levels stay choosable for its next start.
  *
- * The menu reads top down: the current model and agent, the thinking level (always in view), the
- * model and agent lists (they scroll on their own), then More options.
+ * The menu reads top down (owner, 4 November 2026: "model and thinking mode then harnesses"):
+ * search, the model list (the first few and the chosen one, then "More models"; it scrolls on its
+ * own once opened), the thinking level, then every agent in a grid that is always in view, and
+ * More options. The pill names the model an alias stands for and a chosen thinking level.
  *
  * Keys: Ctrl or Cmd + . opens it on the current model; up and down move within a part, left and
  * right move between parts, Enter chooses, digits set the thinking level, letters jump to agents.
@@ -140,6 +171,8 @@ export function Pickers({
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
+  // A long model list folds after its first few; "More models" opens the rest until it closes.
+  const [allModels, setAllModels] = useState(false);
   const columns = useRef<HTMLDivElement>(null);
   useWheelChain(columns);
   const target = optionsTarget(status);
@@ -153,13 +186,13 @@ export function Pickers({
   const effort = options.find((option) => option.category === "effort");
   const saving = (option: ConfigOption | undefined) =>
     option ? (optionsSaving.get(option.id) ?? null) : null;
-  const modelName = model ? (shownChoice(model, saving(model))?.name ?? null) : null;
+  const modelChoice = model ? shownChoice(model, saving(model)) : null;
+  const modelName = model && modelChoice ? shownModelName(model, modelChoice) : null;
   const modelLabel = modelName ?? agent?.name ?? "Model";
-  // The menu's title names the model; without one known it says the agent picks, once.
-  const headTitle = modelName ?? (model ? "The agent's default model" : (agent?.name ?? "Agent"));
-  const headAgent = model ? (agent?.name ?? "Agent") : null;
   const levelChoice = effort ? shownChoice(effort, saving(effort)) : null;
   const level = levelChoice ? levelName(levelChoice) : null;
+  // The pill names a level only when one was chosen: "Opus 5.5 · Max", never "· Default".
+  const pillLevel = level && levelChoice?.value.toLowerCase() !== "default" ? level : null;
   const others = options.filter(
     (option) => option.category !== "model" && option.category !== "effort",
   );
@@ -210,143 +243,120 @@ export function Pickers({
         onSetAutonomy={onSetAutonomy}
         onSetControl={onSetControl}
       />
-      {account}
-      <Popover
-        label="Agent, model and thinking"
-        triggerLabel={`${[agent?.name, modelLabel, level ? `${level} thinking` : null]
-          .filter(Boolean)
-          .join(", ")}. Agent, model and thinking`}
-        tip={`Agent, model and thinking (${shortcutKey} .)`}
-        shortcut="."
-        className="chat-model-popover"
-        onOpenChange={(open) => {
-          if (!open) setQuery("");
-        }}
-        trigger={
-          <>
-            {agent ? (
-              <span aria-hidden="true">
-                <AgentMark agent={agent.id} size={14} />
-              </span>
-            ) : null}
-            <strong className="chat-pill-model">{modelLabel}</strong>
-            {level ? (
-              <span className="chat-pill-effort" data-testid="picker-pill-thinking">
-                <span aria-hidden="true">·</span>
-                <span className="chat-pill-level">{level}</span>
-                <span className="chat-pill-level-short">{levelShortName(level)}</span>
-              </span>
-            ) : null}
-            <ChevronDown size={12} />
-          </>
-        }
-      >
-        {/* biome-ignore lint/a11y/useSemanticElements: a fieldset's anonymous content box gives its flex children no definite height, so the model list could not scroll on its own below the thinking level. */}
-        <div
-          ref={columns}
-          role="group"
-          className="chat-model-columns"
-          aria-label="Agent, model and thinking"
-          onKeyDown={(event) => {
-            if (
-              event.ctrlKey ||
-              event.metaKey ||
-              event.altKey ||
-              event.target instanceof HTMLSelectElement ||
-              event.target instanceof HTMLInputElement
-            )
-              return;
-            const parts = [
-              ...event.currentTarget.querySelectorAll<HTMLElement>("[data-picker-part]"),
-            ].filter((part) => part.querySelector("button:not(:disabled)"));
-            const part = (event.target as HTMLElement).closest<HTMLElement>("[data-picker-part]");
-            const index = part ? parts.indexOf(part) : 0;
-            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-              if (!parts.length) return;
-              event.preventDefault();
-              const next =
-                parts[
-                  (index + (event.key === "ArrowRight" ? 1 : -1) + parts.length) % parts.length
-                ];
-              focusPickerChoice(next);
-            } else if (
-              /^[1-9]$/.test(event.key) &&
-              effort?.kind.type === "select" &&
-              choicesEnabled
-            ) {
-              const choice = effort.kind.choices[Number(event.key) - 1];
-              if (choice) {
-                event.preventDefault();
-                onSetOption(effort.id, { type: "choice", value: choice.value });
-              }
-            } else if (/^[a-z]$/i.test(event.key)) {
-              const row = event.currentTarget.querySelector<HTMLButtonElement>(
-                `button[data-agent-key="${event.key.toLowerCase()}"]:not(:disabled)`,
-              );
-              if (row) {
-                event.preventDefault();
-                row.focus();
-              }
+      {/* Who answers, on which account and model: one group at the row's end, beside Send. */}
+      <div className="chat-pickers-end">
+        {account}
+        <Popover
+          label="Agent, model and thinking"
+          triggerLabel={`${[agent?.name, modelLabel, level ? `${level} thinking` : null]
+            .filter(Boolean)
+            .join(", ")}. Agent, model and thinking`}
+          tip={`Agent, model and thinking (${shortcutKey} .)`}
+          shortcut="."
+          className="chat-model-popover"
+          onOpenChange={(open) => {
+            if (!open) {
+              setQuery("");
+              setAllModels(false);
             }
           }}
-        >
-          <header className="chat-model-head">
-            <span className="chat-model-head-mark" aria-hidden="true">
-              <AgentMark agent={agent?.id ?? "generic"} size={20} />
-            </span>
-            <span className="chat-model-head-copy">
-              <strong className="chat-model-head-title" data-testid="picker-current-model">
-                {headTitle}
+          trigger={
+            <>
+              {agent ? (
+                <span aria-hidden="true">
+                  <AgentMark agent={agent.id} size={14} />
+                </span>
+              ) : null}
+              <strong className="chat-pill-model" data-testid="picker-current-model">
+                {modelLabel}
               </strong>
-              {headAgent ? <span className="chat-model-head-agent">{headAgent}</span> : null}
-            </span>
-          </header>
-          {note || optionError ? (
-            <div className="chat-model-notes">
-              {optionError ? (
-                <p className="ui-error" role="alert" data-testid="picker-option-error">
-                  {optionError}
-                </p>
+              {pillLevel ? (
+                <span className="chat-pill-effort" data-testid="picker-pill-thinking">
+                  <span aria-hidden="true">·</span>
+                  <span className="chat-pill-level">{pillLevel}</span>
+                  <span className="chat-pill-level-short">{levelShortName(pillLevel)}</span>
+                </span>
               ) : null}
-              {note ? (
-                <p data-testid="picker-note" data-test-target={target}>
-                  {note}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          <section
-            className="chat-picker-thinking"
-            data-picker-part="thinking"
-            aria-labelledby={`${id}-thinking`}
+              <ChevronDown size={12} />
+            </>
+          }
+        >
+          {/* biome-ignore lint/a11y/useSemanticElements: a fieldset's anonymous content box gives its flex children no definite height, so the model list could not scroll on its own below the thinking level. */}
+          <div
+            ref={columns}
+            role="group"
+            className="chat-model-columns"
+            aria-label="Agent, model and thinking"
+            onKeyDown={(event) => {
+              if (
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey ||
+                event.target instanceof HTMLSelectElement ||
+                event.target instanceof HTMLInputElement
+              )
+                return;
+              const parts = [
+                ...event.currentTarget.querySelectorAll<HTMLElement>("[data-picker-part]"),
+              ].filter((part) => part.querySelector("button:not(:disabled)"));
+              const part = (event.target as HTMLElement).closest<HTMLElement>("[data-picker-part]");
+              const index = part ? parts.indexOf(part) : 0;
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                if (!parts.length) return;
+                event.preventDefault();
+                const next =
+                  parts[
+                    (index + (event.key === "ArrowRight" ? 1 : -1) + parts.length) % parts.length
+                  ];
+                focusPickerChoice(next);
+              } else if (
+                /^[1-9]$/.test(event.key) &&
+                effort?.kind.type === "select" &&
+                choicesEnabled
+              ) {
+                const choice = effort.kind.choices[Number(event.key) - 1];
+                if (choice) {
+                  event.preventDefault();
+                  onSetOption(effort.id, { type: "choice", value: choice.value });
+                }
+              } else if (/^[a-z]$/i.test(event.key)) {
+                const row = event.currentTarget.querySelector<HTMLButtonElement>(
+                  `button[data-agent-key="${event.key.toLowerCase()}"]:not(:disabled)`,
+                );
+                if (row) {
+                  event.preventDefault();
+                  row.focus();
+                }
+              }
+            }}
           >
-            <h3 id={`${id}-thinking`}>Thinking</h3>
-            {effort ? (
-              <OptionPicker
-                option={effort}
-                saving={saving(effort)}
-                enabled={choicesEnabled}
-                onSet={onSetOption}
+            {note || optionError ? (
+              <div className="chat-model-notes">
+                {optionError ? (
+                  <p className="ui-error" role="alert" data-testid="picker-option-error">
+                    {optionError}
+                  </p>
+                ) : null}
+                {note ? (
+                  <p data-testid="picker-note" data-test-target={target}>
+                    {note}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <label className="chat-picker-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                type="search"
+                className="g-input"
+                aria-label="Search agents and models"
+                placeholder="Search models and agents…"
+                value={query}
+                onChange={(event) => setQuery(event.currentTarget.value)}
               />
-            ) : (
-              <p className="chat-picker-empty" data-testid="picker-thinking-empty">
-                {thinkingEmpty}
-              </p>
-            )}
-          </section>
-          <label className="chat-picker-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="search"
-              className="g-input"
-              aria-label="Search agents and models"
-              placeholder="Search models and agents…"
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-          </label>
-          <div className="chat-model-scroll" data-testid="picker-lists">
+            </label>
             <section
+              className="chat-picker-models"
               data-picker-part="model"
               data-picker-initial=""
               aria-labelledby={`${id}-model`}
@@ -354,16 +364,43 @@ export function Pickers({
               <h3 id={`${id}-model`}>Model</h3>
               {!model ? <p className="chat-picker-empty">{modelEmpty}</p> : null}
               {model ? (
-                <OptionPicker
-                  option={model}
-                  saving={saving(model)}
-                  enabled={choicesEnabled}
-                  onSet={onSetOption}
-                  query={query}
-                />
+                <div className="chat-model-scroll" data-testid="picker-lists">
+                  <OptionPicker
+                    option={model}
+                    saving={saving(model)}
+                    enabled={choicesEnabled}
+                    onSet={onSetOption}
+                    query={query}
+                    folded={!allModels}
+                    onUnfold={() => setAllModels(true)}
+                  />
+                </div>
               ) : null}
             </section>
-            <section data-picker-part="agent" aria-labelledby={`${id}-agent`}>
+            <section
+              className="chat-picker-thinking"
+              data-picker-part="thinking"
+              aria-labelledby={`${id}-thinking`}
+            >
+              <h3 id={`${id}-thinking`}>Thinking</h3>
+              {effort ? (
+                <OptionPicker
+                  option={effort}
+                  saving={saving(effort)}
+                  enabled={choicesEnabled}
+                  onSet={onSetOption}
+                />
+              ) : (
+                <p className="chat-picker-empty" data-testid="picker-thinking-empty">
+                  {thinkingEmpty}
+                </p>
+              )}
+            </section>
+            <section
+              className="chat-picker-agents"
+              data-picker-part="agent"
+              aria-labelledby={`${id}-agent`}
+            >
               <h3 id={`${id}-agent`}>Agent</h3>
               {offered.length && onChooseAgent ? (
                 <fieldset
@@ -371,34 +408,40 @@ export function Pickers({
                   aria-label="Agents"
                   onKeyDown={movePickerFocus}
                 >
-                  {matchingAgents.map((entry) => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      aria-pressed={entry.id === agent?.id}
-                      data-agent-key={AGENT_KEYS[entry.id]}
-                      disabled={entry.availability.state !== "ready"}
-                      onClick={(event) => {
-                        if (entry.id !== agent?.id) {
-                          closePopover(event.currentTarget);
-                          onChooseAgent(entry.id);
-                        }
-                      }}
-                    >
-                      <AgentMark agent={entry.id} size={16} />
-                      <span className="picker-choice-copy">
-                        <strong>{entry.name}</strong>
-                      </span>
-                      <small>
-                        {entry.availability.state === "ready"
-                          ? entry.availability.version === null
-                            ? "Installed"
-                            : agentVersion(entry.name, entry.availability.version)
-                          : entry.availability.state.replaceAll("_", " ")}
-                      </small>
-                      {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}
-                    </button>
-                  ))}
+                  {matchingAgents.map((entry) => {
+                    const availability = entry.availability;
+                    const ready = availability.state === "ready";
+                    const detail =
+                      availability.state === "ready"
+                        ? availability.version === null
+                          ? "Installed"
+                          : agentVersion(entry.name, availability.version)
+                        : availability.state.replaceAll("_", " ");
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        aria-pressed={entry.id === agent?.id}
+                        data-agent-key={AGENT_KEYS[entry.id]}
+                        disabled={!ready}
+                        title={`${entry.name}: ${detail}`}
+                        onClick={(event) => {
+                          if (entry.id !== agent?.id) {
+                            closePopover(event.currentTarget);
+                            onChooseAgent(entry.id);
+                          }
+                        }}
+                      >
+                        <AgentMark agent={entry.id} size={16} />
+                        <span className="picker-choice-copy">
+                          <strong>{entry.name}</strong>
+                        </span>
+                        {/* The version or the reason it can't run, for readers; a tooltip shows it. */}
+                        <span className="sr-only">{detail}</span>
+                        {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}
+                      </button>
+                    );
+                  })}
                   {!matchingAgents.length ? (
                     <p className="chat-picker-empty">No matching agents.</p>
                   ) : null}
@@ -410,23 +453,23 @@ export function Pickers({
                 </span>
               )}
             </section>
+            {others.length ? (
+              <details className="chat-other-options">
+                <summary>More options</summary>
+                {others.map((option) => (
+                  <OptionPicker
+                    key={option.id}
+                    option={option}
+                    saving={saving(option)}
+                    enabled={option.category === "mode" ? modeEnabled : choicesEnabled}
+                    onSet={onSetOption}
+                  />
+                ))}
+              </details>
+            ) : null}
           </div>
-          {others.length ? (
-            <details className="chat-other-options">
-              <summary>More options</summary>
-              {others.map((option) => (
-                <OptionPicker
-                  key={option.id}
-                  option={option}
-                  saving={saving(option)}
-                  enabled={option.category === "mode" ? modeEnabled : choicesEnabled}
-                  onSet={onSetOption}
-                />
-              ))}
-            </details>
-          ) : null}
-        </div>
-      </Popover>
+        </Popover>
+      </div>
       {error !== null || optionError !== null ? (
         <span
           className="chat-picker-error-dot"
@@ -475,6 +518,8 @@ function OptionPicker({
   enabled,
   onSet,
   query = "",
+  folded = false,
+  onUnfold,
 }: {
   readonly option: ConfigOption;
   /** The value a change on its way asked for. */
@@ -482,6 +527,9 @@ function OptionPicker({
   readonly enabled: boolean;
   readonly onSet: (optionId: string, value: ConfigValue) => void;
   readonly query?: string;
+  /** A model list shows its first few and the chosen one, then "More models" (not while searching). */
+  readonly folded?: boolean;
+  readonly onUnfold?: () => void;
 }) {
   const id = useId();
   const pending = option.pending === null ? null : pendingLabel(option, option.pending);
@@ -528,6 +576,8 @@ function OptionPicker({
           `${choice.name} ${choice.group ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()),
         );
     const value = saving?.type === "choice" ? saving.value : current;
+    const shown = effort || !folded || query.trim() ? matching : foldedModels(matching, value);
+    const hidden = matching.length - shown.length;
     return (
       <div
         className="ui-field"
@@ -543,12 +593,43 @@ function OptionPicker({
         </span>
         <PickerChoices
           label={effort ? "Thinking" : option.name}
-          choices={matching}
+          choices={shown}
           value={value}
           busy={saving?.type === "choice" ? saving.value : null}
           enabled={enabled}
           effort={effort}
+          lines={!effort}
           onChoose={(choice) => onSet(option.id, { type: "choice", value: choice })}
+          after={
+            hidden > 0 && onUnfold ? (
+              <button
+                type="button"
+                className="chat-picker-more"
+                data-testid="picker-more-models"
+                onClick={(event) => {
+                  // The first model it opened takes focus, so the arrow keys carry on from there.
+                  const list = event.currentTarget.parentElement;
+                  const first = matching.find((choice) => !shown.includes(choice))?.value;
+                  onUnfold();
+                  if (first === undefined) return;
+                  requestAnimationFrame(() => {
+                    list
+                      ?.querySelector<HTMLButtonElement>(
+                        `button[data-picker-value="${CSS.escape(first)}"]`,
+                      )
+                      ?.focus();
+                  });
+                }}
+              >
+                <span>More models</span>
+                <small>
+                  {hidden}
+                  <span className="sr-only"> more</span>
+                </small>
+                <ChevronDown size={12} aria-hidden="true" />
+              </button>
+            ) : null
+          }
         />
         {!matching.length && query ? (
           <p className="chat-picker-empty">No matching models.</p>

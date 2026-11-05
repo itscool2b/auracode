@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AgentEntry, ConfigOption, QueueWait } from "../../bindings";
+import type { AgentEntry, ConfigChoice, ConfigOption, QueueWait } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, NewChatDraft } from "../../lib/chat/appStore";
 import { type ChatState, ChatStore } from "../../lib/chat/chatStore";
@@ -24,7 +24,7 @@ import { StillWorking } from "./ChatView";
 import { SendControls, StopButton } from "./Composer";
 import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
-import { Pickers } from "./Pickers";
+import { foldedModels, Pickers, shownModelName } from "./Pickers";
 import { QueueEditor, QueueList } from "./QueueList";
 import { SidebarFooter } from "./SidebarFooter";
 import { Transcript } from "./Transcript";
@@ -610,7 +610,7 @@ describe("the pickers", () => {
     expect(ready).not.toMatch(/disabled/);
   });
 
-  it("show the thinking level above the model list, in plain words, and on the pill", () => {
+  it("read model, then thinking in plain words, then agents, and put the level on the pill", () => {
     const html = renderToStaticMarkup(
       <Pickers
         lists={lists(1, { options: [model, effort, toggle] })}
@@ -621,10 +621,14 @@ describe("the pickers", () => {
         onSetOption={noop}
       />,
     );
+    // Owner, 4 November 2026: "model and thinking mode then harnesses".
     const thinking = html.indexOf(">Thinking</h3>");
     expect(thinking).toBeGreaterThan(-1);
-    expect(thinking).toBeLessThan(html.indexOf('data-picker-value="fast"'));
-    expect(html.indexOf('data-picker-value="fast"')).toBeLessThan(html.indexOf("More options"));
+    expect(html.indexOf('data-picker-value="fast"')).toBeLessThan(thinking);
+    expect(thinking).toBeLessThan(html.indexOf(">Agent</h3>"));
+    expect(html.indexOf(">Agent</h3>")).toBeLessThan(html.indexOf("More options"));
+    // The big title over the menu is gone; the pill names the model.
+    expect(html).not.toContain("chat-model-head");
     expect(html).not.toContain(">Effort<");
     expect(html).toMatch(/data-picker-value="xhigh" aria-pressed="true"[^>]*><span>Extra high</);
     expect(html).toMatch(/data-picker-value="low"[^>]*><span>Low</);
@@ -659,7 +663,94 @@ describe("the pickers", () => {
     expect(unknown).toContain("Models show once this agent has run.");
     expect(unknown).toContain("Shown once the agent runs.");
     expect(unknown).not.toContain("Applies when the agent starts.");
-    expect(unknown).not.toContain("chat-model-head-agent");
+  });
+
+  it("fold a long model list after five, keeping the chosen model in view", () => {
+    const names = Array.from({ length: 13 }, (_, index) => `Model ${index + 1}`);
+    const long: ConfigOption = {
+      ...model,
+      pending: null,
+      kind: {
+        type: "select",
+        current: "m9",
+        choices: names.map((name, index) => ({
+          value: `m${index + 1}`,
+          name,
+          description: null,
+          group: null,
+        })),
+      },
+    };
+    const html = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [long] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    const shown = [...html.matchAll(/data-picker-value="(m\d+)"/g)].map((match) => match[1]);
+    expect(shown).toEqual(["m1", "m2", "m3", "m4", "m5", "m9"]);
+    expect(html).toMatch(
+      /data-testid="picker-more-models"><span>More models<\/span><small>7<span class="sr-only"> more<\/span><\/small>/,
+    );
+    // One model past the fold is no fold.
+    expect(
+      foldedModels(
+        names.slice(0, 6).map((value) => ({ value })),
+        "x",
+      ),
+    ).toHaveLength(6);
+    expect(
+      foldedModels(
+        names.slice(0, 7).map((value) => ({ value })),
+        "x",
+      ),
+    ).toHaveLength(5);
+  });
+
+  it("name the model an alias stands for on the pill, and leave a Default level off it", () => {
+    const alias: ConfigOption = {
+      ...model,
+      pending: null,
+      kind: {
+        type: "select",
+        current: "default",
+        choices: [
+          {
+            value: "default",
+            name: "Default (recommended)",
+            description: "Opus 5.5 · Best for everyday, complex tasks",
+            group: null,
+          },
+          { value: "opus", name: "Opus 5.5", description: null, group: null },
+        ],
+      },
+    };
+    const atDefault: ConfigOption = {
+      ...effort,
+      kind: { ...effort.kind, current: "default" } as ConfigOption["kind"],
+    };
+    const html = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [alias, atDefault] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    expect(html).toMatch(/data-testid="picker-current-model">Opus 5\.5</);
+    expect(html).not.toContain("chat-pill-effort");
+    // Readers still hear the level in effect.
+    expect(html).toContain('aria-label="Opus 5.5, Default thinking. Agent, model and thinking"');
+    // A description naming no listed model leaves the alias's own name.
+    if (alias.kind.type !== "select") throw new Error("select");
+    const unlisted = { ...alias.kind.choices[0], description: "Mythos · Unreleased" };
+    expect(shownModelName(alias, unlisted as ConfigChoice)).toBe("Default (recommended)");
   });
 
   it("say why a change was refused inside the model menu", () => {

@@ -2258,13 +2258,16 @@
   padding: 0 var(--g-space-8) var(--g-space-8);
 }
 
-/* Attach: a 32px ghost circle whose glyph starts on the text's edge. */
+/*
+ * Attach and the microphone: 28px ghost circles, the height of every control in the row (owner,
+ * 4 November 2026: the filled pills read as heavy; only Send is filled).
+ */
 .chat-composer-attach {
   display: grid;
   flex: none;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-2);
   transition:
@@ -2292,7 +2295,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--g-space-6);
+  gap: var(--g-space-4);
   margin-left: auto;
 }
 
@@ -2542,19 +2545,19 @@
   min-width: 0;
 }
 
-.chat-pickers > .chat-popover {
+.chat-pickers-end > .chat-popover {
   min-width: 0;
 }
 
-/* The chip: who answers, with which model, how freely. A ghost pill that fills under the hand. */
-.chat-pickers > .chat-popover > summary {
-  gap: var(--g-space-8);
+/*
+ * The chips: how freely, on which account, with which model. Ghost pills, 28px and 13px like
+ * every control in the row: no fill or rim at rest, a fill under the hand, raised while open.
+ * Only the model's name is emphasized; the rest stay quiet (fg-2).
+ */
+.chat-pickers details.chat-popover > summary {
+  gap: var(--g-space-6);
   max-width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-12) 0 var(--g-space-8);
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  padding: 0 var(--g-space-8);
 }
 
 .chat-pickers summary > svg {
@@ -2562,17 +2565,23 @@
   color: var(--g-fg-3);
 }
 
-.chat-pickers summary strong {
+/* Who answers: the account and the model, together at the row's end beside Send. */
+.chat-pickers-end {
+  display: flex;
   flex: 0 1 auto;
-  color: var(--g-fg-1);
-  font-weight: 500;
+  align-items: center;
+  gap: var(--g-space-2);
+  min-width: 0;
+  margin-left: auto;
 }
 
 .chat-pill-model {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 200px;
   overflow: hidden;
-  color: var(--g-fg-2);
+  color: var(--g-fg-1);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2621,10 +2630,6 @@
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.chat-model-popover {
-  margin-left: auto;
-}
-
 /* The pill ends the composer's row, so its tip opens from its right edge and stays inside. */
 .chat-model-popover > summary[data-tip]::after {
   right: 0;
@@ -2636,19 +2641,23 @@
   gap: var(--g-space-2);
   min-width: 0;
 }
-.chat-access-controls summary {
-  height: 32px;
-  padding: 0 var(--g-space-12) 0 var(--g-space-8);
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
-  font-size: var(--g-text-meta);
-  gap: var(--g-space-6);
-}
 .chat-access-controls summary > span:first-of-type {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Executing is the ordinary state: its control is the bare icon. Plan names itself, lit. */
+.chat-pickers details.chat-workflow-popover:not(.chat-workflow-plan) > summary {
+  min-width: 28px;
+  padding: 0 var(--g-space-6);
+  justify-content: center;
+}
+details.chat-workflow-plan:not([open]) > summary:not(:hover) {
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-1);
+}
+.chat-workflow-plan > summary > svg {
+  color: var(--g-fg-1);
 }
 .chat-access-controls .chat-popover-panel {
   bottom: calc(100% + 8px);
@@ -2676,16 +2685,14 @@
 }
 
 /*
- * The account chip: which account the agent signs in with, between access and the model. When the
- * row is short of room it gives way first: its name truncates, down to the icon alone, before the
- * access and workflow pills do.
+ * The account chip: which account the agent signs in with, beside the model. Its face is the
+ * account's initial ringed by its fullest usage window; the name is in its tip and its menu.
  */
-.chat-pickers > .chat-account-popover {
-  flex: 0 1 auto;
-  min-width: 34px;
+.chat-pickers-end > .chat-account-popover {
+  flex: none;
 }
-/* The model pill shares the shortfall, so neither label is cut to a stub. */
-.chat-pickers > .chat-model-popover {
+/* The model pill takes the row's shortfall, down to a readable stub. */
+.chat-pickers-end > .chat-model-popover {
   flex: 0 1 auto;
   min-width: 96px;
 }
@@ -2698,19 +2705,48 @@
   flex-shrink: 0;
 }
 .chat-account-popover > summary {
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--g-text-meta);
-  gap: var(--g-space-6);
+  justify-content: center;
+  min-width: 28px;
+  padding: 0 var(--g-space-2);
 }
-.chat-account-name {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 132px;
-  overflow: hidden;
-  color: var(--g-fg-2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.chat-pickers .chat-pickers-end > details.chat-account-busy > summary {
+  padding: 0 var(--g-space-8) 0 var(--g-space-2);
+}
+.chat-account-avatar {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 600;
+}
+.chat-account-rings {
+  position: absolute;
+  inset: 0;
+  fill: none;
+  stroke-width: 2;
+}
+.chat-account-initial {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control-active);
+}
+.chat-account-ring-track {
+  stroke: var(--g-line);
+}
+.chat-account-ring {
+  stroke: var(--g-fg-2);
+  stroke-linecap: round;
+}
+.chat-account-avatar[data-full] .chat-account-ring {
+  stroke: var(--g-red);
 }
 .chat-account-popover > .chat-popover-panel {
   bottom: calc(100% + 8px);
@@ -2747,13 +2783,23 @@
   display: none;
 }
 
+/* On the pill's lit fill (open, or under the hand) the level steps up a tone to keep 4.5:1. */
+.chat-model-popover[open] > summary .chat-pill-effort {
+  color: var(--g-fg-2);
+}
+
+@media (hover: hover) {
+  .chat-model-popover > summary:hover .chat-pill-effort {
+    color: var(--g-fg-2);
+  }
+}
+
 .chat-picker-search {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--g-space-8);
   padding: var(--g-space-8);
-  box-shadow: inset 0 1px var(--g-line);
   color: var(--g-fg-3);
 }
 .chat-picker-search > input {
@@ -2784,59 +2830,13 @@
   border: 0;
 }
 
-/* The current model, named large beside its agent's mark. */
-.chat-model-head {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--g-space-12);
-  min-width: 0;
-  padding: var(--g-space-8);
-}
-
-.chat-model-head-mark {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
-}
-
-.chat-model-head-copy {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.chat-model-head-title {
-  overflow: hidden;
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-model-head-agent {
-  overflow: hidden;
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Where a change goes, and why one was refused, right under the model. */
+/* Where a change goes, and why one was refused, at the top of the menu. */
 .chat-model-notes {
   display: flex;
   flex: none;
   flex-direction: column;
   gap: var(--g-space-4);
-  padding: 0 var(--g-space-8) var(--g-space-8);
+  padding: var(--g-space-8) var(--g-space-8) 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -2877,26 +2877,32 @@
   min-width: 0;
 }
 
-/* The model and agent lists share one region that scrolls on its own. */
+/*
+ * The model list and the agents are fixed parts: the folded list (five models and "More models")
+ * fits without scrolling, an opened one scrolls on its own, and the agents never leave the view.
+ */
+.chat-picker-models,
+.chat-picker-agents {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--g-space-2);
+  min-width: 0;
+  padding: 0 0 var(--g-space-4);
+}
+
+.chat-picker-agents {
+  padding-top: var(--g-space-4);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+/* Six one-line rows: a folded list never scrolls; an opened one does, inside this frame. */
 .chat-model-scroll {
-  flex: 1 1 auto;
-  min-height: min(176px, 28vh);
+  max-height: 204px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
-}
-
-.chat-model-scroll > section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--g-space-4);
-  min-width: 0;
-  padding: var(--g-space-4) 0;
-}
-
-.chat-model-scroll > section + section {
-  box-shadow: inset 0 1px var(--g-line);
 }
 
 .chat-model-scroll :is(.picker-choices, .chat-agent-choices) {
@@ -2904,14 +2910,49 @@
   overflow: visible;
 }
 
-/* A part's name (Grok's "Voice"): 14/20 500 in fg-2, sentence case. */
-.chat-model-scroll > section > h3 {
+/* A part's name (Grok's "Voice"): 13/20 500 in fg-2, sentence case. */
+:is(.chat-picker-models, .chat-picker-agents) > h3 {
   margin: 0;
-  padding: var(--g-space-8) var(--g-space-8) var(--g-space-4);
+  padding: var(--g-space-4) var(--g-space-8);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
+}
+
+/* "More models": a quiet row at the list's end that opens the rest in place. */
+.chat-picker-more {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  min-height: 32px;
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-10);
+  color: var(--g-fg-2);
+  text-align: left;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.chat-picker-more > small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) {
+  .chat-picker-more:hover {
+    background-color: var(--g-glass-control-hover);
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-picker-more:focus-visible {
+  outline: none;
+  background-color: var(--g-glass-control-hover);
+  color: var(--g-fg-1);
 }
 
 .chat-picker-empty {
@@ -2965,14 +3006,6 @@
 
 .picker-choices:not([data-layout]) > button {
   min-height: 44px;
-}
-
-.chat-agent-choices > button > small {
-  flex: none;
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
 }
 
 .picker-choice-copy {
@@ -3115,6 +3148,48 @@
 .chat-picker-field .g-select {
   height: 32px;
   background-color: var(--g-surface-2);
+}
+
+/* Models: one 32px line each, the name and then its description beside it, a tone quieter. */
+.picker-choices.picker-choices-lines {
+  gap: var(--g-space-2);
+}
+
+.picker-choices.picker-choices-lines > button {
+  min-height: 32px;
+  padding: 0 var(--g-space-8);
+}
+
+.picker-choices-lines .picker-choice-copy {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-space-8);
+}
+
+.picker-choices-lines .picker-choice-copy strong {
+  flex: 0 1 auto;
+  max-width: 62%;
+}
+
+.picker-choices-lines .picker-choice-copy small {
+  flex: 1 1 0;
+}
+
+/* Every agent at once, three to a row, each its mark and name; the chosen one carries a check. */
+.chat-picker-agents > .chat-agent-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--g-space-2);
+  max-height: none;
+  overflow: visible;
+}
+
+.chat-picker-agents > .chat-agent-choices > button {
+  min-height: 32px;
+}
+
+.chat-picker-agents > .chat-agent-choices > .chat-picker-empty {
+  grid-column: 1 / -1;
 }
 
 .chat-autonomy-select {

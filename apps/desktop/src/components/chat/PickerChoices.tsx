@@ -51,7 +51,9 @@ export function PickerChoices({
   enabled,
   onChoose,
   effort = false,
+  lines = false,
   children,
+  after,
 }: {
   readonly label: string;
   readonly choices: readonly PickerChoice[];
@@ -61,7 +63,11 @@ export function PickerChoices({
   readonly enabled: boolean;
   readonly onChoose: (value: string) => void;
   readonly effort?: boolean;
+  /** One line per choice: its name, then its description in a quieter tone beside it. */
+  readonly lines?: boolean;
   readonly children?: ReactNode;
+  /** A row after the choices, inside the list so the arrow keys reach it ("More models"). */
+  readonly after?: ReactNode;
 }) {
   if (effort)
     // The thinking level is one segmented row: the levels side by side, the chosen one raised,
@@ -94,7 +100,11 @@ export function PickerChoices({
       </fieldset>
     );
   return (
-    <fieldset className="picker-choices" aria-label={label} onKeyDown={movePickerFocus}>
+    <fieldset
+      className={lines ? "picker-choices picker-choices-lines" : "picker-choices"}
+      aria-label={label}
+      onKeyDown={movePickerFocus}
+    >
       {children}
       {choices.map((choice) => (
         <button
@@ -116,6 +126,7 @@ export function PickerChoices({
           {value === choice.value ? <Check size={14} aria-label="Selected" /> : null}
         </button>
       ))}
+      {after}
     </fieldset>
   );
 }

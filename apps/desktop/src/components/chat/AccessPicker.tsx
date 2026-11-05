@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ListChecks, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { Check, ListChecks, ShieldCheck, ShieldQuestion } from "lucide-react";
 import type { Autonomy, SessionControlChange, SessionLists, SessionStatus } from "../../bindings";
 import { AUTONOMIES } from "../../lib/chat/present";
 import { movePickerFocus } from "./PickerChoices";
@@ -71,6 +71,8 @@ export function AccessPicker({
   const workflowLabel =
     workflow?.choices?.find((choice) => choice.value === displayedWorkflow)?.name ??
     (lists ? "Mode unavailable" : "Mode");
+  // Executing is the ordinary state, so its control is a quiet icon; Plan names itself, lit.
+  const planShown = displayedWorkflow === "plan";
   return (
     <div
       className="chat-access-controls"
@@ -93,7 +95,6 @@ export function AccessPicker({
             )}
             <span>{label}</span>
             {pending ? <span className="chat-control-pending">Saving…</span> : null}
-            <ChevronDown size={12} />
           </>
         }
       >
@@ -162,14 +163,14 @@ export function AccessPicker({
       </Popover>
       <Popover
         label="Working mode"
-        className="chat-workflow-popover"
+        className={`chat-workflow-popover${planShown ? " chat-workflow-plan" : ""}`}
         triggerLabel={`${workflowLabel}. Working mode`}
+        tip={planShown ? undefined : `Working mode: ${workflowLabel}`}
         trigger={
           <>
             <ListChecks size={14} />
-            <span>{workflowLabel}</span>
+            {planShown ? <span>{workflowLabel}</span> : null}
             {workflowPending ? <span className="chat-control-pending">Saving…</span> : null}
-            <ChevronDown size={12} />
           </>
         }
       >
