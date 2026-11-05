@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProjectShellChoice, ProjectToolsReview } from "../bindings";
 import type { ProjectToolsApi } from "./projectTools";
 import type { TerminalState, TerminalTransport } from "./terminal";
+import type { RememberedPanel, TerminalMemory } from "./terminalMemory";
 import {
   clampHeight,
   holdsShell,
@@ -30,7 +31,28 @@ interface FakeRuntime extends TerminalRuntime {
   disposed: boolean;
 }
 
-function rig(options: { reviews?: (() => Promise<ProjectToolsReview>)[]; limit?: number } = {}) {
+/** Remembered panels in memory, as the window's storage would keep them. */
+function memory(initial: Record<string, RememberedPanel> = {}) {
+  const kept = new Map(Object.entries(initial));
+  const writes: string[] = [];
+  const store: TerminalMemory = {
+    read: (chatId) => kept.get(chatId) ?? null,
+    write: (chatId, panel) => {
+      writes.push(chatId);
+      if (panel) kept.set(chatId, panel);
+      else kept.delete(chatId);
+    },
+  };
+  return { store, kept, writes };
+}
+
+function rig(
+  options: {
+    reviews?: (() => Promise<ProjectToolsReview>)[];
+    limit?: number;
+    memory?: TerminalMemory;
+  } = {},
+) {
   let count = 0;
   const reviews = options.reviews ?? [];
   const api: ProjectToolsApi = {
@@ -61,7 +83,7 @@ function rig(options: { reviews?: (() => Promise<ProjectToolsReview>)[]; limit?:
     runtimes.push(runtime);
     return runtime;
   };
-  const panels = new TerminalPanels(api, factory, options.limit);
+  const panels = new TerminalPanels(api, factory, options.limit, options.memory);
   const tab = (id: string | null) => (id ? panels.getSnapshot().tabs.get(id) : undefined);
   return { api, panels, runtimes, tab };
 }
@@ -119,6 +141,86 @@ describe("the docked terminal panels", () => {
     await panels.closeTab(id);
     expect(runtimes[0]?.disposed).toBe(true);
   });
+  it("remembers a chat's open terminals from the person's actions, never from a shell's exit", async () => {
+    const { store, kept } = memory();
+    const { panels, runtimes } = rig({ memory: store });
+    await panels.newTab("chat", "power_shell");
+    await panels.newTab("chat", "command_prompt");
+    const [first, second] = panels.panel("chat").tabs as [string, string];
+    panels.rename(second, "Tests");
+    panels.runTab(
+      "chat",
+      {} as TerminalTransport,
+      "C:/worktrees/sidebar",
+      "http://localhost:25000",
+    );
+    expect(kept.get("chat")?.tabs).toEqual([
+      { kind: "shell", shell: "power_shell", title: "PowerShell", named: false },
+      { kind: "shell", shell: "command_prompt", title: "Tests", named: true },
+      { kind: "run" },
+    ]);
+    expect(kept.get("chat")?.open).toBe(true);
+    // Quitting stops every shell; that is no reason to forget them.
+    for (const runtime of runtimes) runtime.status({ state: "failed", message: "closed" });
+    expect(kept.get("chat")?.tabs).toHaveLength(3);
+    // Closing a tab or hiding the panel is the person's choice and is kept.
+    runtimes[0]?.status({ state: "running" });
+    await panels.closeTab(second);
+    panels.hide("chat");
+    expect(kept.get("chat")).toMatchObject({
+      tabs: [{ kind: "shell", shell: "power_shell", title: "PowerShell", named: false }],
+      open: false,
+    });
+    await panels.closeTab(first);
+    expect(kept.has("chat")).toBe(false);
+  });
+
+  it("offers a chat's remembered terminals once, starts them only on Resume, and forgets on Not now", async () => {
+    const remembered: RememberedPanel = {
+      tabs: [
+        { kind: "shell", shell: "command_prompt", title: "Tests", named: true },
+        { kind: "run" },
+        { kind: "shell", shell: "power_shell", title: "PowerShell", named: false },
+      ],
+      open: true,
+      savedAt: 1,
+    };
+    const { store, kept } = memory({ chat: remembered, other: remembered });
+    const { panels, api, runtimes, tab } = rig({ memory: store });
+    panels.restore("chat");
+    expect(panels.panel("chat")).toMatchObject({ open: true, resume: remembered.tabs, tabs: [] });
+    expect(api.review).not.toHaveBeenCalled();
+    // Showing the panel shows the offer, not a new shell.
+    panels.hide("chat");
+    panels.show("chat");
+    expect(api.review).not.toHaveBeenCalled();
+    // A second look in the same run offers nothing new.
+    panels.restore("chat");
+    const onRun = vi.fn(() =>
+      panels.runTab(
+        "chat",
+        {} as TerminalTransport,
+        "C:/worktrees/sidebar",
+        "http://localhost:25000",
+      ),
+    );
+    await panels.resume("chat", onRun);
+    expect(panels.panel("chat").resume).toBeNull();
+    expect(onRun).toHaveBeenCalledTimes(1);
+    expect(panels.panel("chat").tabs.map((id) => tab(id)?.title)).toEqual([
+      "Tests",
+      "Run",
+      "PowerShell",
+    ]);
+    expect(runtimes).toHaveLength(3);
+    // Not now forgets the other chat's panel and starts nothing.
+    panels.restore("other");
+    panels.dismissResume("other");
+    expect(panels.panel("other").resume).toBeNull();
+    expect(kept.has("other")).toBe(false);
+    expect(runtimes).toHaveLength(3);
+  });
+
   it("shows a reviewed shell in the chat's folder on the first toggle, and only then", async () => {
     const { api, panels, runtimes, tab } = rig();
     expect(panels.panel("chat").open).toBe(false);

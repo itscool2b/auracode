@@ -255,6 +255,11 @@
   margin-left: auto;
 }
 
+/* A second action (Resume, then Not now) sits beside the first. */
+.terminal-panel-status > .g-button + .g-button {
+  margin-left: 0;
+}
+
 .terminal-panel-viewport {
   position: relative;
   flex: 1;

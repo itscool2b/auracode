@@ -257,6 +257,60 @@ async function inspect(engine, launcher) {
     );
     await audit(page, "refused", engine, scans);
 
+    // After a restart the panel offers back what the chat had open, by shell and name, and
+    // starts nothing until Resume; Not now forgets it. Output from then is not kept.
+    const remembered = JSON.stringify({
+      tabs: [
+        { kind: "shell", shell: "command_prompt", title: "Tests", named: true },
+        { kind: "shell", shell: "power_shell", title: "PowerShell", named: false },
+      ],
+      open: true,
+      savedAt: Date.now(),
+    });
+    const seed = (value) =>
+      page.evaluate((value) => localStorage.setItem("auracode.terminals.preview", value), value);
+    await page.goto(`${url}/?preview=settled`);
+    await seed(remembered);
+    await page.reload();
+    const offer = page.getByTestId("terminal-resume");
+    await offer
+      .getByText(
+        "Tests and PowerShell were open when auracode last closed. Output from then was not kept.",
+      )
+      .waitFor();
+    assert.deepEqual(await calls(page), [], "nothing started before Resume");
+    await audit(page, "resume", engine, scans);
+    await offer.getByRole("button", { name: "Resume", exact: true }).click();
+    await offer.waitFor({ state: "detached" });
+    await tabs(page).nth(1).waitFor();
+    assert.deepEqual(await tabs(page).allTextContents(), ["Tests", "PowerShell"]);
+    assert.deepEqual(
+      (await calls(page))
+        .filter((call) => call.startsWith("start:"))
+        .map((call) => call.replace(/:\d+x\d+$/, "")),
+      ["start:power_shell"],
+    );
+    // Each shell starts when its tab first shows, as any tab's does.
+    await tabs(page).first().click();
+    await page.waitForFunction(() =>
+      window.terminalPanelFixture.calls().some((call) => call.startsWith("start:command_prompt")),
+    );
+    assert.deepEqual(
+      JSON.parse(await page.evaluate(() => localStorage.getItem("auracode.terminals.preview")))
+        .tabs,
+      JSON.parse(remembered).tabs,
+    );
+    await page.goto(`${url}/?preview=settled`);
+    await seed(remembered);
+    await page.reload();
+    await offer.getByRole("button", { name: "Not now", exact: true }).click();
+    await offer.waitFor({ state: "detached" });
+    assert.equal(await tabs(page).count(), 0);
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem("auracode.terminals.preview")),
+      null,
+    );
+
     // Run, in a worktree chat whose folder setup saved a command: one tab of its own with the
     // worktree's address, and Stop in the same place while it runs.
     await page.goto(`${url}/?preview=terminal-panel&tabs=1&run=1`);
@@ -300,7 +354,7 @@ async function inspect(engine, launcher) {
 
     assert.deepEqual(errors, [], "browser errors");
     console.log(
-      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); toggle, focus, menu, palette, tabs, rename, resize, close, exit, limit, refusal and Run passed`,
+      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); toggle, focus, menu, palette, tabs, rename, resize, close, exit, limit, refusal, resume and Run passed`,
     );
   } finally {
     await browser.close();

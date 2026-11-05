@@ -2,6 +2,7 @@ import type { ProjectShell, ProjectShellChoice } from "../bindings";
 import { errorMessage } from "./errors";
 import type { ProjectToolsApi } from "./projectTools";
 import type { TerminalState, TerminalTransport } from "./terminal";
+import { localTerminalMemory, type RememberedTab, type TerminalMemory } from "./terminalMemory";
 
 /** Rust allows eight project shells in the app (aura-core terminal.rs); the panel says so first. */
 export const PANEL_TERMINAL_LIMIT = 8;
@@ -41,6 +42,11 @@ export interface ChatPanel {
   readonly notice: string | null;
   /** Counts the person's requests to use the terminal (show, a new tab, a tab chosen). */
   readonly focus: number;
+  /**
+   * What this chat had open when auracode last closed, offered back until the person resumes
+   * or declines it. Nothing starts by itself.
+   */
+  readonly resume: readonly RememberedTab[] | null;
 }
 
 export interface PanelSnapshot {
@@ -73,6 +79,7 @@ export const CLOSED_PANEL: ChatPanel = {
   shells: [],
   notice: null,
   focus: 0,
+  resume: null,
 };
 
 /** Heights land on Graphite's 4px grid, inside the bounds and the room the view has. */
@@ -109,11 +116,14 @@ export class TerminalPanels {
   #listeners = new Set<() => void>();
   #snapshot: PanelSnapshot = { chats: new Map(), tabs: new Map() };
   #sequence = 0;
+  /** Chats whose remembered panel this run has looked at, so an offer comes once. */
+  #restored = new Set<string>();
 
   constructor(
     private readonly api: ProjectToolsApi,
     private readonly factory: RuntimeFactory,
     private readonly limit = PANEL_TERMINAL_LIMIT,
+    private readonly memory: TerminalMemory = localTerminalMemory,
   ) {}
 
   subscribe = (listener: () => void): (() => void) => {
@@ -159,6 +169,8 @@ export class TerminalPanels {
     this.#setPanel(chatId, {
       ...panel,
       tabs: [...panel.tabs, id],
+      // A terminal opened instead of the earlier ones withdraws their offer.
+      resume: null,
       active: id,
       open: true,
       notice: null,
@@ -211,11 +223,51 @@ export class TerminalPanels {
     this.#setPanel(chatId, {
       ...panel,
       tabs: [...panel.tabs, id],
+      // A terminal opened instead of the earlier ones withdraws their offer.
+      resume: null,
       active: id,
       open: true,
       notice: null,
       focus: panel.focus + 1,
     });
+    this.#remember(chatId);
+  }
+
+  /**
+   * The first time a chat shows in this run: what its panel had open when auracode last closed,
+   * offered back, the panel open as it was. Nothing starts until the person resumes.
+   */
+  restore(chatId: string): void {
+    if (this.#restored.has(chatId)) return;
+    this.#restored.add(chatId);
+    const panel = this.panel(chatId);
+    if (panel.tabs.length > 0) return;
+    const remembered = this.memory.read(chatId);
+    if (!remembered) return;
+    this.#setPanel(chatId, { ...panel, resume: remembered.tabs, open: remembered.open });
+  }
+
+  /** Starts the offered terminals again in their order: shells by name, and Run through `onRun`. */
+  async resume(chatId: string, onRun?: () => void): Promise<void> {
+    const offer = this.panel(chatId).resume;
+    if (!offer) return;
+    this.#setPanel(chatId, { ...this.panel(chatId), resume: null, open: true });
+    for (const tab of offer) {
+      if (tab.kind === "run") {
+        onRun?.();
+        continue;
+      }
+      const id = await this.newTab(chatId, tab.shell);
+      if (id && tab.named) this.rename(id, tab.title);
+    }
+  }
+
+  /** Declines the offer; the chat's panel is remembered afresh from what opens next. */
+  dismissResume(chatId: string): void {
+    const panel = this.panel(chatId);
+    if (!panel.resume) return;
+    this.#setPanel(chatId, { ...panel, resume: null });
+    this.#remember(chatId);
   }
 
   /** The chat's Run tab while its process runs, if there is one. */
@@ -248,16 +300,22 @@ export class TerminalPanels {
       open: true,
       focus: panel.focus + 1,
     });
-    if (panel.tabs.length === 0) void this.newTab(chatId);
+    // An offer waiting shows instead of a new shell.
+    if (panel.tabs.length === 0 && !panel.resume) void this.newTab(chatId);
+    else this.#remember(chatId);
   }
 
   hide(chatId: string): void {
     const panel = this.panel(chatId);
     if (panel.open) this.#setPanel(chatId, { ...panel, open: false, notice: null });
+    this.#remember(chatId);
   }
 
-  /** Reviews the chat's folder and starts the chosen shell (the first one Rust offers by default). */
-  async newTab(chatId: string, shell?: ProjectShell): Promise<void> {
+  /**
+   * Reviews the chat's folder and starts the chosen shell (the first one Rust offers by default).
+   * Answers the new tab, or `null` when the app's limit refused one.
+   */
+  async newTab(chatId: string, shell?: ProjectShell): Promise<string | null> {
     const panel = this.panel(chatId);
     const open = [...this.#tabs.values()].filter((tab) => holdsShell(tab.status)).length;
     if (open >= this.limit) {
@@ -266,7 +324,7 @@ export class TerminalPanels {
         open: true,
         notice: `${this.limit === PANEL_TERMINAL_LIMIT ? "Eight" : this.limit} terminals are open. Close one before opening another.`,
       });
-      return;
+      return null;
     }
     const id = `terminal-${++this.#sequence}`;
     this.#tabs.set(id, {
@@ -282,6 +340,8 @@ export class TerminalPanels {
       ...panel,
       open: true,
       tabs: [...panel.tabs, id],
+      // A terminal opened instead of the earlier ones withdraws their offer.
+      resume: null,
       active: id,
       notice: null,
       focus: panel.focus + 1,
@@ -289,7 +349,7 @@ export class TerminalPanels {
     try {
       const review = await this.api.review(chatId);
       const tab = this.#tabs.get(id);
-      if (!tab) return;
+      if (!tab) return null;
       const choice = review.shells.find((item) => item.id === shell) ?? review.shells[0];
       this.#setPanel(chatId, { ...this.panel(chatId), shells: review.shells });
       if (!choice) {
@@ -297,7 +357,7 @@ export class TerminalPanels {
           folder: review.folder,
           status: { state: "failed", message: "No supported native shell was found." },
         });
-        return;
+        return id;
       }
       const taken = this.panel(chatId)
         .tabs.filter((other) => other !== id)
@@ -319,10 +379,12 @@ export class TerminalPanels {
         folder: review.folder,
         status: { state: "starting" },
       });
+      this.#remember(chatId);
     } catch (error) {
       if (this.#tabs.has(id))
         this.#setTab(id, { status: { state: "failed", message: errorMessage(error) } });
     }
+    return id;
   }
 
   /** Shows a tab. A click moves focus into its shell; arrow keys leave it on the tabs. */
@@ -351,6 +413,7 @@ export class TerminalPanels {
       open: tabs.length > 0 && panel.open,
       notice: null,
     });
+    this.#remember(tab.chatId);
     await runtime?.dispose();
   }
 
@@ -361,6 +424,7 @@ export class TerminalPanels {
     const name = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LIMIT).trim();
     if (name) {
       this.#setTab(tabId, { title: name, named: true });
+      this.#remember(tab.chatId);
       return;
     }
     const taken = this.panel(tab.chatId)
@@ -376,6 +440,7 @@ export class TerminalPanels {
             : "Terminal",
       named: false,
     });
+    this.#remember(tab.chatId);
   }
 
   setHeight(chatId: string, height: number, room?: number): void {
@@ -392,6 +457,29 @@ export class TerminalPanels {
     this.#chats.clear();
     this.#publish();
     await Promise.all(runtimes.map((runtime) => runtime.dispose()));
+  }
+
+  /**
+   * Keeps what the chat's panel has open for the next run: its live shells by shell and name, Run,
+   * and whether it shows. Only the person's own actions call this, never a shell's exit, so
+   * quitting (which stops every shell) leaves the panel as it was.
+   */
+  #remember(chatId: string): void {
+    const panel = this.panel(chatId);
+    // An offer not taken yet keeps the memory it came from.
+    if (panel.resume) return;
+    const tabs: RememberedTab[] = [];
+    for (const id of panel.tabs) {
+      const tab = this.#tabs.get(id);
+      if (!tab || !holdsShell(tab.status)) continue;
+      if (tab.purpose === "run") tabs.push({ kind: "run" });
+      else if (!tab.purpose && tab.shell)
+        tabs.push({ kind: "shell", shell: tab.shell.id, title: tab.title, named: tab.named });
+    }
+    this.memory.write(
+      chatId,
+      tabs.length > 0 ? { tabs, open: panel.open, savedAt: Date.now() } : null,
+    );
   }
 
   #setTab(tabId: string, change: Partial<PanelTab>): void {
