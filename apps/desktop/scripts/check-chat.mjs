@@ -332,14 +332,33 @@ async function toolDetails(page, theme) {
  */
 async function richAnswer(page, theme) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+  // Under the app's own policy (tauri.conf.json), which forbids eval: the dev server applies none,
+  // so the page carries it. Inline scripts stay allowed only so Vite's dev page can start.
+  const policy =
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws:; object-src 'none'; base-uri 'none'";
+  const route = "**/?preview=rich-answer*";
+  await page.route(route, async (request) => {
+    const response = await request.fetch();
+    const body = (await response.text()).replace(
+      "<head>",
+      `<head><meta http-equiv="Content-Security-Policy" content="${policy}">`,
+    );
+    await request.fulfill({ response, body });
+  });
   await page.goto(`${url}/?preview=rich-answer`);
+  await page.evaluate(() => {
+    window.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) =>
+      window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`),
+    );
+  });
   const ts = page.locator("code.hljs").filter({ hasText: "export function reveal" });
   await ts.waitFor();
   assert.ok((await ts.locator(".hljs-keyword").count()) >= 3, "TypeScript keywords are coloured");
   assert.equal(await ts.locator(".hljs-string").first().textContent(), '"row is not in the list"');
   await page.locator(".math-block .katex-display").waitFor();
   assert.ok((await page.locator(".math-inline .katex").count()) >= 3, "inline math is set");
-  const diagram = page.locator(".mermaid-block");
+  const diagram = page.locator(".mermaid-block").filter({ hasText: "Reveal row" });
   await diagram.locator(".mermaid-diagram svg").waitFor();
   assert.match(await diagram.locator(".mermaid-diagram svg").textContent(), /Reveal row/);
   assert.equal(await diagram.locator("script, foreignObject").count(), 0);
@@ -347,6 +366,15 @@ async function richAnswer(page, theme) {
   assert.match(await diagram.locator("pre code").textContent(), /flowchart LR/);
   await diagram.getByRole("button", { name: "Diagram", exact: true }).click();
   await diagram.locator(".mermaid-diagram svg").waitFor();
+  // A diagram asking for ELK, which auracode leaves out, shows its code and says why.
+  const elk = page.locator(".mermaid-block").filter({ hasText: "layout: elk" });
+  await elk.locator(".mermaid-problem").filter({ hasText: "ELK layout" }).waitFor();
+  assert.equal(await elk.locator(".mermaid-diagram svg").count(), 0);
+  assert.deepEqual(
+    (await page.evaluate(() => window.__cspViolations)).filter((v) => !v.startsWith("connect-src")),
+    [],
+  );
+  await page.unroute(route);
   await settled(page);
   assert.deepEqual(
     (

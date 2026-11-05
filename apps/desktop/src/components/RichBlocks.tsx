@@ -191,6 +191,8 @@ export function MermaidBlock({
         engine.initialize({
           startOnLoad: false,
           securityLevel: "strict",
+          // dagre ships with Mermaid; its ELK layout is left out (lib/elkStub.ts).
+          layout: "dagre",
           suppressErrorRendering: true,
           htmlLabels: false,
           flowchart: { htmlLabels: false },
