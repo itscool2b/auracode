@@ -119,7 +119,7 @@ impl SessionManager {
                 let file = resolve(&folder, std::slice::from_ref(&reference))
                     .pop()
                     .flatten()
-                    .ok_or_else(|| invalid("This file is no longer in the chat's folder."))?;
+                    .ok_or_else(|| invalid("This file is not in the chat's folder."))?;
                 let found = detected(&env);
                 let editor = choose(&found, preferred).ok_or_else(|| invalid(NO_EDITOR))?;
                 let path = display_path(&file.absolute)?;

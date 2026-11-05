@@ -321,8 +321,7 @@ const previewFiles: FileLinkApi = {
   open: async (_chat, reference, line, column) => {
     const shown = window as { fileOpens?: unknown[] };
     shown.fileOpens = [...(shown.fileOpens ?? []), { reference, line, column }];
-    if (reference === "src/removed.ts")
-      throw new Error("This file is no longer in the chat's folder.");
+    if (reference === "src/removed.ts") throw new Error("This file is not in the chat's folder.");
     return "cursor";
   },
   editors: async () => ({ editors: ["cursor", "vs_code"], opens_in: "cursor" }),

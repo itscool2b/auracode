@@ -634,16 +634,13 @@ async function fileLinks(page, theme) {
   await answer.waitFor();
   const links = answer.getByTestId("file-link");
   await links.first().waitFor();
-  assert.deepEqual(
-    await links.evaluateAll((nodes) => nodes.map((node) => node.dataset.file)),
-    [
-      "src/components/Sidebar.tsx",
-      "src/styles.css",
-      "src/components/ChatView.tsx",
-      "src/components/Sidebar.tsx",
-      "src/removed.ts",
-    ],
-  );
+  assert.deepEqual(await links.evaluateAll((nodes) => nodes.map((node) => node.dataset.file)), [
+    "src/components/Sidebar.tsx",
+    "src/styles.css",
+    "src/components/ChatView.tsx",
+    "src/components/Sidebar.tsx",
+    "src/removed.ts",
+  ]);
   // Names that are not the chat's files stay as written.
   for (const text of ["console.log", "src/missing.ts"])
     assert.equal(await answer.locator("code", { hasText: text }).count(), 1, text);
@@ -671,7 +668,7 @@ async function fileLinks(page, theme) {
   await links.nth(4).click();
   await page
     .getByRole("alert")
-    .filter({ hasText: "This file is no longer in the chat's folder." })
+    .filter({ hasText: "This file is not in the chat's folder." })
     .waitFor();
   // The changed-files card names the file the turn edited, and its step names it at its line.
   const card = page.getByTestId("changed-files").last();
@@ -679,7 +676,8 @@ async function fileLinks(page, theme) {
   await openWork(page);
   // Each step opens: its group, then the call itself.
   const closedGroups = page.locator('[data-testid="tool-group"][aria-expanded="false"]');
-  for (let left = await closedGroups.count(); left > 0; left -= 1) await closedGroups.first().click();
+  for (let left = await closedGroups.count(); left > 0; left -= 1)
+    await closedGroups.first().click();
   await page.evaluate(() => {
     for (const summary of document.querySelectorAll(".chat-tool-head"))
       if (summary.parentElement && !summary.parentElement.open) summary.click();
