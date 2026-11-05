@@ -667,6 +667,11 @@ export function ChatView({
           onHistory={
             transport.conversation ? () => setContinuation({ type: "history" }) : undefined
           }
+          onCompact={
+            state.lists?.commands.some((command) => command.name === "compact")
+              ? () => void store.send("/compact")
+              : undefined
+          }
           onGit={transport.git ? () => setGitOpen(true) : undefined}
           onTools={() => setDialog("tools")}
           onTerminal={terminals ? () => terminals.toggle(chatId) : undefined}

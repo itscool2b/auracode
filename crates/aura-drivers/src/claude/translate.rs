@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use aura_protocol::session::{ConfigCategory, ConfigChoice, ConfigKind, ConfigOption};
 use aura_protocol::{
-    AuraEvent, Cost, LimitWindow, SlashCommand, TokenUsage, ToolCall, ToolContent, ToolKind,
-    ToolLocation, ToolStatus, ToolUpdate, UsageInfo, UsageScope,
+    AuraEvent, Cost, LimitWindow, NoticeLevel, PlanEntry, PlanStatus, SlashCommand, TokenUsage,
+    ToolCall, ToolContent, ToolKind, ToolLocation, ToolStatus, ToolUpdate, UsageInfo, UsageScope,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -186,6 +186,11 @@ impl Translator {
         let tools = &self.tools;
         let shown = |native: &str| tools.get(native).map(|tool| tool.id.clone());
         if family == "system" {
+            // Claude Code summarized the conversation to free context: say so where it happened.
+            if string(frame, "subtype") == Some("compact_boundary") {
+                events.push(compacted(frame));
+                return events;
+            }
             self.tasks.system(frame, shown, &mut events);
             return events;
         }
@@ -480,7 +485,26 @@ impl Translator {
             .map_or(0, |index| index.saturating_add(1))
     }
 
+    /// Starts or updates the call for `native`. Claude's to-do list (TodoWrite) also becomes the
+    /// turn's plan, the checklist Codex's plan updates fill, whenever its list arrives or changes.
     fn tool_start(
+        &mut self,
+        native: &str,
+        name: &str,
+        input: Option<&Value>,
+        events: &mut Vec<AuraEvent>,
+    ) -> String {
+        let before = events.len();
+        let id = self.call_start(native, name, input, events);
+        if events.len() > before
+            && let Some(entries) = todo_plan(name, input)
+        {
+            events.push(AuraEvent::PlanUpdated { entries });
+        }
+        id
+    }
+
+    fn call_start(
         &mut self,
         native: &str,
         name: &str,
@@ -581,6 +605,60 @@ impl Translator {
             ));
             events.push(AuraEvent::ToolUpdate(update));
         }
+    }
+}
+
+/// Claude's to-do list as plan entries: `None` unless `name` is TodoWrite with a `todos` list.
+fn todo_plan(name: &str, input: Option<&Value>) -> Option<Vec<PlanEntry>> {
+    if name != "TodoWrite" {
+        return None;
+    }
+    let todos = input?.get("todos")?.as_array()?;
+    Some(
+        todos
+            .iter()
+            .filter_map(|todo| {
+                let content = string(todo, "content")?.trim();
+                (!content.is_empty()).then(|| PlanEntry {
+                    content: content.chars().take(500).collect(),
+                    status: match string(todo, "status") {
+                        Some("completed") => PlanStatus::Completed,
+                        Some("in_progress") => PlanStatus::InProgress,
+                        _ => PlanStatus::Pending,
+                    },
+                    priority: None,
+                })
+            })
+            .take(100)
+            .collect(),
+    )
+}
+
+/// Claude Code's `compact_boundary`: the conversation so far was summarized, by request or on
+/// its own as the context filled, from `pre_tokens` tokens.
+fn compacted(frame: &Value) -> AuraEvent {
+    let metadata = &frame["compact_metadata"];
+    let before = metadata["pre_tokens"]
+        .as_u64()
+        .filter(|tokens| *tokens > 0)
+        .map(|tokens| {
+            if tokens >= 1000 {
+                format!(" from {}k tokens", tokens.div_ceil(1000))
+            } else {
+                format!(" from {tokens} tokens")
+            }
+        })
+        .unwrap_or_default();
+    let message = if string(metadata, "trigger") == Some("manual") {
+        format!("Compacted the conversation{before}. Claude Code continues from its summary.")
+    } else {
+        format!(
+            "Claude Code compacted the conversation{before} as its context filled, and continues from its summary."
+        )
+    };
+    AuraEvent::Notice {
+        level: NoticeLevel::Info,
+        message,
     }
 }
 
@@ -1041,6 +1119,87 @@ mod tests {
 
     fn stream(id: &str, event: Value) -> Value {
         json!({"type":"stream_event", "api_message_id":id, "event":event})
+    }
+
+    #[test]
+    fn claudes_to_do_list_becomes_the_turns_plan_whenever_it_changes() {
+        let mut translator = Translator::default();
+        let todos = json!({"todos":[
+            {"content":"Read the failing test","status":"completed","activeForm":"Reading"},
+            {"content":"Fix the parser","status":"in_progress","activeForm":"Fixing"},
+            {"content":"Run the suite","status":"pending","activeForm":"Running"},
+            {"content":"   ","status":"pending"}
+        ]});
+        let events = translator.ingest(&committed(
+            "m",
+            json!([{"type":"tool_use","id":"todo","name":"TodoWrite","input":todos}]),
+        ));
+        let plans: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                AuraEvent::PlanUpdated { entries } => Some(entries.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            plans,
+            vec![vec![
+                PlanEntry {
+                    content: "Read the failing test".into(),
+                    status: PlanStatus::Completed,
+                    priority: None,
+                },
+                PlanEntry {
+                    content: "Fix the parser".into(),
+                    status: PlanStatus::InProgress,
+                    priority: None,
+                },
+                PlanEntry {
+                    content: "Run the suite".into(),
+                    status: PlanStatus::Pending,
+                    priority: None,
+                },
+            ]]
+        );
+        // The call itself still shows, and the same list again changes nothing.
+        assert!(events.iter().any(|event| matches!(event, AuraEvent::ToolCall(call) if call.title == "Update the to-do list")));
+        assert!(
+            translator
+                .ingest(&committed(
+                    "m2",
+                    json!([{"type":"tool_use","id":"todo","name":"TodoWrite","input":todos}])
+                ))
+                .iter()
+                .all(|event| !matches!(event, AuraEvent::PlanUpdated { .. }))
+        );
+        // Other tools never touch the plan.
+        assert_eq!(todo_plan("Bash", Some(&json!({"todos":[]}))), None);
+    }
+
+    #[test]
+    fn a_compacted_conversation_is_a_notice_where_it_happened() {
+        let mut translator = Translator::default();
+        let mut notice = |frame: Value| match translator.ingest(&frame).as_slice() {
+            [
+                AuraEvent::Notice {
+                    level: NoticeLevel::Info,
+                    message,
+                },
+            ] => message.clone(),
+            other => panic!("unexpected {other:?}"),
+        };
+        assert_eq!(
+            notice(
+                json!({"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":152_340}})
+            ),
+            "Claude Code compacted the conversation from 153k tokens as its context filled, and continues from its summary."
+        );
+        assert_eq!(
+            notice(
+                json!({"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual"}})
+            ),
+            "Compacted the conversation. Claude Code continues from its summary."
+        );
     }
 
     fn committed(id: &str, content: Value) -> Value {

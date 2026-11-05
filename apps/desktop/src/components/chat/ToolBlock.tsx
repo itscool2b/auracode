@@ -13,9 +13,18 @@ import {
   SquareTerminal,
   Wrench,
 } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
+import {
+  diffDelta,
+  type InputField,
+  prettyJson,
+  type SearchLink,
+  searchLinks,
+  toolInput,
+  withoutSearchLinks,
+} from "../../lib/chat/toolDetails";
 import { toolPhrase } from "../../lib/chat/toolWords";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
 import { imageSource } from "../../lib/chatImages";
@@ -157,6 +166,21 @@ export function ToolBlock({
   const [moving, setMoving] = useState<"open" | "close" | null>(null);
   const open = bare || expanded || outputFocused || moving === "close";
   const title = tool.title || tool.toolName || "Tool";
+  const input = useMemo(() => toolInput(tool), [tool]);
+  const links = useMemo(() => searchLinks(tool), [tool]);
+  // Once its links show as links, a search's text drops their JSON.
+  const contents = useMemo(
+    () =>
+      links.length > 0
+        ? tool.content.map((content) =>
+            content.type === "text" && content.truncated === null
+              ? { ...content, text: withoutSearchLinks(content.text) }
+              : content,
+          )
+        : tool.content,
+    [links, tool.content],
+  );
+  const delta = useMemo(() => diffDelta(tool), [tool]);
   useEffect(() => {
     if (moving === null) return;
     const timer = setTimeout(() => setMoving(null), moving === "open" ? OPEN_MS : CLOSE_MS);
@@ -215,6 +239,15 @@ export function ToolBlock({
             )}
           </span>
           <ToolPhraseText title={title} kind={tool.toolKind} display={display} />
+          {delta ? (
+            <span
+              className="chat-diff-totals chat-tool-delta"
+              title={`${delta.added} added, ${delta.removed} removed`}
+            >
+              <span data-op="add">+{delta.added}</span>{" "}
+              <span data-op="remove">−{delta.removed}</span>
+            </span>
+          ) : null}
           <span className="chat-tool-status" data-status={display}>
             {STATUS_LABEL[display]}
           </span>
@@ -228,10 +261,12 @@ export function ToolBlock({
         >
           <div className="chat-reveal-clip">
             <div className="chat-tool-well">
+              {input.length > 0 ? <ToolInput fields={input} /> : null}
               <Locations locations={tool.locations} />
-              {tool.content.length > 0 ? (
+              {links.length > 0 ? <SearchLinks links={links} /> : null}
+              {contents.length > 0 ? (
                 <div className="chat-segment">
-                  {tool.content.map((content, index) => (
+                  {contents.map((content, index) => (
                     <ToolContentView
                       // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
                       key={index}
@@ -272,6 +307,42 @@ export function ToolBlock({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** What the call was given, each input by its name; long values set on their own lines. */
+function ToolInput({ fields }: { readonly fields: readonly InputField[] }) {
+  return (
+    <dl className="chat-tool-input" data-testid="tool-input">
+      {fields.map((field) => (
+        <div key={field.key} data-block={field.block ? "" : undefined}>
+          <dt>{field.key}</dt>
+          <dd>
+            {field.block ? (
+              <pre className="ui-pre chat-tool-input-code">{field.value}</pre>
+            ) : (
+              field.value
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The pages a web search found, each opening in the browser. */
+function SearchLinks({ links }: { readonly links: readonly SearchLink[] }) {
+  return (
+    <ul className="chat-tool-links" data-testid="tool-links">
+      {links.map((link) => (
+        <li key={link.url}>
+          <a href={link.url} target="_blank" rel="noreferrer noopener" title={link.url}>
+            {link.title}
+          </a>
+          <span>{link.host}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -348,6 +419,9 @@ export function ToolContentView({
   switch (content.type) {
     case "text": {
       const unkept = unkeptBytes(content.truncated, blob);
+      // JSON (an MCP server's reply, mostly) is set out over lines.
+      const raw = blob?.text || content.text;
+      const shown = prettyJson(raw) ?? raw;
       return (
         <div
           className="chat-command"
@@ -356,15 +430,11 @@ export function ToolContentView({
           data-test-truncated={String(content.truncated !== null)}
         >
           <pre className="ui-pre" data-testid="tool-text">
-            {blob?.text || content.text}
+            {shown}
           </pre>
-          <OutputImages text={blob?.text || content.text} />
+          <OutputImages text={raw} />
           <div className="chat-output-actions">
-            <CopyButton
-              text={blob?.text || content.text}
-              label="Copy output"
-              caption="Copy output"
-            />
+            <CopyButton text={shown} label="Copy output" caption="Copy output" />
           </div>
           {unkept > 0 ? (
             <p className="chat-marker">

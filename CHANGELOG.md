@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- An opened tool call shows what it was given; a web search lists the pages it found as links; JSON and MCP replies are set out over lines; an edit's row counts its changed lines; Claude's to-do list shows as the turn's checklist; and a compacted conversation shows where it happened, with Compact conversation in the chat's menu. ([#79](https://github.com/itscool2b/auracode/pull/79))
 - Settings is one screen with a search that finds any setting: General, Appearance, Chats, Voice and Shortcuts, then Agents, Plugins & MCP, Instructions and Project memory (Customize opens there), then Account & sync, Data & privacy and About. Chats can keep finished turns' steps open, Voice tests the microphone, and controls keep keyboard focus while they save. ([#78](https://github.com/itscool2b/auracode/pull/78))
 - Dictation is built in and has no time limit: bundled Parakeet and Silero models run on this device, the words appear live at the cursor as you speak, Finish sweeps them into the draft and Cancel dissolves them. ([#77](https://github.com/itscool2b/auracode/pull/77))
 - A finished turn folds its work under "Worked for 1 min 42 s · 12 steps" above its final answer, as Codex does, with a card under the answer naming the files it changed. ([#76](https://github.com/itscool2b/auracode/pull/76))

@@ -33,6 +33,7 @@ export function Header({
   onShowLog,
   onChanges,
   onHistory,
+  onCompact,
   onGit,
   onTools,
   onTerminal,
@@ -63,6 +64,11 @@ export function Header({
   readonly onShowLog: () => void;
   readonly onChanges?: () => void;
   readonly onHistory?: () => void;
+  /**
+   * Asks the agent to summarize the conversation so far to free context (its `/compact`); offered
+   * when the agent lists that command.
+   */
+  readonly onCompact?: () => void;
   readonly onGit?: () => void;
   readonly onTools?: () => void;
   /** Shows or hides the docked terminal panel (Ctrl+`, Cmd+` on macOS). */
@@ -92,6 +98,7 @@ export function Header({
   const quiet = activity !== "waiting" && QUIET.has(status) && !session?.detail;
   const tools = chat && inTauri() ? onTools : undefined;
   const files = chat && inTauri();
+  const compact = live ? onCompact : undefined;
   const item = (run: () => void) => (event: { currentTarget: Element }) => {
     closePopover(event.currentTarget);
     run();
@@ -175,7 +182,7 @@ export function Header({
               </span>
             ) : null}
           </div>
-          {onGit || onTerminal || tools || onHistory ? (
+          {onGit || onTerminal || tools || onHistory || compact ? (
             <div className="chat-header-actions">
               {onGit ? (
                 <button type="button" className="g-menu-item" onClick={item(onGit)}>
@@ -202,6 +209,17 @@ export function Header({
               {onHistory ? (
                 <button type="button" className="g-menu-item" onClick={item(onHistory)}>
                   Conversation history
+                </button>
+              ) : null}
+              {compact ? (
+                <button
+                  type="button"
+                  className="g-menu-item"
+                  data-testid="chat-compact"
+                  title="Summarize the conversation so far to free context (/compact)"
+                  onClick={item(compact)}
+                >
+                  Compact conversation
                 </button>
               ) : null}
             </div>

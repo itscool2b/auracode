@@ -82,10 +82,13 @@ and a hands-on walkthrough before merging.
   no limit, the sweep and the dissolve, failures in the bar. Two threads proved cooler than four.
   Deferred: the optional multilingual Whisper download (transcribe.cpp runs Whisper models too),
   and native macOS and Windows ARM64 runs, which need their builds.
-- [x] 6. Settings (this pull request): one screen with search, its pages in three groups;
+- [x] 6. Settings (#78, merged 2026-11-05): one screen with search, its pages in three groups;
   Customize and Agents open on their pages; Voice with a microphone test; Chats with Keep steps
   open; every change saves in turn without disabling its control, which fixes the radio focus
   loss. Also: the Agents page's red status text meets 4.5:1 in Claude dark.
-- [ ] 7. Missing features A, B, C, D
+- [ ] 7. Missing features A, B, C, D. A, first part (this pull request): tool inputs, web search
+  links, formatted JSON and MCP replies, edit line counts, Claude's to-do list as the plan,
+  compaction notices and Compact conversation. Inline diffs were already there. Left in A:
+  syntax highlighting, Mermaid and LaTeX.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page
