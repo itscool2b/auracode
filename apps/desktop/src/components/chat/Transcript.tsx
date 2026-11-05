@@ -10,6 +10,7 @@ import {
 } from "react";
 import { chatActivity, lastToolKind, streamingText } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
+import { findMatches, highlightRanges } from "../../lib/chat/find";
 import { useKeepStepsOpen } from "../../lib/chat/stepsPreference";
 import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
 import { changedFiles, workedLabel, workFold } from "../../lib/chat/workFold";
@@ -18,6 +19,7 @@ import { formatDuration } from "../../lib/format";
 import { useStickToBottom } from "../../lib/hooks";
 import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
+import { FindBar } from "./FindBar";
 import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
 import { UserMessage } from "./UserMessage";
@@ -70,6 +72,7 @@ export function Transcript({
   actions,
   onLoadEarlier,
   dockedRequests,
+  findRequest = 0,
 }: {
   readonly state: ChatState;
   /** The session has a process (tools still running may finish). */
@@ -77,6 +80,8 @@ export function Transcript({
   readonly actions: TurnActions;
   readonly onLoadEarlier: () => void;
   readonly dockedRequests?: ReadonlySet<string>;
+  /** Each new value opens find in chat, or focuses its field again (Ctrl+F). */
+  readonly findRequest?: number;
 }) {
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
@@ -88,6 +93,22 @@ export function Transcript({
   const [reveals, setReveals] = useState<ReadonlyMap<string, Reveal>>(() => new Map());
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
+  // Find in chat: the query, the match shown, and a count of requests to bring it into view.
+  const [find, setFind] = useState<{
+    readonly query: string;
+    readonly index: number;
+    readonly nonce: number;
+  } | null>(null);
+  useEffect(() => {
+    if (findRequest > 0) setFind((current) => current ?? { query: "", index: 0, nonce: 0 });
+  }, [findRequest]);
+  const query = find?.query ?? "";
+  const matches = useMemo(() => findMatches(segments, query), [segments, query]);
+  const shown =
+    find && matches.length > 0
+      ? ((find.index % matches.length) + matches.length) % matches.length
+      : 0;
+  const current = find ? (matches[shown] ?? null) : null;
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef<StickToBottom | null>(null);
   const captureHistory = useRef<(() => void) | null>(null);
@@ -183,7 +204,10 @@ export function Transcript({
     let prompt: TranscriptRow["prompt"];
     // A finished turn's work folds under one "Worked for" row above its final answer.
     const fold = workFold(segment);
-    const foldOpen = fold !== null && (folds.get(segment.key) ?? keepStepsOpen);
+    const foldOpen =
+      fold !== null &&
+      ((folds.get(segment.key) ?? keepStepsOpen) ||
+        (current?.folded === true && current.segmentKey === segment.key));
     const addItem = (
       index: number,
       item: RenderedItem,
@@ -432,9 +456,87 @@ export function Transcript({
     );
   }, [focusedGroupKey, focusedGroupPhase]);
   const [promptHost, setPromptHost] = useState<HTMLDivElement | null>(null);
+  const findNonce = find?.nonce;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new nonce asks for the match again.
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    const registry = typeof CSS === "undefined" ? undefined : CSS.highlights;
+    if (!registry || typeof Highlight === "undefined") return;
+    const clear = () => {
+      registry.delete("chat-find");
+      registry.delete("chat-find-current");
+    };
+    if (!element || !query.trim() || matches.length === 0) {
+      clear();
+      return;
+    }
+    const rowsWith = new Set(matches.map((match) => match.rowKey));
+    // Rows come and go as the reader scrolls; each change paints the rendered ones again.
+    const paint = (): Range | null => {
+      const all: Range[] = [];
+      let shownRange: Range | null = null;
+      for (const row of element.querySelectorAll<HTMLElement>("[data-row-key]")) {
+        const key = row.dataset.rowKey;
+        if (!key || !rowsWith.has(key)) continue;
+        const content = row.querySelector(".chat-user-text, .chat-message") ?? row;
+        const ranges = highlightRanges(content, query);
+        all.push(...ranges);
+        if (current?.rowKey === key)
+          shownRange = ranges[Math.min(current.occurrence, ranges.length - 1)] ?? null;
+      }
+      registry.set("chat-find", new Highlight(...all));
+      if (shownRange) registry.set("chat-find-current", new Highlight(shownRange));
+      else registry.delete("chat-find-current");
+      return shownRange;
+    };
+    const shownRange = paint();
+    // The row is in view; bring the words themselves there, a long answer's included.
+    const frame = requestAnimationFrame(() => {
+      const range = paint() ?? shownRange;
+      if (!range) return;
+      const box = range.getBoundingClientRect();
+      const view = element.getBoundingClientRect();
+      if (box.top < view.top + 48 || box.bottom > view.bottom - 48)
+        element.scrollTop += box.top - view.top - view.height / 2 + box.height / 2;
+    });
+    let pending = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => void paint());
+    });
+    observer.observe(element, { childList: true, subtree: true, characterData: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(pending);
+      observer.disconnect();
+      clear();
+    };
+  }, [query, matches, current, findNonce]);
+  const closeFind = () => {
+    setFind(null);
+    scroller.current?.focus({ preventScroll: true });
+  };
   return (
     <div className="chat-transcript-shell">
       <div ref={setPromptHost} />
+      {find ? (
+        <FindBar
+          query={find.query}
+          onQuery={(next) =>
+            setFind((value) => ({ query: next, index: 0, nonce: (value?.nonce ?? 0) + 1 }))
+          }
+          index={shown}
+          count={matches.length}
+          limited={state.hasMore}
+          onStep={(step) =>
+            setFind((value) =>
+              value ? { ...value, index: shown + step, nonce: value.nonce + 1 } : value,
+            )
+          }
+          onClose={closeFind}
+          focusRequest={findRequest}
+        />
+      ) : null}
       <div
         ref={scrollRef}
         className="chat-transcript"
@@ -456,6 +558,7 @@ export function Transcript({
             captureHistory={captureHistory}
             focusedKey={focusedKey}
             onFocusKey={setFocusedKey}
+            revealRow={current && find ? { key: current.rowKey, nonce: find.nonce } : null}
           />
         </DisclosureMemory.Provider>
       </div>

@@ -136,6 +136,8 @@ and a hands-on walkthrough before merging.
       shown without credentials, and never forces. As with every Git command auracode runs, the
       repository's hooks do not run (an agent could have written them) and Git asks for no
       sign-in, so a push needs Git's stored credentials.
-  - [ ] D.
+  - [ ] D, in several pull requests.
+    - [x] Find in chat (#87, merged 2026-11-05): Ctrl+F opens a solid bar at the transcript's top right that counts the query in messages and answers (tool calls and cards are not searched), highlights the matches with the CSS Custom Highlight API and the shown one in the theme's action colour, and steps with Enter and Shift+Enter. A match in a row the virtual list has not rendered is brought into view, and one in a finished turn's folded work opens the fold while it is shown. Matches count in the loaded messages; the bar says so when earlier ones are not loaded.
+    - [ ] Optional sounds, open a file at its line, worktree run scripts with ports, resume terminal sessions, share a native MCP server with every agent.
 - [ ] 8. Linux
 - [ ] 9. Official builds and the download page

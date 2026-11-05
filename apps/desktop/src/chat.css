@@ -3744,3 +3744,82 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 .chat-diff-revert {
   margin-left: auto;
 }
+
+/* Find in chat (Ctrl+F): a solid bar at the transcript's top right, over the text it finds. */
+.chat-find {
+  position: absolute;
+  top: var(--g-space-8);
+  right: var(--g-space-16);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-2);
+  box-sizing: border-box;
+  width: min(360px, calc(100% - var(--g-space-32)));
+  padding: var(--g-space-4) var(--g-space-4) var(--g-space-4) var(--g-space-12);
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-menu-fill);
+  box-shadow:
+    var(--g-shadow-pop),
+    inset 0 0 0 1px var(--g-glass-rim);
+  font-family: var(--g-sans);
+}
+
+.chat-find:focus-within {
+  box-shadow:
+    var(--g-shadow-pop),
+    inset 0 0 0 1px var(--g-focus);
+}
+
+.chat-find-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-2);
+}
+
+.chat-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-fg-1);
+  font-family: inherit;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  outline: none;
+}
+
+.chat-find-input::placeholder {
+  color: var(--g-fg-3);
+  opacity: 1;
+}
+
+.chat-find-count {
+  padding: 0 var(--g-space-4);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-find-note {
+  margin: 0;
+  padding: 0 var(--g-space-8) var(--g-space-4) 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* Every match in the rendered text, and the one shown in the theme's own action colour. */
+::highlight(chat-find) {
+  background-color: var(--g-selection);
+  color: var(--g-fg-1);
+}
+
+::highlight(chat-find-current) {
+  background-color: var(--g-volt);
+  color: var(--g-bg);
+}
