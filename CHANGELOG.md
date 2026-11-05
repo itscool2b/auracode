@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-05
+
+- The composer's controls are quiet ghost pills with only Send filled, the account shows as its initial ringed by its usage, the model pill names the model Default stands for, and the picker reads models, thinking, then every agent, always in view. ([#73](https://github.com/itscool2b/auracode/pull/73))
+
 ## 2026-11-04
 
 - Themes: Settings offers one for every supported agent (Claude Code, Codex, Grok Build, Pi, Antigravity, Cursor, OpenCode, oh-my-pi and Hermes) beside Aura, each in light and dark, applied at once and saved in the profile. ([#72](https://github.com/itscool2b/auracode/pull/72))
