@@ -17,6 +17,7 @@ mod publish;
 mod records;
 mod recovery;
 mod recreate;
+pub(crate) mod run;
 #[cfg(test)]
 mod recreate_tests;
 pub(crate) mod setup;

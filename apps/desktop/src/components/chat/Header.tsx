@@ -1,5 +1,5 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { Ellipsis, PanelRight } from "lucide-react";
+import { Ellipsis, PanelRight, Play, Square } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
@@ -41,6 +41,7 @@ export function Header({
   onExport,
   onDebug,
   changesOpen = false,
+  run,
 }: {
   readonly state: ChatState;
   /**
@@ -77,6 +78,15 @@ export function Header({
   readonly onExport?: () => void;
   readonly onDebug?: () => void;
   readonly changesOpen?: boolean;
+  /** Run, in a worktree chat whose folder setup saved a Run command: start it, or stop it. */
+  readonly run?: {
+    /** "pnpm dev". */
+    readonly label: string;
+    readonly port: number;
+    readonly running: boolean;
+    readonly onRun: () => void;
+    readonly onStop: () => void;
+  };
 }) {
   const { session } = state;
   const chat = listed ?? state.chat;
@@ -150,6 +160,27 @@ export function Header({
         ) : null}
       </div>
       <div className="chat-header-controls">
+        {run ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-28 chat-run"
+            data-testid="chat-run"
+            data-running={run.running ? "" : undefined}
+            title={
+              run.running
+                ? `Stop ${run.label}`
+                : `Run ${run.label} in this worktree, on localhost:${run.port}`
+            }
+            onClick={run.running ? run.onStop : run.onRun}
+          >
+            {run.running ? (
+              <Square size={14} aria-hidden="true" />
+            ) : (
+              <Play size={14} aria-hidden="true" />
+            )}
+            {run.running ? "Stop" : "Run"}
+          </button>
+        ) : null}
         {onChanges ? (
           <button
             type="button"

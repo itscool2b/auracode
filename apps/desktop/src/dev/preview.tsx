@@ -37,7 +37,7 @@ import { NewChatPreview } from "./newChatPreview";
 import type { NewChatScenario } from "./newChatWorktreeFixture";
 import { withPreviewContext } from "./previewContext";
 import { taskPreviewEvents, taskPreviewRecords } from "./tasksPreview";
-import { terminalPanelFixture } from "./terminalPanelFixture";
+import { runFixture, terminalPanelFixture } from "./terminalPanelFixture";
 
 /**
  * New chat in a project folder, with Rust's worktree review imitated: a Git folder (the default
@@ -1247,6 +1247,9 @@ function Preview() {
       }),
       { nativeRewind },
     );
+    // `?preview=terminal-panel&run=1`: a worktree chat whose folder setup saved a Run command.
+    if (mode === "terminal-panel" && new URLSearchParams(location.search).has("run"))
+      Object.assign(context, { run: runFixture() });
     return shown === "missing-worktree"
       ? Object.assign(context, { git: missingWorktreeGit() })
       : context;

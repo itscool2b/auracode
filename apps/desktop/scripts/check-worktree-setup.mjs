@@ -25,7 +25,12 @@ export async function checkWorktreeSetup(browser, url, out, engine) {
         .getByLabel("Files to copy, one relative path per line")
         .fill(".env.local\nconfig/development.json");
       await page.getByLabel("Setup program", { exact: true }).fill("node");
-      await page.getByLabel("Arguments, one per line").fill("scripts/setup.mjs\n--local");
+      await page
+        .getByLabel("Arguments, one per line", { exact: true })
+        .fill("scripts/setup.mjs\n--local");
+      // Run: what the Run button starts in a worktree of this folder, saved with the rest.
+      await page.getByLabel("Run program", { exact: true }).fill("pnpm");
+      await page.getByLabel("Run arguments, one per line", { exact: true }).fill("dev");
       assert.equal(
         await page.getByRole("button", { name: "Review setup", exact: true }).isDisabled(),
         true,
@@ -34,6 +39,10 @@ export async function checkWorktreeSetup(browser, url, out, engine) {
       await page.getByRole("button", { name: "Review setup", exact: true }).click();
       await page.getByRole("region", { name: "Review worktree setup" }).waitFor();
       assert.deepEqual(await page.evaluate(() => window.setupCalls), ["save", "review"]);
+      assert.deepEqual(await page.evaluate(() => window.setupSaved.run), {
+        program: "pnpm",
+        args: ["dev"],
+      });
     };
     await prepare();
     await settled(page);

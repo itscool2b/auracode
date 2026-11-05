@@ -79,6 +79,7 @@ mod tests {
         let chat = db.chat("/workspace");
         let other = db.chat("/other");
         let input = WorktreeSetupInput {
+            run: None,
             files: vec![".env".into()],
             command: Some(aura_protocol::worktree_setup::SetupCommand {
                 program: "node".into(),
@@ -142,6 +143,7 @@ mod tests {
         let mut explicit = by_folder(
             "/workspace",
             Some(WorktreeSetupInput {
+                run: None,
                 files: vec![".env".into(), "AGENTS.md".into()],
                 command: input.command.clone(),
             }),

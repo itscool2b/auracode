@@ -52,9 +52,12 @@ export function TerminalPanel({
   panels,
   onHidden,
   review,
+  onRun,
 }: {
   readonly chatId: string;
   readonly panels: TerminalPanels;
+  /** Starts Run again, for a Run tab that failed. */
+  readonly onRun?: () => void;
   /** Focus goes back to the conversation when the panel hides from inside. */
   readonly onHidden?: () => void;
   readonly review?: ReactNode;
@@ -267,6 +270,19 @@ export function TerminalPanel({
             ),
           )}
         </div>
+        {active?.url ? (
+          // Run's address opens in the browser, as links in answers do (the opener plugin takes
+          // every http link with target=_blank).
+          <a
+            className="terminal-panel-url"
+            href={active.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={`Open ${active.url} in the browser`}
+          >
+            {active.url.replace(/^http:\/\//, "")}
+          </a>
+        ) : null}
         <span className="terminal-panel-folder" title={active?.folder ?? undefined}>
           {active?.folder ?? ""}
         </span>
@@ -353,6 +369,11 @@ export function TerminalPanel({
                 onClick={() => {
                   if (active.purpose === "setup") {
                     panels.showReview(chatId);
+                    return;
+                  }
+                  if (active.purpose === "run") {
+                    void panels.closeTab(active.id);
+                    onRun?.();
                     return;
                   }
                   const shell = active.shell?.id;

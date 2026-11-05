@@ -245,6 +245,7 @@ async fn saved_setup_runs_after_creation_and_holds_the_agent_for_the_command() {
         .expect("direct chat");
     std::fs::write(rig.folder.join(".env"), "FIXTURE=one").expect("env fixture");
     let recipe = WorktreeSetupInput {
+        run: None,
         files: vec![".env".into()],
         command: Some(SetupCommand {
             program: std::env::current_exe()
@@ -606,6 +607,7 @@ async fn setup_source(rig: &Rig, project: &ProjectSummary) {
         .worktree_setup_save(
             &source.chat.id,
             WorktreeSetupInput {
+                run: None,
                 files: vec![],
                 command: Some(SetupCommand {
                     program: std::env::current_exe().unwrap().to_string_lossy().into(),
@@ -962,5 +964,100 @@ async fn new_worktree_chats_get_ignored_instruction_files_unless_turned_off() {
     assert!(
         !Path::new(&second.worktree.path).join("CLAUDE.md").exists(),
         "turned off, a new worktree gets only what Git checks out"
+    );
+}
+
+#[tokio::test]
+async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
+    let mut rig = rig(
+        vec![idle_driver("run-source"), idle_driver("run-worktree")],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    enable_worktree_fixture(&mut rig).await;
+    let project = project(&rig, &rig.folder).await;
+    let direct = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .expect("direct chat");
+    // A chat in the project folder itself has no worktree, so nothing to run.
+    assert_eq!(rig.manager.worktree_run(&direct.chat.id).await.unwrap(), None);
+    let program = std::env::current_exe().expect("exe");
+    let run = SetupCommand {
+        program: program.to_string_lossy().into(),
+        args: vec!["--not-executed".into()],
+    };
+    rig.manager
+        .worktree_setup_save(
+            &direct.chat.id,
+            WorktreeSetupInput {
+                files: Vec::new(),
+                command: None,
+                run: Some(run.clone()),
+            },
+        )
+        .await
+        .expect("save recipe");
+    let preview = plan(&rig, input(&project)).await;
+    let created = rig
+        .manager
+        .worktree_chat_apply(&preview.token)
+        .await
+        .expect("apply");
+    let chat = created.chat.chat.id.clone();
+    let info = rig
+        .manager
+        .worktree_run(&chat)
+        .await
+        .expect("run info")
+        .expect("a worktree chat can run");
+    assert_eq!(info.command.as_ref(), Some(&run));
+    assert_eq!(canonical(&info.folder), canonical(&preview.path));
+    assert!((25_000..32_000).contains(&info.port));
+    assert_eq!(info.port % 10, 0);
+    // The block is kept, not given again.
+    let again = rig.manager.worktree_run(&chat).await.unwrap().unwrap();
+    assert_eq!(again.port, info.port);
+    // With the chat's agent stopped, nothing else holds the worktree.
+    if created.started {
+        status(&rig, &chat, SessionStatus::Ready).await;
+    }
+    rig.manager.stop(&chat).await.expect("stop");
+    status(&rig, &chat, SessionStatus::Stopped).await;
+    let folder = super::super::live::normalize_path(canonical(&preview.path));
+    let live = &rig.manager.shared().live;
+    assert!(live.reserve_folder(&folder));
+    live.release_folder(&folder);
+    let plan = rig.manager.prepare_worktree_run(&chat).await.expect("run plan");
+    assert_eq!(canonical(&plan.spec.launch.program), canonical(&program));
+    assert_eq!(plan.spec.launch.args, [std::ffi::OsString::from("--not-executed")]);
+    let port = std::ffi::OsString::from(info.port.to_string());
+    assert_eq!(
+        plan.spec.launch.set_env,
+        [
+            ("AURACODE_PORT".into(), port.clone()),
+            ("PORT".into(), port)
+        ]
+    );
+    assert_eq!(canonical(&plan.spec.folder), canonical(&preview.path));
+    // Like a project terminal, Run holds the worktree: folder operations wait until it stops.
+    assert!(!live.reserve_folder(&folder), "a folder operation ran beside Run");
+    drop(plan);
+    assert!(live.reserve_folder(&folder));
+    live.release_folder(&folder);
+    // Without a saved Run command there is nothing to start.
+    rig.manager
+        .worktree_setup_save(&direct.chat.id, WorktreeSetupInput::default())
+        .await
+        .expect("clear recipe");
+    assert!(rig.manager.prepare_worktree_run(&chat).await.is_err());
+    assert_eq!(
+        rig.manager.worktree_run(&chat).await.unwrap().unwrap().command,
+        None
     );
 }

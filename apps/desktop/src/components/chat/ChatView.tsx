@@ -7,6 +7,7 @@ import type {
   PendingHandoff,
   StorageStatus,
   WorktreeRecreatePreview,
+  WorktreeRun,
 } from "../../bindings";
 import { takesAccounts } from "../../lib/agentAccounts";
 import { ChatStore } from "../../lib/chat/chatStore";
@@ -22,6 +23,7 @@ import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import { editorName } from "../../lib/projectTools";
 import type { TerminalPanels } from "../../lib/terminalPanel";
+import { runLabel } from "../../lib/worktreeRun";
 import { AccountPicker } from "./AccountPicker";
 import { BackgroundTasks } from "./BackgroundTasks";
 import { ChangesPanel, type RewindRequest } from "./ChangesPanel";
@@ -113,6 +115,38 @@ export function ChatView({
   // The background task the right panel follows; it and the Changes panel share the panel's place.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [gitOpen, setGitOpen] = useState(false);
+  // Run, for a worktree chat whose folder setup saved a command. Read again when the Git dialog,
+  // where setup is edited, closes.
+  const [run, setRun] = useState<WorktreeRun | null>(null);
+  useEffect(() => {
+    if (gitOpen) return;
+    let current = true;
+    transport.run?.info(chatId).then(
+      (value) => {
+        if (current) setRun(value);
+      },
+      () => {
+        if (current) setRun(null);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [transport.run, chatId, gitOpen]);
+  const runningTab = useSyncExternalStore(
+    terminals?.subscribe ?? noSubscribe,
+    () => terminals?.runningTab(chatId) ?? null,
+    () => null,
+  );
+  const startRun = useCallback(() => {
+    if (!terminals || !transport.run || !run?.command) return;
+    terminals.runTab(
+      chatId,
+      transport.run.terminal(chatId),
+      run.folder,
+      `http://localhost:${run.port}`,
+    );
+  }, [terminals, transport.run, run, chatId]);
   const [dialog, setDialog] = useState<"tools" | "export" | "debug" | null>(null);
   const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
   const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
@@ -757,6 +791,19 @@ export function ChatView({
             onDebug={() => setDialog("debug")}
             changesOpen={changesOpen}
             onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
+            run={
+              run?.command && terminals
+                ? {
+                    label: runLabel(run.command),
+                    port: run.port,
+                    running: runningTab !== null,
+                    onRun: startRun,
+                    onStop: () => {
+                      if (runningTab) void terminals.closeTab(runningTab);
+                    },
+                  }
+                : undefined
+            }
           />
           <div className="chat-work-area">
             <div className="chat-conversation">
@@ -1055,6 +1102,7 @@ export function ChatView({
                   chatId={chatId}
                   panels={terminals}
                   onHidden={focusComposer}
+                  onRun={run?.command ? startRun : undefined}
                   review={
                     setup &&
                     setup.state !== "running" &&

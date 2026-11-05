@@ -30,6 +30,10 @@ impl WorktreeSetupAttempt {
 pub struct WorktreeSetupInput {
     pub files: Vec<String>,
     pub command: Option<SetupCommand>,
+    /// What Run starts in a worktree of this folder, with `AURACODE_PORT` and `PORT` set to the
+    /// worktree's first port: a dev server, say. Recipes saved before Run have none.
+    #[serde(default)]
+    pub run: Option<SetupCommand>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -67,4 +71,13 @@ pub struct WorktreeSetupResult {
     pub copied: Vec<String>,
     pub command_token: Option<String>,
     pub warning: Option<String>,
+}
+
+/// A worktree chat's Run: the saved command, if any, and the first of the ten local ports the
+/// worktree's processes get (`AURACODE_PORT`; Run also sets `PORT`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRun {
+    pub command: Option<SetupCommand>,
+    pub port: u16,
+    pub folder: String,
 }

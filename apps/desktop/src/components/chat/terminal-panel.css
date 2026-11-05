@@ -182,6 +182,25 @@
 }
 
 /* The reviewed folder: a worktree chat shows its worktree. Machine data, so mono. */
+/* Run's address, before the folder: opens in the browser. */
+.terminal-panel-url {
+  flex: none;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-decoration: underline;
+  text-decoration-color: var(--g-fg-4);
+  text-underline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .terminal-panel-url:hover {
+    color: var(--g-fg-1);
+    text-decoration-color: var(--g-fg-1);
+  }
+}
+
 .terminal-panel-folder {
   flex: 1 1 0;
   min-width: 0;

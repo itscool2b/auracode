@@ -83,6 +83,42 @@ describe("the docked terminal panels", () => {
     await panels.closeTab(panels.panel("chat").active as string);
     expect(runtimes[0]?.disposed).toBe(true);
   });
+  it("runs Run in one tab of its own per chat, with its address, until it stops", async () => {
+    const { panels, runtimes, api, tab } = rig({ limit: 2 });
+    const transport = {} as TerminalTransport;
+    panels.runTab("chat", transport, "C:/worktrees/run", "http://localhost:25040");
+    const id = panels.panel("chat").active as string;
+    expect(tab(id)).toMatchObject({
+      purpose: "run",
+      title: "Run",
+      folder: "C:/worktrees/run",
+      url: "http://localhost:25040",
+      status: { state: "starting" },
+    });
+    expect(api.review).not.toHaveBeenCalled();
+    expect(runtimes[0]?.transport).toBe(transport);
+    expect(panels.runningTab("chat")).toBe(id);
+    expect(panels.runningTab("other")).toBeNull();
+    // Asking again while it runs shows that tab instead of starting another.
+    await panels.newTab("chat");
+    panels.runTab("chat", transport, "C:/worktrees/run", "http://localhost:25040");
+    expect(panels.panel("chat").active).toBe(id);
+    expect(runtimes).toHaveLength(2);
+    // Renamed and cleared, it is Run again.
+    panels.rename(id, "Dev server");
+    panels.rename(id, " ");
+    expect(tab(id)?.title).toBe("Run");
+    // Once it exits it no longer counts as running, and the app's limit holds for a new one.
+    runtimes[0]?.status({ state: "finished", exitCode: 1 });
+    expect(panels.runningTab("chat")).toBeNull();
+    panels.runTab("other", transport, "C:/worktrees/other", "http://localhost:25050");
+    panels.runTab("third", transport, "C:/worktrees/third", "http://localhost:25060");
+    expect(panels.panel("third").notice).toBe(
+      "2 terminals are open. Close one before starting Run.",
+    );
+    await panels.closeTab(id);
+    expect(runtimes[0]?.disposed).toBe(true);
+  });
   it("shows a reviewed shell in the chat's folder on the first toggle, and only then", async () => {
     const { api, panels, runtimes, tab } = rig();
     expect(panels.panel("chat").open).toBe(false);
