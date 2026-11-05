@@ -12,6 +12,7 @@ import { takesAccounts } from "../../lib/agentAccounts";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { queueWaitView } from "../../lib/chat/queueWait";
+import { useReviewComments } from "../../lib/chat/review";
 import { newestTurnKey, shownTasks, taskDisplay, tasksByToolCall } from "../../lib/chat/tasks";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
@@ -103,6 +104,8 @@ export function ChatView({
   const [changesOpen, setChangesOpen] = useState(false);
   // A Rewind on a sent message: Changes opens on the files before that turn, all selected.
   const [rewind, setRewind] = useState<RewindRequest | null>(null);
+  // Comments on Changes' diffs, kept while the panel and this view close, until sent or discarded.
+  const [reviewComments, changeReviewComments] = useReviewComments(chatId);
   // The background task the right panel follows; it and the Changes panel share the panel's place.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [gitOpen, setGitOpen] = useState(false);
@@ -1008,6 +1011,25 @@ export function ChatView({
               }}
               onStop={() => void store.stop()}
               rewind={rewind}
+              comments={reviewComments}
+              onCommentsChange={changeReviewComments}
+              // The comments go out as the person's own message, as the composer would send it.
+              onSendReview={async (text) =>
+                (await store.send(text))
+                  ? null
+                  : (store.getSnapshot().sendError ?? "The message could not be sent.")
+              }
+              reviewBlocked={
+                pendingRequests.length > 0
+                  ? `Answer ${agent?.name ?? state.chat?.agent_name ?? "the agent"}'s ${pendingRequests.length === 1 ? "request" : "requests"} first`
+                  : !handoffLoaded ||
+                      canContinueHere ||
+                      handoffError !== null ||
+                      state.steeringPending ||
+                      state.controlSaving !== null
+                    ? "Sending waits until the chat can take a message"
+                    : null
+              }
               onEditFrom={
                 transport.conversation
                   ? (turnId) => setContinuation({ type: "edit", turn_id: turnId })

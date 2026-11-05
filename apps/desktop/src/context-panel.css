@@ -858,3 +858,18 @@
 .context-loaded-state[data-state="failed"] {
   background-color: var(--g-red);
 }
+
+/* Review: the diffs' comments go to the agent as one message, or the agent is asked to review. */
+.changes-review {
+  flex-wrap: wrap;
+}
+
+/* Wrapped under a long note, the actions keep to the right. */
+.changes-review-actions {
+  margin-left: auto;
+}
+
+.changes-review-error {
+  flex-basis: 100%;
+  margin: 0;
+}

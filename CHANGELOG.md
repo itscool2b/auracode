@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Review in Changes: comment on any line of a diff, by pointer or keyboard, and send the comments to the agent as one message that quotes each line with its file and number; or ask the agent to review the changes and report problems before it changes anything. Unsent comments wait while the panel or the chat closes. ([#84](https://github.com/itscool2b/auracode/pull/84))
 - ACP agents' commands show their output as it comes and their exit code, where they said "terminal output is not available". ([#83](https://github.com/itscool2b/auracode/pull/83))
 - MCP servers' forms and browser steps now show in Claude and Codex chats (they were cancelled), checked field by field; and the Session tab lists what the session loaded: MCP servers with their state, skills, plugins and subagents, as each agent reports them. ([#82](https://github.com/itscool2b/auracode/pull/82))
 - Fork into a new chat from the latest answer continues Claude's or Pi's own session, with everything it knew; Rewind on a sent message restores the files from before it and goes on to edit it, from auracode's checkpoints or, in Claude chats, from Claude's own copies of what it edited; and Pi can be steered while it works. ([#81](https://github.com/itscool2b/auracode/pull/81))

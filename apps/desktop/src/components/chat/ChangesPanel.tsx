@@ -1,4 +1,4 @@
-import { FileDiff, RefreshCw, RotateCcw, X } from "lucide-react";
+import { FileDiff, RefreshCw, RotateCcw, ScanSearch, Send, X } from "lucide-react";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import type {
   AgentEntry,
@@ -11,6 +11,12 @@ import type {
 } from "../../bindings";
 import type { ChangesTransport } from "../../lib/changes";
 import type { ChatState } from "../../lib/chat/chatStore";
+import {
+  type CommentsChange,
+  type DiffComment,
+  reviewMessage,
+  reviewRequest,
+} from "../../lib/chat/review";
 import { hasProcess, type Transcript } from "../../lib/chat/transcript";
 import type { ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
@@ -50,6 +56,10 @@ export function ChangesPanel({
   agent,
   rewind = null,
   onEditFrom,
+  comments = [],
+  onCommentsChange,
+  onSendReview,
+  reviewBlocked = null,
 }: {
   readonly chatId: string;
   readonly api: ChangesTransport;
@@ -64,6 +74,13 @@ export function ChangesPanel({
   readonly rewind?: RewindRequest | null;
   /** Continues the conversation from a turn: its Edit, as a rewind's last step. */
   readonly onEditFrom?: (turnId: string) => void;
+  /** Comments on the diffs' lines, kept by the chat until they are sent or discarded. */
+  readonly comments?: readonly DiffComment[];
+  readonly onCommentsChange?: (change: CommentsChange) => void;
+  /** Sends a message as the person's own; answers why it was not sent, or null. */
+  readonly onSendReview?: (text: string) => Promise<string | null>;
+  /** Why no message can go now (the comments wait), or null. */
+  readonly reviewBlocked?: string | null;
 }) {
   const title = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -196,12 +213,20 @@ export function ChangesPanel({
       setActing(false);
     }
   };
+  // Comments on files put back are about changes that no longer exist.
+  const dropComments = (paths: readonly string[]) => {
+    const gone = new Set(paths.map((path) => path.replaceAll("\\", "/")));
+    onCommentsChange?.((current) =>
+      current.filter((comment) => !gone.has(comment.path.replaceAll("\\", "/"))),
+    );
+  };
   const revert = async () => {
     if (!preview || acting) return;
     setActing(true);
     try {
       const outcome = await api.revert(chatId, preview.token);
       setResult(outcome);
+      dropComments(outcome.applied);
       setSelected(new Set());
       setRevision((value) => value + 1);
       // A rewind goes on to the message's Edit only when every file came back.
@@ -262,6 +287,7 @@ export function ChangesPanel({
               deletions: outcome.deletions ?? nativePreview.deletions,
             },
       );
+      dropComments(outcome.files.length ? outcome.files : nativePreview.files);
       setRevision((value) => value + 1);
       if (editAfter && onEditFrom) onEditFrom(scope);
     } catch (error) {
@@ -271,6 +297,40 @@ export function ChangesPanel({
       setActing(false);
     }
   };
+  // Review: the comments go to the agent as one message, or the agent is asked to review.
+  const [reviewNote, setReviewNote] = useState<{
+    readonly text: string;
+    readonly queued: boolean;
+  } | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const working = status === "running" || status === "cancelling";
+  useEffect(() => {
+    // A queued message has gone once the turn before it ends; the note would no longer be true.
+    if (!working) setReviewNote((note) => (note?.queued ? null : note));
+  }, [working]);
+  const sendReview = async (text: string, sent: string, clear: boolean) => {
+    if (!onSendReview || sending) return;
+    const queued = working;
+    setSending(true);
+    setReviewError(null);
+    try {
+      const failure = await onSendReview(text);
+      if (failure !== null) setReviewError(failure);
+      else {
+        setReviewNote({ text: queued ? "Queued for after this turn." : sent, queued });
+        if (clear) onCommentsChange?.(() => []);
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+  const commentedFiles = new Set(comments.map((comment) => comment.path)).size;
+  const changedFiles = snapshot?.files.length
+    ? snapshot.files.map((file) => file.path)
+    : native
+      ? (nativePreview?.files ?? [])
+      : [];
   const turns = transcript.segments
     .flatMap((segment) => {
       if (!segment.turnId) return [];
@@ -281,6 +341,7 @@ export function ChangesPanel({
         {
           id: segment.turnId,
           label: prompt?.kind === "user" ? prompt.text.slice(0, 70) : "Earlier turn",
+          text: prompt?.kind === "user" ? prompt.text : "",
         },
       ];
     })
@@ -535,6 +596,25 @@ export function ChangesPanel({
                     ) : null}
                     <DiffBlock
                       wholeFile={!diff.truncated}
+                      review={
+                        // Comments need the file's own line numbers: a shortened diff has none.
+                        onCommentsChange && !diff.truncated
+                          ? {
+                              comments: comments.filter((comment) => comment.path === diff.path),
+                              onAdd: (comment) => {
+                                setReviewNote(null);
+                                onCommentsChange((current) => [
+                                  ...current,
+                                  { ...comment, id: crypto.randomUUID(), path: diff.path },
+                                ]);
+                              },
+                              onRemove: (id) =>
+                                onCommentsChange((current) =>
+                                  current.filter((comment) => comment.id !== id),
+                                ),
+                            }
+                          : undefined
+                      }
                       key={`${checkpoint?.id}:${diff.path}`}
                       path={diff.path}
                       oldText={diff.before ?? ""}
@@ -583,6 +663,75 @@ export function ChangesPanel({
                 </section>
               ) : null}
             </div>
+            {onCommentsChange && onSendReview && (comments.length || changedFiles.length) ? (
+              <div className="changes-panel-footer changes-review" data-testid="changes-review">
+                <span role="status">
+                  {reviewBlocked ??
+                    (comments.length
+                      ? `${comments.length} ${comments.length === 1 ? "comment" : "comments"}${commentedFiles > 1 ? ` on ${commentedFiles} files` : ""}`
+                      : (reviewNote?.text ??
+                        (snapshot?.files.length ? "Comment on any line" : null)))}
+                </span>
+                <div className="ui-row changes-review-actions">
+                  {comments.length ? (
+                    <>
+                      <button
+                        type="button"
+                        className="g-button g-button-ghost g-button-28"
+                        disabled={sending}
+                        onClick={() => {
+                          setReviewError(null);
+                          onCommentsChange(() => []);
+                        }}
+                      >
+                        Discard
+                      </button>
+                      <button
+                        type="button"
+                        className="g-button g-button-28"
+                        disabled={sending || reviewBlocked !== null}
+                        onClick={() =>
+                          void sendReview(
+                            reviewMessage(comments),
+                            comments.length === 1 ? "Comment sent." : "Comments sent.",
+                            true,
+                          )
+                        }
+                      >
+                        <Send size={13} />
+                        {comments.length === 1
+                          ? "Send comment"
+                          : `Send ${comments.length} comments`}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="g-button g-button-28"
+                      disabled={sending || reviewBlocked !== null}
+                      onClick={() =>
+                        void sendReview(
+                          reviewRequest(
+                            scope ? (turns.find((turn) => turn.id === scope)?.text ?? "") : null,
+                            changedFiles,
+                          ),
+                          "Review requested.",
+                          false,
+                        )
+                      }
+                    >
+                      <ScanSearch size={13} />
+                      Ask {agentName} to review
+                    </button>
+                  )}
+                </div>
+                {reviewError ? (
+                  <p className="ui-error changes-review-error" role="alert">
+                    {reviewError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {native ? (
               <footer className="changes-panel-footer">
                 <span>

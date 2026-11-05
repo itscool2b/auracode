@@ -3588,3 +3588,114 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-1);
   font-weight: 500;
 }
+
+/* Comments on a diff's lines (Changes' review). A line's button shows on hover or focus. */
+.chat-diff-scroll[data-review] {
+  container-type: inline-size;
+}
+
+.chat-diff-comment-cell {
+  width: 24px;
+  min-width: 24px;
+}
+
+.chat-diff-comment-add {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--g-radius-4);
+  background: none;
+  color: var(--g-fg-3);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.chat-diff-line:is(:hover, :focus-within) .chat-diff-comment-add {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .chat-diff-comment-add:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+/* Without hover, every line keeps its button in sight. */
+@media (hover: none) {
+  .chat-diff-comment-add {
+    opacity: 1;
+  }
+}
+
+/* A comment stays in the scrolled view's width, however far its long lines scroll. */
+.chat-diff-pinned {
+  position: sticky;
+  left: var(--g-space-8);
+  box-sizing: border-box;
+  width: calc(100cqi - var(--g-space-16));
+  margin: var(--g-space-4) var(--g-space-8) var(--g-space-8);
+}
+
+.chat-diff-comment,
+.chat-diff-comment-editor {
+  display: flex;
+  gap: var(--g-space-8);
+  padding: var(--g-space-8);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  font-family: var(--g-sans);
+  white-space: normal;
+}
+
+.chat-diff-comment {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.chat-diff-comment-editor {
+  flex-direction: column;
+}
+
+.chat-diff-comment-editor .g-textarea {
+  min-height: 56px;
+  padding: var(--g-space-6) var(--g-space-12);
+  resize: vertical;
+}
+
+.chat-diff-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-space-4);
+}
+
+.chat-diff-comment-text {
+  margin: 0;
+  padding: var(--g-space-2) 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-diff-comment-place {
+  color: var(--g-fg-3);
+}
+
+/* Comments whose lines the file no longer has, after its lines. */
+.chat-diff-lost {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  margin: 0;
+  padding: var(--g-space-8);
+  list-style: none;
+  border-top: 1px solid var(--g-line-faint);
+}
