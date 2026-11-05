@@ -9,19 +9,29 @@ export function isTheme(value: unknown): value is ThemePreference {
   return typeof value === "string" && (THEME_IDS as readonly string[]).includes(value);
 }
 
-let theme: ThemePreference = "aura";
+/**
+ * The theme a profile has until it chooses one, and what a missing or unknown saved theme reads
+ * as (owner, 4 November 2026: Claude Code's). A saved choice, Aura included, is kept.
+ */
+export const DEFAULT_THEME: ThemePreference = "claude";
+
+let theme: ThemePreference = DEFAULT_THEME;
 const themeListeners = new Set<() => void>();
+
+/** Aura is the base palette itself and sets no attribute; every other theme names its own. */
+function paintPalette(next: ThemePreference): void {
+  if (typeof document === "undefined") return;
+  if (next === "aura") delete document.documentElement.dataset.palette;
+  else document.documentElement.dataset.palette = next;
+}
 
 /**
  * The desktop theme: a palette layer over the tokens for whichever appearance is resolved
- * (themes.css). Aura is the base palette itself and sets no attribute.
+ * (themes.css).
  */
 export function setThemePreference(next: ThemePreference): void {
   theme = next;
-  if (typeof document !== "undefined") {
-    if (next === "aura") delete document.documentElement.dataset.palette;
-    else document.documentElement.dataset.palette = next;
-  }
+  paintPalette(next);
   for (const listener of themeListeners) listener();
 }
 
@@ -116,7 +126,12 @@ export function initializeAppearance(): void {
       /* Storage may be disabled. */
     }
     const palette = query.get("palette");
-    setThemePreference(isTheme(palette) ? palette : isTheme(savedPalette) ? savedPalette : "aura");
+    setThemePreference(
+      isTheme(palette) ? palette : isTheme(savedPalette) ? savedPalette : DEFAULT_THEME,
+    );
+  } else {
+    // The first frame already wears the default theme; the profile's choice follows it.
+    paintPalette(theme);
   }
   controller = createAppearanceController(
     window.matchMedia("(prefers-color-scheme: dark)"),
@@ -161,7 +176,7 @@ export function applySetupAppearance(preferences: {
   if (preferences.revision < appliedRevision) return;
   appliedRevision = preferences.revision;
   setAppearancePreference(preferences.appearance);
-  setThemePreference(isTheme(preferences.theme) ? preferences.theme : "aura");
+  setThemePreference(isTheme(preferences.theme) ? preferences.theme : DEFAULT_THEME);
 }
 
 /** Previews keep the chosen theme across reloads, as they keep the appearance. */

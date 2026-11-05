@@ -72,7 +72,9 @@ try {
   });
   const page = await context.newPage();
   const glass = values["no-glass"] ? "" : "&glass=acrylic";
-  await page.goto(`${url}/?preview=settled&theme=${theme}&agents=lineup${glass}`);
+  // The site's product images keep Aura's neutral palette, which suits its paper and ink; the
+  // desktop's own default theme is Claude Code's (owner, 4 November 2026).
+  await page.goto(`${url}/?preview=settled&theme=${theme}&palette=aura&agents=lineup${glass}`);
   await page.getByTestId("composer-input").waitFor();
   await page.evaluate(() => document.fonts.ready);
   // Nothing under the hand: no hover fill, no tooltip.

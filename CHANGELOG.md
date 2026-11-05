@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-05
 
+- Claude Code's theme is the default for profiles that never chose one; a saved choice, Aura included, is kept. ([#74](https://github.com/itscool2b/auracode/pull/74))
 - The composer's controls are quiet ghost pills with only Send filled, the account shows as its initial ringed by its usage, the model pill names the model Default stands for, and the picker reads models, thinking, then every agent, always in view. ([#73](https://github.com/itscool2b/auracode/pull/73))
 
 ## 2026-11-04
