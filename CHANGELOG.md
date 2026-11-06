@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-06
+
+- auracode runs on Linux: deb, rpm and AppImage packages, built on Ubuntu 22.04 so they run there and on newer distributions, with the tray, notifications, Keep awake, sounds, dictation, Bash and Zsh terminals, opening files in VS Code, Cursor or Zed, and added agent accounts kept in the desktop keyring (GNOME Keyring, KWallet). ([#93](https://github.com/itscool2b/auracode/pull/93))
+
 ## 2026-11-05
 
 - Share an agent's own MCP server with every agent: in Plugins & MCP, Preview and copy, then Share with every agent makes it a shared server for every project, with its keys and header values kept on this device. Agents that cannot take shared servers (Antigravity, oh-my-pi, restricted connections) now start without them and say so, instead of refusing to start. ([#92](https://github.com/itscool2b/auracode/pull/92))
