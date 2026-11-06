@@ -47,8 +47,10 @@ ALL EDGE CASES POSSIBLE FOR EVERYTHING ... lock in this as well."
 
 Approval cards, questions, the queue, steering, Rewind, the Worked-for fold and changed-files card,
 image attachments: the TUI handles its own. Dictation types into the terminal. The Dashboard shows
-a terminal chat as Working while its process runs and Finished after it exits; Needs you for
-terminals waits for the vendors' notification hooks (phase 2).
+a terminal chat as Working while its agent draws output, and under Finished as "Open in the
+terminal" once it has been quiet at its prompt for a few seconds (#109; first it showed Working
+for as long as the process ran, idle or not); Needs you for terminals waits for the vendors'
+notification hooks (phase 2), since a question at the prompt is as quiet as an idle prompt.
 
 ## Edge cases
 

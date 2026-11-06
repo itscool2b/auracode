@@ -9,6 +9,7 @@ import {
   terminalWrite,
 } from "../../lib/ipc";
 import { TerminalSession, type TerminalSize, type TerminalState } from "../../lib/terminal";
+import { TerminalActivity, type TerminalUse } from "../../lib/terminalActivity";
 import { createXterm, loadXterm, type XtermView } from "../xterm";
 import { shellKeys } from "./terminalRuntime";
 
@@ -76,6 +77,7 @@ export class TerminalChatRuntime {
   #wantsFocus = false;
   #exited: (() => void) | null = null;
   #lastOutput = 0;
+  #activity = new TerminalActivity();
 
   constructor(chatId: string, label: string, transport: TerminalChatTransport) {
     this.#chatId = chatId;
@@ -130,6 +132,17 @@ export class TerminalChatRuntime {
     else this.#wantsFocus = true;
   }
 
+  /**
+   * What the terminal is doing: its agent starting or drawing output (working), its agent quiet
+   * at its prompt (open), or nothing running.
+   */
+  use(now = Date.now()): TerminalUse {
+    const { state } = this.#snapshot.state;
+    if (state === "starting") return "working";
+    if (state !== "running") return null;
+    return this.#activity.working(now) ? "working" : "open";
+  }
+
   async #open(): Promise<void> {
     const modules = await loadXterm();
     if (this.#disposed) return;
@@ -164,6 +177,7 @@ export class TerminalChatRuntime {
       },
       (bytes) => {
         this.#lastOutput = Date.now();
+        this.#activity.output(this.#lastOutput);
         return new Promise<void>((resolve) => term.write(bytes, resolve));
       },
       (state) => {
@@ -174,12 +188,21 @@ export class TerminalChatRuntime {
     );
     this.#session = session;
     const encoder = new TextEncoder();
+    // What the person types or resizes makes the agent redraw; that redraw is not its work.
+    const poke = () => this.#activity.poke(Date.now());
     const subscriptions = [
-      term.onData((text) => session.write(encoder.encode(text))),
-      term.onBinary((text) =>
-        session.write(Uint8Array.from(text, (char) => char.charCodeAt(0) & 255)),
-      ),
-      term.onResize(({ rows, cols }) => void session.resize({ rows, cols })),
+      term.onData((text) => {
+        poke();
+        session.write(encoder.encode(text));
+      }),
+      term.onBinary((text) => {
+        poke();
+        session.write(Uint8Array.from(text, (char) => char.charCodeAt(0) & 255));
+      }),
+      term.onResize(({ rows, cols }) => {
+        poke();
+        void session.resize({ rows, cols });
+      }),
     ];
     this.#cleanups.push(() => {
       for (const subscription of subscriptions) subscription.dispose();
@@ -212,6 +235,7 @@ export class TerminalChatRuntime {
     // it and presses Enter, so no prompt on screen (a folder-trust question, say) is answered
     // for them.
     const encoder = new TextEncoder();
+    this.#activity.poke(Date.now());
     this.#session?.write(encoder.encode(`\u001b[200~${text}\u001b[201~`));
   }
 
@@ -221,6 +245,7 @@ export class TerminalChatRuntime {
     const container = this.host.parentElement;
     await this.#teardown();
     this.#snapshot = { state: { state: "idle" }, omitted: [], link: null };
+    this.#activity = new TerminalActivity();
     this.#opening = null;
     if (container) this.attach(container);
   }
@@ -282,11 +307,9 @@ export class TerminalChats {
     return this.#runtimes.has(chatId);
   }
 
-  /** The chat's agent is starting or running in its terminal now. */
-  readonly running = (chatId: string): boolean => {
-    const state = this.#runtimes.get(chatId)?.getSnapshot().state.state;
-    return state === "starting" || state === "running";
-  };
+  /** What the chat's terminal is doing now (see `TerminalChatRuntime.use`). */
+  readonly use = (chatId: string, now = Date.now()): TerminalUse =>
+    this.#runtimes.get(chatId)?.use(now) ?? null;
 
   /** Ends the chat's terminal (switching to Chat, another agent, or deleting the chat). */
   async close(chatId: string): Promise<void> {

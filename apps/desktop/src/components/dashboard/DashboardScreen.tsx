@@ -157,10 +157,12 @@ export function DashboardScreen({
     }
   };
 
-  // A chat whose agent runs in its terminal here shows as stopped to the store: it works. When each
-  // chat came into its lane keeps the lanes' order steady while their agents stream.
+  // A chat open in its terminal here shows as stopped to the store; its terminal says whether its
+  // agent works (draws output) or waits at its prompt, read again with every tick of the clock.
+  // When each chat came into its lane keeps the lanes' order steady while their agents stream.
+  const inTerminal = (chatId: string) => terminalChats.use(chatId, now);
   const arrivals = useRef<Arrivals>(new Map());
-  const board = boardOf(summaries, now, terminalChats.running, arrivals.current);
+  const board = boardOf(summaries, now, inTerminal, arrivals.current);
   const processes = new Map(
     (reading.current?.chats ?? []).map((chat) => [chat.chat_id, chat] as const),
   );
@@ -222,6 +224,7 @@ export function DashboardScreen({
                         <DashboardCard
                           chat={chat}
                           lane={lane}
+                          line={stateLine(chat, inTerminal, lane)}
                           place={placeOf(chat)}
                           processes={processes.get(chat.id)}
                           reading={reading}
@@ -283,6 +286,7 @@ function markState(chat: ChatSummary, lane: Lane) {
 function DashboardCard({
   chat,
   lane,
+  line,
   place,
   processes,
   reading,
@@ -293,6 +297,8 @@ function DashboardCard({
 }: {
   readonly chat: ChatSummary;
   readonly lane: Lane;
+  /** What the chat is doing, or why it needs you. */
+  readonly line: string;
   /** Its project's name, or its folder's when it has none. */
   readonly place: string;
   readonly processes: ChatProcesses | undefined;
@@ -306,7 +312,6 @@ function DashboardCard({
   const tasks = orderedTasks(processes?.tasks ?? []).filter((task) => task.status === "running");
   const rows = (processes?.agents ?? []).flatMap((agent) => listTree(agent.processes));
   const memory = rows.reduce((sum, { row }) => sum + (row.memory_bytes ?? 0), 0);
-  const line = stateLine(chat, terminalChats.running);
   return (
     <>
       <div className="dashboard-card-head">
