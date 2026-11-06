@@ -467,6 +467,27 @@ pub struct TerminalOpened {
     pub omitted: Vec<String>,
 }
 
+/// Where a terminal's conversation is read back from (terminal_import.rs): the agent's session
+/// file once known, and its length when the terminal opened, so only what the terminal added is
+/// recorded and turns Chat already holds are not.
+#[derive(Debug, Clone)]
+struct TerminalImport {
+    vendor: super::terminal_import::Vendor,
+    /// Claude Code's config folder or Codex's home.
+    home: PathBuf,
+    native_id: Option<String>,
+    from: u64,
+    folder: PathBuf,
+    opened_at: Millis,
+}
+
+/// What reading a terminal's conversation found.
+struct TerminalRead {
+    imported: super::terminal_import::Imported,
+    /// A new Codex session's thread, learned from its rollout.
+    codex_thread: Option<String>,
+}
+
 /// What a preparation produces.
 struct Prepared {
     memory_mcp_available: bool,
@@ -532,6 +553,10 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    TerminalRead {
+        generation: u64,
+        read: TerminalRead,
+    },
     McpAction {
         generation: u64,
         reply: oneshot::Sender<Result<aura_protocol::mcp::McpActionResult, SessionError>>,
@@ -817,6 +842,8 @@ pub(crate) struct ChatActor {
     /// The generation of the terminal open now. While it is, the chat's session is the
     /// terminal's: Chat does not start, and the live slot and session claim stay held.
     terminal: Option<u64>,
+    /// Where the open terminal's conversation will be read back from when it ends.
+    terminal_import: Option<TerminalImport>,
     /// The current start is a Start fresh.
     starting_fresh: bool,
     /// The native session the agent returned at `Ready` is open in another chat: the start fails
@@ -957,6 +984,7 @@ impl ChatActor {
             pending_start: None,
             terminal_request: None,
             terminal: None,
+            terminal_import: None,
             starting_fresh: false,
             conflict: false,
             shared,
@@ -3430,6 +3458,13 @@ impl ChatActor {
             self.queue_op(Op::InsertAgentSession(row));
             self.native_session_id = Some(native_id.clone());
         }
+        self.terminal_import = Some(terminal_import_plan(
+            spec.kind,
+            &session,
+            &made.launch,
+            &prepared.env,
+            &self.chat.folder,
+        ));
         let generation = self.generation;
         self.terminal = Some(generation);
         self.set_status(SessionStatus::Stopped, Some("Open in the terminal".into()));
@@ -3451,9 +3486,40 @@ impl ChatActor {
 
     /// The terminal ended: the session, the live slot and project memory go back, and prompts
     /// queued meanwhile go to Chat.
+    /// The terminal ended: its conversation is read back first (off the actor), and the session
+    /// goes back only once those turns are recorded, so a prompt queued for Chat cannot land
+    /// before them.
     fn terminal_ended(&mut self, generation: u64) {
         if self.terminal != Some(generation) {
             return;
+        }
+        let Some(plan) = self.terminal_import.take() else {
+            return self.finish_terminal(generation, None);
+        };
+        self.set_detail(Some(
+            "Bringing the terminal's conversation into the chat".into(),
+        ));
+        let task = tokio::task::spawn_blocking(move || read_terminal(&plan));
+        self.in_flight.push(
+            async move {
+                let read = task.await.unwrap_or_else(|_| TerminalRead {
+                    imported: Default::default(),
+                    codex_thread: None,
+                });
+                Done::TerminalRead { generation, read }
+            }
+            .boxed(),
+        );
+    }
+
+    /// Records what the terminal said, then gives the session, the live slot and project memory
+    /// back, and sends prompts queued meanwhile.
+    fn finish_terminal(&mut self, generation: u64, read: Option<TerminalRead>) {
+        if self.terminal != Some(generation) {
+            return;
+        }
+        if let Some(read) = read {
+            self.record_terminal(read);
         }
         self.terminal = None;
         self.memory_grant = None;
@@ -3463,6 +3529,154 @@ impl ChatActor {
         self.info_dirty = true;
         self.schedule_flush();
         self.after_stop();
+    }
+
+    /// The terminal's turns, recorded as turns of this chat: the same events a live turn makes
+    /// (started, the person's message, the agent's answer, ended), so history, Find, sync, the
+    /// Dashboard and handoffs read them as any other. Tool calls and thinking stay in the agent's
+    /// own file. A new Codex session's thread is saved, so the next terminal or Chat resumes it.
+    fn record_terminal(&mut self, read: TerminalRead) {
+        if let Some(thread) = read.codex_thread {
+            let now = now_millis();
+            let agent_id = self
+                .spec
+                .as_ref()
+                .map_or_else(|| "codex".to_owned(), |spec| spec.id.to_owned());
+            let row = AgentSessionRow {
+                capabilities: None,
+                host: self.chat.agent_host.clone(),
+                id: new_id(),
+                chat_id: self.chat_id.clone(),
+                agent_id,
+                native_session_id: Some(thread.clone()),
+                model: None,
+                effort: None,
+                autonomy: self.autonomy,
+                config_json: serde_json::to_string(&self.desired).ok(),
+                controls_json: serde_json::to_string(&self.controls).ok(),
+                cwd: self.chat.folder.clone(),
+                created_at: now,
+                updated_at: now,
+            };
+            self.agent_session = Some(row.clone());
+            self.queue_op(Op::InsertAgentSession(row));
+            self.native_session_id = Some(thread);
+        }
+        let imported = read.imported;
+        for turn in imported.turns {
+            let turn_id = new_id();
+            let prompt_id = new_id();
+            let tag: Arc<str> = Arc::from(turn_id.as_str());
+            let tagged = Some(Arc::clone(&tag));
+            self.ordinal = self.ordinal.saturating_add(1);
+            self.begun = Some(TurnRow {
+                continuation_prefix: None,
+                checkpoint_ref: None,
+                parts: vec![PromptPart::Text {
+                    text: turn.prompt.clone(),
+                }],
+                id: turn_id.clone(),
+                chat_id: self.chat_id.clone(),
+                agent_session_id: self
+                    .agent_session
+                    .as_ref()
+                    .map(|session| session.id.clone()),
+                ordinal: self.ordinal,
+                prompt_id: prompt_id.clone(),
+                first_event_seq: 0,
+                started_at: if turn.started_at > 0 {
+                    turn.started_at
+                } else {
+                    now_millis()
+                },
+            });
+            self.normalizer.begin_turn();
+            let events = [
+                AuraEvent::TurnStarted {
+                    turn_id: turn_id.clone(),
+                    prompt_id: Some(prompt_id.clone()),
+                },
+                AuraEvent::UserMessageDelta {
+                    message_id: format!("{turn_id}.u"),
+                    text: turn.prompt,
+                },
+                AuraEvent::PromptLifecycle {
+                    prompt_id: prompt_id.clone(),
+                    state: PromptState::Started,
+                    preview: None,
+                    held: None,
+                },
+            ];
+            for event in events {
+                self.push_normalized(event, tagged.clone());
+            }
+            if !turn.answer.is_empty() {
+                let message_id = format!("{turn_id}.a");
+                self.push_normalized(
+                    AuraEvent::MessageDelta {
+                        message_id: message_id.clone(),
+                        text: turn.answer,
+                    },
+                    tagged.clone(),
+                );
+                self.push_normalized(AuraEvent::MessageCompleted { message_id }, tagged.clone());
+            }
+            for event in self
+                .normalizer
+                .close_turn(&turn_id, ResolvedBy::Turn, now_millis())
+            {
+                self.push_normalized(event, tagged.clone());
+            }
+            self.push_normalized(
+                AuraEvent::TurnEnded {
+                    turn_id,
+                    stop_reason: StopReason::EndTurn,
+                    usage: None,
+                    duration_ms: u64::try_from(turn.ended_at.saturating_sub(turn.started_at))
+                        .ok()
+                        .filter(|ms| *ms > 0),
+                    recovered: false,
+                },
+                tagged.clone(),
+            );
+            self.push_normalized(
+                AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: PromptState::Completed,
+                    preview: None,
+                    held: None,
+                },
+                tagged,
+            );
+            self.flush();
+        }
+        if imported.skipped > 0 || imported.truncated {
+            let mut parts = Vec::new();
+            if imported.skipped > 0 {
+                parts.push(format!(
+                    "{} {} of the terminal's session could not be read",
+                    imported.skipped,
+                    if imported.skipped == 1 {
+                        "line"
+                    } else {
+                        "lines"
+                    }
+                ));
+            }
+            if imported.truncated {
+                parts.push("its session was too long to bring in whole".to_owned());
+            }
+            self.push(
+                AuraEvent::Notice {
+                    level: NoticeLevel::Info,
+                    message: format!(
+                        "{}. The agent's own session file still has everything.",
+                        capitalized(&parts.join(", and "))
+                    ),
+                },
+                None,
+            );
+        }
     }
 
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
@@ -4434,6 +4648,7 @@ impl ChatActor {
             Done::Retired(generation) => self.retired_one(generation),
             Done::Abort(abort) => abort.abort(),
             Done::Nothing => {}
+            Done::TerminalRead { generation, read } => self.finish_terminal(generation, Some(read)),
         }
     }
 
@@ -6998,4 +7213,96 @@ mod question_validation_tests {
             }
         ));
     }
+}
+
+/// Where a terminal's conversation will be read from: the agent's config folder or home (an added
+/// account's `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, else under the person's home), and how much of the
+/// session file is already there.
+fn terminal_import_plan(
+    kind: aura_protocol::DriverKind,
+    session: &aura_drivers::terminal::TerminalSession,
+    launch: &LaunchSpec,
+    env: &ResolvedEnv,
+    folder: &std::path::Path,
+) -> TerminalImport {
+    use super::terminal_import::{Vendor, claude_session, codex_session, length};
+    use aura_drivers::terminal::TerminalSession;
+    let variable = |name: &str| -> Option<PathBuf> {
+        launch
+            .set_env
+            .iter()
+            .rev()
+            .find(|(key, _)| {
+                aura_process::EnvKey::new(key.clone()) == aura_process::EnvKey::from(name)
+            })
+            .map(|(_, value)| PathBuf::from(value))
+            .or_else(|| {
+                env.vars
+                    .get(&aura_process::EnvKey::from(name))
+                    .map(PathBuf::from)
+            })
+            .filter(|path| path.is_absolute())
+    };
+    let home = variable(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .or_else(|| variable("HOME"))
+        .unwrap_or_default();
+    let (vendor, base) = if kind == aura_protocol::DriverKind::Claude {
+        (
+            Vendor::Claude,
+            variable("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
+        )
+    } else {
+        (
+            Vendor::Codex,
+            variable("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
+        )
+    };
+    let native_id = match session {
+        TerminalSession::Resume(id) | TerminalSession::NewClaude(id) => Some(id.clone()),
+        TerminalSession::New => None,
+    };
+    let file = native_id.as_deref().and_then(|id| match vendor {
+        Vendor::Claude => claude_session(&base, id),
+        Vendor::Codex => codex_session(&base, id),
+    });
+    TerminalImport {
+        vendor,
+        home: base,
+        native_id,
+        from: file.as_deref().map_or(0, length),
+        folder: folder.to_path_buf(),
+        opened_at: now_millis(),
+    }
+}
+
+/// Reads what the terminal added to its session file (blocking: run off the actor).
+fn read_terminal(plan: &TerminalImport) -> TerminalRead {
+    use super::terminal_import::{
+        Vendor, claude_session, codex_session, newest_codex_session, read_since,
+    };
+    let mut codex_thread = None;
+    let file = match (plan.vendor, plan.native_id.as_deref()) {
+        (Vendor::Claude, Some(id)) => claude_session(&plan.home, id),
+        (Vendor::Codex, Some(id)) => codex_session(&plan.home, id),
+        (Vendor::Codex, None) => newest_codex_session(&plan.home, &plan.folder, plan.opened_at)
+            .map(|(path, thread)| {
+                codex_thread = Some(thread);
+                path
+            }),
+        (Vendor::Claude, None) => None,
+    };
+    TerminalRead {
+        imported: file
+            .map(|path| read_since(plan.vendor, &path, plan.from))
+            .unwrap_or_default(),
+        codex_thread,
+    }
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }

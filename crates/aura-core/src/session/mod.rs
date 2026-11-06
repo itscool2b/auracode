@@ -46,6 +46,7 @@ mod shared_mcp;
 mod spawner;
 #[cfg(feature = "account-sync")]
 mod sync_history;
+mod terminal_import;
 #[cfg(test)]
 mod tests;
 mod workspace;
