@@ -50,6 +50,12 @@ export const DETECTION_POLL_MS = 1000;
 export const RELEASE_POLL_WINDOW_MS = 120_000;
 /** Release metadata arrives independently of initial installation detection. */
 export const CATALOG_POLL_MS = 60_000;
+/**
+ * A chat list that could not be read is read again after these waits, then every last one, until
+ * it is: just after an update or a restart the database is still opening (migrations, the
+ * integrity check), and the list must not stay empty when it would answer a moment later.
+ */
+export const CHATS_RETRY_MS = [500, 1000, 2000, 4000, 8000] as const;
 /** A status channel that ended is subscribed again after this long. */
 export const STATUS_RESUBSCRIBE_MS = 1000;
 
@@ -183,6 +189,9 @@ export class AppStore {
       });
   }
 
+  /** Failed list reads in a row, for `CHATS_RETRY_MS`. */
+  #chatFailures = 0;
+
   async reloadChats(): Promise<void> {
     const reload = ++this.#reloads;
     this.#reloading = reload;
@@ -192,10 +201,17 @@ export class AppStore {
       if (reload !== this.#reloads) return;
       // The list may have been read before an update that arrived meanwhile.
       const next = this.#missed.reduce(withUpdate, byActivity(chats));
+      this.#chatFailures = 0;
       this.#set({ ...this.#state, chats: next, chatsError: null });
     } catch (error) {
       if (reload !== this.#reloads) return;
       this.#set({ ...this.#state, chatsError: errorMessage(error) });
+      // Read again until it answers; a newer reload meanwhile makes this one moot.
+      const wait = CHATS_RETRY_MS[Math.min(this.#chatFailures, CHATS_RETRY_MS.length - 1)] ?? 8000;
+      this.#chatFailures += 1;
+      this.#later(this.#run, wait, () => {
+        if (reload === this.#reloads) void this.reloadChats();
+      });
     } finally {
       if (reload === this.#reloads) {
         this.#reloading = null;
