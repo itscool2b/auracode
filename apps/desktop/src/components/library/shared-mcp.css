@@ -65,3 +65,93 @@
     justify-content: flex-start;
   }
 }
+
+/*
+ * Which agents load a server: two radio rows (Every agent, Only the agents I choose), then the
+ * chosen agents as a grid of checkbox rows with their marks. A note in fg-3 says why a row is
+ * not installed, cannot take shared servers or is not on this device.
+ */
+.shared-mcp-agents {
+  display: grid;
+  gap: var(--g-space-8);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shared-mcp-agents > legend {
+  margin-bottom: var(--g-space-4);
+  padding: 0;
+  color: var(--g-fg-1);
+}
+
+.shared-mcp-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-space-8);
+  cursor: pointer;
+}
+
+.shared-mcp-choice > input {
+  margin: var(--g-space-4) 0 0;
+}
+
+.shared-mcp-choice > span,
+.shared-mcp-choice small {
+  display: flex;
+  flex-direction: column;
+}
+
+.shared-mcp-choice small,
+.shared-mcp-agent small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.shared-mcp-agent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--g-space-4);
+  margin: 0 0 0 var(--g-space-24);
+  padding: 0;
+  list-style: none;
+}
+
+.shared-mcp-agent {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 32px;
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-10);
+  cursor: pointer;
+}
+
+.shared-mcp-agent > span[aria-hidden] {
+  display: inline-flex;
+  flex: none;
+}
+
+/* The name, and under it why the agent is not installed or cannot take shared servers. */
+.shared-mcp-agent-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-block: var(--g-space-4);
+}
+
+@media (hover: hover) {
+  .shared-mcp-agent:not([data-disabled]):hover {
+    background-color: var(--g-glass-control-hover);
+  }
+}
+
+.shared-mcp-agent[data-disabled] {
+  cursor: default;
+}
+
+.shared-mcp-agent[data-disabled] .shared-mcp-agent-text > span {
+  color: var(--g-fg-3);
+}

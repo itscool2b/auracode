@@ -126,6 +126,8 @@ pub(super) async fn prepare_launch(
         .store
         .shared_mcp(crate::mcp::Command::ResolveChat {
             chat_id: context.chat.id.clone(),
+            // The agent this launch starts, which may be a connection of the chat's agent.
+            agent: Some(aura_agents::agent_of(spec.id).to_owned()),
             native_names: names,
         })
         .await
@@ -261,11 +263,17 @@ impl SessionManager {
                         "Select a native chat before testing a stdio server.".into(),
                     ));
                 }
+                if !crate::mcp::for_agent(&server.definition, &chat.agent_id) {
+                    return Err(SessionError::Organization(
+                        "This server is not enabled for the selected chat's agent. Add the agent to the server's agents, or test it from a chat with one of its agents.".into(),
+                    ));
+                }
                 let effective = self
                     .deps()
                     .store
                     .shared_mcp(crate::mcp::Command::ResolveChat {
                         chat_id,
+                        agent: None,
                         native_names: Vec::new(),
                     })
                     .await
@@ -370,6 +378,8 @@ impl SessionManager {
             .store
             .shared_mcp(crate::mcp::Command::Resolve {
                 project_id,
+                // auracode's own test connects to the server itself, for whichever agent.
+                agent: None,
                 native_names,
             })
             .await

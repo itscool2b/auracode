@@ -11,7 +11,7 @@ left this surface for the separate Instructions surface. aura-config keeps their
 code, which configuration sync and other callers still use, but the Plugin library does not list
 them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
 
-Plugins stay with their agent. Shared MCP applies to compatible agents in the selected scope.
+Plugins stay with their agent. Shared MCP applies to every compatible agent, or the ones a server is for, in the selected scope.
 Server definitions can sync; authentication stays on each device.
 
 ## Shared MCP
@@ -23,6 +23,19 @@ Native server names are inspected before session launch. Conflicting names or an
 configuration require review; native files and homes are never rewritten by shared MCP. Agents whose
 own MCP configuration auracode cannot read (Antigravity, oh-my-pi), restricted fallback connections and
 agents on another host start without shared servers, and their chat says which were left out.
+
+Each definition is for every agent or only the agents chosen for it (owner, 6 November 2026). The
+editor's Agents choice offers Every agent, which includes agents installed later, and Only the agents I
+choose, a checkbox per agent with its mark: one not installed says so and can still be chosen, one
+that cannot take shared servers (Antigravity, oh-my-pi) is shown but cannot be chosen, and an agent ID
+this device does not know (chosen on a newer device) stays chosen under its ID. An empty choice cannot
+be saved. Each server's row names its agents ("Every agent", or "Claude Code, Codex"). A launch takes
+only the servers its agent is for, a connection such as Claude Code's ACP adapter counting as its agent,
+so a server's name only has to be unique among the agents it loads into. Agents are stored as sorted
+agent IDs, once each; changing them keeps the server's local credentials, and importing native servers
+again keeps the agents chosen for them. A connection test from a chat whose agent the server is not for
+says so. A definition for every agent omits the field and syncs exactly as before; one limited to some
+agents carries it, and a device on an older build cannot read that definition until it updates.
 
 An agent's own MCP server can be shared with every agent from its preview (Preview and copy, then Share
 with every agent): its entry, checked against the reviewed revision, goes through the native import

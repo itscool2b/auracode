@@ -384,6 +384,11 @@ export function PluginLibraryScreen({
           {selected === "shared" ? (
             <SharedMcpPanel
               projects={projects}
+              agents={(library?.agents ?? []).map((entry) => ({
+                id: entry.agent_id,
+                name: entry.name,
+                installed: entry.installed,
+              }))}
               initialProjectId={initialProjectId}
               api={mcpApi}
               activeChatId={activeChatId}

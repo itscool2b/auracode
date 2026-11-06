@@ -31,12 +31,17 @@ pub enum Command {
         project_id: Option<String>,
         document: String,
     },
+    /// `agent`: only the servers that agent loads; None (auracode's own connection test) takes
+    /// every server in scope.
     Resolve {
         project_id: Option<String>,
+        agent: Option<String>,
         native_names: Vec<String>,
     },
+    /// `agent`: the agent the chat is starting; None reads the chat's own.
     ResolveChat {
         chat_id: String,
+        agent: Option<String>,
         native_names: Vec<String>,
     },
     ResolveConflict {
@@ -97,6 +102,24 @@ fn json<T: serde::Serialize>(value: &T) -> Result<String, StoreError> {
 fn valid_uuid(id: &str) -> bool {
     uuid::Uuid::parse_str(id).is_ok_and(|value| value.to_string() == id)
 }
+/// The definition as it is stored: its agents as agent IDs (a connection such as Claude Code's
+/// ACP adapter counts as its agent), sorted and without repeats.
+pub fn normalized(mut def: McpDefinition) -> McpDefinition {
+    if let Some(agents) = &mut def.agents {
+        for agent in agents.iter_mut() {
+            *agent = aura_agents::agent_of(agent).to_owned();
+        }
+        agents.sort();
+        agents.dedup();
+    }
+    def
+}
+/// Whether `agent` loads this definition: every agent when it names none.
+pub fn for_agent(def: &McpDefinition, agent: &str) -> bool {
+    def.agents
+        .as_ref()
+        .is_none_or(|agents| agents.iter().any(|a| a == aura_agents::agent_of(agent)))
+}
 pub fn validate(def: &McpDefinition) -> Result<(), StoreError> {
     if serde_json::to_vec(def)
         .map_err(|_| invalid("The MCP definition is invalid."))?
@@ -121,6 +144,27 @@ pub fn validate(def: &McpDefinition) -> Result<(), StoreError> {
         return Err(invalid(
             "Use a stable server UUID, a server name containing letters, numbers, dots, underscores or hyphens, and a valid project. Aura's internal server names are reserved.",
         ));
+    }
+    if let Some(agents) = &def.agents {
+        let agent = |id: &String| {
+            !id.is_empty()
+                && id.len() <= 32
+                && id.as_bytes()[0].is_ascii_lowercase()
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        };
+        // Sorted and unique, as `normalized` leaves it: one spelling per scope, so definitions
+        // compare equal across devices.
+        if agents.is_empty()
+            || agents.len() > 32
+            || !agents.iter().all(agent)
+            || !agents.windows(2).all(|pair| pair[0] < pair[1])
+        {
+            return Err(invalid(
+                "Choose at least one agent for this server, or make it available to every agent.",
+            ));
+        }
     }
     for keys in [&def.env_keys, &def.header_keys] {
         if keys.len() > 128
@@ -341,19 +385,21 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
         }
         Command::ResolveChat {
             chat_id,
+            agent,
             native_names,
         } => {
-            let project_id: Option<String> = conn
+            let (project_id, active): (Option<String>, Option<String>) = conn
                 .query_row(
-                    "SELECT project_id FROM chats WHERE id=?1 AND deleted=0",
+                    "SELECT project_id,active_agent FROM chats WHERE id=?1 AND deleted=0",
                     [chat_id],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .map_err(db)?;
             return execute(
                 conn,
                 Command::Resolve {
                     project_id,
+                    agent: agent.or(active),
                     native_names,
                 },
             );
@@ -364,7 +410,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
             definition,
         } => {
             check(conn, expected)?;
-            save(conn, &definition)?;
+            save(conn, &normalized(definition))?;
             bump(conn)?;
         }
         Command::Delete {
@@ -463,8 +509,9 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                     "This shared MCP export version or size is unsupported.",
                 ));
             }
+            let definitions: Vec<_> = document.definitions.into_iter().map(normalized).collect();
             let mut ids = BTreeSet::new();
-            for def in &document.definitions {
+            for def in &definitions {
                 validate(def)?;
                 if !ids.insert((def.id.clone(), def.project_id.clone())) {
                     return Err(invalid(
@@ -472,7 +519,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                     ));
                 }
             }
-            for def in document.definitions {
+            for def in definitions {
                 save(conn, &def)?;
             }
             bump(conn)?;
@@ -558,11 +605,14 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                     env: values("env")?,
                     headers: values("headers")?,
                 };
+                // Importing again over a server keeps its identity and the agents it is for.
+                let prior = existing
+                    .iter()
+                    .find(|(d, _, _)| d.name == *name && d.project_id == project_id)
+                    .map(|(d, _, _)| d);
                 let definition = McpDefinition {
-                    id: existing
-                        .iter()
-                        .find(|(d, _, _)| d.name == *name && d.project_id == project_id)
-                        .map(|(d, _, _)| d.id.clone())
+                    id: prior
+                        .map(|d| d.id.clone())
                         .unwrap_or_else(|| uuid::Uuid::now_v7().to_string()),
                     name: name.clone(),
                     project_id: project_id.clone(),
@@ -570,6 +620,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                     transport,
                     env_keys: local.env.keys().cloned().collect(),
                     header_keys: local.headers.keys().cloned().collect(),
+                    agents: prior.and_then(|d| d.agents.clone()),
                 };
                 validate(&definition)?;
                 if existing.iter().any(|(d, _, _)| {
@@ -602,6 +653,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
         }
         Command::Resolve {
             project_id,
+            agent,
             native_names,
         } => {
             let mut selected = BTreeMap::new();
@@ -625,7 +677,14 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
             }
             let mut names = BTreeSet::new();
             let mut result = Vec::new();
-            for server in selected.into_values().filter(|s| s.definition.enabled) {
+            // The project override wins first; then only what this agent loads, so a server's name
+            // only clashes in the agents it is for.
+            for server in selected.into_values().filter(|s| {
+                s.definition.enabled
+                    && agent
+                        .as_deref()
+                        .is_none_or(|agent| for_agent(&s.definition, agent))
+            }) {
                 let normalized = server.definition.name.replace('-', "_");
                 if native_names
                     .iter()
@@ -652,7 +711,7 @@ pub(crate) mod tests {
     use super::*;
     pub(crate) fn fixture() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE projects(id TEXT PRIMARY KEY,deleted INTEGER NOT NULL DEFAULT 0); CREATE TABLE chats(id TEXT PRIMARY KEY,project_id TEXT,deleted INTEGER NOT NULL DEFAULT 0);").unwrap();
+        conn.execute_batch("CREATE TABLE projects(id TEXT PRIMARY KEY,deleted INTEGER NOT NULL DEFAULT 0); CREATE TABLE chats(id TEXT PRIMARY KEY,project_id TEXT,active_agent TEXT,deleted INTEGER NOT NULL DEFAULT 0);").unwrap();
         conn.execute_batch(include_str!("../migrations/0018_shared_mcp.sql"))
             .unwrap();
         conn
@@ -669,6 +728,7 @@ pub(crate) mod tests {
             },
             env_keys: Vec::new(),
             header_keys: Vec::new(),
+            agents: None,
         }
     }
     fn saved(conn: &Connection) -> McpSnapshot {
@@ -686,6 +746,7 @@ pub(crate) mod tests {
             conn,
             Command::Resolve {
                 project_id,
+                agent: None,
                 native_names: names,
             },
         )?
@@ -961,5 +1022,239 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+    }
+
+    fn for_agent_named(
+        conn: &Connection,
+        agent: &str,
+        names: Vec<String>,
+    ) -> Result<Vec<ResolvedMcpServer>, StoreError> {
+        let Reply::Resolved(v) = execute(
+            conn,
+            Command::Resolve {
+                project_id: None,
+                agent: Some(agent.into()),
+                native_names: names,
+            },
+        )?
+        else {
+            panic!()
+        };
+        Ok(v)
+    }
+    fn names(servers: &[ResolvedMcpServer]) -> Vec<String> {
+        servers.iter().map(|s| s.definition.name.clone()).collect()
+    }
+    #[test]
+    fn a_server_for_some_agents_loads_only_in_them_and_one_for_every_agent_in_all() {
+        let conn = fixture();
+        let every = definition();
+        let mut claude_only = definition();
+        claude_only.id = "0b7c5b0e-6f7a-4c39-9f4e-2a8d7c1e5b10".into();
+        claude_only.name = "browser".into();
+        claude_only.agents = Some(vec!["claude".into()]);
+        for (expected, def) in [(0, every), (1, claude_only)] {
+            execute(
+                &conn,
+                Command::Save {
+                    expected,
+                    definition: def,
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            names(&for_agent_named(&conn, "claude", vec![]).unwrap()),
+            ["browser", "docs"]
+        );
+        // A connection of an agent counts as that agent.
+        assert_eq!(
+            names(&for_agent_named(&conn, "claude-acp", vec![]).unwrap()),
+            ["browser", "docs"]
+        );
+        // An agent added later gets every-agent servers without anyone editing them.
+        assert_eq!(
+            names(&for_agent_named(&conn, "codex", vec![]).unwrap()),
+            ["docs"]
+        );
+        assert_eq!(
+            names(&for_agent_named(&conn, "hermes", vec![]).unwrap()),
+            ["docs"]
+        );
+        // auracode's own connection test sees every server in scope.
+        assert_eq!(
+            names(&resolved(&conn, None, vec![]).unwrap()),
+            ["browser", "docs"]
+        );
+    }
+    #[test]
+    fn agents_are_saved_as_sorted_agent_ids_and_an_empty_choice_is_refused() {
+        let conn = fixture();
+        let mut def = definition();
+        def.agents = Some(vec!["codex".into(), "claude-acp".into(), "claude".into()]);
+        execute(
+            &conn,
+            Command::Save {
+                expected: 0,
+                definition: def.clone(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            saved(&conn).servers[0].definition.agents,
+            Some(vec!["claude".to_owned(), "codex".to_owned()])
+        );
+        def.agents = Some(Vec::new());
+        assert!(
+            execute(
+                &conn,
+                Command::Save {
+                    expected: 1,
+                    definition: def.clone()
+                }
+            )
+            .is_err()
+        );
+        for bad in [
+            vec!["Claude".to_owned()],
+            vec!["codex".into(), "claude".into()],
+            vec!["".into()],
+        ] {
+            def.agents = Some(bad.clone());
+            // Unsorted lists only arrive from elsewhere (sync); saving normalizes its own.
+            assert!(validate(&def).is_err(), "{bad:?}");
+        }
+        // An agent ID this device does not know yet (a newer device added it) is kept.
+        def.agents = Some(vec!["future-agent".into()]);
+        assert!(validate(&def).is_ok());
+    }
+    #[test]
+    fn a_definition_for_every_agent_reads_exactly_as_before_agents_existed() {
+        let def = definition();
+        let text = serde_json::to_string(&def).unwrap();
+        assert!(!text.contains("agents"), "{text}");
+        let old = r#"{"id":"61a6ce00-b99f-4f8a-9148-8f880f3c735f","name":"docs","project_id":null,"enabled":true,"transport":{"type":"stdio","command":"node","args":["server.js"]},"env_keys":[],"header_keys":[]}"#;
+        assert_eq!(serde_json::from_str::<McpDefinition>(old).unwrap(), def);
+    }
+    #[test]
+    fn a_name_only_clashes_with_native_servers_of_the_agents_it_loads_into() {
+        let conn = fixture();
+        let mut def = definition();
+        def.agents = Some(vec!["codex".into()]);
+        execute(
+            &conn,
+            Command::Save {
+                expected: 0,
+                definition: def,
+            },
+        )
+        .unwrap();
+        // Claude Code has its own "docs": the Codex-only shared one does not stop it starting.
+        assert!(
+            for_agent_named(&conn, "claude", vec!["docs".into()])
+                .unwrap()
+                .is_empty()
+        );
+        assert!(for_agent_named(&conn, "codex", vec!["docs".into()]).is_err());
+    }
+    #[test]
+    fn changing_the_agents_keeps_local_authentication() {
+        let conn = fixture();
+        let mut def = definition();
+        def.env_keys = vec!["TOKEN".into()];
+        execute(
+            &conn,
+            Command::Save {
+                expected: 0,
+                definition: def.clone(),
+            },
+        )
+        .unwrap();
+        let value = format!("local-{}", 7);
+        execute(
+            &conn,
+            Command::Credentials {
+                expected: 1,
+                id: def.id.clone(),
+                project_id: None,
+                credentials: McpCredentials {
+                    env: BTreeMap::from([("TOKEN".to_owned(), value.clone())]),
+                    headers: BTreeMap::new(),
+                },
+            },
+        )
+        .unwrap();
+        def.agents = Some(vec!["claude".into()]);
+        execute(
+            &conn,
+            Command::Save {
+                expected: 2,
+                definition: def,
+            },
+        )
+        .unwrap();
+        let servers = for_agent_named(&conn, "claude", vec![]).unwrap();
+        assert_eq!(servers[0].credentials.env.get("TOKEN"), Some(&value));
+    }
+    #[test]
+    fn importing_native_servers_again_keeps_the_agents_chosen_for_them() {
+        let conn = fixture();
+        let document = r#"{"mcpServers":{"remote":{"url":"https://example.test/mcp"}}}"#.to_owned();
+        let import = |expected| Command::ImportNative {
+            expected,
+            project_id: None,
+            document: document.clone(),
+        };
+        execute(&conn, import(0)).unwrap();
+        let mut def = saved(&conn).servers[0].definition.clone();
+        def.agents = Some(vec!["pi".into()]);
+        execute(
+            &conn,
+            Command::Save {
+                expected: 1,
+                definition: def,
+            },
+        )
+        .unwrap();
+        execute(&conn, import(2)).unwrap();
+        assert_eq!(
+            saved(&conn).servers[0].definition.agents,
+            Some(vec!["pi".to_owned()])
+        );
+    }
+    #[test]
+    fn a_chat_resolves_for_its_own_agent_unless_the_launch_names_another() {
+        let conn = fixture();
+        conn.execute(
+            "INSERT INTO chats(id,project_id,active_agent) VALUES('c1',NULL,'codex')",
+            [],
+        )
+        .unwrap();
+        let mut def = definition();
+        def.agents = Some(vec!["claude".into()]);
+        execute(
+            &conn,
+            Command::Save {
+                expected: 0,
+                definition: def,
+            },
+        )
+        .unwrap();
+        let chat = |agent: Option<&str>| {
+            let Reply::Resolved(v) = execute(
+                &conn,
+                Command::ResolveChat {
+                    chat_id: "c1".into(),
+                    agent: agent.map(str::to_owned),
+                    native_names: vec![],
+                },
+            )
+            .unwrap() else {
+                panic!()
+            };
+            v.len()
+        };
+        assert_eq!(chat(None), 0);
+        assert_eq!(chat(Some("claude")), 1);
     }
 }

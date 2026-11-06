@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { AgentMark } from "@auracode/ui/graphite";
+import { useEffect, useId, useRef, useState } from "react";
 import type { McpActionResult, McpDefinition, McpSessionAction, McpSnapshot } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import { type SharedMcpApi, sharedMcpApi } from "../../lib/sharedMcp";
@@ -9,13 +10,45 @@ export interface McpProject {
   readonly id: string;
   readonly name: string;
 }
+
+/** An agent a server can be limited to: its catalog ID and name, and whether it is installed. */
+export interface McpAgent {
+  readonly id: string;
+  readonly name: string;
+  readonly installed: boolean;
+}
+
+/**
+ * The agents whose launches take shared servers (Rust's `session::shared_mcp::prepare_launch`).
+ * The others start without them and say so in their chat.
+ */
+export const SHARED_MCP_AGENTS: ReadonlySet<string> = new Set([
+  "claude",
+  "codex",
+  "pi",
+  "opencode",
+  "cursor",
+  "grok",
+  "hermes",
+]);
+
+/** "Every agent", or the chosen agents by name ("Claude Code, Codex"). */
+export function agentsSummary(
+  agents: readonly string[] | null | undefined,
+  known: readonly McpAgent[],
+): string {
+  if (!agents) return "Every agent";
+  return agents.map((id) => known.find((agent) => agent.id === id)?.name ?? id).join(", ");
+}
 export function SharedMcpPanel({
   projects = [],
+  agents = [],
   initialProjectId = null,
   api = sharedMcpApi,
   activeChatId,
 }: {
   readonly projects?: readonly McpProject[];
+  readonly agents?: readonly McpAgent[];
   readonly initialProjectId?: string | null;
   readonly api?: SharedMcpApi;
   readonly activeChatId?: string | null;
@@ -77,7 +110,7 @@ export function SharedMcpPanel({
       <header className="plugins-agent-head">
         <div className="plugins-agent-title">
           <h2>Shared MCP</h2>
-          <p>One definition, compatible agents</p>
+          <p>One definition, for every agent or the ones you choose</p>
         </div>
         <button
           className="g-button g-button-primary g-button-28"
@@ -92,6 +125,7 @@ export function SharedMcpPanel({
               transport: { type: "stdio", command: "", args: [] },
               env_keys: [],
               header_keys: [],
+              agents: null,
             })
           }
         >
@@ -99,9 +133,10 @@ export function SharedMcpPanel({
         </button>
       </header>
       <p className="plugins-summary">
-        Shared MCP connects compatible agents to the same tools. Plugins, packages, hooks and
-        commands belong to each agent. Definitions sync with your Aura account; authentication stays
-        on this device.
+        Shared MCP connects your agents to the same tools: every agent, including ones you install
+        later, or only the agents you choose for a server. Plugins, packages, hooks and commands
+        belong to each agent. Definitions sync with your Aura account; authentication stays on this
+        device.
       </p>
       <p className="plugins-note">
         Project definitions apply to all its folders and worktrees. A project override replaces the
@@ -206,7 +241,11 @@ export function SharedMcpPanel({
               <div className="plugins-row-text">
                 <strong>{record.definition.name}</strong>
                 <small>
-                  {record.definition.transport.type} · Revision {record.revision} ·{" "}
+                  {record.definition.transport.type} ·{" "}
+                  <span data-testid="shared-mcp-agents">
+                    {agentsSummary(record.definition.agents, agents)}
+                  </span>{" "}
+                  · Revision {record.revision} ·{" "}
                   {record.definition.enabled
                     ? record.missing_credentials.length
                       ? "Needs local authentication"
@@ -367,6 +406,7 @@ export function SharedMcpPanel({
         <McpEditor
           definition={editing}
           projects={projects}
+          agents={agents}
           busy={busy}
           onClose={() => setEditing(null)}
           onSave={(definition) =>
@@ -470,12 +510,14 @@ export function SharedMcpPanel({
 function McpEditor({
   definition,
   projects,
+  agents,
   busy,
   onClose,
   onSave,
 }: {
   readonly definition: McpDefinition;
   readonly projects: readonly McpProject[];
+  readonly agents: readonly McpAgent[];
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onSave: (definition: McpDefinition) => void;
@@ -484,6 +526,9 @@ function McpEditor({
   const [args, setArgs] = useState(
     definition.transport.type === "stdio" ? definition.transport.args.join("\n") : "",
   );
+  // The chosen agents survive switching to Every agent and back while the dialog is open.
+  const [every, setEvery] = useState(!definition.agents);
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(definition.agents ?? []));
   const [keys, setKeys] = useState(
     (definition.transport.type === "stdio" ? definition.env_keys : definition.header_keys).join(
       "\n",
@@ -499,8 +544,10 @@ function McpEditor({
         className="shared-mcp-form"
         onSubmit={(e) => {
           e.preventDefault();
+          if (!every && chosen.size === 0) return;
           onSave({
             ...value,
+            agents: every ? null : [...chosen].sort(),
             transport:
               value.transport.type === "stdio"
                 ? { ...value.transport, args: args.split("\n").filter(Boolean) }
@@ -536,6 +583,19 @@ function McpEditor({
             <option value="">All projects</option>
           </select>
         </label>
+        <AgentScope
+          agents={agents}
+          every={every}
+          chosen={chosen}
+          onEvery={setEvery}
+          onToggle={(id) =>
+            setChosen((current) => {
+              const next = new Set(current);
+              if (!next.delete(id)) next.add(id);
+              return next;
+            })
+          }
+        />
         <label className="shared-mcp-field">
           Transport
           <select
@@ -622,13 +682,102 @@ function McpEditor({
           must contain no secret values. Changing the executable, endpoint or credential names
           clears previous local authentication.
         </p>
-        <button type="submit" className="g-button g-button-primary" disabled={busy}>
+        <button
+          type="submit"
+          className="g-button g-button-primary"
+          disabled={busy || (!every && chosen.size === 0)}
+        >
           Save definition
         </button>
       </form>
     </Modal>
   );
 }
+/**
+ * Which agents load the server: every agent (with the ones installed later), or the ones chosen.
+ * Each supported agent is a checkbox with its mark; one not installed says so, one whose launches
+ * cannot take shared servers is shown but cannot be chosen, and an agent this device does not
+ * know (chosen on a newer device) stays chosen under its ID.
+ */
+function AgentScope({
+  agents,
+  every,
+  chosen,
+  onEvery,
+  onToggle,
+}: {
+  readonly agents: readonly McpAgent[];
+  readonly every: boolean;
+  readonly chosen: ReadonlySet<string>;
+  readonly onEvery: (every: boolean) => void;
+  readonly onToggle: (id: string) => void;
+}) {
+  const name = useId();
+  const hint = useId();
+  const unknown = [...chosen].filter((id) => !agents.some((agent) => agent.id === id));
+  const rows: readonly McpAgent[] = [
+    ...agents,
+    ...unknown.map((id) => ({ id, name: id, installed: false })),
+  ];
+  const empty = !every && chosen.size === 0;
+  return (
+    <fieldset className="shared-mcp-agents" aria-describedby={hint}>
+      <legend>Agents</legend>
+      <label className="shared-mcp-choice">
+        <input type="radio" name={name} checked={every} onChange={() => onEvery(true)} />
+        <span>
+          Every agent
+          <small>Includes agents you install later.</small>
+        </span>
+      </label>
+      <label className="shared-mcp-choice">
+        <input type="radio" name={name} checked={!every} onChange={() => onEvery(false)} />
+        <span>
+          Only the agents I choose
+          <small>Other agents start without this server.</small>
+        </span>
+      </label>
+      {every ? null : (
+        <ul className="shared-mcp-agent-list" aria-label="Agents that load this server">
+          {rows.map((agent) => {
+            const foreign = unknown.includes(agent.id);
+            const supported = foreign || SHARED_MCP_AGENTS.has(agent.id);
+            const note = foreign
+              ? "Not on this device"
+              : !supported
+                ? "Can't load shared servers"
+                : !agent.installed
+                  ? "Not installed"
+                  : null;
+            return (
+              <li key={agent.id}>
+                <label className="shared-mcp-agent" data-disabled={supported ? undefined : ""}>
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(agent.id)}
+                    disabled={!supported}
+                    onChange={() => onToggle(agent.id)}
+                  />
+                  <span aria-hidden="true">
+                    <AgentMark agent={agent.id} size={16} />
+                  </span>
+                  <span className="shared-mcp-agent-text">
+                    <span>{agent.name}</span>
+                    {note ? <small>{note}</small> : null}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p id={hint} className={empty ? "ui-error" : "plugins-note"}>
+        {empty ? "Choose at least one agent." : "Changes apply when an idle chat starts again."}
+      </p>
+    </fieldset>
+  );
+}
+
 function CredentialEditor({
   definition,
   busy,
