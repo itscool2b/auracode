@@ -1,7 +1,10 @@
 # Native shell
 
-Windows and macOS own these services in Rust independently of the webview. Linux and WSL are
-deferred. Smoke launches do not create tray icons, power assertions or notifications.
+Windows, macOS and Linux own these services in Rust independently of the webview. On Linux the tray
+is an AppIndicator (it needs a host, such as GNOME's AppIndicator extension or KDE's system tray),
+notifications go to the desktop's notification service over D-Bus, and Keep awake takes a systemd
+inhibitor lock. WSL agent hosts are separate. Smoke launches do not create tray icons, power
+assertions or notifications.
 
 ## Window and long runs
 
@@ -11,6 +14,8 @@ macOS materials inherit the dark window appearance. There is no native theme swi
 Closing the window hides it after tray installation succeeds. Open, a left tray click, a second
 launch, macOS Dock reopen and notification clicks restore and focus it. If tray installation fails,
 closing follows the normal guarded quit path instead of leaving an unreachable hidden application.
+On Linux a missing AppIndicator library counts as a failed installation: the shell checks for it
+first, since the tray would otherwise panic loading it.
 The tray shows a blue activity badge or amber attention badge and a count in its tooltip. macOS also
 gets a menu-bar count and Dock badge. The application icon remains colored on either system theme.
 
@@ -63,7 +68,7 @@ notification suppression, same-thread power assertion release, failed visibility
 cancelled and confirmed quit with active work. Desktop all-target Clippy passes. No native agent,
 login, credential or real power/notification test is involved in these checks.
 
-Installed Windows and macOS checks remain required for tray interaction, notification permission and
+Installed Windows, macOS and Linux checks remain required for tray interaction, notification permission and
 click routing, actual idle-sleep behavior, hide/minimize rendering measurements, and dark materials.
 The frontend navigation consumer validates the chat ID in the UI (covered by Vitest); the native
 click routing above still needs the installed-app checks. This checkpoint does not claim those

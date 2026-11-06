@@ -1,5 +1,5 @@
 # Deliberate integration and final verification only. Routine commits and pushes run no CI.
-# The active product targets are Windows and macOS. Linux/WSL are deferred.
+# The active product targets are Windows, macOS and Linux.
 # Use the supported Intel macOS pool after arm64 runner acquisition failed in final CI.
 name: CI
 
@@ -374,6 +374,8 @@ jobs:
         os:
           - macos-26-intel
           - windows-2025
+          # The release packages' build system (build.yml), so the oldest supported libraries.
+          - ubuntu-22.04
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     steps:
@@ -390,6 +392,11 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libxdo-dev xvfb
       - name: Select native Windows Perl for vendored OpenSSL
         if: runner.os == 'Windows'
         shell: pwsh
@@ -429,7 +436,7 @@ jobs:
           retention-days: 7
       - name: Build the Windows spawning spike
         id: spawn-build
-        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os == 'Windows' }}
         timeout-minutes: 20
         env: &spawn_env
           RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
@@ -501,14 +508,20 @@ jobs:
         run: |
           binary=target/debug/auracode
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
-          bash .github/scripts/run-smoke.sh "$binary" stream
+          # Linux has no display on the runner: a virtual one, at the window's default size.
+          display=()
+          if [ "$RUNNER_OS" = Linux ]; then display=(xvfb-run -a -s "-screen 0 1440x900x24"); fi
+          "${display[@]}" bash .github/scripts/run-smoke.sh "$binary" stream
       - name: Smoke test the chat UI
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 10
         run: |
           binary=target/debug/auracode
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
-          bash .github/scripts/run-smoke.sh "$binary" chat
+          # Linux has no display on the runner: a virtual one, at the window's default size.
+          display=()
+          if [ "$RUNNER_OS" = Linux ]; then display=(xvfb-run -a -s "-screen 0 1440x900x24"); fi
+          "${display[@]}" bash .github/scripts/run-smoke.sh "$binary" chat
       - name: Install pinned external WebDriver bridge (Windows)
         id: webdriver-tools
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' && runner.os == 'Windows' }}
@@ -557,7 +570,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26-intel, windows-2025]
+        os: [macos-26-intel, windows-2025, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ inputs.checkpoint_benchmarks && 90 || 60 }}
     steps:
@@ -593,8 +606,9 @@ jobs:
       - name: Clippy core with account sync
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo clippy -p aura-core --features account-sync --all-targets --locked -- -D warnings
+      # The default baseline predates the Linux port, so the comparison stays on macOS and Windows.
       - name: Compare checkpoint capture and native prompt latency
-        if: ${{ success() && inputs.checkpoint_benchmarks }}
+        if: ${{ success() && inputs.checkpoint_benchmarks && runner.os != 'Linux' }}
         env:
           CHECKPOINT_BASELINE_REF: ${{ inputs.checkpoint_baseline_ref }}
           AURA_CHECKPOINT_BENCH_COUNTS: ${{ inputs.checkpoint_counts }}
@@ -602,7 +616,7 @@ jobs:
           AURA_CHECKPOINT_BENCH_DIAGNOSTICS: "1"
         run: bash .github/scripts/checkpoint-performance.sh
       - name: Keep checkpoint performance evidence
-        if: ${{ always() && inputs.checkpoint_benchmarks }}
+        if: ${{ always() && inputs.checkpoint_benchmarks && runner.os != 'Linux' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checkpoint-performance-${{ runner.os }}-${{ github.sha }}

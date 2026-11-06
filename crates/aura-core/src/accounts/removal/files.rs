@@ -139,9 +139,7 @@ fn lock_owner(dir: &Dir) -> Result<aura_process::locked_file::LockedFile> {
 }
 fn sync(dir: &Dir) -> Result<()> {
     #[cfg(unix)]
-    dir.try_clone()
-        .and_then(|dir| dir.into_std_file().sync_all())
-        .map_err(|_| error::storage())?;
+    crate::fsutil::fsync_dir(dir).map_err(|_| error::storage())?;
     #[cfg(not(unix))]
     let _ = dir;
     Ok(())

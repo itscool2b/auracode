@@ -189,7 +189,35 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
             vec!["--noprofile", "--norc", "-i"],
         ));
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    // Linux: Bash first, as most distributions set it, then Zsh when installed. Both start
+    // without startup files, as on macOS: the reviewed environment already carries the login PATH.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = env;
+        for (id, label, places, args) in [
+            (
+                ProjectShell::Bash,
+                "Bash",
+                ["/usr/bin/bash", "/bin/bash"],
+                vec!["--noprofile", "--norc", "-i"],
+            ),
+            (
+                ProjectShell::Zsh,
+                "Zsh",
+                ["/usr/bin/zsh", "/bin/zsh"],
+                vec!["-f", "-i"],
+            ),
+        ] {
+            if let Some(path) = places
+                .into_iter()
+                .map(PathBuf::from)
+                .find(|path| path.is_file())
+            {
+                choices.push((id, label, path, args));
+            }
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let _ = env;
     choices
         .into_iter()
@@ -253,7 +281,10 @@ impl SessionManager {
     }
 
     /// Holds `folder` as a project terminal does, so worktree changes wait until the process ends.
-    pub(super) fn hold_folder(&self, folder: &std::path::Path) -> Result<Box<dyn Send + Sync>, SessionError> {
+    pub(super) fn hold_folder(
+        &self,
+        folder: &std::path::Path,
+    ) -> Result<Box<dyn Send + Sync>, SessionError> {
         let identity = Handle::from_path(folder)
             .map_err(|_| invalid("The project folder could not be inspected."))?;
         let folder_key = live::normalize_path(folder.to_path_buf());
@@ -364,7 +395,9 @@ impl SessionManager {
             ));
         }
         // A worktree chat's shell knows the worktree's first port, as its setup and Run do.
-        let set_env = self.worktree_port_env(chat_id, &prepared.folder, false).await;
+        let set_env = self
+            .worktree_port_env(chat_id, &prepared.folder, false)
+            .await;
         let folder_key = live::normalize_path(prepared.folder.clone());
         if !self.shared().live.begin_folder_use(folder_key.clone()) {
             return Err(invalid(

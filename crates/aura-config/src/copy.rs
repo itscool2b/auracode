@@ -812,7 +812,7 @@ fn rollback_file(root: &Dir, backup: &Dir, index: usize, file: &JournalFile) -> 
 
 fn sync_directory(directory: &Dir) -> Result<()> {
     #[cfg(unix)]
-    directory.try_clone()?.into_std_file().sync_all()?;
+    crate::safe_fs::fsync_dir(directory)?;
     #[cfg(not(unix))]
     let _ = directory; // Windows syncs staged file handles; directory handles do not support FlushFileBuffers.
     Ok(())

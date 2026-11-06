@@ -173,7 +173,7 @@ fn create_new(dir: &Dir, name: &str, bytes: &[u8], published: impl FnOnce()) -> 
     published();
     dir.remove_file(temporary)?;
     #[cfg(unix)]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::fsutil::fsync_dir(dir)?;
     Ok(())
 }
 
@@ -212,6 +212,15 @@ fn copy_one(from: &Dir, to: &Dir, path: &str) -> Result<bool> {
     let file = match dir.open_with(&name, &options) {
         Ok(file) => file,
         Err(error) if missing(&error) => return Ok(false),
+        // A link is never followed, and skipped like any other non-file. Linux refuses to open
+        // one without following it (ELOOP), where macOS opens the link itself.
+        Err(_)
+            if dir
+                .symlink_metadata(&name)
+                .is_ok_and(|meta| meta.file_type().is_symlink()) =>
+        {
+            return Ok(false);
+        }
         Err(error) => return Err(error.into()),
     };
     let meta = file.metadata()?;

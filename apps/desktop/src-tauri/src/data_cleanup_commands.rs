@@ -80,7 +80,8 @@ pub struct DataCleanupReview {
     pub scope: DataCleanupScope,
     pub items: Vec<DataCleanupItem>,
     pub worktrees: Vec<DataCleanupWorktree>,
-    /// Where auracode's keys are: "Windows Credential Manager" or "the macOS keychain".
+    /// Where auracode's keys are: "Windows Credential Manager", "the macOS keychain" or "the
+    /// desktop keyring" (the Secret Service on Linux).
     pub secure_store: Option<String>,
     pub keys: Vec<DataCleanupKey>,
     pub warnings: Vec<String>,
@@ -208,6 +209,8 @@ pub async fn data_cleanup_review(
             Some("Windows Credential Manager".into())
         } else if cfg!(target_os = "macos") {
             Some("the macOS keychain".into())
+        } else if cfg!(target_os = "linux") {
+            Some("the desktop keyring".into())
         } else {
             None
         },
@@ -256,6 +259,12 @@ pub async fn data_cleanup_apply(
     let arguments = cleanup_arguments(&pending, &choice, std::process::id())?;
     let exe = std::env::current_exe()
         .map_err(|error| failed(format!("auracode could not find its own program: {error}")))?;
+    let exe = appimage_file(
+        &exe,
+        std::env::var_os("APPIMAGE"),
+        std::env::var_os("APPDIR"),
+    )
+    .unwrap_or(exe);
     spawn_detached(&exe, &arguments)
         .map_err(|error| failed(format!("The cleanup could not start: {error}")))?;
     tracing::info!(scope = ?pending.scope, "deleting all auracode data after quitting");
@@ -310,6 +319,24 @@ fn cleanup_arguments(
             .into(),
     ]);
     Ok(arguments)
+}
+
+/// An AppImage runs auracode from a mount that goes away with it, so the cleanup, which must
+/// outlive auracode, starts the AppImage file again (`APPIMAGE`). Only when this program is the one
+/// inside that mount (`APPDIR`): the variables also reach programs an AppImage merely started.
+fn appimage_file(
+    exe: &Path,
+    image: Option<std::ffi::OsString>,
+    mount: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    let (image, mount) = (PathBuf::from(image?), PathBuf::from(mount?));
+    (cfg!(target_os = "linux")
+        && mount.is_absolute()
+        && mount.parent().is_some()
+        && exe.starts_with(&mount)
+        && image.is_absolute()
+        && image.is_file())
+    .then_some(image)
 }
 
 /// Starts the cleanup so it outlives this process: its own process group, no console, out of
@@ -367,6 +394,43 @@ mod tests {
             .into_iter()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect()
+    }
+
+    /// Linux only: elsewhere the program never changes.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_appimage_cleanup_starts_the_appimage_file_only_from_inside_its_own_mount() {
+        let folder = tempfile::tempdir().unwrap();
+        let image = folder.path().join("auracode.AppImage");
+        std::fs::write(&image, b"image").unwrap();
+        let mount = PathBuf::from("/tmp/.mount_auracoXYZ");
+        let inside = mount.join("usr/bin/auracode");
+        let os = |path: &Path| Some(path.as_os_str().to_owned());
+        assert_eq!(
+            appimage_file(&inside, os(&image), os(&mount)),
+            Some(image.clone())
+        );
+        // A program an AppImage started inherits its variables but is not inside the mount.
+        assert_eq!(
+            appimage_file(Path::new("/usr/bin/auracode"), os(&image), os(&mount)),
+            None
+        );
+        assert_eq!(appimage_file(&inside, None, os(&mount)), None);
+        assert_eq!(appimage_file(&inside, os(&image), None), None);
+        assert_eq!(
+            appimage_file(&inside, os(&folder.path().join("gone")), os(&mount)),
+            None,
+            "the AppImage file must exist"
+        );
+        assert_eq!(
+            appimage_file(&inside, os(&image), os(Path::new("/"))),
+            None,
+            "a mount at the root is not one"
+        );
+        assert_eq!(
+            appimage_file(&inside, os(&image), Some("relative".into())),
+            None
+        );
     }
 
     #[test]

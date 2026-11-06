@@ -986,7 +986,10 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
         .await
         .expect("direct chat");
     // A chat in the project folder itself has no worktree, so nothing to run.
-    assert_eq!(rig.manager.worktree_run(&direct.chat.id).await.unwrap(), None);
+    assert_eq!(
+        rig.manager.worktree_run(&direct.chat.id).await.unwrap(),
+        None
+    );
     let program = std::env::current_exe().expect("exe");
     let run = SetupCommand {
         program: program.to_string_lossy().into(),
@@ -1033,9 +1036,16 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
     let live = &rig.manager.shared().live;
     assert!(live.reserve_folder(&folder));
     live.release_folder(&folder);
-    let plan = rig.manager.prepare_worktree_run(&chat).await.expect("run plan");
+    let plan = rig
+        .manager
+        .prepare_worktree_run(&chat)
+        .await
+        .expect("run plan");
     assert_eq!(canonical(&plan.spec.launch.program), canonical(&program));
-    assert_eq!(plan.spec.launch.args, [std::ffi::OsString::from("--not-executed")]);
+    assert_eq!(
+        plan.spec.launch.args,
+        [std::ffi::OsString::from("--not-executed")]
+    );
     let port = std::ffi::OsString::from(info.port.to_string());
     assert_eq!(
         plan.spec.launch.set_env,
@@ -1046,7 +1056,10 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
     );
     assert_eq!(canonical(&plan.spec.folder), canonical(&preview.path));
     // Like a project terminal, Run holds the worktree: folder operations wait until it stops.
-    assert!(!live.reserve_folder(&folder), "a folder operation ran beside Run");
+    assert!(
+        !live.reserve_folder(&folder),
+        "a folder operation ran beside Run"
+    );
     drop(plan);
     assert!(live.reserve_folder(&folder));
     live.release_folder(&folder);
@@ -1057,7 +1070,12 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
         .expect("clear recipe");
     assert!(rig.manager.prepare_worktree_run(&chat).await.is_err());
     assert_eq!(
-        rig.manager.worktree_run(&chat).await.unwrap().unwrap().command,
+        rig.manager
+            .worktree_run(&chat)
+            .await
+            .unwrap()
+            .unwrap()
+            .command,
         None
     );
 }

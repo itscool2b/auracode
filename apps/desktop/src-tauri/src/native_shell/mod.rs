@@ -1,7 +1,7 @@
 //! Native long-run shell. Session status feeds it even when no webview is attached.
 
 mod model;
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 mod power;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -34,7 +34,7 @@ pub struct NativeShell {
     tray_ready: AtomicBool,
     pending_chat: Mutex<Option<String>>,
     notification_id: AtomicU32,
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     power: Mutex<Option<power::Power>>,
     /// Settings' switches (all on by default) and whether any chat is working now.
     switches: Switches,
@@ -92,7 +92,7 @@ impl NativeShell {
     }
 
     fn sync_power(&self) {
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         if let Some(power) = lock(&self.power).as_ref() {
             power.set(
                 self.switches.working.load(Ordering::Acquire)
@@ -107,7 +107,7 @@ impl NativeShell {
 
     pub fn shutdown(&self) {
         self.stopped.send_replace(true);
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         if let Some(mut power) = lock(&self.power).take() {
             power.stop();
         }
@@ -192,7 +192,7 @@ pub(crate) fn profile_changed(app: &tauri::AppHandle) {
 /// Called after AppState is managed and before a webview can start a chat. Smoke launches leave
 /// real tray, power and notification services disabled.
 pub fn setup(app: &tauri::AppHandle) {
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     {
         let state = app.state::<AppState>();
         if state.launch.is_smoke() {
@@ -253,12 +253,12 @@ pub fn setup(app: &tauri::AppHandle) {
             shell.shutdown();
         });
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     let _ = app;
 }
 
 /// Applies Settings' notification, keep-awake and close-to-tray switches. Without a shell (smoke
-/// launches, Linux) there is nothing to switch.
+/// launches) there is nothing to switch.
 pub fn apply_preferences(app: &tauri::AppHandle, general: &GeneralPreferences) {
     if let Some(shell) = app.try_state::<Arc<NativeShell>>() {
         shell.apply_preferences(general);
@@ -307,10 +307,19 @@ pub fn shell_take_navigation(app: tauri::AppHandle) -> Option<String> {
         .and_then(|shell| lock(&shell.pending_chat).take())
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    // The first Linux tray loads the AppIndicator library and panics, ending auracode, when it is
+    // missing. The same lookup first, so such a system runs without a tray instead.
+    #[cfg(target_os = "linux")]
+    if !appindicator_available() {
+        return Err(std::io::Error::other(
+            "neither libayatana-appindicator3 nor libappindicator3 is installed",
+        )
+        .into());
+    }
     let open = MenuItem::with_id(app, OPEN, "Open auracode", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "Quit auracode", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
@@ -341,7 +350,21 @@ fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+/// The libraries libappindicator-sys opens, in its order: Ayatana's and then Canonical's, each by
+/// its ABI name and then by the bare name some AppImages carry.
+#[cfg(target_os = "linux")]
+fn appindicator_available() -> bool {
+    [
+        "libayatana-appindicator3.so.1",
+        "libappindicator3.so.1",
+        "libayatana-appindicator3.so",
+        "libappindicator3.so",
+    ]
+    .iter()
+    .any(|name| dlopen2::raw::Library::open(name).is_ok())
+}
+
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn update_tray(app: &tauri::AppHandle, counts: Counts) {
     if let Some(tray) = app.tray_by_id(TRAY) {
         let _ = tray.set_tooltip(Some(model::tooltip(counts)));
@@ -363,6 +386,12 @@ fn tray_icon() -> tauri::image::Image<'static> {
     tauri::include_image!("icons/tray.png")
 }
 
+/// The logo on a black tile, as on Windows: Linux status areas (AppIndicator) draw icons in colour.
+#[cfg(target_os = "linux")]
+fn tray_icon() -> tauri::image::Image<'static> {
+    tauri::include_image!("icons/tray.png")
+}
+
 /// The logo as a macOS menu bar template image: only its alpha is drawn, in the bar's own colour.
 #[cfg(target_os = "macos")]
 fn tray_icon() -> tauri::image::Image<'static> {
@@ -370,18 +399,18 @@ fn tray_icon() -> tauri::image::Image<'static> {
 }
 
 /// Graphite's volt for "needs you" and fg-1 for "working" (visual-language.md 2.1).
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 const BADGE_ATTENTION: [u8; 4] = [204, 255, 51, 255];
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 const BADGE_ACTIVE: [u8; 4] = [237, 237, 237, 255];
 
 /// The badge is cut out of the logo by a transparent ring. Without it the fg-1 "working" dot
 /// merged with the off-white logo it overlaps, and a macOS template image (alpha only) drew both
 /// as one shape.
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 const BADGE_CUTOUT: [u8; 4] = [0, 0, 0, 0];
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn badged_icon(base: &tauri::image::Image<'_>, counts: Counts) -> tauri::image::Image<'static> {
     let (width, height) = (base.width(), base.height());
     let mut pixels = base.rgba().to_vec();
@@ -417,7 +446,7 @@ fn badged_icon(base: &tauri::image::Image<'_>, counts: Counts) -> tauri::image::
     tauri::image::Image::new_owned(pixels, width, height)
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn install_notification_actions(app: &tauri::AppHandle) {
     use tauri_plugin_notification::NotificationExt;
     let handler_app = app.clone();
@@ -454,7 +483,7 @@ fn install_notification_actions(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Notice) {
     use tauri_plugin_notification::NotificationExt;
     if app
@@ -525,7 +554,7 @@ mod profile_tests {
             tray_ready: AtomicBool::new(false),
             pending_chat: Mutex::new(Some("old-chat".into())),
             notification_id: AtomicU32::new(0),
-            #[cfg(any(windows, target_os = "macos"))]
+            #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
             power: Mutex::new(None),
             switches: Switches::default(),
         };
@@ -548,7 +577,7 @@ mod profile_tests {
     }
 }
 
-#[cfg(all(test, any(windows, target_os = "macos")))]
+#[cfg(all(test, any(windows, target_os = "macos", target_os = "linux")))]
 mod switch_tests {
     use super::*;
 

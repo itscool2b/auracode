@@ -167,7 +167,9 @@ fn left_out_because(native: bool, headless: bool, compatible: bool) -> Option<&'
     } else if headless {
         Some("this restricted connection runs without MCP servers")
     } else if !compatible {
-        Some("auracode cannot read this agent's own MCP configuration to rule out a server of the same name")
+        Some(
+            "auracode cannot read this agent's own MCP configuration to rule out a server of the same name",
+        )
     } else {
         None
     }
@@ -181,9 +183,21 @@ mod launch_tests {
     fn only_compatible_native_full_connections_take_shared_servers() {
         assert_eq!(left_out_because(true, false, true), None);
         // Antigravity and oh-my-pi start without them instead of failing to start.
-        assert!(left_out_because(true, false, false).unwrap().contains("cannot read"));
-        assert!(left_out_because(true, true, true).unwrap().contains("restricted"));
-        assert!(left_out_because(false, false, true).unwrap().contains("this device"));
+        assert!(
+            left_out_because(true, false, false)
+                .unwrap()
+                .contains("cannot read")
+        );
+        assert!(
+            left_out_because(true, true, true)
+                .unwrap()
+                .contains("restricted")
+        );
+        assert!(
+            left_out_because(false, false, true)
+                .unwrap()
+                .contains("this device")
+        );
     }
 }
 

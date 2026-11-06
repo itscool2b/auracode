@@ -51,8 +51,9 @@ its files encrypted, and this file is not encrypted yet.
 
 **Tokens** are in the system's secure storage:
 
-- Credential Manager on Windows; the login keychain on macOS.
-- Elsewhere there is none, and accounts cannot be added.
+- Credential Manager on Windows; the login keychain on macOS; on Linux the desktop keyring, any
+  Secret Service such as GNOME Keyring or KWallet, in its default collection.
+- Without one (a Linux system running no Secret Service, for example) accounts cannot be added.
 
 Details:
 

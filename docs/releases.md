@@ -1,20 +1,23 @@
-# Windows and macOS packaging
+# Windows, macOS and Linux packaging
 
 The owner deferred public signing on 2026-10-26. Complete source and unsigned qualification first.
 The signing and signed-update requirements below apply when public distribution is resumed; they
 do not block the current implementation work.
 
-The manual `Build` workflow produces unsigned acceptance artifacts for three explicit targets:
+The manual `Build` workflow produces unsigned acceptance artifacts for four explicit targets:
 
 | Target | Installer | Native acceptance still required |
 |---|---|---|
 | `universal-apple-darwin` | Universal DMG | Apple Silicon and Intel installation, launch and upgrade |
 | `x86_64-pc-windows-msvc` | x64 NSIS | Windows x64 install, upgrade and uninstall |
 | `aarch64-pc-windows-msvc` | arm64 NSIS | Windows arm64 install, upgrade and uninstall |
+| `x86_64-unknown-linux-gnu` | deb, rpm and AppImage, built on Ubuntu 22.04 | Debian or Ubuntu, Fedora and AppImage install, launch and upgrade |
 
 The Windows arm64 installer is cross-compiled on the Windows runner. This verifies compilation,
 not execution on an arm64 device. The runner needs the MSVC arm64 build tools. Both macOS Rust
-targets are installed before the universal build. Linux and WSL packages are deferred.
+targets are installed before the universal build. The Linux packages link Ubuntu 22.04's glibc, so
+they run there and on newer distributions; the runner installs WebKitGTK 4.1, the AppIndicator,
+librsvg, ALSA, libxdo, patchelf and rpm first. WSL agent hosts are separate from these packages.
 
 These artifacts are labeled `auracode-unsigned-<target>-<SHA>`, expire after seven days, and are
 never published automatically. macOS uses an explicit ad-hoc signature. Neither an ad-hoc signature
@@ -212,6 +215,8 @@ vendor account:
 bash .github/scripts/run-smoke.sh target/debug/auracode all
 # Windows, from the existing Git Bash runner
 bash .github/scripts/run-smoke.sh target/debug/auracode.exe all
+# Linux, on a virtual display when there is no desktop session
+xvfb-run -a -s "-screen 0 1440x900x24" bash .github/scripts/run-smoke.sh target/debug/auracode all
 ```
 
 The native harness covers real webview, IPC, actor, transcript, restart and quit paths. It does not
@@ -247,6 +252,7 @@ use the same explicit targets locally:
 pnpm bundle --target universal-apple-darwin --bundles dmg
 pnpm bundle --target x86_64-pc-windows-msvc --bundles nsis
 pnpm bundle --target aarch64-pc-windows-msvc --bundles nsis
+pnpm bundle --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage
 ```
 
 For signed updater qualification add `--signed-updater` with the secret-store environment already

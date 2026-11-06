@@ -105,7 +105,9 @@ base64url without padding. An account's bounded 2048-byte secret bundle is repla
 Removing a session from that bundle must retain the keys needed for encrypted local data.
 
 Native Windows storage uses Credential Manager with explicit `Local` persistence, never the
-provider's default roaming persistence. macOS uses the user's login Keychain. The API does not search
+provider's default roaming persistence. macOS uses the user's login Keychain. Linux uses the
+Secret Service's default collection (the login keyring of GNOME Keyring or KWallet) over an
+encrypted session, each item labelled with its entry name. The API does not search
 or enumerate credentials, and the Windows provider's search feature is disabled. No provider error
 payload is logged or passed to the UI. Native operations run on a blocking worker and are serialized
 within the application process.

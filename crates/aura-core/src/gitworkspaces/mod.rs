@@ -17,9 +17,9 @@ mod publish;
 mod records;
 mod recovery;
 mod recreate;
-pub(crate) mod run;
 #[cfg(test)]
 mod recreate_tests;
+pub(crate) mod run;
 pub(crate) mod setup;
 pub(crate) use identity::FolderIdentity;
 mod setup_files;

@@ -1,7 +1,7 @@
 use super::*;
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 use crate::session::EditorOpen;
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 use aura_protocol::project_tools::ProjectEditor;
 
 fn enable_git(rig: &mut Rig) {
@@ -168,7 +168,7 @@ async fn several_project_terminals_in_one_folder_each_count_until_they_end() {
 
 /// A synthetic Zed install is offered, opens through its own launcher with the folder as its one
 /// argument, and a launcher replaced after review is refused rather than started.
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 #[tokio::test]
 async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_replaced_one() {
     let (driver, _) = ScriptedDriver::new(vec![
@@ -181,6 +181,9 @@ async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_repl
     let launcher = if cfg!(windows) {
         vars.insert("LOCALAPPDATA".into(), install.path().into());
         install.path().join("Programs/Zed/Zed.exe")
+    } else if cfg!(target_os = "linux") {
+        vars.insert("HOME".into(), install.path().into());
+        install.path().join(".local/zed.app/bin/zed")
     } else {
         vars.insert("HOME".into(), install.path().into());
         install
@@ -211,7 +214,7 @@ async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_repl
     let EditorOpen::Launch(launch) = open else {
         panic!("Zed opens through its launcher");
     };
-    if cfg!(windows) {
+    if cfg!(any(windows, target_os = "linux")) {
         assert_eq!(launch.program, launcher);
         assert_eq!(
             launch.args,

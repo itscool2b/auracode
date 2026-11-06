@@ -16,7 +16,7 @@ inside projects, switch agents and models mid-chat, run several at once.
 
 The integrated product is in development and final acceptance is pending. The full plan and decisions
 live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) records implementation and
-verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
+verification evidence. Windows, macOS and Linux (deb, rpm and AppImage) are the current targets.
 
 Visual work follows the [Aura visual system](docs/design/visual-language.md): a light-only website and a desktop with System, Light and Dark appearances.
 The [styling review record](docs/design/checkpoint-2026-10-30.md) tracks the full pass and its

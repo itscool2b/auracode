@@ -5,13 +5,14 @@ The owner revised the architecture on 2026-10-26: Rust owns backend logic, all a
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
 The proposed full Aura styling pass supersedes the older Graphite, Orbit and Shallows directions. See [visual-language.md](design/visual-language.md) for current authority and review status.
 `docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
-The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
+The owner narrowed the current release to Windows and macOS and deferred Linux/WSL, then added Linux
+back on 2026-11-04 (deb, rpm and AppImage, built on Ubuntu 22.04); WSL agent hosts stay deferred. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
 fixes rerun as needed. Visual work follows the proposed Aura system, with a light-only website and light and dark desktop appearances, and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
-OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS and Windows)
+OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS, Windows and Linux)
 with a ChatGPT-style interface: projects on the left, chats inside projects, any installed agent driving a
 chat through its real harness (headless, rendered in our UI, never a terminal). The base app needs no login.
 A website at auracode.si lets people create an account and download the app; the same account signs into
@@ -24,7 +25,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
   Cloudflare Workers via workers-rs and WebAssembly. Non-Rust backend exceptions need a documented
   platform constraint; platform configuration and SQL stay in their native formats.
 - **Agents:** one generic ACP client (most agents) plus native Rust drivers for Claude Code, Codex, Pi.
-- **Platforms:** macOS and Windows; agents auto-detected on the native host. Linux and WSL are deferred.
+- **Platforms:** macOS, Windows and Linux; agents auto-detected on the native host. WSL agent hosts are deferred.
 - **Default autonomy: Full auto**, with per-turn checkpoints, isolation, and a visible badge as safety net.
 - **Data:** local SQLite per profile, offline with no login. Cloudflare D1 stores accounts, sessions,
   devices and encrypted sync envelopes. R2 stores releases and encrypted blobs. Cloudflare Workers
@@ -591,4 +592,4 @@ Settings Sync's model).
 - **Manual:** I run the real app on this Mac with every installed agent and review screenshots for polish;
   the user tests Windows builds as they land. Budgets: 60fps while streaming and scrolling, near-zero idle
   CPU with orbs paused, warm launch interactive in under 300ms, landing page LCP under 2s.
-- **CI:** macOS and Windows, at deliberate integration checkpoints and final verification only.
+- **CI:** macOS, Windows and Linux, at deliberate integration checkpoints and final verification only.

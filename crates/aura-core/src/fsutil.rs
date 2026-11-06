@@ -440,6 +440,14 @@ pub(crate) fn sync_dir(dir: &Path) {
 #[cfg(not(unix))]
 pub(crate) fn sync_dir(_dir: &Path) {}
 
+/// Flushes an open directory's entries (a rename, link or new file in it) to stable storage. cap-std
+/// holds directories as `O_PATH` descriptors on Linux, which `fsync` refuses with EBADF, so this
+/// syncs a readable descriptor of the same directory rather than the `Dir` itself.
+#[cfg(unix)]
+pub(crate) fn fsync_dir(dir: &cap_std::fs::Dir) -> io::Result<()> {
+    dir.open(".")?.into_std().sync_all()
+}
+
 /// The Windows ACL calls behind [`restrict_to_owner`]. The workspace denies unsafe code, so the FFI
 /// is confined to this module: each function that needs it carries `#[allow(unsafe_code)]` and one
 /// unsafe block with its SAFETY comment.
@@ -736,6 +744,23 @@ mod win_acl {
 mod tests {
     use super::*;
     use serde::Deserialize;
+
+    /// On Linux the `Dir` itself is an `O_PATH` descriptor that `fsync` refuses, which failed
+    /// every encrypted profile write, Revert's recovery copies and clone journals there.
+    #[cfg(unix)]
+    #[test]
+    fn an_open_directory_syncs_through_a_readable_descriptor() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir =
+            cap_std::fs::Dir::open_ambient_dir(temp.path(), cap_std::ambient_authority()).unwrap();
+        dir.write("entry", b"fixture").unwrap();
+        fsync_dir(&dir).unwrap();
+        let nested = {
+            dir.create_dir("nested").unwrap();
+            dir.open_dir("nested").unwrap()
+        };
+        fsync_dir(&nested).unwrap();
+    }
 
     #[test]
     fn verbatim_paths_take_their_plain_spelling_when_it_names_the_same_folder() {

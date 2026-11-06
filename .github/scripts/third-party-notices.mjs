@@ -18,6 +18,7 @@ export const targets = [
   "aarch64-pc-windows-msvc",
   "x86_64-apple-darwin",
   "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
 ];
 const cataloguePath = join(root, "third-party/catalogue.json");
 const digest = (value) => createHash("sha256").update(value).digest("hex");

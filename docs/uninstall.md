@@ -2,8 +2,8 @@
 
 Uninstalling auracode deletes its local files and reviewed, exclusively owned account keys.
 Shared keys and entries that cannot be verified are retained and reported. Your coding agents, their settings and your repositories are not
-touched. Settings has the same deletion without uninstalling, on Windows and macOS (macOS has no
-uninstaller).
+touched. Settings has the same deletion without uninstalling, on Windows, macOS and Linux (macOS
+and Linux have no uninstaller of auracode's own).
 
 One piece of Rust decides what goes everywhere: aura-core's `uninstall` module, run by the app
 binary's `--uninstall-cleanup` mode (`apps/desktop/src-tauri/src/uninstall.rs`). The Windows
@@ -53,7 +53,20 @@ uninstaller, Settings and a person in a terminal all run that mode.
 - With "Also move auracode to the Trash": the app bundle. Launch Services then forgets the
   `auracode://` link.
 
-auracode adds no login item, Run key or launch agent, so there is none to remove.
+### Linux
+
+- `~/.local/share/si.auracode.desktop`: the data folder, which also holds WebKitGTK's storage and
+  cache.
+- `~/.config/si.auracode.desktop`: the window position.
+- `~/.cache/si.auracode.desktop`.
+- In `/tmp` (or `$TMPDIR`): the CLI's probe folders.
+- Reviewed, exclusively owned Secret Service items with the service `auracode.sync.v1`, found by
+  that attribute only, using the same scope rules as Windows.
+
+Removing the package (`sudo apt remove auracode`, `sudo dnf remove auracode`, or deleting the
+AppImage) removes the app and leaves all of this, so delete the data from Settings first.
+
+auracode adds no login item, Run key, launch agent or autostart entry, so there is none to remove.
 
 ## What stays, and why
 
@@ -173,7 +186,7 @@ it as an upgrade.
 
 The bundle builds the NSIS installer only. An MSI would uninstall without the cleanup.
 
-### Settings, on Windows and macOS
+### Settings, on Windows, macOS and Linux
 
 In Settings, open About, then Delete all auracode data under This device. The review lists:
 
@@ -202,6 +215,8 @@ The same cleanup runs from a terminal:
 /Applications/auracode.app/Contents/MacOS/auracode --uninstall-cleanup --dry-run
 # Windows (the default per-user install folder)
 "%LOCALAPPDATA%\auracode\auracode.exe" --uninstall-cleanup --dry-run
+# Linux (the deb or rpm package; an AppImage takes the same options)
+auracode --uninstall-cleanup --dry-run
 ```
 
 | Option | Effect |
@@ -240,6 +255,10 @@ Use these steps when the app is already gone.
      ```sh
      rm -rf ~/Library/Application\ Support/si.auracode.desktop ~/Library/Caches/si.auracode.desktop ~/Library/WebKit/si.auracode.desktop ~/Library/HTTPStorages/si.auracode.desktop* ~/Library/Saved\ Application\ State/si.auracode.desktop.savedState ~/Library/Logs/si.auracode.desktop
      defaults delete si.auracode.desktop
+     ```
+   - **Linux:** quit auracode, then delete the folders listed above:
+     ```sh
+     rm -rf ~/.local/share/si.auracode.desktop ~/.config/si.auracode.desktop ~/.cache/si.auracode.desktop
      ```
 3. **Review the keys with a current auracode binary.** Run the scoped cleanup even if its data
    folder was already removed. Do not blanket-delete every `auracode.sync.v1` credential or
