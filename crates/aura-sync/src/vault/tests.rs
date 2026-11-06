@@ -25,7 +25,10 @@ impl CredentialStoreApi for CheckedMock {
             modifiers,
             Some(&HashMap::from([("target", user), ("persistence", "Local")]))
         );
-        #[cfg(not(windows))]
+        // The Secret Service gets only a label; its `target` would create a collection.
+        #[cfg(target_os = "linux")]
+        assert_eq!(modifiers, Some(&HashMap::from([("label", user)])));
+        #[cfg(not(any(windows, target_os = "linux")))]
         assert!(modifiers.is_none_or(HashMap::is_empty));
         self.inner.build(service, user, None)
     }

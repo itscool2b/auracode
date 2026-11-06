@@ -78,7 +78,7 @@ test("browser gates have explicit deadlines and retain standalone evidence", () 
 });
 
 test("native desktop and isolated encrypted fixtures enable SQLCipher", () => {
-  assert.match(ci, /os: \[macos-26-intel, windows-2025\]/u);
+  assert.match(ci, /os: \[macos-26-intel, windows-2025, ubuntu-22\.04\]/u);
   assert.match(ci, /cargo test -p aura-sync --features sqlcipher --lib --locked/u);
   assert.match(ci, /cargo test -p aura-core --features account-sync --lib --locked/u);
   assert.match(
