@@ -296,7 +296,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/*
+ * Opens down like a select: above the trigger only the hero sits, so an upward list ran under
+ * the title bar. The page scroller grows to hold it in a short window.
+ */
 .new-chat-agent-picker > .chat-popover-panel {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform-origin: 0 0;
+  animation-name: chat-menu-in;
   width: max(280px, 100%);
   max-width: 100%;
   max-height: 340px;
