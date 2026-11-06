@@ -1,8 +1,7 @@
 # Windows, macOS and Linux packaging
 
-The owner deferred public signing on 2026-10-26. Complete source and unsigned qualification first.
-The signing and signed-update requirements below apply when public distribution is resumed; they
-do not block the current implementation work.
+The owner deferred public signing on 2026-10-26 and resumed it with the plan of 2026-11-04: the
+`Release` workflow below builds signed releases once the owner's signing credentials are set up.
 
 The manual `Build` workflow produces unsigned acceptance artifacts for four explicit targets:
 
@@ -34,6 +33,70 @@ When public distribution resumes, it needs a backed-up Tauri updater key, truste
 configuration, macOS Developer ID signing and notarization, the selected Windows signing mechanism,
 signed updater artifacts, the public release-only R2 route, and an old-build update dry run. The private
 encrypted blob bucket must stay private. No signing key is fabricated or recovered from credentials.
+
+## Official releases
+
+The manual `Release` workflow (`.github/workflows/release.yml`) builds every target signed, runs
+the stage through `aura-release`, and publishes it. It runs from main only.
+
+1. **preflight** stops at once when the run is not on main or any signing input below is missing,
+   and when `APPLE_SIGNING_IDENTITY` is not a Developer ID Application identity.
+2. **bundle** builds the four targets with `--signed-updater` and the chosen channel compiled in.
+   It never uses a build cache.
+   - macOS is signed with the Developer ID certificate, notarized with the App Store Connect key and
+     stapled, then checked with `codesign`, `spctl` and `stapler`.
+   - Windows is signed through Azure Artifact Signing (`artifact-signing-cli` as Tauri's
+     `signCommand`). Each installer's Authenticode signature must read Valid.
+   - Linux packages carry only their updater signatures.
+3. **publish** collects the packages and writes the plan (`.github/scripts/release-plan.mjs`: the
+   role of each file, the workspace version). It then runs `aura-release prepare` and `verify`, and
+   keeps the manifests as an artifact.
+   - With `publish` on, it uploads through `aura-release publish --upload`.
+   - For a stable release it then commits the stage's `downloads.json` as
+     `apps/web/app/release-catalog.json` to main. The site deploys from main, so the download page
+     updates itself.
+
+### One-time setup
+
+Repository variables (Settings > Secrets and variables > Actions > Variables), public values:
+
+| Variable | Value |
+|---|---|
+| `AURACODE_UPDATER_PUBLIC_KEY` | The Tauri updater public key: the contents of the `.pub` file `tauri signer generate` writes |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: <name> (<team ID>)`, as `security find-identity -v -p codesigning` lists it |
+| `AZURE_SIGNING_ENDPOINT` | The Artifact Signing account's endpoint, such as `https://eus.codesigning.azure.net` |
+| `AZURE_SIGNING_ACCOUNT` | The Artifact Signing account name |
+| `AZURE_SIGNING_PROFILE` | Its certificate profile name |
+| `CLOUDFLARE_ACCOUNT_ID` | `5feb14f2fe605875bcf1472f348cb7ed` (infra/README.md) |
+
+Repository secrets:
+
+| Secret | Value |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | The updater private key (the file `tauri signer generate` writes). Keep a backup: losing it ends updates for every installed copy |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password, if it has one |
+| `APPLE_CERTIFICATE` | The Developer ID Application certificate and its private key, exported as `.p12`, in base64 (`openssl base64 -A -in cert.p12`) |
+| `APPLE_CERTIFICATE_PASSWORD` | The `.p12` export password |
+| `APPLE_API_ISSUER`, `APPLE_API_KEY` | The App Store Connect API key's issuer ID and key ID (Developer access) |
+| `APPLE_API_PRIVATE_KEY` | The contents of its `AuthKey_<key ID>.p8` |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | The Entra app registration that holds the Artifact Signing Certificate Profile Signer role |
+| `CLOUDFLARE_API_TOKEN` | An API token with Workers R2 Storage edit on the account, used only to write `auracode-releases` |
+
+Before the first publish, connect `download.auracode.si` as the `auracode-releases` bucket's custom
+domain (R2 > auracode-releases > Settings > Custom Domains). The bucket stays private until then,
+and `auracode-blobs` must never get a public domain.
+
+### Releasing
+
+1. Bump `[workspace.package] version` in `Cargo.toml` in a pull request (the lockfile follows). Every
+   signature carries the version, and a published version never changes.
+2. Run `Release` with `channel: staging`, the notes, and `publish` on. Install the staging build.
+   Release the next version to staging as well, and check that the installed build updates to it.
+3. Run `Release` with `channel: stable` and `publish` on. Stable builds read only
+   `/latest.json`, so nothing reaches users before this step.
+
+A run with `publish` off builds, signs and verifies everything and uploads nothing. Use it to test
+the signing setup.
 
 ## Signed updater preparation
 

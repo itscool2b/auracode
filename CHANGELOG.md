@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-06
 
+- A Release workflow builds signed macOS, Windows and Linux packages, verifies them with aura-release, publishes them to staging or stable, and points the download page at a stable release; it waits for the signing credentials in docs/releases.md. ([#97](https://github.com/itscool2b/auracode/pull/97))
 - Releases include Linux: the download page lists Linux beside macOS and Windows, a release carries the AppImage, deb and rpm with their checksums and update signatures, and auracode on Linux updates itself like the other platforms once a signed release is out. ([#96](https://github.com/itscool2b/auracode/pull/96))
 - The third-party notices fingerprint the desktop package again after #94 added a command to it, so the website builds and deploys. ([#95](https://github.com/itscool2b/auracode/pull/95))
 - Tests catch up with #81 and #82 and with a model change handing the thinking level to the agent, and CI also checks dictation, images and the Processes page in Chromium and WebKit. ([#94](https://github.com/itscool2b/auracode/pull/94))
