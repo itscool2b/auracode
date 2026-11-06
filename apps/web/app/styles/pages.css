@@ -188,6 +188,11 @@
   gap: 16px;
 }
 
+/* An odd last cell takes the whole row: Linux under macOS and Windows before a release. */
+.download-cell:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .download-cell {
   display: grid;
   grid-template-rows: auto 1fr auto;

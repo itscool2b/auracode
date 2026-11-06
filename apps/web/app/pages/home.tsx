@@ -21,7 +21,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Run the coding agents you already use through one local-first desktop app for Windows and macOS. No account needed for local work.",
+      "Run the coding agents you already use through one local-first desktop app for Windows, macOS and Linux. No account needed for local work.",
   },
 ];
 

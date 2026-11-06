@@ -42,6 +42,9 @@ const entries = [
   ["macos_universal_updater", "auracode.app.tar.gz"],
   ["windows_x64_nsis", "auracode-x64.exe"],
   ["windows_arm64_nsis", "auracode-arm64.exe"],
+  ["linux_x64_appimage", "auracode-x86_64.AppImage"],
+  ["linux_x64_deb", "auracode-amd64.deb"],
+  ["linux_x64_rpm", "auracode-x86_64.rpm"],
 ];
 const plan = {
   channel: "staging",
@@ -141,7 +144,7 @@ try {
           await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         );
         console.log(
-          `${engine}: all three architecture links, checksums and release notes work without JavaScript`,
+          `${engine}: all ${catalog.release.downloads.length} download links, checksums and release notes work without JavaScript`,
         );
       } finally {
         await browser.close();
