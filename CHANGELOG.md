@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-06
 
+- The third-party notices fingerprint the desktop package again after #94 added a command to it, so the website builds and deploys. ([#95](https://github.com/itscool2b/auracode/pull/95))
 - Tests catch up with #81 and #82 and with a model change handing the thinking level to the agent, and CI also checks dictation, images and the Processes page in Chromium and WebKit. ([#94](https://github.com/itscool2b/auracode/pull/94))
 - auracode runs on Linux: deb, rpm and AppImage packages, built on Ubuntu 22.04 so they run there and on newer distributions, with the tray, notifications, Keep awake, sounds, dictation, Bash and Zsh terminals, opening files in VS Code, Cursor or Zed, and added agent accounts kept in the desktop keyring (GNOME Keyring, KWallet). ([#93](https://github.com/itscool2b/auracode/pull/93))
 

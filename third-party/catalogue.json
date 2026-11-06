@@ -7,7 +7,7 @@
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "227e95acbb737dc26fb88ed4640a54b77adc8a053aaf507852c9fed0214c6fed",
+    "apps/desktop/package.json": "fa181c90211a9ff214754da144b8ed2b0eb89901a951fd3d990028449ab7df91",
     "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
     "apps/desktop/src-tauri/Cargo.toml": "f33a90e8bc9b7b09709350172c80a3edd541bd9ed9f5cdc18ecd754bf3132724",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
