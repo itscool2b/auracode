@@ -35,6 +35,8 @@ describe("terminal appearance", () => {
         constructor(readonly options: Record<string, unknown>) {}
         buffer = buffer;
         parser = { registerOscHandler: () => ({ dispose: vi.fn() }) };
+        attachCustomKeyEventHandler = vi.fn();
+        onKey = () => ({ dispose: vi.fn() });
         loadAddon = vi.fn();
         open = vi.fn();
         resize = vi.fn();

@@ -57,8 +57,13 @@ import { UsageLimitCard } from "./UsageLimitCard";
 
 const noSubscribe = () => () => {};
 /** Back to the conversation after the terminal panel hides. */
+/** Where typing goes in the open chat: its composer, or a terminal chat's terminal. */
 const focusComposer = () =>
-  document.querySelector<HTMLElement>('[data-testid="composer-input"]')?.focus();
+  document
+    .querySelector<HTMLElement>(
+      '[data-testid="composer-input"], [data-testid="terminal-chat"] .xterm-helper-textarea',
+    )
+    ?.focus();
 
 /**
  * One open chat: its store joins the chat when the view mounts and detaches when it unmounts (the

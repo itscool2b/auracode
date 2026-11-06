@@ -1,5 +1,13 @@
 import type { Terminal } from "@xterm/xterm";
 import { subscribeAppearance, subscribeTheme } from "../lib/appearance";
+import {
+  actsOutsideText,
+  copiesSelection,
+  focusBeyond,
+  leavesTerminal,
+  scrollsTerminal,
+  typesText,
+} from "./terminalKeys";
 
 /** An opened xterm view in Graphite's terminal colours, fitted to its element. */
 export interface XtermView {
@@ -47,11 +55,12 @@ export async function openXterm(element: HTMLElement, options: XtermOptions): Pr
 }
 
 /**
- * Opens xterm in `element`, shared by the terminal sheet and the docked panel: code text on
- * surface-1 and the ANSI palette (visual-language 3.1), the Term type size, no blinking cursor, a
- * screen reader mode, and input disabled until the caller enables it. Output can never set the OS
- * clipboard (OSC 52 is swallowed); `keys` decides which key events xterm handles at all. xterm
- * measures its cells here, so `element` must be in the page.
+ * Opens xterm in `element`, shared by the terminal sheet, the docked panel and terminal chats:
+ * code text on surface-1 and the ANSI palette (visual-language 3.1), the Term type size, no
+ * blinking cursor, a screen reader mode, and input disabled until the caller enables it. Output
+ * can never set the OS clipboard (OSC 52 is swallowed); `keys` decides which key events xterm
+ * handles at all, within the rules of terminalKeys.ts. xterm measures its cells here, so `element`
+ * must be in the page.
  */
 export function createXterm(
   { Terminal, FitAddon, WebglAddon }: XtermModules,
@@ -86,9 +95,38 @@ export function createXterm(
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  if (options.keys) term.attachCustomKeyEventHandler(options.keys);
+  term.attachCustomKeyEventHandler((event) => {
+    const leaving = leavesTerminal(event);
+    if (leaving !== null) {
+      if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
+        focusBeyond(element, leaving);
+      }
+      return false;
+    }
+    if (copiesSelection(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (term.hasSelection())
+        void navigator.clipboard?.writeText(term.getSelection()).catch(() => {});
+      return false;
+    }
+    // Nothing runs to take the keys: they work in the app, and Tab reaches what follows.
+    if (term.options.disableStdin) return scrollsTerminal(event);
+    if (options.keys && !options.keys(event)) return false;
+    if (typesText(event)) event.stopPropagation();
+    return true;
+  });
+  // In screen reader mode xterm leaves most keys it sends uncancelled, so the browser and the
+  // app would act on them too: Shift+Tab sent its code and moved focus out of the terminal.
+  const held = term.onKey(({ domEvent }) => {
+    domEvent.stopPropagation();
+    if (actsOutsideText(domEvent)) domEvent.preventDefault();
+  });
   term.open(element);
   term.textarea?.setAttribute("aria-label", options.inputLabel);
+  term.textarea?.setAttribute("aria-description", "Ctrl+Tab leaves the terminal.");
   // The canvas renderer is optional; terminal IO stays usable if WebGL is unavailable or lost.
   try {
     const webgl = new WebglAddon();
@@ -118,6 +156,7 @@ export function createXterm(
       unsubscribeAppearance();
       unsubscribeTheme();
       clipboard.dispose();
+      held.dispose();
       term.dispose();
     },
   };

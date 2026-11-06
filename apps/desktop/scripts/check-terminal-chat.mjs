@@ -5,6 +5,84 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+/**
+ * Keys in a running terminal are its program's: what it sends never also acts in the app or the
+ * browser. Ctrl+Tab and Ctrl+Shift+Tab leave it. Expects focus in the terminal.
+ */
+async function checkKeys(page, label) {
+  const inTerminal = () =>
+    page.evaluate(() => document.activeElement?.closest(".terminal-chat-host") != null);
+  const sent = async (bytes, what) => {
+    try {
+      await page.waitForFunction(
+        (wanted) => window.terminalKeys.written.join(",").includes(wanted.join(",")),
+        bytes,
+        { timeout: 3000 },
+      );
+    } catch {
+      assert.fail(`${label}: ${what} reaches the agent as ${bytes}`);
+    }
+  };
+  /** Whether the browser's own action for the last such keydown was cancelled. */
+  const cancelled = (key) =>
+    page.evaluate(
+      (name) => window.terminalKeys.all.findLast((event) => event.key === name)?.defaultPrevented,
+      key,
+    );
+  // A modifier pressed alone is no shortcut.
+  const reachedApp = () =>
+    page.evaluate(() =>
+      window.terminalKeys.app.filter((key) => !["Shift", "Control", "Alt", "Meta"].includes(key)),
+    );
+  await page.evaluate(() => {
+    window.terminalKeys.app.length = 0;
+    window.stillHere = true;
+  });
+
+  // Claude Code's mode switch: its code goes to the agent and focus stays in the terminal.
+  await page.keyboard.press("Shift+Tab");
+  await sent([27, 91, 90], "Shift+Tab");
+  assert.equal(await inTerminal(), true, `${label}: Shift+Tab keeps focus in the terminal`);
+  assert.equal(await cancelled("Tab"), true, `${label}: Shift+Tab moves no focus`);
+  // F5 is the program's too, and never reloads the window.
+  await page.keyboard.press("F5");
+  await sent([27, 91, 49, 53, 126], "F5");
+  assert.equal(await cancelled("F5"), true, `${label}: F5 does not reload`);
+  // PageUp goes to the program without scrolling the pane.
+  await page.keyboard.press("PageUp");
+  await sent([27, 91, 53, 126], "PageUp");
+  assert.equal(await cancelled("PageUp"), true, `${label}: PageUp scrolls nothing else`);
+  // The line editor's Ctrl+K (the app's search), Escape (the app's interrupt) and typed capitals
+  // (sent on keypress) reach the agent and no app shortcut.
+  await page.keyboard.press("Control+k");
+  await sent([11], "Ctrl+K");
+  await page.keyboard.press("Escape");
+  await page.keyboard.type("Hi");
+  await sent([72, 105], "typed text");
+  assert.deepEqual(await reachedApp(), [], `${label}: no app shortcut saw the terminal's keys`);
+  assert.equal(await page.evaluate(() => window.stillHere), true, `${label}: no reload`);
+  // A key no terminal can send keeps its meaning in the app (Ctrl+1 opens the first chat).
+  await page.keyboard.press("Control+1");
+  assert.deepEqual(await reachedApp(), ["1"], `${label}: Ctrl+1 is still the app's`);
+  assert.equal(await inTerminal(), true);
+
+  // The way out by keyboard, both directions.
+  await page.keyboard.press("Control+Tab");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.dataset.testid),
+    "preview-after",
+    `${label}: Ctrl+Tab leaves forward`,
+  );
+  await page.locator(".terminal-chat-host textarea").focus();
+  await page.keyboard.press("Control+Shift+Tab");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.dataset.testid),
+    "preview-before",
+    `${label}: Ctrl+Shift+Tab leaves back`,
+  );
+  await page.locator(".terminal-chat-host textarea").focus();
+}
+
 export async function checkTerminalChat(browser, url, out, engine) {
   for (const theme of ["light", "dark"]) {
     const context = await browser.newContext({
@@ -44,6 +122,7 @@ export async function checkTerminalChat(browser, url, out, engine) {
           ?.textContent?.includes("hello there"),
       );
       assert.match(await screen(), /hello there/);
+      await checkKeys(page, `${engine}/${theme}`);
       // The frame fills the pane without a page scrollbar or another surface showing through.
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -83,6 +162,14 @@ export async function checkTerminalChat(browser, url, out, engine) {
         `${engine}/${theme}: exited accessibility`,
       );
       await page.screenshot({ path: resolve(out, `${engine}-${theme}-exited.png`) });
+      // With nothing running, the terminal takes no keys: Tab reaches Start again.
+      await page.locator(".terminal-chat-host textarea").focus();
+      await page.keyboard.press("Tab");
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.textContent),
+        "Start again",
+        `${engine}/${theme}: Tab leaves an exited terminal`,
+      );
       await ended.getByRole("button", { name: "Back to Chat" }).click();
       assert.equal(await page.evaluate(() => "backToChat" in document.body.dataset), true);
       // The exit handed the chat's session back.

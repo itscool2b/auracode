@@ -1,12 +1,21 @@
 import { TerminalSession } from "../../lib/terminal";
 import type { RuntimeFactory, TerminalRuntime } from "../../lib/terminalPanel";
+import { isMac } from "../terminalKeys";
 import { createXterm, loadXterm, type XtermView } from "../xterm";
 
-const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-
-/** Ctrl+` or Cmd+`: the panel's own toggle, which the shell never receives. */
-export function isPanelToggle(event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "key" | "code">) {
-  return (event.ctrlKey || event.metaKey) && (event.key === "`" || event.code === "Backquote");
+/**
+ * Ctrl+` or Cmd+`: the panel's own toggle, which the shell never receives. Not with Alt: AltGr
+ * (Ctrl+Alt on Windows) types the backtick on layouts such as Hungarian.
+ */
+export function isPanelToggle(
+  event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "key" | "code"> &
+    Partial<Pick<KeyboardEvent, "altKey">>,
+) {
+  return (
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    (event.key === "`" || event.code === "Backquote")
+  );
 }
 
 /**

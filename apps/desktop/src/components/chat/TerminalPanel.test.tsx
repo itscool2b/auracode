@@ -99,6 +99,10 @@ describe("keys inside a panel terminal", () => {
       true,
     );
     expect(isPanelToggle(key({ key: "`", code: "Backquote" }))).toBe(false);
+    // AltGr+7 types the backtick on a Hungarian layout; it is text, not the toggle.
+    expect(isPanelToggle(key({ ctrlKey: true, altKey: true, key: "`", code: "Digit7" }))).toBe(
+      false,
+    );
   });
 
   it("copies a selection and pastes with Ctrl on Windows, and keeps Ctrl+C an interrupt", () => {

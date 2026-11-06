@@ -242,7 +242,14 @@ export function ChatsScreen({
   useEffect(() => {
     if (!active) return;
     const toggle = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.key !== "\\") return;
+      // Not with Alt: AltGr (Ctrl+Alt on Windows) types the backslash on layouts such as German.
+      if (
+        event.defaultPrevented ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        event.key !== "\\"
+      )
+        return;
       event.preventDefault();
       setCollapsed((value) => !value);
     };
