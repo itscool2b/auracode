@@ -22,7 +22,7 @@ pub(super) fn identity(root: &Dir) -> Result<same_file::Handle> {
 
 fn sync(dir: &Dir) -> Result<()> {
     #[cfg(unix)]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::safe_fs::fsync_dir(dir)?;
     #[cfg(not(unix))]
     let _ = dir;
     Ok(())

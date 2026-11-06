@@ -97,7 +97,7 @@ fn fail(path: &Path, reason: impl std::fmt::Display) -> CloneError {
 
 fn sync(dir: &Dir) -> std::io::Result<()> {
     #[cfg(unix)]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::fsutil::fsync_dir(dir)?;
     #[cfg(not(unix))]
     let _ = dir;
     Ok(())

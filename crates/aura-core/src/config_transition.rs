@@ -177,7 +177,7 @@ impl TransitionLease {
     }
     fn sync(&self) -> io::Result<()> {
         #[cfg(unix)]
-        self.dir.try_clone()?.into_std_file().sync_all()?;
+        crate::fsutil::fsync_dir(&self.dir)?;
         Ok(())
     }
 }

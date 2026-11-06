@@ -419,7 +419,7 @@ pub(super) fn write_new(dir: &Dir, name: &str, bytes: &[u8]) -> io::Result<()> {
 // crash durability is not established by this helper or the existing encrypted object store.
 fn sync(dir: &Dir) -> io::Result<()> {
     #[cfg(unix)]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::fsutil::fsync_dir(dir)?;
     #[cfg(not(unix))]
     let _ = dir;
     Ok(())

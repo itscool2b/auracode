@@ -21,6 +21,14 @@ pub(crate) struct FileData {
     pub executable: bool,
 }
 
+/// Flushes an open directory's entries (a rename, link or new file in it) to stable storage. cap-std
+/// holds directories as `O_PATH` descriptors on Linux, which `fsync` refuses with EBADF, so this
+/// syncs a readable descriptor of the same directory rather than the `Dir` itself.
+#[cfg(unix)]
+pub(crate) fn fsync_dir(dir: &Dir) -> std::io::Result<()> {
+    dir.open(".")?.into_std().sync_all()
+}
+
 pub(crate) fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }

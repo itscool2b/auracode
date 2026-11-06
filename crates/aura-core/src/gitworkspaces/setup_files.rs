@@ -173,7 +173,7 @@ fn create_new(dir: &Dir, name: &str, bytes: &[u8], published: impl FnOnce()) -> 
     published();
     dir.remove_file(temporary)?;
     #[cfg(unix)]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::fsutil::fsync_dir(dir)?;
     Ok(())
 }
 

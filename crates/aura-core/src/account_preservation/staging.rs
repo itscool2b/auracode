@@ -84,12 +84,7 @@ impl Stage {
             .hard_link("profile.prepared.json", &self.directory, "profile.json")
             .map_err(|_| PreservationError::Storage)?;
         #[cfg(unix)]
-        self.directory
-            .try_clone()
-            .map_err(|_| PreservationError::Storage)?
-            .into_std_file()
-            .sync_all()
-            .map_err(|_| PreservationError::Storage)?;
+        crate::fsutil::fsync_dir(&self.directory).map_err(|_| PreservationError::Storage)?;
         let _ = self.directory.remove_file("profile.prepared.json");
         let _ = self.directory.remove_file("keep-local-incomplete.json");
         Ok(())
@@ -114,10 +109,7 @@ impl Stage {
             .and_then(|()| file.sync_all())
             .map_err(|_| PreservationError::Storage)?;
         #[cfg(unix)]
-        directory
-            .into_std_file()
-            .sync_all()
-            .map_err(|_| PreservationError::Storage)?;
+        crate::fsutil::fsync_dir(&directory).map_err(|_| PreservationError::Storage)?;
         Ok(())
     }
 }
