@@ -1,11 +1,12 @@
-# Deliberate Windows and macOS verification
+# Deliberate Windows, macOS and Linux verification
 
 CI is manual. Routine commits do not dispatch checks. Reserve the planned integration runs and
 the final run for a coherent source checkpoint, then rerun affected gates when fixing failures.
-Linux and WSL acceptance are deferred.
+Linux runs the same Rust, binding and smoke checks on Ubuntu 22.04, the release packages' build
+system, with Xvfb as its display. WSL agent hosts stay unavailable.
 
 The separate `encrypted_storage` boolean enables the SQLCipher/account-sync test and Clippy matrix
-on both platforms. Enable it for the integrated M7 checkpoint and final verification. It is separate
+on all three platforms. Enable it for the integrated M7 checkpoint and final verification. It is separate
 from the default workspace build because SQLCipher is an optional Cargo feature. These tests use
 synthetic keys and temporary profiles; they never query the real keychain or account credentials.
 On Windows, the workflow selects an installed native Perl reporting `MSWin32` for vendored OpenSSL.
@@ -16,7 +17,8 @@ lists Perl; macOS uses the existing CommonCrypto SQLCipher backend.
 ## Checkpoint performance comparisons
 
 Set `checkpoint_benchmarks: true` when manually dispatching `CI` to run encrypted core verification
-and checkpoint comparisons on Windows and macOS. This mode skips the app/UI jobs and has its own
+and checkpoint comparisons on Windows and macOS (the default baseline predates the Linux port, so
+Linux runs the encrypted checks without the comparison). This mode skips the app/UI jobs and has its own
 concurrency group, so it can run alongside normal final verification. It does not replace that
 verification. The baseline ref, synthetic fixture sizes, and number of unchanged samples are
 explicit workflow inputs.
@@ -38,7 +40,7 @@ substitute a successful compile or a partial run for a completed comparison. See
 
 The `CI` workflow's optional `refresh_bindings` boolean defaults to `false`.
 
-- Normal runs generate TypeScript bindings independently on Windows and macOS and fail if the
+- Normal runs generate TypeScript bindings independently on Windows, macOS and Linux and fail if the
   result differs from the committed `apps/desktop/src/bindings.ts`.
 - An explicit refresh first compiles the real desktop Rust library on macOS and runs its
   `export_bindings` test. Frontend checks wait for that job, download its exact output, and use it

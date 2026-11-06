@@ -24,11 +24,20 @@ sudo apt-get install -y build-essential clang libwebkit2gtk-4.1-dev libayatana-a
 
 `pnpm bundle --bundles deb,rpm,appimage` makes all three packages. A package runs on the
 distribution it was built on and newer ones, since it links that system's glibc: the release
-packages come from Ubuntu 22.04 (`.github/workflows/build.yml`). The window is opaque (Linux has no
-glass material behind windows), the tray needs an AppIndicator host, notifications need a desktop
-notification service, and Keep awake asks systemd's login manager. Opening files finds Visual Studio
-Code, its Insiders build and Cursor from their packages and Zed from its install script; JetBrains
-IDEs stay manual there. The updater is off on Linux until release packages are published for it.
+packages come from Ubuntu 22.04 (`.github/workflows/build.yml`). The deb and rpm require the
+AppIndicator, ALSA and OpenSSL libraries the binary uses.
+
+- The window is opaque: Linux has no glass material behind windows.
+- The tray is an AppIndicator. Without its library auracode runs without a tray, and closing the
+  window quits. A desktop that shows no AppIndicators (Fedora's GNOME without the AppIndicator
+  extension) still hides the window on close; opening auracode again brings it back, and turning
+  off Settings > General > Keep running in the tray makes closing quit.
+- Notifications need a desktop notification service, and Keep awake asks systemd's login manager.
+- Added agent accounts keep their tokens in the desktop keyring: any Secret Service, such as GNOME
+  Keyring or KWallet. Without one, accounts cannot be added.
+- Opening files finds Visual Studio Code, its Insiders build and Cursor from their packages and Zed
+  from its install script; JetBrains IDEs stay manual there.
+- The updater is off on Linux until release packages are published for it.
 
 ## Signing on macOS
 

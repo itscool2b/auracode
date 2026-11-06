@@ -215,6 +215,8 @@ vendor account:
 bash .github/scripts/run-smoke.sh target/debug/auracode all
 # Windows, from the existing Git Bash runner
 bash .github/scripts/run-smoke.sh target/debug/auracode.exe all
+# Linux, on a virtual display when there is no desktop session
+xvfb-run -a -s "-screen 0 1440x900x24" bash .github/scripts/run-smoke.sh target/debug/auracode all
 ```
 
 The native harness covers real webview, IPC, actor, transcript, restart and quit paths. It does not
@@ -250,6 +252,7 @@ use the same explicit targets locally:
 pnpm bundle --target universal-apple-darwin --bundles dmg
 pnpm bundle --target x86_64-pc-windows-msvc --bundles nsis
 pnpm bundle --target aarch64-pc-windows-msvc --bundles nsis
+pnpm bundle --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage
 ```
 
 For signed updater qualification add `--signed-updater` with the secret-store environment already

@@ -150,6 +150,9 @@ fn endpoint_version_is_available_without_a_launch_or_environment_resolution() {
         .output()
         .expect("version");
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("protocol 1"));
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains(&format!("protocol {}", wire::PROTOCOL_VERSION))
+    );
     assert!(output.stderr.is_empty());
 }
