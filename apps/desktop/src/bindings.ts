@@ -2426,6 +2426,12 @@ export type McpDefinition = {
 	transport: McpTransport,
 	env_keys: string[],
 	header_keys: string[],
+	/**
+	 *  The agents that load this server, by agent ID (`claude`, `codex`). None means every
+	 *  agent that can take shared servers, including ones installed later. Left out of the JSON
+	 *  when None, so a definition for every agent reads exactly as before this field existed.
+	 */
+	agents?: string[] | null,
 };
 
 /**  An MCP server's state, in the few words every agent's states come to. */

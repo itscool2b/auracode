@@ -132,6 +132,7 @@ impl MemoryGrant {
                 },
                 env_keys: vec!["AURA_MEMORY_ENDPOINT".into(), "AURA_MEMORY_TOKEN".into()],
                 header_keys: vec![],
+                agents: None,
             },
             revision: 1,
             credentials: McpCredentials {

@@ -201,6 +201,7 @@ pub(crate) mod tests {
                 },
                 env_keys: vec![],
                 header_keys: vec!["X-Key".into()],
+                agents: None,
             },
             revision: 3,
             credentials: McpCredentials {

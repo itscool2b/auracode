@@ -22,6 +22,11 @@ pub struct McpDefinition {
     pub transport: McpTransport,
     pub env_keys: Vec<String>,
     pub header_keys: Vec<String>,
+    /// The agents that load this server, by agent ID (`claude`, `codex`). None means every
+    /// agent that can take shared servers, including ones installed later. Left out of the JSON
+    /// when None, so a definition for every agent reads exactly as before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents: Option<Vec<String>>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct McpRecord {
