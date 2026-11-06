@@ -131,17 +131,19 @@ impl NativeStore {
         let store = windows_native_keyring_store::Store::new().map_err(platform)?;
         #[cfg(target_os = "macos")]
         let store = apple_native_keyring_store::keychain::Store::new().map_err(platform)?;
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(target_os = "linux")]
+        let store = zbus_secret_service_keyring_store::Store::new().map_err(platform)?;
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         return Err(VaultError::Unavailable);
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         Ok(Self { store, _lease })
     }
     /// Every entry in auracode's own service, by name only. The data cleanup reads the data-folder
     /// indexes among them to tell which account keys another data folder still uses, so it never
     /// removes what another install of auracode on this machine needs. The platform does the
     /// matching (Windows filters Credential Manager by the `auracode.sync.v1:` target prefix,
-    /// macOS the keychain by its service), so no other app's credential reaches this process, and
-    /// each hit is checked again. Nothing is removed here.
+    /// macOS the keychain and Linux the Secret Service by its service), so no other app's
+    /// credential reaches this process, and each hit is checked again. Nothing is removed here.
     pub fn app_entries(&self) -> Result<Vec<VaultEntry>> {
         let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
         #[cfg(windows)]
@@ -157,7 +159,11 @@ impl NativeStore {
             ("target", target.as_str()),
             ("persistence", "Local"),
         ]);
-        #[cfg(not(windows))]
+        // A Secret Service `target` names a collection to create, so Linux sets only the label,
+        // which shows the entry under its target name as the other platforms do.
+        #[cfg(target_os = "linux")]
+        let modifiers = std::collections::HashMap::from([("label", target.as_str())]);
+        #[cfg(not(any(windows, target_os = "linux")))]
         let modifiers = std::collections::HashMap::new();
         self.store
             .build(SERVICE, &target, Some(&modifiers))
@@ -201,9 +207,10 @@ fn app_entries(targets: &[String]) -> Vec<VaultEntry> {
     entries
 }
 
-/// The keychain listing: the store's own search by exact service, then a second check of each
-/// hit, since a store may match loosely (keyring-core's mock matches substrings). Only names are
-/// taken; no secret is read.
+/// The keychain and Secret Service listing: the store's own search by exact service (a locked
+/// Secret Service collection asks to be unlocked first), then a second check of each hit, since a
+/// store may match loosely (keyring-core's mock matches substrings). Only names are taken; no
+/// secret is read.
 #[cfg_attr(windows, allow(dead_code))]
 fn list_by_service(store: &keyring_core::CredentialStore) -> Result<Vec<String>> {
     let spec = std::collections::HashMap::from([("service", SERVICE)]);

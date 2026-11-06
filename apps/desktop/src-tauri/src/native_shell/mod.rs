@@ -258,7 +258,7 @@ pub fn setup(app: &tauri::AppHandle) {
 }
 
 /// Applies Settings' notification, keep-awake and close-to-tray switches. Without a shell (smoke
-/// launches, Linux) there is nothing to switch.
+/// launches) there is nothing to switch.
 pub fn apply_preferences(app: &tauri::AppHandle, general: &GeneralPreferences) {
     if let Some(shell) = app.try_state::<Arc<NativeShell>>() {
         shell.apply_preferences(general);
@@ -311,6 +311,15 @@ pub fn shell_take_navigation(app: tauri::AppHandle) -> Option<String> {
 fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    // The first Linux tray loads the AppIndicator library and panics, ending auracode, when it is
+    // missing. The same lookup first, so such a system runs without a tray instead.
+    #[cfg(target_os = "linux")]
+    if !appindicator_available() {
+        return Err(std::io::Error::other(
+            "neither libayatana-appindicator3 nor libappindicator3 is installed",
+        )
+        .into());
+    }
     let open = MenuItem::with_id(app, OPEN, "Open auracode", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "Quit auracode", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
@@ -339,6 +348,20 @@ fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         });
     tray.build(app)?;
     Ok(())
+}
+
+/// The libraries libappindicator-sys opens, in its order: Ayatana's and then Canonical's, each by
+/// its ABI name and then by the bare name some AppImages carry.
+#[cfg(target_os = "linux")]
+fn appindicator_available() -> bool {
+    [
+        "libayatana-appindicator3.so.1",
+        "libappindicator3.so.1",
+        "libayatana-appindicator3.so",
+        "libappindicator3.so",
+    ]
+    .iter()
+    .any(|name| dlopen2::raw::Library::open(name).is_ok())
 }
 
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]

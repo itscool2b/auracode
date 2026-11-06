@@ -37,7 +37,8 @@ pub trait TokenStore: Send + Sync {
     fn remove(&self, entry: &TokenEntry) -> Result<()>;
 }
 
-/// Credential Manager on Windows, the login keychain on macOS. Elsewhere it is unavailable.
+/// Credential Manager on Windows, the login keychain on macOS, the Secret Service (GNOME Keyring,
+/// KWallet) on Linux. Elsewhere it is unavailable.
 pub struct NativeTokens {
     store: Arc<keyring_core::CredentialStore>,
 }
@@ -48,9 +49,11 @@ impl NativeTokens {
         let store = windows_native_keyring_store::Store::new().map_err(platform)?;
         #[cfg(target_os = "macos")]
         let store = apple_native_keyring_store::keychain::Store::new().map_err(platform)?;
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(target_os = "linux")]
+        let store = zbus_secret_service_keyring_store::Store::new().map_err(platform)?;
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         return Err(VaultError::Unavailable);
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         Ok(Self { store })
     }
     fn entry(&self, entry: &TokenEntry) -> Result<keyring_core::Entry> {
@@ -60,7 +63,11 @@ impl NativeTokens {
             ("target", target.as_str()),
             ("persistence", "Local"),
         ]);
-        #[cfg(not(windows))]
+        // A Secret Service `target` names a collection to create, so Linux sets only the label,
+        // which shows the entry under its target name as the other platforms do.
+        #[cfg(target_os = "linux")]
+        let modifiers = std::collections::HashMap::from([("label", target.as_str())]);
+        #[cfg(not(any(windows, target_os = "linux")))]
         let modifiers = std::collections::HashMap::new();
         self.store
             .build(SERVICE, &target, Some(&modifiers))

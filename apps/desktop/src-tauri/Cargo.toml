@@ -83,6 +83,11 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Checks for the AppIndicator library before the tray loads it, since a missing one panics there
+# (native_shell). Already in the tree through tao, at this version.
+dlopen2 = { version = "0.8.2", default-features = false }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # "Delete data and move auracode to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.
 # Already in the tree through Tauri, at this version.

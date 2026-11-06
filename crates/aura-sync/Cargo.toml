@@ -44,6 +44,11 @@ rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher-v
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.2", default-features = false, features = ["keychain"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# The desktop keyring (GNOME Keyring, KWallet or another Secret Service) over D-Bus: pure Rust on
+# the zbus the Linux build already has, its session encrypted with Rust crypto rather than OpenSSL.
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-async-io-crypto-rust"] }
+
 [target.'cfg(not(windows))'.dependencies]
 rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher"] }
 

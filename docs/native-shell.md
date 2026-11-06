@@ -1,7 +1,10 @@
 # Native shell
 
-Windows and macOS own these services in Rust independently of the webview. Linux and WSL are
-deferred. Smoke launches do not create tray icons, power assertions or notifications.
+Windows, macOS and Linux own these services in Rust independently of the webview. On Linux the tray
+is an AppIndicator (it needs a host, such as GNOME's AppIndicator extension or KDE's system tray),
+notifications go to the desktop's notification service over D-Bus, and Keep awake takes a systemd
+inhibitor lock. WSL agent hosts are separate. Smoke launches do not create tray icons, power
+assertions or notifications.
 
 ## Window and long runs
 
