@@ -75,18 +75,64 @@ export function stateLine(chat: ChatSummary, inTerminal: InTerminal = nowhere): 
 
 export type Board = Record<Lane, ChatSummary[]>;
 
-/** The chats in their lanes, most recent activity first. */
+/**
+ * When each chat came into its lane, so a lane keeps its order while its chats work: a streaming
+ * agent touches its chat many times a second, and sorting by that would shuffle the cards. A move
+ * to Finished waits in `pending` until it settles.
+ */
+export type Arrivals = Map<
+  string,
+  {
+    readonly lane: Lane;
+    readonly at: number;
+    readonly pending?: { readonly lane: Lane; readonly since: number };
+  }
+>;
+
+/**
+ * How long a chat must stay finished before its card moves to Finished. An agent passes through
+ * "ready" between starting and its queued prompt, and between two turns; without the wait its card
+ * flickers out of Working and back. Moves to Working and Needs you are immediate.
+ */
+export const SETTLE_MS = 1500;
+
+/**
+ * The chats in their lanes, the latest to arrive first. A chat seen for the first time arrives at
+ * its last activity, so the first board reads newest first; one that changes lane arrives `now`
+ * (Finished once it has settled). `arrivals` is updated in place.
+ */
 export function boardOf(
   chats: readonly ChatSummary[],
   now: number,
   inTerminal: InTerminal = nowhere,
+  arrivals: Arrivals = new Map(),
 ): Board {
   const board: Board = { attention: [], working: [], finished: [] };
+  const seen = new Set<string>();
   for (const chat of chats) {
     const lane = laneOf(chat, now, inTerminal);
-    if (lane !== null) board[lane].push(chat);
+    if (lane === null) continue;
+    seen.add(chat.id);
+    const before = arrivals.get(chat.id);
+    let placed: Lane = lane;
+    if (before === undefined) arrivals.set(chat.id, { lane, at: chat.updated_at });
+    else if (before.lane === lane) {
+      if (before.pending) arrivals.set(chat.id, { lane, at: before.at });
+    } else if (lane === "finished") {
+      const since = before.pending?.lane === lane ? before.pending.since : now;
+      if (now - since >= SETTLE_MS)
+        arrivals.set(chat.id, { lane, at: Math.max(now, before.at + 1) });
+      else {
+        arrivals.set(chat.id, { lane: before.lane, at: before.at, pending: { lane, since } });
+        placed = before.lane;
+      }
+    } else arrivals.set(chat.id, { lane, at: Math.max(now, before.at + 1) });
+    board[placed].push(chat);
   }
-  for (const lane of LANES) board[lane].sort((a, b) => b.updated_at - a.updated_at);
+  for (const id of [...arrivals.keys()]) if (!seen.has(id)) arrivals.delete(id);
+  const arrived = (chat: ChatSummary) => arrivals.get(chat.id)?.at ?? chat.updated_at;
+  for (const lane of LANES)
+    board[lane].sort((a, b) => arrived(b) - arrived(a) || b.created_at - a.created_at);
   return board;
 }
 

@@ -156,10 +156,10 @@
 }
 
 /*
- * Pages that stand alone, Agents and the Plugin library, sit in the same inset glass pane: the
- * window's material around it, the pane 8px in from every edge with no sidebar beside it, its rim
- * and lit top edge. The page scrolls inside the pane. Their content keeps its place in the window:
- * the pane's inset comes off the top padding that clears the titlebar.
+ * Pages that stand alone, Agents, the Plugin library and the Dashboard, sit in the same inset glass
+ * pane: the window's material around it, the pane 8px in from every edge with no sidebar beside
+ * it, its rim and lit top edge. The page scrolls inside the pane. Their content keeps its place in
+ * the window: the pane's inset comes off the top padding that clears the titlebar.
  */
 .pane-shell {
   display: flex;
@@ -169,7 +169,7 @@
   background-color: transparent;
 }
 
-.pane-shell > :is(.agents-screen, .plugins-screen, .processes-screen) {
+.pane-shell > :is(.agents-screen, .plugins-screen, .dashboard-screen) {
   position: relative;
   isolation: isolate;
   flex: 1;
@@ -181,11 +181,11 @@
 }
 
 /* The pane's light, as the chat's: under the content, never over a word. */
-.pane-shell > :is(.agents-screen, .plugins-screen, .processes-screen)::before {
+.pane-shell > :is(.agents-screen, .plugins-screen, .dashboard-screen)::before {
   content: none;
 }
 
-.pane-shell :is(.agents-page, .processes-page) {
+.pane-shell :is(.agents-page, .dashboard-page) {
   padding-top: calc(var(--ui-titlebar-height) + var(--g-space-4) - var(--ui-pane-inset));
 }
 

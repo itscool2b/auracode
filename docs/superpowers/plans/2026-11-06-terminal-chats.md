@@ -110,3 +110,18 @@ terminals waits for the vendors' notification hooks (phase 2).
 - Left: a native pass with both CLIs in the installed app (PTY behaviour, resume, the import of
   real files, Cursor and Grok updates); crash recovery of a terminal that ended unimported (the
   session file stays the record; the next terminal on that session imports from its own start).
+- 2026-11-06, after the owner's first use (#108):
+  - Keys: xterm's screen reader mode left most keys it sends uncancelled, so Shift+Tab sent Claude
+    Code its mode switch and also moved focus into the app. Every key a terminal sends is now its
+    program's alone; keys no terminal can send keep their app meaning; Ctrl+Tab and Ctrl+Shift+Tab
+    leave it; a terminal whose program is not running takes no keys. Natively checked in Claude
+    Code 2.1.319: Shift+Tab cycled its modes with focus kept, F5 did not reload.
+  - New chat's Terminal waited forever: a new chat starts its agent as it is made, and the
+    terminal's open arrived while that start was past its preparation, which nothing answered.
+    The starting agent is stopped first now, every path that drops a start answers a waiting
+    terminal, and a terminal resumes a saved session only when its file exists (the one a new
+    chat starts for Chat has none until its first message). Natively: a plain folder opened in
+    3.9 s, a Git worktree in 1.6 s.
+  - Not done: skipping that first Chat start for a chat created to open in the terminal (it needs
+    the three chat-creation commands to take the choice); the stop and restart cost a second or
+    two.

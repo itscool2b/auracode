@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ChatSummary } from "../bindings";
-import { boardOf, boardSummary, FINISHED_WINDOW_MS, laneOf, stateLine } from "./dashboard";
+import {
+  boardOf,
+  boardSummary,
+  FINISHED_WINDOW_MS,
+  laneOf,
+  SETTLE_MS,
+  stateLine,
+} from "./dashboard";
 
 const NOW = 1_800_000_000_000;
 
@@ -53,6 +60,58 @@ describe("the Dashboard's lanes", () => {
     expect(board.finished.map((c) => c.id)).toEqual(["newer", "older"]);
     expect(board.working.map((c) => c.id)).toEqual(["busy"]);
     expect(board.attention).toEqual([]);
+  });
+
+  it("keeps a lane's order while its agents work, and puts a chat that changes lane first", () => {
+    const arrivals = new Map();
+    const a = chat("a", { status: "running", updated_at: NOW - 3_000 });
+    const b = chat("b", { status: "running", updated_at: NOW - 2_000 });
+    expect(boardOf([a, b], NOW, undefined, arrivals).working.map((c) => c.id)).toEqual(["b", "a"]);
+    // Streaming touches "a" again and again: it keeps its place.
+    const touched = { ...a, updated_at: NOW + 500 };
+    expect(boardOf([touched, b], NOW + 500, undefined, arrivals).working.map((c) => c.id)).toEqual([
+      "b",
+      "a",
+    ]);
+    // "b" finishes: once that settles it arrives at the top of Finished, above an earlier one.
+    const earlier = chat("earlier", { updated_at: NOW - 1_000 });
+    const finishedB = { ...b, status: "ready" as const, updated_at: NOW + 900 };
+    const settling = boardOf([touched, finishedB, earlier], NOW + 1_000, undefined, arrivals);
+    expect(settling.working.map((c) => c.id)).toEqual(["b", "a"]);
+    const done = boardOf(
+      [touched, finishedB, earlier],
+      NOW + 1_000 + SETTLE_MS,
+      undefined,
+      arrivals,
+    );
+    expect(done.finished.map((c) => c.id)).toEqual(["b", "earlier"]);
+    expect(done.working.map((c) => c.id)).toEqual(["a"]);
+    // A chat no longer on the board is forgotten.
+    boardOf([touched], NOW + 5_000, undefined, arrivals);
+    expect([...arrivals.keys()]).toEqual(["a"]);
+  });
+
+  it("keeps a card in Working while its agent passes through ready between two turns", () => {
+    const arrivals = new Map();
+    const a = chat("a", { status: "starting" });
+    expect(boardOf([a], NOW, undefined, arrivals).working).toHaveLength(1);
+    // Ready for a moment, then the queued prompt runs: the card never leaves Working.
+    for (const [status, at] of [
+      ["ready", NOW + 200],
+      ["running", NOW + 400],
+      ["ready", NOW + 3_000],
+      ["running", NOW + 3_300],
+    ] as const) {
+      const board = boardOf([{ ...a, status }], at, undefined, arrivals);
+      expect(
+        board.working.map((c) => c.id),
+        `${status} at ${at - NOW}`,
+      ).toEqual(["a"]);
+      expect(board.finished).toEqual([]);
+    }
+    // Needs you never waits.
+    const asked = boardOf([{ ...a, needs_attention: true }], NOW + 3_400, undefined, arrivals);
+    expect(asked.attention.map((c) => c.id)).toEqual(["a"]);
   });
 
   it("says why a card needs you, in sentence case", () => {

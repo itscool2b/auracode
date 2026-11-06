@@ -325,6 +325,7 @@ export function SettingsScreen({
     ["Open context panel", `${key} J`],
     ["Show or hide the terminal", `${key} \``],
     ["New terminal", `${key} Shift \``],
+    ["Leave a terminal (other keys go to its program)", "Ctrl Tab"],
     ["Collapse the sidebar", `${key} \\`],
     ["Choose agent, model and effort", `${key} .`],
     ["Open settings", `${key} ,`],

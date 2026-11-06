@@ -43,15 +43,38 @@ export async function checkDashboard(browser, url, out, engine) {
         await page.getByRole("heading", { name: "Dashboard", level: 1 }).waitFor();
         const lanes = page.getByTestId("dashboard-lane");
         assert.equal(await lanes.count(), 3);
+        // The page fills the app's inset pane, its lanes side by side (it once shrank to a
+        // 70px column there, every word on its own line).
+        const frame = await page.evaluate(() => {
+          const screen = document.querySelector('[data-testid="dashboard-screen"]');
+          const boxes = [...document.querySelectorAll('[data-testid="dashboard-lane"]')].map(
+            (lane) => lane.getBoundingClientRect(),
+          );
+          return {
+            screen: screen.getBoundingClientRect().width,
+            window: innerWidth,
+            tops: boxes.map((box) => Math.round(box.top)),
+            widths: boxes.map((box) => Math.round(box.width)),
+          };
+        });
+        assert.ok(frame.screen >= frame.window - 32, `the page fills the pane: ${frame.screen}`);
+        assert.equal(new Set(frame.tops).size, 1, `lanes side by side: ${frame.tops}`);
+        assert.ok(Math.min(...frame.widths) >= 220, `lanes have room: ${frame.widths}`);
         assert.deepEqual(await page.getByRole("heading", { level: 2 }).allTextContents(), [
           "Needs you 2",
-          "Working 2",
+          "Working 3",
           "Finished 2",
         ]);
         assert.equal(
           await page.getByTestId("dashboard-summary").textContent(),
-          "2 need you, 2 working, 2 finished in the last day.",
+          "2 need you, 3 working, 2 finished in the last day.",
         );
+        // A worktree chat names its project, not its app-owned folder; archived chats are off.
+        assert.match(
+          await page.locator('[data-test-chat-id="chat-worktree"]').textContent(),
+          /Codex · auracode/,
+        );
+        assert.equal(await laneOf("chat-archived"), null);
 
         // A chat that waits on you sits under Needs you even though its agent still runs.
         assert.equal(await laneOf("chat-review"), "attention");
@@ -115,11 +138,80 @@ export async function checkDashboard(browser, url, out, engine) {
         await page.getByText("Nothing is running.", { exact: false }).waitFor();
         assert.equal(await page.getByText("Nothing needs you.").count(), 1);
         await audit("empty");
+
+        // A busy day: Finished shows its newest eight, and the rest on request.
+        await page.goto(`${url}/?preview=dashboard&theme=${theme}&case=busy`);
+        const finished = page.locator('[data-lane="finished"] [data-testid="dashboard-card"]');
+        await page.getByRole("heading", { name: "Finished 13", level: 2 }).waitFor();
+        assert.equal(await finished.count(), 8);
+        assert.equal(
+          await finished.first().getAttribute("data-test-chat-id"),
+          "chat-pi",
+          "newest first",
+        );
+        await page.getByRole("button", { name: "Show 5 more" }).click();
+        assert.equal(await finished.count(), 13);
+        await audit("busy");
+        await page.getByRole("button", { name: "Show fewer" }).click();
+        // The cards that go leave on the next frame.
+        await page.waitForFunction(
+          () =>
+            document.querySelectorAll('[data-lane="finished"] [data-testid="dashboard-card"]')
+              .length === 8,
+        );
         assert.deepEqual(errors, []);
       } finally {
         await context.close();
       }
     }
+  }
+  await checkMoves(browser, url, engine);
+}
+
+/**
+ * Cards that change lane, with motion on: a card leaves one lane and arrives in the other, and is
+ * never seen outside its own lane's column (cards used to fly across the board over the others,
+ * their two copies cross-fading).
+ */
+async function checkMoves(browser, url, engine) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  try {
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(`${url}/?preview=dashboard&case=live`);
+    await page.getByRole("heading", { name: "Dashboard", level: 1 }).waitFor();
+    const samples = () =>
+      page.evaluate(() => {
+        const columns = Object.fromEntries(
+          [...document.querySelectorAll('[data-testid="dashboard-lane"]')].map((lane) => {
+            const box = lane.getBoundingClientRect();
+            return [lane.dataset.lane, [box.left, box.right]];
+          }),
+        );
+        return [...document.querySelectorAll('[data-testid="dashboard-card"]')].map((card) => {
+          const box = card.getBoundingClientRect();
+          const [left, right] = columns[card.dataset.lane];
+          return {
+            id: card.dataset.testChatId,
+            lane: card.dataset.lane,
+            inside: box.left >= left - 1 && box.right <= right + 1,
+          };
+        });
+      });
+    const lanesSeen = new Set();
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      for (const card of await samples()) {
+        assert.ok(card.inside, `${engine}: ${card.id} stays in its ${card.lane} column`);
+        if (card.id === "chat-codex") lanesSeen.add(card.lane);
+      }
+      await page.waitForTimeout(40);
+    }
+    assert.deepEqual([...lanesSeen].sort(), ["attention", "working"], "the chat changed lane");
+    assert.deepEqual(errors, []);
+  } finally {
+    await context.close();
   }
 }
 

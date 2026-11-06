@@ -1,11 +1,12 @@
 import { springs, usePrefersReducedMotion } from "@auracode/ui";
 import { AgentMark, PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import { ArrowLeft, Check, ChevronRight, Square } from "lucide-react";
-import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChatProcesses, ChatSummary, ProcessesSnapshot } from "../../bindings";
 import type { AppStore } from "../../lib/chat/appStore";
 import {
+  type Arrivals,
   boardOf,
   boardSummary,
   LANE_TITLES,
@@ -25,10 +26,14 @@ import {
   processesApi,
   REFRESH_MS,
 } from "../../lib/processes";
+import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { TaskKindIcon, TaskMark, taskFacts, useClock } from "../chat/BackgroundTasks";
 import { projectName } from "../chat/ChatList";
 import { terminalChats } from "../chat/terminalChatRuntime";
 import "./dashboard.css";
+
+const noSubscribe = () => () => {};
+const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /** The snapshot shown and the one before it, for processor use between the two. */
 interface Reading {
@@ -45,24 +50,63 @@ const EMPTY: Record<Lane, string> = {
 /** A working card lists this many of its running tasks; the programs disclosure has the rest. */
 const TASKS_SHOWN = 3;
 
+/** Finished shows this many cards until asked for every one. */
+export const FINISHED_SHOWN = 8;
+
+/**
+ * A card arrives at the top of its lane, rising into place as the lane makes room, and leaves its
+ * old lane by fading while the cards below close up. It never crosses the board over the others.
+ * Reduced motion places it at once.
+ */
+function cardMotion(reduced: boolean) {
+  if (reduced) return {};
+  return {
+    layout: "position" as const,
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, transition: { duration: 0.12, ease: "easeOut" as const } },
+    transition: springs.smooth,
+  };
+}
+
 /**
  * The Dashboard: every chat on a board of three lanes, Needs you, Working and Finished, each a card
  * that opens its chat. A working card says what its agent and its tasks are doing, and folds the
  * programs it runs (read from the process table every two seconds while the page is open), each
- * with Stop. Cards glide between lanes as their chats change.
+ * with Stop. A lane keeps its order: a chat that changes lane arrives at the top of the new one.
  */
 export function DashboardScreen({
   app,
+  workspace,
   api = processesApi,
   onBack,
   onOpenChat,
 }: {
   readonly app: AppStore;
+  /** Names each chat's project, and leaves archived chats off the board. */
+  readonly workspace?: WorkspaceStore;
   readonly api?: ProcessesApi;
   readonly onBack: () => void;
   readonly onOpenChat: (chatId: string) => void;
 }) {
-  const summaries = useSyncExternalStore(app.subscribe, app.getSnapshot).chats ?? [];
+  const listed = useSyncExternalStore(app.subscribe, app.getSnapshot).chats ?? [];
+  const organization = useSyncExternalStore(
+    workspace?.subscribe ?? noSubscribe,
+    workspace?.getSnapshot ?? emptyWorkspace,
+    workspace?.getSnapshot ?? emptyWorkspace,
+  ).data;
+  const entries = new Map(organization?.chats.map((entry) => [entry.chat.id, entry]) ?? []);
+  const projectNames = new Map(
+    organization?.projects.map((project) => [project.id, project.name]) ?? [],
+  );
+  // Archived chats are put away; the board leaves them out as the sidebar does.
+  const summaries = listed.filter((chat) => !entries.get(chat.id)?.archived);
+  // A chat's place is its project's name: a worktree's folder is an app-owned name.
+  const placeOf = (chat: ChatSummary) => {
+    const project = entries.get(chat.id)?.project_id;
+    return (project ? projectNames.get(project) : undefined) ?? projectName(chat.folder);
+  };
+  const [allFinished, setAllFinished] = useState(false);
   const [reading, setReading] = useState<Reading>({ previous: null, current: null });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -113,19 +157,10 @@ export function DashboardScreen({
     }
   };
 
-  // A chat whose agent runs in its terminal here shows as stopped to the store: it works.
-  const board = boardOf(summaries, now, terminalChats.running);
-  // Each chat's lane at the last render: a card whose lane changed crosses over the others.
-  const lanes = useRef(new Map<string, Lane>());
-  const crossing = new Set<string>();
-  for (const lane of LANES)
-    for (const chat of board[lane]) {
-      const before = lanes.current.get(chat.id);
-      if (before !== undefined && before !== lane) crossing.add(chat.id);
-    }
-  useEffect(() => {
-    lanes.current = new Map(LANES.flatMap((lane) => board[lane].map((chat) => [chat.id, lane])));
-  });
+  // A chat whose agent runs in its terminal here shows as stopped to the store: it works. When each
+  // chat came into its lane keeps the lanes' order steady while their agents stream.
+  const arrivals = useRef<Arrivals>(new Map());
+  const board = boardOf(summaries, now, terminalChats.running, arrivals.current);
   const processes = new Map(
     (reading.current?.chats ?? []).map((chat) => [chat.chat_id, chat] as const),
   );
@@ -151,9 +186,13 @@ export function DashboardScreen({
         <p role="status" className="dashboard-message">
           {notice}
         </p>
-        <LayoutGroup>
-          <div className="dashboard-board">
-            {LANES.map((lane) => (
+        <div className="dashboard-board">
+          {LANES.map((lane) => {
+            const cards =
+              lane === "finished" && !allFinished
+                ? board[lane].slice(0, FINISHED_SHOWN)
+                : board[lane];
+            return (
               <section
                 key={lane}
                 className="dashboard-lane"
@@ -170,28 +209,47 @@ export function DashboardScreen({
                   <p className="dashboard-lane-empty">{EMPTY[lane]}</p>
                 ) : null}
                 <ul className="dashboard-cards">
-                  <AnimatePresence initial={false}>
-                    {board[lane].map((chat) => (
-                      <DashboardCard
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {cards.map((chat) => (
+                      <motion.li
                         key={chat.id}
-                        chat={chat}
-                        lane={lane}
-                        crossing={crossing.has(chat.id)}
-                        processes={processes.get(chat.id)}
-                        reading={reading}
-                        now={now}
-                        reduced={reduced}
-                        stopping={stopping}
-                        onStop={stop}
-                        onOpenChat={onOpenChat}
-                      />
+                        className="dashboard-card"
+                        data-lane={lane}
+                        data-testid="dashboard-card"
+                        data-test-chat-id={chat.id}
+                        {...cardMotion(reduced)}
+                      >
+                        <DashboardCard
+                          chat={chat}
+                          lane={lane}
+                          place={placeOf(chat)}
+                          processes={processes.get(chat.id)}
+                          reading={reading}
+                          now={now}
+                          stopping={stopping}
+                          onStop={stop}
+                          onOpenChat={onOpenChat}
+                        />
+                      </motion.li>
                     ))}
                   </AnimatePresence>
                 </ul>
+                {lane === "finished" && board.finished.length > FINISHED_SHOWN ? (
+                  <button
+                    type="button"
+                    className="g-button g-button-ghost g-button-28 dashboard-lane-more"
+                    aria-expanded={allFinished}
+                    onClick={() => setAllFinished((all) => !all)}
+                  >
+                    {allFinished
+                      ? "Show fewer"
+                      : `Show ${board.finished.length - FINISHED_SHOWN} more`}
+                  </button>
+                ) : null}
               </section>
-            ))}
-          </div>
-        </LayoutGroup>
+            );
+          })}
+        </div>
       </div>
     </main>
   );
@@ -225,23 +283,21 @@ function markState(chat: ChatSummary, lane: Lane) {
 function DashboardCard({
   chat,
   lane,
-  crossing,
+  place,
   processes,
   reading,
   now,
-  reduced,
   stopping,
   onStop,
   onOpenChat,
 }: {
   readonly chat: ChatSummary;
   readonly lane: Lane;
-  /** Its lane changed with this render: it rides above the cards it passes. */
-  readonly crossing: boolean;
+  /** Its project's name, or its folder's when it has none. */
+  readonly place: string;
   readonly processes: ChatProcesses | undefined;
   readonly reading: Reading;
   readonly now: number;
-  readonly reduced: boolean;
   readonly stopping: ReadonlySet<number>;
   readonly onStop: (chatId: string, pid: number, name: string) => void;
   readonly onOpenChat: (chatId: string) => void;
@@ -251,31 +307,8 @@ function DashboardCard({
   const rows = (processes?.agents ?? []).flatMap((agent) => listTree(agent.processes));
   const memory = rows.reduce((sum, { row }) => sum + (row.memory_bytes ?? 0), 0);
   const line = stateLine(chat, terminalChats.running);
-  const moving = useRef<HTMLLIElement>(null);
-  const motionProps = reduced
-    ? { layout: false as const, transition: { duration: 0 } }
-    : {
-        layout: "position" as const,
-        initial: { opacity: 0, y: 4 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.98 },
-        transition: springs.smooth,
-        // A card crossing lanes rides above the others, solid, until it lands.
-        onLayoutAnimationStart: () => {
-          if (crossing) moving.current?.setAttribute("data-moving", "");
-        },
-        onLayoutAnimationComplete: () => moving.current?.removeAttribute("data-moving"),
-      };
   return (
-    <motion.li
-      ref={moving}
-      layoutId={reduced ? undefined : `dashboard-${chat.id}`}
-      className="dashboard-card"
-      data-lane={lane}
-      data-testid="dashboard-card"
-      data-test-chat-id={chat.id}
-      {...motionProps}
-    >
+    <>
       <div className="dashboard-card-head">
         <AgentMark agent={chat.agent_id} size={28} state={markState(chat, lane)} label={line} />
         <div className="dashboard-card-text">
@@ -290,7 +323,7 @@ function DashboardCard({
             </button>
           </h3>
           <p className="dashboard-card-meta">
-            {chat.agent_name} · {projectName(chat.folder)}
+            {chat.agent_name} · {place}
           </p>
         </div>
         <ChevronRight className="dashboard-card-go" size={14} aria-hidden="true" />
@@ -379,6 +412,6 @@ function DashboardCard({
           </ul>
         </details>
       ) : null}
-    </motion.li>
+    </>
   );
 }

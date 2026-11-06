@@ -2,12 +2,42 @@
 use super::*;
 
 fn claude_rig() -> Rig {
+    claude_rig_with(Vec::new())
+}
+
+fn claude_rig_with(drivers: Vec<ScriptedDriver>) -> Rig {
     rig_with_spec(
-        aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
+        aura_drivers::testing::ScriptedDriverFactory::new(drivers),
         WriterConfig::STANDARD,
         Knobs::STANDARD,
         aura_agents::get("claude").expect("claude").clone(),
     )
+}
+
+/// A home folder for the next rig built on this thread, where Claude Code's files go.
+fn with_home(build: impl FnOnce() -> Rig) -> (tempfile::TempDir, Rig) {
+    let home = tempfile::tempdir().unwrap();
+    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    RIG_ENV.with(|extra| {
+        extra.replace(vec![(
+            variable.into(),
+            home.path().to_string_lossy().into_owned(),
+        )])
+    });
+    let rig = build();
+    RIG_ENV.with(|extra| extra.replace(Vec::new()));
+    (home, rig)
+}
+
+/// Claude Code's session file for `session` under `home`, as it writes one once a message is sent.
+fn claude_file(home: &std::path::Path, session: &str) -> std::path::PathBuf {
+    let project = home.join(".claude").join("projects").join("C--work-app");
+    std::fs::create_dir_all(&project).unwrap();
+    project.join(format!("{session}.jsonl"))
+}
+
+fn session_arg<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter().find_map(|a| a.strip_prefix(flag))
 }
 
 fn argv(opened: &TerminalOpened) -> Vec<String> {
@@ -22,7 +52,7 @@ fn argv(opened: &TerminalOpened) -> Vec<String> {
 
 #[tokio::test]
 async fn a_terminal_starts_a_claude_session_chat_continues_and_chat_waits_while_it_is_open() {
-    let rig = claude_rig();
+    let (home, rig) = with_home(claude_rig);
     let chat = rig
         .manager
         .create_chat("claude", &rig.folder)
@@ -52,7 +82,8 @@ async fn a_terminal_starts_a_claude_session_chat_continues_and_chat_waits_while_
         "{start:?}"
     );
     assert!(rig.manager.open_terminal(&chat.id).await.is_err());
-    // Once it ends, the next terminal continues the same session.
+    // Once it ends, the next terminal continues the same session, which Claude Code wrote down.
+    std::fs::write(claude_file(home.path(), &session), "").unwrap();
     rig.manager.terminal_ended(&chat.id, opened.generation);
     let again = reopened(&rig, &chat.id).await;
     assert!(
@@ -64,6 +95,95 @@ async fn a_terminal_starts_a_claude_session_chat_continues_and_chat_waits_while_
     rig.manager.terminal_ended(&chat.id, opened.generation);
     assert!(rig.manager.open_terminal(&chat.id).await.is_err());
     rig.manager.terminal_ended(&chat.id, again.generation);
+}
+
+/// Waits until the chat's own start has made its agent's driver (it has not said Ready yet).
+async fn driver_made(factory: &aura_drivers::testing::ScriptedDriverFactory) {
+    for _ in 0..500 {
+        if !factory.kinds().is_empty() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("the chat's own start never reached its agent: {factory:?}");
+}
+
+/// A new chat starts its agent as it is made, so a terminal chosen in New chat opens while that
+/// agent is still starting. The terminal waits for it to stop and then opens; it used to wait
+/// forever.
+#[tokio::test]
+async fn a_terminal_opened_while_the_new_chats_agent_starts_opens_once_that_agent_stops() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let factory = aura_drivers::testing::ScriptedDriverFactory::new(vec![driver]);
+    let rig = rig_with_spec(
+        factory.clone(),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+        aura_agents::get("claude").expect("claude").clone(),
+    );
+    let chat = rig
+        .manager
+        .create_chat("claude", &rig.folder)
+        .await
+        .unwrap();
+    driver_made(&factory).await;
+    assert_eq!(rig.statuses.status(&chat.id), Some(SessionStatus::Starting));
+    let opened = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        rig.manager.open_terminal(&chat.id),
+    )
+    .await
+    .expect("the terminal opens instead of waiting forever")
+    .unwrap();
+    assert!(
+        handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, aura_drivers::driver::LoggedCommand::Shutdown)),
+        "the starting agent was asked to stop first"
+    );
+    assert!(session_arg(&argv(&opened), "--session-id=").is_some());
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+}
+
+/// The session a new chat starts for Chat has no file until its first message, and Claude Code
+/// cannot resume it: the terminal starts a session of its own instead.
+#[tokio::test]
+async fn a_session_claude_code_never_wrote_down_is_not_resumed_in_the_terminal() {
+    let unwritten = "01a1b21f-0000-7000-8000-000000000001";
+    let (driver, _handle) = ScriptedDriver::new(vec![
+        ready_step(unwritten),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (_home, rig) = with_home(|| claude_rig_with(vec![driver]));
+    let chat = rig
+        .manager
+        .create_chat("claude", &rig.folder)
+        .await
+        .unwrap();
+    for _ in 0..500 {
+        if rig.statuses.status(&chat.id) == Some(SessionStatus::Ready) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(rig.statuses.status(&chat.id), Some(SessionStatus::Ready));
+    let opened = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        rig.manager.open_terminal(&chat.id),
+    )
+    .await
+    .expect("the terminal opens")
+    .unwrap();
+    let args = argv(&opened);
+    assert_eq!(session_arg(&args, "--resume="), None, "{args:?}");
+    let session = session_arg(&args, "--session-id=").expect("a session of its own");
+    assert_ne!(session, unwritten);
+    rig.manager.terminal_ended(&chat.id, opened.generation);
 }
 
 #[tokio::test]
@@ -106,16 +226,7 @@ async fn reopened(rig: &Rig, chat: &str) -> TerminalOpened {
 
 #[tokio::test]
 async fn a_terminals_conversation_is_recorded_once_it_ends_and_only_what_it_added() {
-    let home = tempfile::tempdir().unwrap();
-    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    RIG_ENV.with(|extra| {
-        extra.replace(vec![(
-            variable.into(),
-            home.path().to_string_lossy().into_owned(),
-        )])
-    });
-    let rig = claude_rig();
-    RIG_ENV.with(|extra| extra.replace(Vec::new()));
+    let (home, rig) = with_home(claude_rig);
     let chat = rig
         .manager
         .create_chat("claude", &rig.folder)
@@ -127,13 +238,7 @@ async fn a_terminals_conversation_is_recorded_once_it_ends_and_only_what_it_adde
         .find_map(|a| a.strip_prefix("--session-id=").map(str::to_owned))
         .unwrap();
     // Claude Code writes its session file as the person works in the terminal.
-    let project = home
-        .path()
-        .join(".claude")
-        .join("projects")
-        .join("C--work-app");
-    std::fs::create_dir_all(&project).unwrap();
-    let file = project.join(format!("{session}.jsonl"));
+    let file = claude_file(home.path(), &session);
     let line = |kind: &str, content: &str| {
         let body = if kind == "user" {
             serde_json::json!({"type":"user","message":{"role":"user","content":content},"timestamp":"2026-11-06T08:00:00.000Z"})
