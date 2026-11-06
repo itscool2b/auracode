@@ -113,7 +113,7 @@ export interface Transport {
     onEnd: () => void,
   ): Promise<ChatAttach>;
   detach(subscriptionId: string): Promise<void>;
-  history(chatId: string, beforeSeq: number): Promise<HistoryPage>;
+  history(chatId: string, beforeSeq: number, maxBytes?: number): Promise<HistoryPage>;
   lists(chatId: string): Promise<SessionLists>;
   send(chatId: string, text: string): Promise<PromptAck>;
   cancelQueued(chatId: string, promptId: string): Promise<void>;
@@ -167,7 +167,7 @@ export const tauriTransport: Transport = {
   storageStatus,
   attach: chatAttach,
   detach: chatDetach,
-  history: (chatId, beforeSeq) => chatHistory(chatId, beforeSeq),
+  history: (chatId, beforeSeq, maxBytes) => chatHistory(chatId, beforeSeq, maxBytes),
   lists: chatLists,
   send: chatSend,
   cancelQueued: chatCancelQueued,

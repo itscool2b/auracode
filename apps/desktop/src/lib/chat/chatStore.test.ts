@@ -12,6 +12,8 @@ import { CommandError } from "../ipc";
 import {
   BLOB_PAGE,
   ChatStore,
+  EARLIER_PAGE_BYTES,
+  EARLIER_TURNS,
   LISTS_DEBOUNCE_MS,
   OPTION_HOLD_MS,
   type PageVisibility,
@@ -32,6 +34,7 @@ import {
   sessionInfo,
   settled,
 } from "./testing";
+import { applyEntries, emptyTranscript } from "./transcript";
 
 const CHAT = "c1";
 
@@ -419,6 +422,116 @@ describe("history pages", () => {
     expect(messageText(store, "t1.m1")).toBe("one two");
     await store.loadEarlier();
     expect(fake.callsOf("history")).toHaveLength(1);
+  });
+
+  it("Load earlier brings a chunk of turns at once, through a turn cut across many pages", async () => {
+    // Seqs 0..: EARLIER_TURNS + 5 short turns, then turn "big" whose 300 tool updates the
+    // history hands over 100 at a time, newest first.
+    const short = EARLIER_TURNS + 5;
+    const all = numbered([
+      ...Array.from(
+        { length: short },
+        (_, i) =>
+          [
+            [`s${i}`, ev.turnStarted(`s${i}`)],
+            [`s${i}`, ev.message(`s${i}.m`, `turn ${i}`)],
+            [`s${i}`, ev.turnEnded(`s${i}`)],
+          ] as const,
+      ).flat(),
+      ["big", ev.turnStarted("big")],
+      ["big", ev.toolCall("sh", { kind: "execute" })],
+      ...Array.from(
+        { length: 300 },
+        (_, i) =>
+          [
+            "big",
+            ev.toolUpdate("sh", {
+              content: [{ type: "terminal", output: `${i}`, exit_code: null, truncated: null }],
+            }),
+          ] as const,
+      ),
+      ["big", ev.turnEnded("big")],
+    ]);
+    const bigStart = short * 3;
+    // The page below each cursor: inside "big", 100 rows; below it, three short turns at a time.
+    const below = (cursor: number): HistoryPage => {
+      const lo = cursor > bigStart ? Math.max(bigStart, cursor - 100) : Math.max(0, cursor - 9);
+      return historyPage(CHAT, items(all.slice(lo, cursor)), {
+        has_more: lo > 0,
+        before_seq: lo,
+        cut_turn_id: cursor > bigStart && lo > bigStart ? "big" : null,
+      });
+    };
+    const fake = new FakeTransport({ history: (_chat, before) => Promise.resolve(below(before)) });
+    const newest = below(all.length);
+    const store = await opened(fake, newest, all.length);
+    expect(store.getSnapshot().transcript.segments[0]).toMatchObject({ partial: true });
+
+    await store.loadEarlier();
+    // Through the rest of "big" (two pages and its start), then short turns until enough started.
+    const calls = fake.callsOf("history");
+    expect(calls.length).toBeGreaterThan(3);
+    let state = store.getSnapshot();
+    expect(state.historyRevision).toBe(1);
+    expect(state.hasMore).toBe(true);
+    const turns = state.transcript.segments.filter((s) => s.turnId !== null);
+    expect(turns.length).toBeGreaterThanOrEqual(EARLIER_TURNS + 1);
+    expect(turns.at(-1)).toMatchObject({ turnId: "big", partial: false });
+
+    await store.loadEarlier();
+    state = store.getSnapshot();
+    expect(state.hasMore).toBe(false);
+    expect(state.historyRevision).toBe(2);
+    expect(state.transcript).toEqual(applyEntries(emptyTranscript(), all));
+  });
+
+  it("Load earlier asks for the largest pages", async () => {
+    const asked: unknown[] = [];
+    const fake = new FakeTransport({
+      history: (chatId, _before, maxBytes) => {
+        asked.push(maxBytes);
+        return Promise.resolve(historyPage(chatId, [], { has_more: false, before_seq: 0 }));
+      },
+    });
+    const store = await opened(fake, historyPage(CHAT, [], { has_more: true, before_seq: 3 }), 3);
+    await store.loadEarlier();
+    expect(asked).toEqual([EARLIER_PAGE_BYTES]);
+  });
+
+  it("keeps the pages fetched before one fails, and Load earlier goes on from there", async () => {
+    let fail = false;
+    const turn = (n: number) =>
+      numbered(
+        [
+          [`t${n}`, ev.turnStarted(`t${n}`)],
+          [`t${n}`, ev.turnEnded(`t${n}`)],
+        ],
+        n * 2,
+      );
+    const fake = new FakeTransport({
+      history: (_chat, before) => {
+        if (fail) return Promise.reject(new Error("disk busy"));
+        fail = true;
+        const n = before / 2 - 1;
+        return Promise.resolve(
+          historyPage(CHAT, items(turn(n)), { has_more: true, before_seq: n * 2 }),
+        );
+      },
+    });
+    const store = await opened(
+      fake,
+      historyPage(CHAT, items(turn(9)), { has_more: true, before_seq: 18 }),
+      20,
+    );
+    await store.loadEarlier();
+    const state = store.getSnapshot();
+    expect(state.earlierError).toBe("disk busy");
+    expect(state.hasMore).toBe(true);
+    expect(state.transcript.segments.map((s) => s.turnId)).toEqual(["t8", "t9"]);
+    expect(fake.callsOf("history")).toEqual([
+      [CHAT, 18],
+      [CHAT, 16],
+    ]);
   });
 
   it("unsaved_marker_and_reattach: the gap is marked, and the view joins again once saving resumes", async () => {
