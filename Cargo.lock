@@ -581,6 +581,7 @@ dependencies = [
  "aura-protocol",
  "aura-sync",
  "cpal",
+ "dlopen2",
  "embed-resource",
  "keepawake",
  "objc2-foundation",
