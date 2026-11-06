@@ -312,7 +312,7 @@ async fn queue_rows_can_be_removed() {
 /// S16: empty, oversized and over-queued prompts are refused.
 #[tokio::test(start_paused = true)]
 async fn send_validation() {
-    let (driver, _handle) = ScriptedDriver::new(vec![
+    let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         Step::Hang,
@@ -333,6 +333,9 @@ async fn send_validation() {
         })
     ));
     h.manager.send(&chat.id, "work".into()).await.expect("send");
+    // The turn has left the queue only once the agent has it: its checkpoint comes first, on a
+    // blocking thread that paused time does not wait for, so the queue could still hold it.
+    command(&handle, CommandMatch::Prompt).await;
     for i in 0..20 {
         assert!(
             h.manager
