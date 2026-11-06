@@ -3,9 +3,9 @@ import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
+import { DashboardScreen } from "./components/dashboard/DashboardScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
-import { ProcessesScreen } from "./components/processes/ProcessesScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
 import { AccountPanel } from "./components/settings/AccountPanel";
@@ -42,7 +42,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress" | "setup" | "processes" | "settings";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "dashboard" | "settings";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -394,9 +394,9 @@ export function App({
         }}
       />
     );
-  // Settings and Processes keep the chats mounted behind them: the open chat and its draft survive
+  // Settings and the Dashboard keep the chats mounted behind them: the open chat and its draft survive
   // the visit.
-  if (view === "chats" || view === "settings" || view === "processes") {
+  if (view === "chats" || view === "settings" || view === "dashboard") {
     return (
       <>
         <div hidden={view !== "chats"} className="app-view">
@@ -410,7 +410,7 @@ export function App({
             onRecoveryDismissed={onRecoveryDismissed}
             onDiagnostics={() => setView("diagnostics")}
             onAgents={() => openSettings("agents")}
-            onProcesses={() => setView("processes")}
+            onDashboard={() => setView("dashboard")}
             onCustomize={(projectId, activeChatId) =>
               openSettings("plugins", { projectId, activeChatId })
             }
@@ -463,9 +463,9 @@ export function App({
             }}
           />
         ) : null}
-        {view === "processes" ? (
+        {view === "dashboard" ? (
           <div className="pane-shell g-root">
-            <ProcessesScreen
+            <DashboardScreen
               app={chats}
               onBack={() => setView("chats")}
               onOpenChat={(id) => {

@@ -1,0 +1,462 @@
+/*
+ * Dashboard (docs/design/visual-language.md, Desktop composition): a board of three lanes, Needs
+ * you, Working and Finished, over the inset pane. Lanes are open columns under their headings;
+ * each chat is a glass card with a hairline rim that opens its chat. A card that needs you wears a
+ * volt rim, one that failed a red one; nothing glows. Below a 760px board the lanes stack.
+ */
+
+.dashboard-screen {
+  display: block;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.dashboard-page {
+  box-sizing: border-box;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: calc(var(--ui-titlebar-height) + var(--g-space-4)) var(--g-space-40) var(--g-space-64);
+  container-type: inline-size;
+}
+
+.dashboard-bar {
+  display: flex;
+  align-items: center;
+  margin: 0 calc(var(--g-space-12) * -1);
+}
+
+.dashboard-head {
+  margin: var(--g-space-40) 0 var(--g-space-24);
+}
+
+.dashboard-head h1 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+.dashboard-head p {
+  margin: var(--g-space-4) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-message {
+  margin: 0 0 var(--g-space-16);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-message:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------------------------- lanes */
+
+.dashboard-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--g-space-32);
+}
+
+@container (min-width: 760px) {
+  .dashboard-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--g-space-16);
+    align-items: start;
+  }
+}
+
+.dashboard-lane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dashboard-lane-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-space-8);
+  margin: 0 0 var(--g-space-12);
+  padding: 0 var(--g-space-4) var(--g-space-12);
+  border-bottom: 1px solid var(--g-line-faint);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 500;
+}
+
+.dashboard-lane-mark {
+  display: inline-flex;
+  align-self: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--g-fg-3);
+}
+
+.dashboard-lane-count {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-lane-empty {
+  margin: 0;
+  padding: var(--g-space-16);
+  border-radius: var(--g-radius-14);
+  box-shadow: inset 0 0 0 1px var(--g-line-faint);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-cards:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------------------------- cards */
+
+.dashboard-card {
+  position: relative;
+  padding: var(--g-space-12) var(--g-space-12) var(--g-space-12) var(--g-space-12);
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow:
+    inset 0 0 0 1px var(--g-glass-rim),
+    var(--g-shadow-control);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    box-shadow var(--g-dur-micro) var(--g-ease);
+}
+
+.dashboard-card[data-moving] {
+  z-index: 2;
+  background-color: var(--ui-menu-fill);
+}
+
+.dashboard-card[data-lane="attention"] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--g-volt) 55%, transparent),
+    var(--g-shadow-control);
+}
+
+.dashboard-card[data-lane="attention"]:has([data-state="error"]) {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--g-red) 55%, transparent),
+    var(--g-shadow-control);
+}
+
+@media (hover: hover) {
+  .dashboard-card:hover {
+    background-color: var(--g-glass-control-hover);
+  }
+
+  .dashboard-card:hover .dashboard-card-go {
+    color: var(--g-fg-2);
+    transform: translateX(2px);
+  }
+}
+
+.dashboard-card:has(.dashboard-card-open:focus-visible) {
+  outline: 2px solid var(--g-outline);
+  outline-offset: 2px;
+}
+
+.dashboard-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--g-space-12);
+}
+
+.dashboard-card-text {
+  min-width: 0;
+}
+
+.dashboard-card-title {
+  margin: 0;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+/* The title's button opens the chat; its cover makes the whole card the target. */
+.dashboard-card-open {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--g-fg-1);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dashboard-card-open:focus-visible {
+  outline: none;
+}
+
+.dashboard-card-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.dashboard-card-meta {
+  margin: 0;
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-card-go {
+  color: var(--g-fg-4);
+  transition:
+    color var(--g-dur-micro) var(--g-ease),
+    transform var(--g-dur-fast) var(--g-ease-out);
+}
+
+.dashboard-card-state {
+  margin: var(--g-space-8) 0 0;
+  /* Under the title: past the 28px mark and its 12px gap. */
+  padding-left: var(--g-space-40);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-card-time {
+  color: var(--g-fg-3);
+}
+
+/* What a working agent's tasks do now: a sunken well of compact rows. */
+.dashboard-tasks {
+  display: flex;
+  flex-direction: column;
+  margin: var(--g-space-8) 0 0;
+  padding: var(--g-space-4) var(--g-space-8);
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  list-style: none;
+}
+
+.dashboard-task {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--g-space-8);
+  padding: var(--g-space-4) 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.dashboard-task .chat-task-kind {
+  align-self: start;
+  margin-top: var(--g-space-2);
+  color: var(--g-fg-3);
+}
+
+/* The title, and what the task does now on its own line under it. */
+.dashboard-task-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dashboard-task-title,
+.dashboard-task-activity {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inside the sunken wells, secondary text takes fg-2: fg-3 falls under 4.5:1 there. */
+.dashboard-task-activity {
+  color: var(--g-fg-2);
+}
+
+.dashboard-task-facts,
+.dashboard-task-more {
+  color: var(--g-fg-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dashboard-task-more {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  /* Under the task titles: past the 14px glyph and its 8px gap. */
+  padding-left: calc(var(--g-space-16) + var(--g-space-6));
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* ---------------------------------------------------------------------------- programs */
+
+/* Above the card's cover, so it opens in place instead of opening the chat. */
+.dashboard-programs {
+  position: relative;
+  z-index: 1;
+  margin: var(--g-space-8) 0 0;
+}
+
+.dashboard-programs > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  height: 24px;
+  margin-left: calc(var(--g-space-8) * -1);
+  padding: 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  list-style: none;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.dashboard-programs > summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (hover: hover) {
+  .dashboard-programs > summary:hover {
+    background-color: var(--g-glass-control-hover);
+    color: var(--g-fg-1);
+  }
+}
+
+.dashboard-programs > summary:focus-visible {
+  outline: 2px solid var(--g-outline);
+  outline-offset: 1px;
+}
+
+.dashboard-process-list {
+  margin: var(--g-space-4) 0 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  list-style: none;
+}
+
+.dashboard-process {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  padding: var(--g-space-6) var(--g-space-4) var(--g-space-6) var(--g-space-12);
+}
+
+.dashboard-process + .dashboard-process::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background-color: var(--g-line-faint);
+}
+
+.dashboard-process[data-depth="1"] {
+  padding-left: calc(var(--g-space-12) + var(--g-space-12));
+}
+
+.dashboard-process[data-depth="2"] {
+  padding-left: calc(var(--g-space-12) + var(--g-space-12) * 2);
+}
+
+.dashboard-process[data-depth="3"],
+.dashboard-process[data-depth="4"] {
+  padding-left: calc(var(--g-space-12) + var(--g-space-12) * 3);
+}
+
+.dashboard-process-text {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--g-space-8);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.dashboard-process-name {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+}
+
+.dashboard-process-facts {
+  overflow: hidden;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-process-command {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-process .g-button {
+  flex: none;
+}
+
+@media (max-width: 720px) {
+  .dashboard-page {
+    padding-right: var(--g-space-20);
+    padding-left: var(--g-space-20);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-card-go {
+    transition: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .dashboard-card-go {
+  transition: none;
+}

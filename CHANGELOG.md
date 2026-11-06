@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-06
 
+- Processes is now the Dashboard: every chat on three lanes, Needs you, Working and Finished, as cards that open their chat, with what working agents and their tasks are doing and their programs folded beneath; cards glide between lanes as chats change. ([#101](https://github.com/itscool2b/auracode/pull/101))
 - Load earlier brings a chunk of the chat at once: it keeps fetching until 20 more turns appear, even through a turn of tens of thousands of tool updates, and keeps those updates folded so long chats stay light. ([#100](https://github.com/itscool2b/auracode/pull/100))
 - New chat's agent picker opens downward like a select, so a long list no longer runs under the title bar and hides its search field. ([#99](https://github.com/itscool2b/auracode/pull/99))
 - The owner plan's status records item 9: the release tooling is done, and the signing credentials and first runs remain. ([#98](https://github.com/itscool2b/auracode/pull/98))
