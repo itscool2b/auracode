@@ -16,7 +16,7 @@ export function Finale() {
           </span>
         </h2>
         <p className="finale-note" data-reveal="">
-          Free for Windows and macOS. No account needed.
+          Free for Windows, macOS and Linux. No account needed.
         </p>
         <div className="finale-actions" data-reveal="">
           <a className="cta cta-light" href="/download" data-magnetic="">

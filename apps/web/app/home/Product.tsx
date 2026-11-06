@@ -21,7 +21,7 @@ export function Product() {
           </span>
         </h2>
         <p className="lead" data-reveal="">
-          Projects, chats, changes and a terminal in a native app for Windows and macOS. Agents run
+          Projects, chats, changes and a terminal in a native app for Windows, macOS and Linux. Agents run
           on your machine, through their own command-line tools.
         </p>
       </div>

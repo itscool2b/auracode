@@ -66,7 +66,9 @@ for a different advertised version, as well as modified bytes and older release 
   Updates refuse the ordinary quit option to discard unsaved work. The task survives a lost IPC
   caller. Only after confirmed cleanup does Tauri verify again and install; Windows then exits
   itself, while macOS restarts. A cleanup or installer failure after closing storage reports
-  `restart_required` and asks the user to restart before retrying.
+  `restart_required` and asks the user to restart before retrying. On Linux an AppImage replaces
+  its own file and a deb or rpm installs through `pkexec` (an administrator prompt); auracode then
+  restarts.
 
 No updater plugin permissions are granted to the webview. All decisions, network traffic, bounds,
 verification and cleanup run in Rust. The thin interface should poll status while an explicit
@@ -76,9 +78,9 @@ signature-mismatch fixture using the actual installer remain required before pub
 ## Offline artifact preparation
 
 `aura-release` is a Rust release tool, not a publisher or a signer. It accepts an explicit plan and
-directory containing exactly the four named package roles: a universal DMG, a universal
-`.app.tar.gz` updater, Windows x64 NSIS and Windows ARM64 NSIS. The three updater packages need
-their Tauri `.sig` files. The DMG checksum does not establish its code-signing or notarization status.
+directory containing exactly the seven named package roles: a universal DMG, a universal
+`.app.tar.gz` updater, Windows x64 NSIS, Windows ARM64 NSIS, and the Linux x64 AppImage, deb and
+rpm. The six updater packages (all but the DMG) need their Tauri `.sig` files. The DMG checksum does not establish its code-signing or notarization status.
 The tool cannot determine whether a file's declared architecture matches the executable inside it;
 native package inspection and installation remain separate gates.
 
@@ -99,8 +101,10 @@ version. It streams the exact verified bytes into the new stage. Missing or inva
 `PREPARATION_INCOMPLETE` and no public manifests. Partial output is retained for inspection, never
 deleted automatically. A valid stage contains:
 
-- `latest.json`, with both macOS architectures pointing to the universal updater and distinct Windows
-  architecture entries, including the NSIS-specific target keys.
+- `latest.json`, with both macOS architectures pointing to the universal updater, distinct Windows
+  architecture entries including the NSIS-specific target keys, and Linux entries for the AppImage
+  (`linux-x86_64-appimage` and the plain `linux-x86_64`, which the updater reads for an AppImage),
+  the deb (`linux-x86_64-deb`) and the rpm (`linux-x86_64-rpm`).
 - `downloads.json`, the website's version, notes, requirements, architecture links and per-file hashes.
 - `SHA256SUMS` and `releases/<version>/SHA256SUMS`, covering package and detached-signature bytes.
 - `releases/<version>/`, with copied packages and signatures.

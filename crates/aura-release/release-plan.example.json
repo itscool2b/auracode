@@ -20,6 +20,21 @@
       "kind": "windows_arm64_nsis",
       "file": "auracode_0.1.0_arm64-setup.exe",
       "signature": "auracode_0.1.0_arm64-setup.exe.sig"
+    },
+    {
+      "kind": "linux_x64_appimage",
+      "file": "auracode_0.1.0_amd64.AppImage",
+      "signature": "auracode_0.1.0_amd64.AppImage.sig"
+    },
+    {
+      "kind": "linux_x64_deb",
+      "file": "auracode_0.1.0_amd64.deb",
+      "signature": "auracode_0.1.0_amd64.deb.sig"
+    },
+    {
+      "kind": "linux_x64_rpm",
+      "file": "auracode-0.1.0-1.x86_64.rpm",
+      "signature": "auracode-0.1.0-1.x86_64.rpm.sig"
     }
   ]
 }

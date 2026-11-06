@@ -137,6 +137,12 @@ fn content_type(key: &str) -> &'static str {
         "application/vnd.microsoft.portable-executable"
     } else if key.ends_with(".tar.gz") {
         "application/gzip"
+    } else if key.ends_with(".deb") {
+        "application/vnd.debian.binary-package"
+    } else if key.ends_with(".rpm") {
+        "application/x-rpm"
+    } else if key.ends_with(".AppImage") {
+        "application/vnd.appimage"
     } else {
         "application/octet-stream"
     }

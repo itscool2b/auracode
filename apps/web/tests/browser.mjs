@@ -307,7 +307,7 @@ try {
       assert.equal(still.names.length, 9);
       assert.ok(still.inView, "the still marquee wraps inside a 320px page");
       await page.goto(`${base}/download`);
-      assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 2);
+      assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 3);
       await page.route("**/api/v1/config", (route) =>
         route.fulfill({ json: { protocol: 1, turnstile_site_key: "synthetic-ui-test" } }),
       );
@@ -666,6 +666,7 @@ try {
       await staticPage.goto(`${base}/download`);
       await staticPage.getByRole("heading", { name: "Windows", exact: true }).waitFor();
       await staticPage.getByRole("heading", { name: "macOS", exact: true }).waitFor();
+      await staticPage.getByRole("heading", { name: "Linux", exact: true }).waitFor();
       assert.equal(
         await staticPage.evaluate(() => getComputedStyle(document.body).backgroundColor),
         "rgb(250, 250, 250)",

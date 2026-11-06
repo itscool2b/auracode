@@ -1,7 +1,7 @@
 import catalog from "#release-catalog";
 import { AppTile, Arrow, Page } from "../ui";
 
-export const meta = () => [{ title: "Download auracode · Windows and macOS" }];
+export const meta = () => [{ title: "Download auracode · Windows, macOS and Linux" }];
 
 const PLATFORMS = [
   {
@@ -16,6 +16,12 @@ const PLATFORMS = [
     format: "NSIS installer",
     requirements: "Windows 10 or newer, with Microsoft Edge WebView2",
   },
+  {
+    name: "Linux",
+    architectures: "x64",
+    format: "deb, rpm and AppImage",
+    requirements: "glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
+  },
 ] as const;
 
 export default function Download() {
@@ -28,8 +34,8 @@ export default function Download() {
       tone="Free, local, no account."
       lead={
         release
-          ? `Version ${release.version} for Windows and macOS.`
-          : "Installers for Windows and macOS are on the way."
+          ? `Version ${release.version} for Windows, macOS and Linux.`
+          : "Installers for Windows, macOS and Linux are on the way."
       }
     >
       {release?.channel === "staging" ? (

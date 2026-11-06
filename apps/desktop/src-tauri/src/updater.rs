@@ -91,7 +91,8 @@ pub struct Updates {
 
 impl Default for Updates {
     fn default() -> Self {
-        let enabled = public_key().is_some() && cfg!(any(windows, target_os = "macos"));
+        let enabled =
+            public_key().is_some() && cfg!(any(windows, target_os = "macos", target_os = "linux"));
         Self { busy: AtomicBool::new(false), inner: Mutex::new(Inner {
             pending: None,
             status: UpdateStatus { channel: channel().into(), phase: if enabled { UpdatePhase::Idle } else { UpdatePhase::Disabled }, version: None, notes: None,
@@ -137,7 +138,7 @@ fn available(state: &AppState) -> Result<&'static str, UpdateError> {
     if state.quit.is_quitting() {
         return Err(error("auracode is already closing."));
     }
-    if !cfg!(any(windows, target_os = "macos")) || state.launch.is_smoke() {
+    if !cfg!(any(windows, target_os = "macos", target_os = "linux")) || state.launch.is_smoke() {
         return Err(error(
             "Application updates are unavailable for this launch.",
         ));
@@ -494,7 +495,8 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
     let bytes = pending
         .bytes
         .ok_or_else(|| error("The verified update is no longer available."))?;
-    // install verifies the package again. On Windows it exits after launching NSIS; macOS returns.
+    // install verifies the package again. On Windows it exits after launching NSIS. macOS returns,
+    // and so does Linux once the AppImage is replaced or pkexec has installed the deb or rpm.
     match tauri::async_runtime::spawn_blocking(move || pending.update.install(bytes)).await {
         Ok(Ok(())) => app.restart(),
         _ => {

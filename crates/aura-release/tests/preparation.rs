@@ -17,6 +17,9 @@ fn plan(root: &Path) -> ReleasePlan {
         (ArtifactKind::MacosUniversalUpdater, "auracode.app.tar.gz"),
         (ArtifactKind::WindowsX64Nsis, "auracode-x64.exe"),
         (ArtifactKind::WindowsArm64Nsis, "auracode-arm64.exe"),
+        (ArtifactKind::LinuxX64Appimage, "auracode-x86_64.AppImage"),
+        (ArtifactKind::LinuxX64Deb, "auracode-amd64.deb"),
+        (ArtifactKind::LinuxX64Rpm, "auracode-x86_64.rpm"),
     ]
     .into_iter()
     .map(|(kind, file)| {
@@ -76,7 +79,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     verify(&stage, &plan.public_key).unwrap();
     let latest: Value =
         serde_json::from_slice(&fs::read(stage.join("latest.json")).unwrap()).unwrap();
-    assert_eq!(latest["platforms"].as_object().unwrap().len(), 6);
+    assert_eq!(latest["platforms"].as_object().unwrap().len(), 10);
     assert_eq!(
         latest["platforms"]["darwin-aarch64"],
         latest["platforms"]["darwin-x86_64"]
@@ -85,10 +88,18 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
         latest["platforms"]["windows-aarch64-nsis"]["url"],
         "https://download.auracode.si/releases/0.1.0/auracode-arm64.exe"
     );
+    assert_eq!(
+        latest["platforms"]["linux-x86_64"],
+        latest["platforms"]["linux-x86_64-appimage"]
+    );
+    assert_eq!(
+        latest["platforms"]["linux-x86_64-rpm"]["url"],
+        "https://download.auracode.si/releases/0.1.0/auracode-x86_64.rpm"
+    );
     let catalog = fs::read_to_string(stage.join("downloads.json")).unwrap();
     assert!(!catalog.contains(&temp.path().to_string_lossy().to_string()));
     let catalog: Value = serde_json::from_str(&catalog).unwrap();
-    assert_eq!(catalog["release"]["downloads"].as_array().unwrap().len(), 3);
+    assert_eq!(catalog["release"]["downloads"].as_array().unwrap().len(), 6);
     assert_eq!(
         catalog["release"]["downloads"][0]["sha256"]
             .as_str()

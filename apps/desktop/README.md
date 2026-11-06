@@ -37,7 +37,9 @@ AppIndicator, ALSA and OpenSSL libraries the binary uses.
   Keyring or KWallet. Without one, accounts cannot be added.
 - Opening files finds Visual Studio Code, its Insiders build and Cursor from their packages and Zed
   from its install script; JetBrains IDEs stay manual there.
-- The updater is off on Linux until release packages are published for it.
+- The updater works as elsewhere once a release build carries the update key: an AppImage replaces
+  its own file, and a deb or rpm installs through `pkexec`, which asks for an administrator's
+  password.
 
 ## Signing on macOS
 

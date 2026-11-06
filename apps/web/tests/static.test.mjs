@@ -14,6 +14,7 @@ test("public pages are prerendered in light appearance without JavaScript", asyn
   const downloads = await readFile(new URL("download/index.html", root), "utf8");
   assert.match(downloads, /macOS/);
   assert.match(downloads, /Windows/);
+  assert.match(downloads, /Linux/);
   assert.match(downloads, /Not published/);
   assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
   await access(new URL("images/desktop-light.png", root));

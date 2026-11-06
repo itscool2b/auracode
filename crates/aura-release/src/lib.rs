@@ -67,6 +67,9 @@ pub enum ArtifactKind {
     MacosUniversalUpdater,
     WindowsX64Nsis,
     WindowsArm64Nsis,
+    LinuxX64Appimage,
+    LinuxX64Deb,
+    LinuxX64Rpm,
 }
 
 impl ArtifactKind {
@@ -75,6 +78,9 @@ impl ArtifactKind {
             Self::MacosUniversalDmg => ".dmg",
             Self::MacosUniversalUpdater => ".app.tar.gz",
             Self::WindowsX64Nsis | Self::WindowsArm64Nsis => ".exe",
+            Self::LinuxX64Appimage => ".AppImage",
+            Self::LinuxX64Deb => ".deb",
+            Self::LinuxX64Rpm => ".rpm",
         }
     }
     fn targets(self) -> &'static [&'static str] {
@@ -83,6 +89,11 @@ impl ArtifactKind {
             Self::MacosUniversalUpdater => &["darwin-aarch64", "darwin-x86_64"],
             Self::WindowsX64Nsis => &["windows-x86_64-nsis", "windows-x86_64"],
             Self::WindowsArm64Nsis => &["windows-aarch64-nsis", "windows-aarch64"],
+            // The plain Linux key is the AppImage's, as the Tauri updater reads it; a deb or rpm
+            // install asks for its own key.
+            Self::LinuxX64Appimage => &["linux-x86_64-appimage", "linux-x86_64"],
+            Self::LinuxX64Deb => &["linux-x86_64-deb"],
+            Self::LinuxX64Rpm => &["linux-x86_64-rpm"],
         }
     }
     fn label(self) -> &'static str {
@@ -91,6 +102,9 @@ impl ArtifactKind {
             Self::MacosUniversalUpdater => "macOS updater",
             Self::WindowsX64Nsis => "Windows · x64",
             Self::WindowsArm64Nsis => "Windows · ARM64",
+            Self::LinuxX64Appimage => "Linux · AppImage",
+            Self::LinuxX64Deb => "Linux · Debian and Ubuntu",
+            Self::LinuxX64Rpm => "Linux · Fedora and other RPM systems",
         }
     }
     fn requirements(self) -> &'static str {
@@ -98,6 +112,9 @@ impl ArtifactKind {
             Self::MacosUniversalDmg | Self::MacosUniversalUpdater => "macOS 13.3 or newer",
             Self::WindowsX64Nsis | Self::WindowsArm64Nsis => {
                 "Windows 10 or newer, with Microsoft Edge WebView2"
+            }
+            Self::LinuxX64Appimage | Self::LinuxX64Deb | Self::LinuxX64Rpm => {
+                "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer"
             }
         }
     }
@@ -185,8 +202,8 @@ fn validate(plan: &ReleasePlan) -> Result<PublicKey> {
         "Release notes must contain 1 to 16384 bytes"
     );
     ensure!(
-        plan.artifacts.len() == 4,
-        "Exactly four artifacts are required: universal DMG and updater, x64 NSIS, ARM64 NSIS"
+        plan.artifacts.len() == 7,
+        "Exactly seven artifacts are required: universal DMG and updater, x64 NSIS, ARM64 NSIS, and the Linux AppImage, deb and rpm"
     );
     let mut kinds = BTreeSet::new();
     let mut names = BTreeSet::new();

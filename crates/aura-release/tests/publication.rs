@@ -21,6 +21,9 @@ fn stage(channel: Channel) -> (tempfile::TempDir, PathBuf, String) {
         (ArtifactKind::MacosUniversalUpdater, "auracode.app.tar.gz"),
         (ArtifactKind::WindowsX64Nsis, "auracode-x64.exe"),
         (ArtifactKind::WindowsArm64Nsis, "auracode-arm64.exe"),
+        (ArtifactKind::LinuxX64Appimage, "auracode-x86_64.AppImage"),
+        (ArtifactKind::LinuxX64Deb, "auracode-amd64.deb"),
+        (ArtifactKind::LinuxX64Rpm, "auracode-x86_64.rpm"),
     ]
     .into_iter()
     .map(|(kind, file)| {
@@ -91,11 +94,17 @@ fn plan_lists_versioned_objects_first_and_latest_last() {
         keys,
         [
             "releases/0.1.0/SHA256SUMS",
+            "releases/0.1.0/auracode-amd64.deb",
+            "releases/0.1.0/auracode-amd64.deb.sig",
             "releases/0.1.0/auracode-arm64.exe",
             "releases/0.1.0/auracode-arm64.exe.sig",
             "releases/0.1.0/auracode-universal.dmg",
             "releases/0.1.0/auracode-x64.exe",
             "releases/0.1.0/auracode-x64.exe.sig",
+            "releases/0.1.0/auracode-x86_64.AppImage",
+            "releases/0.1.0/auracode-x86_64.AppImage.sig",
+            "releases/0.1.0/auracode-x86_64.rpm",
+            "releases/0.1.0/auracode-x86_64.rpm.sig",
             "releases/0.1.0/auracode.app.tar.gz",
             "releases/0.1.0/auracode.app.tar.gz.sig",
             "SHA256SUMS",
@@ -113,6 +122,14 @@ fn plan_lists_versioned_objects_first_and_latest_last() {
     }
     let dmg = objects.iter().find(|o| o.key.ends_with(".dmg")).unwrap();
     assert_eq!(dmg.content_type, "application/x-apple-diskimage");
+    for (suffix, content_type) in [
+        (".deb", "application/vnd.debian.binary-package"),
+        (".rpm", "application/x-rpm"),
+        (".AppImage", "application/vnd.appimage"),
+    ] {
+        let package = objects.iter().find(|o| o.key.ends_with(suffix)).unwrap();
+        assert_eq!(package.content_type, content_type);
+    }
     let latest = objects.last().unwrap();
     assert_eq!(latest.content_type, "application/json; charset=utf-8");
 }
