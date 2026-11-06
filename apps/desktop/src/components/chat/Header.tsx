@@ -115,7 +115,13 @@ export function Header({
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
   const activity = chatActivity(state);
-  const statusLabel = activity === "waiting" ? "Waiting on you" : statusWord(status);
+  // A chat shown as its agent's terminal: the session reads as stopped while the terminal has it.
+  const inTerminal = view?.current === "terminal";
+  const statusLabel = inTerminal
+    ? "In the terminal"
+    : activity === "waiting"
+      ? "Waiting on you"
+      : statusWord(status);
   const quiet = activity !== "waiting" && QUIET.has(status) && !session?.detail;
   const tools = chat && inTauri() ? onTools : undefined;
   const files = chat && inTauri();
@@ -157,7 +163,9 @@ export function Header({
             </span>
           ) : null}
           {statusLabel}
-          {session?.detail ? <span className="chat-status-detail"> · {session.detail}</span> : null}
+          {session?.detail && !inTerminal ? (
+            <span className="chat-status-detail"> · {session.detail}</span>
+          ) : null}
         </span>
         {state.actionError !== null ? (
           <span
