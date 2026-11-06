@@ -1,7 +1,7 @@
 /**
  * Run the fixture checks that read their server from CHECK_URL (dictation, images, the
- * Processes page and typing while a turn streams) against one owned Vite server, as CI's lint job
- * does. Each check covers both browser engines itself.
+ * Processes page, typing while a turn streams and agent update notices) against one owned Vite
+ * server, as CI's lint job does. Each check covers both browser engines itself.
  * Usage: node scripts/check-fixture-suite.mjs [--server URL]
  */
 import { spawn } from "node:child_process";
@@ -47,6 +47,7 @@ try {
     "check-images.mjs",
     "check-processes.mjs",
     "check-composer-follow.mjs",
+    "check-agent-updates.mjs",
   ]) {
     await new Promise((complete, reject) => {
       const check = spawn(process.execPath, [resolve(app, "scripts", script)], {

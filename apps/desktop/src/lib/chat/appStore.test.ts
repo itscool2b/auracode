@@ -7,6 +7,7 @@ import {
   CATALOG_POLL_MS,
   DETECTION_POLL_MS,
   NewChatDraft,
+  RELEASE_POLL_WINDOW_MS,
   STATUS_RESUBSCRIBE_MS,
   STORAGE_ALERT_POLL_MS,
   STORAGE_POLL_MS,
@@ -288,6 +289,32 @@ describe("the app store", () => {
     };
     await vi.advanceTimersByTimeAsync(DETECTION_POLL_MS);
     expect(store.getSnapshot().env?.state.state).toBe("ready");
+    store.stop();
+  });
+
+  it("follows a release check quickly only shortly after a start", async () => {
+    const ready = agent("mock", { state: "ready", version: "1", path: "builtin" });
+    let harness: AgentEntry["harness"] = { state: "checking" };
+    const fake = new FakeTransport({ agentsList: () => Promise.resolve([{ ...ready, harness }]) });
+    const store = new AppStore(fake);
+    store.start();
+    await vi.advanceTimersByTimeAsync(0);
+    // Checking: every second, so an update notice shows soon after the start.
+    await vi.advanceTimersByTimeAsync(3 * DETECTION_POLL_MS);
+    expect(fake.callsOf("agentsList")).toHaveLength(4);
+    // Past the window, a check that never ends (an agent installed later) is polled slowly.
+    await vi.advanceTimersByTimeAsync(RELEASE_POLL_WINDOW_MS);
+    const late = fake.callsOf("agentsList").length;
+    await vi.advanceTimersByTimeAsync(10 * DETECTION_POLL_MS);
+    expect(fake.callsOf("agentsList")).toHaveLength(late);
+    // Within the window, a finished check also slows down.
+    store.stop();
+    harness = { state: "up_to_date", version: "1", checked_at: 1 };
+    store.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const started = fake.callsOf("agentsList").length;
+    await vi.advanceTimersByTimeAsync(10 * DETECTION_POLL_MS);
+    expect(fake.callsOf("agentsList")).toHaveLength(started);
     store.stop();
   });
 

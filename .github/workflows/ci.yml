@@ -195,7 +195,7 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
 
-      - name: Check dictation, images and the Processes page
+      - name: Check dictation, images, the Processes page, typing and update notices
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: pnpm --filter @auracode/desktop check:fixtures
@@ -240,6 +240,7 @@ jobs:
             target/shared-mcp-browser
             target/dictation-browser
             target/images-browser
+            target/agent-updates-browser
             target/processes-browser
             target/web-checks
             target/release-preview-*/*.png
