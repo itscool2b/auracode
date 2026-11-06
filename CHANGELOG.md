@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-06
 
+- Notices are toasts at the bottom right, above the composer, with the agent's mark and Update first; Grok Build and Cursor installed by their own installers now update from the app. ([#106](https://github.com/itscool2b/auracode/pull/106))
 - After an update or a restart, the sidebar's chats and projects load once the database finishes opening, instead of staying empty with "database not available". ([#105](https://github.com/itscool2b/auracode/pull/105))
 - Each shared MCP server can be for every agent, including ones installed later, or only the agents you choose, set when you add or edit it in Plugins & MCP. ([#104](https://github.com/itscool2b/auracode/pull/104))
 - The sea lion and turtle no longer swim along the composer while an agent works. ([#103](https://github.com/itscool2b/auracode/pull/103))

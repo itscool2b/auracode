@@ -1,3 +1,4 @@
+import { AgentMark } from "@auracode/ui/graphite";
 import { X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { AgentMaintenance } from "../../bindings";
@@ -94,42 +95,60 @@ export function AgentUpdateBanner({
         }. Another copy may come first on your PATH.`
       : (blocked ?? waiting);
 
+  // A toast: the agent's mark, what is new, why it waits (if it does), then its actions.
   return (
-    <li className="chat-banner" data-testid="agent-update-banner" data-agent={update.agentId}>
-      <span id={text} role="status">
-        {update.name} {update.latest} is available. You have {update.version}.
-        {detail ? ` ${detail}` : null}
-        {run.state === "failed" ? (
-          <span role="alert" className="ui-error">
-            {" "}
-            The update failed: {run.message}
-          </span>
-        ) : null}
+    <li
+      className="chat-banner ui-toast"
+      data-testid="agent-update-banner"
+      data-agent={update.agentId}
+      aria-describedby={text}
+    >
+      <span className="ui-toast-mark" aria-hidden="true">
+        <AgentMark agent={update.agentId} size={20} />
       </span>
-      {updatable && working === 0 && run.state !== "unchanged" ? (
-        <button
-          type="button"
-          className="g-button g-button-28"
-          aria-describedby={text}
-          disabled={run.state === "updating"}
-          onClick={() => void start()}
-        >
-          {run.state === "updating" ? "Updating…" : run.state === "failed" ? "Try again" : "Update"}
-        </button>
-      ) : null}
-      {(blocked !== null || run.state === "unchanged") && actions.openAgents ? (
-        <button
-          type="button"
-          className="g-button g-button-28"
-          aria-describedby={text}
-          onClick={actions.openAgents}
-        >
-          Agents settings
-        </button>
-      ) : null}
+      <div className="ui-toast-body">
+        <p className="ui-toast-title">
+          {update.name} {update.latest} is available
+        </p>
+        <p id={text} className="ui-toast-detail" role="status">
+          You have {update.version}.{detail ? ` ${detail}` : null}
+        </p>
+        {run.state === "failed" ? (
+          <p role="alert" className="ui-error ui-toast-detail">
+            The update failed: {run.message}
+          </p>
+        ) : null}
+        <div className="ui-toast-actions">
+          {updatable && working === 0 && run.state !== "unchanged" ? (
+            <button
+              type="button"
+              className="g-button g-button-primary g-button-28"
+              aria-describedby={text}
+              disabled={run.state === "updating"}
+              onClick={() => void start()}
+            >
+              {run.state === "updating"
+                ? "Updating…"
+                : run.state === "failed"
+                  ? "Try again"
+                  : "Update"}
+            </button>
+          ) : null}
+          {(blocked !== null || run.state === "unchanged") && actions.openAgents ? (
+            <button
+              type="button"
+              className="g-button g-button-28"
+              aria-describedby={text}
+              onClick={actions.openAgents}
+            >
+              Agents settings
+            </button>
+          ) : null}
+        </div>
+      </div>
       <button
         type="button"
-        className="g-button g-button-ghost g-button-28 g-button-icon"
+        className="g-button g-button-ghost g-button-24 g-button-icon ui-toast-close"
         aria-label={`Dismiss the ${update.name} update notice`}
         title="Dismiss until auracode starts again"
         onClick={onDismiss}
