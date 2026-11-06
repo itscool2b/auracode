@@ -105,6 +105,10 @@ void appearanceReady.then(() => {
         void import("./dev/agentUpdatesPreview").then(({ mountAgentUpdatesPreview }) =>
           mountAgentUpdatesPreview(container),
         );
+      else if (mode === "terminal-chat")
+        void import("./dev/terminalChatPreview").then(({ mountTerminalChatPreview }) =>
+          mountTerminalChatPreview(container),
+        );
       else if (mode === "dictation")
         void import("./dev/dictationPreview").then(({ mountDictationPreview }) =>
           mountDictationPreview(container),

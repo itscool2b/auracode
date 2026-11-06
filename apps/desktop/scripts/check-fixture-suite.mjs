@@ -1,6 +1,6 @@
 /**
  * Run the fixture checks that read their server from CHECK_URL (dictation, images, the
- * Dashboard, typing while a turn streams and agent update notices) against one owned Vite
+ * Dashboard, typing while a turn streams, agent update notices and terminal chats) against one owned Vite
  * server, as CI's lint job does. Each check covers both browser engines itself.
  * Usage: node scripts/check-fixture-suite.mjs [--server URL]
  */
@@ -48,6 +48,7 @@ try {
     "check-dashboard.mjs",
     "check-composer-follow.mjs",
     "check-agent-updates.mjs",
+    "check-terminal-chat.mjs",
   ]) {
     await new Promise((complete, reject) => {
       const check = spawn(process.execPath, [resolve(app, "scripts", script)], {

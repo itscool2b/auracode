@@ -101,7 +101,12 @@ terminals waits for the vendors' notification hooks (phase 2).
   - Tauri chat_terminal_start / chat_terminal_ended; a page that goes ends its terminal chats.
   - The device-local Chat | Terminal choice, the header switch, the framed terminal view that
     survives navigation, graceful exit on Back to Chat (Ctrl+C twice, then close after 2.5 s).
-- Next: step 4 (import the session file into history through the actor's event pipeline, not
-  the sync import, which would mark it remote), then the switcher's transfer, New chat's choice
-  and the Settings default, Dashboard states, a browser fixture and check for the view, and a
-  native pass with both CLIs.
+- Also done: step 4, the import (terminal_import.rs; recorded through the actor's own turn events
+  before the session goes back; only what the terminal added; a new Codex thread learned and
+  saved); step 5, the handoff to a new agent's terminal, pasted as its first input with every
+  control character removed, never on the command line and never sent for the person; New
+  chat's Open in and the Settings default; the Dashboard's "In the terminal"; the
+  terminal-chat browser fixture and check.
+- Left: a native pass with both CLIs in the installed app (PTY behaviour, resume, the import of
+  real files, Cursor and Grok updates); crash recovery of a terminal that ended unimported (the
+  session file stays the record; the next terminal on that session imports from its own start).

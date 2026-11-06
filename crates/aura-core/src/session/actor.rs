@@ -3498,7 +3498,8 @@ The person continues this conversation here, in your terminal. Reply only that y
             },
             generation,
             omitted: made.omitted,
-            first_input: first_message,
+            // Typed into the terminal, so stripped of anything that would act as keys.
+            first_input: first_message.map(|text| aura_drivers::terminal::typed_text(&text)),
         };
         if reply.send(Ok(opened)).is_err() {
             // Nobody waits for it any more (the page closed): give the session back now.

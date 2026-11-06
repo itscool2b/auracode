@@ -77,6 +77,16 @@ pub fn claude(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunc
     }
 }
 
+/// Text safe to type into a terminal: every control character but line breaks and tabs is
+/// dropped (escape included, so text cannot end a bracketed paste and run as keystrokes, nor move
+/// the cursor or rewrite the screen), and CRLF becomes LF.
+pub fn typed_text(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .chars()
+        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
+        .collect()
+}
+
 /// A key Codex's `-c` path can carry without quoting: its parser splits the path at dots.
 fn plain_key(name: &str) -> bool {
     !name.is_empty()
@@ -334,6 +344,19 @@ mod tests {
             &options(&[], TerminalSession::NewClaude("n1".into())),
         );
         assert!(args(&new.launch).contains(&"--session-id=n1".to_owned()));
+    }
+
+    #[test]
+    fn typed_text_cannot_end_a_paste_or_send_keys() {
+        let hostile = "answer\u{1b}[201~\r\nrm -rf ~\r\u{9b}2J\u{7}done\tok";
+        let safe = typed_text(hostile);
+        assert!(
+            !safe
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t'),
+            "{safe:?}"
+        );
+        assert_eq!(safe, "answer[201~\nrm -rf ~2Jdone\tok");
     }
 
     #[test]

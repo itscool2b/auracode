@@ -59,7 +59,9 @@
   height: 100%;
 }
 
+/* xterm paints its viewport black by default; the frame is the terminal's surface to its edge. */
 .terminal-chat-host .xterm-viewport {
+  background-color: var(--g-terminal-bg);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }

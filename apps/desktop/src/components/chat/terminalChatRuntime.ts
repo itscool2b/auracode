@@ -195,8 +195,8 @@ export class TerminalChatRuntime {
   }
 
   /**
-   * Types `text` into the agent once its interface has drawn and gone quiet, as one bracketed
-   * paste (so its line breaks stay part of the message) followed by Enter.
+   * Pastes `text` into the agent's input once its interface has drawn and gone quiet, as one
+   * bracketed paste so its line breaks stay part of the message. The person sends it.
    */
   async #typeWhenSettled(text: string): Promise<void> {
     const started = Date.now();
@@ -207,10 +207,12 @@ export class TerminalChatRuntime {
       if (quiet || Date.now() - started >= FIRST_INPUT_WAIT_MS) break;
     }
     if (this.#snapshot.state.state !== "running") return;
+    // Rust already dropped every control character (aura_drivers::terminal::typed_text), so the
+    // text cannot end the paste early and act as keys. It is pasted, never sent: the person reads
+    // it and presses Enter, so no prompt on screen (a folder-trust question, say) is answered
+    // for them.
     const encoder = new TextEncoder();
     this.#session?.write(encoder.encode(`\u001b[200~${text}\u001b[201~`));
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    this.#session?.write(encoder.encode("\r"));
   }
 
   /** Starts the agent again after it exited or failed, in a fresh view. */
