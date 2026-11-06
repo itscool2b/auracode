@@ -20,7 +20,8 @@ const PLATFORMS = [
     name: "Linux",
     architectures: "x64",
     format: "deb, rpm and AppImage",
-    requirements: "glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
+    requirements:
+      "glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
   },
 ] as const;
 
