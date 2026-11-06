@@ -27,6 +27,12 @@ if (signed >= 0) {
   args.push(
     "--config",
     fileURLToPath(new URL("../src-tauri/tauri.updater.conf.json", import.meta.url)),
+    // The CLI checks each updater signature it makes against the configured key, which the
+    // committed config leaves empty: the app itself embeds the key at compile time (updater.rs).
+    "--config",
+    JSON.stringify({
+      plugins: { updater: { pubkey: process.env.AURACODE_UPDATER_PUBLIC_KEY.trim() } },
+    }),
   );
 }
 
