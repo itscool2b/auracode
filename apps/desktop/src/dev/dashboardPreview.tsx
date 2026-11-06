@@ -1,8 +1,9 @@
 /**
- * Scripted Dashboard fixture (`?preview=dashboard`, `&case=empty`, `&case=live`). Never reads the
- * process table or stops anything: the snapshot is invented, and Stop removes the row and what it
- * started. `live` moves a chat from Working to Needs you and back every few seconds, so the cards'
- * glide between lanes can be watched.
+ * Scripted Dashboard fixture (`?preview=dashboard`, `&case=empty`, `&case=live`, `&case=busy`),
+ * mounted in the same inset pane as the app's. Never reads the process table or stops anything:
+ * the snapshot is invented, and Stop removes the row and what it started. `live` moves a chat from
+ * Working to Needs you and back every few seconds, so the cards' moves between lanes can be
+ * watched; `busy` adds a day's worth of finished chats.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -10,6 +11,7 @@ import type { BackgroundTask, ChatSummary, ProcessesSnapshot, ProcessRow } from 
 import { DashboardScreen } from "../components/dashboard/DashboardScreen";
 import type { AppStore } from "../lib/chat/appStore";
 import type { ProcessesApi } from "../lib/processes";
+import type { WorkspaceStore } from "../lib/workspace";
 
 const MINUTE = 60_000;
 
@@ -161,9 +163,43 @@ function fixture(kind: string | null) {
         summary("chat-codex", "Check the dictation fixture", CODEX, "running", 0),
         summary("chat-pi", "Tidy the changelog check", PI, "ready", 14),
         summary("chat-themes", "Add a theme for every agent", CODEX, "stopped", 180),
+        // In its own worktree, whose folder is an app-owned name: the card names the project.
+        summary("chat-worktree", "Rework the sync queue", CODEX, "running", 1, {
+          folder: "C:\\Users\\me\\AppData\\Local\\auracode\\worktrees\\3f9a2c1d7e4b",
+        }),
+        // Archived: put away, so not on the board.
+        summary("chat-archived", "Try a second sidebar layout", PI, "ready", 5),
         // Quiet for two days: in the sidebar, not on the board.
         summary("chat-old", "Sketch the onboarding globe", PI, "stopped", 2 * 24 * 60),
+        ...(kind === "busy"
+          ? Array.from({ length: 11 }, (_, index) =>
+              summary(
+                `chat-day-${index}`,
+                `Earlier task ${index + 1}`,
+                CLAUDE,
+                "ready",
+                30 + index * 40,
+              ),
+            )
+          : []),
       ];
+  const organization = {
+    data: {
+      projects: [{ id: "project-auracode", name: "auracode", color: null, folders: [] }],
+      chats: chats.map((chat) => ({
+        chat,
+        project_id: "project-auracode",
+        folder_id: "folder-auracode",
+        archived: chat.id === "chat-archived",
+      })),
+    },
+    error: null,
+    busy: false,
+  };
+  const workspace = {
+    subscribe: () => () => {},
+    getSnapshot: () => organization,
+  } as unknown as WorkspaceStore;
   const listeners = new Set<() => void>();
   // useSyncExternalStore needs the same object back until something changes.
   let state = { chats };
@@ -185,22 +221,27 @@ function fixture(kind: string | null) {
     },
     getSnapshot: () => state,
   } as unknown as AppStore;
-  return { api, app };
+  return { api, app, workspace };
 }
 
 export function mountDashboardPreview(container: HTMLElement) {
-  const { api, app } = fixture(new URLSearchParams(location.search).get("case"));
+  const { api, app, workspace } = fixture(new URLSearchParams(location.search).get("case"));
+  // The app's own frame (App.tsx): the inset pane fills the window and the page fills the pane.
+  container.style.height = "100vh";
   createRoot(container).render(
     <StrictMode>
-      <DashboardScreen
-        app={app}
-        api={api}
-        onBack={() => {}}
-        onOpenChat={(id) => {
-          // The checks read which chat a card asked to open.
-          document.body.dataset.openedChat = id;
-        }}
-      />
+      <div className="pane-shell g-root">
+        <DashboardScreen
+          app={app}
+          workspace={workspace}
+          api={api}
+          onBack={() => {}}
+          onOpenChat={(id) => {
+            // The checks read which chat a card asked to open.
+            document.body.dataset.openedChat = id;
+          }}
+        />
+      </div>
     </StrictMode>,
   );
 }

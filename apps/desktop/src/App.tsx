@@ -467,6 +467,7 @@ export function App({
           <div className="pane-shell g-root">
             <DashboardScreen
               app={chats}
+              workspace={workspace}
               onBack={() => setView("chats")}
               onOpenChat={(id) => {
                 setView("chats");

@@ -118,7 +118,9 @@
   line-height: var(--g-leading-ui);
 }
 
+/* A card leaving the lane fades where it was, out of the flow, while the cards below close up. */
 .dashboard-cards {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--g-space-8);
@@ -129,6 +131,13 @@
 
 .dashboard-cards:empty {
   display: none;
+}
+
+/* Finished shows its newest cards; the rest wait behind this. */
+.dashboard-lane-more {
+  align-self: flex-start;
+  margin-top: var(--g-space-8);
+  color: var(--g-fg-2);
 }
 
 /* ------------------------------------------------------------------------------- cards */
@@ -144,11 +153,6 @@
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     box-shadow var(--g-dur-micro) var(--g-ease);
-}
-
-.dashboard-card[data-moving] {
-  z-index: 2;
-  background-color: var(--ui-menu-fill);
 }
 
 .dashboard-card[data-lane="attention"] {
