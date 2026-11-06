@@ -1589,7 +1589,10 @@ export type DataCleanupReview = {
 	scope: DataCleanupScope,
 	items: DataCleanupItem[],
 	worktrees: DataCleanupWorktree[],
-	/**  Where auracode's keys are: "Windows Credential Manager" or "the macOS keychain". */
+	/**
+	 *  Where auracode's keys are: "Windows Credential Manager", "the macOS keychain" or "the
+	 *  desktop keyring" (the Secret Service on Linux).
+	 */
 	secure_store: string | null,
 	keys: DataCleanupKey[],
 	warnings: string[],
