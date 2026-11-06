@@ -222,6 +222,43 @@ export function applyEntries(model: Transcript, entries: readonly Entry[]): Tran
   return draft.finish();
 }
 
+/**
+ * Folds each tool's run of updates into its first one, giving the same transcript with far fewer
+ * entries. A tool's place comes from its first event, and an update only overrides the fields it
+ * sets, so the later updates' set fields laid over the first update say the same thing. A
+ * `tool_call` replaces the whole item, so updates fold only within the stretch after one. A
+ * command's streamed output can store tens of thousands of updates, hundreds of megabytes.
+ */
+export function compactToolUpdates(entries: readonly Entry[]): Entry[] {
+  const folded: Entry[] = [];
+  const firstUpdate = new Map<string, number>();
+  for (const entry of entries) {
+    if ("gap" in entry) {
+      folded.push(entry);
+      continue;
+    }
+    const { event } = entry;
+    if (event.type === "tool_call") firstUpdate.delete(event.tool_call_id);
+    if (event.type !== "tool_update") {
+      folded.push(entry);
+      continue;
+    }
+    const at = firstUpdate.get(event.tool_call_id);
+    const first = at === undefined ? undefined : folded[at];
+    if (at === undefined || !first || "gap" in first || first.event.type !== "tool_update") {
+      firstUpdate.set(event.tool_call_id, folded.length);
+      folded.push(entry);
+      continue;
+    }
+    const merged: Record<string, unknown> = { ...first.event };
+    for (const [field, value] of Object.entries(event)) {
+      if (value !== null && value !== undefined) merged[field] = value;
+    }
+    folded[at] = { ...first, event: merged as AuraEvent };
+  }
+  return folded;
+}
+
 /** The reducer for one event: `(model, seq, turnId, event) -> model`. */
 export function reduce(
   model: Transcript,

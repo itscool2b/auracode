@@ -25,6 +25,7 @@ import { errorMessage } from "../errors";
 import { CommandError } from "../ipc";
 import {
   applyEntries,
+  compactToolUpdates,
   type Entry,
   emptyTranscript,
   type Transcript,
@@ -135,6 +136,18 @@ export interface ChatState {
 
 /** How much `chat_blob` returns per call at most. */
 export const BLOB_PAGE = 256 * 1024;
+
+/** The page size "Load earlier" asks for: `chat_history`'s largest. */
+export const EARLIER_PAGE_BYTES = 4 * 1024 * 1024;
+
+/**
+ * "Load earlier" keeps fetching pages until this many more turns have started, so one click
+ * brings a real stretch of the chat even when a single turn spans hundreds of pages.
+ */
+export const EARLIER_TURNS = 20;
+
+/** The most pages one "Load earlier" fetches: 512 MiB at most. */
+export const EARLIER_MAX_PAGES = 128;
 
 /** A new `revision` refetches the lists after this long without another one. */
 export const LISTS_DEBOUNCE_MS = 200;
@@ -695,26 +708,61 @@ export class ChatStore {
     });
   }
 
-  /** The older page: the same turn continues when the newest one cut it. */
+  /**
+   * Older history in one chunk: pages of up to 4 MiB until `EARLIER_TURNS` more turns have
+   * started or the chat's start is reached, shown together. The same turn continues when a page
+   * cut it. A failure keeps the pages already fetched and says why the rest did not load.
+   */
   async loadEarlier(): Promise<void> {
-    const before = this.#beforeSeq;
+    let before = this.#beforeSeq;
     if (!this.#state.hasMore || before === null || this.#state.loadingEarlier) return;
     const generation = this.#generation;
     this.#set({ ...this.#state, loadingEarlier: true, earlierError: null });
-    let page: HistoryPage;
-    try {
-      page = await this.#transport.history(this.chatId, before);
-    } catch (error) {
+    let older: Entry[] = [];
+    const pages: HistoryPage[] = [];
+    let skipped = 0;
+    let cut = this.#cut;
+    let hasMore: boolean = this.#state.hasMore;
+    let turns = 0;
+    let fetched = 0;
+    let failure: string | null = null;
+    while (hasMore && before !== null && turns < EARLIER_TURNS && fetched < EARLIER_MAX_PAGES) {
+      let page: HistoryPage;
+      try {
+        page = await this.#transport.history(this.chatId, before, EARLIER_PAGE_BYTES);
+      } catch (error) {
+        failure = errorMessage(error);
+        break;
+      }
       if (generation !== this.#generation) return;
-      this.#set({ ...this.#state, loadingEarlier: false, earlierError: errorMessage(error) });
-      return;
+      fetched += 1;
+      const entries = pageEntries(page);
+      turns += entries.filter(
+        (entry) => "event" in entry && entry.event.type === "turn_started",
+      ).length;
+      // Folded as it arrives, so a turn of 50,000 tool updates never sits in memory whole.
+      older = compactToolUpdates([...entries, ...older]);
+      pages.push(page);
+      skipped += page.skipped;
+      cut = page.cut_turn_id;
+      before = page.before_seq;
+      hasMore = page.has_more;
     }
     if (generation !== this.#generation) return;
-    this.#cut = page.cut_turn_id;
-    this.#beforeSeq = page.before_seq;
-    const older = pageEntries(page);
-    this.#entries = [...older, ...this.#entries];
-    this.#attachedEntries += older.length;
+    if (fetched === 0) {
+      this.#set({ ...this.#state, loadingEarlier: false, earlierError: failure });
+      return;
+    }
+    this.#cut = cut;
+    this.#beforeSeq = before;
+    // Only the history before the attach folds: the snapshot's tasks sit between it and the live
+    // frames since.
+    const history = compactToolUpdates([
+      ...older,
+      ...this.#entries.slice(0, this.#attachedEntries),
+    ]);
+    this.#entries = [...history, ...this.#entries.slice(this.#attachedEntries)];
+    this.#attachedEntries = history.length;
     // The snapshot's tasks are newer than history and older than the live frames since the attach.
     this.#set({
       ...this.#state,
@@ -725,11 +773,12 @@ export class ChatStore {
         ),
         this.#entries.slice(this.#attachedEntries),
       ),
-      turnAgents: withTurnAgents(this.#state.turnAgents, page),
-      hasMore: page.has_more,
+      turnAgents: pages.reduce(withTurnAgents, this.#state.turnAgents),
+      hasMore,
       loadingEarlier: false,
+      earlierError: failure,
       historyRevision: this.#state.historyRevision + 1,
-      skipped: this.#state.skipped + page.skipped,
+      skipped: this.#state.skipped + skipped,
     });
   }
 

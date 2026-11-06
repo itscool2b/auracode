@@ -4,6 +4,7 @@ import type { AuraEvent } from "../../bindings";
 import { compactHistory, ev, numbered } from "./testing";
 import {
   applyEntries,
+  compactToolUpdates,
   type EventEntry,
   emptyTranscript,
   hasProcess,
@@ -634,3 +635,51 @@ function generatedStream(seed: number): EventEntry[] {
   }
   return numbered(tagged);
 }
+
+describe("folding a tool's updates", () => {
+  const content = (text: string) => [{ type: "text" as const, text, truncated: null }];
+  const raw = numbered([
+    ["t1", ev.turnStarted("t1")],
+    ["t1", ev.user("t1.u", "Run it")],
+    // Updates of a tool never announced in this history: the first one places it.
+    ["t1", ev.toolUpdate("early", { title: "Early", content: content("a") })],
+    ["t1", ev.toolCall("run", { kind: "execute", title: "Run tests" })],
+    ["t1", ev.toolUpdate("run", { content: content("1") })],
+    ["t1", ev.message("t1.m1", "Running ")],
+    ["t1", ev.toolUpdate("early", { status: "completed" })],
+    ["t1", ev.toolUpdate("run", { content: content("1 2"), truncated: null })],
+    ["t1", ev.toolUpdate("run", { title: "Run all tests" })],
+    // A second call with the same id replaces the item: updates after it fold separately.
+    ["t1", ev.toolCall("run", { kind: "execute", title: "Again" })],
+    ["t1", ev.toolUpdate("run", { content: content("3") })],
+    ["t1", ev.toolUpdate("run", { status: "failed" })],
+    ["t1", ev.message("t1.m1", "done")],
+    ["t1", ev.turnEnded("t1")],
+  ]);
+
+  it("leaves the transcript as it was, with one update per tool and call", () => {
+    const folded = compactToolUpdates(raw);
+    const updates = folded.filter((e) => "event" in e && e.event.type === "tool_update");
+    expect(updates).toHaveLength(3);
+    expect(folded).toHaveLength(raw.length - 4);
+    const whole = applyEntries(emptyTranscript(), raw);
+    expect(applyEntries(emptyTranscript(), folded)).toEqual(whole);
+  });
+
+  it("folds tens of thousands of streamed updates into one", () => {
+    const stream = numbered([
+      ["t1", ev.turnStarted("t1")],
+      ["t1", ev.toolCall("sh", { kind: "execute" })],
+      ...Array.from(
+        { length: 50_000 },
+        (_, i) => ["t1", ev.toolUpdate("sh", { content: content(`line ${i}`) })] as const,
+      ),
+      ["t1", ev.turnEnded("t1")],
+    ]);
+    const folded = compactToolUpdates(stream);
+    expect(folded).toHaveLength(4);
+    expect(applyEntries(emptyTranscript(), folded)).toEqual(
+      applyEntries(emptyTranscript(), stream),
+    );
+  });
+});

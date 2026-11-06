@@ -755,9 +755,12 @@ export class FakeTransport implements Transport {
     return this.handlers.detach?.(subscriptionId) ?? Promise.resolve();
   }
 
-  history(chatId: string, beforeSeq: number): Promise<HistoryPage> {
+  history(chatId: string, beforeSeq: number, maxBytes?: number): Promise<HistoryPage> {
     this.#record("history", [chatId, beforeSeq]);
-    return this.handlers.history?.(chatId, beforeSeq) ?? Promise.resolve(historyPage(chatId, []));
+    return (
+      this.handlers.history?.(chatId, beforeSeq, maxBytes) ??
+      Promise.resolve(historyPage(chatId, []))
+    );
   }
 
   lists(chatId: string): Promise<SessionLists> {
