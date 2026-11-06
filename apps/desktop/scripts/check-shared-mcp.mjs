@@ -113,6 +113,43 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       );
       await dialog.getByRole("button", { name: "Save definition" }).click();
       await page.getByText("local_tools", { exact: true }).waitFor();
+      // A new server is for every agent, including ones installed later.
+      const localRow = page.locator(".shared-mcp-row", { hasText: "local_tools" });
+      assert.equal(await localRow.getByTestId("shared-mcp-agents").textContent(), "Every agent");
+      // Limited to chosen agents: none chosen cannot be saved; two chosen show by name.
+      await localRow.getByRole("button", { name: "Edit", exact: true }).click();
+      dialog = page.getByRole("dialog");
+      await dialog.getByRole("radio", { name: /Only the agents I choose/ }).check();
+      await dialog.getByText("Choose at least one agent.", { exact: true }).waitFor();
+      assert.equal(
+        await dialog.getByRole("button", { name: "Save definition" }).isDisabled(),
+        true,
+      );
+      const choices = dialog.getByRole("list", { name: "Agents that load this server" });
+      await choices.getByRole("checkbox", { name: /Codex/ }).check();
+      await choices.getByRole("checkbox", { name: /Claude Code/ }).check();
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations,
+        [],
+        `${engine}/${theme} agent scope accessibility`,
+      );
+      await dialog.getByRole("button", { name: "Save definition" }).click();
+      await dialog.waitFor({ state: "hidden" });
+      assert.equal(
+        await localRow.getByTestId("shared-mcp-agents").textContent(),
+        "Claude Code, Codex",
+      );
+      // Back to every agent: the choice is a radio away, and the server is for all again.
+      await localRow.getByRole("button", { name: "Edit", exact: true }).click();
+      dialog = page.getByRole("dialog");
+      assert.equal(
+        await dialog.getByRole("radio", { name: /Only the agents I choose/ }).isChecked(),
+        true,
+      );
+      await dialog.getByRole("radio", { name: /Every agent/ }).check();
+      await dialog.getByRole("button", { name: "Save definition" }).click();
+      await dialog.waitFor({ state: "hidden" });
+      assert.equal(await localRow.getByTestId("shared-mcp-agents").textContent(), "Every agent");
       await page.getByRole("button", { name: "Export", exact: true }).click();
       dialog = page.getByRole("dialog");
       const document = await dialog.getByLabel("Definition JSON", { exact: true }).inputValue();
