@@ -30,13 +30,21 @@ export interface WorkspaceView {
 }
 export const EMPTY_WORKSPACE: WorkspaceView = { data: null, error: null, busy: false };
 
+/** The waits before reading the workspace again after a failed read; the last repeats. */
+export const WORKSPACE_RETRY_MS = [500, 1000, 2000, 4000, 8000] as const;
+
 export class WorkspaceStore {
   readonly api: WorkspaceApi;
   #state: WorkspaceView = EMPTY_WORKSPACE;
   #listeners = new Set<() => void>();
   #revision = 0;
-  constructor(api: WorkspaceApi) {
+  /** Failed reads in a row, and the read waiting to try again. */
+  #failures = 0;
+  #retry: ReturnType<typeof setTimeout> | null = null;
+  readonly #waits: readonly number[];
+  constructor(api: WorkspaceApi, waits: readonly number[] = WORKSPACE_RETRY_MS) {
     this.api = api;
+    this.#waits = waits;
   }
   subscribe = (listener: () => void) => {
     this.#listeners.add(listener);
@@ -51,13 +59,33 @@ export class WorkspaceStore {
   }
   async refresh(): Promise<void> {
     const revision = ++this.#revision;
+    if (this.#retry !== null) {
+      clearTimeout(this.#retry);
+      this.#retry = null;
+    }
     try {
       const data = await this.api.snapshot();
-      if (revision === this.#revision) this.#publish({ ...this.#state, data, error: null });
+      if (revision !== this.#revision) return;
+      this.#failures = 0;
+      this.#publish({ ...this.#state, data, error: null });
     } catch (error) {
-      if (revision === this.#revision)
-        this.#publish({ ...this.#state, error: errorMessage(error) });
+      if (revision !== this.#revision) return;
+      this.#publish({ ...this.#state, error: errorMessage(error) });
+      // Read again until it answers: the database may still be opening after a restart.
+      const wait = this.#waits[Math.min(this.#failures, this.#waits.length - 1)] ?? 8000;
+      this.#failures += 1;
+      this.#retry = setTimeout(() => {
+        this.#retry = null;
+        if (revision === this.#revision) void this.refresh();
+      }, wait);
     }
+  }
+
+  /** Stops a waiting retry (the profile closed). */
+  dispose(): void {
+    if (this.#retry !== null) clearTimeout(this.#retry);
+    this.#retry = null;
+    this.#revision += 1;
   }
   async perform<T>(operation: () => Promise<T>): Promise<T | null> {
     if (this.#state.busy) return null;

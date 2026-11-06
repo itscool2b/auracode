@@ -5,6 +5,7 @@ import {
   AppStore,
   agentChoice,
   CATALOG_POLL_MS,
+  CHATS_RETRY_MS,
   DETECTION_POLL_MS,
   NewChatDraft,
   RELEASE_POLL_WINDOW_MS,
@@ -39,6 +40,31 @@ describe("the app store", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("reads the chat list again until the database answers, as after an update", async () => {
+    let unavailable = 2;
+    const fake = new FakeTransport({
+      chatsList: () =>
+        unavailable-- > 0
+          ? Promise.reject(
+              new CommandError("storage_unavailable", "auracode's database is not available."),
+            )
+          : Promise.resolve([chatSummary("kept", { updated_at: 1 })]),
+    });
+    const store = new AppStore(fake);
+    store.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getSnapshot().chatsError).toMatch(/not available/);
+    expect(store.getSnapshot().chats).toBeNull();
+    await vi.advanceTimersByTimeAsync(CHATS_RETRY_MS[0] + CHATS_RETRY_MS[1]);
+    expect(store.getSnapshot().chats?.map((chat) => chat.id)).toEqual(["kept"]);
+    expect(store.getSnapshot().chatsError).toBeNull();
+    // Once it answered, it stops reading on a timer.
+    const reads = fake.callsOf("chatsList").length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fake.callsOf("chatsList")).toHaveLength(reads);
+    store.stop();
   });
 
   it("loads chats, env, storage and agents, and keeps the list current from the status channel", async () => {
