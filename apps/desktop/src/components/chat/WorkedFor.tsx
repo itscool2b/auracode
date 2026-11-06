@@ -1,4 +1,5 @@
 import { ChevronRight, FileDiff } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { FileLink } from "./FileLink";
 
 /**
@@ -34,7 +35,8 @@ export function WorkedFor({
   );
 }
 
-const SHOWN = 4;
+/** Names the card considers at most; the rest only count toward "N more". */
+const LISTED = 12;
 
 function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
@@ -52,23 +54,64 @@ export function ChangedFiles({
   readonly files: readonly string[];
   readonly onReview?: () => void;
 }) {
-  const shown = files.slice(0, SHOWN);
-  const more = files.length - shown.length;
+  const listed = files.slice(0, LISTED);
+  // As many whole names as the row holds; the rest fold into "N more". Measured after layout and
+  // again whenever the row's width changes.
+  const [fit, setFit] = useState(listed.length);
+  const list = useRef<HTMLUListElement>(null);
+  const names = listed.join("\n");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Other names need measuring again.
+  useLayoutEffect(() => {
+    const node = list.current;
+    if (!node) return;
+    const measure = () => {
+      const chips = [...node.querySelectorAll<HTMLElement>("li[data-name]")];
+      const more = node.querySelector<HTMLElement>("li[data-more]");
+      // Every name at its natural width (none shrinking), then keep those that end inside the
+      // row, leaving room for "N more" unless every file's name fits.
+      node.dataset.measuring = "";
+      for (const chip of chips) chip.hidden = false;
+      if (more) more.hidden = false;
+      const right = node.getBoundingClientRect().right + 0.5;
+      const gap = Number.parseFloat(getComputedStyle(node).columnGap) || 0;
+      const room = right - (more ? more.getBoundingClientRect().width + gap : 0);
+      const ends = chips.map((chip) => chip.getBoundingClientRect().right);
+      let shown = ends.findIndex((end) => end > room);
+      if (shown === -1) shown = ends.length;
+      if (files.length === chips.length && ends.every((end) => end <= right)) shown = chips.length;
+      // One name always shows, cut short if it must be.
+      shown = Math.max(1, shown);
+      delete node.dataset.measuring;
+      for (const [index, chip] of chips.entries()) chip.hidden = index >= shown;
+      if (more) more.hidden = files.length - shown <= 0;
+      setFit(shown);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [names, files.length]);
+  const shown = Math.min(fit, listed.length);
+  const more = files.length - shown;
   return (
     <div className="chat-segment chat-changed" data-testid="changed-files">
       <FileDiff size={14} aria-hidden="true" className="chat-changed-icon" />
       <span className="chat-changed-count">
         {files.length === 1 ? "Changed 1 file" : `Changed ${files.length} files`}
       </span>
-      <ul className="chat-changed-list" aria-label="Changed files">
-        {shown.map((path) => (
-          <li key={path} title={path}>
+      <ul ref={list} className="chat-changed-list" aria-label="Changed files">
+        {listed.map((path, index) => (
+          <li key={path} title={path} data-name="" hidden={index >= shown}>
             <FileLink reference={path} icon={false}>
               {basename(path)}
             </FileLink>
           </li>
         ))}
-        {more > 0 ? <li className="chat-changed-more">{more} more</li> : null}
+        {/* Always rendered, so the measurement can reserve its width. */}
+        <li className="chat-changed-more" data-more="" hidden={more <= 0}>
+          {more > 0 ? more : files.length} more
+        </li>
       </ul>
       {onReview ? (
         <button
