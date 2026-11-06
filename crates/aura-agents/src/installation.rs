@@ -132,6 +132,17 @@ pub fn classify_channel(agent_id: &str, resolved_path: &str) -> InstallChannel {
             && lower
                 .windows(3)
                 .any(|parts| parts == [".codex", "packages", "standalone"]))
+        // Grok Build's installer: ~/.grok/bin/grok.
+        || (provider == "grok" && lower.windows(2).any(|parts| parts == [".grok", "bin"]))
+        // Cursor's installer: its own cursor-agent folder holding the versions it downloaded and
+        // the launchers (%LOCALAPPDATA%cursor-agent on Windows, ~/.local/share/cursor-agent).
+        || (provider == "cursor"
+            && lower.windows(2).any(|parts| {
+                parts[0] == "cursor-agent"
+                    && (parts[1] == "versions"
+                        || parts[1].starts_with("cursor-agent")
+                        || parts[1].starts_with("agent"))
+            }))
     {
         return InstallChannel::VendorStandalone;
     }
@@ -175,6 +186,45 @@ mod tests {
                 "pi",
                 "/prefix/lib/node_modules/@oh-my-pi/pi-coding-agent/cli.js"
             ),
+            InstallChannel::Unknown
+        );
+    }
+
+    #[test]
+    fn grok_and_cursor_installers_are_their_vendors_own() {
+        for (agent, path) in [
+            ("grok", r"C:\Users\me\.grok\bin\grok"),
+            ("grok", "/home/me/.grok/bin/grok"),
+            (
+                "cursor",
+                r"C:\Users\me\AppData\Local\cursor-agent\cursor-agent.cmd",
+            ),
+            (
+                "cursor",
+                r"C:\Users\me\AppData\Local\cursor-agent\agent.cmd",
+            ),
+            (
+                "cursor",
+                "/home/me/.local/share/cursor-agent/versions/2026.10.22/cursor-agent",
+            ),
+        ] {
+            assert_eq!(
+                classify_channel(agent, path),
+                InstallChannel::VendorStandalone,
+                "{path}"
+            );
+        }
+        // Lookalikes stay unknown: another agent's folder, or a copy elsewhere.
+        assert_eq!(
+            classify_channel("grok", "/home/me/.grok-old/grok"),
+            InstallChannel::Unknown
+        );
+        assert_eq!(
+            classify_channel("codex", "/home/me/.grok/bin/grok"),
+            InstallChannel::Unknown
+        );
+        assert_eq!(
+            classify_channel("cursor", "/home/me/tools/cursor-agent"),
             InstallChannel::Unknown
         );
     }

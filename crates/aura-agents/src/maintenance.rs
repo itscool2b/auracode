@@ -120,7 +120,11 @@ pub fn update_command(
             Err(MaintenanceError::Bundled(application.clone()))
         }
         InstallChannel::Unknown => Err(MaintenanceError::UnknownChannel),
-        InstallChannel::VendorStandalone if matches!(provider, "claude" | "codex") => {
+        // Each vendor's own installer updates through its CLI: `claude update`, `codex update`,
+        // `grok update` and `cursor-agent update`.
+        InstallChannel::VendorStandalone
+            if matches!(provider, "claude" | "codex" | "grok" | "cursor") =>
+        {
             Ok(vendor(installation, &["update"]))
         }
         InstallChannel::VendorStandalone => Err(MaintenanceError::Unsupported),
@@ -319,6 +323,28 @@ mod tests {
             channel,
             verification: VersionVerification::Unknown,
         }
+    }
+
+    #[test]
+    fn grok_and_cursor_from_their_own_installers_update_through_their_cli() {
+        for (agent, launch) in [
+            ("grok", "/home/me/.grok/bin/grok"),
+            ("cursor", "/home/me/.local/share/cursor-agent/cursor-agent"),
+        ] {
+            let mut installed = installation(InstallChannel::VendorStandalone);
+            installed.agent_id = agent.into();
+            installed.launch_path = launch.into();
+            let command = update_command(&installed, &EnvMap::new()).unwrap();
+            assert_eq!(command.program, std::path::PathBuf::from(launch));
+            assert_eq!(command.args, vec![OsString::from("update")]);
+        }
+        // An agent whose own installer has no reviewed update command still gets none.
+        let mut other = installation(InstallChannel::VendorStandalone);
+        other.agent_id = "hermes".into();
+        assert_eq!(
+            update_command(&other, &EnvMap::new()),
+            Err(MaintenanceError::Unsupported)
+        );
     }
 
     #[test]
