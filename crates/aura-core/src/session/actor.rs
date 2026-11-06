@@ -235,6 +235,15 @@ pub(crate) enum ChatMsg {
         explicit: bool,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// Opens the chat in its agent's own interface (a terminal chat): prepares as a start would,
+    /// then answers with the launch instead of starting the driver. Chat waits while it is open.
+    OpenTerminal {
+        reply: oneshot::Sender<Result<TerminalOpened, SessionError>>,
+    },
+    /// The terminal `OpenTerminal` answered ended: it exited, or its page closed it.
+    TerminalEnded {
+        generation: u64,
+    },
     Stop {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -332,7 +341,11 @@ impl ChatMsg {
             ChatMsg::Shutdown { reply, .. } => {
                 let _ = reply.send(());
             }
-            ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } | ChatMsg::SetupChanged(_) => {}
+            ChatMsg::OpenTerminal { reply } => drop(reply.send(Err(error))),
+            ChatMsg::Detach { .. }
+            | ChatMsg::DropOwner { .. }
+            | ChatMsg::SetupChanged(_)
+            | ChatMsg::TerminalEnded { .. } => {}
             #[cfg(test)]
             ChatMsg::Panic => {}
         }
@@ -443,6 +456,15 @@ struct Preparing {
     generation: u64,
     abort: AbortHandle,
     fresh: bool,
+}
+
+/// A terminal chat's launch, for the terminal registry to start, and what it left out.
+pub struct TerminalOpened {
+    pub spec: aura_process::SpawnSpec,
+    /// Hand it back with `terminal_ended` when the terminal ends.
+    pub generation: u64,
+    /// Shared servers the agent's terminal cannot take, with why.
+    pub omitted: Vec<String>,
 }
 
 /// What a preparation produces.
@@ -790,6 +812,11 @@ pub(crate) struct ChatActor {
     sealed: bool,
     /// A start (fresh or not) to begin once the live driver stopped.
     pending_start: Option<bool>,
+    /// A terminal waiting for its preparation; answered with its launch, or why it cannot open.
+    terminal_request: Option<oneshot::Sender<Result<TerminalOpened, SessionError>>>,
+    /// The generation of the terminal open now. While it is, the chat's session is the
+    /// terminal's: Chat does not start, and the live slot and session claim stay held.
+    terminal: Option<u64>,
     /// The current start is a Start fresh.
     starting_fresh: bool,
     /// The native session the agent returned at `Ready` is open in another chat: the start fails
@@ -928,6 +955,8 @@ impl ChatActor {
             shutdown_reply: None,
             sealed: false,
             pending_start: None,
+            terminal_request: None,
+            terminal: None,
             starting_fresh: false,
             conflict: false,
             shared,
@@ -1340,6 +1369,8 @@ impl ChatActor {
                 let result = self.start(fresh, explicit);
                 drop(reply.send(result));
             }
+            ChatMsg::OpenTerminal { reply } => self.open_terminal(reply),
+            ChatMsg::TerminalEnded { generation } => self.terminal_ended(generation),
             ChatMsg::RestartOnAccount { agent, reply } => {
                 let result = self.restart_on_account(&agent);
                 drop(reply.send(result));
@@ -2860,6 +2891,11 @@ impl ChatActor {
                 preparing.abort.abort();
                 self.progress = None;
             }
+            if let Some(reply) = self.terminal_request.take() {
+                drop(reply.send(Err(SessionError::OptionInvalid(
+                    "Opening the terminal was stopped.".into(),
+                ))));
+            }
             self.release_if_idle();
             self.set_status(SessionStatus::Stopped, None);
             return;
@@ -2965,6 +3001,12 @@ impl ChatActor {
     }
 
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if self.terminal.is_some() {
+            return Err(SessionError::OptionInvalid(
+                "This chat is open in the terminal. Close it, or switch to Chat, to continue here."
+                    .into(),
+            ));
+        }
         if let Some(attempt) = self
             .worktree_setup
             .as_ref()
@@ -3167,7 +3209,13 @@ impl ChatActor {
         };
         self.progress = None;
         match result {
-            Err(error) if error.is_cancelled() => {}
+            Err(error) if error.is_cancelled() => {
+                if let Some(reply) = self.terminal_request.take() {
+                    drop(reply.send(Err(SessionError::OptionInvalid(
+                        "Opening the terminal was stopped.".into(),
+                    ))));
+                }
+            }
             Err(_) => self.start_failed(
                 ErrorKind::Internal,
                 "Preparing the agent failed inside auracode.".into(),
@@ -3197,9 +3245,224 @@ impl ChatActor {
                     return;
                 }
                 self.folder_state = FolderState::Ok;
-                self.spawn_driver(prepared, preparing.fresh);
+                if self.terminal_request.is_some() {
+                    self.spawn_terminal(prepared);
+                } else {
+                    self.spawn_driver(prepared, preparing.fresh);
+                }
             }
         }
+    }
+
+    /// Opens the chat in its agent's own interface. It goes through `start`, so every rule a
+    /// start keeps holds (setup, workspace, recovery, a remote handoff to review, the live slot,
+    /// an idle agent stopping first); a turn under way must finish or be stopped first, never cut.
+    fn open_terminal(&mut self, reply: oneshot::Sender<Result<TerminalOpened, SessionError>>) {
+        let refuse = |reply: oneshot::Sender<Result<TerminalOpened, SessionError>>, why: &str| {
+            drop(reply.send(Err(SessionError::OptionInvalid(why.into()))));
+        };
+        if self.terminal.is_some() || self.terminal_request.is_some() {
+            return refuse(reply, "This chat is already open in the terminal.");
+        }
+        if !matches!(
+            aura_agents::agent_of(&self.chat.agent_id),
+            "claude" | "codex"
+        ) {
+            return refuse(
+                reply,
+                "The terminal is available for Claude Code and Codex chats.",
+            );
+        }
+        if self.chat.agent_host != aura_protocol::agents::AgentHost::Native {
+            return refuse(reply, "The terminal runs agents on this device only.");
+        }
+        if self.turn.is_some()
+            || matches!(
+                self.status,
+                SessionStatus::Running | SessionStatus::Cancelling
+            )
+        {
+            return refuse(
+                reply,
+                "Wait for the turn to finish, or stop it, before opening the terminal.",
+            );
+        }
+        self.terminal_request = Some(reply);
+        if let Err(error) = self.start(false, true)
+            && let Some(reply) = self.terminal_request.take()
+        {
+            drop(reply.send(Err(error)));
+        }
+    }
+
+    /// The prepared start, as the terminal's launch: the chat's session continues (a new Claude
+    /// Code session takes its ID now and is saved, so Chat continues it later), with the same
+    /// account, shared MCP and project memory a driver would get.
+    fn spawn_terminal(&mut self, prepared: Prepared) {
+        use aura_drivers::terminal::{TerminalOptions, TerminalSession};
+        let Some(reply) = self.terminal_request.take() else {
+            return;
+        };
+        let spec = (*prepared.spec).clone();
+        let fail = |this: &mut Self,
+                    reply: oneshot::Sender<Result<TerminalOpened, SessionError>>,
+                    why: String| {
+            this.memory_grant = None;
+            this.release_if_idle();
+            this.set_status(SessionStatus::Stopped, None);
+            drop(reply.send(Err(SessionError::AgentUnavailable(why))));
+        };
+        if !matches!(
+            spec.kind,
+            aura_protocol::DriverKind::Claude | aura_protocol::DriverKind::Codex
+        ) {
+            let why = format!(
+                "This chat's session runs through {}'s {}, which has no terminal. Choose its own connection in Settings > Agents, then open the terminal.",
+                spec.name, spec.connection
+            );
+            return fail(self, reply, why);
+        }
+        let resume = self
+            .agent_session
+            .as_ref()
+            .filter(|session| session.agent_id == spec.id)
+            .and_then(|session| session.native_session_id.clone());
+        let session = match (resume, spec.kind) {
+            (Some(id), _) => TerminalSession::Resume(id),
+            (None, aura_protocol::DriverKind::Claude) => {
+                TerminalSession::NewClaude(uuid::Uuid::now_v7().to_string())
+            }
+            (None, _) => TerminalSession::New,
+        };
+        let native_scope = NativeSessionScope::local(
+            spec.id,
+            &self.shared.deps.device_id,
+            &prepared.env,
+            &prepared.launch,
+            &self.chat.folder,
+        );
+        if let TerminalSession::Resume(id) | TerminalSession::NewClaude(id) = &session
+            && !self.shared.live.claim(&native_scope, id, &self.chat_id)
+        {
+            return fail(
+                self,
+                reply,
+                "This session is already open in another chat.".into(),
+            );
+        }
+        self.memory_grant = crate::memory_service::MemoryGrant::start(
+            self.store.clone(),
+            self.chat_id.clone(),
+            Arc::clone(&self.shared.agent_memory_writes),
+            &self.shared.deps.rt,
+        )
+        .ok();
+        let mut servers = prepared.mcp_servers;
+        if prepared.memory_mcp_available
+            && let Some(helper) = self.memory_grant.as_ref().and_then(|grant| grant.mcp(None))
+        {
+            servers.push(helper);
+        }
+        self.shared.deps.redactor.set_secrets(
+            servers
+                .iter()
+                .flat_map(|s| {
+                    s.credentials
+                        .env
+                        .values()
+                        .chain(s.credentials.headers.values())
+                })
+                .cloned()
+                .chain(
+                    prepared
+                        .account
+                        .as_ref()
+                        .map(|account| account.token.clone()),
+                )
+                .collect(),
+        );
+        let model_id = self
+            .shared
+            .catalogs
+            .get(spec.id)
+            .map_or_else(|| "model".to_owned(), |catalog| catalog.model.id);
+        let model = match self.native_desired().get(&model_id) {
+            Some(ConfigValue::Choice { value }) => Some(value.clone()),
+            _ => None,
+        };
+        let add_dirs: Vec<PathBuf> = prepared
+            .folder_context
+            .additional
+            .iter()
+            .map(PathBuf::from)
+            .collect();
+        let options = TerminalOptions {
+            servers: &servers,
+            autonomy: self.autonomy,
+            session: session.clone(),
+            model,
+            add_dirs: &add_dirs,
+        };
+        let made = if spec.kind == aura_protocol::DriverKind::Claude {
+            aura_drivers::terminal::claude(&prepared.launch, &options)
+        } else {
+            aura_drivers::terminal::codex(&prepared.launch, &options)
+        };
+        if let TerminalSession::NewClaude(native_id) = &session {
+            let now = now_millis();
+            let row = AgentSessionRow {
+                capabilities: None,
+                host: self.chat.agent_host.clone(),
+                id: new_id(),
+                chat_id: self.chat_id.clone(),
+                agent_id: spec.id.to_owned(),
+                native_session_id: Some(native_id.clone()),
+                model: None,
+                effort: None,
+                autonomy: self.autonomy,
+                config_json: serde_json::to_string(&self.desired).ok(),
+                controls_json: serde_json::to_string(&self.controls).ok(),
+                cwd: self.chat.folder.clone(),
+                created_at: now,
+                updated_at: now,
+            };
+            self.agent_session = Some(row.clone());
+            self.queue_op(Op::InsertAgentSession(row));
+            self.native_session_id = Some(native_id.clone());
+        }
+        let generation = self.generation;
+        self.terminal = Some(generation);
+        self.set_status(SessionStatus::Stopped, Some("Open in the terminal".into()));
+        let opened = TerminalOpened {
+            spec: aura_process::SpawnSpec {
+                launch: made.launch,
+                folder: self.chat.folder.clone(),
+                env: prepared.env,
+                max_line_bytes: aura_process::MAX_LINE_BYTES,
+            },
+            generation,
+            omitted: made.omitted,
+        };
+        if reply.send(Ok(opened)).is_err() {
+            // Nobody waits for it any more (the page closed): give the session back now.
+            self.terminal_ended(generation);
+        }
+    }
+
+    /// The terminal ended: the session, the live slot and project memory go back, and prompts
+    /// queued meanwhile go to Chat.
+    fn terminal_ended(&mut self, generation: u64) {
+        if self.terminal != Some(generation) {
+            return;
+        }
+        self.terminal = None;
+        self.memory_grant = None;
+        self.release_if_idle();
+        self.set_status(SessionStatus::Stopped, None);
+        self.revision = self.revision.wrapping_add(1);
+        self.info_dirty = true;
+        self.schedule_flush();
+        self.after_stop();
     }
 
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
@@ -5171,6 +5434,7 @@ impl ChatActor {
             && self.driver.is_none()
             && self.preparing.is_none()
             && self.retiring.is_empty()
+            && self.terminal.is_none()
         {
             self.shared.live.release(&self.chat_id);
         }
@@ -5383,6 +5647,9 @@ impl ChatActor {
         detail: Option<String>,
         auth: bool,
     ) {
+        if let Some(reply) = self.terminal_request.take() {
+            drop(reply.send(Err(SessionError::AgentUnavailable(message.clone()))));
+        }
         self.memory_grant = None;
         self.release_if_idle();
         let message = self.error_text(&message, false);

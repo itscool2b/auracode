@@ -16,6 +16,7 @@ mod rewind;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
+mod terminal_chats;
 mod workspace;
 mod workspace_removal;
 mod worktree_chat;
