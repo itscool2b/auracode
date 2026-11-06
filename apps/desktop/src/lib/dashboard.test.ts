@@ -122,12 +122,24 @@ describe("the Dashboard's lanes", () => {
   });
 
   it("puts a chat working in its terminal under Working, though its session shows as stopped", () => {
-    const inTerminal = (id: string) => id === "t";
+    const inTerminal = (id: string) => (id === "t" ? ("working" as const) : null);
     const terminal = chat("t", { status: "stopped", updated_at: NOW - 3 * FINISHED_WINDOW_MS });
     expect(laneOf(terminal, NOW, inTerminal)).toBe("working");
-    expect(stateLine(terminal, inTerminal)).toBe("In the terminal");
+    expect(stateLine(terminal, inTerminal)).toBe("Working in the terminal");
     // Needing an answer still comes first.
     expect(laneOf(chat("t", { needs_attention: true }), NOW, inTerminal)).toBe("attention");
+  });
+
+  it("does not call a terminal whose agent waits at its prompt working", () => {
+    const inTerminal = (id: string) => (id === "t" ? ("open" as const) : null);
+    // Open for days without a word: still on the board, under Finished, saying where it is.
+    const terminal = chat("t", { status: "stopped", updated_at: NOW - 3 * FINISHED_WINDOW_MS });
+    expect(laneOf(terminal, NOW, inTerminal)).toBe("finished");
+    expect(stateLine(terminal, inTerminal)).toBe("Open in the terminal");
+    const board = boardOf([terminal], NOW, inTerminal);
+    expect(boardSummary(board)).toBe("1 finished in the last day.");
+    // Gone quiet a moment ago, its card still shown under Working says so too, without flicker.
+    expect(stateLine(terminal, inTerminal, "working")).toBe("Working in the terminal");
   });
 
   it("sums the board up in one line", () => {

@@ -1,10 +1,12 @@
 import type { ChatSummary, SessionStatus } from "../bindings";
 import { folderStateLabel } from "./chat/present";
+import type { TerminalUse } from "./terminalActivity";
 
 /**
  * The Dashboard's board: every chat sorted into what it asks of you. A chat that waits on you,
  * failed or lost its folder needs you; one whose agent runs is working; one whose agent went quiet
- * in the last day is finished. Older quiet chats stay in the sidebar only.
+ * in the last day is finished, as is a terminal whose agent waits at its prompt. Older quiet chats
+ * stay in the sidebar only.
  */
 export type Lane = "attention" | "working" | "finished";
 
@@ -26,10 +28,13 @@ const WORKING: ReadonlySet<SessionStatus> = new Set([
   "stopping",
 ]);
 
-/** Whether a chat's agent runs in a terminal of this window (its session shows as stopped then). */
-export type InTerminal = (chatId: string) => boolean;
+/**
+ * What a chat's terminal in this window is doing (its session shows as stopped while it is open):
+ * its agent working, open with its agent quiet at its prompt, or none.
+ */
+export type InTerminal = (chatId: string) => TerminalUse;
 
-const nowhere: InTerminal = () => false;
+const nowhere: InTerminal = () => null;
 
 export function laneOf(
   chat: ChatSummary,
@@ -43,14 +48,29 @@ export function laneOf(
     folderStateLabel(chat.folder_state) !== null
   )
     return "attention";
-  if (WORKING.has(chat.status) || inTerminal(chat.id)) return "working";
+  const terminal = inTerminal(chat.id);
+  if (terminal === "working" || WORKING.has(chat.status)) return "working";
+  // Open, whatever its last activity: its agent waits at its prompt for the person.
+  if (terminal === "open") return "finished";
   return now - chat.updated_at <= FINISHED_WINDOW_MS ? "finished" : null;
 }
 
-/** What a card says the chat is doing, or why it needs you. */
-export function stateLine(chat: ChatSummary, inTerminal: InTerminal = nowhere): string {
+/**
+ * What a card says the chat is doing, or why it needs you. A terminal's card says what the lane
+ * it is shown in says: the board keeps a card in Working a moment after its agent goes quiet, and
+ * its line should not flicker meanwhile.
+ */
+export function stateLine(
+  chat: ChatSummary,
+  inTerminal: InTerminal = nowhere,
+  lane?: Lane,
+): string {
   if (chat.needs_attention) return "Waiting for your answer";
-  if (inTerminal(chat.id)) return "In the terminal";
+  const terminal = inTerminal(chat.id);
+  if (terminal !== null)
+    return (lane ?? (terminal === "working" ? "working" : "finished")) === "working"
+      ? "Working in the terminal"
+      : "Open in the terminal";
   const folder = folderStateLabel(chat.folder_state);
   if (folder !== null) return folder.charAt(0).toUpperCase() + folder.slice(1);
   switch (chat.status) {
