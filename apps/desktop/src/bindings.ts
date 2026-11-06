@@ -213,6 +213,18 @@ export const commands = {
 	agentTokenStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_token_start", { terminalId, agentId, rows, cols })),
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
 	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
+	/**
+	 *  Opens a chat in its agent's own interface in a reserved terminal (`terminal_reserve`): the
+	 *  chat is prepared as a start would be (folder, account, shared MCP, project memory, its
+	 *  session), then its agent's interactive interface starts there. While it runs, the chat's
+	 *  session is the terminal's; `chat_terminal_ended` hands it back.
+	 */
+	chatTerminalStart: (terminalId: string, chatId: string, rows: number, cols: number) => typedError<ChatTerminalStarted, AppError>(__TAURI_INVOKE("chat_terminal_start", { terminalId, chatId, rows, cols })),
+	/**
+	 *  A terminal chat's terminal ended (its agent exited, or the page closed it): the chat gets its
+	 *  session back. Only the page that opened it can end it, once.
+	 */
+	chatTerminalEnded: (terminalId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_terminal_ended", { terminalId })),
 	/**  Reads the clone form. A complete form comes back with the exact command Start will run. */
 	cloneCheck: (input: CloneInput) => typedError<CloneCheck, AppError>(__TAURI_INVOKE("clone_check", { input })),
 	cloneCancelReview: (id: string) => __TAURI_INVOKE<void>("clone_cancel_review", { id }),
@@ -1200,6 +1212,15 @@ export type ChatSummary = {
 	needs_attention: boolean,
 	created_at: number,
 	updated_at: number,
+};
+
+/**
+ *  A terminal chat that started: its terminal, and the shared servers its agent's terminal left
+ *  out, with why, for the chat to say.
+ */
+export type ChatTerminalStarted = {
+	terminal_id: string,
+	omitted: string[],
 };
 
 export type CheckpointSummary = {

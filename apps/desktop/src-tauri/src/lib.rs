@@ -347,6 +347,13 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
         state.dictation.drop_owner(owner);
         state.terminals.drop_owner(owner);
+        // Its terminal chats end with its terminals: the chats get their sessions back.
+        let ended = state.terminal_chats.drain_owner(owner);
+        if let Some(chats) = chats.as_ref() {
+            for (chat_id, generation) in ended {
+                chats.manager.terminal_ended(&chat_id, generation);
+            }
+        }
         if let Some(vendor) = webview.try_state::<Arc<config_vendor::VendorService>>() {
             vendor.drop_owner(owner);
         }

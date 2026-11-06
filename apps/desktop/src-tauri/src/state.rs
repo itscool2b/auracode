@@ -85,6 +85,8 @@ pub struct AppState {
     pub dictation: Arc<crate::dictation::Dictation>,
     /// Unlogged terminal sessions, owned by the window that explicitly opened them.
     pub terminals: aura_core::terminal::Terminals,
+    /// Which chat each terminal chat's terminal holds, so a page that goes ends its own.
+    pub terminal_chats: crate::terminal::TerminalChats,
     /// Lazily loaded setup preferences, available only while this process owns the profile.
     /// The background check after a session that did not close the database. Started once the
     /// window is shown, closed at exit before the store.
@@ -221,6 +223,7 @@ impl AppState {
             catalog_refresh: Arc::default(),
             dictation: Arc::default(),
             terminals: Default::default(),
+            terminal_chats: Default::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
             launch,
