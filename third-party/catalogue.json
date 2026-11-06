@@ -2,14 +2,14 @@
   "version": 1,
   "scope": "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher, Windows vendored OpenSSL, transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
   "inputs": {
-    "Cargo.lock": "b58a20df9cbc47782ed27b275e5f60e79f3401cf6ab4485cb4e7738cd9f6b4cf",
+    "Cargo.lock": "8fb45f571b87d326584fab6b372b1857fd3477b6638d885a66d730bc06c6ba5f",
     "Cargo.toml": "fa7a4ad1ae18ee6891bc86117d7a9d6e4e712e9fe15d5e658cf715c859a69d6f",
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
     "apps/desktop/package.json": "227e95acbb737dc26fb88ed4640a54b77adc8a053aaf507852c9fed0214c6fed",
     "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
-    "apps/desktop/src-tauri/Cargo.toml": "762ad53105c0b5a74fea2b21d7a5de3786820cb18ae09b934bd91b7cc617bb6e",
+    "apps/desktop/src-tauri/Cargo.toml": "f33a90e8bc9b7b09709350172c80a3edd541bd9ed9f5cdc18ecd754bf3132724",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "da8b90bdbbaac48eaee5314720ecb0fe235972affbabb6ff87291eb13ba66e00",
@@ -21,7 +21,7 @@
     "crates/aura-process/Cargo.toml": "32fecd9b59aacf59a88c790bd9d03d72c84e59e2b9dcd7e4d10b53cee99095ed",
     "crates/aura-protocol/Cargo.toml": "5d2b9ca24f6c0cc9ebe7a08fa6de7aa25d9fb28be8ae2443b3100dc40dc36c70",
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
-    "crates/aura-sync/Cargo.toml": "aa968fa121135ffac6f919092d65af607cd8405a08338ea98d8cccdabb523ddb",
+    "crates/aura-sync/Cargo.toml": "b7d587591b42ffb7f5b6eaf2dad6396ac82aceb8855e7fd3bfd9a64792c6e08c",
     "packages/ui/package.json": "aa571a30eac1836db5311e26622541afce99b0c0fb8db4269ae5b647a2260970",
     "pnpm-lock.yaml": "8bb51794484bbdb6bacf19f6cfd4b07b568f5609624e4432e968a6afe42c53e4",
     "third-party/models.json": "6c702b42c6052f5e9da76f4c4fd770fe1133326d960df4323a13835a73e856da",
@@ -79,6 +79,25 @@
         {
           "sha256": "33b32a251d445c5c03a634e64c53314c55540fc367fabdd45d9b6c8f260c028c",
           "source": "https://crates.io/api/v1/crates/aead/0.6.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "aes",
+      "version": "0.9.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/aes/0.9.4/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/aes/0.9.4/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "25f77efa393854f7c15eaf6a2589a2071db2d7337642742763adb12bdecf0445",
+          "source": "https://crates.io/api/v1/crates/aes/0.9.4/download#LICENSE-MIT"
         }
       ]
     },
@@ -826,6 +845,31 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "block-padding",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/block-padding/0.4.2/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/block-padding/0.4.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "98181e7249d0c01737645ec982499ce99a0f07eb8f7d625b8840d799d10dbc01",
+          "source": "https://crates.io/api/v1/crates/block-padding/0.4.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "block2",
       "version": "0.6.2",
       "license": "MIT",
@@ -1204,6 +1248,25 @@
         {
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
           "source": "https://crates.io/api/v1/crates/cargo-platform/0.1.9/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "cbc",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/cbc/0.2.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/cbc/0.2.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68",
+          "source": "https://crates.io/api/v1/crates/cbc/0.2.1/download#LICENSE-MIT"
         }
       ]
     },
@@ -1615,6 +1678,25 @@
         {
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
           "source": "https://crates.io/api/v1/crates/cpal/0.18.2/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "cpubits",
+      "version": "0.1.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/cpubits/0.1.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/cpubits/0.1.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0",
+          "source": "https://crates.io/api/v1/crates/cpubits/0.1.1/download#LICENSE-MIT"
         }
       ]
     },
@@ -5484,6 +5566,25 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "num-bigint",
+      "version": "0.4.8",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/num-bigint/0.4.8/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/num-bigint/0.4.8/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "source": "https://crates.io/api/v1/crates/num-bigint/0.4.8/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "num-complex",
       "version": "0.4.6",
       "license": "MIT OR Apache-2.0",
@@ -5559,6 +5660,44 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "num-iter",
+      "version": "0.1.46",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/num-iter/0.1.46/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/num-iter/0.1.46/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "source": "https://crates.io/api/v1/crates/num-iter/0.1.46/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "num-rational",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/num-rational/0.4.2/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/num-rational/0.4.2/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "source": "https://crates.io/api/v1/crates/num-rational/0.4.2/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "num-traits",
       "version": "0.2.19",
       "license": "MIT OR Apache-2.0",
@@ -5579,6 +5718,25 @@
         {
           "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
           "source": "https://crates.io/api/v1/crates/num-traits/0.2.19/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "num",
+      "version": "0.4.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/num/0.4.3/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/num/0.4.3/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "source": "https://crates.io/api/v1/crates/num/0.4.3/download#LICENSE-MIT"
         }
       ]
     },
@@ -7324,6 +7482,25 @@
         {
           "sha256": "fb77f0a9c53e473abe5103c8632ef9f0f2874d4fb3f17cb2d8c661aab9cee9d7",
           "source": "https://crates.io/api/v1/crates/scopeguard/1.2.0/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "secret-service",
+      "version": "5.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/secret-service/5.2.0/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/secret-service/5.2.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "074585dbaf488db540c26f7b20f36053a157d7580bb1c390dc9f6afdb017c83a",
+          "source": "https://crates.io/api/v1/crates/secret-service/5.2.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -10606,6 +10783,25 @@
         {
           "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
           "source": "https://crates.io/api/v1/crates/zbus_names/4.3.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "zbus-secret-service-keyring-store",
+      "version": "1.0.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/zbus-secret-service-keyring-store/1.0.1/download",
+      "distributions": ["desktop"],
+      "targets": ["x86_64-unknown-linux-gnu"],
+      "files": [
+        {
+          "sha256": "78ebc2ea2a1cec9cbec2e1a6fc15e73474fe22bdad7575518e7f4628651d49c4",
+          "source": "https://crates.io/api/v1/crates/zbus-secret-service-keyring-store/1.0.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "157cc607717b1b372a69f6b4526f6ad18c1279af9f3267835cca2943f37bc07d",
+          "source": "https://crates.io/api/v1/crates/zbus-secret-service-keyring-store/1.0.1/download#LICENSE-MIT"
         }
       ]
     },
