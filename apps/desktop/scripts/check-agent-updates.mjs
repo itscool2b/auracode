@@ -34,7 +34,9 @@ export async function checkAgentUpdates(browser, url, out, engine) {
         .waitFor();
       // Another tool owns Codex's installation: its reason, and the way to Settings > Agents.
       // The reason arrives with the installation's check, after the notice itself.
-      await notice("codex").getByText(/Homebrew manages this installation/).waitFor();
+      await notice("codex")
+        .getByText(/Homebrew manages this installation/)
+        .waitFor();
       assert.equal(
         await notice("codex").getByRole("button", { name: "Update", exact: true }).count(),
         0,
