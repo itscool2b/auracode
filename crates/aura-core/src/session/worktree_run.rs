@@ -41,7 +41,9 @@ impl SessionManager {
             .input
             .run
             .ok_or_else(|| {
-                SessionError::Organization("Save a Run command in this folder's setup first.".into())
+                SessionError::Organization(
+                    "Save a Run command in this folder's setup first.".into(),
+                )
             })?;
         let _organization = self.shared().organization.lock().await;
         if self.shared().is_shutting_down() {

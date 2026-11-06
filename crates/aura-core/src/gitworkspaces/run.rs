@@ -66,7 +66,9 @@ impl GitWorkspaces {
             return Ok((records[index].clone(), port));
         }
         let port = free_block(&taken, bindable).ok_or_else(|| {
-            invalid("No block of ten free local ports is left. Retire a worktree you no longer use.")
+            invalid(
+                "No block of ten free local ports is left. Retire a worktree you no longer use.",
+            )
         })?;
         records[index].port = Some(port);
         let record = records[index].clone();
@@ -150,7 +152,9 @@ mod tests {
         let names = |run| {
             port_env(25_040, run)
                 .into_iter()
-                .map(|(key, value)| format!("{}={}", key.to_string_lossy(), value.to_string_lossy()))
+                .map(|(key, value)| {
+                    format!("{}={}", key.to_string_lossy(), value.to_string_lossy())
+                })
                 .collect::<Vec<_>>()
         };
         assert_eq!(names(true), ["AURACODE_PORT=25040", "PORT=25040"]);

@@ -220,10 +220,7 @@ fn parts(folder: &Folder, reference: &str) -> Option<(Vec<OsString>, bool)> {
     let reference = drive_spelling(reference);
     let path = Path::new(reference.as_ref());
     let (rest, anchored): (Vec<Component<'_>>, bool) = if path.has_root() || path.is_absolute() {
-        let rest = folder
-            .spellings
-            .iter()
-            .find_map(|root| below(path, root))?;
+        let rest = folder.spellings.iter().find_map(|root| below(path, root))?;
         (rest, true)
     } else {
         let components: Vec<Component<'_>> = path.components().collect();
@@ -602,7 +599,10 @@ mod tests {
             opener: editors::Opener::Url,
             file: PathBuf::from("editor"),
         };
-        let found = [detected(ProjectEditor::Cursor), detected(ProjectEditor::Zed)];
+        let found = [
+            detected(ProjectEditor::Cursor),
+            detected(ProjectEditor::Zed),
+        ];
         assert_eq!(
             choose(&found, Some(ProjectEditor::Zed)).map(|item| item.editor),
             Some(ProjectEditor::Zed)

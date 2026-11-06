@@ -846,7 +846,10 @@ mod tests {
             ),
             Some(Command {
                 program: system.path().join("usr/share/code/code"),
-                args: vec![OsString::from("--goto"), OsString::from(format!("{file}:7"))],
+                args: vec![
+                    OsString::from("--goto"),
+                    OsString::from(format!("{file}:7"))
+                ],
                 wait: false,
             })
         );

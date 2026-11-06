@@ -186,7 +186,11 @@ fn editor_url(editor: ProjectEditor, path: &str, target: UrlTarget) -> Result<Ur
 
 /// Hands `open` to the operating system: a URL to its handler, or the detected launcher started
 /// detached. The editor is the person's, never an owned process.
-async fn dispatch(app: &AppHandle, editor: ProjectEditor, open: EditorOpen) -> Result<(), AppError> {
+async fn dispatch(
+    app: &AppHandle,
+    editor: ProjectEditor,
+    open: EditorOpen,
+) -> Result<(), AppError> {
     match open {
         EditorOpen::Url { path, target } => {
             let url = editor_url(editor, &path, target)?;
@@ -323,10 +327,14 @@ mod tests {
             assert!(url.as_str().contains("%25"));
         }
         assert!(
-            editor_url(ProjectEditor::Cursor, "//server/share/a%2Fb", UrlTarget::Folder)
-                .unwrap()
-                .as_str()
-                .ends_with("//server/share/a%252Fb/")
+            editor_url(
+                ProjectEditor::Cursor,
+                "//server/share/a%2Fb",
+                UrlTarget::Folder
+            )
+            .unwrap()
+            .as_str()
+            .ends_with("//server/share/a%252Fb/")
         );
         // A file has no trailing slash and takes its place after a colon.
         let file = |line, column| {

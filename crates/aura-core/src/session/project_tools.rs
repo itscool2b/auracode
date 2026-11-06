@@ -208,7 +208,11 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
                 vec!["-f", "-i"],
             ),
         ] {
-            if let Some(path) = places.into_iter().map(PathBuf::from).find(|path| path.is_file()) {
+            if let Some(path) = places
+                .into_iter()
+                .map(PathBuf::from)
+                .find(|path| path.is_file())
+            {
                 choices.push((id, label, path, args));
             }
         }
@@ -277,7 +281,10 @@ impl SessionManager {
     }
 
     /// Holds `folder` as a project terminal does, so worktree changes wait until the process ends.
-    pub(super) fn hold_folder(&self, folder: &std::path::Path) -> Result<Box<dyn Send + Sync>, SessionError> {
+    pub(super) fn hold_folder(
+        &self,
+        folder: &std::path::Path,
+    ) -> Result<Box<dyn Send + Sync>, SessionError> {
         let identity = Handle::from_path(folder)
             .map_err(|_| invalid("The project folder could not be inspected."))?;
         let folder_key = live::normalize_path(folder.to_path_buf());
@@ -388,7 +395,9 @@ impl SessionManager {
             ));
         }
         // A worktree chat's shell knows the worktree's first port, as its setup and Run do.
-        let set_env = self.worktree_port_env(chat_id, &prepared.folder, false).await;
+        let set_env = self
+            .worktree_port_env(chat_id, &prepared.folder, false)
+            .await;
         let folder_key = live::normalize_path(prepared.folder.clone());
         if !self.shared().live.begin_folder_use(folder_key.clone()) {
             return Err(invalid(
