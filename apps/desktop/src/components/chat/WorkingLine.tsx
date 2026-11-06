@@ -43,9 +43,7 @@ function tokenMs(element: Element, name: string): number {
 /**
  * The working line (docs/design/visual-language.md): one quiet line at the tail of a running turn.
  * The mark of the company whose model is working breathes in the gutter (owner, 3 November 2026;
- * never a glow, never dimmed) while the agent's
- * companion swims along the composer's rim, and a
- * playful verb stands in for the agent's reasoning, swapping every 2.5 to 3.5 seconds with a soft
+ * never a glow, never dimmed), and a playful verb stands in for the agent's reasoning, swapping every 2.5 to 3.5 seconds with a soft
  * crossfade while a sheen passes over it. The elapsed time follows the verb in metadata type and
  * glides, by transform alone, when a new verb is wider or narrower. Screen readers hear "<agent>
  * is working" once; the verbs and the time are not announced. Under reduced motion (the OS's or

@@ -237,9 +237,6 @@
   --g-dur-glide: 240ms;
   /* The working line's rhythm: one pass of the sheen over its verb. */
   --g-dur-bloom: 2400ms;
-  /* The working companion: one lap along the composer's rim, and one stroke of its flippers. */
-  --g-dur-swim: 9000ms;
-  --g-dur-paddle: 1600ms;
   --g-dur-micro: 80ms;
   --g-dur-fast: 120ms;
   --g-dur-base: 160ms;
@@ -505,8 +502,6 @@
   :root {
     --g-dur-glide: 0ms;
     --g-dur-bloom: 0ms;
-    --g-dur-swim: 0ms;
-    --g-dur-paddle: 0ms;
     --g-dur-micro: 0ms;
     --g-dur-fast: 0ms;
     --g-dur-base: 0ms;
@@ -536,8 +531,6 @@
 :root:is([data-motion="reduced"], [data-motion="off"]) {
   --g-dur-glide: 0ms;
   --g-dur-bloom: 0ms;
-  --g-dur-swim: 0ms;
-  --g-dur-paddle: 0ms;
   --g-dur-micro: 0ms;
   --g-dur-fast: 0ms;
   --g-dur-base: 0ms;

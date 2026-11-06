@@ -8,8 +8,7 @@
 /* ---------- The strip ---------- */
 
 /*
- * One row, never more: the pills shrink and truncate, so the composer below never moves. The row
- * keeps clear of the lane the working companion swims in along the composer's top rim.
+ * One row, never more: the pills shrink and truncate, so the composer below never moves.
  */
 .chat-tasks {
   display: flex;
