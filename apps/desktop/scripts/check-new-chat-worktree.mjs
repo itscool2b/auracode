@@ -260,9 +260,33 @@ async function inspect(engine, launcher) {
     );
     await page.getByTestId("composer-input").waitFor();
 
+    // Worktrees kept from chats that are gone: one quiet line, closed, that opens to their names
+    // (each start of auracode used to list every worktree as a box of two full paths).
+    await open(page, "new-worktree&retained=6");
+    await chipReady(page, "worktree");
+    const retained = page.getByTestId("new-chat-retained");
+    await retained.waitFor();
+    assert.equal(await retained.evaluate((node) => node.open), false, "closed until opened");
+    assert.match(await retained.locator("summary").textContent(), /Retained worktrees\s*6/);
+    await retained.locator("summary").click();
+    const kept = retained.locator(".git-worktrees > li");
+    assert.equal(await kept.count(), 6);
+    assert.match(await kept.first().textContent(), /auracode · 420476c6724f/);
+    assert.equal(await retained.locator("code").count(), 0, "no spelled-out paths");
+    await audit(page, "retained", engine, scans);
+    // One whose creation stopped half way opens the line by itself.
+    await open(page, "new-worktree&retained=broken");
+    await chipReady(page, "worktree");
+    await page.getByTestId("new-chat-retained").waitFor();
+    assert.equal(
+      await page.getByTestId("new-chat-retained").evaluate((node) => node.open),
+      true,
+      "an operation that needs recovery shows at once",
+    );
+
     assert.deepEqual(errors, [], "browser errors");
     console.log(
-      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); zero-click worktree, popover, refused and typed names, Local, stale review, fallback, plain folder and setup terminal passed`,
+      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); zero-click worktree, popover, refused and typed names, Local, stale review, fallback, plain folder, setup terminal and retained worktrees passed`,
     );
   } finally {
     await browser.close();
