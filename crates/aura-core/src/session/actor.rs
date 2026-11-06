@@ -3319,10 +3319,28 @@ impl ChatActor {
                 "Wait for the turn to finish, or stop it, before opening the terminal.",
             );
         }
-        self.terminal_request = Some(reply);
-        if let Err(error) = self.start(false, true)
-            && let Some(reply) = self.terminal_request.take()
+        // A new chat starts its agent as it is made. A start still preparing becomes the
+        // terminal's (on_prepared); one whose agent is already starting is stopped first, and the
+        // terminal starts once it has stopped (after_stop).
+        if self.status == SessionStatus::Starting
+            && self.preparing.is_none()
+            && self.driver.is_some()
         {
+            self.pending_start = Some(false);
+            self.stop();
+            self.terminal_request = Some(reply);
+            return;
+        }
+        self.terminal_request = Some(reply);
+        if let Err(error) = self.start(false, true) {
+            self.refuse_terminal(error);
+        }
+    }
+
+    /// Answers a terminal open still waiting when no start will follow for it, so the view never
+    /// waits on a start that will not come.
+    fn refuse_terminal(&mut self, error: SessionError) {
+        if let Some(reply) = self.terminal_request.take() {
             drop(reply.send(Err(error)));
         }
     }
@@ -3354,11 +3372,16 @@ impl ChatActor {
             );
             return fail(self, reply, why);
         }
+        // Only a session the agent wrote down can be resumed. The one a new chat starts for Chat
+        // has no file until its first message, and Claude Code refuses to resume it, so the
+        // terminal starts a new session instead (nothing is lost: it had no conversation).
+        let home = terminal_home(spec.kind, &prepared.launch, &prepared.env);
         let resume = self
             .agent_session
             .as_ref()
             .filter(|session| session.agent_id == spec.id)
-            .and_then(|session| session.native_session_id.clone());
+            .and_then(|session| session.native_session_id.clone())
+            .filter(|id| home.session_file(id).is_some());
         let session = match (resume, spec.kind) {
             (Some(id), _) => TerminalSession::Resume(id),
             (None, aura_protocol::DriverKind::Claude) => {
@@ -3479,13 +3502,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.queue_op(Op::InsertAgentSession(row));
             self.native_session_id = Some(native_id.clone());
         }
-        self.terminal_import = Some(terminal_import_plan(
-            spec.kind,
-            &session,
-            &made.launch,
-            &prepared.env,
-            &self.chat.folder,
-        ));
+        self.terminal_import = Some(terminal_import_plan(home, &session, &self.chat.folder));
         let generation = self.generation;
         self.terminal = Some(generation);
         self.set_status(SessionStatus::Stopped, Some("Open in the terminal".into()));
@@ -5732,9 +5749,18 @@ The person continues this conversation here, in your terminal. Reply only that y
             return;
         }
         if let Some(fresh) = self.pending_start.take() {
-            let _ = self.start(fresh, false);
-        } else if self.status == SessionStatus::Stopped
-            && self.queue.first().is_some_and(|row| !row.held)
+            if let Err(error) = self.start(fresh, false) {
+                self.refuse_terminal(error);
+            }
+            return;
+        }
+        // A Stop that replaced the start a terminal waited for (a start still preparing answers it).
+        if self.preparing.is_none() {
+            self.refuse_terminal(SessionError::OptionInvalid(
+                "Opening the terminal was stopped.".into(),
+            ));
+        }
+        if self.status == SessionStatus::Stopped && self.queue.first().is_some_and(|row| !row.held)
         {
             let _ = self.start(false, false);
         }
@@ -5799,6 +5825,11 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.set_status(SessionStatus::Stopped, None);
         self.flush();
         self.pending_start = None;
+        self.refuse_terminal(SessionError::AgentUnavailable(
+            self.last_error
+                .as_ref()
+                .map_or_else(String::new, |error| error.message.clone()),
+        ));
     }
 
     fn start_failed_exit(&mut self, generation: u64, error: DriverError) {
@@ -7238,18 +7269,30 @@ mod question_validation_tests {
     }
 }
 
-/// Where a terminal's conversation will be read from: the agent's config folder or home (an added
-/// account's `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, else under the person's home), and how much of the
-/// session file is already there.
-fn terminal_import_plan(
+/// Where an agent keeps its session files: its config folder or home (an added account's
+/// `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, else under the person's home).
+struct TerminalHome {
+    vendor: super::terminal_import::Vendor,
+    base: PathBuf,
+}
+
+impl TerminalHome {
+    /// The session's file, when the agent has written one.
+    fn session_file(&self, id: &str) -> Option<PathBuf> {
+        use super::terminal_import::{Vendor, claude_session, codex_session};
+        match self.vendor {
+            Vendor::Claude => claude_session(&self.base, id),
+            Vendor::Codex => codex_session(&self.base, id),
+        }
+    }
+}
+
+fn terminal_home(
     kind: aura_protocol::DriverKind,
-    session: &aura_drivers::terminal::TerminalSession,
     launch: &LaunchSpec,
     env: &ResolvedEnv,
-    folder: &std::path::Path,
-) -> TerminalImport {
-    use super::terminal_import::{Vendor, claude_session, codex_session, length};
-    use aura_drivers::terminal::TerminalSession;
+) -> TerminalHome {
+    use super::terminal_import::Vendor;
     let variable = |name: &str| -> Option<PathBuf> {
         launch
             .set_env
@@ -7269,28 +7312,36 @@ fn terminal_import_plan(
     let home = variable(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .or_else(|| variable("HOME"))
         .unwrap_or_default();
-    let (vendor, base) = if kind == aura_protocol::DriverKind::Claude {
-        (
-            Vendor::Claude,
-            variable("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
-        )
+    if kind == aura_protocol::DriverKind::Claude {
+        TerminalHome {
+            vendor: Vendor::Claude,
+            base: variable("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
+        }
     } else {
-        (
-            Vendor::Codex,
-            variable("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
-        )
-    };
+        TerminalHome {
+            vendor: Vendor::Codex,
+            base: variable("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
+        }
+    }
+}
+
+/// Where a terminal's conversation will be read from, and how much of its session file is
+/// already there.
+fn terminal_import_plan(
+    home: TerminalHome,
+    session: &aura_drivers::terminal::TerminalSession,
+    folder: &std::path::Path,
+) -> TerminalImport {
+    use super::terminal_import::length;
+    use aura_drivers::terminal::TerminalSession;
     let native_id = match session {
         TerminalSession::Resume(id) | TerminalSession::NewClaude(id) => Some(id.clone()),
         TerminalSession::New => None,
     };
-    let file = native_id.as_deref().and_then(|id| match vendor {
-        Vendor::Claude => claude_session(&base, id),
-        Vendor::Codex => codex_session(&base, id),
-    });
+    let file = native_id.as_deref().and_then(|id| home.session_file(id));
     TerminalImport {
-        vendor,
-        home: base,
+        vendor: home.vendor,
+        home: home.base,
         native_id,
         from: file.as_deref().map_or(0, length),
         folder: folder.to_path_buf(),
