@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-06
 
+- The sea lion and turtle no longer swim along the composer while an agent works. ([#103](https://github.com/itscool2b/auracode/pull/103))
 - A notice says when an agent has a newer release, with Update, until its X, and again at each start until it is updated; the changed-files card stays on one row with Review beside the names; and typing while an agent works no longer makes the chat flicker. ([#102](https://github.com/itscool2b/auracode/pull/102))
 - Processes is now the Dashboard: every chat on three lanes, Needs you, Working and Finished, as cards that open their chat, with what working agents and their tasks are doing and their programs folded beneath; cards glide between lanes as chats change. ([#101](https://github.com/itscool2b/auracode/pull/101))
 - Load earlier brings a chunk of the chat at once: it keeps fetching until 20 more turns appear, even through a turn of tens of thousands of tool updates, and keeps those updates folded so long chats stay light. ([#100](https://github.com/itscool2b/auracode/pull/100))

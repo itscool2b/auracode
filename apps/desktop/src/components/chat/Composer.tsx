@@ -15,7 +15,6 @@ import {
   useDictation,
 } from "./Dictation";
 import { SlashMenu } from "./SlashMenu";
-import { type CompanionVariant, companionVariant, WorkingCompanion } from "./WorkingCompanion";
 
 /**
  * The message box: Enter sends, Shift+Enter starts a new line; Send, and Stop while a turn runs or
@@ -112,15 +111,6 @@ export function Composer({
   const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
   const working = status === "running" || status === "starting";
   const steerable = onSteer !== undefined && status === "running";
-  // A new swim each time the agent starts working.
-  const [companion, setCompanion] = useState<{ key: number; variant: CompanionVariant } | null>(
-    null,
-  );
-  useEffect(() => {
-    setCompanion((current) =>
-      working ? (current ?? { key: Date.now(), variant: companionVariant() }) : null,
-    );
-  }, [working]);
 
   const send = async (steer = false): Promise<void> => {
     if (sending || dictating || context.busy || blocked || empty) return;
@@ -159,7 +149,6 @@ export function Composer({
 
   return (
     <div className="chat-composer" data-working={working ? "" : undefined}>
-      {companion ? <WorkingCompanion key={companion.key} variant={companion.variant} /> : null}
       <ContextChips context={context} />
       {mentionOpen ? (
         <MentionMenu
