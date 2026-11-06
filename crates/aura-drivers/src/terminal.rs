@@ -154,11 +154,14 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
         let mut env = Vec::new();
         match &server.definition.transport {
             McpTransport::Stdio { command, args } => {
-                let reserved = server.credentials.env.keys().any(|key| {
-                    key.get(..5)
-                        .is_some_and(|p| p.eq_ignore_ascii_case("AURA_"))
-                        || launch_names.contains(&EnvKey::new(key))
-                });
+                // auracode's own project-memory server uses the reserved names by design.
+                let own_memory = crate::mcp::managed_memory(server);
+                let reserved = !own_memory
+                    && server.credentials.env.keys().any(|key| {
+                        key.get(..5)
+                            .is_some_and(|p| p.eq_ignore_ascii_case("AURA_"))
+                            || launch_names.contains(&EnvKey::new(key))
+                    });
                 if reserved {
                     omitted.push(format!(
                         "{name}: it needs a variable auracode sets for the launch itself"
@@ -461,6 +464,39 @@ mod tests {
         assert_eq!(
             taken.map(|(_, v)| v.to_string_lossy().into_owned()),
             Some("taken".into())
+        );
+    }
+
+    #[test]
+    fn codex_keeps_project_memory_whose_variables_are_auracodes_own() {
+        let mut memory = server(
+            "aura_project_memory",
+            McpTransport::Stdio {
+                command: "auracode".into(),
+                args: vec!["--aura-memory-helper".into()],
+            },
+            &[("AURA_MEMORY_TOKEN", format!("t{}", 1))],
+        );
+        memory.definition.id = "aura-project-memory".into();
+        let made = codex(
+            &base(),
+            &options(std::slice::from_ref(&memory), TerminalSession::New),
+        );
+        assert!(made.omitted.is_empty(), "{:?}", made.omitted);
+        assert!(
+            args(&made.launch)
+                .iter()
+                .any(|a| a.starts_with("mcp_servers.aura_project_memory."))
+        );
+        // Another server may still not take auracode's names.
+        let mut other = memory.clone();
+        other.definition.id = "61a6ce00-b99f-4f8a-9148-8f880f3c735f".into();
+        other.definition.name = "imposter".into();
+        assert_eq!(
+            codex(&base(), &options(&[other], TerminalSession::New))
+                .omitted
+                .len(),
+            1
         );
     }
 
