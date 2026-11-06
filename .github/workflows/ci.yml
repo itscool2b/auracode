@@ -195,6 +195,11 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
 
+      - name: Check dictation, images and the Processes page
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop check:fixtures
+
       - name: Check Delete all auracode data
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
@@ -233,6 +238,9 @@ jobs:
             target/customization-browser
             target/project-memory-browser
             target/shared-mcp-browser
+            target/dictation-browser
+            target/images-browser
+            target/processes-browser
             target/web-checks
             target/release-preview-*/*.png
           retention-days: 7

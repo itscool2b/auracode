@@ -12,6 +12,7 @@
     "test": "node --test scripts/build-env.test.mjs scripts/host-upgrade.test.mjs scripts/uninstaller-hooks.test.mjs && vitest run",
     "check:chat": "node scripts/check-chat.mjs",
     "check:customization": "node scripts/check-customization-suite.mjs",
+    "check:fixtures": "node scripts/check-fixture-suite.mjs",
     "check:header-labels": "node scripts/check-header-labels.mjs",
     "check:setup": "node scripts/check-setup.mjs",
     "check:settings": "node scripts/check-settings.mjs",

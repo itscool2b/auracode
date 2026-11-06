@@ -126,7 +126,7 @@
           "steer": false,
           "interrupt": true,
           "resume": true,
-          "fork": false,
+          "fork": true,
           "rewind": false,
           "set_model": true,
           "set_effort": true,
@@ -147,6 +147,16 @@
         },
         "spawn_id": "019a0000-0000-7000-8000-00000000aaaa",
         "replay": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
       }
     },
     {

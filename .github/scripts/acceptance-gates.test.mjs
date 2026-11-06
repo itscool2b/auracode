@@ -11,6 +11,9 @@ const ci = read(".github/workflows/ci.yml");
 const build = read(".github/workflows/build.yml");
 const desktop = JSON.parse(read("apps/desktop/package.json"));
 const scripts = "apps/desktop/scripts";
+// Native evidence probes drive real installed agents, which hosted runners do not have: documented
+// manual checks (docs/plugin-library.md), not CI gates.
+const manual = new Set(["check-native-mcp.mjs"]);
 
 test("every desktop acceptance script runs directly or through a checked aggregator", () => {
   const expected = readdirSync(resolve(root, scripts)).filter((file) =>
@@ -29,6 +32,10 @@ test("every desktop acceptance script runs directly or through a checked aggrega
     )) {
       include(match[1]);
     }
+    // A suite that runs a list of checks on its own server (check-customization-suite.mjs).
+    if (/resolve\(app,\s*["']scripts["'],\s*script\)/u.test(source)) {
+      for (const match of source.matchAll(/["'](check-[\w-]+\.mjs)["']/gu)) include(match[1]);
+    }
   }
   for (const match of ci.matchAll(/@auracode\/desktop\s+exec node scripts\/(check-[^\s]+\.mjs)/gu))
     include(match[1]);
@@ -40,7 +47,7 @@ test("every desktop acceptance script runs directly or through a checked aggrega
     include(file[1]);
   }
   assert.deepEqual(
-    expected.filter((file) => !covered.has(file)),
+    expected.filter((file) => !covered.has(file) && !manual.has(file)),
     [],
     "Acceptance scripts missing from final CI",
   );

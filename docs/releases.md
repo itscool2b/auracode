@@ -190,6 +190,7 @@ pnpm test
 pnpm --filter @auracode/desktop check:chat
 pnpm --filter @auracode/desktop check:settings
 pnpm --filter @auracode/desktop check:setup
+pnpm --filter @auracode/desktop check:fixtures
 pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs

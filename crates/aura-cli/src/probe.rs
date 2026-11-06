@@ -349,8 +349,9 @@ impl Probe<'_> {
         self.cancel_step(&chat).await;
         let native = chat.info().and_then(|info| info.native_session_id);
         if self.close_step(&chat).await {
-            // Step 4 chose every option's value as it was at the start, so a restart, which
-            // re-applies what was chosen (5.3.2), must bring those values back.
+            // Step 4 chose every option's value as it was at the start, then switched the model,
+            // so a restart, which re-applies what was chosen (5.3.2), must bring back those values
+            // with the model and thinking level the switch left.
             self.resume_step(&chat, chosen.as_ref(), native.as_deref())
                 .await;
             self.interrupted_start_step(&chat).await;
@@ -927,7 +928,9 @@ impl Probe<'_> {
     }
 
     /// Sets every option to its current value, then switches the model and back. Returns the
-    /// options as chosen: their values at the start, with the model the agent took last.
+    /// options as chosen: their values at the start, with the model the agent took last and the
+    /// thinking level it showed with that model, since a model change hands the level to the agent
+    /// and the next start restores the level the agent showed.
     async fn options_step(
         &mut self,
         chat: &ChatRun<'_>,
@@ -997,14 +1000,24 @@ impl Probe<'_> {
             }
         }
         let mut chosen = lists.clone();
-        if let Some((option_id, value)) = self.model_switch(chat, lists, watch).await
-            && let Some(option) = chosen
+        if let Some((option_id, value)) = self.model_switch(chat, lists, watch).await {
+            if let Some(option) = chosen
                 .options
                 .iter_mut()
                 .find(|option| option.id == option_id)
-            && let ConfigKind::Select { current, .. } = &mut option.kind
-        {
-            *current = value;
+                && let ConfigKind::Select { current, .. } = &mut option.kind
+            {
+                *current = value;
+            }
+            if let Ok(now) = chat.lists().await {
+                for option in &mut chosen.options {
+                    if option.category == ConfigCategory::Effort
+                        && let Some(after) = now.options.iter().find(|after| after.id == option.id)
+                    {
+                        option.kind = after.kind.clone();
+                    }
+                }
+            }
         }
         Some(chosen)
     }

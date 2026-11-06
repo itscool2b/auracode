@@ -294,6 +294,69 @@
       ]
     },
     {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
       "type": "status",
       "data": "closing"
     }

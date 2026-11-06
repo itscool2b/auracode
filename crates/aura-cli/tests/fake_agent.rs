@@ -370,9 +370,9 @@ mod process {
     }
 
     /// codex-acp's effort follows its model: a model that offers no `ultra` sets `medium`, and
-    /// switching back keeps it. The probe chose every option's value (step 4), so a restart, which
-    /// re-applies what was chosen, brings the chosen effort back rather than the one the agent
-    /// picked on its own; the probe says what the switch changed and checks the chosen values.
+    /// switching back keeps it. A model change hands the thinking level to the agent, so a restart
+    /// brings back the level the agent showed with the model rather than the one chosen before the
+    /// switch; the probe says what the switch changed and checks the values a restart restores.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn probe_tells_an_option_the_agent_changed_with_the_model_from_a_lost_one() {
         let machine = Machine::with_fake_hermes();

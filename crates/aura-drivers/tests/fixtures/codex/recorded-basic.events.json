@@ -403,6 +403,43 @@
       ]
     },
     {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
       "type": "options",
       "data": [
         {
@@ -512,6 +549,32 @@
       ]
     },
     {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
       "type": "autonomy",
       "data": {
         "requested": "full_auto",
@@ -526,6 +589,58 @@
       "type": "run_state",
       "data": {
         "idle": false
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
       }
     },
     {
@@ -554,6 +669,594 @@
       "type": "run_state",
       "data": {
         "idle": false
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-4",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-5",
+            "state": "failed",
+            "source": null
+          },
+          {
+            "name": "fixture-server-6",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-7",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-8",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
       }
     },
     {
