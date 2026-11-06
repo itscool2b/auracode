@@ -69,6 +69,11 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "appearance", title: "Text size", words: "font density compact comfortable" },
   {
     page: "chats",
+    title: "Open new chats in",
+    words: "terminal tui gui interface claude code codex own cli new chat default",
+  },
+  {
+    page: "chats",
     title: "Keep steps open",
     words: "worked for fold folding thinking tools interim messages",
   },
