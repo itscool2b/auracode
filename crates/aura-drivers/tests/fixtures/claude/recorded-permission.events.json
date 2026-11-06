@@ -267,7 +267,7 @@
           "steer": false,
           "interrupt": true,
           "resume": true,
-          "fork": false,
+          "fork": true,
           "rewind": false,
           "set_model": true,
           "set_effort": true,
@@ -288,6 +288,16 @@
         },
         "spawn_id": "01a176ab-a34b-73b2-a097-1781a15ce4f7",
         "replay": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
       }
     },
     {

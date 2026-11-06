@@ -294,6 +294,69 @@
       ]
     },
     {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
       "type": "options",
       "data": [
         {
@@ -789,6 +852,58 @@
           "type": "never"
         },
         "note": "Applied to each new turn; Codex restrictions still apply."
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "starting",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
+      }
+    },
+    {
+      "type": "loaded",
+      "data": {
+        "mcp_servers": [
+          {
+            "name": "fixture-server-1",
+            "state": "starting",
+            "source": null
+          },
+          {
+            "name": "fixture-server-2",
+            "state": "connected",
+            "source": null
+          },
+          {
+            "name": "fixture-server-3",
+            "state": "connected",
+            "source": null
+          }
+        ],
+        "skills": [],
+        "plugins": [],
+        "agents": [],
+        "tools": null
       }
     },
     {
