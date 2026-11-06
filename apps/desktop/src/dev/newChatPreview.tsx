@@ -5,7 +5,7 @@
  * missing sign-in when its sign-in is checked. No process, network or native call runs.
  */
 import { useEffect, useMemo, useState } from "react";
-import type { AgentEntry, AgentInstallation } from "../bindings";
+import type { AgentEntry, AgentInstallation, ManagedWorktree } from "../bindings";
 import { NewChat } from "../components/chat/NewChat";
 import { NewChatDraft } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
@@ -13,6 +13,39 @@ import { worktreeRecoveryApi } from "../lib/worktreeRecovery";
 import { FIXTURE_FOLDER, type NewChatScenario, newChatFixture } from "./newChatWorktreeFixture";
 
 const mode = new URLSearchParams(location.search).get("agents");
+
+/**
+ * `&retained=<n>`: worktrees kept from n chats that are gone, as the profile's registry lists
+ * them (no saved chat holds them); `&retained=broken` adds one whose creation stopped half way.
+ */
+function retainedRecords(): ManagedWorktree[] {
+  const asked = new URLSearchParams(location.search).get("retained");
+  if (asked === null) return [];
+  const count = asked === "broken" ? 2 : Number(asked) || 0;
+  const records: ManagedWorktree[] = Array.from({ length: count }, (_, index) => ({
+    id: `kept-${index}`,
+    chat_id: `deleted-chat-${index}`,
+    source: FIXTURE_FOLDER,
+    path: `C:\\Users\\me\\AppData\\Local\\si.auracode.desktop\\profiles\\local\\worktrees\\${(0x420476c6724f + index * 7919).toString(16)}`,
+    branch: `aura/${(0xebf0f061 + index * 977).toString(16)}`,
+    base_commit: "abc",
+    state: "ready",
+    detail: null,
+    recovery: null,
+    created_at: 1_800_000_000_000 - index * 3_600_000,
+  }));
+  if (asked === "broken")
+    records.push({
+      ...(records[0] as ManagedWorktree),
+      id: "broken",
+      chat_id: "deleted-chat-broken",
+      branch: "aura/5c1e0b9d",
+      state: "recovery_required",
+      detail: "The chat could not be saved. Rollback retained changed files.",
+      recovery: { type: "create" },
+    });
+  return records;
+}
 
 function installation(
   id: string,
@@ -126,7 +159,10 @@ export function NewChatPreview({
     [projectContext],
   );
   const fixture = useMemo(() => (scenario ? newChatFixture(scenario) : null), [scenario]);
-  const recoveryApi = useMemo(() => ({ ...worktreeRecoveryApi, list: async () => [] }), []);
+  const recoveryApi = useMemo(
+    () => ({ ...worktreeRecoveryApi, list: async () => retainedRecords() }),
+    [],
+  );
   useEffect(() => {
     if (!fixture) return;
     Object.assign(window, { newChatFixture: { calls: () => [...fixture.calls] } });

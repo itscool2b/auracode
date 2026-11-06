@@ -9,14 +9,50 @@ import { withoutVerbatimPrefix } from "../../lib/gitWorkspace";
 import type { WorktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import "./git-dialog.css";
 
+/** A folder's last name: a worktree's app-owned folder, or the project it came from. */
+function folderName(path: string): string {
+  const plain = withoutVerbatimPrefix(path);
+  return plain.split(/[\\/]/).filter(Boolean).pop() ?? plain;
+}
+
+/**
+ * States a person should look at now: an operation stopped half way. A worktree kept from a chat
+ * that is gone (ready), one retired for recovery and one whose folder is missing can wait.
+ */
+export function needsRecovery(record: ManagedWorktree): boolean {
+  return !["ready", "retired", "missing"].includes(record.state);
+}
+
+/**
+ * The worktrees to offer for review: those no saved chat holds, and any whose operation stopped
+ * half way, from `inProject` when a project is chosen. Which ones no chat holds can only be told
+ * once the chats have loaded (`savedChats` null until then): before, every chat's worktree looked
+ * kept, and each start of auracode listed them all.
+ */
+export function worktreesToReview(
+  records: readonly ManagedWorktree[],
+  savedChats: ReadonlySet<string> | null,
+  inProject: (record: ManagedWorktree) => boolean = () => true,
+): ManagedWorktree[] {
+  if (savedChats === null) return [];
+  return records.filter(
+    (record) =>
+      inProject(record) &&
+      (!savedChats.has(record.chat_id) || !["ready", "retired"].includes(record.state)),
+  );
+}
+
 export function WorktreeRecoveryList({
   records,
   api,
   onChanged,
+  heading = true,
 }: {
   readonly records: readonly ManagedWorktree[];
   readonly api: WorktreeRecoveryApi;
   readonly onChanged: () => void;
+  /** Its own heading and introduction; off where a disclosure already names the list. */
+  readonly heading?: boolean;
 }) {
   const [review, setReview] = useState<{
     value: WorktreeRecoveryPreview | WorktreeRecreatePreview;
@@ -39,9 +75,13 @@ export function WorktreeRecoveryList({
   };
   if (!records.length) return null;
   return (
-    <section className="new-chat-more" aria-label="Retained worktrees">
-      <h2>Retained worktrees</h2>
-      <p>Review worktrees whose chat could not be saved or whose operation needs recovery.</p>
+    <section className={heading ? "new-chat-more" : undefined} aria-label="Retained worktrees">
+      {heading ? (
+        <>
+          <h2>Retained worktrees</h2>
+          <p>Review worktrees whose chat could not be saved or whose operation needs recovery.</p>
+        </>
+      ) : null}
       {error ? (
         <p role="alert" className="ui-error">
           {error}
@@ -51,11 +91,12 @@ export function WorktreeRecoveryList({
         {records.map((record) => (
           <li key={record.id}>
             <strong>{record.branch}</strong>
-            <p className="git-path">
-              Source: <code>{withoutVerbatimPrefix(record.source)}</code>
-            </p>
-            <p className="git-path">
-              Retained folder: <code>{withoutVerbatimPrefix(record.path)}</code>
+            {/* Names, not paths: the full paths are a hover away, and Open folder shows it. */}
+            <p
+              className="git-path"
+              title={`Source: ${withoutVerbatimPrefix(record.source)}\nFolder: ${withoutVerbatimPrefix(record.path)}`}
+            >
+              {folderName(record.source)} · {folderName(record.path)}
             </p>
             <p>
               {record.detail ??

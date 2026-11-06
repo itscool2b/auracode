@@ -33,7 +33,7 @@ import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktre
 import { projectName } from "./ChatList";
 import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
-import { WorktreeRecoveryList } from "./WorktreeRecoveryList";
+import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
 import "./new-chat.css";
 
 const noSubscribe = () => () => {};
@@ -350,14 +350,14 @@ export function NewChat({
   const selectedProject = projects.find((project) =>
     project.folders.some((folder) => folder.id === knownFolder),
   );
-  const recoveries = retained.filter(
+  const recoveries = worktreesToReview(
+    retainedLoaded ? retained : [],
+    organization.data ? new Set(organization.data.chats.map((entry) => entry.chat.id)) : null,
     (record) =>
-      (!selectedProject ||
-        selectedProject.folders.some(
-          (folder) => folder.path && sameFolder(folder.path, record.source),
-        )) &&
-      (!organization.data?.chats.some((chat) => chat.chat.id === record.chat_id) ||
-        !["ready", "retired"].includes(record.state)),
+      !selectedProject ||
+      selectedProject.folders.some(
+        (folder) => folder.path !== null && sameFolder(folder.path, record.source),
+      ),
   );
   const selectedState = selected ? choiceState(selected) : null;
   return (
@@ -657,11 +657,32 @@ export function NewChat({
             Could not load retained worktrees: {recoveryError}
           </p>
         ) : null}
-        <WorktreeRecoveryList
-          records={recoveries}
-          api={recoveryApi}
-          onChanged={() => setRecoveryRevision((value) => value + 1)}
-        />
+        {recoveries.length > 0 ? (
+          // One quiet line, as Other agents is; it opens by itself only when an operation stopped
+          // half way and needs a look.
+          <details
+            className="new-chat-more"
+            data-testid="new-chat-retained"
+            open={recoveries.some(needsRecovery) || undefined}
+          >
+            <summary>
+              <span className="new-chat-more-label">Retained worktrees</span>
+              <span className="new-chat-more-count">{recoveries.length}</span>
+            </summary>
+            <div className="new-chat-more-body">
+              <p>
+                Folders kept from chats that are gone, or whose last change needs a review. Their
+                files and branches are untouched.
+              </p>
+              <WorktreeRecoveryList
+                records={recoveries}
+                api={recoveryApi}
+                heading={false}
+                onChanged={() => setRecoveryRevision((value) => value + 1)}
+              />
+            </div>
+          </details>
+        ) : null}
         <WorktreeChip
           view={worktree}
           busyChats={preview?.busy_chats.length ?? 0}

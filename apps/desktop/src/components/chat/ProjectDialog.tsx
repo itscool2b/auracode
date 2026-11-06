@@ -17,7 +17,7 @@ import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
 import { WorkspaceRemovalDialog } from "./WorkspaceRemovalDialog";
-import { WorktreeRecoveryList } from "./WorktreeRecoveryList";
+import { WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
 
 /**
  * The colours a project can carry, as stored with the project, each drawn by its Graphite tone
@@ -295,10 +295,9 @@ export function ProjectDialog({
             </p>
           ) : null}
           <WorktreeRecoveryList
-            records={worktrees.filter(
-              (record) =>
-                !state.data?.chats.some((chat) => chat.chat.id === record.chat_id) ||
-                !["ready", "retired"].includes(record.state),
+            records={worktreesToReview(
+              worktrees,
+              state.data ? new Set(state.data.chats.map((entry) => entry.chat.id)) : null,
             )}
             api={recoveryApi}
             onChanged={() => setRecoveryRevision((value) => value + 1)}
