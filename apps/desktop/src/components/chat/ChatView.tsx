@@ -272,6 +272,22 @@ export function ChatView({
   const loadBlob = useCallback((sha256: string) => void store.loadBlob(sha256), [store]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
+  // The window's toasts sit just above the composer: the dock's height, on the chat pane.
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dock = dockRef.current;
+    const pane = dock?.closest<HTMLElement>(".chat-main");
+    if (!dock || !pane || typeof ResizeObserver === "undefined") return;
+    const measure = () =>
+      pane.style.setProperty("--ui-dock-height", `${Math.round(dock.offsetHeight)}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => {
+      observer.disconnect();
+      pane.style.removeProperty("--ui-dock-height");
+    };
+  });
   // File names in the chat open in the person's editor; without one installed they stay text.
   const files = transport.files;
   const [opensIn, setOpensIn] = useState<string | null>(null);
@@ -864,7 +880,7 @@ export function ChatView({
                   findRequest={findRequest}
                 />
               </TaskLinkContext.Provider>
-              <div className="chat-dock">
+              <div className="chat-dock" ref={dockRef}>
                 {fileNote ? (
                   <p
                     className="conversation-notice"

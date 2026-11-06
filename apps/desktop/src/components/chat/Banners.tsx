@@ -77,7 +77,7 @@ export function Banners({
     return null;
   }
   return (
-    <ul className="chat-banners" aria-label="Notices">
+    <ul className="chat-banners ui-toasts" aria-label="Notices">
       {storageText !== null ? (
         <li
           className="chat-banner"
