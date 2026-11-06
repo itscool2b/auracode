@@ -1,29 +1,44 @@
 /**
- * Scripted Processes fixture (`?preview=processes`, `&case=empty`). Never reads the process table
- * or stops anything: the snapshot is invented, and Stop removes the row and what it started.
+ * Scripted Dashboard fixture (`?preview=dashboard`, `&case=empty`, `&case=live`). Never reads the
+ * process table or stops anything: the snapshot is invented, and Stop removes the row and what it
+ * started. `live` moves a chat from Working to Needs you and back every few seconds, so the cards'
+ * glide between lanes can be watched.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { BackgroundTask, ChatSummary, ProcessesSnapshot, ProcessRow } from "../bindings";
-import { ProcessesScreen } from "../components/processes/ProcessesScreen";
+import { DashboardScreen } from "../components/dashboard/DashboardScreen";
 import type { AppStore } from "../lib/chat/appStore";
 import type { ProcessesApi } from "../lib/processes";
 
-const started = Date.now() - 12 * 60_000;
+const MINUTE = 60_000;
 
-const summary = (id: string, title: string, agent: string, status: ChatSummary["status"]) =>
+const summary = (
+  id: string,
+  title: string,
+  agent: [string, string],
+  status: ChatSummary["status"],
+  minutesAgo: number,
+  extra: Partial<ChatSummary> = {},
+): ChatSummary =>
   ({
     id,
     title,
-    agent_id: agent.toLowerCase(),
-    agent_name: agent,
+    agent_id: agent[0],
+    agent_name: agent[1],
     folder: "C:\\work\\auracode",
     folder_state: "ok",
     status,
     needs_attention: false,
-    created_at: started,
-    updated_at: started,
+    created_at: Date.now() - (minutesAgo + 30) * MINUTE,
+    updated_at: Date.now() - minutesAgo * MINUTE,
+    ...extra,
   }) as ChatSummary;
+
+const CLAUDE: [string, string] = ["claude", "Claude Code"];
+const CODEX: [string, string] = ["codex", "Codex"];
+const PI: [string, string] = ["pi", "Pi"];
+const GROK: [string, string] = ["grok", "Grok Build"];
 
 const task = (id: string, extra: Partial<BackgroundTask>): BackgroundTask => ({
   task_id: id,
@@ -46,7 +61,8 @@ const task = (id: string, extra: Partial<BackgroundTask>): BackgroundTask => ({
   ...extra,
 });
 
-function fixture(empty: boolean) {
+function fixture(kind: string | null) {
+  const empty = kind === "empty";
   const row = (
     pid: number,
     parent: number | null,
@@ -59,7 +75,7 @@ function fixture(empty: boolean) {
     parent,
     name,
     command,
-    started_ms: Date.now() - minutes * 60_000,
+    started_ms: Date.now() - minutes * MINUTE,
     cpu_ms: 0,
     memory_bytes: megabytes * 1024 * 1024,
   });
@@ -103,15 +119,15 @@ function fixture(empty: boolean) {
                     activity: "Reading audio.rs",
                     tool_uses: 12,
                   }),
-                  task("explore-themes", {
-                    title: "Explore theming system and changelog",
-                    activity: "Searching for data-theme",
-                    tool_uses: 7,
-                  }),
                   task("tests", {
                     kind: "command",
                     agent_type: null,
                     title: "Run the desktop tests",
+                    activity: null,
+                    started_at: Date.now() - 41_000,
+                  }),
+                  task("explore-themes", {
+                    title: "Explore theming system and changelog",
                     status: "completed",
                     started_at: Date.now() - 600_000,
                     duration_ms: 41_000,
@@ -134,25 +150,57 @@ function fixture(empty: boolean) {
       rows = rows.filter((entry) => !gone.has(entry.pid));
     },
   };
-  const chats = [
-    summary("chat-claude", "Fix dictation on Windows", "Claude Code", "running"),
-    summary("chat-codex", "Check the dictation fixture", "Codex", "ready"),
-  ];
+  let chats: ChatSummary[] = empty
+    ? []
+    : [
+        summary("chat-review", "Review the sync conflict resolver", CLAUDE, "running", 2, {
+          needs_attention: true,
+        }),
+        summary("chat-grok", "Port the release workflow to Linux runners", GROK, "failed", 9),
+        summary("chat-claude", "Fix dictation on Windows", CLAUDE, "running", 0),
+        summary("chat-codex", "Check the dictation fixture", CODEX, "running", 0),
+        summary("chat-pi", "Tidy the changelog check", PI, "ready", 14),
+        summary("chat-themes", "Add a theme for every agent", CODEX, "stopped", 180),
+        // Quiet for two days: in the sidebar, not on the board.
+        summary("chat-old", "Sketch the onboarding globe", PI, "stopped", 2 * 24 * 60),
+      ];
+  const listeners = new Set<() => void>();
   // useSyncExternalStore needs the same object back until something changes.
-  const state = { chats };
+  let state = { chats };
+  if (kind === "live") {
+    setInterval(() => {
+      chats = chats.map((chat) =>
+        chat.id === "chat-codex"
+          ? { ...chat, needs_attention: !chat.needs_attention, updated_at: Date.now() }
+          : chat,
+      );
+      state = { chats };
+      for (const listener of listeners) listener();
+    }, 3000);
+  }
   const app = {
-    subscribe: () => () => {},
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     getSnapshot: () => state,
   } as unknown as AppStore;
   return { api, app };
 }
 
-export function mountProcessesPreview(container: HTMLElement) {
-  const empty = new URLSearchParams(location.search).get("case") === "empty";
-  const { api, app } = fixture(empty);
+export function mountDashboardPreview(container: HTMLElement) {
+  const { api, app } = fixture(new URLSearchParams(location.search).get("case"));
   createRoot(container).render(
     <StrictMode>
-      <ProcessesScreen app={app} api={api} onBack={() => {}} onOpenChat={() => {}} />
+      <DashboardScreen
+        app={app}
+        api={api}
+        onBack={() => {}}
+        onOpenChat={(id) => {
+          // The checks read which chat a card asked to open.
+          document.body.dataset.openedChat = id;
+        }}
+      />
     </StrictMode>,
   );
 }

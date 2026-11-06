@@ -1,9 +1,9 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import {
-  Activity,
   ChevronDown,
   ChevronRight,
   Ellipsis,
+  LayoutDashboard,
   Pin,
   Plus,
   Search,
@@ -124,7 +124,7 @@ export function ChatList({
   onNewProject,
   onProjectNewChat,
   onCustomize,
-  onProcesses,
+  onDashboard,
   onProjectSettings,
   onChatOptions,
   archived = false,
@@ -141,8 +141,11 @@ export function ChatList({
   readonly onNewProject?: () => void;
   readonly onProjectNewChat?: (project: ProjectSummary) => void;
   readonly onCustomize?: () => void;
-  /** Opens Processes; the row counts the chats whose agent works now. */
-  readonly onProcesses?: () => void;
+  /**
+   * Opens the Dashboard; the row counts the chats whose agent works now, after a volt dot while
+   * one needs you.
+   */
+  readonly onDashboard?: () => void;
   readonly onProjectSettings?: (project: ProjectSummary) => void;
   readonly onChatOptions?: (chat: ChatSummary) => void;
   readonly archived?: boolean;
@@ -220,6 +223,7 @@ export function ChatList({
   }, [searching]);
   const section = archived ? "Archived" : "Projects";
   const working = chats?.filter((chat) => chat.status === "running").length ?? 0;
+  const needing = chats?.filter((chat) => chat.needs_attention).length ?? 0;
   return (
     <nav aria-label="Chats" className="chat-navigation" data-testid="chat-list">
       <div className="chat-nav-actions">
@@ -256,23 +260,26 @@ export function ChatList({
             <span>Customize</span>
           </button>
         ) : null}
-        {onProcesses ? (
+        {onDashboard ? (
           <button
             type="button"
             className="chat-nav-action"
-            onClick={onProcesses}
-            data-testid="processes-button"
-            aria-label={
-              working > 0
-                ? `Processes, ${working} ${working === 1 ? "agent" : "agents"} working`
-                : "Processes"
-            }
+            onClick={onDashboard}
+            data-testid="dashboard-button"
+            aria-label={[
+              "Dashboard",
+              needing > 0 ? `${needing} ${needing === 1 ? "needs" : "need"} you` : null,
+              working > 0 ? `${working} working` : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
           >
-            <Activity size={16} />
-            <span>Processes</span>
-            {working > 0 ? (
+            <LayoutDashboard size={16} />
+            <span>Dashboard</span>
+            {needing > 0 || working > 0 ? (
               <span className="chat-nav-count" aria-hidden="true">
-                {working}
+                {needing > 0 ? <StatusDot tone="volt" /> : null}
+                {working > 0 ? working : null}
               </span>
             ) : null}
           </button>
