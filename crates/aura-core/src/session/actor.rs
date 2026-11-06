@@ -3424,12 +3424,30 @@ impl ChatActor {
             .iter()
             .map(PathBuf::from)
             .collect();
+        // A chat that moved here from another agent opens with the visible handoff, as Chat
+        // would send it with the next prompt; a resumed session already has its context.
+        let first_message = if matches!(session, TerminalSession::Resume(_)) {
+            None
+        } else {
+            self.continuation
+                .as_mut()
+                .map(|continuation| std::mem::take(&mut continuation.handoff))
+                .filter(|handoff| !handoff.is_empty())
+                .map(|handoff| {
+                    format!(
+                        "{handoff}
+
+The person continues this conversation here, in your terminal. Reply only that you have the context, then wait for their next message."
+                    )
+                })
+        };
         let options = TerminalOptions {
             servers: &servers,
             autonomy: self.autonomy,
             session: session.clone(),
             model,
             add_dirs: &add_dirs,
+            first_message,
         };
         let made = if spec.kind == aura_protocol::DriverKind::Claude {
             aura_drivers::terminal::claude(&prepared.launch, &options)

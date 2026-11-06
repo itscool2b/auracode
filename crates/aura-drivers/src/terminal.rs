@@ -29,6 +29,9 @@ pub struct TerminalOptions<'a> {
     /// The model the chat chose, if it chose one.
     pub model: Option<String>,
     pub add_dirs: &'a [PathBuf],
+    /// The terminal's first message: the visible handoff when the chat moved here from another
+    /// agent, so the new agent starts with the conversation so far.
+    pub first_message: Option<String>,
 }
 
 /// The launch, and the shared servers it had to leave out, with why, for the chat to say.
@@ -70,6 +73,9 @@ pub fn claude(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunc
         launch
             .args
             .extend(["--add-dir".into(), dir.as_os_str().to_owned()]);
+    }
+    if let Some(message) = &options.first_message {
+        launch.args.push(message.into());
     }
     TerminalLaunch {
         launch,
@@ -233,6 +239,9 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
             launch.set_env.push((key.into(), value.into()));
         }
     }
+    if let Some(message) = &options.first_message {
+        launch.args.push(message.into());
+    }
     TerminalLaunch { launch, omitted }
 }
 
@@ -306,6 +315,7 @@ mod tests {
             session,
             model: Some("opus".into()),
             add_dirs: &[],
+            first_message: None,
         }
     }
 
@@ -334,6 +344,18 @@ mod tests {
             &options(&[], TerminalSession::NewClaude("n1".into())),
         );
         assert!(args(&new.launch).contains(&"--session-id=n1".to_owned()));
+    }
+
+    #[test]
+    fn a_handoff_is_the_terminals_first_message_after_every_option() {
+        let mut opts = options(&[], TerminalSession::New);
+        opts.first_message = Some("Visible conversation handoff".into());
+        for made in [claude(&base(), &opts), codex(&base(), &opts)] {
+            assert_eq!(
+                args(&made.launch).last().map(String::as_str),
+                Some("Visible conversation handoff")
+            );
+        }
     }
 
     #[test]
