@@ -90,4 +90,18 @@ terminals waits for the vendors' notification hooks (phase 2).
 
 ## Status
 
-- 2026-11-06: plan locked with the owner. Nothing built yet.
+- 2026-11-06: plan locked with the owner.
+- Done (branch codex/terminal-chats):
+  - aura_drivers::terminal builds Claude Code's and Codex's interactive launch from the chat's
+    setup; credentials only in the environment (OS-cased names, reserved AURA_ names, the launch's
+    own names protected; project memory exempt). Tests.
+  - The chat actor's open_terminal / terminal_ended: prepared through start(), the session claim
+    and live slot held while open, Chat refused meanwhile, a new Claude session saved with its ID
+    so Chat resumes it. Tests in session/tests/terminal_chats.rs.
+  - Tauri chat_terminal_start / chat_terminal_ended; a page that goes ends its terminal chats.
+  - The device-local Chat | Terminal choice, the header switch, the framed terminal view that
+    survives navigation, graceful exit on Back to Chat (Ctrl+C twice, then close after 2.5 s).
+- Next: step 4 (import the session file into history through the actor's event pipeline, not
+  the sync import, which would mark it remote), then the switcher's transfer, New chat's choice
+  and the Settings default, Dashboard states, a browser fixture and check for the view, and a
+  native pass with both CLIs.
