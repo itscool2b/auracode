@@ -4,7 +4,7 @@
 //! only in the environment, never on the command line, where other programs and logs can read them.
 use std::path::PathBuf;
 
-use aura_process::LaunchSpec;
+use aura_process::{EnvKey, LaunchSpec};
 use aura_protocol::{
     Autonomy,
     mcp::{McpTransport, ResolvedMcpServer},
@@ -132,8 +132,15 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
             .args
             .extend(["--add-dir".into(), dir.as_os_str().to_owned()]);
     }
-    // A variable forwarded to one server must not carry another's value.
-    let mut forwarded = std::collections::BTreeMap::<String, String>::new();
+    // Names compare as the OS compares them (TOKEN and token are one variable on Windows). A
+    // variable forwarded to one server must not carry another's value, nor replace one the launch
+    // already sets (the account's, say); auracode's own AURA_ names are reserved.
+    let launch_names: std::collections::BTreeSet<EnvKey> = launch
+        .set_env
+        .iter()
+        .map(|(name, _)| EnvKey::new(name.clone()))
+        .collect();
+    let mut forwarded = std::collections::BTreeMap::<EnvKey, String>::new();
     let mut headers = 0usize;
     for server in options.servers {
         let name = &server.definition.name;
@@ -147,8 +154,25 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
         let mut env = Vec::new();
         match &server.definition.transport {
             McpTransport::Stdio { command, args } => {
+                let reserved = server.credentials.env.keys().any(|key| {
+                    key.get(..5)
+                        .is_some_and(|p| p.eq_ignore_ascii_case("AURA_"))
+                        || launch_names.contains(&EnvKey::new(key))
+                });
+                if reserved {
+                    omitted.push(format!(
+                        "{name}: it needs a variable auracode sets for the launch itself"
+                    ));
+                    continue;
+                }
+                let mut own = std::collections::BTreeMap::<EnvKey, &String>::new();
                 let clash = server.credentials.env.iter().any(|(key, value)| {
-                    forwarded.get(key).is_some_and(|existing| existing != value)
+                    let name = EnvKey::new(key);
+                    own.insert(name.clone(), value)
+                        .is_some_and(|other| other != value)
+                        || forwarded
+                            .get(&name)
+                            .is_some_and(|existing| existing != value)
                 });
                 if clash {
                     omitted.push(format!(
@@ -173,7 +197,11 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
                 if !server.credentials.headers.is_empty() {
                     let mut names = serde_json::Map::new();
                     for (header, value) in &server.credentials.headers {
-                        let variable = format!("AURA_CODEX_MCP_HEADER_{headers}");
+                        let mut variable = format!("AURA_CODEX_MCP_HEADER_{headers}");
+                        while launch_names.contains(&EnvKey::new(&variable)) {
+                            headers += 1;
+                            variable = format!("AURA_CODEX_MCP_HEADER_{headers}");
+                        }
                         headers += 1;
                         names.insert(header.clone(), json!(variable));
                         env.push((variable, value.clone()));
@@ -194,10 +222,11 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
             ]);
         }
         for (key, value) in env {
-            forwarded.insert(key.clone(), value.clone());
+            let name = EnvKey::new(&key);
+            forwarded.insert(name.clone(), value.clone());
             launch
                 .set_env
-                .retain(|(existing, _)| existing != key.as_str());
+                .retain(|(existing, _)| EnvKey::new(existing.clone()) != name);
             launch.set_env.push((key.into(), value.into()));
         }
     }
@@ -383,6 +412,86 @@ mod tests {
                 .any(|(k, v)| k == "TOKEN" && v.to_string_lossy() == secret)
         );
         assert!(made.omitted.is_empty());
+    }
+
+    #[test]
+    fn codex_never_lets_a_server_variable_replace_the_launchs_or_auracodes_own() {
+        let mut launch = base();
+        launch
+            .set_env
+            .push(("AURA_CODEX_MCP_HEADER_0".into(), "taken".into()));
+        let servers = [
+            server(
+                "account",
+                McpTransport::Stdio {
+                    command: "a".into(),
+                    args: vec![],
+                },
+                &[("CLAUDE_CONFIG_DIR", format!("v{}", 1))],
+            ),
+            server(
+                "reserved",
+                McpTransport::Stdio {
+                    command: "b".into(),
+                    args: vec![],
+                },
+                &[("aura_codex_mcp_header_9", format!("v{}", 2))],
+            ),
+            server(
+                "remote",
+                McpTransport::Http {
+                    url: "https://example.test/mcp".into(),
+                },
+                &[("X-Key", format!("v{}", 3))],
+            ),
+        ];
+        let made = codex(&launch, &options(&servers, TerminalSession::New));
+        assert_eq!(made.omitted.len(), 2, "{:?}", made.omitted);
+        // The header takes the next free name, leaving the launch's own value alone.
+        assert!(
+            args(&made.launch)
+                .iter()
+                .any(|a| a.contains("AURA_CODEX_MCP_HEADER_1"))
+        );
+        let taken = made
+            .launch
+            .set_env
+            .iter()
+            .find(|(k, _)| k == "AURA_CODEX_MCP_HEADER_0");
+        assert_eq!(
+            taken.map(|(_, v)| v.to_string_lossy().into_owned()),
+            Some("taken".into())
+        );
+    }
+
+    #[test]
+    fn codex_compares_variable_names_as_the_os_does() {
+        let servers = [
+            server(
+                "one",
+                McpTransport::Stdio {
+                    command: "a".into(),
+                    args: vec![],
+                },
+                &[("TOKEN", format!("v{}", 1))],
+            ),
+            server(
+                "two",
+                McpTransport::Stdio {
+                    command: "b".into(),
+                    args: vec![],
+                },
+                &[("token", format!("v{}", 2))],
+            ),
+        ];
+        let made = codex(&base(), &options(&servers, TerminalSession::New));
+        // One variable on Windows, two elsewhere.
+        assert_eq!(
+            made.omitted.len(),
+            usize::from(cfg!(windows)),
+            "{:?}",
+            made.omitted
+        );
     }
 
     #[test]
