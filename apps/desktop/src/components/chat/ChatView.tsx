@@ -18,6 +18,7 @@ import { useReviewComments } from "../../lib/chat/review";
 import { newestTurnKey, shownTasks, taskDisplay, tasksByToolCall } from "../../lib/chat/tasks";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
+import { chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
@@ -45,10 +46,12 @@ import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
 import { TaskPanel } from "./TaskPanel";
+import { TerminalChat } from "./TerminalChat";
 import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
 import { type TaskLink, TaskLinkContext } from "./taskLinks";
+import { terminalChats } from "./terminalChatRuntime";
 import { isPanelToggle } from "./terminalRuntime";
 import { UsageLimitCard } from "./UsageLimitCard";
 
@@ -288,6 +291,13 @@ export function ChatView({
       pane.style.removeProperty("--ui-dock-height");
     };
   });
+  // Chat or Terminal: this device's choice for this chat, for agents with a terminal.
+  useSyncExternalStore(
+    chatInterfaces.subscribe,
+    chatInterfaces.getVersion,
+    chatInterfaces.getVersion,
+  );
+  const interfaceView = state.chat ? chatInterfaces.of(chatId, state.chat.agent_id) : "chat";
   // File names in the chat open in the person's editor; without one installed they stay text.
   const files = transport.files;
   const [opensIn, setOpensIn] = useState<string | null>(null);
@@ -811,6 +821,23 @@ export function ChatView({
             onDebug={() => setDialog("debug")}
             changesOpen={changesOpen}
             onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
+            view={
+              state.chat && terminalSupported(state.chat.agent_id)
+                ? {
+                    current: interfaceView,
+                    unavailable:
+                      status === "running" || status === "cancelling"
+                        ? "Wait for the turn to finish, or stop it, before opening the terminal."
+                        : null,
+                    onChange: (next) => {
+                      chatInterfaces.set(chatId, next);
+                      // Back to Chat: the agent exits by itself first, then hands the session
+                      // back, so Chat continues the same session.
+                      if (next === "chat") void terminalChats.close(chatId);
+                    },
+                  }
+                : undefined
+            }
             run={
               run?.command && terminals
                 ? {
@@ -870,253 +897,268 @@ export function ChatView({
                   </button>
                 </div>
               ) : null}
-              <TaskLinkContext.Provider value={taskLinks}>
-                <Transcript
-                  dockedRequests={dockedRequests}
-                  state={state}
-                  live={live}
-                  actions={actions}
-                  onLoadEarlier={() => void store.loadEarlier()}
-                  findRequest={findRequest}
+              {interfaceView === "terminal" ? (
+                <TerminalChat
+                  chatId={chatId}
+                  agentName={agent?.name ?? state.chat.agent_name}
+                  onChat={() => {
+                    chatInterfaces.set(chatId, "chat");
+                    void terminalChats.close(chatId);
+                  }}
                 />
-              </TaskLinkContext.Provider>
-              <div className="chat-dock" ref={dockRef}>
-                {fileNote ? (
-                  <p
-                    className="conversation-notice"
-                    role={fileNote.failed ? "alert" : "status"}
-                    data-testid="file-note"
-                  >
-                    {fileNote.text}
-                  </p>
-                ) : null}
-                {recreateNote ? (
-                  <p
-                    className="conversation-notice"
-                    role={recreateNote.failed ? "alert" : "status"}
-                    data-testid="recreate-note"
-                  >
-                    {recreateNote.text}
-                  </p>
-                ) : null}
-                {canContinueHere ? (
-                  <div className="conversation-notice" role="status">
-                    <p>
-                      New history arrived from another device. Review the context before continuing.
-                    </p>
-                    <button
-                      type="button"
-                      className="g-button"
-                      onClick={() => setContinuation({ type: "continue_here" })}
-                    >
-                      Continue here
-                    </button>
-                  </div>
-                ) : null}
-                {handoff ? (
-                  <details className="chat-handoff">
-                    <summary>
-                      {/* The words name the agent; its mark only shows whose turn comes next. */}
-                      <span className="chat-handoff-mark" aria-hidden="true">
-                        <AgentMark agent={handoff.agent_id} size={16} />
-                      </span>
-                      <span className="chat-handoff-text">
-                        Next message includes a handoff to{" "}
-                        {agents?.find((agent) => agent.id === handoff.agent_id)?.name ??
-                          handoff.agent_id}
-                      </span>
-                      <span className="chat-handoff-preview">Preview</span>
-                    </summary>
-                    <pre>
-                      {handoff.handoff ||
-                        (handoff.uses_native_fork
-                          ? "Continue from the saved native fork. No extra context will be added."
-                          : "No extra context will be added.")}
-                    </pre>
-                  </details>
-                ) : null}
-                {handoffError ? (
-                  <p className="conversation-notice" role="alert">
-                    Could not verify the saved handoff. {handoffError}{" "}
-                    <button
-                      type="button"
-                      className="g-button"
-                      onClick={() => setHandoffRevision((value) => value + 1)}
-                    >
-                      Retry
-                    </button>
-                  </p>
-                ) : null}
-                {state.auth !== null &&
-                state.session?.account_id &&
-                takesAccounts(state.chat.agent_id) &&
-                transport.accounts ? (
-                  // An added account's token was refused: the vendor sign-in would sign in the
-                  // agent's own account, so the way on is another account.
-                  <UsageLimitCard
-                    key={`refused:${state.session.account_id}`}
-                    refused
-                    limit={{ message: state.auth.message, resets_at: null }}
-                    chatId={chatId}
-                    agentId={state.chat.agent_id}
-                    agentName={agent?.name ?? state.chat.agent_name}
-                    accountId={state.session.account_id}
-                    api={transport.accounts}
-                  />
-                ) : state.auth !== null ? (
-                  <ChatAuthCard
-                    key={state.chat.agent_id}
-                    auth={state.auth}
-                    agentId={state.chat.agent_id}
-                    agentName={agent?.name ?? state.chat.agent_name}
-                    transport={transport}
-                    onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
-                  />
-                ) : null}
-                {state.session?.usage_limit ? (
-                  <UsageLimitCard
-                    key={`${state.chat.agent_id}:${state.session.account_id ?? ""}`}
-                    limit={state.session.usage_limit}
-                    chatId={chatId}
-                    agentId={state.chat.agent_id}
-                    agentName={agent?.name ?? state.chat.agent_name}
-                    accountId={state.session.account_id ?? null}
-                    api={takesAccounts(state.chat.agent_id) ? transport.accounts : undefined}
-                  />
-                ) : null}
-                {state.stillWorkingMinutes !== null ? (
-                  <StillWorking
-                    minutes={state.stillWorkingMinutes}
-                    onStop={() => void store.interrupt()}
-                    onSendNow={
-                      stallSendsNow && nextQueued !== null
-                        ? () => void store.sendNow(nextQueued)
-                        : undefined
-                    }
-                  />
-                ) : null}
-                <BackgroundTasks
-                  tasks={tasks}
-                  turnKey={newestTurnKey(state.transcript.segments)}
-                  live={live}
-                  liveTasks={state.liveTasks}
-                  openTaskId={openTaskItem ? openTaskId : null}
-                  onOpen={(taskId) =>
-                    openTaskId === taskId ? setOpenTaskId(null) : openTask(taskId)
-                  }
-                />
-                <QueueList
-                  queue={state.queue}
-                  held={held}
-                  wait={queueWait}
-                  onRemove={(promptId) => void store.cancelQueued(promptId)}
-                  onSendQueued={() => void store.resumeQueue()}
-                  onSendNow={(promptId) => void store.sendNow(promptId)}
-                  onStart={() => startSession(false)}
-                  onRecreate={missingTree ? () => void reviewRecreate() : undefined}
-                  onSetup={() => document.getElementById(`setup-review-${chatId}`)?.click()}
-                  onLoadText={(promptId) => store.queuedText(promptId)}
-                  onEdit={(promptId, text) => store.editQueued(promptId, text)}
-                  onMove={(promptId, index) => store.moveQueued(promptId, index)}
-                />
-                {pendingRequests.length > 0 ? (
-                  <section
-                    ref={requestDock}
-                    tabIndex={-1}
-                    className="chat-permission-dock"
-                    aria-label="Waiting for your response"
-                  >
-                    {pendingRequests.slice(0, 1).map((item) => {
-                      if (item.kind !== "permission" && item.kind !== "question") return null;
-                      const segment = state.transcript.segments.find((entry) =>
-                        entry.itemKeys.includes(item.key),
-                      );
-                      const user = segment?.itemKeys
-                        .map((key) => state.transcript.items.get(key))
-                        .find((entry) => entry?.kind === "user");
-                      return (
-                        <div
-                          key={item.key}
-                          data-test-segment-key={segment?.key}
-                          data-test-kind={segment?.turnId ? "turn" : "outside"}
-                          data-test-turn-id={segment?.turnId ?? ""}
-                          data-test-prompt={user?.kind === "user" ? user.text : ""}
-                          data-test-stop-reason={segment?.end?.stopReason ?? ""}
-                          data-test-recovered={String(segment?.end?.recovered ?? false)}
-                        >
-                          {item.kind === "question" ? (
-                            <QuestionCard
-                              item={item}
-                              request={state.requests.get(item.request.request_id)}
-                              onRespond={(answer) =>
-                                void store.respondUi(item.request.request_id, answer)
-                              }
-                            />
-                          ) : (
-                            <PermissionCard
-                              item={item}
-                              request={state.requests.get(item.request.request_id)}
-                              onRespond={(optionId) =>
-                                void store.respondPermission(item.request.request_id, optionId)
-                              }
-                              agentName={agent?.name ?? state.chat?.agent_name}
-                              onAddToPlan={addToPlan}
-                              blobs={state.blobs}
-                              onLoadBlob={(sha256) => void store.loadBlob(sha256)}
-                            />
-                          )}
-                          <p className="chat-request-scope">
-                            {segment?.turnId ? "Turn request" : "Session request"}
-                            {user?.kind === "user" ? (
-                              <span className="chat-request-prompt" title={user.text}>
-                                {user.text.slice(0, 160)}
-                              </span>
-                            ) : null}
-                          </p>
-                        </div>
-                      );
-                    })}
-                    {pendingRequests.length > 1 ? (
-                      <p className="chat-request-remaining" role="status">
-                        {pendingRequests.length - 1} more{" "}
-                        {pendingRequests.length === 2 ? "request" : "requests"} waiting
+              ) : (
+                <>
+                  <TaskLinkContext.Provider value={taskLinks}>
+                    <Transcript
+                      dockedRequests={dockedRequests}
+                      state={state}
+                      live={live}
+                      actions={actions}
+                      onLoadEarlier={() => void store.loadEarlier()}
+                      findRequest={findRequest}
+                    />
+                  </TaskLinkContext.Provider>
+                  <div className="chat-dock" ref={dockRef}>
+                    {fileNote ? (
+                      <p
+                        className="conversation-notice"
+                        role={fileNote.failed ? "alert" : "status"}
+                        data-testid="file-note"
+                      >
+                        {fileNote.text}
                       </p>
                     ) : null}
-                  </section>
-                ) : null}
-                <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>
-                  <Composer
-                    blocked={
-                      pendingRequests.length > 0 ||
-                      !handoffLoaded ||
-                      canContinueHere ||
-                      handoffError !== null ||
-                      state.steeringPending ||
-                      state.controlSaving !== null
-                    }
-                    chatId={chatId}
-                    runningTasks={runningTasks}
-                    contextApi={transport.composer}
-                    agentName={agent?.name ?? state.chat.agent_name}
-                    controls={controls}
-                    status={status}
-                    commands={state.lists?.commands ?? []}
-                    error={state.sendError}
-                    onSend={(text, context) => store.send(text, context)}
-                    onSteer={
-                      state.phase === "live" &&
-                      status === "running" &&
-                      state.lists?.capabilities?.steer &&
-                      transport.composer?.steer &&
-                      state.openTurnId
-                        ? (text, context) => store.steer(state.openTurnId as string, text, context)
-                        : undefined
-                    }
-                    onStop={() => void store.interrupt()}
-                    onForceStop={() => void store.forceStop()}
-                  />
-                </div>
-              </div>
+                    {recreateNote ? (
+                      <p
+                        className="conversation-notice"
+                        role={recreateNote.failed ? "alert" : "status"}
+                        data-testid="recreate-note"
+                      >
+                        {recreateNote.text}
+                      </p>
+                    ) : null}
+                    {canContinueHere ? (
+                      <div className="conversation-notice" role="status">
+                        <p>
+                          New history arrived from another device. Review the context before
+                          continuing.
+                        </p>
+                        <button
+                          type="button"
+                          className="g-button"
+                          onClick={() => setContinuation({ type: "continue_here" })}
+                        >
+                          Continue here
+                        </button>
+                      </div>
+                    ) : null}
+                    {handoff ? (
+                      <details className="chat-handoff">
+                        <summary>
+                          {/* The words name the agent; its mark only shows whose turn comes next. */}
+                          <span className="chat-handoff-mark" aria-hidden="true">
+                            <AgentMark agent={handoff.agent_id} size={16} />
+                          </span>
+                          <span className="chat-handoff-text">
+                            Next message includes a handoff to{" "}
+                            {agents?.find((agent) => agent.id === handoff.agent_id)?.name ??
+                              handoff.agent_id}
+                          </span>
+                          <span className="chat-handoff-preview">Preview</span>
+                        </summary>
+                        <pre>
+                          {handoff.handoff ||
+                            (handoff.uses_native_fork
+                              ? "Continue from the saved native fork. No extra context will be added."
+                              : "No extra context will be added.")}
+                        </pre>
+                      </details>
+                    ) : null}
+                    {handoffError ? (
+                      <p className="conversation-notice" role="alert">
+                        Could not verify the saved handoff. {handoffError}{" "}
+                        <button
+                          type="button"
+                          className="g-button"
+                          onClick={() => setHandoffRevision((value) => value + 1)}
+                        >
+                          Retry
+                        </button>
+                      </p>
+                    ) : null}
+                    {state.auth !== null &&
+                    state.session?.account_id &&
+                    takesAccounts(state.chat.agent_id) &&
+                    transport.accounts ? (
+                      // An added account's token was refused: the vendor sign-in would sign in the
+                      // agent's own account, so the way on is another account.
+                      <UsageLimitCard
+                        key={`refused:${state.session.account_id}`}
+                        refused
+                        limit={{ message: state.auth.message, resets_at: null }}
+                        chatId={chatId}
+                        agentId={state.chat.agent_id}
+                        agentName={agent?.name ?? state.chat.agent_name}
+                        accountId={state.session.account_id}
+                        api={transport.accounts}
+                      />
+                    ) : state.auth !== null ? (
+                      <ChatAuthCard
+                        key={state.chat.agent_id}
+                        auth={state.auth}
+                        agentId={state.chat.agent_id}
+                        agentName={agent?.name ?? state.chat.agent_name}
+                        transport={transport}
+                        onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
+                      />
+                    ) : null}
+                    {state.session?.usage_limit ? (
+                      <UsageLimitCard
+                        key={`${state.chat.agent_id}:${state.session.account_id ?? ""}`}
+                        limit={state.session.usage_limit}
+                        chatId={chatId}
+                        agentId={state.chat.agent_id}
+                        agentName={agent?.name ?? state.chat.agent_name}
+                        accountId={state.session.account_id ?? null}
+                        api={takesAccounts(state.chat.agent_id) ? transport.accounts : undefined}
+                      />
+                    ) : null}
+                    {state.stillWorkingMinutes !== null ? (
+                      <StillWorking
+                        minutes={state.stillWorkingMinutes}
+                        onStop={() => void store.interrupt()}
+                        onSendNow={
+                          stallSendsNow && nextQueued !== null
+                            ? () => void store.sendNow(nextQueued)
+                            : undefined
+                        }
+                      />
+                    ) : null}
+                    <BackgroundTasks
+                      tasks={tasks}
+                      turnKey={newestTurnKey(state.transcript.segments)}
+                      live={live}
+                      liveTasks={state.liveTasks}
+                      openTaskId={openTaskItem ? openTaskId : null}
+                      onOpen={(taskId) =>
+                        openTaskId === taskId ? setOpenTaskId(null) : openTask(taskId)
+                      }
+                    />
+                    <QueueList
+                      queue={state.queue}
+                      held={held}
+                      wait={queueWait}
+                      onRemove={(promptId) => void store.cancelQueued(promptId)}
+                      onSendQueued={() => void store.resumeQueue()}
+                      onSendNow={(promptId) => void store.sendNow(promptId)}
+                      onStart={() => startSession(false)}
+                      onRecreate={missingTree ? () => void reviewRecreate() : undefined}
+                      onSetup={() => document.getElementById(`setup-review-${chatId}`)?.click()}
+                      onLoadText={(promptId) => store.queuedText(promptId)}
+                      onEdit={(promptId, text) => store.editQueued(promptId, text)}
+                      onMove={(promptId, index) => store.moveQueued(promptId, index)}
+                    />
+                    {pendingRequests.length > 0 ? (
+                      <section
+                        ref={requestDock}
+                        tabIndex={-1}
+                        className="chat-permission-dock"
+                        aria-label="Waiting for your response"
+                      >
+                        {pendingRequests.slice(0, 1).map((item) => {
+                          if (item.kind !== "permission" && item.kind !== "question") return null;
+                          const segment = state.transcript.segments.find((entry) =>
+                            entry.itemKeys.includes(item.key),
+                          );
+                          const user = segment?.itemKeys
+                            .map((key) => state.transcript.items.get(key))
+                            .find((entry) => entry?.kind === "user");
+                          return (
+                            <div
+                              key={item.key}
+                              data-test-segment-key={segment?.key}
+                              data-test-kind={segment?.turnId ? "turn" : "outside"}
+                              data-test-turn-id={segment?.turnId ?? ""}
+                              data-test-prompt={user?.kind === "user" ? user.text : ""}
+                              data-test-stop-reason={segment?.end?.stopReason ?? ""}
+                              data-test-recovered={String(segment?.end?.recovered ?? false)}
+                            >
+                              {item.kind === "question" ? (
+                                <QuestionCard
+                                  item={item}
+                                  request={state.requests.get(item.request.request_id)}
+                                  onRespond={(answer) =>
+                                    void store.respondUi(item.request.request_id, answer)
+                                  }
+                                />
+                              ) : (
+                                <PermissionCard
+                                  item={item}
+                                  request={state.requests.get(item.request.request_id)}
+                                  onRespond={(optionId) =>
+                                    void store.respondPermission(item.request.request_id, optionId)
+                                  }
+                                  agentName={agent?.name ?? state.chat?.agent_name}
+                                  onAddToPlan={addToPlan}
+                                  blobs={state.blobs}
+                                  onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                                />
+                              )}
+                              <p className="chat-request-scope">
+                                {segment?.turnId ? "Turn request" : "Session request"}
+                                {user?.kind === "user" ? (
+                                  <span className="chat-request-prompt" title={user.text}>
+                                    {user.text.slice(0, 160)}
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+                          );
+                        })}
+                        {pendingRequests.length > 1 ? (
+                          <p className="chat-request-remaining" role="status">
+                            {pendingRequests.length - 1} more{" "}
+                            {pendingRequests.length === 2 ? "request" : "requests"} waiting
+                          </p>
+                        ) : null}
+                      </section>
+                    ) : null}
+                    <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>
+                      <Composer
+                        blocked={
+                          pendingRequests.length > 0 ||
+                          !handoffLoaded ||
+                          canContinueHere ||
+                          handoffError !== null ||
+                          state.steeringPending ||
+                          state.controlSaving !== null
+                        }
+                        chatId={chatId}
+                        runningTasks={runningTasks}
+                        contextApi={transport.composer}
+                        agentName={agent?.name ?? state.chat.agent_name}
+                        controls={controls}
+                        status={status}
+                        commands={state.lists?.commands ?? []}
+                        error={state.sendError}
+                        onSend={(text, context) => store.send(text, context)}
+                        onSteer={
+                          state.phase === "live" &&
+                          status === "running" &&
+                          state.lists?.capabilities?.steer &&
+                          transport.composer?.steer &&
+                          state.openTurnId
+                            ? (text, context) =>
+                                store.steer(state.openTurnId as string, text, context)
+                            : undefined
+                        }
+                        onStop={() => void store.interrupt()}
+                        onForceStop={() => void store.forceStop()}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               {terminals ? (
                 <TerminalPanel
                   chatId={chatId}

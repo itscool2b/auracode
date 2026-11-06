@@ -1,10 +1,11 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { Ellipsis, PanelRight, Play, Square } from "lucide-react";
+import { Ellipsis, MessageSquare, PanelRight, Play, Square, SquareTerminal } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
+import type { ChatInterface } from "../../lib/chatInterface";
 import { agentVersion, builtInPath } from "../../lib/format";
 import { inTauri } from "../../lib/ipc";
 import { projectName } from "./ChatList";
@@ -42,6 +43,7 @@ export function Header({
   onDebug,
   changesOpen = false,
   run,
+  view,
 }: {
   readonly state: ChatState;
   /**
@@ -64,6 +66,15 @@ export function Header({
   readonly onStop: () => void;
   readonly onShowLog: () => void;
   readonly onChanges?: () => void;
+  /**
+   * Chat or Terminal: auracode's interface, or the agent's own in auracode's terminal. Absent for
+   * agents without a terminal; `unavailable` says why Terminal cannot be chosen now.
+   */
+  readonly view?: {
+    readonly current: ChatInterface;
+    readonly unavailable: string | null;
+    readonly onChange: (next: ChatInterface) => void;
+  };
   readonly onHistory?: () => void;
   /**
    * Asks the agent to summarize the conversation so far to free context (its `/compact`); offered
@@ -104,7 +115,13 @@ export function Header({
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
   const activity = chatActivity(state);
-  const statusLabel = activity === "waiting" ? "Waiting on you" : statusWord(status);
+  // A chat shown as its agent's terminal: the session reads as stopped while the terminal has it.
+  const inTerminal = view?.current === "terminal";
+  const statusLabel = inTerminal
+    ? "In the terminal"
+    : activity === "waiting"
+      ? "Waiting on you"
+      : statusWord(status);
   const quiet = activity !== "waiting" && QUIET.has(status) && !session?.detail;
   const tools = chat && inTauri() ? onTools : undefined;
   const files = chat && inTauri();
@@ -146,7 +163,9 @@ export function Header({
             </span>
           ) : null}
           {statusLabel}
-          {session?.detail ? <span className="chat-status-detail"> · {session.detail}</span> : null}
+          {session?.detail && !inTerminal ? (
+            <span className="chat-status-detail"> · {session.detail}</span>
+          ) : null}
         </span>
         {state.actionError !== null ? (
           <span
@@ -160,6 +179,41 @@ export function Header({
         ) : null}
       </div>
       <div className="chat-header-controls">
+        {view ? (
+          <fieldset className="g-segmented chat-view-switch" aria-label="Show this chat as">
+            {(["chat", "terminal"] as const).map((choice) => {
+              const blocked = choice === "terminal" && view.unavailable !== null;
+              return (
+                <button
+                  key={choice}
+                  type="button"
+                  className="g-segment"
+                  aria-pressed={view.current === choice}
+                  aria-disabled={blocked && view.current !== choice ? true : undefined}
+                  data-testid={`chat-view-${choice}`}
+                  title={
+                    blocked && view.current !== choice
+                      ? (view.unavailable ?? undefined)
+                      : choice === "chat"
+                        ? "auracode's chat"
+                        : "The agent's own interface, in auracode's terminal"
+                  }
+                  onClick={() => {
+                    if (view.current === choice || (blocked && view.current !== choice)) return;
+                    view.onChange(choice);
+                  }}
+                >
+                  {choice === "chat" ? (
+                    <MessageSquare size={14} aria-hidden="true" />
+                  ) : (
+                    <SquareTerminal size={14} aria-hidden="true" />
+                  )}
+                  {choice === "chat" ? "Chat" : "Terminal"}
+                </button>
+              );
+            })}
+          </fieldset>
+        ) : null}
         {run ? (
           <button
             type="button"

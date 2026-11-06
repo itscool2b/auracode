@@ -30,6 +30,7 @@ pub mod mock_driver;
 pub mod pi;
 #[cfg(feature = "replay")]
 pub mod replay;
+pub mod terminal;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

@@ -27,6 +27,7 @@ import {
 } from "../../lib/processes";
 import { TaskKindIcon, TaskMark, taskFacts, useClock } from "../chat/BackgroundTasks";
 import { projectName } from "../chat/ChatList";
+import { terminalChats } from "../chat/terminalChatRuntime";
 import "./dashboard.css";
 
 /** The snapshot shown and the one before it, for processor use between the two. */
@@ -112,7 +113,8 @@ export function DashboardScreen({
     }
   };
 
-  const board = boardOf(summaries, now);
+  // A chat whose agent runs in its terminal here shows as stopped to the store: it works.
+  const board = boardOf(summaries, now, terminalChats.running);
   // Each chat's lane at the last render: a card whose lane changed crosses over the others.
   const lanes = useRef(new Map<string, Lane>());
   const crossing = new Set<string>();
@@ -248,7 +250,7 @@ function DashboardCard({
   const tasks = orderedTasks(processes?.tasks ?? []).filter((task) => task.status === "running");
   const rows = (processes?.agents ?? []).flatMap((agent) => listTree(agent.processes));
   const memory = rows.reduce((sum, { row }) => sum + (row.memory_bytes ?? 0), 0);
-  const line = stateLine(chat);
+  const line = stateLine(chat, terminalChats.running);
   const moving = useRef<HTMLLIElement>(null);
   const motionProps = reduced
     ? { layout: false as const, transition: { duration: 0 } }

@@ -11,6 +11,7 @@ import {
   type ChatAttach,
   type ChatStatusUpdate,
   type ChatSummary,
+  type ChatTerminalStarted,
   type ConfigValue,
   commands,
   type DemoKind,
@@ -205,6 +206,19 @@ export function agentLoginStart(
   cols: number,
 ): Promise<string> {
   return settle(commands.agentLoginStart(terminalId, agentId, rows, cols));
+}
+/** Opens a chat in its agent's own interface in a reserved terminal. */
+export function chatTerminalStart(
+  terminalId: string,
+  chatId: string,
+  rows: number,
+  cols: number,
+): Promise<ChatTerminalStarted> {
+  return settle(commands.chatTerminalStart(terminalId, chatId, rows, cols));
+}
+/** The terminal chat's terminal ended: its chat gets its session back. */
+export function chatTerminalEnded(terminalId: string): Promise<void> {
+  return settle(commands.chatTerminalEnded(terminalId)).then(() => undefined);
 }
 export function terminalRead(terminalId: string): Promise<TerminalChunk> {
   return settle(commands.terminalRead(terminalId));

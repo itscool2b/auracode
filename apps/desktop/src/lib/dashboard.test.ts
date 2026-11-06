@@ -62,6 +62,15 @@ describe("the Dashboard's lanes", () => {
     expect(stateLine(chat("d", { status: "ready" }))).toBe("Finished its turn");
   });
 
+  it("puts a chat working in its terminal under Working, though its session shows as stopped", () => {
+    const inTerminal = (id: string) => id === "t";
+    const terminal = chat("t", { status: "stopped", updated_at: NOW - 3 * FINISHED_WINDOW_MS });
+    expect(laneOf(terminal, NOW, inTerminal)).toBe("working");
+    expect(stateLine(terminal, inTerminal)).toBe("In the terminal");
+    // Needing an answer still comes first.
+    expect(laneOf(chat("t", { needs_attention: true }), NOW, inTerminal)).toBe("attention");
+  });
+
   it("sums the board up in one line", () => {
     const board = boardOf(
       [chat("a", { needs_attention: true }), chat("b", { status: "running" }), chat("c")],

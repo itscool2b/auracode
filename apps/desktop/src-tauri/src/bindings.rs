@@ -168,6 +168,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             terminal::agent_token_start,
             terminal::agent_install_review,
             terminal::agent_install_start,
+            terminal::chat_terminal_start,
+            terminal::chat_terminal_ended,
             crate::clone_commands::clone_check,
             crate::clone_commands::clone_cancel_review,
             crate::clone_commands::clone_start,

@@ -16,6 +16,7 @@ mod rewind;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
+mod terminal_chats;
 mod workspace;
 mod workspace_removal;
 mod worktree_chat;
@@ -127,6 +128,11 @@ fn rig_with_spec(
     rig_from_store(dir, profile, folder, store, drivers, knobs, spec)
 }
 
+thread_local! {
+    /// More variables for the next rig built on this thread (a test's home folder, say).
+    static RIG_ENV: std::cell::RefCell<Vec<(String, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 fn rig_from_store(
     dir: tempfile::TempDir,
     profile: Profile,
@@ -139,6 +145,11 @@ fn rig_from_store(
     let rt = Handle::current();
     let mut vars = EnvMap::new();
     vars.insert(EnvKey::from("PATH"), "/usr/bin".into());
+    RIG_ENV.with(|extra| {
+        for (key, value) in extra.borrow().iter() {
+            vars.insert(EnvKey::from(key.as_str()), value.into());
+        }
+    });
     let env = EnvResolver::fixed(ResolvedEnv {
         vars,
         source: EnvSource::Fallback {

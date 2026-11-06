@@ -195,7 +195,7 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
 
-      - name: Check dictation, images, the Dashboard, typing and update notices
+      - name: Check dictation, images, the Dashboard, typing, update notices and terminal chats
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: pnpm --filter @auracode/desktop check:fixtures
@@ -242,6 +242,7 @@ jobs:
             target/images-browser
             target/dashboard-browser
             target/agent-updates-browser
+            target/terminal-chat-browser
             target/web-checks
             target/release-preview-*/*.png
           retention-days: 7

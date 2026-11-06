@@ -13,6 +13,11 @@ export interface XtermOptions {
   readonly inputLabel: string;
   readonly onLink?: (url: string) => void;
   readonly keys?: (event: KeyboardEvent) => boolean;
+  /**
+   * A terminal chat runs an agent's whole interface: larger type, deep scrollback and the
+   * blinking cursor its prompt expects. Tool terminals keep the compact defaults.
+   */
+  readonly variant?: "tool" | "chat";
 }
 
 type XtermModules = {
@@ -59,11 +64,11 @@ export function createXterm(
   const term = new Terminal({
     cols: 80,
     rows: 24,
-    scrollback: 1000,
-    fontSize: 12.5,
-    lineHeight: 1.44,
+    scrollback: options.variant === "chat" ? 10000 : 1000,
+    fontSize: options.variant === "chat" ? 13.5 : 12.5,
+    lineHeight: options.variant === "chat" ? 1.35 : 1.44,
     fontFamily: color("--g-mono", '"Geist Mono Variable", monospace'),
-    cursorBlink: false,
+    cursorBlink: options.variant === "chat",
     screenReaderMode: true,
     disableStdin: true,
     logLevel: "off",

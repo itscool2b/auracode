@@ -1,5 +1,5 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
   AppInfo,
@@ -10,6 +10,7 @@ import type {
 } from "../../bindings";
 import { getThemePreference } from "../../lib/appearance";
 import { AUTONOMIES, autonomyLabel, levelName } from "../../lib/chat/present";
+import { chatInterfaces } from "../../lib/chatInterface";
 import { editorName } from "../../lib/projectTools";
 import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
 import { playNotice } from "../../lib/sounds";
@@ -446,6 +447,13 @@ export function ChatsPage({
   const general = prefs.shown?.general ?? DEFAULT_GENERAL;
   const disabled = !prefs.saved;
   const [installed, setInstalled] = useState<readonly ProjectEditor[] | null>(null);
+  // New chats' interface is this device's choice (lib/chatInterface.ts), not a synced setting.
+  useSyncExternalStore(
+    chatInterfaces.subscribe,
+    chatInterfaces.getVersion,
+    chatInterfaces.getVersion,
+  );
+  const newChatInterface = chatInterfaces.defaultInterface();
   useEffect(() => {
     let live = true;
     editors?.().then(
@@ -467,6 +475,34 @@ export function ChatsPage({
       : (installed?.[0] ?? null);
   return (
     <>
+      <section className="settings-section" aria-labelledby="settings-new-chats">
+        <h2 id="settings-new-chats">New chats</h2>
+        <div className="settings-group">
+          <Row
+            title="Open new chats in"
+            detail={
+              newChatInterface === "terminal"
+                ? "Claude Code and Codex open in their own interface, in auracode's terminal; other agents open in Chat. Any chat switches from its header. This device only."
+                : "auracode's chat. Claude Code and Codex chats can switch to their own interface from the header."
+            }
+          >
+            <select
+              className="g-select settings-control settings-select"
+              aria-label="Open new chats in"
+              data-testid="settings-new-chat-interface"
+              value={newChatInterface}
+              onChange={(event) =>
+                chatInterfaces.setDefault(
+                  event.currentTarget.value === "terminal" ? "terminal" : "chat",
+                )
+              }
+            >
+              <option value="chat">Chat</option>
+              <option value="terminal">Terminal</option>
+            </select>
+          </Row>
+        </div>
+      </section>
       <section className="settings-section" aria-labelledby="settings-turns">
         <h2 id="settings-turns">Finished turns</h2>
         <div className="settings-group">

@@ -12,6 +12,7 @@
 //! chat reads `Stopped`.
 
 mod actor;
+pub use actor::TerminalOpened;
 mod agent_accounts;
 mod agent_installations;
 mod catalogs;
@@ -45,6 +46,7 @@ mod shared_mcp;
 mod spawner;
 #[cfg(feature = "account-sync")]
 mod sync_history;
+mod terminal_import;
 #[cfg(test)]
 mod tests;
 mod workspace;
@@ -1093,6 +1095,23 @@ impl SessionManager {
             reply,
         })
         .await
+    }
+
+    /// Opens a chat in its agent's own interface: the launch for a terminal, prepared as a start
+    /// would be. While it is open, Chat does not start; `terminal_ended` gives the session back.
+    pub async fn open_terminal(
+        &self,
+        chat_id: &str,
+    ) -> Result<actor::TerminalOpened, SessionError> {
+        self.ask(chat_id, |reply| ChatMsg::OpenTerminal { reply })
+            .await
+    }
+
+    /// The terminal `open_terminal` answered ended (it exited, or its page closed it).
+    pub fn terminal_ended(&self, chat_id: &str, generation: u64) {
+        if let Some(mailbox) = self.existing_actor(chat_id) {
+            let _ = mailbox.send(ChatMsg::TerminalEnded { generation });
+        }
     }
 
     pub async fn stop(&self, chat_id: &str) -> Result<(), SessionError> {
