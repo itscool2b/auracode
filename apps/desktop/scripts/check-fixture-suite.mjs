@@ -1,7 +1,8 @@
 /**
- * Run the fixture checks that read their server from CHECK_URL (dictation, images and the
- * Dashboard) against one owned Vite server, as CI's lint job does. Each check covers both
- * browser engines itself. Usage: node scripts/check-fixture-suite.mjs [--server URL]
+ * Run the fixture checks that read their server from CHECK_URL (dictation, images, the
+ * Dashboard, typing while a turn streams and agent update notices) against one owned Vite
+ * server, as CI's lint job does. Each check covers both browser engines itself.
+ * Usage: node scripts/check-fixture-suite.mjs [--server URL]
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -41,7 +42,13 @@ try {
     if (Date.now() >= deadline) throw new Error(`Fixture server did not become ready: ${output}`);
     await new Promise((done) => setTimeout(done, 150));
   }
-  for (const script of ["check-dictation.mjs", "check-images.mjs", "check-dashboard.mjs"]) {
+  for (const script of [
+    "check-dictation.mjs",
+    "check-images.mjs",
+    "check-dashboard.mjs",
+    "check-composer-follow.mjs",
+    "check-agent-updates.mjs",
+  ]) {
     await new Promise((complete, reject) => {
       const check = spawn(process.execPath, [resolve(app, "scripts", script)], {
         cwd: app,

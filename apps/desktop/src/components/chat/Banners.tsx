@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import type { EnvStatus, StorageStatus } from "../../bindings";
 import { type DismissState, SHOWN } from "../../lib/dismiss";
 import type { AgentEditState } from "../../lib/projectMemory";
@@ -39,8 +39,9 @@ export function envBanner(env: EnvStatus | null): string | null {
 
 /**
  * The window's banners: saving paused or failed, the environment fallback with Retry, the
- * database repair notice (dismissable for good), startup notices (dismissable for now), and
- * agents' direct edits to project memory, with Review and Undo.
+ * database repair notice (dismissable for good), startup notices (dismissable for now), agents'
+ * direct edits to project memory, with Review and Undo, and agents' newer releases (`updates`,
+ * their rows), each until its X for this run of auracode.
  */
 export function Banners({
   storage,
@@ -50,6 +51,7 @@ export function Banners({
   onRecoveryDismissed,
   notices,
   memoryEdits = [],
+  updates = [],
 }: {
   readonly storage: StorageStatus | null;
   readonly env: EnvStatus | null;
@@ -58,6 +60,7 @@ export function Banners({
   readonly onRecoveryDismissed: () => void;
   readonly notices: readonly string[];
   readonly memoryEdits?: readonly MemoryEditBanner[];
+  readonly updates?: readonly ReactNode[];
 }) {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const storageText = storageBanner(storage);
@@ -68,7 +71,8 @@ export function Banners({
     envText === null &&
     recoveryNotice === null &&
     shown.length === 0 &&
-    memoryEdits.length === 0
+    memoryEdits.length === 0 &&
+    updates.length === 0
   ) {
     return null;
   }
@@ -108,6 +112,7 @@ export function Banners({
       {memoryEdits.map((edit) => (
         <MemoryEditBannerView key={edit.key} edit={edit} />
       ))}
+      {updates}
     </ul>
   );
 }

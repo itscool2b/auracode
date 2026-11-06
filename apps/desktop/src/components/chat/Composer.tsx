@@ -5,6 +5,7 @@ import { matchingCommands, slashQuery } from "../../lib/chat/present";
 import { composerPlaceholder } from "../../lib/chat/queueWait";
 import type { ComposerContext, ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
+import { fitTextarea } from "../../lib/fitTextarea";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
 import {
   DictationBar,
@@ -97,10 +98,8 @@ export function Composer({
   useLayoutEffect(() => {
     const field = input.current;
     if (!field) return;
-    field.style.height = "0px";
     const ghost = ghostNode.current;
-    const natural = Math.max(field.scrollHeight, ghost?.scrollHeight ?? 0);
-    field.style.height = `${Math.min(240, Math.max(48, natural))}px`;
+    fitTextarea(field, 48, 240, () => ghost?.scrollHeight ?? 0);
     if (ghost) revealDictation(ghost, field);
   }, [text, dictation?.layout]);
   const fieldId = useId();

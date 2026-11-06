@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Pencil, X } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { QueuedPrompt } from "../../bindings";
 import type { QueueWaitView } from "../../lib/chat/queueWait";
+import { fitTextarea } from "../../lib/fitTextarea";
 
 /** The row action that keeps focus after a move or an edit re-renders the queue. */
 type RowAction = "edit" | "up" | "down";
@@ -333,8 +334,7 @@ export function QueueEditor({
   // biome-ignore lint/correctness/useExhaustiveDependencies: The value changes scrollHeight after React commits the textarea.
   useLayoutEffect(() => {
     if (!field.current) return;
-    field.current.style.height = "0px";
-    field.current.style.height = `${Math.min(160, Math.max(36, field.current.scrollHeight))}px`;
+    fitTextarea(field.current, 36, 160);
   }, [text]);
   useLayoutEffect(() => {
     const node = field.current;

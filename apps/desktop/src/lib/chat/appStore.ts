@@ -42,6 +42,12 @@ export const STORAGE_POLL_MS = 5000;
 export const STORAGE_ALERT_POLL_MS = 2000;
 /** The env and the agents are polled this often while they are still being worked out. */
 export const DETECTION_POLL_MS = 1000;
+/**
+ * A release check still running keeps the agents polled at `DETECTION_POLL_MS` this long after a
+ * start only: startup's checks finish well within it (ten seconds per agent at most), while an
+ * agent installed later waits for the 15-minute release round and needs no fast polling.
+ */
+export const RELEASE_POLL_WINDOW_MS = 120_000;
 /** Release metadata arrives independently of initial installation detection. */
 export const CATALOG_POLL_MS = 60_000;
 /** A status channel that ended is subscribed again after this long. */
@@ -108,6 +114,9 @@ export class AppStore {
   /** Status updates that arrived while `#reloading` was on its way, newest last. */
   #missed: ChatStatusUpdate[] = [];
 
+  /** When polling last started, for `RELEASE_POLL_WINDOW_MS`. */
+  #startedAt = 0;
+
   constructor(transport: Transport) {
     this.#transport = transport;
   }
@@ -125,6 +134,7 @@ export class AppStore {
   start(): void {
     if (this.#running) return;
     this.#running = true;
+    this.#startedAt = Date.now();
     const run = ++this.#run;
     this.#subscribeStatus(run);
     void this.reloadChats();
@@ -250,7 +260,13 @@ export class AppStore {
     } catch {
       // Agents stay as they were; the next poll or Refresh tries again.
     }
-    const checking = this.#state.agents?.some((agent) => agent.availability.state === "checking");
+    // Quickly while an installation or its release check is still being worked out, so an update
+    // notice shows soon after a start.
+    const early = Date.now() - this.#startedAt < RELEASE_POLL_WINDOW_MS;
+    const checking = this.#state.agents?.some(
+      (agent) =>
+        agent.availability.state === "checking" || (early && agent.harness?.state === "checking"),
+    );
     this.#later(
       run,
       checking ? DETECTION_POLL_MS : CATALOG_POLL_MS,

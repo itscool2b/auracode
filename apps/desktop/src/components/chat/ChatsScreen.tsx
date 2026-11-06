@@ -1,6 +1,7 @@
 import { PanelLeft } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
+import { availableUpdates, updateNotices, workingChats } from "../../lib/agentUpdates";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import { newChatAgent, projectChatContext } from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
@@ -15,6 +16,7 @@ import {
 import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { type AgentUpdateActions, AgentUpdateBanner } from "./AgentUpdateBanner";
 import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
@@ -102,6 +104,18 @@ export function ChatsScreen({
   readonly onReviewMemory?: (projectId: string, revision: string) => void;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
+  const dismissedUpdates = useSyncExternalStore(
+    updateNotices.subscribe,
+    updateNotices.getSnapshot,
+    updateNotices.getSnapshot,
+  );
+  // One object for the screen's life, so each notice asks its agent's maintenance once.
+  const [updateActions] = useState<AgentUpdateActions>(() => ({
+    maintenance: (agentId) => transport.agentMaintenance(agentId),
+    update: (agentId) => transport.agentUpdate(agentId),
+    refresh: () => app.refreshAgents(),
+    openAgents: onAgents,
+  }));
   const memoryEdits = useAgentMemoryEdits(memory);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
@@ -299,6 +313,17 @@ export function ChatsScreen({
           onRecoveryDismissed={onRecoveryDismissed}
           notices={info.notices}
           memoryEdits={memoryBanners}
+          updates={availableUpdates(snapshot.agents)
+            .filter((update) => !dismissedUpdates.has(update.key))
+            .map((update) => (
+              <AgentUpdateBanner
+                key={update.key}
+                update={update}
+                working={workingChats(snapshot.chats, update.agentId)}
+                actions={updateActions}
+                onDismiss={() => updateNotices.dismiss(update.key)}
+              />
+            ))}
         />
         {selected === null ? (
           <NewChat

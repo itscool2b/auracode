@@ -418,6 +418,8 @@ function synthetic(mode: string): AuraEvent[] {
           },
         ],
       }),
+      // `&changed=7`: more edited files, for the changed-files card's row.
+      ...extraEdits(Number(new URLSearchParams(location.search).get("changed") ?? 1) - 1),
       ev.message(
         "files-answer",
         "The jump came from `src/components/Sidebar.tsx:18`, where the list rendered again, so src/styles.css:4 now fixes the row height. [ChatView.tsx:120](src/components/ChatView.tsx#L120) passes the selected id, and `Sidebar.tsx` is the only component that changed shape.\n\nNot files: `console.log`, `src/missing.ts` and version 1.2.3. The old helper was in src/removed.ts:9.",
@@ -1381,5 +1383,29 @@ export function mountPreview(container: HTMLElement): void {
     ) : (
       preview
     ),
+  );
+}
+
+/** Completed edits to `count` more files, so the changed-files card has names to fit. */
+function extraEdits(count: number): AuraEvent[] {
+  const names = [
+    "src/lib/dashboard.ts",
+    "src/components/dashboard/DashboardScreen.tsx",
+    "src/components/dashboard/dashboard.css",
+    "src/shell.css",
+    "src/App.tsx",
+    "docs/design/visual-language.md",
+    "src/components/chat/ChatList.tsx",
+    "src/main.tsx",
+    "src/lib/processes.ts",
+  ];
+  return names.slice(0, Math.max(0, count)).map((path, index) =>
+    ev.toolCall(`files-extra-${index}`, {
+      kind: "edit",
+      title: `Edit ${path}`,
+      status: "completed",
+      locations: [{ path, line: 1 }],
+      content: [{ type: "diff", path, old_text: "a", new_text: "b", truncated: null }],
+    }),
   );
 }

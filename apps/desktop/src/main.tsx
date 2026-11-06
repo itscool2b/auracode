@@ -101,6 +101,10 @@ void appearanceReady.then(() => {
         void import("./dev/dashboardPreview").then(({ mountDashboardPreview }) =>
           mountDashboardPreview(container),
         );
+      else if (mode === "agent-updates")
+        void import("./dev/agentUpdatesPreview").then(({ mountAgentUpdatesPreview }) =>
+          mountAgentUpdatesPreview(container),
+        );
       else if (mode === "dictation")
         void import("./dev/dictationPreview").then(({ mountDictationPreview }) =>
           mountDictationPreview(container),

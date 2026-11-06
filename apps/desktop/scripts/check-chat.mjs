@@ -717,6 +717,31 @@ async function fileLinks(page, theme) {
     .analyze();
   assert.deepEqual(scan.violations, [], `${theme} file links accessibility`);
   await page.screenshot({ path: resolve(out, `file-links-${theme}.png`) });
+
+  // Many changed files keep one row: whole names that fit, the rest as "N more", Review beside.
+  await page.goto(`${url}/?preview=file-links&changed=7`);
+  const many = page.getByTestId("changed-files").last();
+  await many.waitFor();
+  await many.scrollIntoViewIfNeeded();
+  const row = await many.evaluate((node) => {
+    const top = (selector) => node.querySelector(selector).getBoundingClientRect().top;
+    const shown = [...node.querySelectorAll("li:not([hidden])")];
+    return {
+      sameRow: Math.abs(top(".chat-changed-review") - top(".chat-changed-count")) < 8,
+      inside:
+        node.getBoundingClientRect().right <=
+        node.parentElement.getBoundingClientRect().right + 0.5,
+      cut: shown
+        .filter((li) => li.dataset.name !== undefined)
+        .some((li) => li.scrollWidth > li.clientWidth + 1),
+      more: node.querySelector("li[data-more]:not([hidden])")?.textContent ?? null,
+      names: shown.filter((li) => li.dataset.name !== undefined).length,
+    };
+  });
+  assert.equal(row.sameRow, true, `${theme}: Review shares the changed-files row`);
+  assert.equal(row.inside, true, `${theme}: the changed-files card stays in its column`);
+  assert.equal(row.cut, false, `${theme}: changed file names show whole`);
+  assert.equal(row.more, `${7 - row.names} more`);
 }
 
 async function richAnswer(page, theme) {
