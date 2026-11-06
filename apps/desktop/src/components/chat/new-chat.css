@@ -1052,3 +1052,13 @@
 .new-chat-agent:is(:active, :has(> input:checked)) > small {
   color: var(--g-fg-1);
 }
+
+/* Open in: Chat or Terminal, for agents with a terminal; the shared segmented control. */
+.new-chat-interface {
+  border-top: 1px solid var(--g-line-faint);
+}
+
+.new-chat-interface-choice {
+  justify-self: start;
+  margin: 0;
+}

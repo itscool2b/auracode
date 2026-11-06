@@ -23,6 +23,7 @@ import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
 import { projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
+import { type ChatInterface, chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
 import { agentVersion, builtInPath } from "../../lib/format";
 import { sameFolder } from "../../lib/gitWorkspace";
@@ -295,6 +296,16 @@ export function NewChat({
   // The one lineup every agent list reads, so "Other agents" counts the same everywhere.
   const { usable: available, others: unavailable } = agentLineup(agents ?? []);
   const selected = available.find((agent) => agent.id === state.agentId) ?? null;
+  // Chat or Terminal for the new chat, starting from this device's default (Settings > Chats).
+  const [interfaceChoice, setInterfaceChoice] = useState<ChatInterface>(() =>
+    chatInterfaces.defaultInterface(),
+  );
+  const terminalOffered = selected !== null && terminalSupported(selected.id);
+  // Every way a chat is made ends here: it opens as chosen, Chat for agents without a terminal.
+  const created = (chat: ChatSummary) => {
+    chatInterfaces.set(chat.id, terminalSupported(chat.agent_id) ? interfaceChoice : "chat");
+    onCreated(chat);
+  };
   // Rust reviews the worktree for the chosen agent, or the first one that can run until one is.
   const reviewAgent = selected?.id ?? available[0]?.id ?? null;
   useEffect(() => {
@@ -305,7 +316,7 @@ export function NewChat({
   const worktreeMode = worktree.kind === "git" && worktree.options.mode === "worktree";
   // Rust persisted setup admission before exposing the chat. Its normal composer remains usable.
   const madeWorktree = (result: WorktreeChatResult, _plan: WorktreeChatPlan) => {
-    onCreated(result.chat.chat);
+    created(result.chat.chat);
   };
   const choiceState = (agent: AgentEntry): ChoiceState =>
     agent.availability.state === "checking"
@@ -359,7 +370,7 @@ export function NewChat({
         if (!canCreate || (busy && !allowBusy)) return;
         if (!workspace) {
           void draft.create().then((chat) => {
-            if (chat) onCreated(chat);
+            if (chat) created(chat);
           });
           return;
         }
@@ -412,7 +423,7 @@ export function NewChat({
             return { type: "local" as const, entry };
           })
           .then((made) => {
-            if (made?.type === "local") onCreated(made.entry.chat);
+            if (made?.type === "local") created(made.entry.chat);
             else if (made?.type === "worktree") madeWorktree(made.result, made.plan);
           });
       }}
@@ -536,6 +547,26 @@ export function NewChat({
             )}
           </button>
         </div>
+        {terminalOffered ? (
+          <div className="new-chat-row new-chat-interface" data-testid="new-chat-interface">
+            <span className="new-chat-field-label">Open in</span>
+            <fieldset className="g-segmented new-chat-interface-choice" aria-label="Open in">
+              {(["chat", "terminal"] as const).map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  className="g-segment"
+                  aria-pressed={interfaceChoice === choice}
+                  data-test-interface={choice}
+                  onClick={() => setInterfaceChoice(choice)}
+                >
+                  {choice === "chat" ? "Chat" : "Terminal"}
+                </button>
+              ))}
+            </fieldset>
+            <span aria-hidden="true" />
+          </div>
+        ) : null}
         <div className="new-chat-folder">
           <span className="new-chat-field-label">Folder</span>
           <Folder className="new-chat-folder-icon" size={16} aria-hidden="true" />
