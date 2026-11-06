@@ -26,7 +26,16 @@ const WORKING: ReadonlySet<SessionStatus> = new Set([
   "stopping",
 ]);
 
-export function laneOf(chat: ChatSummary, now: number): Lane | null {
+/** Whether a chat's agent runs in a terminal of this window (its session shows as stopped then). */
+export type InTerminal = (chatId: string) => boolean;
+
+const nowhere: InTerminal = () => false;
+
+export function laneOf(
+  chat: ChatSummary,
+  now: number,
+  inTerminal: InTerminal = nowhere,
+): Lane | null {
   if (
     chat.needs_attention ||
     chat.status === "auth_required" ||
@@ -34,13 +43,14 @@ export function laneOf(chat: ChatSummary, now: number): Lane | null {
     folderStateLabel(chat.folder_state) !== null
   )
     return "attention";
-  if (WORKING.has(chat.status)) return "working";
+  if (WORKING.has(chat.status) || inTerminal(chat.id)) return "working";
   return now - chat.updated_at <= FINISHED_WINDOW_MS ? "finished" : null;
 }
 
 /** What a card says the chat is doing, or why it needs you. */
-export function stateLine(chat: ChatSummary): string {
+export function stateLine(chat: ChatSummary, inTerminal: InTerminal = nowhere): string {
   if (chat.needs_attention) return "Waiting for your answer";
+  if (inTerminal(chat.id)) return "In the terminal";
   const folder = folderStateLabel(chat.folder_state);
   if (folder !== null) return folder.charAt(0).toUpperCase() + folder.slice(1);
   switch (chat.status) {
@@ -66,10 +76,14 @@ export function stateLine(chat: ChatSummary): string {
 export type Board = Record<Lane, ChatSummary[]>;
 
 /** The chats in their lanes, most recent activity first. */
-export function boardOf(chats: readonly ChatSummary[], now: number): Board {
+export function boardOf(
+  chats: readonly ChatSummary[],
+  now: number,
+  inTerminal: InTerminal = nowhere,
+): Board {
   const board: Board = { attention: [], working: [], finished: [] };
   for (const chat of chats) {
-    const lane = laneOf(chat, now);
+    const lane = laneOf(chat, now, inTerminal);
     if (lane !== null) board[lane].push(chat);
   }
   for (const lane of LANES) board[lane].sort((a, b) => b.updated_at - a.updated_at);

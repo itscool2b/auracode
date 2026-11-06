@@ -267,6 +267,9 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 pub struct ChatTerminalStarted {
     pub terminal_id: String,
     pub omitted: Vec<String>,
+    /// What the page types into the terminal once the agent's interface is ready (the visible
+    /// handoff from another agent), never part of the command line.
+    pub first_input: Option<String>,
 }
 
 /// Opens a chat in its agent's own interface in a reserved terminal (`terminal_reserve`): the
@@ -302,6 +305,7 @@ pub async fn chat_terminal_start(
     let sessions = state.sessions()?;
     let opened = sessions.open_terminal(&chat_id).await?;
     let generation = opened.generation;
+    let first_input = opened.first_input.clone();
     let give_back = |error: AppError| {
         sessions.terminal_ended(&chat_id, generation);
         error
@@ -326,6 +330,7 @@ pub async fn chat_terminal_start(
     Ok(ChatTerminalStarted {
         terminal_id: id,
         omitted: opened.omitted,
+        first_input,
     })
 }
 

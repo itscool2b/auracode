@@ -1221,6 +1221,11 @@ export type ChatSummary = {
 export type ChatTerminalStarted = {
 	terminal_id: string,
 	omitted: string[],
+	/**
+	 *  What the page types into the terminal once the agent's interface is ready (the visible
+	 *  handoff from another agent), never part of the command line.
+	 */
+	first_input: string | null,
 };
 
 export type CheckpointSummary = {

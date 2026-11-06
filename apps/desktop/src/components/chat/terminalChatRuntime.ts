@@ -46,6 +46,11 @@ export const chatTerminalTransport: TerminalChatTransport = {
   ended: chatTerminalEnded,
 };
 
+/** The agent's interface counts as ready once its output has been quiet this long. */
+export const SETTLED_MS = 900;
+/** The first input waits at most this long for the interface to settle, then goes anyway. */
+export const FIRST_INPUT_WAIT_MS = 20_000;
+
 /** How long a terminal chat's agent gets to exit by itself before its processes are closed. */
 export const EXIT_GRACE_MS = 2500;
 
@@ -70,6 +75,7 @@ export class TerminalChatRuntime {
   #disposed = false;
   #wantsFocus = false;
   #exited: (() => void) | null = null;
+  #lastOutput = 0;
 
   constructor(chatId: string, label: string, transport: TerminalChatTransport) {
     this.#chatId = chatId;
@@ -147,6 +153,7 @@ export class TerminalChatRuntime {
         start: async (id, chatId, size) => {
           const started = await transport.start(id, chatId, size);
           this.#set({ omitted: started.omitted });
+          if (started.first_input) void this.#typeWhenSettled(started.first_input);
           return started.terminal_id;
         },
         read: (id) => transport.read(id),
@@ -155,7 +162,10 @@ export class TerminalChatRuntime {
         // Closing always gives the chat its session back, whether the agent exited or not.
         close: (id) => transport.close(id).finally(() => transport.ended(id)),
       },
-      (bytes) => new Promise<void>((resolve) => term.write(bytes, resolve)),
+      (bytes) => {
+        this.#lastOutput = Date.now();
+        return new Promise<void>((resolve) => term.write(bytes, resolve));
+      },
       (state) => {
         if (this.#disposed) return;
         term.options.disableStdin = state.state !== "running";
@@ -182,6 +192,25 @@ export class TerminalChatRuntime {
     if (this.#wantsFocus && this.host.isConnected) term.focus();
     this.#wantsFocus = false;
     void session.start(this.#chatId, { rows: term.rows, cols: term.cols });
+  }
+
+  /**
+   * Types `text` into the agent once its interface has drawn and gone quiet, as one bracketed
+   * paste (so its line breaks stay part of the message) followed by Enter.
+   */
+  async #typeWhenSettled(text: string): Promise<void> {
+    const started = Date.now();
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (this.#disposed || !this.#session) return;
+      const quiet = this.#lastOutput > 0 && Date.now() - this.#lastOutput >= SETTLED_MS;
+      if (quiet || Date.now() - started >= FIRST_INPUT_WAIT_MS) break;
+    }
+    if (this.#snapshot.state.state !== "running") return;
+    const encoder = new TextEncoder();
+    this.#session?.write(encoder.encode(`\u001b[200~${text}\u001b[201~`));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    this.#session?.write(encoder.encode("\r"));
   }
 
   /** Starts the agent again after it exited or failed, in a fresh view. */
@@ -250,6 +279,12 @@ export class TerminalChats {
   has(chatId: string): boolean {
     return this.#runtimes.has(chatId);
   }
+
+  /** The chat's agent is starting or running in its terminal now. */
+  readonly running = (chatId: string): boolean => {
+    const state = this.#runtimes.get(chatId)?.getSnapshot().state.state;
+    return state === "starting" || state === "running";
+  };
 
   /** Ends the chat's terminal (switching to Chat, another agent, or deleting the chat). */
   async close(chatId: string): Promise<void> {

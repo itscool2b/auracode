@@ -465,6 +465,10 @@ pub struct TerminalOpened {
     pub generation: u64,
     /// Shared servers the agent's terminal cannot take, with why.
     pub omitted: Vec<String>,
+    /// What the terminal types first, once the agent's interface is ready: the visible handoff
+    /// when the chat moved here from another agent. Input, never an argument: a command line is
+    /// readable by other programs and logs.
+    pub first_input: Option<String>,
 }
 
 /// Where a terminal's conversation is read back from (terminal_import.rs): the agent's session
@@ -3447,7 +3451,6 @@ The person continues this conversation here, in your terminal. Reply only that y
             session: session.clone(),
             model,
             add_dirs: &add_dirs,
-            first_message,
         };
         let made = if spec.kind == aura_protocol::DriverKind::Claude {
             aura_drivers::terminal::claude(&prepared.launch, &options)
@@ -3495,6 +3498,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             },
             generation,
             omitted: made.omitted,
+            first_input: first_message,
         };
         if reply.send(Ok(opened)).is_err() {
             // Nobody waits for it any more (the page closed): give the session back now.

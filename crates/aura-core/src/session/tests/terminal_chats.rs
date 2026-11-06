@@ -41,6 +41,8 @@ async fn a_terminal_starts_a_claude_session_chat_continues_and_chat_waits_while_
         .expect("a new session's ID")
         .to_owned();
     assert_eq!(opened.spec.folder, rig.folder);
+    // A chat that did not move here from another agent has nothing to type first.
+    assert_eq!(opened.first_input, None);
     // Chat does not start while the terminal holds the session, and a second terminal waits too.
     let start = rig.manager.start(&chat.id, false).await;
     assert!(
