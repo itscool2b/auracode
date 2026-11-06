@@ -66,6 +66,27 @@ export function TerminalChat({
           </p>
         ) : null}
       </div>
+      {snapshot.link ? (
+        // Opens in the browser, never here: the opener plugin takes target=_blank clicks for http
+        // and https only (Markdown.tsx). The full address shows first, as in the sign-in sheet.
+        <p className="chat-banner terminal-chat-link" data-testid="terminal-chat-link">
+          <a
+            href={snapshot.link}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={() => runtime.dismissLink()}
+          >
+            Open link: {snapshot.link}
+          </a>
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-28"
+            onClick={() => runtime.dismissLink()}
+          >
+            Dismiss
+          </button>
+        </p>
+      ) : null}
       {ended ? (
         <div className="terminal-chat-ended" data-testid="terminal-chat-ended">
           <p role={state.state === "failed" ? "alert" : "status"}>{endedText}</p>

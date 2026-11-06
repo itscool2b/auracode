@@ -15,6 +15,18 @@
   padding: var(--g-space-8) var(--g-space-16) var(--g-space-16);
 }
 
+.terminal-chat-link {
+  flex: none;
+  margin: 0;
+}
+
+.terminal-chat-link > a {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--g-fg-1);
+}
+
 .terminal-chat-note {
   flex: none;
   margin: 0;

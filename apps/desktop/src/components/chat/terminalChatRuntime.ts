@@ -17,6 +17,11 @@ export interface TerminalChatSnapshot {
   readonly state: TerminalState | { readonly state: "idle" };
   /** Shared servers its agent's terminal could not take, with why. */
   readonly omitted: readonly string[];
+  /**
+   * A link clicked in the terminal, shown in full before it opens: terminal output is any
+   * program's, so its link text can say one address and lead to another.
+   */
+  readonly link: string | null;
 }
 
 /** The IPC a terminal chat uses; tests replace it. */
@@ -56,7 +61,7 @@ export class TerminalChatRuntime {
   readonly #label: string;
   readonly #transport: TerminalChatTransport;
   readonly #listeners = new Set<() => void>();
-  #snapshot: TerminalChatSnapshot = { state: { state: "idle" }, omitted: [] };
+  #snapshot: TerminalChatSnapshot = { state: { state: "idle" }, omitted: [], link: null };
   #view: XtermView | null = null;
   #session: TerminalSession | null = null;
   #opening: Promise<void> | null = null;
@@ -105,6 +110,11 @@ export class TerminalChatRuntime {
     }
   }
 
+  /** Puts away the link shown for confirmation. */
+  dismissLink(): void {
+    if (this.#snapshot.link !== null) this.#set({ link: null });
+  }
+
   detach(): void {
     this.host.remove();
   }
@@ -126,7 +136,7 @@ export class TerminalChatRuntime {
       inputLabel: `${this.#label} terminal input`,
       keys: (event) => shellKeys(event, () => view.term.hasSelection()),
       variant: "chat",
-      onLink: (url) => window.open(url, "_blank", "noopener"),
+      onLink: (url) => this.#set({ link: url }),
     });
     this.#view = view;
     const term = view.term;
@@ -179,7 +189,7 @@ export class TerminalChatRuntime {
     if (this.#disposed) return;
     const container = this.host.parentElement;
     await this.#teardown();
-    this.#snapshot = { state: { state: "idle" }, omitted: [] };
+    this.#snapshot = { state: { state: "idle" }, omitted: [], link: null };
     this.#opening = null;
     if (container) this.attach(container);
   }
