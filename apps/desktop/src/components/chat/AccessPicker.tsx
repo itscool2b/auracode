@@ -9,6 +9,8 @@ const ACCESS_LABEL: Record<Autonomy, string> = {
   auto_edit: "Allow edits",
   full_auto: "Full access",
 };
+/** What a change kept for the next start says while the agent is not running. */
+const APPLIES_AT_START = "Applies when the agent starts.";
 const ACCESS_DESCRIPTION: Record<Autonomy, string> = {
   ask: "Review actions the agent asks permission to perform.",
   auto_edit: "Allow file edits. Other actions follow the agent's approval policy.",
@@ -57,6 +59,9 @@ export function AccessPicker({
   // change waits until it is ready.
   const running = status === "ready" || status === "running" || status === "cancelling";
   const waiting = status === "stopped" || status === "failed" || status === "auth_required";
+  // The lists came from the running agent: they carry its capabilities. Lists fetched before it
+  // started (the status turns ready a moment before they are fetched again) say nothing of it.
+  const listed = running && lists?.capabilities != null;
   const current = hasNativeAccess ? access?.effective : (lists?.autonomy.requested ?? autonomy);
   const pending =
     controlSaving?.type === "access" ? controlSaving.value : (access?.pending ?? saving);
@@ -69,9 +74,9 @@ export function AccessPicker({
     : ACCESS_LABEL[lists?.autonomy.requested ?? autonomy];
   const label =
     choices.find((choice) => choice.value === displayed)?.name ??
-    (!running
+    (!listed
       ? startLabel
-      : lists && (hasNativeAccess || choices.length === 0)
+      : hasNativeAccess || choices.length === 0
         ? "Access unavailable"
         : ACCESS_LABEL[(displayed as Autonomy) ?? autonomy]);
   const planning = workflow?.effective === "plan";
@@ -81,16 +86,20 @@ export function AccessPicker({
       : (workflow?.pending ?? workflow?.effective);
   const workflowLabel =
     workflow?.choices?.find((choice) => choice.value === displayedWorkflow)?.name ??
-    (lists && running ? "Mode unavailable" : "Mode");
+    (listed ? "Mode unavailable" : "Mode");
   const startNote =
     choices.length === 0
       ? null
       : waiting
-        ? "Applies when the agent starts."
+        ? APPLIES_AT_START
         : status === "starting"
           ? "Access opens once the agent has started."
           : null;
-  const accessNote = access?.note ?? lists?.autonomy.note ?? null;
+  // The session says a change kept for the start "applies when the agent starts"; the line above
+  // says so for as long as it is true, and not once the start is under way.
+  const accessNote = [access?.note, lists?.autonomy.note].find(
+    (note) => note && note !== APPLIES_AT_START,
+  );
   // Executing is the ordinary state, so its control is a quiet icon; Plan names itself, lit.
   const planShown = displayedWorkflow === "plan";
   return (
@@ -155,7 +164,7 @@ export function AccessPicker({
         </fieldset>
         {!choices.length ? (
           <p className="chat-picker-empty">
-            {lists && running
+            {listed
               ? "This connection does not offer access controls."
               : "Access controls load when the agent starts."}
           </p>
@@ -166,7 +175,7 @@ export function AccessPicker({
             <p>Change access when the agent is idle with no queued messages or pending requests.</p>
           ) : null}
           {startNote ? <p>{startNote}</p> : null}
-          {accessNote && accessNote !== startNote ? <p>{accessNote}</p> : null}
+          {accessNote ? <p>{accessNote}</p> : null}
           {(access?.native_mode ?? lists?.autonomy.native_mode) ? (
             <p>Native setting: {access?.native_mode ?? lists?.autonomy.native_mode}</p>
           ) : null}
@@ -229,7 +238,7 @@ export function AccessPicker({
         </fieldset>
         {!workflow?.choices?.length ? (
           <p className="chat-picker-empty">
-            {lists && running
+            {listed
               ? "Native Plan mode is not available on this connection."
               : "Modes load when the agent starts."}
           </p>

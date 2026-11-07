@@ -4,8 +4,28 @@ import type { SessionLists } from "../../bindings";
 import { lists } from "../../lib/chat/testing";
 import { AccessPicker } from "./AccessPicker";
 
+/** What a running agent reports: lists fetched after it started carry its capabilities. */
+const running = {
+  images: false,
+  steer: false,
+  interrupt: false,
+  resume: false,
+  fork: false,
+  rewind: false,
+  set_model: false,
+  set_effort: false,
+  permissions: true,
+  plans: false,
+  usage: false,
+  limits: false,
+  slash_commands: false,
+  add_dirs: false,
+  autonomy_levels: [],
+} satisfies SessionLists["capabilities"];
+
 const nativeLists = (): SessionLists =>
   lists(1, {
+    capabilities: running,
     controls: {
       version: 1,
       access: {
@@ -80,7 +100,7 @@ describe("native access and planning", () => {
     }
   });
   it("reports unavailable native planning and offers no fabricated choices", () => {
-    const html = render({ lists: lists(1) });
+    const html = render({ lists: lists(1, { capabilities: running }) });
     expect(html).toContain("Native Plan mode is not available on this connection.");
     expect(html).toContain('aria-label="Mode unavailable. Working mode"');
     expect(html).not.toContain('aria-label="Execute. Working mode"');
@@ -142,9 +162,18 @@ describe("access before the agent runs", () => {
     expect(html).toContain("Modes load when the agent starts.");
   });
   it("still says a running agent offers no access control", () => {
-    const html = render({ lists: lists(1), status: "ready" });
+    const html = render({ lists: lists(1, { capabilities: running }), status: "ready" });
     expect(html).toContain('aria-label="Access unavailable. Access level"');
     expect(html).toContain("This connection does not offer access controls.");
+  });
+  it("does not judge a just-ready agent by the lists fetched while it started", () => {
+    // Natively, 6 November 2026: the status turned ready 200 ms before the lists were fetched
+    // again, and the pill flashed "Access unavailable".
+    const html = render({ lists: lists(1), status: "ready" });
+    expect(html).not.toContain("Access unavailable");
+    expect(html).toContain('aria-label="Full access. Access level"');
+    expect(html).not.toContain("does not offer access controls");
+    expect(html).toContain('aria-label="Mode. Working mode"');
   });
   it("offers a stopped chat's access for its next start", () => {
     for (const status of ["stopped", "failed", "auth_required"] as const) {
@@ -193,5 +222,9 @@ describe("access before the agent runs", () => {
     state.autonomy = { ...state.autonomy, note: "Applies when the agent starts." };
     const html = render({ lists: state, status: "stopped" });
     expect(html.match(/Applies when the agent starts\./g)).toHaveLength(1);
+    // Natively: the stopped chat's note stayed beside "Access opens…" while the agent started.
+    const starting = render({ lists: state, status: "starting" });
+    expect(starting).toContain("Access opens once the agent has started.");
+    expect(starting).not.toContain("Applies when the agent starts.");
   });
 });
