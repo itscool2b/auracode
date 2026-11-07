@@ -61,6 +61,58 @@ async fn update_ownership_includes_post_update_verification() {
     );
 }
 
+/// Run in terminal after a failed update: the terminal needs an installation, and the failed update
+/// dropped the cached one. It used to refuse until someone pressed Refresh, so it never started.
+#[tokio::test]
+async fn a_failed_update_detects_again_and_a_terminal_starts_without_a_refresh() {
+    let (machine, bin) = vendor_machine();
+    let detector = machine.detector(machine.env_with_path(&[&bin], &[]));
+    detector.detect(aura_agents::get("claude").unwrap()).await;
+    std::fs::write(machine.fake.join("claude.maintenance"), "fail").unwrap();
+    assert_eq!(
+        detector.update("claude").await,
+        Err(MaintenanceError::Failed(Some(1)))
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !detector
+            .cached()
+            .iter()
+            .any(|entry| entry.id == "claude" && entry.installation.is_some())
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the failed update detects the agent again");
+    let (name, installation) = detector.fresh_installation("claude").await.unwrap();
+    assert_eq!(name, "Claude Code");
+    assert_eq!(installation.version, "2.1.310");
+}
+
+#[tokio::test]
+async fn a_vendor_terminal_waits_for_a_running_update() {
+    let (machine, bin) = vendor_machine();
+    std::fs::write(machine.fake.join("claude.maintenance"), "slow").unwrap();
+    let detector = machine.detector(machine.env_with_path(&[&bin], &[]));
+    let worker = std::sync::Arc::clone(&detector);
+    let update = tokio::spawn(async move { worker.update("claude").await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !machine
+            .runs("claude")
+            .iter()
+            .any(|run| run["argv"] == serde_json::json!(["update"]))
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let refused = detector.fresh_installation("claude-acp").await.unwrap_err();
+    assert!(refused.contains("is updating"), "{refused}");
+    assert_eq!(update.await.unwrap(), Ok(()));
+    assert!(detector.fresh_installation("claude").await.is_ok());
+}
+
 #[tokio::test]
 async fn status_runs_the_exact_vendor_command_and_drops_account_details() {
     let (machine, bin) = vendor_machine();

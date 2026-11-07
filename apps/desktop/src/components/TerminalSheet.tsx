@@ -214,7 +214,7 @@ export function TerminalSheet({
                 : state.exitCode === null
                   ? "The terminal closed without an exit status."
                   : purpose === "update"
-                    ? `The update exited with code ${state.exitCode}. Its output above says why.`
+                    ? `The update exited with code ${state.exitCode}. Its output below says why.`
                     : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
 
   const outcome =
@@ -343,7 +343,9 @@ export function TerminalSheet({
                   ? "Start setup"
                   : purpose === "project"
                     ? "Start project terminal"
-                    : "Start sign-in"}
+                    : purpose === "update"
+                      ? "Start update"
+                      : "Start sign-in"}
           </button>
         )}
       </footer>

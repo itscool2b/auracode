@@ -1028,9 +1028,64 @@ impl Detector {
         }
     }
 
+    /// The installation `id` runs, detected again now, with the agent's name. A vendor terminal
+    /// (sign-in, account token, update) starts from what is on disk: a failed update or a change
+    /// of executable settings drops the cached detection on purpose, and a terminal that waited for
+    /// someone to press Refresh never started (owner, 7 November 2026: "it doesn't even boot up
+    /// the terminal"). The new detection is kept, so the agent shows as ready again too.
+    pub async fn fresh_installation(
+        &self,
+        id: &str,
+    ) -> Result<(String, aura_protocol::agents::AgentInstallation), String> {
+        let Mode::Live(live) = &self.mode else {
+            return Err("This agent has no vendor commands.".into());
+        };
+        let spec = self
+            .connection_for(id)
+            .ok_or_else(|| format!("auracode doesn't know an agent called \"{id}\"."))?;
+        // Two updaters replacing one binary at once can leave it broken, and a sign-in started
+        // mid-update runs a binary that is being replaced.
+        if lock(&live.state)
+            .maintenance
+            .contains(crate::installation::provider_namespace(id))
+        {
+            return Err(format!(
+                "{} is updating; try again when the update finishes.",
+                spec.name
+            ));
+        }
+        let interrupted = || format!("Checking {} was interrupted; try again.", spec.name);
+        let detection = live
+            .probe(&spec, true)
+            .wait()
+            .await
+            .ok_or_else(interrupted)?;
+        match detection.availability {
+            Availability::Ready { .. } => detection
+                .installation
+                .map(|installation| (spec.name.to_owned(), installation))
+                .ok_or_else(|| format!("auracode can't run {}'s own commands.", spec.name)),
+            Availability::Missing { reason } | Availability::Broken { reason } => Err(reason),
+            Availability::Checking => Err(interrupted()),
+        }
+    }
+
     /// Explicit user action only. Serialize aliases of one provider and invalidate detection even
-    /// on failure, because a vendor installer may have partially changed its files.
+    /// on failure, because a vendor installer may have partially changed its files; a failed
+    /// update then detects the agent again at once, so it does not sit unchecked until a refresh.
     pub async fn update(&self, id: &str) -> Result<(), crate::maintenance::MaintenanceError> {
+        let result = self.update_once(id).await;
+        if result.is_err()
+            && let Mode::Live(live) = &self.mode
+            && let Some(spec) = self.connection_for(id)
+        {
+            // The guard is gone: this probe's result is kept.
+            drop(live.probe(&spec, true));
+        }
+        result
+    }
+
+    async fn update_once(&self, id: &str) -> Result<(), crate::maintenance::MaintenanceError> {
         use crate::maintenance::{self, MaintenanceError};
         let Mode::Live(live) = &self.mode else {
             return Err(MaintenanceError::Unsupported);
