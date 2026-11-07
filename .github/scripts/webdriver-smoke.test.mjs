@@ -198,6 +198,13 @@ test("the scenario drives create, typing, Stop and reload externally; only folde
     calls.filter((call) => call.type).map((call) => call.text),
     ["/echo External native WebDriver hello", "/slow"],
   );
+  const clicks = calls.filter((call) => call.click).map((call) => call.click);
+  assert(
+    clicks.indexOf('[data-testid="new-chat-button"]') <
+      clicks.findIndex((click) => click.startsWith('[data-testid="new-chat-agent"]')),
+    "New chat opens from the start screen before an agent is chosen",
+  );
+  assert(clicks.includes('[data-testid="new-chat-button"]'));
   assert(calls.some((call) => call.click === '[data-testid="composer-stop"]'));
   assert(calls.some((call) => call.click === '[data-testid="chat-stop-session"]'));
   assert.equal(calls.filter((call) => call.path === "/refresh").length, 2);

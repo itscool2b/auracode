@@ -39,6 +39,12 @@ export const ALLOWLIST = [
       "The passed status's pixel check is an SVG data URL, which cannot read a custom property.",
   },
   {
+    file: "components/chat/launch-art.css",
+    fragment: " * var(--launch-art-scale))",
+    reason:
+      "The start screen's drawing is the art tokens times the scale that fits it to the pane; no fixed size fits every piece in every window.",
+  },
+  {
     file: "components/setup/setup.css",
     fragment: "0.01ms !important",
     reason: "The app's reduced-motion switch ends every animation at once and still fires its end.",

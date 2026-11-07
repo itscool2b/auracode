@@ -43,6 +43,10 @@ export const MODES = [
   "plan",
   "error",
   "new",
+  // The start screen: a short piece grown to fit, the tallest, the widest (Braille dots).
+  "launch&art=p-51-mustang",
+  "launch&art=f-15-eagle",
+  "launch&art=f-35-lightning-ii",
   "history",
   "history-question",
   "partial-history",

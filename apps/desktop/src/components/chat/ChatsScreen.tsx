@@ -23,6 +23,7 @@ import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
 import { ChatView } from "./ChatView";
 import { CommandPalette, type PaletteCommand } from "./CommandPalette";
+import { LaunchArt } from "./LaunchArt";
 import { NewChat } from "./NewChat";
 import { ProjectDialog } from "./ProjectDialog";
 import { SidebarFooter } from "./SidebarFooter";
@@ -120,6 +121,9 @@ export function ChatsScreen({
   }));
   const memoryEdits = useAgentMemoryEdits(memory);
   const [selected, setSelected] = useState<string | null>(null);
+  // Launch shows the start screen's aircraft; New chat, a project's New chat and Ctrl+N open the
+  // composer, which then stays whenever no chat is open.
+  const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
   // Settings' default agent, read again whenever the chats come back into view (from Settings).
   const [defaultAgent, setDefaultAgent] = useState<string | null | undefined>(undefined);
@@ -283,6 +287,7 @@ export function ChatsScreen({
               ? (project) => {
                   if (!organization.data) return;
                   setSelected(null);
+                  setComposing(true);
                   setArchived(false);
                   setDraft(
                     new NewChatDraft(transport, projectChatContext(project, organization.data)),
@@ -308,6 +313,7 @@ export function ChatsScreen({
           onSelect={setSelected}
           onNewChat={() => {
             setSelected(null);
+            setComposing(true);
             setDraft(new NewChatDraft(transport));
           }}
         />
@@ -335,7 +341,9 @@ export function ChatsScreen({
               />
             ))}
         />
-        {selected === null ? (
+        {selected === null && !composing ? (
+          <LaunchArt />
+        ) : selected === null ? (
           <NewChat
             key={draft.key}
             workspace={workspace}
@@ -431,6 +439,7 @@ export function ChatsScreen({
               detail: "Choose an agent and project",
               run: () => {
                 setSelected(null);
+                setComposing(true);
                 setDraft(new NewChatDraft(transport));
               },
             },

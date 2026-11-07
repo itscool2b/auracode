@@ -345,6 +345,12 @@ export function renderText(catalogue, distribution) {
     "",
     "Agent marks: the logos shown beside the Claude Code (the Claude spark), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok Build (the Grok mark), OpenCode, oh-my-pi and Hermes agents, and the model makers' marks (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Mistral AI, Meta, Qwen and Moonshot AI), are trademarks of their respective owners. They only identify which agent a chat uses or whose model is working, imply no endorsement or partnership, and are not covered by these notices or by any license for auracode. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
     "",
+    ...(distribution === "desktop"
+      ? [
+          "Start screen aircraft: the pictures of aircraft drawn in text that the desktop app opens on are published text art by their artists (Mike Whaley, Joshua Bell, Radeon350, dew, Billcow168, Andrew S. Townley, Larry E. Cunningham, Sean Riesch, and others unsigned), kept as drawn and named under each picture. They are not covered by these notices or by any license for auracode. Their sources are listed in third-party/ascii-art.md.",
+          "",
+        ]
+      : []),
   ];
   const used = new Map();
   for (const record of records) {

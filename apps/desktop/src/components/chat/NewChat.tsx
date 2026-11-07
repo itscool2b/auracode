@@ -1,4 +1,4 @@
-import { AgentMark, PixelLoader } from "@auracode/ui/graphite";
+import { AgentMark, Logo, PixelLoader } from "@auracode/ui/graphite";
 import { Check, ChevronDown, Folder, RefreshCw, Search } from "lucide-react";
 import {
   useEffect,
@@ -31,7 +31,6 @@ import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
 import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { projectName } from "./ChatList";
-import { bootJet } from "./jets";
 import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
@@ -126,7 +125,7 @@ const STATE_LABEL: Record<ChoiceState, string> = {
 };
 
 /**
- * New chat: this launch's fighter jet in ASCII (`jets.ts`), and one composer card holding the
+ * New chat, after Grok's start screen: the logo, one sentence, and one composer card holding the
  * agents that can run here (each showing whether it is still being looked for, ready, or waiting
  * on a sign-in), the folder, and Create. Agents that cannot run here wait under "Other agents"
  * with their reason. Creating the chat starts its agent; errors show under the card.
@@ -155,7 +154,6 @@ export function NewChat({
   readonly recoveryApi?: WorktreeRecoveryApi;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
-  const jet = bootJet();
   const organization = useSyncExternalStore(
     workspace?.subscribe ?? noSubscribe,
     workspace?.getSnapshot ?? emptyWorkspace,
@@ -430,21 +428,16 @@ export function NewChat({
           });
       }}
     >
-      {/* Owner, 7 November 2026: the logo, title and line gave way to a jet, another each launch. */}
       <header className="new-chat-hero">
-        <h1 className="sr-only">
-          {draft.context ? `New chat in ${draft.context.projectName}` : "New chat"}
-        </h1>
-        <pre
-          className="new-chat-jet"
-          role="img"
-          aria-label={`${jet.name}, drawn in text`}
-          title={jet.name}
-          data-testid="new-chat-jet"
-          data-jet={jet.name}
-        >
-          {jet.art}
-        </pre>
+        <div className="new-chat-heading">
+          <Logo className="new-chat-logo" size={24} />
+          <h1 className="new-chat-title">New chat</h1>
+        </div>
+        <p className="new-chat-hint">
+          {draft.context
+            ? `Start a session in ${draft.context.projectName}.`
+            : "Choose an agent and a folder to work in."}
+        </p>
       </header>
       <div className="new-chat-card">
         <div className="new-chat-row">
