@@ -792,11 +792,11 @@ async fn a_reopened_chat_names_its_access_and_keeps_a_change_for_its_next_start(
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
-/// A new chat's agent takes a few seconds to start. Its access levels are offered meanwhile, and
-/// one chosen after the start's setup went out is applied as soon as the agent is ready, before
-/// the message sent while it started.
+/// A new chat's agent takes a few seconds to start. Its access levels are named meanwhile. Once
+/// the agent's process has its setup, a change is refused rather than kept for later: kept, a
+/// message sent before it applied could run on the access the person had just left.
 #[tokio::test]
-async fn a_new_chat_takes_an_access_change_while_its_agent_starts() {
+async fn a_new_chat_names_its_access_while_its_agent_starts_and_never_runs_a_stale_choice() {
     let (rig, seen, ready) = claude_rig(true);
     // An earlier chat taught the connection's levels.
     ready.add_permits(1);
@@ -816,7 +816,7 @@ async fn a_new_chat_takes_an_access_change_while_its_agent_starts() {
         lists.controls.access.effective.as_deref(),
         Some("legacy:full_auto")
     );
-    let lists = rig
+    let refused = rig
         .manager
         .set_control(
             &chat.id,
@@ -825,8 +825,8 @@ async fn a_new_chat_takes_an_access_change_while_its_agent_starts() {
             },
         )
         .await
-        .unwrap();
-    assert_eq!(lists.controls.access.pending.as_deref(), Some("legacy:ask"));
+        .expect_err("the agent already has its setup");
+    assert!(refused.to_string().contains("is starting"), "{refused}");
     let sent = rig.manager.send(&chat.id, "first words".into()).await;
     assert!(sent.unwrap().queued);
     ready.add_permits(1);
@@ -837,14 +837,16 @@ async fn a_new_chat_takes_an_access_change_while_its_agent_starts() {
     assert_eq!(lock(&seen.starts)[1], (Autonomy::FullAuto, None));
     assert_eq!(
         lock(&seen.commands).as_slice(),
-        ["level:default", "prompt with default"],
-        "the level applied before the queued message went"
+        ["prompt with bypassPermissions"],
+        "the message ran on the access the picker showed"
     );
     status(&rig, &chat.id, SessionStatus::Ready).await;
     let lists = rig.manager.lists(&chat.id).await.unwrap();
-    assert_eq!(lists.controls.access.effective.as_deref(), Some("default"));
-    assert_eq!(lists.controls.access.pending, None);
-    assert_eq!(lists.autonomy.requested, Autonomy::Ask);
+    assert_eq!(
+        lists.controls.access.effective.as_deref(),
+        Some("bypassPermissions")
+    );
+    assert_eq!(lists.autonomy.requested, Autonomy::FullAuto);
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
 

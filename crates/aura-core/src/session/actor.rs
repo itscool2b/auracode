@@ -786,9 +786,6 @@ pub(crate) struct ChatActor {
     autonomy_state: AutonomyState,
     controls: aura_protocol::session::SessionControlPreferences,
     control_pending: Option<(String, ConfigValue)>,
-    /// An access value chosen while the agent was starting, after its setup went out: applied
-    /// once it is ready (`controls::apply_after_start`).
-    after_start: Option<String>,
     mcp_pending: bool,
     /// A native file rewind awaits the agent's reply.
     rewind_pending: bool,
@@ -949,7 +946,6 @@ impl ChatActor {
             autonomy_state: stopped_autonomy(autonomy, None),
             controls,
             control_pending: None,
-            after_start: None,
             mcp_pending: false,
             rewind_pending: false,
             implementation_approved: false,
@@ -1731,7 +1727,6 @@ impl ChatActor {
             self.desired = initial_options(self.agent_session.as_ref(), initial_model, initial_effort);
             self.controls = controls::preferences(self.agent_session.as_ref());
             self.control_pending = None;
-            self.after_start = None;
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
             self.options_generation = 0;
@@ -3183,8 +3178,6 @@ impl ChatActor {
         }
         self.generation += 1;
         self.control_pending = None;
-        // This start reads the chat's access with its setup.
-        self.after_start = None;
         self.implementation_approved = false;
         let generation = self.generation;
         self.starting_fresh = fresh;
@@ -5259,7 +5252,6 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.set_status(SessionStatus::Ready, None);
         }
         self.refresh_run_status();
-        self.apply_after_start();
         self.dispatch_next();
     }
 

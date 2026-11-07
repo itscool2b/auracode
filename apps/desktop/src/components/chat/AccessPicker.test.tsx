@@ -112,3 +112,86 @@ describe("native access and planning", () => {
     expect(render({ lists: state }).match(/<button[^>]*disabled/g)).toBeNull();
   });
 });
+
+/** Claude Code's access as the session lists it before its agent runs. */
+const waitingLists = (requested: string, values: readonly string[]): SessionLists => {
+  const state = lists(1);
+  if (!state.controls) throw new Error("Missing fixture controls");
+  state.controls.access = {
+    ...state.controls.access,
+    requested,
+    effective: requested,
+    choices: values.map((value) => ({
+      value,
+      name: { default: "Ask for approval", bypassPermissions: "Full access" }[value] ?? value,
+      description: null,
+      legacy_autonomy: null,
+    })),
+  };
+  return state;
+};
+
+describe("access before the agent runs", () => {
+  it("names the level a starting chat asks for instead of calling it unavailable", () => {
+    const html = render({ lists: lists(1), status: "starting" });
+    expect(html).not.toContain("Access unavailable");
+    expect(html).toContain('aria-label="Full access. Access level"');
+    expect(html).toContain("Access controls load when the agent starts.");
+    expect(html).not.toContain("does not offer access controls");
+    expect(html).toContain('aria-label="Mode. Working mode"');
+    expect(html).toContain("Modes load when the agent starts.");
+  });
+  it("still says a running agent offers no access control", () => {
+    const html = render({ lists: lists(1), status: "ready" });
+    expect(html).toContain('aria-label="Access unavailable. Access level"');
+    expect(html).toContain("This connection does not offer access controls.");
+  });
+  it("offers a stopped chat's access for its next start", () => {
+    for (const status of ["stopped", "failed", "auth_required"] as const) {
+      const html = render({
+        lists: waitingLists("default", ["default", "bypassPermissions"]),
+        status,
+      });
+      expect(html).toContain('aria-label="Ask for approval. Access level"');
+      expect(html).toContain("Applies when the agent starts.");
+      expect(html.match(/<button[^>]*disabled[^>]*data-testid="picker-access-choice"/g)).toBeNull();
+      expect(html).toContain('data-testid="picker-access-choice"');
+    }
+  });
+  it("names a starting agent's access and opens it once the agent is ready", () => {
+    const html = render({
+      lists: waitingLists("default", ["default", "bypassPermissions"]),
+      status: "starting",
+    });
+    expect(html).toContain('aria-label="Ask for approval. Access level"');
+    expect(html).toContain("Access opens once the agent has started.");
+    expect(html).not.toContain("Applies when the agent starts.");
+    expect(html.match(/<button[^>]*disabled[^>]*data-testid="picker-access-choice"/g)).toHaveLength(
+      2,
+    );
+  });
+  it("leaves access unchangeable while the agent stops or works", () => {
+    for (const status of ["stopping", "running"] as const) {
+      const html = render({
+        lists: waitingLists("default", ["default", "bypassPermissions"]),
+        status,
+      });
+      expect(
+        html.match(/<button[^>]*disabled[^>]*data-testid="picker-access-choice"/g),
+      ).toHaveLength(2);
+      expect(html).not.toContain("Access opens once the agent has started.");
+    }
+  });
+  it("names a saved native setting no known choice offers as plain Access", () => {
+    const state = waitingLists("acceptEdits", []);
+    const html = render({ lists: state, status: "stopped" });
+    expect(html).toContain('aria-label="Access. Access level"');
+    expect(html).not.toContain("Full access");
+  });
+  it("shows the one Applies note when the session says the same", () => {
+    const state = waitingLists("default", ["default"]);
+    state.autonomy = { ...state.autonomy, note: "Applies when the agent starts." };
+    const html = render({ lists: state, status: "stopped" });
+    expect(html.match(/Applies when the agent starts\./g)).toHaveLength(1);
+  });
+});

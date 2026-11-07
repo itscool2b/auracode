@@ -51,18 +51,29 @@ export function AccessPicker({
           description: ACCESS_DESCRIPTION[value],
           legacy_autonomy: value,
         }));
+  // Only a running agent can say what it offers. A chat whose agent is not running (one opened
+  // after a restart, a new chat whose agent is starting) names the access its start asks for;
+  // a stopped one takes a change for that start. A starting agent already has its setup, so a
+  // change waits until it is ready.
+  const running = status === "ready" || status === "running" || status === "cancelling";
+  const waiting = status === "stopped" || status === "failed" || status === "auth_required";
   const current = hasNativeAccess ? access?.effective : (lists?.autonomy.requested ?? autonomy);
   const pending =
     controlSaving?.type === "access" ? controlSaving.value : (access?.pending ?? saving);
   const workflowPending = controlSaving?.type === "workflow" || workflow?.pending != null;
   const displayed = pending ?? current;
+  // A native setting no known choice names stays unnamed rather than shown as another level.
+  const requestedNative = access?.requested && !access.requested.startsWith("legacy:");
+  const startLabel = requestedNative
+    ? "Access"
+    : ACCESS_LABEL[lists?.autonomy.requested ?? autonomy];
   const label =
-    lists && choices.length === 0
-      ? "Access unavailable"
-      : (choices.find((choice) => choice.value === displayed)?.name ??
-        (hasNativeAccess
-          ? "Access unavailable"
-          : ACCESS_LABEL[(displayed as Autonomy) ?? autonomy]));
+    choices.find((choice) => choice.value === displayed)?.name ??
+    (!running
+      ? startLabel
+      : lists && (hasNativeAccess || choices.length === 0)
+        ? "Access unavailable"
+        : ACCESS_LABEL[(displayed as Autonomy) ?? autonomy]);
   const planning = workflow?.effective === "plan";
   const displayedWorkflow =
     controlSaving?.type === "workflow"
@@ -70,7 +81,16 @@ export function AccessPicker({
       : (workflow?.pending ?? workflow?.effective);
   const workflowLabel =
     workflow?.choices?.find((choice) => choice.value === displayedWorkflow)?.name ??
-    (lists ? "Mode unavailable" : "Mode");
+    (lists && running ? "Mode unavailable" : "Mode");
+  const startNote =
+    choices.length === 0
+      ? null
+      : waiting
+        ? "Applies when the agent starts."
+        : status === "starting"
+          ? "Access opens once the agent has started."
+          : null;
+  const accessNote = access?.note ?? lists?.autonomy.note ?? null;
   // Executing is the ordinary state, so its control is a quiet icon; Plan names itself, lit.
   const planShown = displayedWorkflow === "plan";
   return (
@@ -109,7 +129,7 @@ export function AccessPicker({
               type="button"
               aria-pressed={current === choice.value}
               disabled={
-                status !== "ready" ||
+                !(status === "ready" || waiting) ||
                 transitionBlocked ||
                 pending !== null ||
                 controlSaving !== null ||
@@ -135,9 +155,9 @@ export function AccessPicker({
         </fieldset>
         {!choices.length ? (
           <p className="chat-picker-empty">
-            {lists
+            {lists && running
               ? "This connection does not offer access controls."
-              : "Access controls load when the session starts."}
+              : "Access controls load when the agent starts."}
           </p>
         ) : null}
         <div className="chat-picker-note">
@@ -145,9 +165,8 @@ export function AccessPicker({
           {status === "running" || transitionBlocked ? (
             <p>Change access when the agent is idle with no queued messages or pending requests.</p>
           ) : null}
-          {access?.note || lists?.autonomy.note ? (
-            <p>{access?.note ?? lists?.autonomy.note}</p>
-          ) : null}
+          {startNote ? <p>{startNote}</p> : null}
+          {accessNote && accessNote !== startNote ? <p>{accessNote}</p> : null}
           {(access?.native_mode ?? lists?.autonomy.native_mode) ? (
             <p>Native setting: {access?.native_mode ?? lists?.autonomy.native_mode}</p>
           ) : null}
@@ -210,14 +229,17 @@ export function AccessPicker({
         </fieldset>
         {!workflow?.choices?.length ? (
           <p className="chat-picker-empty">
-            {lists
+            {lists && running
               ? "Native Plan mode is not available on this connection."
-              : "Modes load when the session starts."}
+              : "Modes load when the agent starts."}
           </p>
         ) : null}
         {workflow?.note ? <p className="chat-picker-note">{workflow?.note}</p> : null}
         {status === "running" ? (
           <p className="chat-picker-note">Change mode after the current turn finishes.</p>
+        ) : null}
+        {!running && workflow?.choices?.length ? (
+          <p className="chat-picker-note">Change mode once the agent has started.</p>
         ) : null}
         {transitionBlocked ? (
           <p className="chat-picker-note">

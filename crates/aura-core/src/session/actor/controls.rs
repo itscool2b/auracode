@@ -27,12 +27,6 @@ fn legacy(value: Autonomy) -> (&'static str, &'static str) {
         Autonomy::Ask => ("legacy:ask", "Ask for approval"),
     }
 }
-/// The level a `legacy:` access value names.
-fn legacy_level(value: &str) -> Option<Autonomy> {
-    [Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask]
-        .into_iter()
-        .find(|level| legacy(*level).0 == value)
-}
 fn descriptor(options: &[ConfigOption], id: &str, requested: Option<String>) -> SessionControl {
     let mut result = SessionControl {
         requested,
@@ -179,28 +173,14 @@ impl ChatActor {
             workflow.note =
                 Some("This connection does not advertise a native Plan control.".into());
         }
-        // A change on its way, or one kept for the agent that is starting, shows as pending where
-        // the choices name it (a level chosen before a start does not name the agent's own once it
-        // runs; the agent's lists show it once applied).
-        let pending = self.control_pending.clone().or_else(|| {
-            self.after_start
-                .clone()
-                .map(|value| (ACCESS.to_owned(), ConfigValue::Choice { value }))
-        });
-        if let Some((id, value)) = &pending {
+        if let Some((id, value)) = &self.control_pending {
             let target = if id == ACCESS {
                 &mut access
             } else {
                 &mut workflow
             };
-            let value = choice_value(value);
-            if value
-                .as_ref()
-                .is_some_and(|value| target.choices.iter().any(|choice| &choice.value == value))
-            {
-                target.pending = value;
-                target.requested = target.pending.clone();
-            }
+            target.pending = choice_value(value);
+            target.requested = target.pending.clone();
         }
         SessionControls {
             version: 1,
@@ -290,10 +270,11 @@ impl ChatActor {
         self.set_control_admitted(change, reply);
     }
 
-    /// The agent is not running, or still starting: an access change is kept for its start, as a
-    /// model change is, and the start asks for it. One made after the start's setup went to the
-    /// agent is applied as soon as the agent is ready, before any queued message goes. A mode
-    /// waits for a running, idle agent.
+    /// The agent is not running, or its start is still being prepared: an access change is kept
+    /// for the start, as a model change is, and the start's setup asks for it. Once the agent's
+    /// process has its setup (the last moment of a start), a change waits for the agent to be
+    /// ready: kept for later instead, it could let a message sent meanwhile run on the access the
+    /// person had just left. A mode waits for a running, idle agent.
     fn keep_control_for_start(
         &mut self,
         change: SessionControlChange,
@@ -305,6 +286,13 @@ impl ChatActor {
             )));
             return;
         };
+        if self.driver.is_some() {
+            let _ = reply.send(Err(SessionError::OptionInvalid(format!(
+                "{} is starting. Choose the access again once it is ready.",
+                self.agent_label()
+            ))));
+            return;
+        }
         let controls = self.control_lists();
         let Some(choice) = controls
             .access
@@ -337,38 +325,7 @@ impl ChatActor {
             self.info_dirty = true;
             self.schedule_flush();
         }
-        // An agent already starting read the earlier access with its setup.
-        self.after_start = self.driver.is_some().then_some(value);
         let _ = reply.send(Ok(self.lists()));
-    }
-
-    /// The agent just became ready: an access change kept while it started is applied now. A
-    /// queued message waits for it, as for any control change. One that cannot apply stays the
-    /// chat's request for its next start.
-    pub(super) fn apply_after_start(&mut self) {
-        let Some(value) = self.after_start.take() else {
-            return;
-        };
-        let ready = self.status == SessionStatus::Ready
-            && self.turn.is_none()
-            && self.control_pending.is_none()
-            && self.driver.as_ref().is_some_and(|driver| {
-                driver.ready && driver.stop == Stop::None && driver.run_idle.is_none_or(|idle| idle)
-            });
-        if !ready || self.control_lists().workflow.effective.as_deref() == Some("plan") {
-            return;
-        }
-        let (reply, _) = oneshot::channel();
-        match legacy_level(&value) {
-            // A level chosen before the start: the agent maps it to its own setting.
-            Some(autonomy) => {
-                self.control_pending = Some((ACCESS.into(), ConfigValue::Choice { value }));
-                self.info_dirty = true;
-                self.schedule_flush();
-                self.set_autonomy_inner(autonomy, reply, true);
-            }
-            None => self.set_control_admitted(SessionControlChange::Access { value }, reply),
-        }
     }
 
     /// Saves the chat's native control choices with its session, when it has one yet.
