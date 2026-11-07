@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-07
 
+- New chat opens on a fighter jet drawn in text, one of sixteen from the B-2 and SR-71 to the F-22, F-35 and Tomcat, a different one each time auracode starts, in place of the logo, title and line. ([#112](https://github.com/itscool2b/auracode/pull/112))
 - A chat's access no longer says "Access unavailable" until a message starts its agent: a chat opened after a restart names its access and takes a change for its next start, a new chat shows the access its agent is starting with and opens the choices once it is ready, and a new Claude chat that never got a message starts again after a restart instead of failing with "No conversation found". ([#111](https://github.com/itscool2b/auracode/pull/111))
 
 ## 2026-11-06
