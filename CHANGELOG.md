@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-07
+
+- A chat's access no longer says "Access unavailable" until a message starts its agent: a chat opened after a restart names its access and takes a change for its next start, a new chat shows the access its agent is starting with and opens the choices once it is ready, and a new Claude chat that never got a message starts again after a restart instead of failing with "No conversation found". ([#111](https://github.com/itscool2b/auracode/pull/111))
+
 ## 2026-11-06
 
 - New chat no longer opens on a wall of boxed folder paths: it waited for the chats to load before telling which worktrees no chat holds, so each start listed every chat's worktree. Those kept from chats that are gone now sit behind one Retained worktrees line, by folder name, opening by itself only when one needs recovery. ([#110](https://github.com/itscool2b/auracode/pull/110))
