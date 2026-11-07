@@ -701,7 +701,7 @@ async fn latest_qualified_native_fork_uses_a_distinct_native_id() {
     );
 }
 
-async fn reopen_manager(rig: &mut Rig) {
+pub(super) async fn reopen_manager(rig: &mut Rig) {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
     let deps = rig.manager.deps();
     let manager = SessionManager::new(ManagerDeps {

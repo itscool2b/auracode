@@ -1,6 +1,10 @@
 use super::*;
 use aura_drivers::driver::{DriverCommand, LoggedCommand};
-use aura_protocol::session::{ConfigValue, SessionControlChange, SessionControlPreferences};
+use aura_protocol::session::{
+    ConfigCategory, ConfigKind, ConfigOption, ConfigValue, SessionControlChange,
+    SessionControlPreferences, SessionLists,
+};
+use aura_protocol::{Autonomy, AutonomyState};
 
 struct NativeControls;
 impl AgentDriver for NativeControls {
@@ -513,6 +517,360 @@ async fn legacy_live_access_obeys_native_idle_queue_and_approval_admission_but_s
             .count(),
         1,
         "only the idle live choice reached the native driver"
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+/// One start's level and the native access its setup asked for.
+type Start = (Autonomy, Option<String>);
+
+/// What a Claude-like agent did: each start, then the changes and prompts it received, in order.
+#[derive(Clone, Default)]
+struct Seen {
+    starts: Arc<Mutex<Vec<Start>>>,
+    commands: Arc<Mutex<Vec<String>>>,
+}
+
+/// Starts like Claude Code: it lists a model, native access and workflow, starts on the access
+/// its setup asks for (else the one its level maps to), and reports Ready once `ready` has a
+/// permit (a test holds a start by leaving it empty).
+struct ClaudeLike {
+    seen: Seen,
+    ready: Arc<tokio::sync::Semaphore>,
+}
+
+fn native_access(autonomy: Autonomy) -> &'static str {
+    match autonomy {
+        Autonomy::FullAuto => "bypassPermissions",
+        Autonomy::AutoEdit => "acceptEdits",
+        Autonomy::Ask => "default",
+    }
+}
+
+fn claude_options(access: &str) -> DriverEvent {
+    let model = ConfigOption {
+        id: "model".into(),
+        name: "Model".into(),
+        description: None,
+        category: ConfigCategory::Model,
+        kind: ConfigKind::Select {
+            current: "opus".into(),
+            choices: vec![aura_drivers::controls::choice("opus", "Opus")],
+        },
+        pending: None,
+    };
+    DriverEvent::Options(vec![
+        model,
+        aura_drivers::controls::select(
+            aura_drivers::controls::ACCESS,
+            "Access",
+            access,
+            vec![
+                aura_drivers::controls::choice("default", "Ask for approval"),
+                aura_drivers::controls::choice("acceptEdits", "Allow edits"),
+                aura_drivers::controls::choice("bypassPermissions", "Full access"),
+            ],
+        ),
+        aura_drivers::controls::workflow("execute"),
+    ])
+}
+
+async fn emit(events: &aura_drivers::driver::EventSender, event: DriverEvent) {
+    events
+        .reserve(event.approx_bytes())
+        .await
+        .unwrap()
+        .send(event);
+}
+
+impl AgentDriver for ClaudeLike {
+    fn run(self: Box<Self>, mut ctx: DriverContext) -> BoxFuture<'static, DriverExit> {
+        async move {
+            let requested = match ctx.setup.desired.get(aura_drivers::controls::ACCESS) {
+                Some(ConfigValue::Choice { value }) => Some(value.clone()),
+                _ => None,
+            };
+            lock(&self.seen.starts).push((ctx.setup.autonomy, requested.clone()));
+            let mut access =
+                requested.unwrap_or_else(|| native_access(ctx.setup.autonomy).to_owned());
+            let Ok(permit) = self.ready.acquire().await else {
+                return DriverExit::Closed;
+            };
+            permit.forget();
+            emit(&ctx.events, claude_options(&access)).await;
+            emit(
+                &ctx.events,
+                DriverEvent::Autonomy(AutonomyState {
+                    requested: ctx.setup.autonomy,
+                    native_mode: Some(access.clone()),
+                    auto_answer: aura_protocol::AutoAnswer::Never,
+                    note: None,
+                }),
+            )
+            .await;
+            let Step::Emit(DriverEvent::Ready(mut info)) =
+                ready_step(&format!("native-{}", ctx.setup.chat_id))
+            else {
+                unreachable!()
+            };
+            info.capabilities.autonomy_levels =
+                vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask];
+            info.capabilities.resume = true;
+            if ctx.setup.resume.is_some() {
+                info.resumed = ResumeOutcome::Resumed;
+            }
+            emit(&ctx.events, DriverEvent::Ready(info)).await;
+            while let Some(command) = ctx.commands.recv().await {
+                match command {
+                    DriverCommand::SetOption {
+                        option_id,
+                        value: ConfigValue::Choice { value },
+                        reply,
+                    } if option_id == aura_drivers::controls::ACCESS => {
+                        lock(&self.seen.commands).push(format!("access:{value}"));
+                        access = value;
+                        emit(&ctx.events, claude_options(&access)).await;
+                        let _ = reply.send(Ok(()));
+                    }
+                    DriverCommand::SetAutonomy { autonomy, reply } => {
+                        access = native_access(autonomy).to_owned();
+                        lock(&self.seen.commands).push(format!("level:{access}"));
+                        emit(&ctx.events, claude_options(&access)).await;
+                        let _ = reply.send(Ok(AutonomyState {
+                            requested: autonomy,
+                            native_mode: Some(access.clone()),
+                            auto_answer: aura_protocol::AutoAnswer::Never,
+                            note: None,
+                        }));
+                    }
+                    DriverCommand::Prompt { turn, .. } => {
+                        lock(&self.seen.commands).push(format!("prompt with {access}"));
+                        emit(
+                            &ctx.events,
+                            DriverEvent::TurnEnded {
+                                turn_id: turn.turn_id,
+                                stop_reason: StopReason::EndTurn,
+                                usage: None,
+                                error: None,
+                            },
+                        )
+                        .await;
+                    }
+                    DriverCommand::Shutdown { .. } => break,
+                    _ => {}
+                }
+            }
+            DriverExit::Closed
+        }
+        .boxed()
+    }
+}
+
+struct ClaudeLikeFactory {
+    seen: Seen,
+    ready: Arc<tokio::sync::Semaphore>,
+}
+
+impl DriverFactory for ClaudeLikeFactory {
+    fn create(&self, _kind: aura_protocol::DriverKind) -> Box<dyn AgentDriver> {
+        Box::new(ClaudeLike {
+            seen: self.seen.clone(),
+            ready: Arc::clone(&self.ready),
+        })
+    }
+}
+
+/// Starts report Ready at once unless `held`, when each waits for `ready.add_permits(1)`.
+fn claude_rig(held: bool) -> (Rig, Seen, Arc<tokio::sync::Semaphore>) {
+    let seen = Seen::default();
+    let ready = Arc::new(tokio::sync::Semaphore::new(if held { 0 } else { 1000 }));
+    let rig = rig_with(
+        Arc::new(ClaudeLikeFactory {
+            seen: seen.clone(),
+            ready: Arc::clone(&ready),
+        }),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    (rig, seen, ready)
+}
+
+fn access_values(lists: &SessionLists) -> Vec<String> {
+    lists
+        .controls
+        .access
+        .choices
+        .iter()
+        .map(|choice| choice.value.clone())
+        .collect()
+}
+
+/// The owner's report, 6 November 2026: a chat opened after a restart said "Access unavailable"
+/// until a message started its agent. Its access is named and changeable before the agent
+/// starts, and the next start asks for the change.
+#[tokio::test]
+async fn a_reopened_chat_names_its_access_and_keeps_a_change_for_its_next_start() {
+    let (mut rig, seen, _ready) = claude_rig(false);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    rig.manager
+        .set_control(
+            &chat.id,
+            SessionControlChange::Access {
+                value: "acceptEdits".into(),
+            },
+        )
+        .await
+        .unwrap();
+    super::conversation::reopen_manager(&mut rig).await;
+    // The saved catalogs load as the manager opens.
+    let mut lists = rig.manager.lists(&chat.id).await.unwrap();
+    for _ in 0..600 {
+        if !lists.controls.access.choices.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        lists = rig.manager.lists(&chat.id).await.unwrap();
+    }
+    assert_eq!(
+        access_values(&lists),
+        ["default", "acceptEdits", "bypassPermissions"]
+    );
+    assert_eq!(
+        lists.controls.access.effective.as_deref(),
+        Some("acceptEdits")
+    );
+    assert_eq!(
+        lists.controls.access.requested.as_deref(),
+        Some("acceptEdits")
+    );
+    assert_eq!(lists.controls.access.note, None, "nothing waits to apply");
+    assert_eq!(
+        lists.controls.workflow.effective.as_deref(),
+        Some("execute")
+    );
+    assert_eq!(lists.controls.workflow.note, None);
+    // Chosen while stopped: kept for the start, which asks for it.
+    let lists = rig
+        .manager
+        .set_control(
+            &chat.id,
+            SessionControlChange::Access {
+                value: "default".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(lists.controls.access.effective.as_deref(), Some("default"));
+    assert!(
+        rig.manager
+            .set_control(
+                &chat.id,
+                SessionControlChange::Workflow {
+                    value: "plan".into(),
+                    implementation_approved: false,
+                },
+            )
+            .await
+            .is_err(),
+        "a mode waits for a running agent"
+    );
+    rig.manager.send(&chat.id, "go".into()).await.unwrap();
+    eventually("the prompt", || {
+        lock(&seen.commands).iter().any(|c| c.starts_with("prompt"))
+    })
+    .await;
+    assert_eq!(
+        lock(&seen.starts).last().cloned(),
+        Some((Autonomy::FullAuto, Some("default".into())))
+    );
+    assert_eq!(
+        lock(&seen.commands).as_slice(),
+        ["access:acceptEdits", "prompt with default"],
+        "the start applied it; nothing changed it again"
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+/// A new chat's agent takes a few seconds to start. Its access levels are offered meanwhile, and
+/// one chosen after the start's setup went out is applied as soon as the agent is ready, before
+/// the message sent while it started.
+#[tokio::test]
+async fn a_new_chat_takes_an_access_change_while_its_agent_starts() {
+    let (rig, seen, ready) = claude_rig(true);
+    // An earlier chat taught the connection's levels.
+    ready.add_permits(1);
+    let first = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &first.id, SessionStatus::Ready).await;
+    let folder = rig.folder.join("second");
+    std::fs::create_dir_all(&folder).unwrap();
+    let chat = rig.manager.create_chat("mock", &folder).await.unwrap();
+    eventually("the second agent spawned", || lock(&seen.starts).len() == 2).await;
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert_eq!(
+        access_values(&lists),
+        ["legacy:full_auto", "legacy:auto_edit", "legacy:ask"],
+        "the levels the connection reported, not \"Access unavailable\""
+    );
+    assert_eq!(
+        lists.controls.access.effective.as_deref(),
+        Some("legacy:full_auto")
+    );
+    let lists = rig
+        .manager
+        .set_control(
+            &chat.id,
+            SessionControlChange::Access {
+                value: "legacy:ask".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(lists.controls.access.pending.as_deref(), Some("legacy:ask"));
+    let sent = rig.manager.send(&chat.id, "first words".into()).await;
+    assert!(sent.unwrap().queued);
+    ready.add_permits(1);
+    eventually("the prompt", || {
+        lock(&seen.commands).iter().any(|c| c.starts_with("prompt"))
+    })
+    .await;
+    assert_eq!(lock(&seen.starts)[1], (Autonomy::FullAuto, None));
+    assert_eq!(
+        lock(&seen.commands).as_slice(),
+        ["level:default", "prompt with default"],
+        "the level applied before the queued message went"
+    );
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert_eq!(lists.controls.access.effective.as_deref(), Some("default"));
+    assert_eq!(lists.controls.access.pending, None);
+    assert_eq!(lists.autonomy.requested, Autonomy::Ask);
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+/// With nothing known about its agent yet, a starting chat offers no invented choices, and says
+/// the level it starts on.
+#[tokio::test]
+async fn a_first_chat_offers_no_access_choices_until_its_agent_reports_them() {
+    let (rig, _seen, ready) = claude_rig(true);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert!(lists.controls.access.choices.is_empty());
+    assert_eq!(
+        lists.controls.access.requested.as_deref(),
+        Some("legacy:full_auto"),
+        "the level it starts on, for the picker to name"
+    );
+    assert_eq!(
+        lists.controls.workflow.note, None,
+        "only a running agent can say it has no Plan control"
+    );
+    ready.add_permits(1);
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert_eq!(
+        lists.controls.access.effective.as_deref(),
+        Some("bypassPermissions")
     );
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
