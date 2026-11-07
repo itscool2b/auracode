@@ -158,6 +158,9 @@
   --g-leading-term: 18px;
   --g-text-key: 11px;
   --g-leading-key: 16px;
+  /* Pictures drawn in text (New chat's jets): lines close enough that the strokes join. */
+  --g-text-art: 12px;
+  --g-leading-art: 14px;
 
   /* Website scale */
   --g-web-hero: 48px;
