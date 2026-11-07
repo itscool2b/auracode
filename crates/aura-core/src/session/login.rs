@@ -7,7 +7,6 @@ use aura_agents::maintenance::{
 };
 use aura_process::{LaunchSpec, ProcessCwd, SpawnSpec};
 use aura_protocol::agents::AgentInstallation;
-use aura_protocol::session::Availability;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -49,23 +48,16 @@ impl SessionManager {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
-        let agent = self
-            .deps()
-            .detector
-            .cached()
-            .into_iter()
-            .find(|entry| entry.id == agent_id)
-            .ok_or_else(|| SessionError::UnknownAgent(agent_id.into()))?;
-        if !matches!(agent.availability, Availability::Ready { .. }) {
-            return Err(SessionError::AgentUnavailable(format!(
-                "Refresh agents before the {purpose}."
-            )));
+        let detector = &self.deps().detector;
+        if detector.agent(agent_id).is_none() {
+            return Err(SessionError::UnknownAgent(agent_id.into()));
         }
-        let installation = agent.installation.ok_or_else(|| {
-            SessionError::AgentUnavailable(format!(
-                "This installation has no verified {purpose} command."
-            ))
-        })?;
+        // Detected again, not read from the cache: a failed update or a settings change drops the
+        // cached detection, and the terminal then refused to start until someone refreshed.
+        let (name, installation) = detector
+            .fresh_installation(agent_id)
+            .await
+            .map_err(SessionError::AgentUnavailable)?;
         let command = command(&installation)
             .map_err(|error| SessionError::AgentUnavailable(error.to_string()))?;
         let env = self.deps().env.get().await;
@@ -82,7 +74,7 @@ impl SessionManager {
             .map_err(|error| SessionError::AgentUnavailable(error.to_string()))?;
         Ok(SpawnSpec {
             launch: LaunchSpec {
-                label: format!("{} {purpose}", agent.name),
+                label: format!("{name} {purpose}"),
                 program: command.program,
                 args: command.args,
                 cwd: ProcessCwd::Fixed(folder.clone()),

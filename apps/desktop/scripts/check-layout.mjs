@@ -43,6 +43,9 @@ export const MODES = [
   "plan",
   "error",
   "new",
+  // The start screen: its shortest piece, grown to fit, and its tallest, shrunk to fit.
+  "launch&art=b-1b-lancer",
+  "launch&art=sr-71-blackbird",
   "history",
   "history-question",
   "partial-history",

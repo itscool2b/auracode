@@ -18,17 +18,28 @@ import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type AgentUpdateActions, AgentUpdateBanner } from "./AgentUpdateBanner";
-import { Banners } from "./Banners";
+import { Banners, noticeItems } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
 import { ChatView } from "./ChatView";
 import { CommandPalette, type PaletteCommand } from "./CommandPalette";
+import { LaunchArt } from "./LaunchArt";
 import { NewChat } from "./NewChat";
+import { Notifications } from "./Notifications";
 import { ProjectDialog } from "./ProjectDialog";
 import { SidebarFooter } from "./SidebarFooter";
 import { createXtermRuntime } from "./terminalRuntime";
 
 const noSubscribe = () => () => {};
+
+/** `set` with `key` in or out, the same set when nothing changes. */
+function toggled(set: ReadonlySet<string>, key: string, present: boolean): ReadonlySet<string> {
+  if (set.has(key) === present) return set;
+  const next = new Set(set);
+  if (present) next.add(key);
+  else next.delete(key);
+  return next;
+}
 const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /**
@@ -119,7 +130,15 @@ export function ChatsScreen({
     terminal: transport.updateTerminal,
   }));
   const memoryEdits = useAgentMemoryEdits(memory);
+  // A memory edit's toast moves on by itself; the edit stays in the notifications panel.
+  const [toastedEdits, setToastedEdits] = useState<ReadonlySet<string>>(new Set());
+  // Startup notices put away for this run, and agents whose last update failed (a red bell).
+  const [dismissedNotices, setDismissedNotices] = useState<ReadonlySet<string>>(new Set());
+  const [failedUpdates, setFailedUpdates] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  // Launch shows the start screen's aircraft; New chat, a project's New chat and Ctrl+N open the
+  // composer, which then stays whenever no chat is open.
+  const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
   // Settings' default agent, read again whenever the chats come back into view (from Settings).
   const [defaultAgent, setDefaultAgent] = useState<string | null | undefined>(undefined);
@@ -283,6 +302,7 @@ export function ChatsScreen({
               ? (project) => {
                   if (!organization.data) return;
                   setSelected(null);
+                  setComposing(true);
                   setArchived(false);
                   setDraft(
                     new NewChatDraft(transport, projectChatContext(project, organization.data)),
@@ -308,34 +328,57 @@ export function ChatsScreen({
           onSelect={setSelected}
           onNewChat={() => {
             setSelected(null);
+            setComposing(true);
             setDraft(new NewChatDraft(transport));
           }}
         />
-        <SidebarFooter profile={info.profile} onSettings={onSettings} />
+        <SidebarFooter
+          profile={info.profile}
+          onSettings={onSettings}
+          notifications={
+            <Notifications
+              items={noticeItems({
+                storage: snapshot.storage,
+                env: snapshot.env,
+                onRetryEnv: () => void app.retryEnv(),
+                recoveryNotice: info.recovery_notice,
+                onRecoveryDismissed,
+                notices: info.notices.filter((notice) => !dismissedNotices.has(notice)),
+                onDismissNotice: (notice) =>
+                  setDismissedNotices((current) => toggled(current, notice, true)),
+                memoryEdits: memoryBanners,
+                updates: availableUpdates(snapshot.agents)
+                  .filter((update) => !dismissedUpdates.has(update.key))
+                  .map((update) => ({
+                    key: `update:${update.key}`,
+                    ...(failedUpdates.has(update.key) ? { level: "error" as const } : {}),
+                    node: (
+                      <AgentUpdateBanner
+                        update={update}
+                        working={workingChats(snapshot.chats, update.agentId)}
+                        actions={updateActions}
+                        onDismiss={() => updateNotices.dismiss(update.key)}
+                        onFailed={(failed) =>
+                          setFailedUpdates((current) => toggled(current, update.key, failed))
+                        }
+                      />
+                    ),
+                  })),
+              })}
+            />
+          }
+        />
       </aside>
       <main className="chat-main">
         <div className="chat-drag" data-tauri-drag-region="" />
         <Banners
           storage={snapshot.storage}
-          env={snapshot.env}
-          onRetryEnv={() => void app.retryEnv()}
-          recoveryNotice={info.recovery_notice}
-          onRecoveryDismissed={onRecoveryDismissed}
-          notices={info.notices}
-          memoryEdits={memoryBanners}
-          updates={availableUpdates(snapshot.agents)
-            .filter((update) => !dismissedUpdates.has(update.key))
-            .map((update) => (
-              <AgentUpdateBanner
-                key={update.key}
-                update={update}
-                working={workingChats(snapshot.chats, update.agentId)}
-                actions={updateActions}
-                onDismiss={() => updateNotices.dismiss(update.key)}
-              />
-            ))}
+          memoryEdits={memoryBanners.filter((edit) => !toastedEdits.has(edit.key))}
+          onExpire={(key) => setToastedEdits((current) => toggled(current, key, true))}
         />
-        {selected === null ? (
+        {selected === null && !composing ? (
+          <LaunchArt />
+        ) : selected === null ? (
           <NewChat
             key={draft.key}
             workspace={workspace}
@@ -431,6 +474,7 @@ export function ChatsScreen({
               detail: "Choose an agent and project",
               run: () => {
                 setSelected(null);
+                setComposing(true);
                 setDraft(new NewChatDraft(transport));
               },
             },

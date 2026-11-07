@@ -18,7 +18,7 @@ import {
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
 import { primaryAgents } from "../setup/Onboarding";
-import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
+import { Banners, envBanner, noticeItems, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, chatShortcutIndex, projectName, projectsOf, visibleChatIds } from "./ChatList";
 import { StillWorking } from "./ChatView";
 import { SendControls, StopButton } from "./Composer";
@@ -1402,7 +1402,7 @@ describe("the banners", () => {
     ).toBe("");
   });
 
-  it("show paused or failed saving, the env fallback with Retry, and notices", () => {
+  it("float only paused or failed saving; the panel lists it with the env fallback and notices", () => {
     expect(storageBanner(null)).toBeNull();
     expect(storageBanner({ state: { state: "ok" }, unsaved_bytes: 0 })).toBeNull();
     expect(
@@ -1420,33 +1420,48 @@ describe("the banners", () => {
     expect(
       envBanner({ state: { state: "fallback", reason: "the shell timed out" }, removed: [] }),
     ).toContain("(the shell timed out)");
-    const html = renderToStaticMarkup(
-      <Banners
-        storage={{ state: { state: "paused", reason: "busy", since: 1 }, unsaved_bytes: 9 }}
-        env={{ state: { state: "fallback", reason: "no PATH" }, removed: [] }}
-        onRetryEnv={noop}
-        recoveryNotice={null}
-        onRecoveryDismissed={noop}
-        notices={[
-          "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly.",
-        ]}
-      />,
-    );
-    expect(html).toContain("database is busy");
-    expect(html).toContain("(no PATH)");
-    expect(html).toContain("auracode stopped 1 agent process");
-    expect(buttons(html).map((b) => b.label)).toEqual(["Retry", "Dismiss"]);
-    expect(
-      renderToStaticMarkup(
-        <Banners
-          storage={null}
-          env={null}
-          onRetryEnv={noop}
-          recoveryNotice={null}
-          onRecoveryDismissed={noop}
-          notices={[]}
-        />,
-      ),
-    ).toBe("");
+    const paused = {
+      state: { state: "paused" as const, reason: "busy" as const, since: 1 },
+      unsaved_bytes: 9,
+    };
+    const floating = renderToStaticMarkup(<Banners storage={paused} />);
+    expect(floating).toContain("database is busy");
+    expect(buttons(floating)).toEqual([]);
+    expect(renderToStaticMarkup(<Banners storage={null} />)).toBe("");
+    const items = noticeItems({
+      storage: paused,
+      env: { state: { state: "fallback", reason: "no PATH" }, removed: [] },
+      onRetryEnv: noop,
+      recoveryNotice: "auracode repaired its database; the damaged copy is kept.",
+      onRecoveryDismissed: noop,
+      notices: [
+        "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly.",
+      ],
+      onDismissNotice: noop,
+    });
+    expect(items.map((item) => [item.key, item.level ?? null])).toEqual([
+      ["storage:paused", "warning"],
+      ["env", "warning"],
+      ["recovery", "warning"],
+      [
+        "notice:auracode stopped 1 agent process left running by an earlier session that ended unexpectedly.",
+        null,
+      ],
+    ]);
+    const panel = renderToStaticMarkup(<ul>{items.map((item) => item.node)}</ul>);
+    expect(panel).toContain("database is busy");
+    expect(panel).toContain("(no PATH)");
+    expect(panel).toContain("auracode stopped 1 agent process");
+    expect(buttons(panel).map((b) => b.label)).toEqual(["Retry", "Dismiss", "Dismiss"]);
+    const failed = noticeItems({
+      storage: { state: { state: "failed", message: "damaged" }, unsaved_bytes: 0 },
+      env: null,
+      onRetryEnv: noop,
+      recoveryNotice: null,
+      onRecoveryDismissed: noop,
+      notices: [],
+      onDismissNotice: noop,
+    });
+    expect(failed.map((item) => [item.key, item.level])).toEqual([["storage:failed", "error"]]);
   });
 });

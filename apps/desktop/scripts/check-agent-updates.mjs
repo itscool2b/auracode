@@ -1,4 +1,7 @@
-/** Agent update notices over the real chat screen (`?preview=agent-updates`). Installs nothing. */
+/**
+ * Agent update notices in the real chat screen's notifications panel (`?preview=agent-updates`),
+ * behind the sidebar's bell. Installs nothing.
+ */
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -18,18 +21,39 @@ export async function checkAgentUpdates(browser, url, out, engine) {
       page.on("pageerror", (error) => errors.push(error.message));
       const notice = (agent) =>
         page.locator(`[data-testid="agent-update-banner"][data-agent="${agent}"]`);
+      const bell = page.locator(".chat-inbox > summary");
+      const attention = () => page.getByTestId("notifications-bell").getAttribute("data-attention");
+      const panel = page.getByRole("region", { name: "Notifications", exact: true });
       const open = async (query = "") => {
         await page.goto(`${url}/?preview=agent-updates&theme=${theme}${query}`);
+        await bell.waitFor();
+        await bell.click();
         await notice("claude").waitFor();
-        // The stack folds to its front toast; pointing at it opens every toast.
-        await notice("claude").hover();
       };
 
+      // New releases wait behind the bell: nothing floats over the pane, the bell has its dot.
       await page.goto(`${url}/?preview=agent-updates&theme=${theme}`);
+      await bell.waitFor();
+      await page.waitForFunction(
+        () => document.querySelectorAll('[data-testid="agent-update-banner"]').length === 3,
+      );
+      assert.equal(await page.locator(".ui-toasts").count(), 0, "no update floats over the pane");
+      assert.equal(await notice("claude").isVisible(), false, "the notices wait in the panel");
+      assert.equal(await attention(), "new");
+      assert.equal(await bell.getAttribute("aria-label"), "Notifications, 3, 3 new");
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-bell.png`) });
+      await bell.click();
       await notice("claude").waitFor();
-      await page.mouse.move(400, 600);
-      assert.equal(await notice("codex").isVisible(), false, "the stack folds to its front toast");
-      await page.screenshot({ path: resolve(out, `${engine}-${theme}-folded.png`) });
+      // Opening the panel counts them as seen.
+      await page.waitForFunction(
+        () =>
+          !document
+            .querySelector('[data-testid="notifications-bell"]')
+            ?.hasAttribute("data-attention"),
+      );
+      assert.equal(await bell.getAttribute("aria-label"), "Notifications, 3");
+      await page.keyboard.press("Escape");
+      await panel.waitFor({ state: "hidden" });
       await open();
       assert.equal(
         await page.getByTestId("agent-update-banner").count(),
@@ -58,21 +82,15 @@ export async function checkAgentUpdates(browser, url, out, engine) {
         0,
       );
       assert.deepEqual(
-        (await new AxeBuilder({ page }).include(".chat-banners").analyze()).violations,
+        (await new AxeBuilder({ page }).include(".chat-inbox").analyze()).violations,
         [],
       );
-      // The stack sits at the pane's top right under its header, clear of the composer.
-      const stack = await page.locator(".chat-banners").boundingBox();
-      const pane = await page.locator(".chat-main").boundingBox();
-      assert.ok(stack && pane, "the stack and the pane are on screen");
-      assert.ok(
-        stack.y - pane.y < 80,
-        `the stack starts under the header, at ${stack.y - pane.y}px`,
-      );
-      assert.ok(
-        pane.x + pane.width - (stack.x + stack.width) <= 24,
-        "the stack keeps to the right",
-      );
+      // The panel rises from the bell at the foot of the sidebar and stays inside the window.
+      const box = await page.locator(".chat-inbox > .chat-popover-panel").boundingBox();
+      const trigger = await bell.boundingBox();
+      assert.ok(box && trigger, "the panel and the bell are on screen");
+      assert.ok(box.y + box.height <= trigger.y, "the panel opens above the bell");
+      assert.ok(box.y >= 0 && box.x >= 0 && box.x + box.width <= 1280, "the panel fits the window");
       await page.screenshot({ path: resolve(out, `${engine}-${theme}-notices.png`) });
 
       // X hides a notice for this run of auracode only.
@@ -93,6 +111,12 @@ export async function checkAgentUpdates(browser, url, out, engine) {
       await open("&case=fail");
       await notice("claude").getByRole("button", { name: "Update", exact: true }).click();
       await notice("claude").getByRole("alert").filter({ hasText: "The update failed" }).waitFor();
+      // A failed update turns the bell red until it is settled, open panel or not.
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="notifications-bell"]')?.dataset.attention ===
+          "error",
+      );
       await notice("claude").getByRole("button", { name: "Run in terminal" }).click();
       const sheet = page.getByRole("dialog", { name: "Update Claude Code" });
       await sheet.waitFor();
@@ -102,6 +126,7 @@ export async function checkAgentUpdates(browser, url, out, engine) {
       assert.equal(await notice("claude").count(), 1, "the notice waits while the output is read");
       await sheet.getByRole("button", { name: "Close update terminal" }).click();
       await notice("claude").waitFor({ state: "detached" });
+      assert.notEqual(await attention(), "error", "a settled failure leaves the bell");
       // Try again can succeed too.
       await open("&case=fail");
       await notice("claude").getByRole("button", { name: "Update", exact: true }).click();

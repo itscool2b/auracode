@@ -31,28 +31,39 @@ type Run =
   | { readonly state: "unchanged" };
 
 /**
- * One agent's newer release, as a window toast: it stays until its X, and while the agent's chats
- * have a turn under way it waits for them instead of offering Update. An agent whose installation
- * auracode cannot update (another tool owns it) says why and points to Settings > Agents. A failed
- * update offers its command in auracode's own terminal, where its output and prompts show.
+ * One agent's newer release, a row in the notifications panel: it stays until its X, and while the
+ * agent's chats have a turn under way it waits for them instead of offering Update. An agent whose
+ * installation auracode cannot update (another tool owns it) says why and points to Settings >
+ * Agents. A failed update offers its command in auracode's own terminal, where its output and
+ * prompts show, and `onFailed` turns the bell red while it stands.
  */
 export function AgentUpdateBanner({
   update,
   working,
   actions,
   onDismiss,
+  onFailed,
 }: {
   readonly update: AgentUpdate;
   /** The agent's chats with a turn under way now. */
   readonly working: number;
   readonly actions: AgentUpdateActions;
   readonly onDismiss: () => void;
+  /** Whether the last update failed, told when that changes and `false` when the notice goes. */
+  readonly onFailed?: (failed: boolean) => void;
 }) {
   const text = useId();
   const [maintenance, setMaintenance] = useState<AgentMaintenance | "failed" | null>(null);
   const [run, setRun] = useState<Run>({ state: "idle" });
   const [terminal, setTerminal] = useState(false);
   const terminalExit = useRef<number | null>(null);
+  const failedChanged = useRef(onFailed);
+  failedChanged.current = onFailed;
+  const failed = run.state === "failed";
+  useEffect(() => {
+    failedChanged.current?.(failed);
+  }, [failed]);
+  useEffect(() => () => failedChanged.current?.(false), []);
 
   // What this installation can do, asked again for each release and installation. A new version
   // means the last run's outcome no longer applies.
@@ -113,7 +124,7 @@ export function AgentUpdateBanner({
   const canRun = updatable && working === 0 && run.state !== "unchanged";
   const inTerminal = canRun && run.state === "failed" && actions.terminal !== undefined;
 
-  // A toast: the agent's mark, what is new, why it waits (if it does), then its actions.
+  // The agent's mark, what is new, why it waits (if it does), then its actions.
   return (
     <li
       className="chat-banner ui-toast"
@@ -201,7 +212,7 @@ export function AgentUpdateBanner({
           }}
           onClose={() => {
             setTerminal(false);
-            // Checked once the person has read the output: a passing update makes this toast go.
+            // Checked once the person has read the output: a passing update makes this notice go.
             if (terminalExit.current === 0) void verify();
           }}
         />

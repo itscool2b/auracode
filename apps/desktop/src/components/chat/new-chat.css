@@ -25,45 +25,45 @@
 
 /* ---------------------------------------------------------------------------- hero */
 
-/*
- * This launch's jet (jets.ts), centred over the card and resting on it. The hero keeps the tallest
- * jet's 17 lines whichever one flies, so the card sits at the same height at every launch; a short
- * window leaves the jet out so the card keeps its room.
- */
 .new-chat-hero {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: calc(var(--g-leading-art) * 17);
+  align-items: flex-start;
   margin-bottom: var(--g-space-24);
+  text-align: left;
 }
 
-/* Ligatures off: Geist Mono would join the drawing's == and -- into glyphs of their own. */
-.new-chat-jet {
-  max-width: 100%;
+.new-chat-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+}
+
+.new-chat-logo {
+  color: var(--g-fg-1);
+}
+
+/* Two tones at one size and weight: the agent and folder in ink, the connecting words in grey. */
+.new-chat-title {
   margin: 0;
-  overflow: hidden;
-  color: var(--g-fg-2);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-art);
-  line-height: var(--g-leading-art);
-  font-variant-ligatures: none;
-  font-feature-settings:
-    "liga" 0,
-    "calt" 0;
-  white-space: pre;
-  user-select: none;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-display);
+  text-wrap: balance;
 }
 
-@media (max-height: 720px) {
-  .new-chat-hero {
-    min-height: 0;
-  }
+.new-chat-ink {
+  color: var(--g-fg-1);
+}
 
-  .new-chat-jet {
-    display: none;
-  }
+/* Keep the description close to its heading. */
+.new-chat-hint {
+  margin: var(--g-space-6) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-prose);
+  line-height: var(--g-leading-prose);
 }
 
 /* ---------------------------------------------------------------------------- card */

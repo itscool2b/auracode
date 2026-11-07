@@ -84,6 +84,9 @@ export async function exerciseApp(driver, folder, save, checks = []) {
     ),
   );
   await driver.click("//button[normalize-space(.)='Skip setup']", "xpath");
+  // Launch shows the start screen's aircraft; the sidebar's New chat opens the form.
+  await until("start screen", () => driver.visible(byTest("launch-art")));
+  await driver.click(byTest("new-chat-button"));
   await until("new chat form", () => driver.visible(byTest("new-chat")));
   await driver.click(`select[aria-label="Project folder"] option[value="${folderId}"]`);
   const demo = 'input[type="radio"][value="mock"]';

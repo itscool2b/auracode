@@ -1,0 +1,60 @@
+/*
+ * The start screen (LaunchArt.tsx): this launch's aircraft in ASCII, alone in the pane under the
+ * drag band, its name just beneath it, the two centred together. The pane sets the
+ * figure's size, never the piece, so the script can fit the piece to it (--launch-art-scale)
+ * without resizing its own room.
+ */
+.launch-art {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-space-16);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: var(--g-space-40) var(--g-space-24) var(--g-space-48);
+  overflow: hidden;
+}
+
+/* Ligatures off: Geist Mono would join a drawing's == and -- into glyphs of their own. */
+.launch-art-picture {
+  --launch-art-scale: 1;
+  flex: none;
+  width: max-content;
+  margin: 0;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: calc(var(--g-text-art) * var(--launch-art-scale));
+  line-height: calc(var(--g-leading-art) * var(--launch-art-scale));
+  font-variant-ligatures: none;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  white-space: pre;
+  user-select: none;
+}
+
+.launch-art-caption {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-align: center;
+}
+
+/* Arriving: the piece, then its name, rise once per launch, as New chat's rows do. */
+.launch-art > :is(.launch-art-picture, .launch-art-caption) {
+  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) backwards;
+}
+
+.launch-art > .launch-art-caption {
+  animation-delay: var(--g-stagger-row);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launch-art > :is(.launch-art-picture, .launch-art-caption) {
+    animation: none;
+  }
+}

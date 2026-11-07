@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { Banners, type MemoryEditBanner, MemoryEditBannerView } from "./Banners";
+import { Banners, type MemoryEditBanner, MemoryEditBannerView, noticeItems } from "./Banners";
 
 const banner = (state: MemoryEditBanner["state"]): MemoryEditBanner => ({
   key: "one:r2",
@@ -57,18 +57,22 @@ describe("an agent's memory edit banner", () => {
   it("hides Review where nothing can open Project memory", () => {
     expect(view({ ...banner({ status: "shown" }), onReview: undefined })).not.toContain(">Review<");
   });
-  it("joins the window's banners, which otherwise show nothing", () => {
-    const quiet = {
+  it("floats while fresh, and stays in the panel without leaving by itself", () => {
+    expect(renderToStaticMarkup(<Banners storage={null} />)).toBe("");
+    expect(
+      renderToStaticMarkup(<Banners storage={null} memoryEdits={[banner({ status: "shown" })]} />),
+    ).toContain('data-testid="memory-edit-banner"');
+    const items = noticeItems({
       storage: null,
       env: null,
       onRetryEnv: () => {},
       recoveryNotice: null,
       onRecoveryDismissed: () => {},
       notices: [],
-    };
-    expect(renderToStaticMarkup(<Banners {...quiet} />)).toBe("");
-    expect(
-      renderToStaticMarkup(<Banners {...quiet} memoryEdits={[banner({ status: "shown" })]} />),
-    ).toContain('data-testid="memory-edit-banner"');
+      onDismissNotice: () => {},
+      memoryEdits: [banner({ status: "shown" })],
+    });
+    expect(items.map((item) => [item.key, item.level])).toEqual([["memory:one:r2", undefined]]);
+    expect(renderToStaticMarkup(<ul>{items.map((item) => item.node)}</ul>)).toContain(">Undo<");
   });
 });
