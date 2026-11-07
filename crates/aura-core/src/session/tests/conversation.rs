@@ -701,7 +701,7 @@ async fn latest_qualified_native_fork_uses_a_distinct_native_id() {
     );
 }
 
-async fn reopen_manager(rig: &mut Rig) {
+pub(super) async fn reopen_manager(rig: &mut Rig) {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
     let deps = rig.manager.deps();
     let manager = SessionManager::new(ManagerDeps {
@@ -782,4 +782,75 @@ async fn saved_handoff_survives_actor_reconstruction_and_is_consumed_once() {
             text: "later prompt".into()
         }]
     );
+}
+
+/// Natively, 6 November 2026: a new Claude chat starts its agent before its first message, and
+/// Claude Code writes the session's file only with that message, so after a restart its first
+/// message failed to start the agent ("No conversation found with session ID"). Such a session
+/// starts again under its own id; one that ran a turn still resumes.
+#[tokio::test]
+async fn a_never_messaged_claude_session_starts_again_under_its_own_id() {
+    let home = tempfile::tempdir().unwrap();
+    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    RIG_ENV.with(|extra| {
+        extra.replace(vec![(
+            variable.into(),
+            home.path().to_string_lossy().into_owned(),
+        )])
+    });
+    let native = uuid::Uuid::now_v7().to_string();
+    let (created, _) = ScriptedDriver::new(vec![
+        ready_step(&native),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (first_message, h2) = turn_driver(&native, "first answer");
+    let (resumed, _) = ScriptedDriver::new(vec![ready_step(&native)]);
+    let starts = Arc::new(Mutex::new(Vec::new()));
+    let factory = Arc::new(RecordingFactory {
+        inner: aura_drivers::testing::ScriptedDriverFactory::new(vec![
+            created,
+            first_message,
+            resumed,
+        ]),
+        starts: Arc::clone(&starts),
+    });
+    let mut rig = rig_with_spec(
+        factory,
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+        aura_agents::get("claude").expect("claude").clone(),
+    );
+    RIG_ENV.with(|extra| extra.replace(Vec::new()));
+    let chat = rig
+        .manager
+        .create_chat("claude", &rig.folder)
+        .await
+        .expect("chat");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    reopen_manager(&mut rig).await;
+    turn(&rig, &chat.id, &h2, "first words").await;
+    {
+        let starts = lock(&starts);
+        assert_eq!(starts[1].1, None, "Claude has no such session to resume");
+        assert_eq!(starts[1].2.new_session_id.as_deref(), Some(native.as_str()));
+    }
+    let loaded = rig.store.load_chat(&chat.id).await.unwrap();
+    assert_eq!(
+        loaded
+            .agent_session
+            .and_then(|session| session.native_session_id),
+        Some(native.clone()),
+        "the chat keeps its session"
+    );
+    stop(&rig, &chat.id).await;
+    rig.manager.start(&chat.id, false).await.expect("start");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let starts = lock(&starts);
+    assert_eq!(
+        starts[2].1.as_deref(),
+        Some(native.as_str()),
+        "a session that ran a turn resumes, file or not"
+    );
+    assert_eq!(starts[2].2.new_session_id, None);
 }

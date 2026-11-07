@@ -1,5 +1,6 @@
 //! Admission, descriptors and per-native-session persistence for native controls.
 use super::*;
+use crate::session::catalogs::Catalog;
 use aura_drivers::controls::{ACCESS, WORKFLOW};
 use aura_protocol::session::{
     SessionControl, SessionControlChange, SessionControlChoice, SessionControlPreferences,
@@ -25,6 +26,12 @@ fn legacy(value: Autonomy) -> (&'static str, &'static str) {
         Autonomy::AutoEdit => ("legacy:auto_edit", "Allow edits"),
         Autonomy::Ask => ("legacy:ask", "Ask for approval"),
     }
+}
+/// The level a `legacy:` access value names.
+fn legacy_level(value: &str) -> Option<Autonomy> {
+    [Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask]
+        .into_iter()
+        .find(|level| legacy(*level).0 == value)
 }
 fn descriptor(options: &[ConfigOption], id: &str, requested: Option<String>) -> SessionControl {
     let mut result = SessionControl {
@@ -71,9 +78,66 @@ fn choice_value(value: &ConfigValue) -> Option<String> {
         _ => None,
     }
 }
+/// A control as its connection last listed it, showing `current` when it offers it.
+fn offered_as(option: &ConfigOption, current: &str) -> Option<ConfigOption> {
+    let ConfigKind::Select { choices, .. } = &option.kind else {
+        return None;
+    };
+    choices
+        .iter()
+        .any(|choice| choice.value == current)
+        .then(|| ConfigOption {
+            kind: ConfigKind::Select {
+                current: current.to_owned(),
+                choices: choices.clone(),
+            },
+            pending: None,
+            ..option.clone()
+        })
+}
 impl ChatActor {
+    /// The access levels this chat can ask for: the running agent's, else the ones its saved
+    /// session or its connection last reported (a chat loaded at launch has not started yet).
+    fn known_levels(&self) -> Vec<Autonomy> {
+        if let Some(capabilities) = &self.capabilities {
+            return capabilities.autonomy_levels.clone();
+        }
+        self.agent_session
+            .as_ref()
+            .and_then(|session| session.capabilities.as_ref())
+            .map(|capabilities| capabilities.autonomy_levels.clone())
+            .filter(|levels| !levels.is_empty())
+            .or_else(|| self.catalog().map(|catalog| catalog.autonomy_levels))
+            .unwrap_or_default()
+    }
+
+    /// Control `id` as the agent last listed it in this run, else as its connection did.
+    fn last_control<'a>(
+        &'a self,
+        catalog: Option<&'a Catalog>,
+        id: &str,
+    ) -> Option<&'a ConfigOption> {
+        self.options
+            .iter()
+            .find(|option| option.id == id)
+            .or_else(|| catalog.and_then(|catalog| catalog.control(id)))
+    }
+
     pub(super) fn control_lists(&self) -> SessionControls {
+        let live = self.options_live();
+        // While the agent is not running (a chat loaded at launch, a new chat still starting),
+        // the controls it or its connection last listed stand in for its own, showing what the
+        // next start asks for rather than what an earlier process ran with.
+        let catalog = if live { None } else { self.catalog() };
         let mut access = descriptor(&self.options, ACCESS, self.controls.access.clone());
+        if !live
+            && let Some(requested) = self.controls.access.as_deref()
+            && let Some(option) = self
+                .last_control(catalog.as_ref(), ACCESS)
+                .and_then(|option| offered_as(option, requested))
+        {
+            access = descriptor(&[option], ACCESS, Some(requested.to_owned()));
+        }
         if access.choices.is_empty() {
             access.requested = self
                 .controls
@@ -93,23 +157,44 @@ impl ChatActor {
             if self.controls.access.is_some() {
                 access.effective = None;
             }
-            access.choices = self.capabilities.as_ref().map(|c| c.autonomy_levels.iter().map(|v| { let (id,name) = legacy(*v); SessionControlChoice { value: id.into(), name: name.into(), description: Some(match v { Autonomy::FullAuto => "Use this connection full native access setting; native restrictions remain in effect.", Autonomy::AutoEdit => "Allow native file edits, with other operations governed by this connection approval policy.", Autonomy::Ask => "Use this connection approval policy for access requests." }.into()), legacy_autonomy: Some(*v) } }).collect()).unwrap_or_default();
+            access.choices = self.known_levels().iter().map(|v| { let (id,name) = legacy(*v); SessionControlChoice { value: id.into(), name: name.into(), description: Some(match v { Autonomy::FullAuto => "Use this connection full native access setting; native restrictions remain in effect.", Autonomy::AutoEdit => "Allow native file edits, with other operations governed by this connection approval policy.", Autonomy::Ask => "Use this connection approval policy for access requests." }.into()), legacy_autonomy: Some(*v) } }).collect();
         }
         access.native_mode = self.autonomy_state.native_mode.clone();
         access.note = access.note.or_else(|| self.autonomy_state.note.clone());
         let mut workflow = descriptor(&self.options, WORKFLOW, self.controls.workflow.clone());
-        if workflow.choices.is_empty() && workflow.note.is_none() {
+        if !live
+            && let Some(requested) = self
+                .controls
+                .workflow
+                .as_deref()
+                .or_else(|| workflow.choices.is_empty().then_some("execute"))
+            && let Some(option) = self
+                .last_control(catalog.as_ref(), WORKFLOW)
+                .and_then(|option| offered_as(option, requested))
+        {
+            workflow = descriptor(&[option], WORKFLOW, self.controls.workflow.clone());
+        }
+        // Only a running agent can say it has no Plan control.
+        if workflow.choices.is_empty() && workflow.note.is_none() && live {
             workflow.note =
                 Some("This connection does not advertise a native Plan control.".into());
         }
+        // A change on its way shows as pending where the choices name it: a level chosen from the
+        // ones shown before the agent's own lists names none of them, and they show it once applied.
         if let Some((id, value)) = &self.control_pending {
             let target = if id == ACCESS {
                 &mut access
             } else {
                 &mut workflow
             };
-            target.pending = choice_value(value);
-            target.requested = target.pending.clone();
+            let value = choice_value(value);
+            if value
+                .as_ref()
+                .is_some_and(|value| target.choices.iter().any(|choice| &choice.value == value))
+            {
+                target.pending = value;
+                target.requested = target.pending.clone();
+            }
         }
         SessionControls {
             version: 1,
@@ -180,14 +265,126 @@ impl ChatActor {
         change: SessionControlChange,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
     ) {
+        if !self.options_live()
+            && self.terminal.is_none()
+            && matches!(
+                self.status,
+                SessionStatus::Stopped
+                    | SessionStatus::Failed
+                    | SessionStatus::AuthRequired
+                    | SessionStatus::Starting
+            )
+        {
+            return self.keep_control_for_start(change, reply);
+        }
         if !self.controls_idle() {
             let _ = reply.send(Err(SessionError::OptionInvalid("Wait until the agent is idle, clear queued messages and answer pending approvals before changing native controls.".into())));
             return;
         }
+        self.set_control_admitted(change, reply);
+    }
+
+    /// The agent is not running, or its start is still being prepared: an access change is kept
+    /// for the start, as a model change is, and the start's setup asks for it. Once the agent's
+    /// process has its setup (the last moment of a start), a change waits for the agent to be
+    /// ready: kept for later instead, it could let a message sent meanwhile run on the access the
+    /// person had just left. A mode waits for a running, idle agent.
+    fn keep_control_for_start(
+        &mut self,
+        change: SessionControlChange,
+        reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+    ) {
+        let SessionControlChange::Access { value } = change else {
+            let _ = reply.send(Err(SessionError::OptionInvalid(
+                "Change the mode once the agent is running and idle.".into(),
+            )));
+            return;
+        };
+        if self.driver.is_some() {
+            let _ = reply.send(Err(SessionError::OptionInvalid(format!(
+                "{} is starting. Choose the access again once it is ready.",
+                self.agent_label()
+            ))));
+            return;
+        }
+        let controls = self.control_lists();
+        let Some(choice) = controls
+            .access
+            .choices
+            .iter()
+            .find(|choice| choice.value == value)
+            .cloned()
+        else {
+            let _ = reply.send(Err(SessionError::OptionInvalid(
+                "This connection does not offer that access setting.".into(),
+            )));
+            return;
+        };
+        if controls.workflow.effective.as_deref() == Some("plan") {
+            let _ = reply.send(Err(SessionError::OptionInvalid(
+                "Leave Plan with implementation approval before changing execution access.".into(),
+            )));
+            return;
+        }
+        if let Some(autonomy) = choice.legacy_autonomy {
+            self.store_autonomy(
+                autonomy,
+                stopped_autonomy(autonomy, Some("Applies when the agent starts.")),
+            );
+        } else {
+            self.controls.version = 1;
+            self.controls.access = Some(value.clone());
+            self.persist_controls();
+            self.revision = self.revision.wrapping_add(1);
+            self.info_dirty = true;
+            self.schedule_flush();
+        }
+        let _ = reply.send(Ok(self.lists()));
+    }
+
+    /// Saves the chat's native control choices with its session, when it has one yet.
+    fn persist_controls(&mut self) {
+        let Some(session) = &mut self.agent_session else {
+            return;
+        };
+        let controls_json = serde_json::to_string(&self.controls).ok();
+        session.controls_json = controls_json.clone();
+        let id = session.id.clone();
+        self.queue_op(Op::UpdateAgentSession {
+            id,
+            patch: AgentSessionPatch {
+                capabilities: None,
+                native_session_id: None,
+                model: None,
+                effort: None,
+                autonomy: None,
+                config_json: None,
+                controls_json,
+                updated_at: now_millis(),
+            },
+        });
+    }
+
+    /// A control change the agent is idle for.
+    fn set_control_admitted(
+        &mut self,
+        change: SessionControlChange,
+        reply: oneshot::Sender<Result<SessionLists, SessionError>>,
+    ) {
         let controls = self.control_lists();
         let (id, value) = match change {
             SessionControlChange::Access { value } => {
-                let Some(choice) = controls.access.choices.iter().find(|c| c.value == value) else {
+                let choice = controls.access.choices.iter().find(|c| c.value == value);
+                // A level the agent supports, chosen from the levels the picker showed before the
+                // agent's own lists arrived (a moment after it turns ready): it goes through the
+                // agent's level, as on a connection without native access.
+                let level = legacy_level(&value).filter(|level| {
+                    self.capabilities
+                        .as_ref()
+                        .is_some_and(|capabilities| capabilities.autonomy_levels.contains(level))
+                });
+                let Some(legacy_autonomy) = choice.map(|c| c.legacy_autonomy).or(level.map(Some))
+                else {
                     let _ = reply.send(Err(SessionError::OptionInvalid(
                         "This connection does not offer that access setting.".into(),
                     )));
@@ -200,7 +397,7 @@ impl ChatActor {
                     )));
                     return;
                 }
-                if let Some(autonomy) = choice.legacy_autonomy {
+                if let Some(autonomy) = legacy_autonomy {
                     self.control_pending = Some((
                         ACCESS.into(),
                         ConfigValue::Choice {
@@ -321,25 +518,7 @@ impl ChatActor {
         if legacy_changed {
             self.persist_desired();
         }
-        let Some(session) = &mut self.agent_session else {
-            return;
-        };
-        let controls_json = serde_json::to_string(&self.controls).ok();
-        session.controls_json = controls_json.clone();
-        let id = session.id.clone();
-        self.queue_op(Op::UpdateAgentSession {
-            id,
-            patch: AgentSessionPatch {
-                capabilities: None,
-                native_session_id: None,
-                model: None,
-                effort: None,
-                autonomy: None,
-                config_json: None,
-                controls_json,
-                updated_at: now_millis(),
-            },
-        });
+        self.persist_controls();
     }
 }
 

@@ -3719,6 +3719,23 @@ The person continues this conversation here, in your terminal. Reply only that y
         }
     }
 
+    /// A new chat starts its agent before its first message, and Claude Code writes a session's
+    /// file only with that message: a later start (after a restart, or once the agent stopped)
+    /// that resumed the session would fail with "No conversation found". A saved Claude session
+    /// that ran no turn and has no file starts again under the same id instead. One that ran
+    /// turns still resumes, so a missing file is reported rather than quietly forgotten.
+    fn unwritten_claude_session(&self, spec: &AgentSpec, prepared: &Prepared, id: &str) -> bool {
+        spec.kind == aura_protocol::DriverKind::Claude
+            && self
+                .replay_check
+                .as_ref()
+                .is_some_and(|check| check.native_session_id == id && check.turns == 0)
+            && uuid::Uuid::parse_str(id).is_ok()
+            && terminal_home(spec.kind, &prepared.launch, &prepared.env)
+                .session_file(id)
+                .is_none()
+    }
+
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
         self.mcp_pending = false;
         if !prepared.memory_mcp_available {
@@ -3744,7 +3761,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             .as_ref()
             .map(|account| (account.account_id.clone(), account.name.clone()));
         self.usage_limit = None;
-        let native_start = native_start(spec.kind, self.continuation.as_ref());
+        let mut native_start = native_start(spec.kind, self.continuation.as_ref());
         let resume = if let Some(source) = self
             .continuation
             .as_ref()
@@ -3757,6 +3774,15 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.agent_session
                 .as_ref()
                 .and_then(|session| session.native_session_id.clone())
+                .and_then(|id| {
+                    if self.unwritten_claude_session(&spec, &prepared, &id) {
+                        // Started again under its own id: nothing was said in it to lose.
+                        native_start.new_session_id = Some(id);
+                        None
+                    } else {
+                        Some(id)
+                    }
+                })
         };
         let native_scope = NativeSessionScope::local(
             spec.id,
@@ -5165,7 +5191,11 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.option_value(ConfigCategory::Effort),
         );
         match (&info.resumed, &mut self.agent_session) {
-            (ResumeOutcome::Resumed | ResumeOutcome::Loaded, Some(session)) if same_session => {
+            // A session started again under its own id (`unwritten_claude_session`) keeps its row.
+            (
+                ResumeOutcome::Resumed | ResumeOutcome::Loaded | ResumeOutcome::New,
+                Some(session),
+            ) if same_session => {
                 session.updated_at = now;
                 session.autonomy = self.autonomy;
                 session.config_json = config_json.clone();
@@ -5238,6 +5268,10 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.native_session_id = info.native_session_id;
         self.agent_name = info.agent_name;
         self.agent_version = info.agent_version;
+        // The next chat on this connection names its access levels before its agent starts.
+        self.shared
+            .catalogs
+            .learn_levels(spec.id, &info.capabilities.autonomy_levels);
         self.capabilities = Some(info.capabilities);
         self.revision = self.revision.wrapping_add(1);
         if self

@@ -1,7 +1,9 @@
 //! The model catalog each agent connection last reported: its models, the thinking levels each
-//! model offered while it was current, and the model it starts on when nothing is chosen. A chat
-//! whose agent is not running offers these, so a model or a thinking level can be chosen before
-//! the agent starts; the choice applies when it does.
+//! model offered while it was current, the model it starts on when nothing is chosen, and its
+//! access: the native access and workflow controls it listed and the access levels it supports. A
+//! chat whose agent is not running offers these, so a model, a thinking level or an access level
+//! can be chosen before the agent starts (a new chat's is still starting); the choice applies when
+//! it does.
 //!
 //! Every list a running agent reports refreshes its connection's catalog, and the profile's
 //! database keeps the catalogs across restarts as one device-only setting (another device runs
@@ -13,8 +15,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use aura_protocol::Millis;
 use aura_protocol::session::{ConfigCategory, ConfigChoice, ConfigKind, ConfigOption};
+use aura_protocol::{Autonomy, Millis};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -48,6 +50,13 @@ pub(crate) struct Catalog {
     /// By model value: the thinking level option the agent offered while that model was current
     /// (its `current` means nothing), or `None` when that model offered none.
     pub(crate) efforts: BTreeMap<String, Option<ConfigOption>>,
+    /// The native access and workflow controls (`aura.access`, `aura.workflow`) as last listed,
+    /// their choices only: which one is chosen belongs to each chat. Older records have none.
+    #[serde(default)]
+    pub(crate) controls: Vec<ConfigOption>,
+    /// The access levels the connection said it supports when it last started.
+    #[serde(default)]
+    pub(crate) autonomy_levels: Vec<Autonomy>,
 }
 
 impl Catalog {
@@ -69,6 +78,11 @@ impl Catalog {
             ConfigKind::Select { choices, .. } => choices,
             ConfigKind::Toggle { .. } => &[],
         }
+    }
+
+    /// The native control `id` as last listed, its `current` empty.
+    pub(crate) fn control(&self, id: &str) -> Option<&ConfigOption> {
+        self.controls.iter().find(|option| option.id == id)
     }
 }
 
@@ -178,6 +192,12 @@ impl Catalogs {
         }
         // A model the agent no longer lists keeps no levels.
         efforts.retain(|value, _| choices.iter().any(|choice| choice.value == *value));
+        // Every list a driver sends is whole: one without native controls means it has none now.
+        let controls = options
+            .iter()
+            .filter(|option| is_control(&option.id))
+            .map(levels_only)
+            .collect();
         let next = Catalog {
             agent: agent.to_owned(),
             updated_at: now_millis(),
@@ -190,6 +210,10 @@ impl Catalogs {
                 ..model.clone()
             },
             efforts,
+            controls,
+            autonomy_levels: known
+                .map(|known| known.autonomy_levels.clone())
+                .unwrap_or_default(),
         };
         if known.is_some_and(|known| same_but_time(known, &next)) {
             return;
@@ -206,6 +230,24 @@ impl Catalogs {
             };
             state.catalogs.remove(&oldest);
         }
+        state.dirty = true;
+        drop(state);
+        self.changes
+            .send_modify(|count| *count = count.wrapping_add(1));
+    }
+
+    /// Records the access levels a started agent of `connection` said it supports. A connection
+    /// without a catalog (it listed no models) keeps none.
+    pub(crate) fn learn_levels(&self, connection: &str, levels: &[Autonomy]) {
+        let mut state = lock(&self.state);
+        let Some(catalog) = state.catalogs.get_mut(connection) else {
+            return;
+        };
+        if catalog.autonomy_levels == levels {
+            return;
+        }
+        catalog.autonomy_levels = levels.to_vec();
+        catalog.updated_at = now_millis();
         state.dirty = true;
         drop(state);
         self.changes
@@ -356,7 +398,19 @@ fn levels_only(option: &ConfigOption) -> ConfigOption {
 }
 
 fn same_but_time(a: &Catalog, b: &Catalog) -> bool {
-    a.agent == b.agent && a.model == b.model && a.efforts == b.efforts
+    a.agent == b.agent
+        && a.model == b.model
+        && a.efforts == b.efforts
+        && a.controls == b.controls
+        && a.autonomy_levels == b.autonomy_levels
+}
+
+/// The native access and workflow controls, which every chat chooses for itself.
+fn is_control(id: &str) -> bool {
+    matches!(
+        id,
+        aura_drivers::controls::ACCESS | aura_drivers::controls::WORKFLOW
+    )
 }
 
 #[cfg(test)]
@@ -457,6 +511,60 @@ mod tests {
             true,
         );
         assert!(catalogs.get("other").is_none());
+    }
+
+    #[test]
+    fn learns_the_access_controls_and_levels_without_any_chats_choice() {
+        let catalogs = read();
+        let mut options = lists("smart", None);
+        options.push(select(
+            aura_drivers::controls::ACCESS,
+            ConfigCategory::Other,
+            "bypassPermissions",
+            &["default", "bypassPermissions"],
+        ));
+        catalogs.learn_levels("mock", &[Autonomy::Ask]);
+        assert!(
+            catalogs.get("mock").is_none(),
+            "levels alone make no catalog"
+        );
+        catalogs.learn("mock", "mock", &options, true);
+        let catalog = catalogs.get("mock").unwrap();
+        let access = catalog
+            .control(aura_drivers::controls::ACCESS)
+            .expect("access");
+        assert!(
+            matches!(&access.kind, ConfigKind::Select { current, choices } if current.is_empty() && choices.len() == 2)
+        );
+        assert!(catalog.control("mode").is_none(), "only native controls");
+        catalogs.take_dirty();
+        catalogs.learn_levels("mock", &[Autonomy::FullAuto, Autonomy::Ask]);
+        let saved = catalogs.take_dirty().expect("the levels are saved");
+        catalogs.learn_levels("mock", &[Autonomy::FullAuto, Autonomy::Ask]);
+        assert!(
+            catalogs.take_dirty().is_none(),
+            "the same levels change nothing"
+        );
+        // A later list keeps the levels; one without controls drops them.
+        catalogs.learn("mock", "mock", &lists("smart", None), false);
+        let catalog = catalogs.get("mock").unwrap();
+        assert!(catalog.controls.is_empty());
+        assert_eq!(catalog.autonomy_levels, [Autonomy::FullAuto, Autonomy::Ask]);
+        let restarted = read();
+        restarted.merge_saved(&saved);
+        assert_eq!(
+            restarted.get("mock").unwrap().autonomy_levels,
+            [Autonomy::FullAuto, Autonomy::Ask]
+        );
+        // A record saved before access was kept reads with none.
+        let mut older: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        let entry = older["catalogs"]["mock"].as_object_mut().unwrap();
+        entry.remove("controls");
+        entry.remove("autonomy_levels");
+        let restarted = read();
+        restarted.merge_saved(&older.to_string());
+        let catalog = restarted.get("mock").expect("an older record still loads");
+        assert!(catalog.controls.is_empty() && catalog.autonomy_levels.is_empty());
     }
 
     /// A book whose saved record was read.
