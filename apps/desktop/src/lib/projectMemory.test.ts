@@ -14,6 +14,7 @@ import {
   type AgentEditNotice,
   adoptsSaved,
   agentEditText,
+  agentEditToast,
   agentLabel,
   MAX_MEMORY_BYTES,
   MEMORY_CHANGED_ANYWHERE,
@@ -200,6 +201,26 @@ describe("agent edit notices", () => {
     expect(agentEditText({ ...one, state: { status: "undone" } }, chats, "auracode")).toBe(
       "Undone. The project memory for auracode is back to its revision before this edit.",
     );
+  });
+  it("puts the edit on a toast: a short title, then who and where on one line", () => {
+    const [one] = noticeAgentEdit([], edit("r2", "r1"));
+    if (!one) throw new Error("notice");
+    expect(agentEditToast(one, chats, "auracode")).toEqual({
+      title: "Project memory updated",
+      detail: "Claude Code · Fix the login flow · auracode",
+    });
+    expect(agentEditToast({ ...one, chats: ["gone"] }, chats, null)).toEqual({
+      title: "Project memory updated",
+      detail: "An agent",
+    });
+    expect(agentEditToast({ ...one, edits: 2, chats: ["login", "untitled"] }, chats, "x")).toEqual({
+      title: "2 edits to project memory",
+      detail: "Agents in 2 chats · x",
+    });
+    expect(agentEditToast({ ...one, state: { status: "undone" } }, chats, "auracode")).toEqual({
+      title: "Edit undone",
+      detail: "Project memory for auracode is back to its revision before this edit.",
+    });
   });
 });
 

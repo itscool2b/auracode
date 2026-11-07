@@ -21,8 +21,15 @@ export async function checkAgentUpdates(browser, url, out, engine) {
       const open = async (query = "") => {
         await page.goto(`${url}/?preview=agent-updates&theme=${theme}${query}`);
         await notice("claude").waitFor();
+        // The stack folds to its front toast; pointing at it opens every toast.
+        await notice("claude").hover();
       };
 
+      await page.goto(`${url}/?preview=agent-updates&theme=${theme}`);
+      await notice("claude").waitFor();
+      await page.mouse.move(400, 600);
+      assert.equal(await notice("codex").isVisible(), false, "the stack folds to its front toast");
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-folded.png`) });
       await open();
       assert.equal(
         await page.getByTestId("agent-update-banner").count(),
@@ -54,6 +61,18 @@ export async function checkAgentUpdates(browser, url, out, engine) {
         (await new AxeBuilder({ page }).include(".chat-banners").analyze()).violations,
         [],
       );
+      // The stack sits at the pane's top right under its header, clear of the composer.
+      const stack = await page.locator(".chat-banners").boundingBox();
+      const pane = await page.locator(".chat-main").boundingBox();
+      assert.ok(stack && pane, "the stack and the pane are on screen");
+      assert.ok(
+        stack.y - pane.y < 80,
+        `the stack starts under the header, at ${stack.y - pane.y}px`,
+      );
+      assert.ok(
+        pane.x + pane.width - (stack.x + stack.width) <= 24,
+        "the stack keeps to the right",
+      );
       await page.screenshot({ path: resolve(out, `${engine}-${theme}-notices.png`) });
 
       // X hides a notice for this run of auracode only.
@@ -69,7 +88,21 @@ export async function checkAgentUpdates(browser, url, out, engine) {
       await open();
       await notice("cursor").waitFor();
 
-      // A failed update says why and offers to try again, which can succeed.
+      // A failed update says why and offers its command in auracode's terminal, where its
+      // output shows; once that passes and the sheet closes, the notice goes.
+      await open("&case=fail");
+      await notice("claude").getByRole("button", { name: "Update", exact: true }).click();
+      await notice("claude").getByRole("alert").filter({ hasText: "The update failed" }).waitFor();
+      await notice("claude").getByRole("button", { name: "Run in terminal" }).click();
+      const sheet = page.getByRole("dialog", { name: "Update Claude Code" });
+      await sheet.waitFor();
+      await sheet
+        .getByText("The update finished. auracode checks the new version when you close this.")
+        .waitFor();
+      assert.equal(await notice("claude").count(), 1, "the notice waits while the output is read");
+      await sheet.getByRole("button", { name: "Close update terminal" }).click();
+      await notice("claude").waitFor({ state: "detached" });
+      // Try again can succeed too.
       await open("&case=fail");
       await notice("claude").getByRole("button", { name: "Update", exact: true }).click();
       await notice("claude").getByRole("alert").filter({ hasText: "The update failed" }).waitFor();

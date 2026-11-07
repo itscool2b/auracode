@@ -51,7 +51,7 @@ export function TerminalSheet({
   readonly onClose: () => void;
   readonly onFinished?: (exitCode: number | null) => void;
   readonly transport?: TerminalTransport;
-  readonly purpose?: "sign-in" | "installation" | "setup" | "project" | "token";
+  readonly purpose?: "sign-in" | "installation" | "setup" | "project" | "token" | "update";
   readonly review?: ReactNode;
   /** Starts the command once the terminal is ready: the person already asked for it. */
   readonly autoStart?: boolean;
@@ -178,7 +178,9 @@ export function TerminalSheet({
             ? "Review the command before starting."
             : purpose === "project"
               ? "Review the folder and shell before starting."
-              : "Ready to sign in."
+              : purpose === "update"
+                ? "Ready to run the update."
+                : "Ready to sign in."
         : state.state === "starting"
           ? purpose === "installation"
             ? "Checking the reviewed installer…"
@@ -186,13 +188,17 @@ export function TerminalSheet({
               ? "Checking the reviewed setup…"
               : purpose === "project"
                 ? "Checking the reviewed project folder…"
-                : "Opening the vendor sign-in flow…"
+                : purpose === "update"
+                  ? "Starting the agent's update…"
+                  : "Opening the vendor sign-in flow…"
           : state.state === "running"
             ? purpose === "setup"
               ? "The setup command is running."
               : purpose === "project"
                 ? "The project shell is running."
-                : "Follow the vendor's prompts below."
+                : purpose === "update"
+                  ? "The update is running. Answer any prompt it asks below."
+                  : "Follow the vendor's prompts below."
             : state.state === "failed"
               ? state.message
               : state.exitCode === 0
@@ -202,10 +208,14 @@ export function TerminalSheet({
                     ? "The setup command finished."
                     : purpose === "project"
                       ? "The project shell finished."
-                      : "The vendor command finished. Check sign-in status to confirm."
+                      : purpose === "update"
+                        ? "The update finished. auracode checks the new version when you close this."
+                        : "The vendor command finished. Check sign-in status to confirm."
                 : state.exitCode === null
                   ? "The terminal closed without an exit status."
-                  : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
+                  : purpose === "update"
+                    ? `The update exited with code ${state.exitCode}. Its output above says why.`
+                    : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
 
   const outcome =
     state.state === "failed" || (state.state === "finished" && state.exitCode !== 0)
@@ -238,7 +248,9 @@ export function TerminalSheet({
                   ? `Setup ${agentName}`
                   : purpose === "project"
                     ? `${agentName} terminal`
-                    : `Sign in to ${agentName}`}
+                    : purpose === "update"
+                      ? `Update ${agentName}`
+                      : `Sign in to ${agentName}`}
           </h2>
           <p id={description}>
             {purpose === "token"
@@ -249,7 +261,9 @@ export function TerminalSheet({
                   ? "Runs the reviewed command. Closing stops it."
                   : purpose === "project"
                     ? "Opens a shell in the reviewed project folder. Closing stops it."
-                    : "Runs the agent's own sign-in. Closing stops it."}{" "}
+                    : purpose === "update"
+                      ? "Runs the agent's own update command, the one Update runs. Closing stops it."
+                      : "Runs the agent's own sign-in. Closing stops it."}{" "}
             Terminal output is not saved.
           </p>
         </div>

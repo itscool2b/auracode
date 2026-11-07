@@ -1,7 +1,9 @@
-//! Explicit vendor login preparation. No authentication command runs while inspecting this plan.
+//! Explicit vendor terminals: sign-in, account tokens and updates. No vendor command runs while
+//! inspecting this plan; only the terminal the person starts runs it.
 use super::{SessionError, SessionManager};
 use aura_agents::maintenance::{
     MaintenanceCommand, MaintenanceError, check_unchanged, login_command, token_command,
+    update_command,
 };
 use aura_process::{LaunchSpec, ProcessCwd, SpawnSpec};
 use aura_protocol::agents::AgentInstallation;
@@ -24,11 +26,25 @@ impl SessionManager {
             .await
     }
 
+    /// The agent's own update command (the one Update runs in the background), in a terminal the
+    /// person watches: when the background update fails, its output and any prompt it asks show
+    /// here instead of being lost. The same channel rules apply; nothing runs that Update would not.
+    pub async fn prepare_agent_update(&self, agent_id: &str) -> Result<SpawnSpec, SessionError> {
+        let env = self.deps().env.get().await;
+        let mut spec = self
+            .prepare_vendor_terminal(agent_id, "update", |installation| {
+                update_command(installation, &env.vars)
+            })
+            .await?;
+        spec.launch.startup_timeout = Duration::from_secs(30);
+        Ok(spec)
+    }
+
     async fn prepare_vendor_terminal(
         &self,
         agent_id: &str,
         purpose: &str,
-        command: fn(&AgentInstallation) -> Result<MaintenanceCommand, MaintenanceError>,
+        command: impl FnOnce(&AgentInstallation) -> Result<MaintenanceCommand, MaintenanceError>,
     ) -> Result<SpawnSpec, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
@@ -41,14 +57,14 @@ impl SessionManager {
             .find(|entry| entry.id == agent_id)
             .ok_or_else(|| SessionError::UnknownAgent(agent_id.into()))?;
         if !matches!(agent.availability, Availability::Ready { .. }) {
-            return Err(SessionError::AgentUnavailable(
-                "Refresh agents before signing in.".into(),
-            ));
+            return Err(SessionError::AgentUnavailable(format!(
+                "Refresh agents before the {purpose}."
+            )));
         }
         let installation = agent.installation.ok_or_else(|| {
-            SessionError::AgentUnavailable(
-                "This installation has no verified login command.".into(),
-            )
+            SessionError::AgentUnavailable(format!(
+                "This installation has no verified {purpose} command."
+            ))
         })?;
         let command = command(&installation)
             .map_err(|error| SessionError::AgentUnavailable(error.to_string()))?;

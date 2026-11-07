@@ -4,7 +4,8 @@
  *
  * - Claude Code has a newer release and can update; Update succeeds and detection then finds it
  *   up to date. `&case=fail` makes the update fail once; `&case=unchanged` finishes it while
- *   detection still finds the old version (another copy first on PATH).
+ *   detection still finds the old version (another copy first on PATH). After a failure, Run in
+ *   terminal plays the vendor's output in the terminal sheet and the update then passes.
  * - Codex has a newer release that another tool manages, so it points to Settings > Agents.
  * - Cursor has a newer release while one of its chats works, so its Update waits.
  */
@@ -20,6 +21,7 @@ import {
 import { AppStore } from "../lib/chat/appStore";
 import { chatSummary, FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
+import type { TerminalTransport } from "../lib/terminal";
 
 const entry = (id: string, name: string, harness: HarnessStatus): AgentEntry =>
   ({
@@ -143,6 +145,32 @@ export function mountAgentUpdatesPreview(container: HTMLElement): void {
     chatCreate: unavailable,
     start: unavailable,
   });
+  // The vendor's update, played in the terminal sheet: its output, then a passing exit.
+  let played = false;
+  const updateTerminal: TerminalTransport = {
+    reserve: async () => "update-fixture",
+    start: async (id) => id,
+    read: async () => {
+      if (played) return { bytes: [], done: true, exit_code: 0, truncated: false };
+      played = true;
+      await new Promise((done) => setTimeout(done, 300));
+      claude = { state: "up_to_date", version: "2.1.400", checked_at: Date.now() };
+      return {
+        bytes: Array.from(
+          new TextEncoder().encode(
+            "Current version: 2.1.310\r\nChecking for updates...\r\nUpdating to 2.1.400...\r\nSuccessfully updated to 2.1.400\r\n",
+          ),
+        ),
+        done: false,
+        exit_code: null,
+        truncated: false,
+      };
+    },
+    write: async () => {},
+    resize: async () => {},
+    close: async () => {},
+  };
+  transport.updateTerminal = updateTerminal;
   const app = new AppStore(transport);
   createRoot(container).render(
     <StrictMode>

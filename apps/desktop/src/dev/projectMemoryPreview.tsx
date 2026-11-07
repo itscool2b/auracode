@@ -11,6 +11,7 @@ import { Banners } from "../components/chat/Banners";
 import { ProjectMemoryPanel } from "../components/settings/ProjectMemoryPanel";
 import {
   agentEditText,
+  agentEditToast,
   type MemoryChats,
   type ProjectMemoryApi,
   useAgentMemoryEdits,
@@ -210,6 +211,7 @@ export default function ProjectMemoryPreview() {
         notices={[]}
         memoryEdits={edits.notices.map((notice) => ({
           key: `${notice.projectId}:${notice.revision}`,
+          ...agentEditToast(notice, CHATS, "auracode fixture"),
           text: agentEditText(notice, CHATS, "auracode fixture"),
           state: notice.state,
           onReview: () => {

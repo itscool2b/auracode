@@ -63,6 +63,7 @@ import {
 } from "../ipc";
 import { type ProjectToolsApi, projectToolsApi } from "../projectTools";
 import { type SearchTransport, searchApi } from "../search";
+import { type TerminalTransport, updateTerminalTransport } from "../terminal";
 import { type WorktreeRunApi, worktreeRunApi } from "../worktreeRun";
 import { type WorktreeSetupApi, worktreeSetupApi } from "../worktreeSetup";
 import { type FileLinkApi, fileLinkApi } from "./fileLinks";
@@ -91,6 +92,8 @@ export interface Transport {
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
+  /** An agent's update command in the terminal sheet, after Update failed in the background. */
+  readonly updateTerminal?: TerminalTransport;
   /**
    * An agent's Connection setting on this device: one of its connection ids, or `null` for
    * Automatic. Answers every agent as `agentsList` does.
@@ -155,6 +158,7 @@ export const tauriTransport: Transport = {
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,
+  updateTerminal: updateTerminalTransport,
   agentSetConnection,
   agentsList,
   agentsRefresh,

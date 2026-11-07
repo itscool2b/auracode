@@ -2029,20 +2029,22 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * The window's notices are toasts (owner, 6 November 2026: "notifications should be bottom
- * right"): a stack at the chat pane's bottom right, just above the composer (ChatView measures
- * the dock into --ui-dock-height), the newest last. Each is a solid card like the menus, so it
- * reads over any content: the agent's mark when it has one, a title, a quieter detail line, its
+ * The window's notices are toasts. On 6 November 2026 the owner asked for them bottom right; the
+ * composer fills the pane's bottom middle, so they rode above it, over the reply being written,
+ * and on 7 November: "the positioning, everything. sucks". Now one stack sits at the pane's top
+ * right, just under its header, in the same place on every page, and never touches the composer.
+ * Each toast is a solid card like the menus: a mark, a short title, one quieter line, small
  * actions under them and its X at the top right. Nothing glows.
  */
 .chat-banners.ui-toasts {
   position: absolute;
+  top: calc(var(--g-app-header) + var(--g-space-12));
   right: var(--g-space-16);
-  bottom: calc(var(--ui-dock-height, 0px) + var(--g-space-16));
   z-index: 25;
   box-sizing: border-box;
-  width: min(360px, calc(100% - var(--g-space-32)));
-  max-height: calc(100% - var(--ui-dock-height, 0px) - var(--g-space-96));
+  width: min(340px, calc(100% - var(--g-space-32)));
+  max-height: calc(100% - var(--g-app-header) - var(--g-space-32));
+  gap: var(--g-space-8);
   padding: 0;
   overflow-y: auto;
   scrollbar-width: none;
@@ -2050,11 +2052,8 @@ details.setup-install-review[open] > summary::before {
 }
 
 .ui-toasts > .chat-banner {
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--g-space-8) var(--g-space-12);
   min-height: 0;
-  padding: var(--g-space-12) var(--g-space-12) var(--g-space-12) var(--g-space-16);
+  padding: var(--g-space-12);
   border-radius: var(--g-radius-14);
   background-color: var(--ui-menu-fill);
   box-shadow:
@@ -2067,22 +2066,33 @@ details.setup-install-review[open] > summary::before {
   animation: ui-toast-in var(--g-dur-panel) var(--g-ease-quint) both;
 }
 
-/* A toast carries its own mark; a plain one needs no dot either. */
-.ui-toasts > .chat-banner::before {
+/*
+ * A stack folds to its front toast, the next two peeking under it as card edges, until it is
+ * pointed at or focused: then every toast shows. Pointing makes the whole column hold the hover,
+ * so moving between toasts does not fold it again.
+ */
+.ui-toasts:is(:hover, :focus-within) {
+  pointer-events: auto;
+}
+
+.ui-toasts:not(:hover, :focus-within) > .chat-banner:nth-child(n + 2) {
   display: none;
 }
 
-/* A plain notice: its sentence across the card, its buttons under it at the right. */
-.ui-toasts > .chat-banner:not(.ui-toast) > span:first-child {
-  flex: 1 1 100%;
+.ui-toasts:not(:hover, :focus-within):has(> .chat-banner:nth-child(2)) > .chat-banner:first-child {
+  margin-bottom: var(--g-space-12);
+  box-shadow:
+    inset 0 0 0 1px var(--g-glass-rim),
+    0 6px 0 -3px var(--ui-menu-fill),
+    0 6px 0 -2px var(--g-glass-rim),
+    0 12px 0 -6px var(--ui-menu-fill),
+    0 12px 0 -5px var(--g-glass-rim),
+    var(--g-shadow-pop);
 }
 
-.ui-toasts > .chat-banner:not(.ui-toast) > .g-button {
-  margin-left: auto;
-}
-
-.ui-toasts > .chat-banner:not(.ui-toast) > .g-button ~ .g-button {
-  margin-left: 0;
+/* A toast carries its own mark, so the banner's dot goes. */
+.ui-toasts > .chat-banner::before {
+  display: none;
 }
 
 .ui-toasts > .chat-banner[data-level="error"] {
@@ -2094,11 +2104,22 @@ details.setup-install-review[open] > summary::before {
 .ui-toast {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--g-space-12);
 }
 
 .ui-toast-mark {
   display: inline-flex;
   padding-top: var(--g-space-2);
+  color: var(--g-fg-3);
+}
+
+.ui-toast[data-level="warning"] .ui-toast-mark {
+  color: var(--g-volt);
+}
+
+.ui-toast[data-level="error"] .ui-toast-mark {
+  color: var(--g-red);
 }
 
 .ui-toast-body {
@@ -2109,6 +2130,7 @@ details.setup-install-review[open] > summary::before {
   margin: 0;
   color: var(--g-fg-1);
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .ui-toast-detail {
@@ -2119,15 +2141,19 @@ details.setup-install-review[open] > summary::before {
   overflow-wrap: anywhere;
 }
 
+/* Who and where on one line: a long chat title shortens instead of wrapping the toast tall. */
+.ui-toast-line {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .ui-toast-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--g-space-8);
-  margin-top: var(--g-space-12);
-}
-
-.ui-toast-actions:empty {
-  display: none;
+  margin-top: var(--g-space-8);
 }
 
 .ui-toast-close {
@@ -2135,10 +2161,11 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-3);
 }
 
+/* Arriving from the window's edge, a few pixels and a fade. */
 @keyframes ui-toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateX(8px);
   }
   to {
     opacity: 1;

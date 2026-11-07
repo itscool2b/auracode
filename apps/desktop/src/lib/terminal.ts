@@ -2,6 +2,7 @@ import type { TerminalChunk } from "../bindings";
 import { errorMessage } from "./errors";
 import {
   agentLoginStart,
+  agentUpdateStart,
   terminalClose,
   terminalRead,
   terminalReserve,
@@ -28,6 +29,12 @@ export const terminalTransport: TerminalTransport = {
   write: terminalWrite,
   resize: (id, size) => terminalResize(id, size.rows, size.cols),
   close: terminalClose,
+};
+
+/** The terminal sheet running an agent's update command, which Rust chooses as Update does. */
+export const updateTerminalTransport: TerminalTransport = {
+  ...terminalTransport,
+  start: (id, agentId, size) => agentUpdateStart(id, agentId, size.rows, size.cols),
 };
 
 export type TerminalState =

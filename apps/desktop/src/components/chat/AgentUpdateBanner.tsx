@@ -1,9 +1,11 @@
 import { AgentMark } from "@auracode/ui/graphite";
 import { X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { AgentMaintenance } from "../../bindings";
 import type { AgentUpdate } from "../../lib/agentUpdates";
 import { errorMessage } from "../../lib/errors";
+import type { TerminalTransport } from "../../lib/terminal";
+import { TerminalSheet } from "../TerminalSheet";
 
 /** What the notice needs from the shell: the vendor's update command and a fresh detection. */
 export interface AgentUpdateActions {
@@ -13,6 +15,12 @@ export interface AgentUpdateActions {
   refresh(): Promise<void>;
   /** Settings > Agents, where every agent's update and installation details are. */
   openAgents?: () => void;
+  /**
+   * The same update command in auracode's terminal sheet, for when the background update failed
+   * (owner, 7 November 2026: "it says go through with it in the terminal for debugging ... we
+   * should make a flow to be able to do that in this ADE directly").
+   */
+  terminal?: TerminalTransport;
 }
 
 type Run =
@@ -23,9 +31,10 @@ type Run =
   | { readonly state: "unchanged" };
 
 /**
- * One agent's newer release, as a window notice: it stays until its X, and while the agent's chats
+ * One agent's newer release, as a window toast: it stays until its X, and while the agent's chats
  * have a turn under way it waits for them instead of offering Update. An agent whose installation
- * auracode cannot update (another tool owns it) says why and points to Settings > Agents.
+ * auracode cannot update (another tool owns it) says why and points to Settings > Agents. A failed
+ * update offers its command in auracode's own terminal, where its output and prompts show.
  */
 export function AgentUpdateBanner({
   update,
@@ -42,6 +51,8 @@ export function AgentUpdateBanner({
   const text = useId();
   const [maintenance, setMaintenance] = useState<AgentMaintenance | "failed" | null>(null);
   const [run, setRun] = useState<Run>({ state: "idle" });
+  const [terminal, setTerminal] = useState(false);
+  const terminalExit = useRef<number | null>(null);
 
   // What this installation can do, asked again for each release and installation. A new version
   // means the last run's outcome no longer applies.
@@ -63,6 +74,15 @@ export function AgentUpdateBanner({
     };
   }, [actions, update.agentId, update.version, update.path]);
 
+  /** A finished update: the notice goes once detection sees the new version. */
+  const verify = async () => {
+    setRun({ state: "updating" });
+    // Until the refresh answers it reads as still updating; if the old version is still what
+    // auracode finds, the update went to another copy than the one it runs.
+    await actions.refresh().catch(() => {});
+    setRun({ state: "unchanged" });
+  };
+
   const start = async () => {
     setRun({ state: "updating" });
     try {
@@ -71,11 +91,7 @@ export function AgentUpdateBanner({
       setRun({ state: "failed", message: errorMessage(reason) });
       return;
     }
-    // A successful update makes the notice go once detection sees the new version. Until the
-    // refresh answers it reads as still updating; if the old version is still what auracode
-    // finds, the update went to another copy than the one it runs.
-    await actions.refresh().catch(() => {});
-    setRun({ state: "unchanged" });
+    await verify();
   };
 
   const updatable =
@@ -94,35 +110,53 @@ export function AgentUpdateBanner({
           update.path ? ` at ${update.path}` : ""
         }. Another copy may come first on your PATH.`
       : (blocked ?? waiting);
+  const canRun = updatable && working === 0 && run.state !== "unchanged";
+  const inTerminal = canRun && run.state === "failed" && actions.terminal !== undefined;
 
   // A toast: the agent's mark, what is new, why it waits (if it does), then its actions.
   return (
     <li
       className="chat-banner ui-toast"
+      data-level={run.state === "failed" ? "error" : undefined}
       data-testid="agent-update-banner"
       data-agent={update.agentId}
-      aria-describedby={text}
     >
       <span className="ui-toast-mark" aria-hidden="true">
         <AgentMark agent={update.agentId} size={20} />
       </span>
       <div className="ui-toast-body">
-        <p className="ui-toast-title">
-          {update.name} {update.latest} is available
-        </p>
-        <p id={text} className="ui-toast-detail" role="status">
-          You have {update.version}.{detail ? ` ${detail}` : null}
-        </p>
+        <div id={text} role="status">
+          <p className="ui-toast-title">
+            {update.name} {update.latest} is available
+          </p>
+          <p className="ui-toast-detail">
+            You have {update.version}.{detail ? ` ${detail}` : null}
+          </p>
+        </div>
         {run.state === "failed" ? (
           <p role="alert" className="ui-error ui-toast-detail">
-            The update failed: {run.message}
+            The update failed. {run.message}
+            {inTerminal ? " Run it in the terminal to see why." : null}
           </p>
         ) : null}
         <div className="ui-toast-actions">
-          {updatable && working === 0 && run.state !== "unchanged" ? (
+          {inTerminal ? (
             <button
               type="button"
-              className="g-button g-button-primary g-button-28"
+              className="g-button g-button-primary g-button-24"
+              aria-describedby={text}
+              onClick={() => {
+                terminalExit.current = null;
+                setTerminal(true);
+              }}
+            >
+              Run in terminal
+            </button>
+          ) : null}
+          {canRun ? (
+            <button
+              type="button"
+              className={`g-button ${inTerminal ? "" : "g-button-primary "}g-button-24`}
               aria-describedby={text}
               disabled={run.state === "updating"}
               onClick={() => void start()}
@@ -137,7 +171,7 @@ export function AgentUpdateBanner({
           {(blocked !== null || run.state === "unchanged") && actions.openAgents ? (
             <button
               type="button"
-              className="g-button g-button-28"
+              className="g-button g-button-24"
               aria-describedby={text}
               onClick={actions.openAgents}
             >
@@ -155,6 +189,23 @@ export function AgentUpdateBanner({
       >
         <X size={14} aria-hidden="true" />
       </button>
+      {terminal && actions.terminal ? (
+        <TerminalSheet
+          agentId={update.agentId}
+          agentName={update.name}
+          purpose="update"
+          transport={actions.terminal}
+          autoStart
+          onFinished={(code) => {
+            terminalExit.current = code;
+          }}
+          onClose={() => {
+            setTerminal(false);
+            // Checked once the person has read the output: a passing update makes this toast go.
+            if (terminalExit.current === 0) void verify();
+          }}
+        />
+      ) : null}
     </li>
   );
 }

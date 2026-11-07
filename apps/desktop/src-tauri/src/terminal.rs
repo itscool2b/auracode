@@ -164,6 +164,46 @@ pub async fn agent_token_start(
     Ok(ticket.start(&spawner, spec, size).await?)
 }
 
+/// The agent's own update command in the terminal sheet, when the update Update ran in the
+/// background failed: the person sees its output and answers its prompts. Only the sheet's Start
+/// runs it, and Rust chooses the command, as for Update.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_update_start(
+    webview: Webview,
+    state: State<'_, AppState>,
+    terminal_id: String,
+    agent_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<String, AppError> {
+    if state.quit.is_quitting() {
+        return Err(AppError::new(
+            AppErrorCode::ShuttingDown,
+            "auracode is quitting.",
+        ));
+    }
+    let owner = webview.label();
+    let page = state.pages.for_view(owner);
+    if !page.is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let size = PtySize { rows, cols }
+        .validate()
+        .map_err(|_| TerminalError::Resize)?;
+    let ticket = state.terminals.claim(owner, &terminal_id)?;
+    let spec = state.sessions()?.prepare_agent_update(&agent_id).await?;
+    if !page.is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let chats = state.chats().ok_or(TerminalError::Closed)?;
+    let spawner = Spawner::new(
+        chats.registry.clone(),
+        tauri::async_runtime::handle().inner().clone(),
+    );
+    Ok(ticket.start(&spawner, spec, size).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn terminal_read(
