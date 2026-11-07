@@ -4,6 +4,8 @@ import { Banners, type MemoryEditBanner, MemoryEditBannerView } from "./Banners"
 
 const banner = (state: MemoryEditBanner["state"]): MemoryEditBanner => ({
   key: "one:r2",
+  title: "Project memory updated",
+  detail: "Claude Code · Fix the login flow · auracode",
   text: "Claude Code in Fix the login flow updated project memory for auracode.",
   state,
   onReview: vi.fn(),
@@ -21,11 +23,15 @@ describe("an agent's memory edit banner", () => {
   it("says who edited memory and offers Review, Undo and Dismiss without acting", () => {
     const edit = banner({ status: "shown" });
     const html = view(edit);
+    expect(html).toContain(">Project memory updated<");
+    expect(html).toContain(">Claude Code · Fix the login flow · auracode<");
+    // The whole sentence stays in the tooltip, for a line shortened to fit.
     expect(html).toContain(
-      "Claude Code in Fix the login flow updated project memory for auracode.",
+      'title="Claude Code in Fix the login flow updated project memory for auracode."',
     );
     expect(html).toContain('role="status"');
-    for (const label of [">Review<", ">Undo<", ">Dismiss<"]) expect(html).toContain(label);
+    for (const label of [">Review<", ">Undo<", 'aria-label="Dismiss"'])
+      expect(html).toContain(label);
     expect(html).not.toContain('data-level="warning"');
     expect(edit.onUndo).not.toHaveBeenCalled();
     expect(edit.onReview).not.toHaveBeenCalled();
@@ -37,7 +43,7 @@ describe("an agent's memory edit banner", () => {
     const undone = view(banner({ status: "undone" }));
     expect(undone).not.toContain(">Undo<");
     expect(undone).not.toContain(">Review<");
-    expect(undone).toContain(">Dismiss<");
+    expect(undone).toContain('aria-label="Dismiss"');
   });
   it("announces a failed undo and keeps Review to look at it", () => {
     const html = view(

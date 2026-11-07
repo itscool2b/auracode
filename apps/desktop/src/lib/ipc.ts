@@ -207,6 +207,15 @@ export function agentLoginStart(
 ): Promise<string> {
   return settle(commands.agentLoginStart(terminalId, agentId, rows, cols));
 }
+/** The agent's own update command in a reserved terminal, after Update failed in the background. */
+export function agentUpdateStart(
+  terminalId: string,
+  agentId: string,
+  rows: number,
+  cols: number,
+): Promise<string> {
+  return settle(commands.agentUpdateStart(terminalId, agentId, rows, cols));
+}
 /** Opens a chat in its agent's own interface in a reserved terminal. */
 export function chatTerminalStart(
   terminalId: string,

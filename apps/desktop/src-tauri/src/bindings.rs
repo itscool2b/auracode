@@ -166,6 +166,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             terminal::terminal_reserve,
             terminal::agent_login_start,
             terminal::agent_token_start,
+            terminal::agent_update_start,
             terminal::agent_install_review,
             terminal::agent_install_start,
             terminal::chat_terminal_start,

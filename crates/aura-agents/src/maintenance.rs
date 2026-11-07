@@ -34,10 +34,13 @@ pub enum MaintenanceError {
     SpawnFailed,
     #[error("The vendor maintenance command timed out.")]
     TimedOut,
-    #[error(
-        "The vendor maintenance command failed with exit code {0:?}. Run it in your terminal for details."
-    )]
+    /// The app offers to run the same command in its own terminal, where its output shows.
+    #[error("The vendor's command failed{}.", exit_code(.0))]
     Failed(Option<i32>),
+}
+
+fn exit_code(code: &Option<i32>) -> String {
+    code.map_or_else(String::new, |code| format!(" with exit code {code}"))
 }
 
 /// A reviewed program and argument vector. Never concatenate it into a shell command.
@@ -516,5 +519,17 @@ mod tests {
             ),
             AgentAuthStatus::Unknown { .. }
         ));
+    }
+
+    #[test]
+    fn a_failed_command_names_its_exit_code_and_nothing_else() {
+        assert_eq!(
+            MaintenanceError::Failed(Some(1)).to_string(),
+            "The vendor's command failed with exit code 1."
+        );
+        assert_eq!(
+            MaintenanceError::Failed(None).to_string(),
+            "The vendor's command failed."
+        );
     }
 }

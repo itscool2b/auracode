@@ -245,6 +245,38 @@ export function agentEditAuthor(
   return `${sentenceStart ? "Agents" : "agents"} in ${notice.chats.length} chats`;
 }
 
+/**
+ * A memory edit as its toast says it: a short title, then who and where on one line ("Claude
+ * Code · Fix the login flow · auracode"), so a long chat title shortens instead of swallowing the
+ * sentence around it. `agentEditText` stays the full sentence, for the toast's tooltip.
+ */
+export function agentEditToast(
+  notice: AgentEditNotice,
+  chats: MemoryChats,
+  project: string | null,
+): { readonly title: string; readonly detail: string } {
+  if (notice.state.status === "undone") {
+    return {
+      title: "Edit undone",
+      detail: `Project memory${project ? ` for ${project}` : ""} is back to its revision before ${
+        notice.edits > 1 ? "these edits" : "this edit"
+      }.`,
+    };
+  }
+  const [only] = notice.chats;
+  const chat = notice.chats.length === 1 && only !== undefined ? chats.get(only) : undefined;
+  const who =
+    notice.chats.length > 1
+      ? [`Agents in ${notice.chats.length} chats`]
+      : chat
+        ? [chat.agent, chat.title?.trim() ?? ""]
+        : ["An agent"];
+  return {
+    title: notice.edits > 1 ? `${notice.edits} edits to project memory` : "Project memory updated",
+    detail: [...who, project ?? ""].filter((part) => part !== "").join(" · "),
+  };
+}
+
 /** "Claude Code in Fix the login flow updated project memory for auracode." */
 export function agentEditText(
   notice: AgentEditNotice,

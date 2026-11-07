@@ -113,14 +113,20 @@ async function checkAgentEdits(page, url, out, engine, theme) {
   assert.match(await newest().textContent(), /Claude Code in Fix the login flow · Current/);
   assert.equal(await newest().getAttribute("data-source"), "agent");
   const banner = page.getByTestId("memory-edit-banner");
+  // Pointing at the toast holds it: it would leave by itself after a while.
+  await banner.hover();
   assert.equal(
     (await banner.locator('[role="status"]').textContent()).trim(),
+    "Project memory updatedClaude Code · Fix the login flow · auracode fixture",
+  );
+  assert.equal(
+    await banner.getAttribute("title"),
     "Claude Code in Fix the login flow updated project memory for auracode fixture.",
   );
   await scan("agent-edit");
   // Undo restores what the edit replaced as the person's revision.
   await banner.getByRole("button", { name: "Undo", exact: true }).click();
-  await banner.getByText(/^Undone\./).waitFor();
+  await banner.getByText("Edit undone", { exact: true }).waitFor();
   await page.waitForFunction(
     () => !document.querySelector(".project-memory textarea").value.includes("Run cargo test"),
   );

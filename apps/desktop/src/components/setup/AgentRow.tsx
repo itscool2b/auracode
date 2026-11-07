@@ -391,6 +391,10 @@ export function AgentRow({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [signIn, setSignIn] = useState(false);
+  // A failed Update offers its command in auracode's terminal, where its output shows.
+  const [updateFailed, setUpdateFailed] = useState(false);
+  const [updateTerminal, setUpdateTerminal] = useState(false);
+  const updateExit = useRef<number | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A different installation needs its own lookup.
   useEffect(() => {
     setMaintenance(null);
@@ -431,7 +435,13 @@ export function AgentRow({
     });
   const update = () =>
     void run("update", async () => {
-      await transport.agentUpdate(agent.id);
+      setUpdateFailed(false);
+      try {
+        await transport.agentUpdate(agent.id);
+      } catch (reason) {
+        setUpdateFailed(true);
+        throw reason;
+      }
       setMessage("Update finished.");
       onRefresh();
     });
@@ -609,6 +619,21 @@ export function AgentRow({
         >
           {error ??
             (busy === "auth" ? "Checking sign-in…" : busy === "update" ? "Updating…" : message)}
+          {error && updateFailed && transport.updateTerminal ? (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="g-button g-button-24"
+                onClick={() => {
+                  updateExit.current = null;
+                  setUpdateTerminal(true);
+                }}
+              >
+                Run in terminal
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
       {open ? (
@@ -652,6 +677,27 @@ export function AgentRow({
             </div>
           ) : null}
         </AgentDetail>
+      ) : null}
+      {updateTerminal && transport.updateTerminal ? (
+        <TerminalSheet
+          agentId={agent.id}
+          agentName={agent.name}
+          purpose="update"
+          transport={transport.updateTerminal}
+          autoStart
+          onFinished={(code) => {
+            updateExit.current = code;
+          }}
+          onClose={() => {
+            setUpdateTerminal(false);
+            if (updateExit.current === 0) {
+              setUpdateFailed(false);
+              setError(null);
+              setMessage("Update finished.");
+              onRefresh();
+            }
+          }}
+        />
       ) : null}
       {signIn ? (
         <TerminalSheet

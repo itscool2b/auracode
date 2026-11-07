@@ -280,22 +280,6 @@ export function ChatView({
   const loadBlob = useCallback((sha256: string) => void store.loadBlob(sha256), [store]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
-  // The window's toasts sit just above the composer: the dock's height, on the chat pane.
-  const dockRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const dock = dockRef.current;
-    const pane = dock?.closest<HTMLElement>(".chat-main");
-    if (!dock || !pane || typeof ResizeObserver === "undefined") return;
-    const measure = () =>
-      pane.style.setProperty("--ui-dock-height", `${Math.round(dock.offsetHeight)}px`);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(dock);
-    return () => {
-      observer.disconnect();
-      pane.style.removeProperty("--ui-dock-height");
-    };
-  });
   // Chat or Terminal: this device's choice for this chat, for agents with a terminal.
   useSyncExternalStore(
     chatInterfaces.subscribe,
@@ -923,7 +907,7 @@ export function ChatView({
                       findRequest={findRequest}
                     />
                   </TaskLinkContext.Provider>
-                  <div className="chat-dock" ref={dockRef}>
+                  <div className="chat-dock">
                     {fileNote ? (
                       <p
                         className="conversation-notice"

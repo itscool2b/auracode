@@ -211,6 +211,12 @@ export const commands = {
 	 *  prints the token the person pastes. Like the sign-in, only the sheet's Start runs it.
 	 */
 	agentTokenStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_token_start", { terminalId, agentId, rows, cols })),
+	/**
+	 *  The agent's own update command in the terminal sheet, when the update Update ran in the
+	 *  background failed: the person sees its output and answers its prompts. Only the sheet's Start
+	 *  runs it, and Rust chooses the command, as for Update.
+	 */
+	agentUpdateStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_update_start", { terminalId, agentId, rows, cols })),
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
 	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
 	/**

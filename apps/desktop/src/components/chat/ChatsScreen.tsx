@@ -8,6 +8,7 @@ import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
 import {
   agentEditText,
+  agentEditToast,
   memoryChats,
   type ProjectMemoryApi,
   projectMemoryApi,
@@ -115,6 +116,7 @@ export function ChatsScreen({
     update: (agentId) => transport.agentUpdate(agentId),
     refresh: () => app.refreshAgents(),
     openAgents: onAgents,
+    terminal: transport.updateTerminal,
   }));
   const memoryEdits = useAgentMemoryEdits(memory);
   const [selected, setSelected] = useState<string | null>(null);
@@ -173,23 +175,24 @@ export function ChatsScreen({
     ...(organization.data?.chats.map((entry) => entry.chat) ?? []),
     ...(snapshot.chats ?? []),
   ]);
-  const memoryBanners = memoryEdits.notices.map((notice) => ({
-    key: `${notice.projectId}:${notice.revision}`,
-    text: agentEditText(
-      notice,
-      knownChats,
-      organization.data?.projects.find((project) => project.id === notice.projectId)?.name ?? null,
-    ),
-    state: notice.state,
-    onReview: onReviewMemory
-      ? () => {
-          memoryEdits.dismiss(notice);
-          onReviewMemory(notice.projectId, notice.revision);
-        }
-      : undefined,
-    onUndo: () => void memoryEdits.undo(notice, knownChats),
-    onDismiss: () => memoryEdits.dismiss(notice),
-  }));
+  const memoryBanners = memoryEdits.notices.map((notice) => {
+    const project =
+      organization.data?.projects.find((project) => project.id === notice.projectId)?.name ?? null;
+    return {
+      key: `${notice.projectId}:${notice.revision}`,
+      ...agentEditToast(notice, knownChats, project),
+      text: agentEditText(notice, knownChats, project),
+      state: notice.state,
+      onReview: onReviewMemory
+        ? () => {
+            memoryEdits.dismiss(notice);
+            onReviewMemory(notice.projectId, notice.revision);
+          }
+        : undefined,
+      onUndo: () => void memoryEdits.undo(notice, knownChats),
+      onDismiss: () => memoryEdits.dismiss(notice),
+    };
+  });
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
   const selectedEntry = organization.data?.chats.find((entry) => entry.chat.id === selected);
   const selectedProject =
