@@ -1,6 +1,6 @@
 import { Logo } from "@auracode/ui/graphite";
 import { Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { ProfileMeta } from "../../bindings";
 import type { AccountSyncStatus } from "../../lib/account/bindings";
 import {
@@ -12,17 +12,21 @@ import {
 import { commandKey } from "./Keys";
 
 /**
- * The foot of the sidebar, as calm as Grok's: the logo and one Settings button. Profiles, sync,
- * agents and diagnostics live in Settings and the command palette. The one thing that still shows
- * here is an account whose sync needs a hand: a small dot on the button, named in its label.
+ * The foot of the sidebar, as calm as Grok's: the logo, the notifications bell and one Settings
+ * button. Profiles, sync, agents and diagnostics live in Settings and the command palette. The one
+ * thing that still shows here is an account whose sync needs a hand: a small dot on the button,
+ * named in its label.
  */
 export function SidebarFooter({
   profile,
   onSettings,
+  notifications,
   source = accountSyncSource,
 }: {
   readonly profile: ProfileMeta | null;
   readonly onSettings?: () => void;
+  /** The notifications bell (`Notifications`), beside Settings. */
+  readonly notifications?: ReactNode;
   readonly source?: AccountSyncSource;
 }) {
   const accountId = profile?.kind === "account" ? profile.id : null;
@@ -41,22 +45,27 @@ export function SidebarFooter({
   return (
     <div className="chat-sidebar-footer">
       <Logo size={24} className="chat-sidebar-footer-logo" />
-      {onSettings ? (
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-settings"
-          aria-label={
-            attention ? `Open settings, ${syncStatusLabel(status).toLowerCase()}` : "Open settings"
-          }
-          aria-keyshortcuts="Control+, Meta+,"
-          data-tip={`Settings (${commandKey()} ,)`}
-          data-attention={attention ? "" : undefined}
-          data-testid="sidebar-settings"
-          onClick={onSettings}
-        >
-          <Settings size={16} aria-hidden="true" />
-        </button>
-      ) : null}
+      <div className="chat-sidebar-footer-actions">
+        {notifications}
+        {onSettings ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-settings"
+            aria-label={
+              attention
+                ? `Open settings, ${syncStatusLabel(status).toLowerCase()}`
+                : "Open settings"
+            }
+            aria-keyshortcuts="Control+, Meta+,"
+            data-tip={`Settings (${commandKey()} ,)`}
+            data-attention={attention ? "" : undefined}
+            data-testid="sidebar-settings"
+            onClick={onSettings}
+          >
+            <Settings size={16} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

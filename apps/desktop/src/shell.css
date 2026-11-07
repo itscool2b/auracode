@@ -989,6 +989,52 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-3);
 }
 
+/* The notifications bell and Settings, side by side at the footer's right. */
+.chat-sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-2);
+}
+
+/* ---------- Notifications (Notifications.tsx) ---------- */
+
+/* The bell: an icon button like Settings beside it. */
+.chat-popover.chat-inbox > summary {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  color: var(--g-fg-3);
+}
+
+.chat-inbox-bell {
+  position: relative;
+  display: inline-flex;
+}
+
+/*
+ * Something new: Settings' 6px dot on the bell's shoulder, cut out of the window; amber while a
+ * notice warns, red while one failed.
+ */
+.chat-inbox-bell[data-attention]::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-1);
+  box-shadow: 0 0 0 2px var(--g-window);
+}
+
+.chat-inbox-bell[data-attention="warning"]::after {
+  background-color: var(--g-volt);
+}
+
+.chat-inbox-bell[data-attention="error"]::after {
+  background-color: var(--g-red);
+}
+
 /* An account whose sync needs a hand: a 6px fg-1 dot on the corner, cut out of the black. */
 .chat-sidebar-settings[data-attention]::before {
   content: "";
@@ -1091,11 +1137,16 @@ details.setup-install-review[open] > summary::before {
   display: none;
 }
 
-/* The rail keeps Settings, centred under the toggle. */
+/* The rail keeps the bell and Settings, stacked and centred under the toggle. */
 .chat-app[data-sidebar-collapsed="true"] .chat-sidebar-footer {
+  height: auto;
   margin-top: auto;
   justify-content: center;
   padding-left: 0;
+}
+
+.chat-app[data-sidebar-collapsed="true"] .chat-sidebar-footer-actions {
+  flex-direction: column;
 }
 
 /* ---------- Chat header (6.3) ---------- */
@@ -2029,12 +2080,14 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * The window's notices are toasts. On 6 November 2026 the owner asked for them bottom right; the
- * composer fills the pane's bottom middle, so they rode above it, over the reply being written,
- * and on 7 November: "the positioning, everything. sucks". Now one stack sits at the pane's top
- * right, just under its header, in the same place on every page, and never touches the composer.
- * Each toast is a solid card like the menus: a mark, a short title, one quieter line, small
- * actions under them and its X at the top right. Nothing glows.
+ * The few notices that cannot wait are toasts (the rest wait behind the sidebar's bell). On 6
+ * November 2026 the owner asked for them bottom right; the composer fills the pane's bottom
+ * middle, so they rode above it, over the reply being written, and on 7 November: "the
+ * positioning, everything. sucks". The stack sits at the pane's top right, just under its header,
+ * in the same place on every page, and never touches the composer. It holds only saving paused or
+ * failed and an agent's fresh memory edit while its Undo matters. Each toast is a solid card like
+ * the menus: a mark, a short title, one quieter line, small actions under them and its X at the
+ * top right. Nothing glows.
  */
 .chat-banners.ui-toasts {
   position: absolute;
@@ -2181,4 +2234,67 @@ details.setup-install-review[open] > summary::before {
 
 :root:is([data-motion="reduced"], [data-motion="off"]) .ui-toasts > .chat-banner {
   animation: none;
+}
+
+/* ---------- The notifications panel's rows (Notifications.tsx), after the toasts they restyle ---------- */
+
+/*
+ * The panel rises from the footer over the pane, the composer pickers' solid card: a title, then
+ * one list whose rows are split by hairlines instead of floating as cards of their own.
+ */
+.chat-popover.chat-inbox > .chat-popover-panel {
+  gap: 0;
+  width: 360px;
+  max-height: min(560px, 70vh);
+  padding: var(--g-space-8) 0;
+}
+
+.chat-inbox-title {
+  margin: 0;
+  padding: var(--g-space-4) var(--g-space-16) var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.chat-inbox-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* As specific as the toast stack's own rules, which it restyles. */
+.chat-inbox > .chat-popover-panel > .chat-inbox-list > .chat-banner {
+  min-height: 0;
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: inset 0 1px 0 var(--g-line);
+  color: var(--g-fg-2);
+}
+
+/* Each row carries its own mark, so the banner's dot goes. */
+.chat-inbox-list > .chat-banner::before {
+  display: none;
+}
+
+.chat-inbox .ui-toast-title {
+  color: var(--g-fg-1);
+}
+
+.chat-inbox .ui-toast-detail {
+  color: var(--g-fg-3);
+}
+
+.chat-inbox .ui-error {
+  color: var(--g-red);
+}
+
+.chat-inbox-empty {
+  padding: var(--g-space-4) var(--g-space-16) var(--g-space-8);
+}
+
+.chat-inbox .chat-inbox-empty {
+  color: var(--g-fg-3);
 }

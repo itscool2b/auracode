@@ -4,6 +4,7 @@ import type { EnvStatus, StorageStatus } from "../../bindings";
 import { type DismissState, SHOWN } from "../../lib/dismiss";
 import type { AgentEditState } from "../../lib/projectMemory";
 import { dismissRecovery } from "../RecoveryNotice";
+import type { NoticeItem } from "./Notifications";
 
 /** An agent's direct edit to project memory, as the window's toast shows it. */
 export interface MemoryEditBanner {
@@ -48,10 +49,9 @@ export function envBanner(env: EnvStatus | null): string | null {
 }
 
 /**
- * One toast (owner, 7 November 2026, of the stack that floated above the composer: "the
- * positioning, everything. sucks"): a mark, a short title, one quieter line, its actions, and an
- * X when it can go. The window's stack sits at the pane's top right under its header, the same
- * place on every page, so it never covers the composer or the reply being written.
+ * One notice: a mark, a short title, one quieter line, its actions, and an X when it can go. It is
+ * a row in the notifications panel (`Notifications`), or a toast at the pane's top right when it
+ * cannot wait (`Banners`).
  */
 export function Toast({
   level,
@@ -66,6 +66,7 @@ export function Toast({
   testId,
   live = "status",
   autoDismissMs = null,
+  onExpire,
 }: {
   readonly level?: "warning" | "error";
   readonly mark: ReactNode;
@@ -81,20 +82,22 @@ export function Toast({
   readonly live?: "status" | "alert";
   /** Leaves by itself after this long while nobody points at or focuses it; `null` stays. */
   readonly autoDismissMs?: number | null;
+  /** What leaving by itself does, when it is not the X's dismissal (a toast that moves on). */
+  readonly onExpire?: () => void;
 }) {
   const text = useId();
   const [held, setHeld] = useState({ pointer: false, focus: false });
   const paused = held.pointer || held.focus;
   // The window re-renders often; the countdown follows only what it waits for, not each new
   // callback, and calls the newest one.
-  const dismiss = useRef(onDismiss);
-  dismiss.current = onDismiss;
-  const dismissable = onDismiss !== undefined;
+  const leave = useRef(onExpire ?? onDismiss);
+  leave.current = onExpire ?? onDismiss;
+  const leaves = leave.current !== undefined;
   useEffect(() => {
-    if (autoDismissMs === null || !dismissable || paused) return;
-    const timer = setTimeout(() => dismiss.current?.(), autoDismissMs);
+    if (autoDismissMs === null || !leaves || paused) return;
+    const timer = setTimeout(() => leave.current?.(), autoDismissMs);
     return () => clearTimeout(timer);
-  }, [autoDismissMs, dismissable, paused]);
+  }, [autoDismissMs, leaves, paused]);
   return (
     <li
       className="chat-banner ui-toast"
@@ -136,19 +139,72 @@ export function Toast({
   );
 }
 
+/** Saving paused or failed: a notice that cannot wait, also kept in the panel. */
+function StorageToast({
+  storage,
+  text,
+}: {
+  readonly storage: StorageStatus;
+  readonly text: string;
+}) {
+  const failed = storage.state.state === "failed";
+  return (
+    <Toast
+      level={failed ? "error" : "warning"}
+      live={failed ? "alert" : "status"}
+      mark={<HardDrive size={16} />}
+      title={failed ? "Saving failed" : "Saving paused"}
+      detail={text}
+    />
+  );
+}
+
 /**
- * The window's notices: saving paused or failed, the environment fallback with Retry, the
- * database repair notice (dismissable for good), startup notices (dismissable for now), agents'
- * direct edits to project memory, with Review and Undo, and agents' newer releases (`updates`,
- * their toasts), each until its X for this run of auracode.
+ * What cannot wait, over the pane's top right under its header: saving paused or failed (the
+ * agents wait on it), and an agent's fresh edit to project memory while its Undo matters. Each
+ * edit's toast moves on by itself (`onExpire`) and the edit stays in the notifications panel;
+ * without `onExpire` leaving by itself dismisses it. Everything else waits in the panel only.
  */
 export function Banners({
+  storage,
+  memoryEdits = [],
+  onExpire,
+}: {
+  readonly storage: StorageStatus | null;
+  readonly memoryEdits?: readonly MemoryEditBanner[];
+  readonly onExpire?: (key: string) => void;
+}) {
+  const storageText = storageBanner(storage);
+  if ((storage === null || storageText === null) && memoryEdits.length === 0) return null;
+  return (
+    <ul className="chat-banners ui-toasts" aria-label="Notices">
+      {storage !== null && storageText !== null ? (
+        <StorageToast storage={storage} text={storageText} />
+      ) : null}
+      {memoryEdits.map((edit) => (
+        <MemoryEditBannerView
+          key={edit.key}
+          edit={edit}
+          onExpire={onExpire ? () => onExpire(edit.key) : undefined}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Every notice for the notifications panel, in order: saving, the environment fallback with
+ * Retry, the database repair notice (dismissable for good), startup notices (dismissable for this
+ * run), agents' memory edits with Review and Undo, then agents' new releases (`updates`).
+ */
+export function noticeItems({
   storage,
   env,
   onRetryEnv,
   recoveryNotice,
   onRecoveryDismissed,
   notices,
+  onDismissNotice,
   memoryEdits = [],
   updates = [],
 }: {
@@ -158,36 +214,24 @@ export function Banners({
   readonly recoveryNotice: string | null;
   readonly onRecoveryDismissed: () => void;
   readonly notices: readonly string[];
+  readonly onDismissNotice: (notice: string) => void;
   readonly memoryEdits?: readonly MemoryEditBanner[];
-  readonly updates?: readonly ReactNode[];
-}) {
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
+  readonly updates?: readonly NoticeItem[];
+}): NoticeItem[] {
+  const items: NoticeItem[] = [];
   const storageText = storageBanner(storage);
+  if (storage !== null && storageText !== null)
+    items.push({
+      key: `storage:${storage.state.state}`,
+      level: storage.state.state === "failed" ? "error" : "warning",
+      node: <StorageToast storage={storage} text={storageText} />,
+    });
   const envText = envBanner(env);
-  const shown = notices.filter((notice) => !dismissed.has(notice));
-  if (
-    storageText === null &&
-    envText === null &&
-    recoveryNotice === null &&
-    shown.length === 0 &&
-    memoryEdits.length === 0 &&
-    updates.length === 0
-  ) {
-    return null;
-  }
-  const failed = storage?.state.state === "failed";
-  return (
-    <ul className="chat-banners ui-toasts" aria-label="Notices">
-      {storageText !== null ? (
-        <Toast
-          level={failed ? "error" : "warning"}
-          live={failed ? "alert" : "status"}
-          mark={<HardDrive size={16} />}
-          title={failed ? "Saving failed" : "Saving paused"}
-          detail={storageText}
-        />
-      ) : null}
-      {envText !== null ? (
+  if (envText !== null)
+    items.push({
+      key: "env",
+      level: "warning",
+      node: (
         <Toast
           level="warning"
           mark={<TriangleAlert size={16} />}
@@ -199,32 +243,42 @@ export function Banners({
             </button>
           }
         />
-      ) : null}
-      {recoveryNotice !== null ? (
-        <RecoveryBanner message={recoveryNotice} onDismissed={onRecoveryDismissed} />
-      ) : null}
-      {shown.map((notice) => (
-        <Toast
-          key={notice}
-          mark={<Info size={16} />}
-          title={notice}
-          onDismiss={() => setDismissed((current) => new Set([...current, notice]))}
-        />
-      ))}
-      {memoryEdits.map((edit) => (
-        <MemoryEditBannerView key={edit.key} edit={edit} />
-      ))}
-      {updates}
-    </ul>
-  );
+      ),
+    });
+  if (recoveryNotice !== null)
+    items.push({
+      key: "recovery",
+      level: "warning",
+      node: <RecoveryBanner message={recoveryNotice} onDismissed={onRecoveryDismissed} />,
+    });
+  for (const notice of notices)
+    items.push({
+      key: `notice:${notice}`,
+      node: (
+        <Toast mark={<Info size={16} />} title={notice} onDismiss={() => onDismissNotice(notice)} />
+      ),
+    });
+  for (const edit of memoryEdits)
+    items.push({ key: `memory:${edit.key}`, node: <MemoryEditBannerView edit={edit} lasting /> });
+  items.push(...updates);
+  return items;
 }
 
 /**
- * An agent's direct edit to project memory: a calm toast that never blocks the chat and leaves by
- * itself (Customize > Project memory keeps every revision). Review opens the edit's changes; Undo
+ * An agent's direct edit to project memory: a calm toast that never blocks the chat and moves on
+ * by itself, or with `lasting` a row in the notifications panel that stays until its X
+ * (Customize > Project memory keeps every revision). Review opens the edit's changes; Undo
  * restores what it replaced as a new revision of the person's.
  */
-export function MemoryEditBannerView({ edit }: { readonly edit: MemoryEditBanner }) {
+export function MemoryEditBannerView({
+  edit,
+  lasting = false,
+  onExpire,
+}: {
+  readonly edit: MemoryEditBanner;
+  readonly lasting?: boolean;
+  readonly onExpire?: () => void;
+}) {
   const { state } = edit;
   const busy = state.status === "undoing";
   return (
@@ -244,12 +298,15 @@ export function MemoryEditBannerView({ edit }: { readonly edit: MemoryEditBanner
         </>
       }
       autoDismissMs={
-        state.status === "shown"
-          ? MEMORY_TOAST_MS
-          : state.status === "undone"
-            ? UNDONE_TOAST_MS
-            : null
+        lasting
+          ? null
+          : state.status === "shown"
+            ? MEMORY_TOAST_MS
+            : state.status === "undone"
+              ? UNDONE_TOAST_MS
+              : null
       }
+      onExpire={onExpire}
       onDismiss={edit.onDismiss}
       dismissDisabled={busy}
       actions={

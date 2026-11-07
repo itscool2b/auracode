@@ -204,11 +204,6 @@ export default function ProjectMemoryPreview() {
       <h1>Customize</h1>
       <Banners
         storage={null}
-        env={null}
-        onRetryEnv={() => {}}
-        recoveryNotice={null}
-        onRecoveryDismissed={() => {}}
-        notices={[]}
         memoryEdits={edits.notices.map((notice) => ({
           key: `${notice.projectId}:${notice.revision}`,
           ...agentEditToast(notice, CHATS, "auracode fixture"),
