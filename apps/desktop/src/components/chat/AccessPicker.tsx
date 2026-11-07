@@ -72,8 +72,14 @@ export function AccessPicker({
   const startLabel = requestedNative
     ? "Access"
     : ACCESS_LABEL[lists?.autonomy.requested ?? autonomy];
+  // A level on its way that the agent's own choices do not name (chosen from the levels shown
+  // before they arrived) is named as the level.
+  const pendingLevel = pending?.startsWith("legacy:")
+    ? ACCESS_LABEL[pending.slice("legacy:".length) as Autonomy]
+    : undefined;
   const label =
     choices.find((choice) => choice.value === displayed)?.name ??
+    pendingLevel ??
     (!listed
       ? startLabel
       : hasNativeAccess || choices.length === 0

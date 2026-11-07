@@ -27,6 +27,12 @@ fn legacy(value: Autonomy) -> (&'static str, &'static str) {
         Autonomy::Ask => ("legacy:ask", "Ask for approval"),
     }
 }
+/// The level a `legacy:` access value names.
+fn legacy_level(value: &str) -> Option<Autonomy> {
+    [Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask]
+        .into_iter()
+        .find(|level| legacy(*level).0 == value)
+}
 fn descriptor(options: &[ConfigOption], id: &str, requested: Option<String>) -> SessionControl {
     let mut result = SessionControl {
         requested,
@@ -173,14 +179,22 @@ impl ChatActor {
             workflow.note =
                 Some("This connection does not advertise a native Plan control.".into());
         }
+        // A change on its way shows as pending where the choices name it: a level chosen from the
+        // ones shown before the agent's own lists names none of them, and they show it once applied.
         if let Some((id, value)) = &self.control_pending {
             let target = if id == ACCESS {
                 &mut access
             } else {
                 &mut workflow
             };
-            target.pending = choice_value(value);
-            target.requested = target.pending.clone();
+            let value = choice_value(value);
+            if value
+                .as_ref()
+                .is_some_and(|value| target.choices.iter().any(|choice| &choice.value == value))
+            {
+                target.pending = value;
+                target.requested = target.pending.clone();
+            }
         }
         SessionControls {
             version: 1,
@@ -360,7 +374,17 @@ impl ChatActor {
         let controls = self.control_lists();
         let (id, value) = match change {
             SessionControlChange::Access { value } => {
-                let Some(choice) = controls.access.choices.iter().find(|c| c.value == value) else {
+                let choice = controls.access.choices.iter().find(|c| c.value == value);
+                // A level the agent supports, chosen from the levels the picker showed before the
+                // agent's own lists arrived (a moment after it turns ready): it goes through the
+                // agent's level, as on a connection without native access.
+                let level = legacy_level(&value).filter(|level| {
+                    self.capabilities
+                        .as_ref()
+                        .is_some_and(|capabilities| capabilities.autonomy_levels.contains(level))
+                });
+                let Some(legacy_autonomy) = choice.map(|c| c.legacy_autonomy).or(level.map(Some))
+                else {
                     let _ = reply.send(Err(SessionError::OptionInvalid(
                         "This connection does not offer that access setting.".into(),
                     )));
@@ -373,7 +397,7 @@ impl ChatActor {
                     )));
                     return;
                 }
-                if let Some(autonomy) = choice.legacy_autonomy {
+                if let Some(autonomy) = legacy_autonomy {
                     self.control_pending = Some((
                         ACCESS.into(),
                         ConfigValue::Choice {

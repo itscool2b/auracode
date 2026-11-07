@@ -854,7 +854,7 @@ async fn a_new_chat_names_its_access_while_its_agent_starts_and_never_runs_a_sta
 /// the level it starts on.
 #[tokio::test]
 async fn a_first_chat_offers_no_access_choices_until_its_agent_reports_them() {
-    let (rig, _seen, ready) = claude_rig(true);
+    let (rig, seen, ready) = claude_rig(true);
     let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     let lists = rig.manager.lists(&chat.id).await.unwrap();
     assert!(lists.controls.access.choices.is_empty());
@@ -874,5 +874,20 @@ async fn a_first_chat_offers_no_access_choices_until_its_agent_reports_them() {
         lists.controls.access.effective.as_deref(),
         Some("bypassPermissions")
     );
+    // A level the picker showed before the agent's own lists arrived still applies, through the
+    // agent's level.
+    rig.manager
+        .set_control(
+            &chat.id,
+            SessionControlChange::Access {
+                value: "legacy:ask".into(),
+            },
+        )
+        .await
+        .expect("a level the agent supports");
+    let lists = rig.manager.lists(&chat.id).await.unwrap();
+    assert_eq!(lists.controls.access.effective.as_deref(), Some("default"));
+    assert_eq!(lists.controls.access.pending, None);
+    assert_eq!(lock(&seen.commands).as_slice(), ["level:default"]);
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }

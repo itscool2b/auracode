@@ -211,6 +211,19 @@ describe("access before the agent runs", () => {
       expect(html).not.toContain("Access opens once the agent has started.");
     }
   });
+  it("names a level on its way that the agent's own choices do not list", () => {
+    const html = render({
+      lists: {
+        ...waitingLists("bypassPermissions", ["default", "bypassPermissions"]),
+        capabilities: running,
+      },
+      status: "ready",
+      controlSaving: { type: "access", value: "legacy:ask" },
+    });
+    expect(html).toContain('aria-label="Ask for approval. Access level"');
+    expect(html).toContain("Saving…");
+    expect(html).not.toContain("Access unavailable");
+  });
   it("names a saved native setting no known choice offers as plain Access", () => {
     const state = waitingLists("acceptEdits", []);
     const html = render({ lists: state, status: "stopped" });
