@@ -22,21 +22,21 @@ function memory(saved: string | null = null) {
 }
 
 describe("the start screen's aircraft", () => {
-  it("has a picture for every file, each kept as published", () => {
+  it("has a picture for every file, each shown as stored", () => {
     const files = readdirSync(folder)
       .filter((file) => file.endsWith(".txt"))
       .map((file) => file.replace(/\.txt$/, ""))
       .sort();
     expect(LAUNCH_ART.map((picture) => picture.id).sort()).toEqual(files);
     for (const picture of LAUNCH_ART) {
-      const published = readFileSync(`${folder}/${picture.id}.txt`, "utf8");
-      expect(picture.art, picture.id).toBe(published.replace(/\r\n?/g, "\n").replace(/\n+$/, ""));
+      const stored = readFileSync(`${folder}/${picture.id}.txt`, "utf8");
+      expect(picture.art, picture.id).toBe(stored.replace(/\r\n?/g, "\n").replace(/\n+$/, ""));
     }
   });
 
-  it("covers the aircraft the owner named, and fifteen pictures in all", () => {
-    expect(LAUNCH_ART).toHaveLength(15);
-    const names = new Set(LAUNCH_ART.map((picture) => picture.name));
+  it("is fifteen different aircraft, the owner's named ones among them", () => {
+    const names = LAUNCH_ART.map((picture) => picture.name);
+    expect(new Set(names).size).toBe(15);
     for (const name of [
       "B-2 Spirit",
       "SR-71 Blackbird",
@@ -47,14 +47,13 @@ describe("the start screen's aircraft", () => {
       expect(names).toContain(name);
   });
 
-  it("draws each piece in one alphabet: printable ASCII, or Braille dots alone", () => {
+  it("draws every piece in printable ASCII, without trailing space", () => {
     for (const picture of LAUNCH_ART) {
       const lines = picture.art.split("\n");
       expect(lines.length, picture.id).toBeGreaterThan(5);
       for (const line of lines) {
         expect(line, picture.id).toBe(line.trimEnd());
-        if (picture.dots) expect(line, picture.id).toMatch(/^[⠀-⣿]*$/u);
-        else expect(line, picture.id).toMatch(/^[ -~]*$/);
+        expect(line, picture.id).toMatch(/^[ -~]*$/);
       }
     }
   });
@@ -87,17 +86,13 @@ describe("the start screen's aircraft", () => {
     expect(LAUNCH_ART).toContain(pickLaunchPicture(() => 0.5, null));
   });
 
-  it("shows the piece as one image with its name and artist under it, and no heading above", () => {
-    const signed = LAUNCH_ART.find((picture) => picture.id === "sr-71-blackbird-front");
-    const dots = LAUNCH_ART.find((picture) => picture.id === "b-2-spirit");
-    if (!signed || !dots) throw new Error("pictures missing");
-    const html = renderToStaticMarkup(<LaunchArt picture={signed} />);
+  it("shows the piece as one image with its name under it, and no heading above", () => {
+    const raptor = LAUNCH_ART.find((picture) => picture.id === "f-22-raptor");
+    if (!raptor) throw new Error("the F-22 is missing");
+    const html = renderToStaticMarkup(<LaunchArt picture={raptor} />);
     expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="SR-71 Blackbird, drawn in text"');
-    expect(html).toContain("<figcaption");
-    expect(html).toContain("by Sean Riesch");
+    expect(html).toContain('aria-label="F-22 Raptor, drawn in text"');
+    expect(html).toMatch(/<figcaption[^>]*>F-22 Raptor<\/figcaption>/);
     expect(html).not.toMatch(/<h[1-6]/);
-    expect(html).not.toContain("data-dots");
-    expect(renderToStaticMarkup(<LaunchArt picture={dots} />)).toContain('data-dots=""');
   });
 });

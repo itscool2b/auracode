@@ -1,6 +1,6 @@
 /*
- * The start screen (LaunchArt.tsx): this launch's aircraft drawn in text, alone in the pane under
- * the drag band, its name and artist just beneath it, the two centred together. The pane sets the
+ * The start screen (LaunchArt.tsx): this launch's aircraft in ASCII, alone in the pane under the
+ * drag band, its name just beneath it, the two centred together. The pane sets the
  * figure's size, never the piece, so the script can fit the piece to it (--launch-art-scale)
  * without resizing its own room.
  */
@@ -37,25 +37,11 @@
   user-select: none;
 }
 
-/* Dot art: rows a cell apart, so the dots of one row continue the row above's. */
-.launch-art-picture[data-dots] {
-  font-family: var(--g-dots);
-  line-height: calc(var(--g-text-art) * var(--launch-art-scale));
-}
-
 .launch-art-caption {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--g-space-6);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   text-align: center;
-}
-
-.launch-art-artist {
-  color: var(--g-fg-3);
 }
 
 /* Arriving: the piece, then its name, rise once per launch, as New chat's rows do. */

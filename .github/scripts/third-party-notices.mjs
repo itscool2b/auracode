@@ -347,7 +347,7 @@ export function renderText(catalogue, distribution) {
     "",
     ...(distribution === "desktop"
       ? [
-          "Start screen aircraft: the pictures of aircraft drawn in text that the desktop app opens on are published text art by their artists (Mike Whaley, Joshua Bell, Radeon350, dew, Billcow168, Andrew S. Townley, Larry E. Cunningham, Sean Riesch, and others unsigned), kept as drawn and named under each picture. They are not covered by these notices or by any license for auracode. Their sources are listed in third-party/ascii-art.md.",
+          "Start screen aircraft: the aircraft the desktop app opens on are ASCII renderings of public-domain photographs and one drawing from Wikimedia Commons (U.S. Air Force, U.S. Navy, U.S. Army Air Forces and the San Diego Air & Space Museum archive). Their sources and photographers are listed in third-party/ascii-art.md.",
           "",
         ]
       : []),

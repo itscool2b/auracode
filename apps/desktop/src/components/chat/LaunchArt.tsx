@@ -8,7 +8,7 @@ const MOST = 2;
 const FILL = 0.84;
 
 /**
- * The start screen: this launch's aircraft drawn in text, alone in the pane with its name under it
+ * The start screen: this launch's aircraft in ASCII, alone in the pane with its name under it
  * (owner, 7 November 2026: "i dont want that thing showing on startup. just the art on startup").
  * New chat, a project's New chat and Ctrl+N open the composer as before. The piece is sized to the
  * pane: a large one shrinks to fit, a small one grows up to twice its set size.
@@ -44,7 +44,7 @@ export function LaunchArt({ picture = launchPicture() }: { readonly picture?: La
       piece.style.setProperty("--launch-art-scale", scale.toFixed(4));
     };
     size();
-    // Geist Mono and the dot faces can arrive after the first layout; measure again once they have.
+    // Geist Mono can arrive after the first layout; measure again once it has.
     let live = true;
     void document.fonts?.ready.then(() => {
       if (live) size();
@@ -66,7 +66,6 @@ export function LaunchArt({ picture = launchPicture() }: { readonly picture?: La
       <pre
         ref={art}
         className="launch-art-picture"
-        data-dots={picture.dots ? "" : undefined}
         role="img"
         aria-label={`${picture.name}, drawn in text`}
       >
@@ -74,7 +73,6 @@ export function LaunchArt({ picture = launchPicture() }: { readonly picture?: La
       </pre>
       <figcaption ref={caption} className="launch-art-caption">
         {picture.name}
-        {picture.artist ? <span className="launch-art-artist">by {picture.artist}</span> : null}
       </figcaption>
     </figure>
   );
