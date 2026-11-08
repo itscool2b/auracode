@@ -855,6 +855,9 @@ pub(crate) struct ChatActor {
     terminal_request: Option<oneshot::Sender<Result<TerminalOpened, SessionError>>>,
     /// Pi's shared-MCP extension file while its terminal runs.
     terminal_extension: Option<tempfile::NamedTempFile>,
+    /// The session the chat's terminal last used, for an agent whose Chat and terminal keep
+    /// sessions apart (Cursor, Hermes).
+    terminal_session: Option<crate::chatstore::TerminalSessionRecord>,
     /// The generation of the terminal open now. While it is, the chat's session is the
     /// terminal's: Chat does not start, and the live slot and session claim stay held.
     terminal: Option<u64>,
@@ -886,6 +889,7 @@ impl ChatActor {
             queue,
             recovered_turns,
             replay_check,
+            terminal_session,
         } = load;
         if recovered_turns > 0 {
             tracing::info!(
@@ -1000,6 +1004,7 @@ impl ChatActor {
             pending_start: None,
             terminal_request: None,
             terminal_extension: None,
+            terminal_session,
             terminal: None,
             terminal_import: None,
             starting_fresh: false,
@@ -1731,6 +1736,7 @@ impl ChatActor {
             self.remote_history = load.remote_history;
             self.agent_session = load.agent_session;
             self.continuation = load.continuation;
+            self.terminal_session = load.terminal_session;
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
             self.spec = chat_connection(&self.shared.deps.detector, &self.chat, self.agent_session.as_ref());
             let defaults = lock(&self.shared.new_chat_defaults).clone();
@@ -3423,12 +3429,21 @@ impl ChatActor {
                 .as_ref()
                 .is_some_and(|check| check.native_session_id == id && check.turns > 0)
         };
-        let resume = self
-            .agent_session
-            .as_ref()
-            .filter(|session| session.agent_id == spec.id && agent.shares_chat_sessions())
-            .and_then(|session| session.native_session_id.clone())
-            .filter(|id| home.recorded(id).unwrap_or_else(|| ran_turns(id)));
+        // An agent that keeps its terminal's sessions apart from Chat's resumes the session its
+        // terminal last used here, unless the agent's own record shows it gone.
+        let resume = if agent.shares_chat_sessions() {
+            self.agent_session
+                .as_ref()
+                .filter(|session| session.agent_id == spec.id)
+                .and_then(|session| session.native_session_id.clone())
+                .filter(|id| home.recorded(id).unwrap_or_else(|| ran_turns(id)))
+        } else {
+            self.terminal_session
+                .as_ref()
+                .filter(|record| record.connection == spec.id)
+                .map(|record| record.session.clone())
+                .filter(|id| home.recorded(id) != Some(false))
+        };
         let session = match resume {
             Some(id) => TerminalSession::Resume(id),
             None if agent.names_new_sessions() => {
@@ -3699,6 +3714,20 @@ The person continues this conversation here, in your terminal. Reply only that y
                 },
                 None,
             );
+        }
+        if !shares && let Some(session) = read.learned.clone() {
+            let record = crate::chatstore::TerminalSessionRecord {
+                connection: self
+                    .spec
+                    .as_ref()
+                    .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.id.to_owned()),
+                session,
+            };
+            self.terminal_session = Some(record.clone());
+            self.queue_op(Op::SaveTerminalSession {
+                chat_id: self.chat_id.clone(),
+                record: Some(record),
+            });
         }
         let learned = read.learned.is_some() && shares;
         if let Some(thread) = read.learned.filter(|_| shares) {

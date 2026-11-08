@@ -350,7 +350,7 @@ fn the_agent_list_offers_the_terminal_for_exactly_the_agents_it_can_launch() {
 }
 
 #[tokio::test]
-async fn a_cursor_terminal_is_its_own_chat_whose_turns_reach_chat_as_a_handoff() {
+async fn a_cursor_terminal_keeps_its_own_chat_whose_turns_reach_chat_as_a_handoff() {
     let (home, rig) = with_home(|| {
         rig_with_spec(
             aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
@@ -403,10 +403,10 @@ async fn a_cursor_terminal_is_its_own_chat_whose_turns_reach_chat_as_a_handoff()
     )
     .unwrap();
     rig.manager.terminal_ended(&chat.id, opened.generation);
-    // The next terminal is a chat of its own again: Cursor's Chat sessions are not its terminal's.
+    // The next terminal continues the terminal's own Cursor chat (Chat keeps its own session).
     let again = reopened(&rig, &chat.id).await;
     assert!(
-        !argv(&again).iter().any(|a| a.starts_with("--resume")),
+        argv(&again).contains(&format!("--resume={id}")),
         "{:?}",
         argv(&again)
     );

@@ -878,6 +878,11 @@ impl fmt::Debug for OpPermit {
 #[derive(Debug)]
 pub enum Op {
     InsertAgentSession(AgentSessionRow),
+    /// Keeps (or with `None`, forgets) the session the chat's terminal last used.
+    SaveTerminalSession {
+        chat_id: String,
+        record: Option<TerminalSessionRecord>,
+    },
     UpdateAgentSession {
         id: String,
         patch: AgentSessionPatch,
@@ -1005,6 +1010,21 @@ pub struct ChatLoad {
     pub queue: Vec<QueuedRow>,
     pub recovered_turns: u32,
     pub replay_check: Option<ReplayCheck>,
+    /// The session this chat's terminal last used, for an agent whose Chat and terminal keep
+    /// sessions apart (Cursor, Hermes): this device's own.
+    pub terminal_session: Option<TerminalSessionRecord>,
+}
+
+/// A terminal's own vendor session: the connection it ran through and the session's ID.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct TerminalSessionRecord {
+    pub connection: String,
+    pub session: String,
+}
+
+/// The device setting that keeps a chat's terminal session.
+pub(crate) fn terminal_session_key(device: &str, chat_id: &str) -> String {
+    format!("device/{device}/terminal-session/{chat_id}")
 }
 
 /// For the Hermes replay comparison: the latest agent session's turn count and its newest reply's

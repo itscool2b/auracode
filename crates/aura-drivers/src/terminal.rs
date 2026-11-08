@@ -283,11 +283,12 @@ impl TerminalAgent {
     }
 
     /// Chat (its protocol) and its interface keep one store of sessions, so either continues the
-    /// other's. Cursor keeps its ACP sessions apart from its interface's chats
-    /// (`~/.cursor/acp-sessions` and `~/.cursor/chats`, found with Cursor 2026.11.05): its terminal is
-    /// a chat of its own each time, and the visible handoff carries its turns to Chat.
+    /// other's. Two do not (found natively on 8 November 2026): Cursor 2026.11.05 keeps its ACP
+    /// sessions apart from its interface's chats (`~/.cursor/acp-sessions`, `~/.cursor/chats`), and
+    /// Hermes 0.22.5's ACP server refuses to resume a session its CLI began. Their terminal keeps
+    /// a session of its own, and the visible handoff carries its turns to Chat.
     pub fn shares_chat_sessions(self) -> bool {
-        self != Self::Cursor
+        !matches!(self, Self::Cursor | Self::Hermes)
     }
 
     /// A new session can start under an ID auracode chooses, so Chat continues it afterwards.

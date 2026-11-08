@@ -376,6 +376,7 @@ impl Pending {
                 self.sessions.insert(row.id.clone(), row.chat_id.clone());
                 Attribution::Chat(row.chat_id.clone())
             }
+            Op::SaveTerminalSession { chat_id, .. } => Attribution::Chat(chat_id.clone()),
             Op::UpdateAgentSession { id, .. } | Op::SaveNativeIdentity { id, .. } => {
                 known(&self.sessions, id)
             }
@@ -508,6 +509,13 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
             .as_ref()
             .map_or(SMALL, |json| json.len().saturating_add(SMALL))
             .saturating_add(patch.controls_json.as_ref().map_or(0, String::len)),
+        Op::SaveTerminalSession { record, .. } => record.as_ref().map_or(SMALL, |record| {
+            record
+                .connection
+                .len()
+                .saturating_add(record.session.len())
+                .saturating_add(SMALL)
+        }),
         Op::InsertAgentSession(row) => row
             .config_json
             .as_ref()
@@ -764,6 +772,7 @@ fn work_name(work: &Work) -> &'static str {
 pub(crate) fn op_name(op: &Op) -> &'static str {
     match op {
         Op::InsertAgentSession(_) => "insert_agent_session",
+        Op::SaveTerminalSession { .. } => "save_terminal_session",
         Op::UpdateAgentSession { .. } => "update_agent_session",
         Op::SaveNativeIdentity { .. } => "save_native_identity",
         Op::BeginTurn { .. } => "begin_turn",
@@ -2081,6 +2090,12 @@ fn apply(
     let sql = |result: rusqlite::Result<()>| result.map_err(classify);
     match op {
         Op::InsertAgentSession(row) => sql(rows::insert_agent_session(conn, device_id, row)),
+        Op::SaveTerminalSession { chat_id, record } => sql(rows::save_terminal_session(
+            conn,
+            device_id,
+            chat_id,
+            record.as_ref(),
+        )),
         Op::UpdateAgentSession { id, patch } => {
             sql(rows::update_agent_session(conn, device_id, id, patch))
         }
@@ -2131,6 +2146,10 @@ fn apply(
 enum DeadOp<'a> {
     InsertAgentSession {
         row: &'a AgentSessionRow,
+    },
+    SaveTerminalSession {
+        chat_id: &'a str,
+        record: Option<&'a super::TerminalSessionRecord>,
     },
     UpdateAgentSession {
         id: &'a str,
@@ -2197,6 +2216,10 @@ fn dead_letter<'a>(item: &'a Item, error: &'a str, at: i64) -> Option<DeadLetter
     let op = match &item.work {
         Work::Op(op) => match op {
             Op::InsertAgentSession(row) => DeadOp::InsertAgentSession { row },
+            Op::SaveTerminalSession { chat_id, record } => DeadOp::SaveTerminalSession {
+                chat_id,
+                record: record.as_ref(),
+            },
             Op::UpdateAgentSession { id, patch } => DeadOp::UpdateAgentSession { id, patch },
             Op::BeginTurn { turn, rows } => DeadOp::BeginTurn { turn, rows },
             Op::AppendEvents { chat_id, rows } => DeadOp::AppendEvents { chat_id, rows },
