@@ -1139,12 +1139,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
     let mut native_launch = launch(&setup, &native_id);
     let _mcp_extension = if !setup.mcp_servers.is_empty() {
         use std::io::Write;
-        if setup.mcp_servers.iter().any(|s| {
-            matches!(
-                s.definition.transport,
-                aura_protocol::mcp::McpTransport::Sse { .. }
-            ) || s.definition.name.contains('.')
-        }) {
+        if !setup.mcp_servers.iter().all(super::shared_mcp_supported) {
             return DriverExit::StartFailed(error(
                 "Pi supports stdio and HTTP MCP with letters, numbers, underscores and hyphens in server names.",
             ));
@@ -1161,27 +1156,18 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
                 ));
             }
         };
-        if file.write_all(include_bytes!("shared-mcp.ts")).is_err() {
+        if file.write_all(super::SHARED_MCP_EXTENSION).is_err() {
             return DriverExit::StartFailed(error(
                 "Aura could not write Pi's session MCP extension.",
             ));
         }
-        let servers = crate::mcp::codex(&setup.mcp_servers);
-        let mut servers = servers.as_object().cloned().unwrap_or_default();
-        for server in servers.values_mut() {
-            if let Some(headers) = server
-                .as_object_mut()
-                .and_then(|s| s.remove("http_headers"))
-            {
-                server["headers"] = headers;
-            }
-        }
         native_launch
             .args
             .extend(["--extension".into(), file.path().as_os_str().to_owned()]);
-        native_launch
-            .set_env
-            .push(("AURA_SHARED_MCP".into(), json!(servers).to_string().into()));
+        native_launch.set_env.push((
+            "AURA_SHARED_MCP".into(),
+            super::shared_mcp_json(&setup.mcp_servers).into(),
+        ));
         Some(file)
     } else {
         None
