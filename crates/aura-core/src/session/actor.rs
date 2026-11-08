@@ -3426,7 +3426,7 @@ impl ChatActor {
         let resume = self
             .agent_session
             .as_ref()
-            .filter(|session| session.agent_id == spec.id)
+            .filter(|session| session.agent_id == spec.id && agent.shares_chat_sessions())
             .and_then(|session| session.native_session_id.clone())
             .filter(|id| home.recorded(id).unwrap_or_else(|| ran_turns(id)));
         let session = match resume {
@@ -3641,8 +3641,67 @@ The person continues this conversation here, in your terminal. Reply only that y
     /// own file. A session the terminal started and the agent named itself is saved, so the next
     /// terminal or Chat resumes it.
     fn record_terminal(&mut self, read: TerminalRead) {
-        let learned = read.learned.is_some();
-        if let Some(thread) = read.learned {
+        let agent =
+            aura_drivers::terminal::TerminalAgent::of(aura_agents::agent_of(&self.chat.agent_id));
+        let shares = agent.is_none_or(aura_drivers::terminal::TerminalAgent::shares_chat_sessions);
+        // An agent whose Chat cannot continue its terminal's session (Cursor) keeps Chat's own; the
+        // terminal's turns reach it with the next Chat message instead, as a visible handoff.
+        if !shares && !read.imported.turns.is_empty() {
+            let first = self.ordinal.saturating_add(1);
+            let turns: Vec<crate::conversation::ContextTurn> = read
+                .imported
+                .turns
+                .iter()
+                .enumerate()
+                .map(|(index, turn)| crate::conversation::ContextTurn {
+                    id: String::new(),
+                    ordinal: first.saturating_add(u32::try_from(index).unwrap_or(u32::MAX)),
+                    agent_id: self.chat.agent_id.clone(),
+                    status: "completed".into(),
+                    prompt: turn.prompt.clone(),
+                    parts: Vec::new(),
+                    answer: turn.answer.clone(),
+                })
+                .collect();
+            let (handoff, _) = crate::conversation::handoff(
+                &turns,
+                None,
+                "Unchanged by auracode; see the folder.",
+                "Not read for a terminal session.",
+            );
+            match &mut self.continuation {
+                Some(continuation) if !continuation.handoff.is_empty() => {
+                    continuation.handoff = format!(
+                        "{}
+
+{handoff}",
+                        continuation.handoff
+                    );
+                }
+                Some(continuation) => continuation.handoff = handoff,
+                None => {
+                    self.continuation = Some(crate::chatstore::conversation::PendingContinuation {
+                        handoff,
+                        force_fresh: false,
+                        resume_source: None,
+                        native_start: Default::default(),
+                        connection: None,
+                    });
+                }
+            }
+            self.push(
+                AuraEvent::Notice {
+                    level: NoticeLevel::Info,
+                    message: format!(
+                        "{} keeps its terminal and Chat sessions apart, so the next Chat message includes the terminal's turns as context.",
+                        agent.map_or("The agent", aura_drivers::terminal::TerminalAgent::label)
+                    ),
+                },
+                None,
+            );
+        }
+        let learned = read.learned.is_some() && shares;
+        if let Some(thread) = read.learned.filter(|_| shares) {
             let now = now_millis();
             let agent_id = self
                 .spec

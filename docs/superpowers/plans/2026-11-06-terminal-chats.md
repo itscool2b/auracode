@@ -144,7 +144,7 @@ oh-my-pi (not installed here), from its published documentation:
 | Hermes | `--resume <id>` | named by Hermes, learned after | its own | `--yolo` for full access | chat folder only | its own |
 | Pi | `--session <id>` | named up front, `--session-id` | `--model` | Pi has no approvals | chat folder only | the Chat driver's extension, `-e` |
 | oh-my-pi | `--resume <id>` | named by oh-my-pi | its own | its own | chat folder only | its own |
-| Cursor | `--resume=<id>` | named by Cursor, learned after | its own | `--force` for full access | chat folder only | its own (`.cursor/mcp.json`) |
+| Cursor | a chat of its own each time | named by Cursor, learned after | its own | `--force` for full access | chat folder only | its own (`.cursor/mcp.json`) |
 | Antigravity | `--conversation <id>` | named by Antigravity, learned after | its own | `--mode accept-edits`, `--dangerously-skip-permissions` | `--add-dir` | its own |
 
 - **Which session opens.** The chat's saved session when it has a conversation (turns ran on it, or
@@ -155,6 +155,11 @@ oh-my-pi (not installed here), from its published documentation:
   Hermes' `sessions export`, Cursor's chat `meta.json` (`cwd`, `createdAtMs`), oh-my-pi's session
   file header, Antigravity's newest conversation. Where nothing is found, Chat keeps its own
   session and the chat says so.
+- **Cursor keeps two stores.** Its ACP sessions (`~/.cursor/acp-sessions`) and its interface's
+  chats (`~/.cursor/chats`) cannot load each other (its ACP server answered "Session not found"
+  for a terminal chat, natively with 2026.11.05). So Chat keeps its own Cursor session, each
+  terminal is a new Cursor chat, its turns come back into the history, and the next Chat message
+  carries them as the visible handoff, as when the chat changes agents.
 - **The agent's interface.** The connection's program without its protocol arguments (`grok agent
   stdio` becomes `grok`, `opencode acp` becomes `opencode`); through an ACP adapter, the CLI the
   adapter drives (`CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`); Antigravity's ACP server is a separate

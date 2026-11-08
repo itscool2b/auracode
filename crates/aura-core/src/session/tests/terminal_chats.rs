@@ -348,3 +348,75 @@ fn the_agent_list_offers_the_terminal_for_exactly_the_agents_it_can_launch() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_cursor_terminal_is_its_own_chat_whose_turns_reach_chat_as_a_handoff() {
+    let (home, rig) = with_home(|| {
+        rig_with_spec(
+            aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
+            WriterConfig::STANDARD,
+            Knobs::STANDARD,
+            aura_agents::get("cursor").expect("cursor").clone(),
+        )
+    });
+    let chat = rig
+        .manager
+        .create_chat("cursor", &rig.folder)
+        .await
+        .unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    let args = argv(&opened);
+    assert!(
+        !args.iter().any(|a| a == "acp" || a.starts_with("--resume")),
+        "{args:?}"
+    );
+    // Cursor names its new chat and writes it down as the person works.
+    let id = "f2538249-b0ef-43a7-bb25-69d5c4040056";
+    let meta = home.path().join(".cursor/chats/workspace").join(id);
+    std::fs::create_dir_all(&meta).unwrap();
+    std::fs::write(
+        meta.join("meta.json"),
+        serde_json::json!({
+            "createdAtMs": crate::time::now_millis(),
+            "cwd": rig.folder,
+            "hasConversation": true,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let transcript = home
+        .path()
+        .join(".cursor/projects/C-work-app/agent-transcripts")
+        .join(id);
+    std::fs::create_dir_all(&transcript).unwrap();
+    let lines = [
+        serde_json::json!({"role":"user","message":{"content":[{"type":"text","text":"<timestamp>now</timestamp>\n<user_query>\nList the files\n</user_query>"}]}}),
+        serde_json::json!({"role":"assistant","message":{"content":[{"type":"text","text":"There are two."}]}}),
+        serde_json::json!({"type":"turn_ended","status":"success"}),
+    ];
+    std::fs::write(
+        transcript.join(format!("{id}.jsonl")),
+        lines
+            .iter()
+            .map(|line| line.to_string() + "\n")
+            .collect::<String>(),
+    )
+    .unwrap();
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    // The next terminal is a chat of its own again: Cursor's Chat sessions are not its terminal's.
+    let again = reopened(&rig, &chat.id).await;
+    assert!(
+        !argv(&again).iter().any(|a| a.starts_with("--resume")),
+        "{:?}",
+        argv(&again)
+    );
+    assert_eq!(
+        conversation(&rig, &chat.id).await,
+        ["you: List the files", "agent: There are two."]
+    );
+    let page = rig.manager.history(&chat.id, u32::MAX, None).await.unwrap();
+    assert!(page.items.iter().any(|item| matches!(
+        &item.event,
+        AuraEvent::Notice { message, .. } if message.contains("next Chat message includes the terminal's turns")
+    )));
+}
