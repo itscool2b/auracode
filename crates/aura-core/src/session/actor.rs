@@ -3399,7 +3399,18 @@ impl ChatActor {
             );
             return fail(self, reply, why);
         };
+        // The connection's own arguments are its protocol's (after an npm shim's entry script,
+        // which stays); an adapter's or another program's are not the interface's at all.
+        let protocol: &[&str] = match &spec.recipe {
+            Recipe::Binary { args, .. }
+            | Recipe::QualifiedBinary { args, .. }
+            | Recipe::NativeBinary { args, .. } => args,
+            Recipe::NpmAdapter { .. } | Recipe::Builtin => &[],
+        };
+        let replaced = program != prepared.launch.program;
         let mut base = prepared.launch.clone();
+        base.args =
+            aura_drivers::terminal::interactive_args(&prepared.launch.args, protocol, replaced);
         base.program = program;
         // Only a session with a conversation is resumed. The one a new chat starts for Chat has
         // no record until its first message, and an agent refuses to resume a session it never

@@ -49,9 +49,7 @@ pub struct TerminalLaunch {
 /// Claude Code's interactive interface. Its MCP descriptor names environment variables
 /// (`${AURA_MCP_0_env_0}`) whose values the launch sets, as the protocol launch does.
 pub fn claude(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch {
-    let mut launch = base.clone();
-    launch.args.clear();
-    launch.label = format!("{} (terminal)", base.label);
+    let mut launch = interactive(base);
     crate::mcp::claude(options.servers, &mut launch);
     let mode = match options.autonomy {
         Autonomy::Ask => "default",
@@ -124,9 +122,7 @@ fn toml(value: &Value) -> String {
 /// command's environment credentials are set on Codex's process and forwarded by name
 /// (`env_vars`), and an address's header credentials through `env_http_headers`.
 pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch {
-    let mut launch = base.clone();
-    launch.args.clear();
-    launch.label = format!("{} (terminal)", base.label);
+    let mut launch = interactive(base);
     let mut omitted = Vec::new();
     if let TerminalSession::Resume(id) = &options.session {
         launch.args.extend(["resume".into(), id.into()]);
@@ -373,8 +369,33 @@ pub fn interactive_program(
     Some(base.program.clone())
 }
 
+/// The connection's arguments the interface keeps: what comes before its protocol arguments (an
+/// npm shim's entry script: `node.exe <entry> acp` keeps `<entry>`). None when the interface is
+/// another program than the connection's (`replaced`), or when the arguments do not end with the
+/// protocol's as expected.
+pub fn interactive_args(
+    args: &[std::ffi::OsString],
+    protocol: &[&str],
+    replaced: bool,
+) -> Vec<std::ffi::OsString> {
+    if replaced || args.len() < protocol.len() {
+        return Vec::new();
+    }
+    let (prefix, tail) = args.split_at(args.len() - protocol.len());
+    if tail
+        .iter()
+        .zip(protocol)
+        .all(|(arg, expected)| arg == expected)
+    {
+        prefix.to_vec()
+    } else {
+        Vec::new()
+    }
+}
+
 /// The launch for `agent`'s interface: `base` is the connection's launch with `program` already
-/// the interface's ([`interactive_program`]).
+/// the interface's ([`interactive_program`]) and `args` only what it keeps
+/// ([`interactive_args`]).
 pub fn build(
     agent: TerminalAgent,
     base: &LaunchSpec,
@@ -396,10 +417,9 @@ pub fn build(
     made
 }
 
-/// The connection's launch as an interactive one: its protocol arguments dropped.
+/// The connection's launch as an interactive one (its protocol arguments already dropped).
 fn interactive(base: &LaunchSpec) -> LaunchSpec {
     let mut launch = base.clone();
-    launch.args.clear();
     launch.label = format!("{} (terminal)", base.label);
     launch
 }
@@ -732,11 +752,13 @@ mod tests {
     use aura_protocol::mcp::{McpCredentials, McpDefinition};
     use std::collections::BTreeMap;
 
+    /// A connection's launch as the terminal gets it: its protocol arguments already dropped
+    /// (`interactive_args`).
     fn base() -> LaunchSpec {
         LaunchSpec {
             label: "claude".into(),
             program: PathBuf::from("/bin/claude"),
-            args: vec!["-p".into(), "--output-format".into(), "stream-json".into()],
+            args: Vec::new(),
             cwd: aura_process::ProcessCwd::ChatFolder,
             set_env: vec![("CLAUDE_CONFIG_DIR".into(), "/accounts/two".into())],
             daemons: Vec::new(),
@@ -1439,5 +1461,31 @@ mod tests {
             assert!(input.starts_with('\u{3}'), "{agent:?}");
             assert_eq!(input.ends_with('\u{4}'), agent == TerminalAgent::Hermes);
         }
+    }
+
+    #[test]
+    fn the_interface_keeps_a_shims_entry_script_and_drops_only_the_protocol() {
+        let os = |items: &[&str]| -> Vec<std::ffi::OsString> {
+            items.iter().map(std::ffi::OsString::from).collect()
+        };
+        // Cursor through its npm shim: node.exe <entry> acp.
+        assert_eq!(
+            interactive_args(&os(&["C:/cursor/index.js", "acp"]), &["acp"], false),
+            os(&["C:/cursor/index.js"])
+        );
+        assert_eq!(
+            interactive_args(&os(&["agent", "stdio"]), &["agent", "stdio"], false),
+            os(&[])
+        );
+        // Another program than the connection's keeps none of its arguments.
+        assert_eq!(
+            interactive_args(&os(&["C:/adapter/index.js"]), &[], true),
+            os(&[])
+        );
+        // Arguments that do not end with the protocol's are not guessed at.
+        assert_eq!(
+            interactive_args(&os(&["C:/x/index.js", "serve"]), &["acp"], false),
+            os(&[])
+        );
     }
 }
