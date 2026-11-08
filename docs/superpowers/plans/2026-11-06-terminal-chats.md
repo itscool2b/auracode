@@ -30,9 +30,11 @@ ALL EDGE CASES POSSIBLE FOR EVERYTHING ... lock in this as well."
 6. **Interface choice is device-local.** A terminal needs the agent's CLI on this device, and the
    chat record's sync format stays unchanged (older builds keep syncing). The choice lives in a
    local table keyed by chat; a chat synced to a device without it opens as Chat.
-7. **Phase 1 agents: Claude Code and Codex.** They have the strongest TUIs, take MCP and resume
-   options on their command lines, and write session files auracode can read. Other agents show
-   Terminal as unavailable, saying why, until each is checked.
+7. **Every agent auracode supports (owner, 8 November 2026: "fix for all supported harnesses").**
+   Phase 1 was Claude Code and Codex. Since 8 November each agent with an interactive interface
+   opens in the terminal: Claude Code, Codex (also through their ACP adapters), Grok Build,
+   OpenCode, Hermes, Pi, oh-my-pi, Cursor and Antigravity. "Every agent" below lists what each
+   one carries over, how its session continues and how its turns come back.
 
 ## What carries over to a terminal
 
@@ -127,3 +129,44 @@ notification hooks (phase 2), since a question at the prompt is as quiet as an i
   - Not done: skipping that first Chat start for a chat created to open in the terminal (it needs
     the three chat-creation commands to take the choice); the stop and restart cost a second or
     two.
+
+## Every agent (8 November 2026)
+
+The owner found Terminal missing for every agent but Claude Code and Codex and asked for all of
+them. What each one's terminal gets, from its own `--help` on this machine (Hermes 0.22.5,
+Antigravity 1.5.0, Grok Build 1.0.77, OpenCode 1.19.4, Pi 1.0.2) or, for the two not installed
+here (Cursor, oh-my-pi), from their published documentation:
+
+| Agent | Resume | A new session | Model | Access | Folders | Shared MCP |
+| --- | --- | --- | --- | --- | --- | --- |
+| Grok Build | `--resume <id>` | named up front, `--session-id` | `--model` | `--permission-mode` | `--add-dir` | its own (`grok mcp`) |
+| OpenCode | `--session <id>` | named by OpenCode, learned after | `--model provider/model` | `permission` in `OPENCODE_CONFIG_CONTENT`, `--auto` | chat folder only | `mcp` in `OPENCODE_CONFIG_CONTENT`, values by `{env:}` |
+| Hermes | `--resume <id>` | named by Hermes, learned after | its own | `--yolo` for full access | chat folder only | its own |
+| Pi | `--session <id>` | named up front, `--session-id` | `--model` | Pi has no approvals | chat folder only | the Chat driver's extension, `-e` |
+| oh-my-pi | `--resume <id>` | named by oh-my-pi | its own | its own | chat folder only | its own |
+| Cursor | `--resume=<id>` | named by Cursor | `--model` | `--force` for full access | chat folder only | its own (`.cursor/mcp.json`) |
+| Antigravity | `--conversation <id>` | named by Antigravity, learned after | its own | `--mode accept-edits`, `--dangerously-skip-permissions` | `--add-dir` | its own |
+
+- **Which session opens.** The chat's saved session when it has a conversation (turns ran on it, or
+  the agent's own record of it exists), else a new one. An agent that can name a new session takes
+  an ID auracode chooses and saves, so Chat continues it (Claude Code, Grok Build, Pi). Otherwise
+  the new session is learned after the terminal ends, from the agent's own record in the chat's
+  folder and started after the terminal opened: Codex's rollout, OpenCode's `session list`,
+  Hermes' `sessions export`, Antigravity's newest conversation. Where nothing can be learned
+  (Cursor, oh-my-pi), Chat keeps its own session and the chat says so.
+- **The agent's interface.** The connection's program without its protocol arguments (`grok agent
+  stdio` becomes `grok`, `opencode acp` becomes `opencode`); through an ACP adapter, the CLI the
+  adapter drives (`CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`); Antigravity's ACP server is a separate
+  program, so its terminal finds `agy` beside it or on `PATH`.
+- **What comes back.** Session files are read as for Claude Code and Codex, only what the terminal
+  added: Grok Build's `chat_history.jsonl` (prompts without `synthetic_reason`), Pi's and
+  oh-my-pi's session JSONL (user and assistant text), Hermes' `sessions export` (messages after
+  the terminal opened), OpenCode's `export` (messages created after it opened). Antigravity's
+  conversations are binary and Cursor's store is undocumented: their turns stay in the agent's
+  session, which Chat continues, and the chat says they were not copied.
+- **Leaving.** Each agent's own exit: Ctrl+C twice for most, then the process tree after the grace
+  period, as before.
+- A setting an agent's terminal cannot take (shared MCP, extra folders, the chosen model) is listed
+  in "Left out of this terminal", as shared servers already were.
+- Availability comes from the agent's entry (`AgentEntry.terminal`), not a list of names in the
+  page, so the header switch and New chat agree with what Rust can launch.
