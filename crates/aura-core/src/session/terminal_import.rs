@@ -32,8 +32,8 @@ pub(crate) enum Vendor {
     OpenCode,
     /// Its conversations are binary: a new one's ID is learned, its turns are not read.
     Antigravity,
-    /// Nothing is read back (Cursor).
-    Unread,
+    /// Cursor: `<home>/.cursor/projects/<folder>/agent-transcripts/<id>/<id>.jsonl`.
+    Cursor,
 }
 
 /// One exchange from the terminal: what the person typed, and the agent's answer text.
@@ -138,9 +138,8 @@ pub(crate) fn read_since(vendor: Vendor, path: &Path, from: u64) -> Imported {
         Vendor::Codex => parse_codex(&text),
         Vendor::Grok => parse_grok(&text),
         Vendor::Pi => parse_pi(&text),
-        Vendor::Hermes | Vendor::OpenCode | Vendor::Antigravity | Vendor::Unread => {
-            Imported::default()
-        }
+        Vendor::Cursor => parse_cursor(&text),
+        Vendor::Hermes | Vendor::OpenCode | Vendor::Antigravity => Imported::default(),
     };
     imported.truncated = truncated;
     imported
@@ -627,11 +626,8 @@ pub(crate) fn parse_grok(text: &str) -> Imported {
                 }
                 let text = text_of(&value["content"]);
                 let mut prompt = text.trim();
-                if let Some(inner) = prompt
-                    .strip_prefix("<user_query>")
-                    .and_then(|rest| rest.trim_end().strip_suffix("</user_query>"))
-                {
-                    prompt = inner.trim();
+                if let Some(inner) = user_query(prompt) {
+                    prompt = inner;
                 } else if value["prompt_index"].is_null() && prompt.starts_with('<') {
                     continue;
                 }
@@ -992,6 +988,126 @@ pub(crate) fn opencode_export(text: &str, from: Millis) -> Imported {
 fn json_in(text: &str) -> Option<Value> {
     let start = text.find(['{', '['])?;
     serde_json::from_str(text[start..].trim()).ok()
+}
+
+/// The person's own words in a prompt an agent wrapped in `<user_query>` (Grok Build, Cursor),
+/// whatever context it put around them.
+fn user_query(text: &str) -> Option<&str> {
+    let start = text.find("<user_query>")? + "<user_query>".len();
+    let end = start + text[start..].find("</user_query>")?;
+    Some(text[start..end].trim())
+}
+
+/// Cursor's transcript for `chat_id` under the person's home:
+/// `.cursor/projects/<folder>/agent-transcripts/<id>/<id>.jsonl`, found by ID in any folder's.
+pub(crate) fn cursor_transcript(home: &Path, chat_id: &str) -> Option<PathBuf> {
+    if !plain_id(chat_id) {
+        return None;
+    }
+    let name = format!("{chat_id}.jsonl");
+    std::fs::read_dir(home.join(".cursor").join("projects"))
+        .ok()?
+        .flatten()
+        .take(DIRS_LIMIT)
+        .map(|entry| {
+            entry
+                .path()
+                .join("agent-transcripts")
+                .join(chat_id)
+                .join(&name)
+        })
+        .find(|path| path.is_file())
+}
+
+/// A new Cursor terminal chat names itself: the newest chat begun in `folder` at or after `since`,
+/// from its `.cursor/chats/<workspace>/<id>/meta.json` (`cwd`, `createdAtMs`).
+pub(crate) fn newest_cursor_chat(home: &Path, folder: &Path, since: Millis) -> Option<String> {
+    let mut found: Option<(Millis, String)> = None;
+    let mut seen = 0usize;
+    for workspace in std::fs::read_dir(home.join(".cursor").join("chats"))
+        .ok()?
+        .flatten()
+        .take(DIRS_LIMIT)
+    {
+        let Ok(chats) = std::fs::read_dir(workspace.path()) else {
+            continue;
+        };
+        for chat in chats.flatten() {
+            seen += 1;
+            if seen > FILES_LIMIT {
+                return found.map(|(_, id)| id);
+            }
+            let Some(id) = chat.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if !plain_id(&id) {
+                continue;
+            }
+            let Some(meta) = std::fs::read(chat.path().join("meta.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            else {
+                continue;
+            };
+            let Some(at) = meta["createdAtMs"].as_i64() else {
+                continue;
+            };
+            if at + CLOCK_SLACK < since
+                || !meta["cwd"]
+                    .as_str()
+                    .is_some_and(|cwd| same_folder(Path::new(cwd), folder))
+            {
+                continue;
+            }
+            if found.as_ref().is_none_or(|(best, _)| at > *best) {
+                found = Some((at, id));
+            }
+        }
+    }
+    found.map(|(_, id)| id)
+}
+
+/// Cursor's transcript: a user line opens a turn with the person's words (inside the
+/// `<user_query>` Cursor wraps them in, after its `<timestamp>`); assistant text is its answer.
+pub(crate) fn parse_cursor(text: &str) -> Imported {
+    let mut out = Imported::default();
+    let mut open: Option<ImportedTurn> = None;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            out.skipped += 1;
+            continue;
+        };
+        let content = text_of(&value["message"]["content"]);
+        match value["role"].as_str() {
+            Some("user") => {
+                let prompt = match user_query(&content) {
+                    Some(inner) => inner,
+                    None if content.trim_start().starts_with('<') => continue,
+                    None => content.trim(),
+                };
+                if prompt.is_empty() {
+                    continue;
+                }
+                if let Some(turn) = open.take() {
+                    out.turns.push(turn);
+                }
+                open = Some(ImportedTurn {
+                    prompt: prompt.to_owned(),
+                    answer: String::new(),
+                    started_at: 0,
+                    ended_at: 0,
+                });
+            }
+            Some("assistant") => {
+                if let Some(turn) = open.as_mut() {
+                    append(&mut turn.answer, &content);
+                }
+            }
+            _ => {}
+        }
+    }
+    out.turns.extend(open);
+    out
 }
 
 #[cfg(test)]
@@ -1358,5 +1474,51 @@ mod tests {
             env: Vec::new(),
         };
         assert_eq!(missing.run(dir.path(), &[]), None);
+    }
+
+    #[test]
+    fn cursor_turns_keep_the_persons_words_and_a_new_chat_is_learned_from_its_meta() {
+        let text = [
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<timestamp>Sunday</timestamp>\n<user_query>\nReply with only the word ok.\n</user_query>"}]}}"#,
+            r#"{"role":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}"#,
+            r#"{"type":"turn_ended","status":"success"}"#,
+        ]
+        .join("\n");
+        let imported = parse_cursor(&text);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].prompt, "Reply with only the word ok.");
+        assert_eq!(imported.turns[0].answer, "ok");
+
+        let home = tempfile::tempdir().unwrap();
+        let transcript = home
+            .path()
+            .join(".cursor/projects/C-work-app/agent-transcripts/c-1");
+        std::fs::create_dir_all(&transcript).unwrap();
+        std::fs::write(transcript.join("c-1.jsonl"), "").unwrap();
+        assert_eq!(
+            cursor_transcript(home.path(), "c-1"),
+            Some(transcript.join("c-1.jsonl"))
+        );
+        let chat = |id: &str, cwd: &str, at: i64| {
+            let dir = home.path().join(".cursor/chats/ws").join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("meta.json"),
+                serde_json::json!({"createdAtMs": at, "cwd": cwd, "hasConversation": true})
+                    .to_string(),
+            )
+            .unwrap();
+        };
+        chat("c-old", "/work/app", 1_794_180_000_000);
+        chat("c-new", "/work/app", 1_794_180_439_416);
+        chat("c-else", "/work/else", 1_794_180_440_000);
+        assert_eq!(
+            newest_cursor_chat(home.path(), Path::new("/work/app"), 1_794_180_430_000).as_deref(),
+            Some("c-new")
+        );
+        assert_eq!(
+            newest_cursor_chat(home.path(), Path::new("/work/app"), 1_794_180_500_000),
+            None
+        );
     }
 }

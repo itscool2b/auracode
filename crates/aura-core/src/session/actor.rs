@@ -7424,16 +7424,17 @@ impl TerminalHome {
     /// The session's file, when the agent keeps one and has written it.
     fn session_file(&self, id: &str) -> Option<PathBuf> {
         use super::terminal_import::{
-            Vendor, antigravity_conversation, claude_session, codex_session, grok_session,
-            pi_session,
+            Vendor, antigravity_conversation, claude_session, codex_session, cursor_transcript,
+            grok_session, pi_session,
         };
         match self.vendor {
             Vendor::Claude => claude_session(&self.base, id),
             Vendor::Codex => codex_session(&self.base, id),
             Vendor::Grok => grok_session(&self.base, id),
             Vendor::Pi => pi_session(&self.base, id),
+            Vendor::Cursor => cursor_transcript(&self.base, id),
             Vendor::Antigravity => antigravity_conversation(&self.base, id),
-            Vendor::Hermes | Vendor::OpenCode | Vendor::Unread => None,
+            Vendor::Hermes | Vendor::OpenCode => None,
         }
     }
 
@@ -7442,7 +7443,7 @@ impl TerminalHome {
     fn recorded(&self, id: &str) -> Option<bool> {
         use super::terminal_import::Vendor;
         match self.vendor {
-            Vendor::Hermes | Vendor::OpenCode | Vendor::Unread => None,
+            Vendor::Hermes | Vendor::OpenCode => None,
             _ => Some(self.session_file(id).is_some()),
         }
     }
@@ -7498,7 +7499,7 @@ fn terminal_home(
             Vendor::Antigravity,
             home.join(".gemini").join("antigravity-cli"),
         ),
-        TerminalAgent::Cursor => (Vendor::Unread, home),
+        TerminalAgent::Cursor => (Vendor::Cursor, home),
     };
     TerminalHome { vendor, base }
 }
@@ -7553,9 +7554,9 @@ fn terminal_import_plan(
 /// session a new terminal started where the agent named it itself.
 fn read_terminal(plan: &TerminalImport) -> TerminalRead {
     use super::terminal_import::{
-        Imported, Vendor, claude_session, codex_session, grok_session,
-        newest_antigravity_conversation, newest_codex_session, newest_pi_session, pi_session,
-        read_hermes, read_opencode, read_since,
+        Imported, Vendor, claude_session, codex_session, cursor_transcript, grok_session,
+        newest_antigravity_conversation, newest_codex_session, newest_cursor_chat,
+        newest_pi_session, pi_session, read_hermes, read_opencode, read_since,
     };
     let id = plan.native_id.as_deref();
     let from_file = |file: Option<PathBuf>| {
@@ -7602,7 +7603,21 @@ fn read_terminal(plan: &TerminalImport) -> TerminalRead {
                 .flatten(),
             true,
         ),
-        Vendor::Unread => (Imported::default(), None, true),
+        Vendor::Cursor => match id {
+            Some(id) => (from_file(cursor_transcript(&plan.home, id)), None, false),
+            None => match newest_cursor_chat(&plan.home, &plan.folder, plan.opened_at) {
+                Some(chat) => {
+                    let file = cursor_transcript(&plan.home, &chat);
+                    (
+                        file.map(|path| read_since(Vendor::Cursor, &path, 0))
+                            .unwrap_or_default(),
+                        Some(chat),
+                        false,
+                    )
+                }
+                None => (Imported::default(), None, true),
+            },
+        },
     };
     TerminalRead {
         session_known: id.is_some() || learned.is_some(),
