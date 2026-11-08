@@ -18,7 +18,12 @@ describe("a chat's interface", () => {
     interfaces.set("c1", "terminal");
     expect(interfaces.of("c1", "claude")).toBe("terminal");
     // The same chat switched to an agent without a terminal shows as Chat.
-    expect(interfaces.of("c1", "cursor")).toBe("chat");
+    expect(interfaces.of("c1", "mock")).toBe("chat");
+    // Every agent with an interface of its own opens there, also under a connection's ID.
+    for (const agent of ["grok", "opencode", "hermes", "pi", "omp", "cursor", "antigravity"]) {
+      expect(interfaces.of("c1", agent)).toBe("terminal");
+    }
+    expect(interfaces.of("c1", "claude-acp")).toBe("terminal");
     interfaces.set("c1", "chat");
     expect(interfaces.of("c1", "claude")).toBe("chat");
   });

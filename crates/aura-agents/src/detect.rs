@@ -1373,6 +1373,7 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         latest_release: None,
         harness: None,
         connections: None,
+        terminal: crate::catalog::has_terminal(spec.agent),
     }
 }
 

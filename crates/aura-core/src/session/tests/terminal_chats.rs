@@ -336,3 +336,15 @@ async fn a_terminals_conversation_is_recorded_once_it_ends_and_only_what_it_adde
         ]
     );
 }
+
+#[test]
+fn the_agent_list_offers_the_terminal_for_exactly_the_agents_it_can_launch() {
+    for spec in aura_agents::catalog() {
+        assert_eq!(
+            aura_agents::has_terminal(spec.id),
+            aura_drivers::terminal::TerminalAgent::of(spec.agent).is_some(),
+            "{}",
+            spec.id
+        );
+    }
+}

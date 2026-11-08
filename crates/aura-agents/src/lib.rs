@@ -41,7 +41,8 @@ mod shared;
 use std::time::Duration;
 
 pub use catalog::{
-    AgentSpec, Recipe, UserBinary, agent_of, catalog, get, parse_version, version_at_least,
+    AgentSpec, Recipe, UserBinary, agent_of, catalog, get, has_terminal, parse_version,
+    version_at_least,
 };
 pub use detect::{Detector, FixedAgent, Gate};
 pub use launch::LaunchError;

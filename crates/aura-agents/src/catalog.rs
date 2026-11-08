@@ -116,6 +116,15 @@ pub fn agent_of(id: &str) -> &str {
     get(id).map_or(id, |spec| spec.agent)
 }
 
+/// The agent `id` names has an interactive interface of its own that a chat can open in
+/// auracode's terminal (`aura_drivers::terminal::TerminalAgent` builds its launch).
+pub fn has_terminal(id: &str) -> bool {
+    matches!(
+        agent_of(id),
+        "claude" | "codex" | "grok" | "opencode" | "hermes" | "pi" | "omp" | "cursor" | "antigravity"
+    )
+}
+
 /// The connections of the agent `id` names, preferred first; empty for an id the catalog does not
 /// know.
 pub fn connections(id: &str) -> Vec<&'static AgentSpec> {

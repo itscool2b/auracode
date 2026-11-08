@@ -53,7 +53,7 @@ export function TerminalChat({
       {snapshot.omitted.length > 0 ? (
         <p className="chat-banner terminal-chat-note" role="status">
           <span>
-            Left out of this terminal: {snapshot.omitted.join("; ")}. They still load in Chat.
+            Left out of this terminal: {snapshot.omitted.join("; ")}. Chat still uses them.
           </span>
         </p>
       ) : null}

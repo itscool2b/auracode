@@ -300,10 +300,13 @@ export function NewChat({
   const [interfaceChoice, setInterfaceChoice] = useState<ChatInterface>(() =>
     chatInterfaces.defaultInterface(),
   );
-  const terminalOffered = selected !== null && terminalSupported(selected.id);
+  const terminalOffered = selected !== null && terminalSupported(selected.id, agents);
   // Every way a chat is made ends here: it opens as chosen, Chat for agents without a terminal.
   const created = (chat: ChatSummary) => {
-    chatInterfaces.set(chat.id, terminalSupported(chat.agent_id) ? interfaceChoice : "chat");
+    chatInterfaces.set(
+      chat.id,
+      terminalSupported(chat.agent_id, agents) ? interfaceChoice : "chat",
+    );
     onCreated(chat);
   };
   // Rust reviews the worktree for the chosen agent, or the first one that can run until one is.

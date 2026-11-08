@@ -6,11 +6,40 @@
  */
 export type ChatInterface = "chat" | "terminal";
 
-/** The agents whose own interface a chat can open in. */
-export const TERMINAL_AGENTS: ReadonlySet<string> = new Set(["claude", "codex"]);
+/**
+ * The agents whose own interface a chat can open in, as Rust's `aura_agents::has_terminal` names
+ * them: an agent's entry carries it (`AgentEntry.terminal`), and this list answers until the
+ * entries load, so a chat open in its terminal keeps that view meanwhile.
+ */
+export const TERMINAL_AGENTS: ReadonlySet<string> = new Set([
+  "claude",
+  "codex",
+  "grok",
+  "opencode",
+  "hermes",
+  "pi",
+  "omp",
+  "cursor",
+  "antigravity",
+]);
 
-export function terminalSupported(agentId: string): boolean {
-  return TERMINAL_AGENTS.has(agentId);
+/** Chats saved before each agent had one entry name a connection (`claude-acp`). */
+const CONNECTIONS: Readonly<Record<string, string>> = {
+  "claude-acp": "claude",
+  "codex-acp": "codex",
+  "opencode-v2": "opencode",
+  "agy-stream": "antigravity",
+  "grok-stream": "grok",
+};
+
+/** Whether `agentId`'s chats can open in its own interface: its entry says, when it is known. */
+export function terminalSupported(
+  agentId: string,
+  agents?: readonly { readonly id: string; readonly terminal?: boolean }[] | null,
+): boolean {
+  const id = CONNECTIONS[agentId] ?? agentId;
+  const entry = agents?.find((agent) => agent.id === id);
+  return entry ? entry.terminal === true : TERMINAL_AGENTS.has(id);
 }
 
 const PREFIX = "auracode.chat-interface.";
