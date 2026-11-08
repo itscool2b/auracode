@@ -608,9 +608,10 @@ fn text_of(content: &Value) -> String {
     }
 }
 
-/// Grok Build's history: a user line opens a turn, unless Grok Build wrote it itself
-/// (`synthetic_reason`: instructions, context, reminders); assistant content is its answer.
-/// Reasoning and system lines are left out.
+/// Grok Build's history: a prompt (a user line with `prompt_index`, its text in `<user_query>`)
+/// opens a turn; assistant content is its answer. What Grok Build writes itself as user lines is
+/// left out: lines with `synthetic_reason` (reminders) and tagged context without a prompt index
+/// (`<user_info>`, `<rules>`), as are reasoning and system lines.
 pub(crate) fn parse_grok(text: &str) -> Imported {
     let mut out = Imported::default();
     let mut open: Option<ImportedTurn> = None;
@@ -624,8 +625,16 @@ pub(crate) fn parse_grok(text: &str) -> Imported {
                 if !value["synthetic_reason"].is_null() {
                     continue;
                 }
-                let prompt = text_of(&value["content"]);
-                let prompt = prompt.trim();
+                let text = text_of(&value["content"]);
+                let mut prompt = text.trim();
+                if let Some(inner) = prompt
+                    .strip_prefix("<user_query>")
+                    .and_then(|rest| rest.trim_end().strip_suffix("</user_query>"))
+                {
+                    prompt = inner.trim();
+                } else if value["prompt_index"].is_null() && prompt.starts_with('<') {
+                    continue;
+                }
                 if prompt.is_empty() {
                     continue;
                 }
@@ -1127,7 +1136,8 @@ mod tests {
         let text = [
             r#"{"type":"system","content":"You are Grok Build"}"#,
             r#"{"type":"user","content":[{"type":"text","text":"<instructions>"}],"synthetic_reason":"instructions"}"#,
-            r#"{"type":"user","content":[{"type":"text","text":"Rename the file"}],"prompt_index":0}"#,
+            r#"{"type":"user","content":[{"type":"text","text":"<user_info>\nOS Version: windows\n</user_info>\n<rules>be brief</rules>"}]}"#,
+            r#"{"type":"user","content":[{"type":"text","text":"<user_query>\nRename the file\n</user_query>"}],"prompt_index":0}"#,
             r#"{"type":"reasoning","id":"r1","summary":[]}"#,
             r#"{"type":"assistant","content":"Renamed it."}"#,
             r#"{"type":"user","content":[{"type":"text","text":"Thanks"}]}"#,
