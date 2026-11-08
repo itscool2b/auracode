@@ -469,6 +469,8 @@ pub struct TerminalOpened {
     /// when the chat moved here from another agent. Input, never an argument: a command line is
     /// readable by other programs and logs.
     pub first_input: Option<String>,
+    /// What the terminal types to ask the agent's interface to exit.
+    pub exit_input: String,
 }
 
 /// Where a terminal's conversation is read back from (terminal_import.rs): the agent's session
@@ -477,19 +479,27 @@ pub struct TerminalOpened {
 #[derive(Debug, Clone)]
 struct TerminalImport {
     vendor: super::terminal_import::Vendor,
-    /// Claude Code's config folder or Codex's home.
+    /// Where the agent keeps its sessions (Claude Code's config folder, Codex's home, ...).
     home: PathBuf,
     native_id: Option<String>,
     from: u64,
     folder: PathBuf,
     opened_at: Millis,
+    /// The agent's own command, for agents read through it (Hermes, OpenCode).
+    cli: super::terminal_import::Cli,
 }
 
 /// What reading a terminal's conversation found.
 struct TerminalRead {
     imported: super::terminal_import::Imported,
-    /// A new Codex session's thread, learned from its rollout.
-    codex_thread: Option<String>,
+    /// The session a new terminal started, learned from the agent's own record (Codex's rollout,
+    /// OpenCode's and Hermes' session lists, ...).
+    learned: Option<String>,
+    /// The agent's turns cannot be read back (Antigravity, Cursor).
+    unread: bool,
+    /// The terminal's session is known (it resumed or named one, or one was learned), so Chat
+    /// continues it.
+    session_known: bool,
 }
 
 /// What a preparation produces.
@@ -843,6 +853,8 @@ pub(crate) struct ChatActor {
     pending_start: Option<bool>,
     /// A terminal waiting for its preparation; answered with its launch, or why it cannot open.
     terminal_request: Option<oneshot::Sender<Result<TerminalOpened, SessionError>>>,
+    /// Pi's shared-MCP extension file while its terminal runs.
+    terminal_extension: Option<tempfile::NamedTempFile>,
     /// The generation of the terminal open now. While it is, the chat's session is the
     /// terminal's: Chat does not start, and the live slot and session claim stay held.
     terminal: Option<u64>,
@@ -987,6 +999,7 @@ impl ChatActor {
             sealed: false,
             pending_start: None,
             terminal_request: None,
+            terminal_extension: None,
             terminal: None,
             terminal_import: None,
             starting_fresh: false,
@@ -3296,13 +3309,12 @@ impl ChatActor {
         if self.terminal.is_some() || self.terminal_request.is_some() {
             return refuse(reply, "This chat is already open in the terminal.");
         }
-        if !matches!(
-            aura_agents::agent_of(&self.chat.agent_id),
-            "claude" | "codex"
-        ) {
+        if aura_drivers::terminal::TerminalAgent::of(aura_agents::agent_of(&self.chat.agent_id))
+            .is_none()
+        {
             return refuse(
                 reply,
-                "The terminal is available for Claude Code and Codex chats.",
+                "This chat's agent has no interface of its own to open in the terminal.",
             );
         }
         if self.chat.agent_host != aura_protocol::agents::AgentHost::Native {
@@ -3345,11 +3357,11 @@ impl ChatActor {
         }
     }
 
-    /// The prepared start, as the terminal's launch: the chat's session continues (a new Claude
-    /// Code session takes its ID now and is saved, so Chat continues it later), with the same
-    /// account, shared MCP and project memory a driver would get.
+    /// The prepared start, as the terminal's launch: the chat's session continues (a new session
+    /// of an agent that takes an ID takes one now and is saved, so Chat continues it later), with
+    /// the same account, shared MCP and project memory a driver would get.
     fn spawn_terminal(&mut self, prepared: Prepared) {
-        use aura_drivers::terminal::{TerminalOptions, TerminalSession};
+        use aura_drivers::terminal::{TerminalAgent, TerminalOptions, TerminalSession};
         let Some(reply) = self.terminal_request.take() else {
             return;
         };
@@ -3362,32 +3374,56 @@ impl ChatActor {
             this.set_status(SessionStatus::Stopped, None);
             drop(reply.send(Err(SessionError::AgentUnavailable(why))));
         };
-        if !matches!(
-            spec.kind,
-            aura_protocol::DriverKind::Claude | aura_protocol::DriverKind::Codex
-        ) {
+        let Some(agent) = TerminalAgent::of(spec.agent) else {
             let why = format!(
-                "This chat's session runs through {}'s {}, which has no terminal. Choose its own connection in Settings > Agents, then open the terminal.",
-                spec.name, spec.connection
+                "{} has no interface of its own to open in the terminal.",
+                spec.name
             );
             return fail(self, reply, why);
-        }
-        // Only a session the agent wrote down can be resumed. The one a new chat starts for Chat
-        // has no file until its first message, and Claude Code refuses to resume it, so the
-        // terminal starts a new session instead (nothing is lost: it had no conversation).
-        let home = terminal_home(spec.kind, &prepared.launch, &prepared.env);
+        };
+        // Through an ACP adapter, the terminal runs the CLI the adapter drives.
+        let adapter_env = match &spec.recipe {
+            Recipe::NpmAdapter { user_binary, .. } => Some(user_binary.env),
+            _ => None,
+        };
+        let Some(program) = aura_drivers::terminal::interactive_program(
+            agent,
+            &prepared.launch,
+            adapter_env,
+            &prepared.env.vars,
+        ) else {
+            let why = format!(
+                "auracode could not find {}'s own interface (`{}`) on this device. Install it, or keep this chat in Chat.",
+                agent.label(),
+                agent.program_name()
+            );
+            return fail(self, reply, why);
+        };
+        let mut base = prepared.launch.clone();
+        base.program = program;
+        // Only a session with a conversation is resumed. The one a new chat starts for Chat has
+        // no record until its first message, and an agent refuses to resume a session it never
+        // wrote down, so the terminal starts a new session instead (nothing is lost: it had no
+        // conversation). Where the agent's own record can be looked for, it decides; otherwise
+        // the turns this chat ran on the session do.
+        let home = terminal_home(agent, &prepared.launch, &prepared.env);
+        let ran_turns = |id: &str| {
+            self.replay_check
+                .as_ref()
+                .is_some_and(|check| check.native_session_id == id && check.turns > 0)
+        };
         let resume = self
             .agent_session
             .as_ref()
             .filter(|session| session.agent_id == spec.id)
             .and_then(|session| session.native_session_id.clone())
-            .filter(|id| home.session_file(id).is_some());
-        let session = match (resume, spec.kind) {
-            (Some(id), _) => TerminalSession::Resume(id),
-            (None, aura_protocol::DriverKind::Claude) => {
-                TerminalSession::NewClaude(uuid::Uuid::now_v7().to_string())
+            .filter(|id| home.recorded(id).unwrap_or_else(|| ran_turns(id)));
+        let session = match resume {
+            Some(id) => TerminalSession::Resume(id),
+            None if agent.names_new_sessions() => {
+                TerminalSession::Named(uuid::Uuid::now_v7().to_string())
             }
-            (None, _) => TerminalSession::New,
+            None => TerminalSession::New,
         };
         let native_scope = NativeSessionScope::local(
             spec.id,
@@ -3396,7 +3432,7 @@ impl ChatActor {
             &prepared.launch,
             &self.chat.folder,
         );
-        if let TerminalSession::Resume(id) | TerminalSession::NewClaude(id) = &session
+        if let TerminalSession::Resume(id) | TerminalSession::Named(id) = &session
             && !self.shared.live.claim(&native_scope, id, &self.chat_id)
         {
             return fail(
@@ -3468,19 +3504,26 @@ The person continues this conversation here, in your terminal. Reply only that y
                     )
                 })
         };
+        // Pi loads shared servers through an extension file, kept while its terminal runs.
+        self.terminal_extension = if agent == TerminalAgent::Pi && !servers.is_empty() {
+            aura_drivers::terminal::pi_extension().ok()
+        } else {
+            None
+        };
         let options = TerminalOptions {
             servers: &servers,
             autonomy: self.autonomy,
             session: session.clone(),
             model,
             add_dirs: &add_dirs,
+            extension: self
+                .terminal_extension
+                .as_ref()
+                .map(tempfile::NamedTempFile::path),
+            env: Some(&prepared.env.vars),
         };
-        let made = if spec.kind == aura_protocol::DriverKind::Claude {
-            aura_drivers::terminal::claude(&prepared.launch, &options)
-        } else {
-            aura_drivers::terminal::codex(&prepared.launch, &options)
-        };
-        if let TerminalSession::NewClaude(native_id) = &session {
+        let made = aura_drivers::terminal::build(agent, &base, &options);
+        if let TerminalSession::Named(native_id) = &session {
             let now = now_millis();
             let row = AgentSessionRow {
                 capabilities: None,
@@ -3502,7 +3545,13 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.queue_op(Op::InsertAgentSession(row));
             self.native_session_id = Some(native_id.clone());
         }
-        self.terminal_import = Some(terminal_import_plan(home, &session, &self.chat.folder));
+        // Agents read through their own commands run them with the chat's environment, without
+        // what the terminal itself added (its shared servers would start for nothing).
+        let cli = super::terminal_import::Cli {
+            program: base.program.clone(),
+            env: cli_env(&prepared.launch, &prepared.env),
+        };
+        self.terminal_import = Some(terminal_import_plan(home, &session, &self.chat.folder, cli));
         let generation = self.generation;
         self.terminal = Some(generation);
         self.set_status(SessionStatus::Stopped, Some("Open in the terminal".into()));
@@ -3517,6 +3566,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             omitted: made.omitted,
             // Typed into the terminal, so stripped of anything that would act as keys.
             first_input: first_message.map(|text| aura_drivers::terminal::typed_text(&text)),
+            exit_input: agent.exit_input().to_owned(),
         };
         if reply.send(Ok(opened)).is_err() {
             // Nobody waits for it any more (the page closed): give the session back now.
@@ -3544,7 +3594,9 @@ The person continues this conversation here, in your terminal. Reply only that y
             async move {
                 let read = task.await.unwrap_or_else(|_| TerminalRead {
                     imported: Default::default(),
-                    codex_thread: None,
+                    learned: None,
+                    unread: false,
+                    session_known: false,
                 });
                 Done::TerminalRead { generation, read }
             }
@@ -3562,6 +3614,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.record_terminal(read);
         }
         self.terminal = None;
+        self.terminal_extension = None;
         self.memory_grant = None;
         self.release_if_idle();
         self.set_status(SessionStatus::Stopped, None);
@@ -3574,14 +3627,16 @@ The person continues this conversation here, in your terminal. Reply only that y
     /// The terminal's turns, recorded as turns of this chat: the same events a live turn makes
     /// (started, the person's message, the agent's answer, ended), so history, Find, sync, the
     /// Dashboard and handoffs read them as any other. Tool calls and thinking stay in the agent's
-    /// own file. A new Codex session's thread is saved, so the next terminal or Chat resumes it.
+    /// own file. A session the terminal started and the agent named itself is saved, so the next
+    /// terminal or Chat resumes it.
     fn record_terminal(&mut self, read: TerminalRead) {
-        if let Some(thread) = read.codex_thread {
+        let learned = read.learned.is_some();
+        if let Some(thread) = read.learned {
             let now = now_millis();
             let agent_id = self
                 .spec
                 .as_ref()
-                .map_or_else(|| "codex".to_owned(), |spec| spec.id.to_owned());
+                .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.id.to_owned());
             let row = AgentSessionRow {
                 capabilities: None,
                 host: self.chat.agent_host.clone(),
@@ -3600,9 +3655,49 @@ The person continues this conversation here, in your terminal. Reply only that y
             };
             self.agent_session = Some(row.clone());
             self.queue_op(Op::InsertAgentSession(row));
-            self.native_session_id = Some(thread);
+            self.native_session_id = Some(thread.clone());
+            // The session has a conversation (the agent wrote it down), so the next terminal
+            // resumes it, even where none of its turns could be read back.
+            self.replay_check = Some(ReplayCheck {
+                native_session_id: thread,
+                turns: 1,
+                last_reply_sha256: None,
+            });
         }
         let imported = read.imported;
+        if let Some(check) = &mut self.replay_check
+            && self.native_session_id.as_deref() == Some(check.native_session_id.as_str())
+            && !imported.turns.is_empty()
+        {
+            let count = u32::try_from(imported.turns.len()).unwrap_or(u32::MAX);
+            check.turns = if learned {
+                count
+            } else {
+                check.turns.saturating_add(count)
+            };
+        }
+        if read.unread {
+            let agent = aura_drivers::terminal::TerminalAgent::of(aura_agents::agent_of(
+                &self.chat.agent_id,
+            ))
+            .map_or("The agent", aura_drivers::terminal::TerminalAgent::label);
+            let message = if read.session_known {
+                format!(
+                    "{agent} keeps the terminal's turns in its own session, which Chat continues. auracode cannot copy them into this chat's history."
+                )
+            } else {
+                format!(
+                    "auracode could not find the session {agent}'s terminal started, so Chat continues from this chat's history."
+                )
+            };
+            self.push(
+                AuraEvent::Notice {
+                    level: NoticeLevel::Info,
+                    message,
+                },
+                None,
+            );
+        }
         for turn in imported.turns {
             let turn_id = new_id();
             let prompt_id = new_id();
@@ -3731,9 +3826,13 @@ The person continues this conversation here, in your terminal. Reply only that y
                 .as_ref()
                 .is_some_and(|check| check.native_session_id == id && check.turns == 0)
             && uuid::Uuid::parse_str(id).is_ok()
-            && terminal_home(spec.kind, &prepared.launch, &prepared.env)
-                .session_file(id)
-                .is_none()
+            && terminal_home(
+                aura_drivers::terminal::TerminalAgent::Claude,
+                &prepared.launch,
+                &prepared.env,
+            )
+            .session_file(id)
+            .is_none()
     }
 
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
@@ -7303,30 +7402,48 @@ mod question_validation_tests {
     }
 }
 
-/// Where an agent keeps its session files: its config folder or home (an added account's
-/// `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, else under the person's home).
+/// Where an agent keeps its sessions: its config folder or home (an added account's
+/// `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`, else under the person's home).
 struct TerminalHome {
     vendor: super::terminal_import::Vendor,
     base: PathBuf,
 }
 
 impl TerminalHome {
-    /// The session's file, when the agent has written one.
+    /// The session's file, when the agent keeps one and has written it.
     fn session_file(&self, id: &str) -> Option<PathBuf> {
-        use super::terminal_import::{Vendor, claude_session, codex_session};
+        use super::terminal_import::{
+            Vendor, antigravity_conversation, claude_session, codex_session, grok_session,
+            pi_session,
+        };
         match self.vendor {
             Vendor::Claude => claude_session(&self.base, id),
             Vendor::Codex => codex_session(&self.base, id),
+            Vendor::Grok => grok_session(&self.base, id),
+            Vendor::Pi => pi_session(&self.base, id),
+            Vendor::Antigravity => antigravity_conversation(&self.base, id),
+            Vendor::Hermes | Vendor::OpenCode | Vendor::Unread => None,
+        }
+    }
+
+    /// Whether the agent wrote the session down, where its record can be looked for here (its
+    /// session files); `None` where it cannot (a database, an undocumented store).
+    fn recorded(&self, id: &str) -> Option<bool> {
+        use super::terminal_import::Vendor;
+        match self.vendor {
+            Vendor::Hermes | Vendor::OpenCode | Vendor::Unread => None,
+            _ => Some(self.session_file(id).is_some()),
         }
     }
 }
 
 fn terminal_home(
-    kind: aura_protocol::DriverKind,
+    agent: aura_drivers::terminal::TerminalAgent,
     launch: &LaunchSpec,
     env: &ResolvedEnv,
 ) -> TerminalHome {
     use super::terminal_import::Vendor;
+    use aura_drivers::terminal::TerminalAgent;
     let variable = |name: &str| -> Option<PathBuf> {
         launch
             .set_env
@@ -7346,17 +7463,53 @@ fn terminal_home(
     let home = variable(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .or_else(|| variable("HOME"))
         .unwrap_or_default();
-    if kind == aura_protocol::DriverKind::Claude {
-        TerminalHome {
-            vendor: Vendor::Claude,
-            base: variable("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
-        }
-    } else {
-        TerminalHome {
-            vendor: Vendor::Codex,
-            base: variable("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
-        }
+    let (vendor, base) = match agent {
+        TerminalAgent::Claude => (
+            Vendor::Claude,
+            variable("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
+        ),
+        TerminalAgent::Codex => (
+            Vendor::Codex,
+            variable("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
+        ),
+        TerminalAgent::Grok => (
+            Vendor::Grok,
+            variable("GROK_HOME").unwrap_or_else(|| home.join(".grok")),
+        ),
+        TerminalAgent::Pi => (
+            Vendor::Pi,
+            variable("PI_CODING_AGENT_DIR").unwrap_or_else(|| home.join(".pi").join("agent")),
+        ),
+        TerminalAgent::OhMyPi => (Vendor::Pi, home.join(".omp").join("agent")),
+        TerminalAgent::Hermes => (Vendor::Hermes, home),
+        TerminalAgent::OpenCode => (Vendor::OpenCode, home),
+        TerminalAgent::Antigravity => (
+            Vendor::Antigravity,
+            home.join(".gemini").join("antigravity-cli"),
+        ),
+        TerminalAgent::Cursor => (Vendor::Unread, home),
+    };
+    TerminalHome { vendor, base }
+}
+
+/// The environment an agent's own command runs with when its sessions are read through it: the
+/// chat's, and the connection's own variables (an added account's), as the agent's Chat start
+/// gets them.
+fn cli_env(
+    launch: &LaunchSpec,
+    env: &ResolvedEnv,
+) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    let mut vars: std::collections::BTreeMap<aura_process::EnvKey, std::ffi::OsString> = env
+        .vars
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    for (key, value) in &launch.set_env {
+        vars.insert(aura_process::EnvKey::new(key.clone()), value.clone());
     }
+    vars.into_iter()
+        .map(|(key, value)| (key.as_os_str().to_owned(), value))
+        .collect()
 }
 
 /// Where a terminal's conversation will be read from, and how much of its session file is
@@ -7365,11 +7518,12 @@ fn terminal_import_plan(
     home: TerminalHome,
     session: &aura_drivers::terminal::TerminalSession,
     folder: &std::path::Path,
+    cli: super::terminal_import::Cli,
 ) -> TerminalImport {
     use super::terminal_import::length;
     use aura_drivers::terminal::TerminalSession;
     let native_id = match session {
-        TerminalSession::Resume(id) | TerminalSession::NewClaude(id) => Some(id.clone()),
+        TerminalSession::Resume(id) | TerminalSession::Named(id) => Some(id.clone()),
         TerminalSession::New => None,
     };
     let file = native_id.as_deref().and_then(|id| home.session_file(id));
@@ -7380,30 +7534,70 @@ fn terminal_import_plan(
         from: file.as_deref().map_or(0, length),
         folder: folder.to_path_buf(),
         opened_at: now_millis(),
+        cli,
     }
 }
 
-/// Reads what the terminal added to its session file (blocking: run off the actor).
+/// Reads what the terminal added to its session (blocking: run off the actor), and learns the
+/// session a new terminal started where the agent named it itself.
 fn read_terminal(plan: &TerminalImport) -> TerminalRead {
     use super::terminal_import::{
-        Vendor, claude_session, codex_session, newest_codex_session, read_since,
+        Imported, Vendor, claude_session, codex_session, grok_session,
+        newest_antigravity_conversation, newest_codex_session, newest_pi_session, pi_session,
+        read_hermes, read_opencode, read_since,
     };
-    let mut codex_thread = None;
-    let file = match (plan.vendor, plan.native_id.as_deref()) {
-        (Vendor::Claude, Some(id)) => claude_session(&plan.home, id),
-        (Vendor::Codex, Some(id)) => codex_session(&plan.home, id),
-        (Vendor::Codex, None) => newest_codex_session(&plan.home, &plan.folder, plan.opened_at)
-            .map(|(path, thread)| {
-                codex_thread = Some(thread);
-                path
-            }),
-        (Vendor::Claude, None) => None,
+    let id = plan.native_id.as_deref();
+    let from_file = |file: Option<PathBuf>| {
+        file.map(|path| read_since(plan.vendor, &path, plan.from))
+            .unwrap_or_default()
+    };
+    let (imported, learned, unread) = match plan.vendor {
+        Vendor::Claude => (
+            from_file(id.and_then(|id| claude_session(&plan.home, id))),
+            None,
+            false,
+        ),
+        Vendor::Codex => match id {
+            Some(id) => (from_file(codex_session(&plan.home, id)), None, false),
+            None => match newest_codex_session(&plan.home, &plan.folder, plan.opened_at) {
+                Some((path, thread)) => (read_since(Vendor::Codex, &path, 0), Some(thread), false),
+                None => (Imported::default(), None, false),
+            },
+        },
+        Vendor::Grok => (
+            from_file(id.and_then(|id| grok_session(&plan.home, id))),
+            None,
+            false,
+        ),
+        Vendor::Pi => match id {
+            Some(id) => (from_file(pi_session(&plan.home, id)), None, false),
+            None => match newest_pi_session(&plan.home, &plan.folder, plan.opened_at) {
+                Some((path, session)) => (read_since(Vendor::Pi, &path, 0), Some(session), false),
+                None => (Imported::default(), None, false),
+            },
+        },
+        Vendor::Hermes => {
+            let (imported, learned) = read_hermes(&plan.cli, &plan.folder, id, plan.opened_at);
+            (imported, learned, false)
+        }
+        Vendor::OpenCode => {
+            let (imported, learned) = read_opencode(&plan.cli, &plan.folder, id, plan.opened_at);
+            (imported, learned, false)
+        }
+        Vendor::Antigravity => (
+            Imported::default(),
+            id.is_none()
+                .then(|| newest_antigravity_conversation(&plan.home, plan.opened_at))
+                .flatten(),
+            true,
+        ),
+        Vendor::Unread => (Imported::default(), None, true),
     };
     TerminalRead {
-        imported: file
-            .map(|path| read_since(plan.vendor, &path, plan.from))
-            .unwrap_or_default(),
-        codex_thread,
+        session_known: id.is_some() || learned.is_some(),
+        imported,
+        learned,
+        unread,
     }
 }
 

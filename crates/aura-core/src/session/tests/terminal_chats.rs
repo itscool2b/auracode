@@ -187,16 +187,74 @@ async fn a_session_claude_code_never_wrote_down_is_not_resumed_in_the_terminal()
 }
 
 #[tokio::test]
-async fn only_claude_code_and_codex_chats_open_in_the_terminal() {
+async fn a_chat_whose_agent_has_no_interface_of_its_own_stays_in_chat() {
     let rig = rig(Vec::new(), WriterConfig::STANDARD, Knobs::STANDARD);
     let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     let refused = rig.manager.open_terminal(&chat.id).await;
     assert!(
         refused
             .as_ref()
-            .is_err_and(|e| e.to_string().contains("Claude Code and Codex")),
+            .is_err_and(|e| e.to_string().contains("no interface of its own")),
         "{:?}",
         refused.err()
+    );
+}
+
+#[tokio::test]
+async fn a_grok_terminal_names_its_session_brings_its_turns_back_and_resumes_it_next_time() {
+    let (home, rig) = with_home(|| {
+        rig_with_spec(
+            aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
+            WriterConfig::STANDARD,
+            Knobs::STANDARD,
+            aura_agents::get("grok").expect("grok").clone(),
+        )
+    });
+    let chat = rig.manager.create_chat("grok", &rig.folder).await.unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    let args = argv(&opened);
+    // Grok Build's own interface: none of the ACP server's arguments.
+    assert!(
+        !args.iter().any(|a| a == "agent" || a == "stdio"),
+        "{args:?}"
+    );
+    assert_eq!(opened.exit_input, "");
+    let at = args
+        .iter()
+        .position(|a| a == "--session-id")
+        .expect("a new session's ID");
+    let session = args[at + 1].clone();
+    assert!(uuid::Uuid::parse_str(&session).is_ok(), "{session}");
+    // Grok Build writes its history as the person works in the terminal.
+    let folder = home
+        .path()
+        .join(".grok")
+        .join("sessions")
+        .join("C%3A%5Cwork%5Capp")
+        .join(&session);
+    std::fs::create_dir_all(&folder).unwrap();
+    let history = [
+        serde_json::json!({"type":"system","content":"You are Grok Build"}),
+        serde_json::json!({"type":"user","content":[{"type":"text","text":"<rules>"}],"synthetic_reason":"rules"}),
+        serde_json::json!({"type":"user","content":[{"type":"text","text":"Tidy the README"}],"prompt_index":0}),
+        serde_json::json!({"type":"assistant","content":"Tidied."}),
+    ]
+    .iter()
+    .map(|line| line.to_string() + "
+")
+    .collect::<String>();
+    std::fs::write(folder.join("chat_history.jsonl"), history).unwrap();
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    let again = reopened(&rig, &chat.id).await;
+    let args = argv(&again);
+    assert!(
+        args.windows(2)
+            .any(|w| w[0] == "--resume" && w[1] == session),
+        "{args:?}"
+    );
+    assert_eq!(
+        conversation(&rig, &chat.id).await,
+        ["you: Tidy the README", "agent: Tidied."]
     );
 }
 

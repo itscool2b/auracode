@@ -1,6 +1,10 @@
-//! A terminal chat's conversation, read back from its agent's own session file
-//! (docs/superpowers/plans/2026-11-06-terminal-chats.md, decision 4): Claude Code's
-//! `<config>/projects/<folder>/<session>.jsonl`, Codex's `<home>/sessions/**/rollout-*-<thread>.jsonl`.
+//! A terminal chat's conversation, read back from its agent's own session record
+//! (docs/superpowers/plans/2026-11-06-terminal-chats.md, decision 4 and "Every agent"): Claude
+//! Code's `<config>/projects/<folder>/<session>.jsonl`, Codex's
+//! `<home>/sessions/**/rollout-*-<thread>.jsonl`, Grok Build's
+//! `<home>/sessions/<folder>/<id>/chat_history.jsonl`, Pi's and oh-my-pi's
+//! `<agent dir>/sessions/<folder>/<time>_<id>.jsonl`, and Hermes' and OpenCode's through their own
+//! export commands.
 //! Only what the terminal added is read (from the file's length when it opened), as turns of a
 //! prompt and the agent's answer text; tool calls, thinking, injected context and lines that do not
 //! parse are left out and counted. Reads are bounded; nothing here writes.
@@ -19,6 +23,17 @@ const DIRS_LIMIT: usize = 4096;
 pub(crate) enum Vendor {
     Claude,
     Codex,
+    Grok,
+    /// Pi and oh-my-pi.
+    Pi,
+    /// Read through `hermes sessions export`.
+    Hermes,
+    /// Read through `opencode export`.
+    OpenCode,
+    /// Its conversations are binary: a new one's ID is learned, its turns are not read.
+    Antigravity,
+    /// Nothing is read back (Cursor).
+    Unread,
 }
 
 /// One exchange from the terminal: what the person typed, and the agent's answer text.
@@ -121,6 +136,11 @@ pub(crate) fn read_since(vendor: Vendor, path: &Path, from: u64) -> Imported {
     let mut imported = match vendor {
         Vendor::Claude => parse_claude(&text),
         Vendor::Codex => parse_codex(&text),
+        Vendor::Grok => parse_grok(&text),
+        Vendor::Pi => parse_pi(&text),
+        Vendor::Hermes | Vendor::OpenCode | Vendor::Antigravity | Vendor::Unread => {
+            Imported::default()
+        }
     };
     imported.truncated = truncated;
     imported
@@ -421,6 +441,550 @@ pub(crate) fn rfc3339_millis(text: &str) -> Option<Millis> {
     Some(seconds * 1000 + millis)
 }
 
+/// Session files a folder scan looks at, at most.
+const FILES_LIMIT: usize = 65_536;
+/// How long an agent's own command gets to answer when its sessions are read through it.
+const CLI_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// A session that began this long before the terminal opened still counts as the terminal's: the
+/// two clocks are the same machine's, but an agent can stamp a session as it starts.
+const CLOCK_SLACK: Millis = 2000;
+
+/// Grok Build's history for `session_id` under its home (`~/.grok`): found by ID in any folder's
+/// sessions, since the folder's name is Grok Build's own spelling of the path.
+pub(crate) fn grok_session(home: &Path, session_id: &str) -> Option<PathBuf> {
+    if !plain_id(session_id) {
+        return None;
+    }
+    std::fs::read_dir(home.join("sessions"))
+        .ok()?
+        .flatten()
+        .take(DIRS_LIMIT)
+        .map(|entry| entry.path().join(session_id).join("chat_history.jsonl"))
+        .find(|path| path.is_file())
+}
+
+/// Pi's (or oh-my-pi's) session file for `session_id` under its agent folder: `<time>_<id>.jsonl`
+/// in any folder's sessions.
+pub(crate) fn pi_session(base: &Path, session_id: &str) -> Option<PathBuf> {
+    if !plain_id(session_id) {
+        return None;
+    }
+    let suffix = format!("_{session_id}.jsonl");
+    pi_files(base).into_iter().find(|path| {
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.ends_with(&suffix))
+    })
+}
+
+/// A new oh-my-pi terminal session names itself: the newest session file begun in `folder` at or
+/// after `since`, with its ID, from the file's first line (`{"type":"session","id","cwd"}`).
+pub(crate) fn newest_pi_session(
+    base: &Path,
+    folder: &Path,
+    since: Millis,
+) -> Option<(PathBuf, String)> {
+    let mut found: Option<(Millis, PathBuf, String)> = None;
+    for path in pi_files(base) {
+        let modified = modified_millis(&path).unwrap_or(0);
+        if modified + CLOCK_SLACK < since {
+            continue;
+        }
+        let Some((id, cwd)) = first_line(&path).and_then(|value| {
+            (value["type"] == "session").then(|| {
+                (
+                    value["id"].as_str().map(str::to_owned),
+                    value["cwd"].as_str().map(PathBuf::from),
+                )
+            })
+        }) else {
+            continue;
+        };
+        let (Some(id), Some(cwd)) = (id, cwd) else {
+            continue;
+        };
+        if !plain_id(&id) || !same_folder(&cwd, folder) {
+            continue;
+        }
+        if found.as_ref().is_none_or(|(best, _, _)| modified > *best) {
+            found = Some((modified, path, id));
+        }
+    }
+    found.map(|(_, path, id)| (path, id))
+}
+
+/// Every `*.jsonl` directly in a folder of `<base>/sessions`, bounded.
+fn pi_files(base: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let Ok(dirs) = std::fs::read_dir(base.join("sessions")) else {
+        return files;
+    };
+    for dir in dirs.flatten().take(DIRS_LIMIT) {
+        let Ok(read) = std::fs::read_dir(dir.path()) else {
+            continue;
+        };
+        for entry in read.flatten() {
+            if files.len() >= FILES_LIMIT {
+                return files;
+            }
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "jsonl") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// Antigravity's conversation `id` under its CLI's folder (`~/.gemini/antigravity-cli`).
+pub(crate) fn antigravity_conversation(base: &Path, id: &str) -> Option<PathBuf> {
+    if !plain_id(id) {
+        return None;
+    }
+    std::fs::read_dir(base.join("conversations"))
+        .ok()?
+        .flatten()
+        .take(FILES_LIMIT)
+        .map(|entry| entry.path())
+        .find(|path| path.file_stem().and_then(|s| s.to_str()) == Some(id))
+}
+
+/// A new Antigravity terminal conversation: the newest one written at or after `since`. Its
+/// conversations are binary, so only its ID is learned, never its turns.
+pub(crate) fn newest_antigravity_conversation(base: &Path, since: Millis) -> Option<String> {
+    let mut found: Option<(Millis, String)> = None;
+    for entry in std::fs::read_dir(base.join("conversations"))
+        .ok()?
+        .flatten()
+        .take(FILES_LIMIT)
+    {
+        let path = entry.path();
+        let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !plain_id(id) {
+            continue;
+        }
+        let at = created_millis(&path).unwrap_or(0);
+        if at + CLOCK_SLACK < since {
+            continue;
+        }
+        if found.as_ref().is_none_or(|(best, _)| at > *best) {
+            found = Some((at, id.to_owned()));
+        }
+    }
+    found.map(|(_, id)| id)
+}
+
+fn modified_millis(path: &Path) -> Option<Millis> {
+    let time = std::fs::metadata(path).ok()?.modified().ok()?;
+    Millis::try_from(time.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis()).ok()
+}
+
+/// When a file was made, or last written where the system does not keep that.
+fn created_millis(path: &Path) -> Option<Millis> {
+    let meta = std::fs::metadata(path).ok()?;
+    let time = meta.created().or_else(|_| meta.modified()).ok()?;
+    Millis::try_from(time.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis()).ok()
+}
+
+fn first_line(path: &Path) -> Option<Value> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut first = String::new();
+    std::io::BufRead::read_line(
+        &mut std::io::BufReader::new(file.take(256 * 1024)),
+        &mut first,
+    )
+    .ok()?;
+    serde_json::from_str(first.trim()).ok()
+}
+
+/// Text from a string, or the `text` of an array's text parts.
+fn text_of(content: &Value) -> String {
+    match content {
+        Value::String(text) => text.clone(),
+        Value::Array(parts) => joined(parts, "text"),
+        _ => String::new(),
+    }
+}
+
+/// Grok Build's history: a user line opens a turn, unless Grok Build wrote it itself
+/// (`synthetic_reason`: instructions, context, reminders); assistant content is its answer.
+/// Reasoning and system lines are left out.
+pub(crate) fn parse_grok(text: &str) -> Imported {
+    let mut out = Imported::default();
+    let mut open: Option<ImportedTurn> = None;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            out.skipped += 1;
+            continue;
+        };
+        match value["type"].as_str() {
+            Some("user") => {
+                if !value["synthetic_reason"].is_null() {
+                    continue;
+                }
+                let prompt = text_of(&value["content"]);
+                let prompt = prompt.trim();
+                if prompt.is_empty() {
+                    continue;
+                }
+                if let Some(turn) = open.take() {
+                    out.turns.push(turn);
+                }
+                open = Some(ImportedTurn {
+                    prompt: prompt.to_owned(),
+                    answer: String::new(),
+                    started_at: 0,
+                    ended_at: 0,
+                });
+            }
+            Some("assistant") => {
+                if let Some(turn) = open.as_mut() {
+                    append(&mut turn.answer, &text_of(&value["content"]));
+                }
+            }
+            _ => {}
+        }
+    }
+    out.turns.extend(open);
+    out
+}
+
+/// Pi's (and oh-my-pi's) session: a user message opens a turn; assistant text parts are its
+/// answer. Tool calls, tool results, thinking and session entries are left out.
+pub(crate) fn parse_pi(text: &str) -> Imported {
+    let mut out = Imported::default();
+    let mut open: Option<ImportedTurn> = None;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            out.skipped += 1;
+            continue;
+        };
+        if value["type"] != "message" {
+            continue;
+        }
+        let message = &value["message"];
+        let at = value["timestamp"]
+            .as_str()
+            .and_then(rfc3339_millis)
+            .or_else(|| message["timestamp"].as_i64())
+            .unwrap_or(0);
+        match message["role"].as_str() {
+            Some("user") => {
+                let prompt = text_of(&message["content"]);
+                let prompt = prompt.trim();
+                if prompt.is_empty() {
+                    continue;
+                }
+                if let Some(turn) = open.take() {
+                    out.turns.push(turn);
+                }
+                open = Some(ImportedTurn {
+                    prompt: prompt.to_owned(),
+                    answer: String::new(),
+                    started_at: at,
+                    ended_at: at,
+                });
+            }
+            Some("assistant") => {
+                if let Some(turn) = open.as_mut() {
+                    append(&mut turn.answer, &text_of(&message["content"]));
+                    turn.ended_at = turn.ended_at.max(at);
+                }
+            }
+            _ => {}
+        }
+    }
+    out.turns.extend(open);
+    out
+}
+
+/// An agent's own command line, for agents whose sessions are read through it (Hermes, OpenCode):
+/// its program and the chat's environment.
+#[derive(Debug, Clone)]
+pub(crate) struct Cli {
+    pub program: PathBuf,
+    pub env: Vec<(std::ffi::OsString, std::ffi::OsString)>,
+}
+
+impl Cli {
+    /// Runs the command in `folder` with the chat's environment, without a console window, and
+    /// returns what it printed, bounded in time and size. Anything else (it failed to start, ran
+    /// too long) reads as nothing.
+    fn run(&self, folder: &Path, args: &[&str]) -> Option<String> {
+        use std::process::{Command, Stdio};
+        let mut command = Command::new(&self.program);
+        command
+            .args(args)
+            .current_dir(folder)
+            .env_clear()
+            .envs(self.env.iter().map(|(k, v)| (k, v)))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = command.spawn().ok()?;
+        let mut stdout = child.stdout.take()?;
+        let reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            drop((&mut stdout).take(READ_LIMIT).read_to_end(&mut bytes));
+            bytes
+        });
+        let deadline = std::time::Instant::now() + CLI_TIMEOUT;
+        let finished = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status.success(),
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                _ => {
+                    drop(child.kill());
+                    drop(child.wait());
+                    break false;
+                }
+            }
+        };
+        let bytes = reader.join().ok()?;
+        finished.then(|| String::from_utf8_lossy(&bytes).into_owned())
+    }
+}
+
+/// Milliseconds from a number of seconds or of milliseconds (agents write either).
+fn epoch_millis(value: &Value) -> Option<Millis> {
+    let number = value.as_f64()?;
+    if !number.is_finite() || number <= 0.0 {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, reason = "an epoch time fits")]
+    let millis = if number < 1e11 {
+        (number * 1000.0) as Millis
+    } else {
+        number as Millis
+    };
+    Some(millis)
+}
+
+/// Hermes' terminal session, through `hermes sessions export`: the known session, or the newest one
+/// begun in `folder` at or after `since`, which is learned. Its messages from `since` on (all of a
+/// learned one's) become turns.
+pub(crate) fn read_hermes(
+    cli: &Cli,
+    folder: &Path,
+    native_id: Option<&str>,
+    since: Millis,
+) -> (Imported, Option<String>) {
+    let folder_text = folder.to_string_lossy().into_owned();
+    let mut args = vec!["sessions", "export", "--format", "jsonl", "--yes"];
+    match native_id {
+        Some(id) => args.extend(["--session-id", id]),
+        None => args.extend(["--cwd", folder_text.as_str(), "--newer-than", "2d"]),
+    }
+    args.push("-");
+    let Some(text) = cli.run(folder, &args) else {
+        return (Imported::default(), None);
+    };
+    hermes_export(&text, folder, native_id, since)
+}
+
+/// What `hermes sessions export --format jsonl` printed, as [`read_hermes`] reads it.
+pub(crate) fn hermes_export(
+    text: &str,
+    folder: &Path,
+    native_id: Option<&str>,
+    since: Millis,
+) -> (Imported, Option<String>) {
+    let mut skipped = 0;
+    let sessions: Vec<Value> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| {
+            let parsed = serde_json::from_str::<Value>(line).ok();
+            skipped += usize::from(parsed.is_none());
+            parsed
+        })
+        .collect();
+    let chosen = match native_id {
+        Some(id) => sessions.into_iter().find(|session| session["id"] == id),
+        None => sessions
+            .into_iter()
+            .filter(|session| {
+                session["id"].as_str().is_some_and(plain_id)
+                    && epoch_millis(&session["started_at"])
+                        .is_some_and(|at| at + CLOCK_SLACK >= since)
+                    && session["cwd"]
+                        .as_str()
+                        .is_some_and(|cwd| same_folder(Path::new(cwd), folder))
+            })
+            .max_by_key(|session| epoch_millis(&session["started_at"]).unwrap_or(0)),
+    };
+    let Some(session) = chosen else {
+        return (Imported::default(), None);
+    };
+    let learned = native_id
+        .is_none()
+        .then(|| session["id"].as_str().map(str::to_owned))
+        .flatten();
+    let from = if native_id.is_some() { since } else { 0 };
+    let mut imported = Imported {
+        skipped,
+        ..Imported::default()
+    };
+    let mut open: Option<ImportedTurn> = None;
+    for message in session["messages"].as_array().into_iter().flatten() {
+        // The terminal opened before it wrote anything: no slack for a message.
+        let at = epoch_millis(&message["timestamp"]).unwrap_or(0);
+        if at != 0 && at < from {
+            continue;
+        }
+        let text = text_of(&message["content"]);
+        match message["role"].as_str() {
+            Some("user") => {
+                let prompt = text.trim();
+                if prompt.is_empty() {
+                    continue;
+                }
+                if let Some(turn) = open.take() {
+                    imported.turns.push(turn);
+                }
+                open = Some(ImportedTurn {
+                    prompt: prompt.to_owned(),
+                    answer: String::new(),
+                    started_at: at,
+                    ended_at: at,
+                });
+            }
+            Some("assistant") => {
+                if let Some(turn) = open.as_mut() {
+                    append(&mut turn.answer, &text);
+                    turn.ended_at = turn.ended_at.max(at);
+                }
+            }
+            _ => {}
+        }
+    }
+    imported.turns.extend(open);
+    (imported, learned)
+}
+
+/// OpenCode's terminal session, through `opencode export`: the known session, or the newest one
+/// `opencode session list` shows begun at or after `since` in the chat's folder, which is learned.
+/// Its messages from `since` on (all of a learned one's) become turns.
+pub(crate) fn read_opencode(
+    cli: &Cli,
+    folder: &Path,
+    native_id: Option<&str>,
+    since: Millis,
+) -> (Imported, Option<String>) {
+    let (id, learned) = match native_id {
+        Some(id) => (id.to_owned(), None),
+        None => {
+            let newest = cli
+                .run(folder, &["session", "list", "--format", "json", "-n", "20"])
+                .and_then(|text| opencode_newest(&text, folder, since));
+            let Some(id) = newest else {
+                return (Imported::default(), None);
+            };
+            (id.clone(), Some(id))
+        }
+    };
+    if !plain_id(&id) {
+        return (Imported::default(), learned);
+    }
+    let Some(export) = cli.run(folder, &["export", &id]) else {
+        return (Imported::default(), learned);
+    };
+    let from = if native_id.is_some() { since } else { 0 };
+    (opencode_export(&export, from), learned)
+}
+
+fn opencode_created(value: &Value) -> Option<Millis> {
+    epoch_millis(&value["time"]["created"]).or_else(|| epoch_millis(&value["created"]))
+}
+
+/// The newest session `opencode session list --format json` shows begun at or after `since` in
+/// `folder`.
+pub(crate) fn opencode_newest(text: &str, folder: &Path, since: Millis) -> Option<String> {
+    json_in(text)?
+        .as_array()?
+        .iter()
+        .filter(|session| {
+            session["id"].as_str().is_some_and(plain_id)
+                && opencode_created(session).is_some_and(|at| at + CLOCK_SLACK >= since)
+                && session["directory"]
+                    .as_str()
+                    .is_none_or(|dir| same_folder(Path::new(dir), folder))
+        })
+        .max_by_key(|session| opencode_created(session).unwrap_or(0))
+        .and_then(|session| session["id"].as_str().map(str::to_owned))
+}
+
+/// What `opencode export` printed, as turns from `from` on.
+pub(crate) fn opencode_export(text: &str, from: Millis) -> Imported {
+    let created = opencode_created;
+    let Some(export) = json_in(text) else {
+        return Imported {
+            skipped: usize::from(!text.trim().is_empty()),
+            ..Imported::default()
+        };
+    };
+    let mut imported = Imported::default();
+    let mut open: Option<ImportedTurn> = None;
+    for message in export["messages"].as_array().into_iter().flatten() {
+        let info = &message["info"];
+        let at = created(info).unwrap_or(0);
+        if at != 0 && at < from {
+            continue;
+        }
+        let text = message["parts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|part| part["type"] == "text" && part["synthetic"] != true)
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        match info["role"].as_str() {
+            Some("user") => {
+                let prompt = text.trim();
+                if prompt.is_empty() {
+                    continue;
+                }
+                if let Some(turn) = open.take() {
+                    imported.turns.push(turn);
+                }
+                open = Some(ImportedTurn {
+                    prompt: prompt.to_owned(),
+                    answer: String::new(),
+                    started_at: at,
+                    ended_at: at,
+                });
+            }
+            Some("assistant") => {
+                if let Some(turn) = open.as_mut() {
+                    append(&mut turn.answer, &text);
+                    let done = epoch_millis(&info["time"]["completed"]).unwrap_or(at);
+                    turn.ended_at = turn.ended_at.max(done);
+                }
+            }
+            _ => {}
+        }
+    }
+    imported.turns.extend(open);
+    imported
+}
+
+/// The JSON a command printed, after anything it printed first.
+fn json_in(text: &str) -> Option<Value> {
+    let start = text.find(['{', '['])?;
+    serde_json::from_str(text[start..].trim()).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,5 +1120,233 @@ mod tests {
         let (path, id) = newest_codex_session(dir.path(), Path::new("/work/app"), since).unwrap();
         assert_eq!(id, "new");
         assert_eq!(codex_session(dir.path(), "new"), Some(path));
+    }
+
+    #[test]
+    fn grok_turns_leave_out_what_grok_wrote_itself() {
+        let text = [
+            r#"{"type":"system","content":"You are Grok Build"}"#,
+            r#"{"type":"user","content":[{"type":"text","text":"<instructions>"}],"synthetic_reason":"instructions"}"#,
+            r#"{"type":"user","content":[{"type":"text","text":"Rename the file"}],"prompt_index":0}"#,
+            r#"{"type":"reasoning","id":"r1","summary":[]}"#,
+            r#"{"type":"assistant","content":"Renamed it."}"#,
+            r#"{"type":"user","content":[{"type":"text","text":"Thanks"}]}"#,
+            "not json",
+        ]
+        .join("\n");
+        let imported = parse_grok(&text);
+        assert_eq!(imported.skipped, 1);
+        assert_eq!(imported.turns.len(), 2);
+        assert_eq!(imported.turns[0].prompt, "Rename the file");
+        assert_eq!(imported.turns[0].answer, "Renamed it.");
+        assert_eq!(imported.turns[1].prompt, "Thanks");
+        assert_eq!(imported.turns[1].answer, "");
+    }
+
+    #[test]
+    fn pi_turns_keep_prompts_and_answer_text_only() {
+        let text = [
+            r#"{"type":"session","version":3,"id":"p1","timestamp":"2026-11-08T10:00:00Z","cwd":"/work/app"}"#,
+            r#"{"type":"model_change","id":"m","parentId":null,"provider":"x","modelId":"y"}"#,
+            r#"{"type":"message","id":"a","timestamp":"2026-11-08T10:00:01Z","message":{"role":"user","content":[{"type":"text","text":"Fix the test"}]}}"#,
+            r#"{"type":"message","id":"b","timestamp":"2026-11-08T10:00:05Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"},{"type":"toolCall","name":"bash"}]}}"#,
+            r#"{"type":"message","id":"c","message":{"role":"toolResult","content":[{"type":"text","text":"ok"}]}}"#,
+            r#"{"type":"message","id":"d","timestamp":"2026-11-08T10:00:09Z","message":{"role":"assistant","content":[{"type":"text","text":"Fixed."}]}}"#,
+        ]
+        .join("\n");
+        let imported = parse_pi(&text);
+        assert_eq!(imported.skipped, 0);
+        assert_eq!(imported.turns.len(), 1);
+        let turn = &imported.turns[0];
+        assert_eq!(turn.prompt, "Fix the test");
+        assert_eq!(turn.answer, "Fixed.");
+        assert_eq!(turn.ended_at - turn.started_at, 8000);
+    }
+
+    #[test]
+    fn grok_pi_and_antigravity_sessions_are_found_by_id_and_new_ones_by_folder_and_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let grok = dir.path().join("sessions").join("C%3A%5Cwork").join("g-1");
+        std::fs::create_dir_all(&grok).unwrap();
+        std::fs::write(grok.join("chat_history.jsonl"), "").unwrap();
+        assert_eq!(
+            grok_session(dir.path(), "g-1"),
+            Some(grok.join("chat_history.jsonl"))
+        );
+        assert_eq!(grok_session(dir.path(), "g-2"), None);
+        assert_eq!(grok_session(dir.path(), "../g-1"), None);
+
+        let pi = tempfile::tempdir().unwrap();
+        let folder = pi.path().join("sessions").join("--work-app--");
+        std::fs::create_dir_all(&folder).unwrap();
+        let header = |id: &str, cwd: &str| {
+            format!(r#"{{"type":"session","version":3,"id":"{id}","cwd":"{cwd}"}}"#) + "\n"
+        };
+        std::fs::write(
+            folder.join("2026-11-08T10-00-00-000Z_p-old.jsonl"),
+            header("p-old", "/work/app"),
+        )
+        .unwrap();
+        assert_eq!(
+            pi_session(pi.path(), "p-old"),
+            Some(folder.join("2026-11-08T10-00-00-000Z_p-old.jsonl"))
+        );
+        let since =
+            modified_millis(&folder.join("2026-11-08T10-00-00-000Z_p-old.jsonl")).unwrap() + 60_000;
+        assert_eq!(
+            newest_pi_session(pi.path(), Path::new("/work/app"), since),
+            None,
+            "a session older than the terminal is not its"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let now = modified_millis(&folder.join("2026-11-08T10-00-00-000Z_p-old.jsonl")).unwrap();
+        std::fs::write(
+            folder.join("2026-11-08T11-00-00-000Z_p-new.jsonl"),
+            header("p-new", "/work/app"),
+        )
+        .unwrap();
+        std::fs::write(
+            folder.join("2026-11-08T11-00-01-000Z_p-else.jsonl"),
+            header("p-else", "/work/elsewhere"),
+        )
+        .unwrap();
+        let (_, id) = newest_pi_session(pi.path(), Path::new("/work/app"), now).unwrap();
+        assert!(id == "p-new" || id == "p-old", "{id}");
+        assert_ne!(id, "p-else");
+
+        let agy = tempfile::tempdir().unwrap();
+        let conversations = agy.path().join("conversations");
+        std::fs::create_dir_all(&conversations).unwrap();
+        std::fs::write(conversations.join("c-1.pb"), b"\x01").unwrap();
+        assert_eq!(
+            antigravity_conversation(agy.path(), "c-1"),
+            Some(conversations.join("c-1.pb"))
+        );
+        assert_eq!(
+            newest_antigravity_conversation(agy.path(), 0),
+            Some("c-1".to_owned())
+        );
+        assert_eq!(
+            newest_antigravity_conversation(agy.path(), Millis::MAX / 2),
+            None
+        );
+    }
+
+    #[test]
+    fn hermes_export_learns_a_new_session_in_the_folder_and_reads_its_turns() {
+        let since = 1_762_600_000_000;
+        let session = |id: &str, cwd: &str, started: f64, messages: &str| {
+            format!(
+                r#"{{"id":"{id}","source":"cli","cwd":"{cwd}","started_at":{started},"messages":{messages}}}"#
+            )
+        };
+        let messages = r#"[
+            {"role":"system","content":"You are Hermes","timestamp":1762600001.0},
+            {"role":"user","content":"Plan the release","timestamp":1762600002.5},
+            {"role":"assistant","content":"","tool_calls":[{"id":"t"}],"timestamp":1762600003.0},
+            {"role":"tool","content":"done","timestamp":1762600004.0},
+            {"role":"assistant","content":"Here is the plan.","timestamp":1762600005.0}
+        ]"#
+        .replace('\n', " ");
+        let text = [
+            session("local-old", "/work/app", 1_762_500_000.0, "[]"),
+            session("local-new", "/work/app", 1_762_600_001.0, &messages),
+            session("local-sub", "/work/app/sub", 1_762_600_009.0, "[]"),
+        ]
+        .join("\n");
+        let (imported, learned) = hermes_export(&text, Path::new("/work/app"), None, since);
+        assert_eq!(learned.as_deref(), Some("local-new"));
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].prompt, "Plan the release");
+        assert_eq!(imported.turns[0].answer, "Here is the plan.");
+        // A resumed session: only what came after the terminal opened.
+        let (imported, learned) = hermes_export(
+            &text,
+            Path::new("/work/app"),
+            Some("local-new"),
+            1_762_600_006_000,
+        );
+        assert_eq!(learned, None);
+        assert!(imported.turns.is_empty(), "{imported:?}");
+    }
+
+    #[test]
+    fn opencode_learns_the_newest_session_begun_in_the_folder_and_reads_its_text() {
+        let list = r#"Loading...
+[{"id":"ses_old","directory":"/work/app","time":{"created":1762500000000,"updated":1762500000000}},
+ {"id":"ses_new","directory":"/work/app","time":{"created":1762600001000,"updated":1762600009000}},
+ {"id":"ses_else","directory":"/work/else","time":{"created":1762600002000,"updated":1762600002000}}]"#;
+        assert_eq!(
+            opencode_newest(list, Path::new("/work/app"), 1_762_600_000_000).as_deref(),
+            Some("ses_new")
+        );
+        assert_eq!(
+            opencode_newest(list, Path::new("/work/app"), 1_762_700_000_000),
+            None
+        );
+        let export = r#"{"info":{"id":"ses_new"},"messages":[
+            {"info":{"id":"m1","role":"user","time":{"created":1762600002000}},"parts":[{"type":"text","text":"Add a test"},{"type":"text","text":"<context>","synthetic":true}]},
+            {"info":{"id":"m2","role":"assistant","time":{"created":1762600003000,"completed":1762600008000}},"parts":[{"type":"reasoning","text":"thinking"},{"type":"tool","tool":"bash"},{"type":"text","text":"Added."}]}
+        ]}"#;
+        let imported = opencode_export(export, 0);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].prompt, "Add a test");
+        assert_eq!(imported.turns[0].answer, "Added.");
+        assert_eq!(imported.turns[0].ended_at, 1_762_600_008_000);
+        assert!(opencode_export(export, 1_762_700_000_000).turns.is_empty());
+        assert_eq!(opencode_export("garbage", 0).skipped, 1);
+    }
+
+    #[test]
+    fn epoch_times_read_as_seconds_or_milliseconds() {
+        assert_eq!(
+            epoch_millis(&serde_json::json!(1_762_600_002.5)),
+            Some(1_762_600_002_500)
+        );
+        assert_eq!(
+            epoch_millis(&serde_json::json!(1_762_600_002_500_i64)),
+            Some(1_762_600_002_500)
+        );
+        assert_eq!(epoch_millis(&serde_json::json!("soon")), None);
+        assert_eq!(epoch_millis(&serde_json::json!(-1)), None);
+    }
+
+    #[test]
+    fn an_agents_own_command_runs_in_the_folder_with_the_chats_environment_and_no_more() {
+        let dir = tempfile::tempdir().unwrap();
+        // The agent's command, as a script that prints its folder and one variable.
+        #[cfg(windows)]
+        let (program, body) = (
+            dir.path().join("agent.cmd"),
+            "@echo off\r\necho %CD%^|%AURA_TEST_VALUE%\r\n",
+        );
+        #[cfg(not(windows))]
+        let (program, body) = (
+            dir.path().join("agent.sh"),
+            "#!/bin/sh\necho \"$(pwd)|$AURA_TEST_VALUE\"\n",
+        );
+        std::fs::write(&program, body).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+            .filter(|(key, _)| {
+                let key = key.to_string_lossy().to_ascii_uppercase();
+                key == "PATH" || key == "SYSTEMROOT" || key == "COMSPEC"
+            })
+            .collect();
+        env.push(("AURA_TEST_VALUE".into(), "seen".into()));
+        let cli = Cli { program, env };
+        let printed = cli.run(dir.path(), &[]).expect("output");
+        let (folder, value) = printed.trim().split_once('|').expect("both");
+        assert!(same_folder(Path::new(folder), dir.path()), "{folder}");
+        assert_eq!(value, "seen");
+        let missing = Cli {
+            program: dir.path().join("missing"),
+            env: Vec::new(),
+        };
+        assert_eq!(missing.run(dir.path(), &[]), None);
     }
 }
