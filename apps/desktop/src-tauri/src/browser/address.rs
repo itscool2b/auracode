@@ -258,6 +258,21 @@ fn local_file(url: &Url) -> bool {
     }
 }
 
+/// A file address written the way that reaches a network share (`file:////server/share`,
+/// `file://localhost//server`, encoded or backslashed slashes), judged as written: an address
+/// parser may fold it into an ordinary path, as it does outside Windows.
+fn share_spelling(address: &str) -> bool {
+    let lower = address.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("file:") else {
+        return false;
+    };
+    let rest = rest
+        .strip_prefix("//localhost")
+        .or_else(|| rest.strip_prefix("//"))
+        .unwrap_or(rest);
+    percent_decode(&rest.replace('\\', "/")).starts_with("//")
+}
+
 /// `%5C` and friends as the engine reads them, for the share check.
 fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
@@ -294,7 +309,7 @@ pub fn policy(address: &str) -> Policy {
         // A file on this computer only: a network share (`file://server/share`, and the spellings
         // with an empty host that still reach one) sends the person's Windows credentials to it.
         "file" => {
-            if local_file(&url) {
+            if local_file(&url) && !share_spelling(address) {
                 Policy::Open
             } else {
                 Policy::Refuse
