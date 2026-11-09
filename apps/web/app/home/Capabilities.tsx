@@ -575,7 +575,7 @@ export function Capabilities() {
       <div className="wrap">
         <h2 id="caps-title" className="title">
           <Words text="Built for long turns." />{" "}
-          <span className="title-soft serif">
+          <span className="title-soft">
             <Words text="And for changing your mind." offset={4} />
           </span>
         </h2>
