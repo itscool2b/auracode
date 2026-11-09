@@ -21,7 +21,8 @@ export interface ComposerTransport {
   saveDraft(chatId: string, input: ComposerInput): Promise<void>;
   pick(chatId: string): Promise<ComposerAttachment | null>;
   import(chatId: string, path: string): Promise<ComposerAttachment>;
-  paste(chatId: string, bytes: number[]): Promise<ComposerAttachment>;
+  /** An image's bytes; `name` is a PNG file name of the page's own (the canvas's drawing). */
+  paste(chatId: string, bytes: number[], name?: string): Promise<ComposerAttachment>;
   mentions(chatId: string, query: string): Promise<FileMention[]>;
   send(chatId: string, input: ComposerInput): Promise<PromptAck>;
   steer?(chatId: string, expectedTurnId: string, input: ComposerInput): Promise<SteeringAck>;
@@ -36,7 +37,7 @@ export const composerApi: ComposerTransport = {
   },
   pick: async (id) => settle(commands.composerPick(id)),
   import: async (id, path) => settle(commands.composerImport(id, path)),
-  paste: async (id, bytes) => settle(commands.composerPaste(id, bytes)),
+  paste: async (id, bytes, name) => settle(commands.composerPaste(id, bytes, name ?? null)),
   mentions: async (id, query) => settle(commands.composerMentions(id, query)),
   send: async (id, input) => settle(commands.composerSend(id, input)),
   steer: async (id, turn, input) => settle(commands.composerSteer(id, turn, input)),

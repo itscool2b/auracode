@@ -551,7 +551,7 @@ async fn fork_copies_only_selected_image_metadata_and_missing_metadata_rolls_bac
         .expect("fixture PNG");
     let attachment = rig
         .manager
-        .composer_paste(&chat.id, png.into_inner())
+        .composer_paste(&chat.id, png.into_inner(), None)
         .await
         .expect("import");
     rig.manager

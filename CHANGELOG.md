@@ -7,7 +7,9 @@ checks the format.
 
 ## 2026-11-09
 
+- Canvas, beside Attach in the composer, opens a drawing pane above the message box: sketch flows and ideas with pens, shapes, arrows that follow their boxes and text, press Talk to explain it as you draw (each sentence is numbered on the shapes you drew while saying it), and Add to message attaches the drawing as Canvas.png with an outline of it and what you said. ([#116](https://github.com/itscool2b/auracode/pull/116))
 - Terminal is offered for every agent with an interface of its own, not just Claude Code and Codex: Grok Build, OpenCode, Hermes, Pi, oh-my-pi, Cursor and Antigravity open in their own interface with the chat's folder, account and access, continue their session there, and bring the terminal's turns back into the chat. Cursor and Hermes keep their terminal's session apart from Chat's, so their next Chat message carries what happened in the terminal. ([#115](https://github.com/itscool2b/auracode/pull/115))
+
 
 ## 2026-11-07
 

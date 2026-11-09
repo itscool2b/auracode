@@ -122,7 +122,20 @@ impl SessionManager {
         &self,
         chat_id: &str,
         bytes: Vec<u8>,
+        name: Option<String>,
     ) -> Result<ComposerAttachment, SessionError> {
+        // A plain PNG file name of the page's own (the canvas names its drawing); anything else
+        // keeps the pasted image's name.
+        let name = name
+            .filter(|name| {
+                name.len() <= 64
+                    && name.to_ascii_lowercase().ends_with(".png")
+                    && name.len() > 4
+                    && !name
+                        .chars()
+                        .any(|c| c.is_control() || r#"/\:*?"<>|"#.contains(c))
+            })
+            .unwrap_or_else(|| "Pasted image.png".into());
         self.composer_folder(chat_id).await?;
         let bytes = self
             .deps()
@@ -130,13 +143,8 @@ impl SessionManager {
             .spawn_blocking(move || normalize_image(&bytes))
             .await
             .map_err(|_| invalid("The image could not be prepared."))??;
-        self.composer_store(
-            chat_id,
-            "Pasted image.png".into(),
-            "image/png".into(),
-            bytes,
-        )
-        .await
+        self.composer_store(chat_id, name, "image/png".into(), bytes)
+            .await
     }
 
     async fn composer_store(

@@ -27,6 +27,7 @@ import type { TerminalPanels } from "../../lib/terminalPanel";
 import { runLabel } from "../../lib/worktreeRun";
 import { AccountPicker } from "./AccountPicker";
 import { BackgroundTasks } from "./BackgroundTasks";
+import { CanvasBridge, CanvasPane } from "./CanvasPane";
 import { ChangesPanel, type RewindRequest } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -114,6 +115,9 @@ export function ChatView({
     () => false,
   );
   const [changesOpen, setChangesOpen] = useState(false);
+  // The canvas takes the transcript's place above the composer; the drawing stays with the chat.
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [canvasBridge] = useState(() => new CanvasBridge());
   // Ctrl+F (Cmd+F on macOS) opens find in chat, or focuses its field again.
   const [findRequest, setFindRequest] = useState(0);
   // A Rewind on a sent message: Changes opens on the files before that turn, all selected.
@@ -897,16 +901,27 @@ export function ChatView({
                 />
               ) : (
                 <>
-                  <TaskLinkContext.Provider value={taskLinks}>
-                    <Transcript
-                      dockedRequests={dockedRequests}
-                      state={state}
-                      live={live}
-                      actions={actions}
-                      onLoadEarlier={() => void store.loadEarlier()}
-                      findRequest={findRequest}
+                  {canvasOpen && transport.composer ? (
+                    <CanvasPane
+                      key={chatId}
+                      chatId={chatId}
+                      bridge={canvasBridge}
+                      images={state.lists?.capabilities?.images ?? null}
+                      dictation={transport.composer.dictation}
+                      onClose={() => setCanvasOpen(false)}
                     />
-                  </TaskLinkContext.Provider>
+                  ) : (
+                    <TaskLinkContext.Provider value={taskLinks}>
+                      <Transcript
+                        dockedRequests={dockedRequests}
+                        state={state}
+                        live={live}
+                        actions={actions}
+                        onLoadEarlier={() => void store.loadEarlier()}
+                        findRequest={findRequest}
+                      />
+                    </TaskLinkContext.Provider>
+                  )}
                   <div className="chat-dock">
                     {fileNote ? (
                       <p
@@ -1143,6 +1158,15 @@ export function ChatView({
                         }
                         onStop={() => void store.interrupt()}
                         onForceStop={() => void store.forceStop()}
+                        canvas={
+                          transport.composer
+                            ? {
+                                open: canvasOpen,
+                                onToggle: () => setCanvasOpen((open) => !open),
+                                bridge: canvasBridge,
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                   </div>
