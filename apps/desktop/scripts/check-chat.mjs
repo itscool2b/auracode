@@ -680,17 +680,21 @@ async function fileLinks(page, theme) {
   const card = page.getByTestId("changed-files").last();
   await card.getByTestId("file-link").click();
   await openWork(page);
-  // Each step opens: its group, then the call itself.
-  const closedGroups = page.locator('[data-testid="tool-group"][aria-expanded="false"]');
-  for (let left = await closedGroups.count(); left > 0; left -= 1)
-    await closedGroups.first().click();
-  await page.evaluate(() => {
+  // Each step opens: its group, then the call itself. The edited step is in the last turn, at the
+  // end, where the virtual list renders it, and a group renders its calls a moment after it
+  // opens, so keep the end in view and open what shows until the step's location does.
+  await page.waitForFunction(() => {
+    const transcript = document.querySelector('[data-testid="transcript"]');
+    if (transcript) transcript.scrollTop = transcript.scrollHeight;
+    for (const group of document.querySelectorAll(
+      '[data-testid="tool-group"][aria-expanded="false"]',
+    ))
+      group.click();
     for (const summary of document.querySelectorAll(".chat-tool-head"))
       if (summary.parentElement && !summary.parentElement.open) summary.click();
-  });
-  // The edited step is in the last turn: at the end, where the virtual list renders it.
-  await page.getByTestId("transcript").evaluate((node) => {
-    node.scrollTop = node.scrollHeight;
+    return [...document.querySelectorAll('[data-testid="tool-locations"] button')].some(
+      (button) => button.textContent === "src/styles.css:4",
+    );
   });
   const location = page
     .getByTestId("tool-locations")

@@ -338,8 +338,22 @@ try {
       await introPage.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await introPage.getByRole("button", { name: "Skip setup", exact: true }).click();
       await introPage.getByRole("heading", { name: "Workspace ready" }).waitFor();
+      // Skipped once, setup stays skipped: the reload holds the formed mark for a moment, never
+      // the first launch's dissolve, and shows the ready workspace. Timing the heading cannot say
+      // which played: on CI's macOS the page alone takes over 1.5 s to start.
+      await introPage.addInitScript(() => {
+        window.__dissolvePlayed = false;
+        new MutationObserver(() => {
+          if (document.querySelector('[data-mode="live"]')) window.__dissolvePlayed = true;
+        }).observe(document, { childList: true, subtree: true, attributes: true });
+      });
       await introPage.reload();
-      await introPage.getByRole("heading", { name: "Workspace ready" }).waitFor({ timeout: 1500 });
+      await introPage.getByRole("heading", { name: "Workspace ready" }).waitFor();
+      assert.equal(
+        await introPage.evaluate(() => window.__dissolvePlayed),
+        false,
+        `${engine}: the first launch's dissolve played again after a reload`,
+      );
       await intro.close();
       assert.deepEqual(errors, [], `${engine} page errors`);
       console.log(
