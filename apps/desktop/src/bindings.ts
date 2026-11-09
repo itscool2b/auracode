@@ -11,6 +11,50 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	browserStatus: () => typedError<BrowserStatus, AppError>(__TAURI_INVOKE("browser_status")),
+	browserChat: (chatId: string) => typedError<ChatBrowser, AppError>(__TAURI_INVOKE("browser_chat", { chatId })),
+	/**
+	 *  Opens a tab in a chat: `input` (an address, a host or words to search for) loads in it, or the
+	 *  start page shows when there is none.
+	 */
+	browserOpen: (chatId: string, input: string | null, activate: boolean) => typedError<BrowserTab, AppError>(__TAURI_INVOKE("browser_open", { chatId, input, activate })),
+	browserClose: (tabId: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_close", { tabId })),
+	browserActivate: (chatId: string, tabId: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_activate", { chatId, tabId })),
+	browserMove: (tabId: string, index: number) => typedError<null, AppError>(__TAURI_INVOKE("browser_move", { tabId, index })),
+	/**  Loads what was typed in the address bar; answers the address it became. */
+	browserNavigate: (tabId: string, input: string) => typedError<string, AppError>(__TAURI_INVOKE("browser_navigate", { tabId, input })),
+	browserGo: (tabId: string, action: GoAction) => typedError<null, AppError>(__TAURI_INVOKE("browser_go", { tabId, action })),
+	/**
+	 *  Shows a tab's page over the panel's page area (`rect`, in the window's CSS pixels), or hides
+	 *  whatever page shows (`tab_id` or `rect` absent, or `visible` false).
+	 */
+	browserPlace: (tabId: string | null, rect: BrowserRect | null, visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("browser_place", { tabId, rect, visible })),
+	/**
+	 *  The page as shown, as a JPEG data URL, for the panel to stand in for the page while something
+	 *  opens over it (`None` where the engine cannot take one).
+	 */
+	browserCapture: (tabId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("browser_capture", { tabId })),
+	browserZoom: (tabId: string, zoom: number | null) => typedError<number | null, AppError>(__TAURI_INVOKE("browser_zoom", { tabId, zoom })),
+	browserDevtools: (tabId: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_devtools", { tabId })),
+	browserFocus: (tabId: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_focus", { tabId })),
+	/**
+	 *  Turns Annotate's picker on or off in a tab; `accent` and `ink` (`#rrggbb` or `rgb()`) colour
+	 *  its highlight. Answers whether it runs.
+	 */
+	browserAnnotate: (tabId: string, on: boolean, accent: string, ink: string) => typedError<boolean, AppError>(__TAURI_INVOKE("browser_annotate", { tabId, on, accent, ink })),
+	/**  The element at a point of the page (CSS pixels of its viewport). */
+	browserPickAt: (tabId: string, x: number | null, y: number | null) => typedError<PickedElement | null, AppError>(__TAURI_INVOKE("browser_pick_at", { tabId, x, y })),
+	/**  Pages from history for what is typed in the address bar, best first. */
+	browserSuggest: (input: string) => typedError<HistoryEntry[], AppError>(__TAURI_INVOKE("browser_suggest", { input })),
+	/**  History, newest first, matching `query`, visited before `before` (paging). */
+	browserHistory: (query: string, limit: number, before: number | null) => typedError<HistoryEntry[], AppError>(__TAURI_INVOKE("browser_history", { query, limit, before })),
+	browserHistoryRemove: (urls: string[]) => typedError<number, AppError>(__TAURI_INVOKE("browser_history_remove", { urls })),
+	browserClear: (data: ClearData) => typedError<null, AppError>(__TAURI_INVOKE("browser_clear", { data })),
+	/**
+	 *  Opens an address outside auracode: a web page in the system's browser, or another program's
+	 *  link a page asked for (`mailto:`, `vscode:`), after the person chose to.
+	 */
+	browserOpenOutside: (url: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_open_outside", { url })),
 	signInLinkPending: () => __TAURI_INVOKE<SignInLink | null>("sign_in_link_pending"),
 	signInLinkAcknowledge: (id: string) => __TAURI_INVOKE<void>("sign_in_link_acknowledge", { id }),
 	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
@@ -1053,6 +1097,83 @@ export type BlobText = {
 	eof: boolean,
 };
 
+/**  Everything the browser tells the window. */
+export type BrowserEvent = 
+/**  A chat's tabs changed (opened, closed, moved front, loading, titled, crashed). */
+{ type: "chat"; browser: ChatBrowser } | 
+/**  Annotate picked part of a page. */
+{ type: "pick"; chat_id: string; tab_id: string; pick: BrowserPick } | 
+/**  Annotate ended from the page (Esc). */
+{ type: "annotate_ended"; chat_id: string; tab_id: string } | 
+/**  One of the browser's own shortcuts, pressed while a page had the keyboard. */
+{ type: "shortcut"; chat_id: string; tab_id: string; action: string } | 
+/**
+ *  An agent works in a chat's browser (`label` says what), or stopped (`None`). `opened`: it
+ *  opened a page, so the panel should show it.
+ */
+{ type: "agent"; chat_id: string; tab_id: string | null; label: string | null; opened: boolean } | { type: "download"; chat_id: string; tab_id: string; url: string; file: string | null; state: DownloadState } | 
+/**  A page tried to open another program's link (`mailto:`, `vscode:`); the person may. */
+{ type: "outside"; chat_id: string; tab_id: string; url: string } | { type: "status"; status: BrowserStatus };
+
+/**  What Annotate picked: one element, or an area and the element at its centre. */
+export type BrowserPick = {
+	/**  `element` or `area`. */
+	mode: string,
+	/**  The address and title the engine reports for the page (never the page's own word). */
+	url: string,
+	title: string,
+	/**  Shift was held: add it to the note open now. */
+	add?: boolean,
+	viewport: PickViewport,
+	area?: PickRect | null,
+	elements?: PickedElement[],
+	/**  The page as it was shown when the pick was made, as a JPEG data URL. */
+	screenshot?: string | null,
+};
+
+/**  Where the panel's page area is, in the window's CSS pixels. */
+export type BrowserRect = {
+	x: number | null,
+	y: number | null,
+	width: number | null,
+	height: number | null,
+};
+
+/**  Whether the browser can be used, and how it keeps its data. */
+export type BrowserStatus = {
+	/**  The Browser plugin is on (Settings > Plugins & MCP). */
+	enabled: boolean,
+	/**  Why the browser cannot run on this system, when it cannot. */
+	unavailable: string | null,
+	/**  The engine offers to save sign-ins (Windows). */
+	passwords: boolean,
+	/**  This profile keeps no browser data on disk (an encrypted account profile). */
+	private: boolean,
+};
+
+/**  One tab of a chat's browser. */
+export type BrowserTab = {
+	id: string,
+	/**  `None`: a new tab, which shows auracode's start page instead of a web page. */
+	url: string | null,
+	title: string,
+	loading: boolean,
+	can_go_back: boolean,
+	can_go_forward: boolean,
+	/**  The page's process ended (it crashed or ran out of memory); Reload brings it back. */
+	crashed: boolean,
+	/**  Why the last load failed, when the engine says (Windows). */
+	error: string | null,
+	zoom: number | null,
+	/**
+	 *  No page is loaded for it until it is shown: restored after a restart, or put to sleep while
+	 *  hidden to save memory.
+	 */
+	asleep: boolean,
+	/**  Annotate's picker runs in its page. */
+	annotating: boolean,
+};
+
 /**  What a driver supports. The UI shows or hides features from this, never from agent names. */
 export type Capabilities = {
 	images: boolean,
@@ -1110,6 +1231,13 @@ export type ChatAttach = {
 	next_seq: number,
 	snapshot: ChatSnapshot,
 	history: HistoryPage,
+};
+
+/**  A chat's tabs, in their order, and the one in front. */
+export type ChatBrowser = {
+	chat_id: string,
+	tabs: BrowserTab[],
+	active: string | null,
 };
 
 export type ChatCreatePreview = {
@@ -1252,6 +1380,14 @@ export type CheckpointSummary = {
 	total_bytes: number,
 	/**  Exclusions and limits are visible. Excluded paths are never removed by a revert. */
 	warnings: string[],
+};
+
+/**  What Clear browsing data removes. */
+export type ClearData = {
+	history: boolean,
+	cookies: boolean,
+	cache: boolean,
+	passwords: boolean,
 };
 
 /**
@@ -1728,6 +1864,8 @@ export type DictationModel = {
 	supported: boolean,
 };
 
+export type DownloadState = "started" | "done" | "failed";
+
 export type EditablePrompt = {
 	turn_id: string,
 	/**  Original free text only. Existing attachment and mention context is retained on edit. */
@@ -1860,6 +1998,17 @@ export type GeneralPreferences = {
 	 *  installed: the first one detected.
 	 */
 	editor: ProjectEditor | null,
+	/**
+	 *  The Browser universal plugin: the browser beside the chat, Annotate, and the browser tools
+	 *  agents get. On unless the person turns it off in Settings > Plugins & MCP (owner, 9
+	 *  November 2026: "on by default", and off "disables the browser on the UI").
+	 */
+	browser: boolean,
+	/**
+	 *  The browser offers to save sign-ins and fills them in (WebView2's own password manager, on
+	 *  Windows). On by default.
+	 */
+	browser_passwords: boolean,
 };
 
 export type GitFileState = {
@@ -1893,6 +2042,8 @@ export type GitWorkspace = {
  */
 export type GlassEffect = "liquid_glass" | "vibrancy" | "mica" | "acrylic" | "none";
 
+export type GoAction = "back" | "forward" | "reload" | "stop";
+
 /**  The installed harness against its latest known release. */
 export type HarnessStatus = { state: "not_installed" } | 
 /**  Detection or the release check has not finished. */
@@ -1901,6 +2052,15 @@ export type HarnessStatus = { state: "not_installed" } |
 { state: "unknown"; version: string | null; reason: string } | 
 /**  The installed binary did not pass its version check. */
 { state: "failed"; reason: string };
+
+/**  One page in history. */
+export type HistoryEntry = {
+	url: string,
+	title: string,
+	visits: number,
+	/**  The last visit, in milliseconds since the Unix epoch. */
+	last_visit: number | null,
+};
 
 /**  One stored event and where it sits. */
 export type HistoryItem = {
@@ -2606,6 +2766,40 @@ export type PermissionRequest = {
 	truncated: Truncation | null,
 };
 
+export type PickRect = {
+	x: number | null,
+	y: number | null,
+	width: number | null,
+	height: number | null,
+};
+
+export type PickViewport = {
+	width: number | null,
+	height: number | null,
+	dpr?: number | null,
+};
+
+/**  The React, Vue or Svelte component that rendered a picked element, and the ones around it. */
+export type PickedComponent = {
+	name: string,
+	stack?: string[],
+	framework?: string,
+};
+
+/**  A part of a page Annotate picked, as the page script read it. */
+export type PickedElement = {
+	tag: string,
+	id?: string | null,
+	classes?: string[],
+	attributes?: { [key in string]: string },
+	selector?: string,
+	text?: string,
+	rect: PickRect,
+	styles?: { [key in string]: string },
+	component?: PickedComponent | null,
+	html?: string,
+};
+
 export type PlanEntry = {
 	content: string,
 	status: PlanStatus,
@@ -3201,7 +3395,11 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns on or off agents' direct edits to project memory. Off keeps review-only proposals. */
 { type: "agent_memory_writes"; enabled: boolean } | 
 /**  Turns on or off showing a finished turn's work instead of folding it. */
-{ type: "keep_steps_open"; enabled: boolean };
+{ type: "keep_steps_open"; enabled: boolean } | 
+/**  Turns the Browser universal plugin on or off. */
+{ type: "browser"; enabled: boolean } | 
+/**  Turns on or off the browser's offer to save sign-ins. */
+{ type: "browser_passwords"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,
