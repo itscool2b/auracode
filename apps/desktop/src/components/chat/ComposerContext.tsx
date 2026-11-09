@@ -15,8 +15,6 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
-  const current = useRef(attachments);
-  current.current = attachments;
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -27,7 +25,7 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
 
   const run = async (action: () => Promise<ComposerAttachment | null>): Promise<void> => {
     if (inFlight.current || !api || !chatId || !draft.getSnapshot().ready) return;
-    if (current.current.length >= 8) {
+    if (draft.getSnapshot().attachments.length >= 8) {
       setError("Send up to eight attachments at a time.");
       return;
     }
@@ -108,6 +106,28 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
       draft.update({ mentions: mentions.includes(path) ? mentions : [...mentions, path] });
     },
     pick: () => (api && chatId ? run(() => api.pick(chatId)) : Promise.resolve()),
+    /**
+     * Adds an image the page made (the canvas's drawing), in place of `replace` while that is
+     * still attached; its attachment, or `null` when it was not added.
+     */
+    pasteImage: async (
+      bytes: Uint8Array,
+      name: string,
+      replace: string | null,
+    ): Promise<string | null> => {
+      if (!api || !chatId) return null;
+      if (replace && draft.getSnapshot().attachments.some((item) => item.id === replace))
+        draft.update({
+          attachments: draft.getSnapshot().attachments.filter((item) => item.id !== replace),
+        });
+      let added: string | null = null;
+      await run(async () => {
+        const item = await api.paste(chatId, Array.from(bytes), name);
+        added = item.id;
+        return item;
+      });
+      return added;
+    },
     paste: (file: File) =>
       api && chatId
         ? run(async () => {

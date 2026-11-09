@@ -5,7 +5,20 @@
  * shapes drawn while each phrase was spoken). Nothing here touches the page or the agent.
  */
 
-export type Tool = "select" | "pen" | "highlighter" | "rect" | "ellipse" | "arrow" | "text" | "eraser";
+/** The item at `index`, which the caller has bounds-checked. */
+function item<T>(list: readonly T[], index: number): T {
+  return list[index] as T;
+}
+
+export type Tool =
+  | "select"
+  | "pen"
+  | "highlighter"
+  | "rect"
+  | "ellipse"
+  | "arrow"
+  | "text"
+  | "eraser";
 
 /** Colours are the theme's tokens, so a drawing repaints with the theme and appearance. */
 export type Ink = "ink" | "red" | "yellow" | "green" | "blue" | "magenta" | "cyan";
@@ -72,7 +85,12 @@ export type Element =
       readonly start: string | null;
       readonly end: string | null;
     })
-  | (Base & { readonly kind: "text"; readonly x: number; readonly y: number; readonly text: string });
+  | (Base & {
+      readonly kind: "text";
+      readonly x: number;
+      readonly y: number;
+      readonly text: string;
+    });
 
 /** A phrase of the narration and when it settled. */
 export interface Phrase {
@@ -183,13 +201,17 @@ export function hits(element: Element, point: Point, tolerance: number): boolean
     case "stroke": {
       const reach = tolerance + strokeWidth(element) / 2;
       const points = element.points;
-      if (points.length === 1) return Math.hypot(point.x - points[0].x, point.y - points[0].y) <= reach;
+      if (points.length === 1)
+        return Math.hypot(point.x - item(points, 0).x, point.y - item(points, 0).y) <= reach;
       for (let index = 1; index < points.length; index += 1)
-        if (distanceToSegment(point, points[index - 1], points[index]) <= reach) return true;
+        if (distanceToSegment(point, item(points, index - 1), item(points, index)) <= reach)
+          return true;
       return false;
     }
     case "arrow":
-      return distanceToSegment(point, element.from, element.to) <= tolerance + STROKE[element.width];
+      return (
+        distanceToSegment(point, element.from, element.to) <= tolerance + STROKE[element.width]
+      );
     case "rect":
     case "ellipse":
     case "text":
@@ -200,15 +222,18 @@ export function hits(element: Element, point: Point, tolerance: number): boolean
 /** The topmost element under `point`. */
 export function elementAt(drawing: Drawing, point: Point, tolerance: number): Element | null {
   for (let index = drawing.elements.length - 1; index >= 0; index -= 1)
-    if (hits(drawing.elements[index], point, tolerance)) return drawing.elements[index];
+    if (hits(item(drawing.elements, index), point, tolerance)) return item(drawing.elements, index);
   return null;
 }
 
 /** The topmost shape (rectangle or ellipse) an arrow end at `point` attaches to. */
 export function shapeAt(drawing: Drawing, point: Point, tolerance: number): Element | null {
   for (let index = drawing.elements.length - 1; index >= 0; index -= 1) {
-    const element = drawing.elements[index];
-    if ((element.kind === "rect" || element.kind === "ellipse") && inside(point, bounds(element), tolerance))
+    const element = item(drawing.elements, index);
+    if (
+      (element.kind === "rect" || element.kind === "ellipse") &&
+      inside(point, bounds(element), tolerance)
+    )
       return element;
   }
   return null;
@@ -221,7 +246,10 @@ export function within(drawing: Drawing, area: Box): string[] {
     .filter((element) => {
       const own = bounds(element);
       return (
-        own.x <= box.x + box.w && own.x + own.w >= box.x && own.y <= box.y + box.h && own.y + own.h >= box.y
+        own.x <= box.x + box.w &&
+        own.x + own.w >= box.x &&
+        own.y <= box.y + box.h &&
+        own.y + own.h >= box.y
       );
     })
     .map((element) => element.id);
@@ -230,7 +258,10 @@ export function within(drawing: Drawing, area: Box): string[] {
 function shifted(element: Element, dx: number, dy: number): Element {
   switch (element.kind) {
     case "stroke":
-      return { ...element, points: element.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
+      return {
+        ...element,
+        points: element.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
+      };
     case "arrow":
       return {
         ...element,
@@ -243,7 +274,12 @@ function shifted(element: Element, dx: number, dy: number): Element {
 }
 
 /** Moves the elements `ids`; an arrow attached to a moved shape takes that end along. */
-export function moveElements(drawing: Drawing, ids: ReadonlySet<string>, dx: number, dy: number): Drawing {
+export function moveElements(
+  drawing: Drawing,
+  ids: ReadonlySet<string>,
+  dx: number,
+  dy: number,
+): Drawing {
   return {
     ...drawing,
     elements: drawing.elements.map((element) => {
@@ -269,7 +305,8 @@ export function removeElements(drawing: Drawing, ids: ReadonlySet<string>): Draw
       .filter((element) => !ids.has(element.id))
       .map((element) =>
         element.kind === "arrow" &&
-        ((element.start !== null && ids.has(element.start)) || (element.end !== null && ids.has(element.end)))
+        ((element.start !== null && ids.has(element.start)) ||
+          (element.end !== null && ids.has(element.end)))
           ? {
               ...element,
               start: element.start !== null && ids.has(element.start) ? null : element.start,
@@ -299,28 +336,29 @@ export function strokePath(points: readonly Point[]): string {
   if (!points.length) return "";
   const round = (value: number) => Math.round(value * 100) / 100;
   if (points.length === 1) {
-    const { x, y } = points[0];
+    const { x, y } = item(points, 0);
     return `M${round(x)} ${round(y)}L${round(x + 0.01)} ${round(y)}`;
   }
-  let path = `M${round(points[0].x)} ${round(points[0].y)}`;
+  let path = `M${round(item(points, 0).x)} ${round(item(points, 0).y)}`;
   for (let index = 1; index < points.length - 1; index += 1) {
-    const point = points[index];
-    const next = points[index + 1];
+    const point = item(points, index);
+    const next = item(points, index + 1);
     path += `Q${round(point.x)} ${round(point.y)} ${round((point.x + next.x) / 2)} ${round((point.y + next.y) / 2)}`;
   }
-  const last = points[points.length - 1];
+  const last = item(points, points.length - 1);
   return `${path}L${round(last.x)} ${round(last.y)}`;
 }
 
 /** Drops points closer than `spacing` to the last kept one, keeping the stroke's ends. */
 export function simplify(points: readonly Point[], spacing: number): Point[] {
   if (points.length <= 2) return [...points];
-  const kept: Point[] = [points[0]];
+  const kept: Point[] = [item(points, 0)];
   for (let index = 1; index < points.length - 1; index += 1) {
-    const last = kept[kept.length - 1];
-    if (Math.hypot(points[index].x - last.x, points[index].y - last.y) >= spacing) kept.push(points[index]);
+    const last = item(kept, kept.length - 1);
+    if (Math.hypot(item(points, index).x - last.x, item(points, index).y - last.y) >= spacing)
+      kept.push(item(points, index));
   }
-  kept.push(points[points.length - 1]);
+  kept.push(item(points, points.length - 1));
   return kept;
 }
 
@@ -419,7 +457,8 @@ export function outline(drawing: Drawing): string[] {
       element.kind === "rect" || element.kind === "ellipse",
   );
   const texts = drawing.elements.filter(
-    (element): element is Extract<Element, { kind: "text" }> => element.kind === "text" && element.text.trim() !== "",
+    (element): element is Extract<Element, { kind: "text" }> =>
+      element.kind === "text" && element.text.trim() !== "",
   );
   const labels = new Map<string, string[]>();
   const labelled = new Set<string>();
@@ -441,7 +480,9 @@ export function outline(drawing: Drawing): string[] {
     const label = labels.get(shape.id);
     names.set(
       shape.id,
-      label ? quoted(label.join(" ")) : `${shape.kind === "rect" ? "box" : "oval"} ${counts[shape.kind]}`,
+      label
+        ? quoted(label.join(" "))
+        : `${shape.kind === "rect" ? "box" : "oval"} ${counts[shape.kind]}`,
     );
   }
   const lines: string[] = [];
@@ -538,7 +579,11 @@ export function loadDrawing(storage: Pick<Storage, "getItem"> | null, chatId: st
     if (!text) return EMPTY;
     const value: unknown = JSON.parse(text);
     if (!valid(value)) return EMPTY;
-    return { elements: value.elements, narration: value.narration, narratedFrom: value.narratedFrom ?? null };
+    return {
+      elements: value.elements,
+      narration: value.narration,
+      narratedFrom: value.narratedFrom ?? null,
+    };
   } catch {
     return EMPTY;
   }

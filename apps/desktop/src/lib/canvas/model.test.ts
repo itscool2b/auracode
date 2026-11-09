@@ -3,8 +3,8 @@ import { exportArea, exportScale, MAX_EXPORT } from "./export";
 import {
   addElement,
   type Drawing,
-  EMPTY,
   type Element,
+  EMPTY,
   elementAt,
   History,
   loadDrawing,

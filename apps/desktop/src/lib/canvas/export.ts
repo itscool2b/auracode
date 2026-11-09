@@ -48,7 +48,9 @@ export function paletteOf(element: HTMLElement): Palette {
 }
 
 /** The area an export covers: what was drawn and its markers, with padding. */
-export function exportArea(drawing: Drawing): { x: number; y: number; w: number; h: number } | null {
+export function exportArea(
+  drawing: Drawing,
+): { x: number; y: number; w: number; h: number } | null {
   const boxes = drawing.elements.map(bounds);
   for (const marker of markers(drawing))
     boxes.push({
@@ -72,6 +74,10 @@ export function exportScale(area: { w: number; h: number }): number {
   return Math.min(2, MAX_EXPORT / Math.max(area.w, area.h, 1));
 }
 
+function item<T>(list: readonly T[], index: number): T {
+  return list[index] as T;
+}
+
 function draw(context: CanvasRenderingContext2D, element: Element, palette: Palette) {
   const colour = palette.ink[element.ink];
   context.strokeStyle = colour;
@@ -85,14 +91,15 @@ function draw(context: CanvasRenderingContext2D, element: Element, palette: Pale
       if (element.highlighter) context.globalAlpha = 0.35;
       const points = element.points;
       context.beginPath();
-      context.moveTo(points[0].x, points[0].y);
-      if (points.length === 1) context.lineTo(points[0].x + 0.01, points[0].y);
+      context.moveTo(item(points, 0).x, item(points, 0).y);
+      if (points.length === 1) context.lineTo(item(points, 0).x + 0.01, item(points, 0).y);
       for (let index = 1; index < points.length - 1; index += 1) {
-        const point = points[index];
-        const next = points[index + 1];
+        const point = item(points, index);
+        const next = item(points, index + 1);
         context.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
       }
-      if (points.length > 1) context.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      if (points.length > 1)
+        context.lineTo(item(points, points.length - 1).x, item(points, points.length - 1).y);
       context.stroke();
       return;
     }
@@ -103,7 +110,15 @@ function draw(context: CanvasRenderingContext2D, element: Element, palette: Pale
       context.beginPath();
       if (element.kind === "rect") context.roundRect(box.x, box.y, box.w, box.h, 6);
       else
-        context.ellipse(box.x + box.w / 2, box.y + box.h / 2, box.w / 2, box.h / 2, 0, 0, Math.PI * 2);
+        context.ellipse(
+          box.x + box.w / 2,
+          box.y + box.h / 2,
+          box.w / 2,
+          box.h / 2,
+          0,
+          0,
+          Math.PI * 2,
+        );
       context.stroke();
       return;
     }

@@ -1,4 +1,4 @@
-import { ArrowUp, Paperclip, Square } from "lucide-react";
+import { ArrowUp, Paperclip, PenTool, Square } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
@@ -6,6 +6,7 @@ import { composerPlaceholder } from "../../lib/chat/queueWait";
 import type { ComposerContext, ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
 import { fitTextarea } from "../../lib/fitTextarea";
+import type { CanvasBridge } from "./CanvasPane";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
 import {
   DictationBar,
@@ -36,6 +37,7 @@ export function Composer({
   contextApi,
   blocked = false,
   runningTasks = 0,
+  canvas,
 }: {
   readonly status: SessionStatus;
   readonly commands: readonly SlashCommand[];
@@ -52,6 +54,12 @@ export function Composer({
   readonly blocked?: boolean;
   /** Background tasks running now: Stop ends them with the turn, and says so. */
   readonly runningTasks?: number;
+  /** The chat's canvas: whether it is open, its toggle, and the link it adds to the draft through. */
+  readonly canvas?: {
+    readonly open: boolean;
+    readonly onToggle: () => void;
+    readonly bridge: CanvasBridge;
+  };
 }) {
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
@@ -60,6 +68,32 @@ export function Composer({
   const ghostNode = useRef<HTMLDivElement>(null);
   const context = useComposerContext(chatId, contextApi);
   const { text, setText } = context;
+  // The canvas adds its drawing and its text through this draft.
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const canvasBridge = canvas?.bridge;
+  useEffect(() => {
+    if (!canvasBridge) return;
+    const bridge = canvasBridge;
+    bridge.composer = {
+      addImage: (bytes, replace) => contextRef.current.pasteImage(bytes, "Canvas.png", replace),
+      putText: (value, previous) =>
+        contextRef.current.setText((current) => {
+          if (previous && current.includes(previous))
+            return value ? current.replace(previous, value) : current.replace(previous, "").trim();
+          if (!value) return current;
+          return current.trim()
+            ? `${current.trimEnd()}
+
+${value}`
+            : value;
+        }),
+      full: () => contextRef.current.attachments.length >= 8,
+    };
+    return () => {
+      bridge.composer = null;
+    };
+  }, [canvasBridge]);
   const dictation = useDictation({
     api: contextApi?.dictation,
     input,
@@ -277,6 +311,18 @@ export function Composer({
             onClick={() => void context.pick()}
           >
             <Paperclip size={16} />
+          </button>
+        ) : null}
+        {canvas ? (
+          <button
+            type="button"
+            className="chat-composer-attach chat-composer-canvas"
+            aria-label="Canvas"
+            aria-pressed={canvas.open}
+            title={canvas.open ? "Close the canvas" : "Draw on a canvas and add it to this message"}
+            onClick={canvas.onToggle}
+          >
+            <PenTool size={16} />
           </button>
         ) : null}
         {controls}

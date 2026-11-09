@@ -22,6 +22,18 @@ import { fileURLToPath } from "node:url";
 /** Justified exceptions: the file, a fragment of the declaration, and why it stays. */
 export const ALLOWLIST = [
   {
+    file: "components/chat/canvas.css",
+    fragment: "font-size: var(--canvas-editor-size)",
+    reason:
+      "The canvas's text box sits over the drawing's own text at the current zoom, so its size is the drawing's, not the interface's scale.",
+  },
+  {
+    file: "components/chat/canvas.css",
+    fragment: "line-height: 1.3",
+    reason:
+      "The canvas's text box lines up with the drawing's text, which the SVG and the export set at 1.3 of its size.",
+  },
+  {
     file: "shell.css",
     fragment: "stroke='%23000'",
     reason: "The checkbox's check is an SVG data URL, which cannot read a custom property.",
