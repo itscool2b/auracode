@@ -92,6 +92,17 @@ pub fn classify_channel(agent_id: &str, resolved_path: &str) -> InstallChannel {
         };
     }
     let provider = provider_namespace(agent_id);
+    // Pi's own installer keeps each release's package under install/releases/<version>; it is
+    // not a global npm install, so npm never updates it.
+    if provider == "pi"
+        && lower.windows(6).any(|parts| {
+            parts[0] == "install"
+                && parts[1] == "releases"
+                && parts[3..] == ["node_modules", "@earendil-works", "pi-coding-agent"]
+        })
+    {
+        return InstallChannel::VendorStandalone;
+    }
     let package = match provider {
         "claude" => Some(["@anthropic-ai", "claude-code"]),
         "codex" => Some(["@openai", "codex"]),
@@ -187,6 +198,35 @@ mod tests {
                 "/prefix/lib/node_modules/@oh-my-pi/pi-coding-agent/cli.js"
             ),
             InstallChannel::Unknown
+        );
+    }
+
+    #[test]
+    fn pis_own_installer_is_its_vendors_channel_not_npm() {
+        let managed = r"C:\Users\me\.pi\agent\install\releases\1.0.2\node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js";
+        assert_eq!(
+            classify_channel("pi", managed),
+            InstallChannel::VendorStandalone
+        );
+        // oh-my-pi's package in the same place is not Pi's installer.
+        assert_eq!(
+            classify_channel(
+                "omp",
+                "/home/me/.pi/agent/install/releases/1.0.2/node_modules/@oh-my-pi/pi-coding-agent/cli.js"
+            ),
+            InstallChannel::Npm {
+                package: "@oh-my-pi/pi-coding-agent".into()
+            }
+        );
+        // A release folder by another name is a plain npm package.
+        assert_eq!(
+            classify_channel(
+                "pi",
+                "/home/me/releases/1.0.2/node_modules/@earendil-works/pi-coding-agent/cli.js"
+            ),
+            InstallChannel::Npm {
+                package: "@earendil-works/pi-coding-agent".into()
+            }
         );
     }
 

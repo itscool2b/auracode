@@ -121,7 +121,15 @@ pub fn agent_of(id: &str) -> &str {
 pub fn has_terminal(id: &str) -> bool {
     matches!(
         agent_of(id),
-        "claude" | "codex" | "grok" | "opencode" | "hermes" | "pi" | "omp" | "cursor" | "antigravity"
+        "claude"
+            | "codex"
+            | "grok"
+            | "opencode"
+            | "hermes"
+            | "pi"
+            | "omp"
+            | "cursor"
+            | "antigravity"
     )
 }
 

@@ -79,7 +79,11 @@ pub fn prepare(
     let folder = std::fs::canonicalize(folder).map_err(|_| VendorError::Folder)?;
     let (key, fallback) = config_path(request.provider);
     let config = bind_path(&variable(key).unwrap_or_else(|| folder.join(fallback)))?;
-    let (program, prefix) = crate::npm_entry::command(
+    let crate::npm_entry::Command {
+        program,
+        prefix,
+        set_env: launcher_env,
+    } = crate::npm_entry::command(
         &installation.agent_id,
         Path::new(&installation.launch_path),
         env,
@@ -107,6 +111,14 @@ pub fn prepare(
     for path in &prefix {
         crate::installer::hash_file(&mut hash, Path::new(path))
             .map_err(|_| VendorError::Changed)?;
+    }
+    // What the vendor's own launcher sets (Pi's install root) is part of what was reviewed.
+    for (key, value) in &launcher_env {
+        for part in [key, value] {
+            let part = part.to_str().ok_or(VendorError::Changed)?;
+            hash.update((part.len() as u64).to_le_bytes());
+            hash.update(part.as_bytes());
+        }
     }
     let mut notices = vec![
         "Changes this device's personal agent configuration. Project and cloud-managed integrations are excluded.".into(),
@@ -146,6 +158,7 @@ pub fn prepare(
     if !key.is_empty() && request.kind != K::Native {
         set_env.push((key.into(), config.as_os_str().into()));
     }
+    set_env.extend(launcher_env);
     Ok(VendorPlan {
         review,
         program,

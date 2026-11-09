@@ -58,10 +58,13 @@ async fn reviewed_npm_bins_launch_through_node_without_running_shell_shims() {
         assert_eq!(ready_path(&detector.detect(&agent).await), shim);
         let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
         assert_eq!(launch.program, machine.tool("node"));
-        assert_eq!(
-            launch.args[0],
-            std::fs::canonicalize(&entry).unwrap().into_os_string()
-        );
+        // The entry detection checked, in its plain spelling: Node cannot start a verbatim
+        // (\\?\C:\...) main script.
+        let canonical = std::fs::canonicalize(&entry).unwrap();
+        let canonical = canonical.to_str().unwrap();
+        let plain = canonical.strip_prefix(r"\\?\").unwrap_or(canonical);
+        assert_eq!(launch.args[0], std::ffi::OsString::from(plain));
+        assert!(!launch.args[0].to_string_lossy().starts_with(r"\\?\"));
         let installed = detector
             .detect_all(false)
             .await
@@ -85,9 +88,12 @@ async fn reviewed_npm_bins_launch_through_node_without_running_shell_shims() {
                 .iter()
                 .any(|arg| arg == std::ffi::OsStr::new(&format!("{package}@latest")))
         );
-        assert!(machine.runs("node").iter().any(|run| {
-            run["argv"] == serde_json::json!([std::fs::canonicalize(&entry).unwrap(), "--version"])
-        }));
+        assert!(
+            machine
+                .runs("node")
+                .iter()
+                .any(|run| { run["argv"] == serde_json::json!([plain, "--version"]) })
+        );
         std::fs::write(root.join("dist/other.js"), "replacement").unwrap();
         std::fs::write(
             root.join("package.json"),
@@ -102,6 +108,92 @@ async fn reviewed_npm_bins_launch_through_node_without_running_shell_shims() {
             Err(aura_agents::maintenance::MaintenanceError::Changed)
         );
     }
+}
+
+/// Pi's own installer: `bin/pi.cmd` stands for the release `install/current-version` names. It
+/// runs through Node with the install root Pi's launcher would announce, and npm never updates it.
+#[cfg(windows)]
+#[tokio::test]
+async fn pis_own_installer_launches_its_current_release_through_node() {
+    use aura_agents::maintenance::{MaintenanceError, check_unchanged, update_command};
+    use aura_protocol::agents::InstallChannel;
+
+    let machine = Machine::with_tools(&["node", "npm"]);
+    let shim = machine.bin.join("pi.cmd");
+    std::fs::write(&shim, "@exit /b 99\r\n").unwrap();
+    std::fs::write(machine.bin.join("pi-launcher.js"), "never run").unwrap();
+    let install = machine.root.path().join("install");
+    let root = install
+        .join("releases")
+        .join("1.0.2")
+        .join("node_modules")
+        .join("@earendil-works/pi-coding-agent");
+    std::fs::create_dir_all(root.join("dist/bundle")).unwrap();
+    let entry = root.join("dist/bundle/cli.js");
+    std::fs::write(&entry, "FAKE_ADAPTER_VERSION=1.0.2\n").unwrap();
+    std::fs::write(
+        root.join("package.json"),
+        r#"{"name":"@earendil-works/pi-coding-agent","bin":{"pi":"dist/bundle/cli.js"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        install.join("managed-install.json"),
+        r#"{"kind":"pi-managed-install","schemaVersion":1,"layout":"releases-v1"}"#,
+    )
+    .unwrap();
+    std::fs::write(install.join("current-version"), "1.0.2\n").unwrap();
+    let env = machine.env(&[]);
+    let detector = machine.detector(env.clone());
+    let agent = spec("pi");
+    assert_eq!(ready_path(&detector.detect(&agent).await), shim);
+    let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
+    assert_eq!(launch.program, machine.tool("node"));
+    let canonical = std::fs::canonicalize(&entry).unwrap();
+    let canonical = canonical.to_str().unwrap();
+    let plain = canonical.strip_prefix(r"\\?\").unwrap_or(canonical);
+    assert_eq!(launch.args[0], std::ffi::OsString::from(plain));
+    assert_eq!(
+        launch.set_env,
+        vec![(
+            std::ffi::OsString::from("PI_MANAGED_INSTALL_ROOT"),
+            install.clone().into_os_string()
+        )]
+    );
+    assert!(
+        machine
+            .runs("node")
+            .iter()
+            .any(|run| run["argv"] == serde_json::json!([plain, "--version"]))
+    );
+    let installed = detector
+        .detect_all(false)
+        .await
+        .into_iter()
+        .find(|agent| agent.id == "pi")
+        .unwrap()
+        .installation
+        .unwrap();
+    assert_eq!(installed.channel, InstallChannel::VendorStandalone);
+    check_unchanged(&installed).unwrap();
+    assert!(matches!(
+        update_command(&installed, &env.vars),
+        Err(MaintenanceError::Unsupported)
+    ));
+    // A new release the version file names is a changed installation.
+    let newer = install
+        .join("releases")
+        .join("1.1.0")
+        .join("node_modules")
+        .join("@earendil-works/pi-coding-agent");
+    std::fs::create_dir_all(newer.join("dist/bundle")).unwrap();
+    std::fs::write(
+        newer.join("dist/bundle/cli.js"),
+        "FAKE_ADAPTER_VERSION=1.1.0\n",
+    )
+    .unwrap();
+    std::fs::copy(root.join("package.json"), newer.join("package.json")).unwrap();
+    std::fs::write(install.join("current-version"), "1.1.0").unwrap();
+    assert_eq!(check_unchanged(&installed), Err(MaintenanceError::Changed));
 }
 
 #[tokio::test]

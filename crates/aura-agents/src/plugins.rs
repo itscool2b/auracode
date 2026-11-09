@@ -784,8 +784,11 @@ pub(crate) async fn run_listings(
         std::path::PathBuf::from(&installation.launch_path),
         env.vars.clone(),
     );
-    let Ok(Ok((program, prefix))) =
-        tokio::task::spawn_blocking(move || crate::npm_entry::command(&id, &path, &vars)).await
+    let Ok(Ok(crate::npm_entry::Command {
+        program,
+        prefix,
+        set_env: launcher_env,
+    })) = tokio::task::spawn_blocking(move || crate::npm_entry::command(&id, &path, &vars)).await
     else {
         return unavailable("The agent's program could not be resolved.");
     };
@@ -808,6 +811,7 @@ pub(crate) async fn run_listings(
             .iter()
             .chain(&[("NO_COLOR", "1")])
             .map(|(key, value)| (OsString::from(*key), OsString::from(*value)))
+            .chain(launcher_env.iter().cloned())
             .collect();
         let output = run_helper(
             registry,

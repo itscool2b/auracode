@@ -330,6 +330,7 @@ impl Live {
                 })?;
                 let mut launch = launch::binary(spec, &located.program, program, args);
                 launch.args.splice(0..0, located.prefix_args);
+                launch.set_env.extend(located.set_env);
                 Ok(launch)
             }
             Recipe::NativeBinary { user_binary, args } => {
