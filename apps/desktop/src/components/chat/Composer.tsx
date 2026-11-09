@@ -72,6 +72,13 @@ export function Composer({
   const contextRef = useRef(context);
   contextRef.current = context;
   const canvasBridge = canvas?.bridge;
+  // Something the canvas added just arrived: the capsule's rim says so for a moment.
+  const [received, setReceived] = useState(0);
+  useEffect(() => {
+    if (!received) return;
+    const settle = window.setTimeout(() => setReceived(0), 1600);
+    return () => window.clearTimeout(settle);
+  }, [received]);
   useEffect(() => {
     if (!canvasBridge) return;
     const bridge = canvasBridge;
@@ -89,11 +96,24 @@ ${value}`
             : value;
         }),
       full: () => contextRef.current.attachments.length >= 8,
+      holds: (image, value) =>
+        (image === null ||
+          contextRef.current.attachments.some((attachment) => attachment.id === image)) &&
+        (value === null || contextRef.current.text.includes(value)),
+      announce: () => setReceived((count) => count + 1),
     };
+    bridge.changed();
     return () => {
       bridge.composer = null;
+      bridge.changed();
     };
   }, [canvasBridge]);
+  // The canvas reads whether the draft still holds what it added.
+  useEffect(() => {
+    void text;
+    void context.attachments;
+    canvasBridge?.changed();
+  }, [canvasBridge, text, context.attachments]);
   const dictation = useDictation({
     api: contextApi?.dictation,
     input,
@@ -126,15 +146,17 @@ ${value}`
       window.clearTimeout(timer);
     };
   }, [contextApi, chatId, mentionQuery]);
-  // The box grows with the draft, and with dictated words still in its ghost, up to 240px.
+  // The box grows with the draft, and with dictated words still in its ghost, up to 240px; with
+  // the canvas open, up to 120px, so a long draft scrolls instead of shrinking the drawing.
+  const fitMax = canvas?.open ? 120 : 240;
   // biome-ignore lint/correctness/useExhaustiveDependencies: The value and the ghost change scrollHeight after React commits them.
   useLayoutEffect(() => {
     const field = input.current;
     if (!field) return;
     const ghost = ghostNode.current;
-    fitTextarea(field, 48, 240, () => ghost?.scrollHeight ?? 0);
+    fitTextarea(field, 48, fitMax, () => ghost?.scrollHeight ?? 0);
     if (ghost) revealDictation(ghost, field);
-  }, [text, dictation?.layout]);
+  }, [text, dictation?.layout, fitMax]);
   const fieldId = useId();
   const menuId = useId();
   const mentionId = useId();
@@ -182,7 +204,11 @@ ${value}`
   };
 
   return (
-    <div className="chat-composer" data-working={working ? "" : undefined}>
+    <div
+      className="chat-composer"
+      data-working={working ? "" : undefined}
+      data-received={received ? "" : undefined}
+    >
       <ContextChips context={context} />
       {mentionOpen ? (
         <MentionMenu

@@ -143,7 +143,10 @@ pub async fn composer_paste(
     bytes: Vec<u8>,
     name: Option<String>,
 ) -> Result<ComposerAttachment, AppError> {
-    Ok(state.sessions()?.composer_paste(&chat_id, bytes, name).await?)
+    Ok(state
+        .sessions()?
+        .composer_paste(&chat_id, bytes, name)
+        .await?)
 }
 
 #[tauri::command]

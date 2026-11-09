@@ -1,6 +1,7 @@
 import "./canvas.css";
 import {
   BrushCleaning,
+  Check,
   Circle,
   Eraser,
   Highlighter,
@@ -69,7 +70,12 @@ import {
   within,
   withLabels,
 } from "../../lib/canvas/model";
-import { type DictationApi, DictationController } from "../../lib/dictation";
+import {
+  type DictationApi,
+  DictationController,
+  type LiveWord,
+  liveWords,
+} from "../../lib/dictation";
 import { errorMessage } from "../../lib/errors";
 
 /** What the canvas needs from the composer below it, registered by the composer itself. */
@@ -80,11 +86,42 @@ export interface CanvasComposer {
   putText(text: string, previous: string | null): void;
   /** The message already holds its eight attachments. */
   full(): boolean;
+  /**
+   * Whether the message still holds what the canvas put in: the attachment `image` (when not
+   * null) and the draft text `text` (when not null). The person may have removed either.
+   */
+  holds(image: string | null, text: string | null): boolean;
+  /** Shows, for a moment, that something just arrived in the message. */
+  announce(): void;
 }
 
-/** The chat's link between its canvas and its composer. */
+/**
+ * The chat's link between its canvas and its composer. The composer registers itself and says when
+ * its draft or attachments change, so the canvas can tell whether what it added is still there.
+ */
 export class CanvasBridge {
   composer: CanvasComposer | null = null;
+  #version = 0;
+  readonly #listeners = new Set<() => void>();
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  };
+  readonly getVersion = (): number => this.#version;
+  /** The composer's draft or attachments changed. */
+  changed(): void {
+    this.#version += 1;
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+/** What Add to message puts in, named by what the canvas holds. */
+export function addLabel(drawn: boolean, narrated: boolean): string {
+  if (drawn && narrated) return "Add drawing and narration";
+  if (narrated) return "Add narration";
+  return "Add drawing";
 }
 
 const TOOLS: readonly { id: Tool; label: string; key: string; icon: ReactNode }[] = [
@@ -272,7 +309,17 @@ export function CanvasPane({
   const [adding, setAdding] = useState(false);
   const [space, setSpace] = useState(false);
   const [, setRevision] = useState(0);
-  const added = useRef<{ image: string | null; text: string | null }>({ image: null, text: null });
+  // What Add to message put in last, and the drawing it came from: the button says whether the
+  // message still holds this drawing, or needs updating.
+  const added = useRef<{ image: string | null; text: string | null; drawing: Drawing | null }>({
+    image: null,
+    text: null,
+    drawing: null,
+  });
+  // The composer's draft and attachments, so a removed attachment or edited text shows here.
+  useSyncExternalStore(bridge.subscribe, bridge.getVersion, bridge.getVersion);
+  const transcript = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const surface = useRef<SVGSVGElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -310,6 +357,8 @@ export function CanvasPane({
 
   // Talk: the narration's own dictation. Each phrase that settles is kept with when it did.
   const narration = useRef({ settled: "" });
+  // Add to message as it is this render; Finish calls it once the last words are in.
+  const addRef = useRef<(auto: boolean) => Promise<void>>(async () => {});
   const controller = useMemo(
     () =>
       dictationApi
@@ -330,6 +379,10 @@ export function CanvasPane({
               drawingRef.current = updated;
               setDrawing(updated);
             }
+            // Finish puts the drawing and what was said in the message, as the composer's own
+            // dictation puts its words in the draft (owner, 9 November 2026: the recording did
+            // not show up anywhere until Add to message).
+            void addRef.current(true);
           })
         : null,
     [dictationApi],
@@ -758,15 +811,15 @@ export function CanvasPane({
     setNote("Cleared. Undo brings the drawing back.");
   };
 
-  const add = async () => {
+  const add = async (auto = false) => {
     const composer = bridge.composer;
     const current = drawingRef.current;
-    if (!composer) {
-      setNote("The message box is not ready yet. Try again in a moment.");
+    if (!current.elements.length && !current.narration.length) {
+      if (!auto) setNote("Draw something or press Talk first.");
       return;
     }
-    if (!current.elements.length && !current.narration.length) {
-      setNote("Draw something first.");
+    if (!composer) {
+      setNote("The message box is not ready yet. Try again in a moment.");
       return;
     }
     setAdding(true);
@@ -784,14 +837,31 @@ export function CanvasPane({
       }
       const text = messageText(current, image !== null);
       composer.putText(text, added.current.text);
-      added.current = { image, text: text || null };
-      setNote(why ?? "Added to your message. Edit it there before you send.");
+      added.current = { image, text: text || null, drawing: current };
+      composer.announce();
+      setNote(
+        why ??
+          (auto
+            ? "Added to your message below, with what you said. Edit it there before you send."
+            : "Added to your message below. Edit it there before you send."),
+      );
     } catch (error) {
       setNote(errorMessage(error));
     } finally {
       setAdding(false);
     }
   };
+
+  addRef.current = add;
+
+  // The transcript keeps the newest words in view as they arrive.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new words and phrases change its height after React commits them.
+  useLayoutEffect(() => {
+    const node = transcript.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+    setOverflowing(node.scrollTop > 0);
+  }, [drawing.narration.length, talk]);
 
   const keys = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -861,12 +931,42 @@ export function CanvasPane({
   const selected = drawing.elements.filter((element) => selection.has(element.id));
   const lines = outline(drawing);
   const narrated = drawing.narration.length > 0;
+  const drawn = drawing.elements.length > 0;
   const numbers = markers(drawing);
-  const empty = !drawing.elements.length && !narrated;
-  const words =
+  const empty = !drawn && !narrated;
+  // The words heard since the last phrase settled: what Talk has not numbered yet.
+  const tail: readonly LiveWord[] =
     talk.state === "listening" || talk.state === "finishing"
-      ? `${talk.text.settled}${talk.text.stable}${talk.text.tentative}`.trim()
-      : "";
+      ? liveWords({
+          settled: talk.text.settled.startsWith(narration.current.settled)
+            ? talk.text.settled.slice(narration.current.settled.length)
+            : "",
+          stable: talk.text.stable,
+          tentative: talk.text.tentative,
+        })
+      : [];
+  // Whether the message still holds what this canvas added, and from this very drawing.
+  const composer = bridge.composer;
+  const holds =
+    composer !== null &&
+    (added.current.image !== null || added.current.text !== null) &&
+    composer.holds(added.current.image, added.current.text);
+  const inMessage = holds && added.current.drawing === drawing;
+  const addState: "empty" | "fresh" | "update" | "added" = empty
+    ? "empty"
+    : inMessage
+      ? "added"
+      : holds
+        ? "update"
+        : "fresh";
+  const addText =
+    addState === "added"
+      ? "In your message"
+      : addState === "update"
+        ? "Update message"
+        : addState === "fresh"
+          ? addLabel(drawn, narrated)
+          : "Add to message";
 
   return (
     <section className="canvas-pane" aria-label="Canvas">
@@ -1017,17 +1117,24 @@ export function CanvasPane({
             ) : null}
             <button
               type="button"
-              className="g-button g-button-primary g-button-28 canvas-add"
+              className={`g-button ${addState === "added" ? "g-button-ghost" : "g-button-primary"} g-button-28 canvas-add`}
+              data-state={addState}
+              data-testid="canvas-add"
               disabled={adding || empty || talking}
+              aria-label={addText}
               title={
-                empty
-                  ? "Draw something first"
-                  : "Add the drawing, its outline and what you said to your message"
+                addState === "empty"
+                  ? "Draw something or press Talk first"
+                  : addState === "added"
+                    ? "Your message holds this drawing and what you said. Adding again replaces them."
+                    : addState === "update"
+                      ? "Replace what the canvas added to your message with the drawing as it is now"
+                      : "Put the drawing, its outline and what you said in your message"
               }
               onClick={() => void add()}
             >
-              <ImagePlus size={16} />
-              Add to message
+              {addState === "added" ? <Check size={16} /> : <ImagePlus size={16} />}
+              <span className="canvas-add-label">{addText}</span>
             </button>
             <button
               type="button"
@@ -1152,33 +1259,87 @@ export function CanvasPane({
         ) : null}
       </div>
       {talking || narrated || talk.state === "failed" ? (
-        <fieldset className="canvas-narration" aria-label="What you said">
-          {talking ? (
-            <>
-              <p className="canvas-words" aria-live="polite">
-                {words || (talk.state === "starting" ? "Opening the microphone" : "Listening")}
-              </p>
-              <button
-                type="button"
-                className="g-button g-button-ghost g-button-28"
-                onClick={() => void controller?.cancel()}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="g-button g-button-primary g-button-28"
-                disabled={talk.state !== "listening"}
-                onClick={() => void controller?.stop()}
-              >
-                Finish
-              </button>
-            </>
-          ) : talk.state === "failed" ? (
-            <>
-              <p className="canvas-words ui-error" role="alert">
-                {talk.message}
-              </p>
+        <fieldset
+          className="canvas-narration"
+          aria-label="What you said"
+          data-state={talking ? "talking" : talk.state === "failed" ? "failed" : "done"}
+          data-testid="canvas-narration"
+        >
+          {talk.state === "failed" && !talking ? (
+            <p className="canvas-words ui-error" role="alert">
+              {talk.message}
+            </p>
+          ) : (
+            <div
+              ref={transcript}
+              className="canvas-transcript"
+              role="log"
+              aria-label="What you said, newest last"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll earlier phrases back into view.
+              tabIndex={0}
+              data-overflowing={overflowing ? "" : undefined}
+              onScroll={(event) => setOverflowing(event.currentTarget.scrollTop > 0)}
+            >
+              <ol className="canvas-phrases">
+                {drawing.narration.map((phrase, index) => (
+                  <li key={`${phrase.at}-${phrase.text}`}>
+                    <span className="canvas-phrase-number">{index + 1}</span>
+                    <span className="canvas-phrase-text">{phrase.text}</span>
+                  </li>
+                ))}
+                {talking ? (
+                  <li className="canvas-phrase-live" data-testid="canvas-live">
+                    <span className="canvas-phrase-number" data-live="" aria-hidden="true" />
+                    <span className="canvas-phrase-text">
+                      {tail.length ? (
+                        tail.map((word, index) => (
+                          <span
+                            // A word keeps its place while the recogniser revises it.
+                            // biome-ignore lint/suspicious/noArrayIndexKey: words are positional
+                            key={index}
+                            className="dictation-word"
+                            data-kind={word.kind}
+                          >
+                            {index ? " " : ""}
+                            {word.text}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="canvas-listening">
+                          {talk.state === "starting"
+                            ? "Opening the microphone"
+                            : narrated
+                              ? "Listening for more"
+                              : "Listening"}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ) : null}
+              </ol>
+            </div>
+          )}
+          <div className="canvas-narration-actions">
+            {talking ? (
+              <>
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28"
+                  onClick={() => void controller?.cancel()}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="g-button g-button-primary g-button-28"
+                  disabled={talk.state !== "listening"}
+                  title="Finish and put the drawing and what you said in your message"
+                  onClick={() => void controller?.stop()}
+                >
+                  Finish
+                </button>
+              </>
+            ) : talk.state === "failed" ? (
               <button
                 type="button"
                 className="g-button g-button-ghost g-button-28"
@@ -1186,26 +1347,35 @@ export function CanvasPane({
               >
                 Dismiss
               </button>
-            </>
-          ) : (
-            <>
-              <ol className="canvas-phrases">
-                {drawing.narration.map((phrase, index) => (
-                  <li key={`${phrase.at}-${phrase.text}`}>
-                    <span className="canvas-phrase-number">{index + 1}</span>
-                    {phrase.text}
-                  </li>
-                ))}
-              </ol>
-              <button
-                type="button"
-                className="g-button g-button-ghost g-button-28"
-                onClick={() => commit({ ...drawingRef.current, narration: [], narratedFrom: null })}
-              >
-                Clear what you said
-              </button>
-            </>
-          )}
+            ) : (
+              <>
+                {addState === "added" ? (
+                  <span className="canvas-in-message" role="status">
+                    <Check size={14} aria-hidden="true" />
+                    In your message
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="g-button g-button-primary g-button-28"
+                    disabled={adding}
+                    onClick={() => void add()}
+                  >
+                    {addState === "update" ? "Update message" : "Add to message"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28"
+                  onClick={() =>
+                    commit({ ...drawingRef.current, narration: [], narratedFrom: null })
+                  }
+                >
+                  Clear what you said
+                </button>
+              </>
+            )}
+          </div>
         </fieldset>
       ) : null}
       {note ? (

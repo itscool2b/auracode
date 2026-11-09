@@ -2288,19 +2288,22 @@
  * (x 16 inside the pill); Send sits as far in from the right.
  */
 /*
- * The composer is a frosted glass capsule floating over the pane, radius 22, with a hairline rim
- * and one long soft shadow. Focus within brightens the rim a step; reached from the keyboard, the
- * message box draws the focus ring. Nothing glows (owner, 2 November 2026), and nothing swims
- * along the rim while the agent works (owner, 6 November 2026).
+ * The composer is a glass capsule floating over the pane, radius 22: the popover glass under the
+ * stronger blur, a lit top edge with a short sheen under it, a hairline rim and one long soft
+ * shadow. Focus within brightens the rim a step and draws no coloured ring (owner, 9 November
+ * 2026: "remove the outline of color and make this whole thing like a nice glass styling").
+ * Nothing glows (owner, 2 November 2026), and nothing swims along the rim while the agent works
+ * (owner, 6 November 2026).
  */
 .chat-composer {
   position: relative;
   display: flex;
   flex-direction: column;
   border-radius: var(--g-radius-22);
-  background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
+  background-color: var(--ui-composer-fill);
+  background-image: var(--ui-composer-sheen);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
@@ -2309,8 +2312,10 @@
   box-shadow: var(--ui-composer-shadow-focus);
 }
 
-.chat-composer:has(.g-textarea:focus-visible) {
-  box-shadow: var(--ui-composer-shadow-keyboard);
+/* What the canvas added just arrived: the rim brightens for a moment, then settles (no glow). */
+.chat-composer[data-received] {
+  box-shadow: var(--ui-composer-shadow-focus);
+  transition-duration: var(--g-dur-micro);
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"])

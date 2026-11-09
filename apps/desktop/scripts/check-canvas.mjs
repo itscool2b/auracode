@@ -45,7 +45,7 @@ export async function checkCanvas(browser, url, out, engine) {
       );
       await axe(page, `${label} empty`);
       const surface = page.locator(".canvas-surface");
-      const box = await surface.boundingBox();
+      let box = await surface.boundingBox();
       assert.ok(box, `${label}: the surface has a size`);
       const at = (x, y) => ({ x: box.x + x, y: box.y + y });
       const drag = async (from, to) => {
@@ -114,6 +114,13 @@ export async function checkCanvas(browser, url, out, engine) {
         `${label}: the label moves with its box`,
       );
 
+      // Before Talk the button names what it would add.
+      const add = page.getByTestId("canvas-add");
+      assert.equal(await add.getAttribute("data-state"), "fresh", `${label}: nothing added yet`);
+      assert.equal(await add.textContent(), "Add drawing", `${label}: Add names the drawing`);
+      const composer = page.locator(".chat-composer textarea");
+      await composer.fill("Build this.");
+
       // Talk: a shape drawn while a phrase is said gets that phrase's number.
       await pane.getByRole("button", { name: "Talk" }).click();
       await pane.getByText("Listening").waitFor();
@@ -123,8 +130,14 @@ export async function checkCanvas(browser, url, out, engine) {
         window.canvasSaid = ["this is the cache"];
       });
       await pane.getByText("this is the cache").waitFor();
+      // Finish puts the drawing, its outline and what was said in the message at once.
       await pane.getByRole("button", { name: "Finish" }).click();
       await pane.locator(".canvas-phrases li").filter({ hasText: "this is the cache" }).waitFor();
+      await page.waitForFunction(() => window.canvasPastes.length === 1);
+      await pane.getByText("Added to your message below", { exact: false }).waitFor();
+      await pane.locator(".canvas-in-message").waitFor();
+      assert.equal(await add.getAttribute("data-state"), "added", `${label}: in the message`);
+      assert.equal(await add.textContent(), "In your message", `${label}: Add says so`);
       assert.equal(
         await surface.locator(".canvas-marker text").first().textContent(),
         "1",
@@ -133,11 +146,7 @@ export async function checkCanvas(browser, url, out, engine) {
       await axe(page, `${label} drawn`);
       await page.screenshot({ path: resolve(out, `canvas-${engine}-${theme}.png`) });
 
-      // Add to message: the drawing as Canvas.png, its outline and the narration in the draft.
-      const composer = page.locator(".chat-composer textarea");
-      await composer.fill("Build this.");
-      await pane.getByRole("button", { name: "Add to message" }).click();
-      await pane.getByText("Added to your message.", { exact: false }).waitFor();
+      // What Finish added: the drawing as Canvas.png, its outline and the narration in the draft.
       const pastes = await page.evaluate(() => window.canvasPastes);
       assert.equal(pastes.length, 1, `${label}: one image`);
       assert.equal(pastes[0].name, "Canvas.png", `${label}: named Canvas.png`);
@@ -152,12 +161,53 @@ export async function checkCanvas(browser, url, out, engine) {
       ])
         assert.ok(text.includes(part), `${label}: the draft has ${part}: ${text}`);
       await page.locator(".composer-context").getByText("Canvas.png").waitFor();
-      // Adding again replaces the image and the text instead of doubling them.
-      await pane.getByRole("button", { name: "Add to message" }).click();
+      // The draft holds the outline now; with the canvas open it scrolls instead of taking the
+      // drawing's room.
+      const field = await composer.boundingBox();
+      assert.ok(field && field.height <= 121, `${label}: the draft keeps to 120px`);
+      box = await surface.boundingBox();
+      // Drawing more leaves the message behind; Update message replaces the image and the text
+      // instead of doubling them.
+      await tool("Pen");
+      await drag([420, 300], [560, 360]);
+      assert.equal(await add.getAttribute("data-state"), "update", `${label}: out of date`);
+      assert.equal(await add.textContent(), "Update message", `${label}: Add offers the update`);
+      await add.click();
       await page.waitForFunction(() => window.canvasPastes.length === 2);
       await page.waitForFunction(() => window.canvasDraft().attachments.length === 1);
       const again = await composer.inputValue();
       assert.equal(again.split("The attached canvas shows:").length, 2, `${label}: one outline`);
+      assert.equal(await add.getAttribute("data-state"), "added", `${label}: up to date again`);
+
+      // A long narration stays inside the strip: it scrolls on the newest words, above the
+      // composer, instead of spilling over it.
+      await pane.getByRole("button", { name: "Talk" }).click();
+      await pane.locator("[data-testid=canvas-live]").waitFor();
+      await page.evaluate(() => {
+        window.canvasSaid = Array.from(
+          { length: 6 },
+          (_, index) =>
+            `phrase ${index + 2} keeps going about the gateway, the queue, the workers and the retries`,
+        );
+        window.canvasForming = "and this is still forming";
+      });
+      await pane.getByText("and this is still forming").waitFor();
+      const transcript = pane.locator(".canvas-transcript");
+      const fit = await transcript.evaluate((node) => ({
+        scrolls: node.scrollHeight > node.clientHeight,
+        atEnd: node.scrollTop + node.clientHeight >= node.scrollHeight - 2,
+        faded: node.hasAttribute("data-overflowing"),
+      }));
+      assert.deepEqual(fit, { scrolls: true, atEnd: true, faded: true }, `${label}: it scrolls`);
+      const strip = await pane.locator("[data-testid=canvas-narration]").boundingBox();
+      const capsule = await page.locator(".chat-composer").boundingBox();
+      assert.ok(
+        strip && capsule && strip.y + strip.height <= capsule.y,
+        `${label}: the strip stays above the composer`,
+      );
+      await axe(page, `${label} talking`);
+      await pane.getByRole("button", { name: "Cancel" }).click();
+      await pane.locator("[data-testid=canvas-live]").waitFor({ state: "detached" });
 
       // Closing keeps the drawing; the transcript comes back.
       await pane.getByRole("button", { name: "Close the canvas" }).click();
