@@ -216,17 +216,16 @@
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-control);
   box-shadow: inset 0 0 0 1px var(--g-glass-rim);
-  transition:
-    background-color var(--g-dur-fast) var(--g-ease),
-    box-shadow var(--g-dur-fast) var(--g-ease);
+  /* No transition: the editing state is the field's focus mark, so it shows at once. */
 }
 
 .browser-address:hover {
   background-color: var(--g-glass-control-hover);
 }
 
-/* Editing: the field rises and its rim brightens; no coloured ring (the composer's rule). */
-.browser-address[data-editing] {
+/* Editing: the field rises and its rim brightens; no coloured ring (the composer's rule). It
+   follows the focus itself, so it is there the moment the field is. */
+.browser-address:focus-within {
   background-color: var(--g-glass-raised);
   box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }

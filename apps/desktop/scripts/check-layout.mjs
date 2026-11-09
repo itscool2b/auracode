@@ -80,6 +80,8 @@ export const MODES = [
   "settings&page=voice",
   "settings&page=agents",
   "settings&page=plugins",
+  // Universal plugins: Browser use on, with its settings.
+  "settings&page=plugins#universal",
   "settings&page=memory&scope=folder",
   "settings&page=privacy",
   "setup",
@@ -191,6 +193,10 @@ export const MODES = [
   "queue-held",
   "queue-failed",
   "queue-missing",
+  // The browser beside the chat: a page, a new tab's start page, and the chat with it closed.
+  "browser",
+  "browser&start",
+  "browser&closed",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */
@@ -313,6 +319,10 @@ const OPENERS = {
   defaults: async (page) => {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
+  },
+  universal: async (page) => {
+    await page.getByTestId("plugins-universal-nav").click();
+    await page.getByTestId("plugins-universal").waitFor();
   },
   "plugin-menu": (page) => openRowMenu(page, "tools actions"),
   "plugin-item": async (page) => {

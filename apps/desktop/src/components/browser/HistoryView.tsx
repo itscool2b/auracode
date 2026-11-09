@@ -15,13 +15,17 @@ export function HistoryView({
   onOpen,
   actions,
   now = Date.now,
+  level = 2,
 }: {
   readonly api: BrowserApi;
   readonly onOpen?: (url: string) => void;
   /** Shown beside the search field (Clear browsing data, Close). */
   readonly actions?: React.ReactNode;
   readonly now?: () => number;
+  /** The days' heading level: 2 in the panel, 3 under a dialog's title. */
+  readonly level?: 2 | 3;
 }) {
+  const Day = level === 3 ? "h3" : "h2";
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<readonly HistoryEntry[] | null>(null);
   const [more, setMore] = useState(false);
@@ -124,7 +128,7 @@ export function HistoryView({
         ) : (
           groups.map((group) => (
             <section key={group.day} className="browser-history-day" aria-label={group.day}>
-              <h3 className="browser-history-heading">{group.day}</h3>
+              <Day className="browser-history-heading">{group.day}</Day>
               <ul>
                 {group.entries.map((entry) => (
                   <li key={entry.url} className="browser-history-row">

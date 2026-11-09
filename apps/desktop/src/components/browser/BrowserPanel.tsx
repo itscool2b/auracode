@@ -1029,6 +1029,7 @@ function TabButton({
         role="tab"
         className="browser-tab-button"
         aria-selected={active}
+        aria-keyshortcuts="Delete"
         tabIndex={active ? 0 : -1}
         title={tab.url ? `${name}\n${tab.url}` : name}
         onClick={onActivate}
@@ -1057,10 +1058,11 @@ function TabButton({
         </span>
         <span className="browser-tab-name">{name}</span>
       </button>
+      {/* The pointer's way to close; the tab list owns only tabs, which close with Delete. */}
       <button
         type="button"
         className="browser-tab-close"
-        aria-label={`Close ${name}`}
+        aria-hidden="true"
         title="Close tab (Ctrl+W)"
         tabIndex={-1}
         onClick={onClose}

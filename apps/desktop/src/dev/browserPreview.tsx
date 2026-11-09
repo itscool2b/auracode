@@ -316,6 +316,8 @@ class FixtureBrowser implements BrowserApi {
       frame.title = "Page";
       frame.srcdoc = PAGE;
       frame.setAttribute("data-fixture-page", tabId);
+      // The native page is no stop in the window's own tab order; the panel hands focus to it.
+      frame.tabIndex = -1;
       Object.assign(frame.style, {
         position: "fixed",
         zIndex: "2147483000",

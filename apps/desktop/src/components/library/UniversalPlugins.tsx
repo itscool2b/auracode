@@ -153,7 +153,7 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
           onClose={() => setHistory(false)}
         >
           <div className="plugins-history">
-            <HistoryView api={browser.api} />
+            <HistoryView api={browser.api} level={3} />
           </div>
         </Modal>
       ) : null}
