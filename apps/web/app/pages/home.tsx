@@ -1,12 +1,12 @@
 import accentFont from "@fontsource-variable/fraunces/files/fraunces-latin-opsz-italic.woff2?url";
 import { Capabilities } from "../home/Capabilities";
 import { Faq } from "../home/Faq";
+import { Features } from "../home/Features";
 import { Finale } from "../home/Finale";
 import { Hero } from "../home/Hero";
-import { Numbers } from "../home/Numbers";
 import { Product } from "../home/Product";
 import { AgentSprite } from "../home/Sprite";
-import { Wheel } from "../home/Wheel";
+import { Statement } from "../home/Statement";
 
 /**
  * The hero sets the agent's name in the accent italic above the fold, so the home page fetches its
@@ -26,18 +26,19 @@ export const meta = () => [
 ];
 
 /**
- * The product in motion, the real app, what it does on the night band, three numbers, what stays
- * yours, answers, and the night finale that runs into the footer.
+ * The product in motion, what it is in one statement and three drawings, the real app, what it does
+ * on the night band, the terminal and the canvas, answers, and the night finale that runs into the
+ * footer.
  */
 export default function Home() {
   return (
     <main id="main" className="home">
       <AgentSprite />
       <Hero />
+      <Statement />
       <Product />
       <Capabilities />
-      <Numbers />
-      <Wheel />
+      <Features />
       <Faq />
       <Finale />
     </main>

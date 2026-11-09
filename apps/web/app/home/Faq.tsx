@@ -116,7 +116,7 @@ export function Faq() {
         <div className="faq-head">
           <h2 id="faq-title" className="title">
             <Words text="Questions, answered." />{" "}
-            <span className="title-soft serif">
+            <span className="title-soft">
               <Words text="Before you install." offset={2} />
             </span>
           </h2>

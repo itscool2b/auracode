@@ -16,14 +16,20 @@ export function Product() {
       <div className="wrap product-head">
         <h2 id="product-title" className="title">
           <Words text="One workspace." />{" "}
-          <span className="title-soft serif">
+          <span className="title-soft">
             <Words text="Every agent you run." offset={2} />
           </span>
         </h2>
-        <p className="lead" data-reveal="">
-          Projects, chats, changes and a terminal in a native app for Windows, macOS and Linux.
-          Agents run on your machine, through their own command-line tools.
-        </p>
+        <div className="split-side" data-reveal="">
+          <p className="lead">
+            Projects, chats, changes and a terminal in a native app for Windows, macOS and Linux.
+            Agents run on your machine, through their own command-line tools.
+          </p>
+          <a className="text-link" href="#capabilities">
+            See what it does
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
       </div>
       <div className="product-stage wrap-wide">
         <figure className="product-frame" data-reveal="trigger">

@@ -11,7 +11,7 @@ export function Finale() {
       <div className="wrap finale-inner">
         <h2 id="finale-title" className="finale-title">
           <Words text="Your agents." />{" "}
-          <span className="serif">
+          <span className="finale-soft">
             <Words text="Your machine." offset={2} />
           </span>
         </h2>

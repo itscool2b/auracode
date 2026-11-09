@@ -41,6 +41,17 @@ The owner asked for a sexier accent face than Instrument Serif Italic, a marquee
 
 The accent face was chosen from real renders of the site's hero, titles, wheel and finale in each candidate, all SIL OFL on Fontsource: Fraunces, Playfair 2, Bodoni Moda, Newsreader, Source Serif 4, Noto Serif Display, Redaction (and its pixel-degraded cut), DM Serif Display, Spectral, Piazzolla, Petrona, Cormorant Garamond, Literata, Arapey, and the grotesk italics of Mona Sans, Instrument Sans, Schibsted Grotesk, Familjen Grotesk and Geist. Fraunces Italic at its largest optical size read as the most striking and the least templated against Geist's tight headlines, at 82 KB for its one italic file.
 
+## Home page revamp, 9 November 2026
+
+The owner asked for the landing page to look like linear.app, SpaceXAI and aside.com. Their sections were studied on Mobbin, and the live linear.app and aside.com home pages were captured with Playwright at 1440 by 900. The page stays light (the standing rule); Linear's night is kept for the two night bands. No layout, copy, artwork or asset is copied, and the labels and badges these pages put above their headings are not adopted.
+
+| Reference | Observed | Adaptation |
+| --- | --- | --- |
+| [Linear hero](https://mobbin.com/sites/sections/f1148b2c-af7e-451c-a2a4-3f8740f58596), live linear.app | A large left-aligned headline over the product window; a statement paragraph in white and grey; line-art figures between hairlines; split headers (title left, text and link right) over large product panels | The left-aligned hero with its column beside it; the statement; three line-art drawings between hairlines; split headers for the product and the features |
+| [Linear, roadmap to release](https://mobbin.com/sites/sections/40a46191-a57a-4bab-9a92-94fc14cad817) | Isometric planes drawn in hairlines | The drawings: slabs, agents wired to a plate, columns stepping up. Its mono annotations are not adopted |
+| [SpaceXAI for Business](https://mobbin.com/sites/sections/00ed6985-4338-4daa-9061-607f173448cc) | A two-tone headline in one face, ink then grey; black and outline pills | Two-tone titles in Geist on the home page; the existing pills |
+| [Aside hero](https://mobbin.com/sites/sections/bdad14df-7d77-4d9d-8c30-dfd826d134d1), live aside.com | A framed page with hairline rails; the app window as the stage; feature cards on soft tinted grounds with the product inside; captions that start in ink | The rails and hairlines across the page; the hero window on a grey stage; the feature cards and their captions. Its sky photograph is not adopted |
+
 ## Desktop references
 
 The desktop keeps the audited Devin organization: compact work surfaces, navigation and settings structure in light and dark. Halo adds glass layers over the native window material: Acrylic or Mica on Windows, vibrancy or Liquid Glass on macOS. Accent, focus and selection stay neutral. No fresh live Devin inspection is claimed for Halo.

@@ -6,9 +6,10 @@ import { HeroWindow, useHandoffLoop, workingAgent } from "./HeroWindow";
 import { Marquee } from "./Marquee";
 
 /**
- * "One window for" the agent at work. The glass window below replays one session handed from
- * agent to agent; the name in the headline follows it. The window and the agents it runs stand
- * on one pale stage printed with the app's pixels.
+ * "One window for" the agent at work, set large and left as a statement, with what it is and the
+ * two actions beside it. The window below replays one session handed from agent to agent; the
+ * name in the headline follows it. The window leans back on a hairline floor and lies flat as the
+ * page scrolls; the agents it runs pass underneath.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
@@ -26,18 +27,20 @@ export function Hero() {
             <AgentRoll name={agent.name} />
           </span>
         </h1>
-        <p className="hero-lead">
-          The coding agents you already use, together in one chat on your machine. Free, with
-          nothing to sign up for.
-        </p>
-        <div className="hero-actions">
-          <a className="cta cta-ink" href="/download" data-magnetic="">
-            Download
-            <Arrow direction="down" />
-          </a>
-          <a className="cta cta-glass" href="#capabilities">
-            See it work
-          </a>
+        <div className="hero-side">
+          <p className="hero-lead">
+            The coding agents you already use, side by side in one chat on your machine. Free, with
+            nothing to sign up for.
+          </p>
+          <div className="hero-actions">
+            <a className="cta cta-ink" href="/download" data-magnetic="">
+              Download
+              <Arrow direction="down" />
+            </a>
+            <a className="cta cta-glass" href="#capabilities">
+              See it work
+            </a>
+          </div>
         </div>
       </div>
       <div className="hero-floor">
