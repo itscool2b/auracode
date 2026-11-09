@@ -152,12 +152,14 @@ function scenarioDriver() {
     async click(selector, using) {
       calls.push({ click: selector, using });
       if (selector.includes('[data-testid="new-chat-agent"]')) {
-        assert.equal(
-          selector,
-          '[data-testid="new-chat-agent"] label:has(input[type="radio"][value="mock"])',
-          "agent choices are radio labels, not select options",
+        assert.ok(
+          [
+            '[data-testid="new-chat-agent"] details > summary',
+            '[data-testid="new-chat-agent"] details label:has(input[type="radio"][value="mock"])',
+          ].includes(selector),
+          `the agent menu opens, and its choices are radio labels, not select options: ${selector}`,
         );
-        demoSelected = true;
+        if (selector.includes("label:has")) demoSelected = true;
       }
     },
     async scroll(selector, deltaY) {
@@ -205,6 +207,11 @@ test("the scenario drives create, typing, Stop and reload externally; only folde
     "New chat opens from the start screen before an agent is chosen",
   );
   assert(clicks.includes('[data-testid="new-chat-button"]'));
+  const menu = clicks.indexOf('[data-testid="new-chat-agent"] details > summary');
+  assert(
+    menu >= 0 && menu < clicks.findIndex((click) => click.includes("label:has")),
+    "the agent menu opens before the Demo agent is chosen",
+  );
   assert(calls.some((call) => call.click === '[data-testid="composer-stop"]'));
   assert(calls.some((call) => call.click === '[data-testid="chat-stop-session"]'));
   assert.equal(calls.filter((call) => call.path === "/refresh").length, 2);
