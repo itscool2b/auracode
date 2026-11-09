@@ -82,10 +82,25 @@ describe("the Worked for fold", () => {
       ),
     ).toBeNull();
     expect(workFold(segment([user("u"), tool("t"), message("a")], null))).toBeNull();
-    expect(
-      workFold({ ...segment([user("u"), tool("t"), message("a")]), partial: true }),
-    ).toBeNull();
     expect(workFold({ ...segment([tool("t"), message("a")]), turnId: null })).toBeNull();
+  });
+
+  it("folds what loaded of a turn too long for one history page, without a step count", () => {
+    // Cut inside its work: the prompt and earlier steps did not load.
+    const cut = (items: readonly RenderedItem[], end: TurnEnd | null = ended) => ({
+      ...segment(items, end),
+      partial: true,
+    });
+    expect(
+      workFold(cut([tool("t1"), message("m", "Now the tests."), tool("t2"), message("a")])),
+    ).toEqual({ from: 0, to: 3, steps: null });
+    // A message of the person's in the loaded part is a steer, so the work stays in view.
+    expect(workFold(cut([user("steer"), tool("t"), message("a")]))).toBeNull();
+    // The cut fell inside the answer, or the turn ended otherwise: nothing to fold.
+    expect(workFold(cut([message("a1"), message("a2")]))).toBeNull();
+    expect(
+      workFold(cut([tool("t"), message("a")], { ...ended, stopReason: "cancelled" })),
+    ).toBeNull();
   });
 
   it("keeps errors, waiting requests and the person's own steers in view", () => {
@@ -136,5 +151,8 @@ describe("the Worked for fold", () => {
     const format = (ms: number) => `${ms / 1000} s`;
     expect(workedLabel(12, 102_000, format)).toBe("Worked for 102 s · 12 steps");
     expect(workedLabel(1, null, format)).toBe("Worked · 1 step");
+    // Only part of the turn loaded: its time, which the turn's end records whole, and no count.
+    expect(workedLabel(null, 7_240_000, format)).toBe("Worked for 7240 s");
+    expect(workedLabel(null, null, format)).toBe("Worked");
   });
 });

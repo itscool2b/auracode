@@ -50,6 +50,7 @@ export const MODES = [
   "history-question",
   "partial-history",
   "partial-message",
+  "partial-work",
   "large-turn",
   "long-prompt",
   "long-output",

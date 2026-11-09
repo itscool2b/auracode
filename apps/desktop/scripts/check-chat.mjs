@@ -1558,6 +1558,29 @@ async function inspect(engine, launcher) {
       );
     }
 
+    // A turn too long for one history page loads cut inside its work, and still ends on its
+    // answer (owner, 9 November 2026): what loaded folds under "Worked for", which counts no steps
+    // until Load earlier brings the rest of the turn.
+    await page.goto(`${url}/?preview=partial-work`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    const cutWork = page.getByTestId("worked-for");
+    await cutWork.waitFor();
+    assert.equal(await cutWork.getAttribute("aria-expanded"), "false");
+    assert.match((await cutWork.textContent()) ?? "", /Worked for [^·]+$/);
+    assert.equal(
+      await page.getByTestId("tool-group").count(),
+      0,
+      `${engine}: a cut turn's folded work still shows calls`,
+    );
+    await page
+      .getByText("Every sidebar file is reviewed, and the styles now match.", { exact: true })
+      .waitFor();
+    await page.getByTestId("load-earlier").click();
+    await page
+      .getByTestId("worked-for")
+      .filter({ hasText: /· 41 steps$/ })
+      .waitFor();
+
     // A finished turn's work folds under "Worked for" above its final answer (owner, 4 November
     // 2026, after Codex): the calls are out of view until it opens, by click or by keyboard.
     await page.goto(`${url}/?preview=settled`);
