@@ -592,14 +592,30 @@ async fn a_failed_start_and_a_missing_folder_say_why_the_prompt_waits() {
     let h = Harness::new(Vec::new());
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Failed).await;
+    let before = h.statuses.all(&chat.id).len();
     let ack = h
         .manager
         .send(&chat.id, "hello".into())
         .await
         .expect("send");
     assert!(ack.queued);
-    h.status(&chat.id, SessionStatus::Starting).await;
-    h.status(&chat.id, SessionStatus::Failed).await;
+    // The start the prompt asks for fails at once, so Starting can come and go between two looks
+    // at the latest status: read every update since the send instead.
+    let statuses = Arc::clone(&h.statuses);
+    let id = chat.id.clone();
+    eventually("the prompt's start to begin and fail", move || {
+        let since: Vec<SessionStatus> = statuses
+            .all(&id)
+            .into_iter()
+            .skip(before)
+            .map(|update| update.status)
+            .collect();
+        since
+            .iter()
+            .position(|status| *status == SessionStatus::Starting)
+            .is_some_and(|start| since[start..].contains(&SessionStatus::Failed))
+    })
+    .await;
     assert_eq!(wait_now(&h, &chat.id).await, Some(QueueWait::StartFailed));
 
     let (driver, _) = ScriptedDriver::new(vec![ready_step("n2")]);
