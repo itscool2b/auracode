@@ -15,6 +15,7 @@ pub fn apply(app: &AppHandle, general: &GeneralPreferences) {
         apply_to_manager(&chats.manager, general);
     }
     crate::native_shell::apply_preferences(app, general);
+    crate::browser::apply_preferences(app, general);
 }
 
 pub(crate) fn apply_to_manager(
@@ -25,6 +26,7 @@ pub(crate) fn apply_to_manager(
     manager.set_automatic_checkpoints(general.automatic_checkpoints);
     manager.set_worktree_instruction_copies(general.copy_instructions_to_worktrees);
     manager.set_agent_memory_writes(general.agent_memory_writes);
+    manager.set_browser_tools(general.browser);
 }
 
 /// Initialize before publishing a runtime, so its first actor sees the saved profile policy.

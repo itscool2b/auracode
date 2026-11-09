@@ -153,6 +153,13 @@ pub struct GeneralPreferences {
     /// The editor a chat's files open in, at their line. `None`, or an editor that is no longer
     /// installed: the first one detected.
     pub editor: Option<ProjectEditor>,
+    /// The Browser universal plugin: the browser beside the chat, Annotate, and the browser tools
+    /// agents get. On unless the person turns it off in Settings > Plugins & MCP (owner, 9
+    /// November 2026: "on by default", and off "disables the browser on the UI").
+    pub browser: bool,
+    /// The browser offers to save sign-ins and fills them in (WebView2's own password manager, on
+    /// Windows). On by default.
+    pub browser_passwords: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -172,6 +179,8 @@ impl Default for GeneralPreferences {
             agent_memory_writes: true,
             keep_steps_open: false,
             editor: None,
+            browser: true,
+            browser_passwords: true,
         }
     }
 }
@@ -255,6 +264,14 @@ pub enum SetupAction {
     },
     /// Turns on or off showing a finished turn's work instead of folding it.
     KeepStepsOpen {
+        enabled: bool,
+    },
+    /// Turns the Browser universal plugin on or off.
+    Browser {
+        enabled: bool,
+    },
+    /// Turns on or off the browser's offer to save sign-ins.
+    BrowserPasswords {
         enabled: bool,
     },
 }
@@ -566,6 +583,10 @@ impl OnboardingStore {
             SetupAction::KeepStepsOpen { enabled } => {
                 next.preferences.general.keep_steps_open = enabled;
             }
+            SetupAction::Browser { enabled } => next.preferences.general.browser = enabled,
+            SetupAction::BrowserPasswords { enabled } => {
+                next.preferences.general.browser_passwords = enabled;
+            }
         }
         next.preferences.revision = revision
             .checked_add(1)
@@ -766,6 +787,43 @@ mod tests {
                 .preferences()
                 .general
                 .copy_instructions_to_worktrees
+        );
+    }
+
+    /// The Browser plugin is on by default (owner, 9 November 2026), including for profiles saved
+    /// before it existed, and its switches stay as set.
+    #[test]
+    fn the_browser_is_on_for_legacy_profiles_and_can_be_turned_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut legacy = serde_json::to_value(Record::default()).unwrap();
+        let general = legacy["preferences"]["general"].as_object_mut().unwrap();
+        general.remove("browser");
+        general.remove("browser_passwords");
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(store.snapshot().unwrap().notice.is_none());
+        assert!(store.preferences().general.browser);
+        assert!(store.preferences().general.browser_passwords);
+        store
+            .apply(0, SetupAction::Browser { enabled: false })
+            .unwrap();
+        store
+            .apply(1, SetupAction::BrowserPasswords { enabled: false })
+            .unwrap();
+        let reopened = OnboardingStore::open(dir.path()).unwrap();
+        assert!(!reopened.preferences().general.browser);
+        assert!(!reopened.preferences().general.browser_passwords);
+        assert_eq!(
+            reopened.preferences().general,
+            GeneralPreferences {
+                browser: false,
+                browser_passwords: false,
+                ..GeneralPreferences::default()
+            }
         );
     }
 
@@ -1159,6 +1217,8 @@ mod tests {
                 agent_memory_writes: true,
                 keep_steps_open: false,
                 editor: Some(ProjectEditor::Zed),
+                browser: true,
+                browser_passwords: true,
             }
         );
         assert!(

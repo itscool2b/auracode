@@ -14,6 +14,14 @@ fn main() {
         aura_core::memory_service::run_helper();
         return;
     }
+    // The browser's MCP helper (the Browser plugin's tools), started by an agent the same way.
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "--aura-browser-helper")
+    {
+        aura_core::browser_service::run_helper();
+        return;
+    }
     // `auracode --uninstall-cleanup` deletes auracode's data and exits; nothing else starts.
     if let Some(code) = auracode_desktop::uninstall::run_from_args() {
         std::process::exit(code);

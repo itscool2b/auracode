@@ -36,6 +36,7 @@ pub mod account_preservation;
 pub mod accounts;
 pub mod agent_accounts;
 pub mod agent_usage;
+pub mod browser_service;
 pub mod chatstore;
 pub mod checkpoints;
 pub mod cloning;

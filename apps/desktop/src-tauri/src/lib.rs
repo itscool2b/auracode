@@ -27,6 +27,7 @@ pub mod agent_installation_commands;
 pub mod appearance;
 pub mod bindings;
 pub mod boot;
+pub mod browser;
 pub mod catalog_refresh;
 pub mod changes_commands;
 pub mod chat_export;
@@ -252,6 +253,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(Arc::new(config_vendor::VendorService::default()));
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(clones));
+    browser::setup(app.handle());
     native_shell::setup(app.handle());
     general_preferences::refresh(app.handle());
     appearance::refresh(app.handle());
@@ -419,6 +421,8 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             }
         }
         RunEvent::Exit => {
+            // The browser's pages close before the window they live in.
+            browser::shutdown(app);
             if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
                 clones.cancel_all();
             }

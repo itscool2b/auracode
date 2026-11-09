@@ -51,8 +51,30 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::PullRequestPreview>()
         // The payload of `auracode-project-memory-changed` (memory_commands::MEMORY_CHANGED).
         .typ::<aura_protocol::memory::ProjectMemoryChanged>()
+        // The payload of `auracode-browser` (browser::EVENT).
+        .typ::<crate::browser::BrowserEvent>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
+            crate::browser::commands::browser_status,
+            crate::browser::commands::browser_chat,
+            crate::browser::commands::browser_open,
+            crate::browser::commands::browser_close,
+            crate::browser::commands::browser_activate,
+            crate::browser::commands::browser_move,
+            crate::browser::commands::browser_navigate,
+            crate::browser::commands::browser_go,
+            crate::browser::commands::browser_place,
+            crate::browser::commands::browser_capture,
+            crate::browser::commands::browser_zoom,
+            crate::browser::commands::browser_devtools,
+            crate::browser::commands::browser_focus,
+            crate::browser::commands::browser_annotate,
+            crate::browser::commands::browser_pick_at,
+            crate::browser::commands::browser_suggest,
+            crate::browser::commands::browser_history,
+            crate::browser::commands::browser_history_remove,
+            crate::browser::commands::browser_clear,
+            crate::browser::commands::browser_open_outside,
             crate::deep_links::sign_in_link_pending,
             crate::deep_links::sign_in_link_acknowledge,
             crate::accounts::account_config,

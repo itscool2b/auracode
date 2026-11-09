@@ -782,6 +782,8 @@ pub(crate) struct ChatActor {
     checkpoint_capture: bool,
     memory_revision: Option<String>,
     memory_grant: Option<crate::memory_service::MemoryGrant>,
+    /// The Browser plugin's tools for this generation's agent, revoked with the generation.
+    browser_grant: Option<crate::browser_service::BrowserGrant>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -954,6 +956,7 @@ impl ChatActor {
             checkpoint_capture: false,
             memory_revision: None,
             memory_grant: None,
+            browser_grant: None,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -2784,6 +2787,7 @@ impl ChatActor {
 
     fn force_stop(&mut self) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.cancel_checkpoint();
         if !matches!(
             self.status,
@@ -2838,6 +2842,7 @@ impl ChatActor {
     /// process, end what is still open, and reach `Stopped`.
     fn force_kill(&mut self) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.force_wait = None;
         self.stop_deadline = None;
         if let Some(mut driver) = self.driver.take() {
@@ -2924,6 +2929,7 @@ impl ChatActor {
 
     fn stop(&mut self) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
@@ -2971,6 +2977,7 @@ impl ChatActor {
     /// Sends `Shutdown`; a stop not done in time is forced.
     fn graceful_stop(&mut self, plan: StopPlan, auth: bool) {
         self.memory_grant = None;
+        self.browser_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -3376,6 +3383,7 @@ impl ChatActor {
                     reply: oneshot::Sender<Result<TerminalOpened, SessionError>>,
                     why: String| {
             this.memory_grant = None;
+            this.browser_grant = None;
             this.release_if_idle();
             this.set_status(SessionStatus::Stopped, None);
             drop(reply.send(Err(SessionError::AgentUnavailable(why))));
@@ -3642,6 +3650,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.terminal = None;
         self.terminal_extension = None;
         self.memory_grant = None;
+        self.browser_grant = None;
         self.release_if_idle();
         self.set_status(SessionStatus::Stopped, None);
         self.revision = self.revision.wrapping_add(1);
@@ -4043,6 +4052,25 @@ The person continues this conversation here, in your terminal. Reply only that y
             )
             .with_protocol_logging(!deps.store.encrypted()),
         );
+        // The Browser plugin's tools (docs/superpowers/plans/2026-11-09-browser.md): for a native
+        // Chat session whose agent takes Aura's own MCP servers, while the plugin is on.
+        self.browser_grant = match self.shared.browser_bridge() {
+            Some(bridge)
+                if self.chat.agent_host == aura_protocol::agents::AgentHost::Native
+                    && prepared.memory_mcp_available
+                    && spec.kind != aura_protocol::DriverKind::Headless
+                    && self.shared.browser_tools.load(Ordering::Acquire) =>
+            {
+                crate::browser_service::BrowserGrant::start(
+                    bridge,
+                    self.chat_id.clone(),
+                    Arc::clone(&self.shared.browser_tools),
+                    &self.shared.deps.rt,
+                )
+                .ok()
+            }
+            _ => None,
+        };
         let setup = SessionSetup {
             mcp_servers: {
                 let mut servers = prepared.mcp_servers;
@@ -4052,6 +4080,9 @@ The person continues this conversation here, in your terminal. Reply only that y
                     && let Some(helper) =
                         self.memory_grant.as_ref().and_then(|grant| grant.mcp(None))
                 {
+                    servers.push(helper);
+                }
+                if let Some(helper) = self.browser_grant.as_ref().and_then(|grant| grant.mcp()) {
                     servers.push(helper);
                 }
                 deps.redactor.set_secrets(
@@ -4448,6 +4479,7 @@ The person continues this conversation here, in your terminal. Reply only that y
 
     fn shutdown(&mut self, plan: StopPlan, reply: oneshot::Sender<()>) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
@@ -5797,6 +5829,7 @@ The person continues this conversation here, in your terminal. Reply only that y
 
     fn on_events_closed(&mut self) {
         self.memory_grant = None;
+        self.browser_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -5819,6 +5852,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             return;
         }
         self.memory_grant = None;
+        self.browser_grant = None;
         let Some(driver) = self.driver.take() else {
             return;
         };
@@ -5930,6 +5964,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     /// The driver closed as asked.
     fn closed(&mut self, generation: u64, auth: bool) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.book.clear(generation);
         self.release_if_idle();
         let now = now_millis();
@@ -6001,6 +6036,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     /// The driver ended without being asked (or panicked, or was aborted).
     fn crashed(&mut self, generation: u64, message: String, stderr_tail: Option<String>) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.kill_generation(generation);
         self.release_if_idle();
         let detail = stderr_tail
@@ -6066,6 +6102,7 @@ The person continues this conversation here, in your terminal. Reply only that y
 
     fn start_failed_exit(&mut self, generation: u64, error: DriverError) {
         self.memory_grant = None;
+        self.browser_grant = None;
         self.kill_generation(generation);
         if let Some(turn) = self.turn.take() {
             // A driver that reports a failed start mid-turn broke its contract; end the turn anyway.
@@ -6152,6 +6189,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             drop(reply.send(Err(SessionError::AgentUnavailable(message.clone()))));
         }
         self.memory_grant = None;
+        self.browser_grant = None;
         self.release_if_idle();
         let message = self.error_text(&message, false);
         self.last_error = Some(ErrorInfo {

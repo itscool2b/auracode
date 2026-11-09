@@ -680,7 +680,7 @@ impl Session {
                                     .setup
                                     .mcp_servers
                                     .iter()
-                                    .any(|server| !crate::mcp::managed_memory(server))
+                                    .any(|server| !crate::mcp::managed(server))
                                 {
                                     self.failure = Some(error(
                                         "Pi did not load Aura's shared MCP extension. Update Pi to a compatible version and restart; no prompt was sent.",

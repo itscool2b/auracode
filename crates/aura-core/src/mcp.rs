@@ -138,7 +138,10 @@ pub fn validate(def: &McpDefinition) -> Result<(), StoreError> {
     };
     if !valid_uuid(&def.id)
         || !key(&def.name)
-        || def.name.replace('-', "_") == "aura_project_memory"
+        || matches!(
+            def.name.replace('-', "_").as_str(),
+            "aura_project_memory" | "aura_browser"
+        )
         || def.project_id.as_ref().is_some_and(|p| !valid_uuid(p))
     {
         return Err(invalid(
@@ -972,7 +975,12 @@ pub(crate) mod tests {
     }
     #[test]
     fn reserved_memory_aliases_are_rejected_by_save_and_native_import() {
-        for name in ["aura_project_memory", "aura-project-memory"] {
+        for name in [
+            "aura_project_memory",
+            "aura-project-memory",
+            "aura_browser",
+            "aura-browser",
+        ] {
             let conn = fixture();
             let mut def = definition();
             def.name = name.into();
