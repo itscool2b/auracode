@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-09
 
+- The website's home page is redesigned: a large left-aligned headline over the live app window on a ruled stage, one statement of what auracode is with three line drawings, split headers, a new section showing chats in their agent's own terminal and the canvas, and a frame of hairlines down the page; the number counters and the fact wheel are gone. ([#117](https://github.com/itscool2b/auracode/pull/117))
 - Canvas, beside Attach in the composer, opens a drawing pane above the message box: sketch flows and ideas with pens, shapes, arrows that follow their boxes and text, press Talk to explain it as you draw (each sentence is numbered on the shapes you drew while saying it), and Add to message attaches the drawing as Canvas.png with an outline of it and what you said. ([#116](https://github.com/itscool2b/auracode/pull/116))
 - Terminal is offered for every agent with an interface of its own, not just Claude Code and Codex: Grok Build, OpenCode, Hermes, Pi, oh-my-pi, Cursor and Antigravity open in their own interface with the chat's folder, account and access, continue their session there, and bring the terminal's turns back into the chat. Cursor and Hermes keep their terminal's session apart from Chat's, so their next Chat message carries what happened in the terminal. ([#115](https://github.com/itscool2b/auracode/pull/115))
 
