@@ -656,6 +656,13 @@ async function createChat(): Promise<string> {
  * for an agent that cannot run here, its row under Other agents with the reason.
  */
 async function agentOption(agentId: string): Promise<{ disabled: boolean; text: string }> {
+  // Launch shows the start screen's aircraft (#114), and the sidebar's New chat opens the form.
+  const opening = await waitFor(
+    "the start screen or New chat",
+    () => one("new-chat") ?? one("launch-art"),
+  );
+  if (opening.dataset.testid === "launch-art")
+    await clickWhenEnabled("the sidebar's New chat", () => one("new-chat-button"));
   const form = await waitFor("the New chat screen", () => one("new-chat"));
   const value = CSS.escape(agentId);
   return waitFor(`New chat to list the agent ${agentId}`, () => {
@@ -883,7 +890,7 @@ async function chatScenario(
     const option = await agentOption(agentId);
     if (option.disabled)
       throw new StepError(`New chat offers the demo agent disabled: ${option.text}`);
-    return "the app opened on New chat, offering the demo agent";
+    return "New chat offers the demo agent";
   });
 
   await checks.run("pick-folder", async () => {
