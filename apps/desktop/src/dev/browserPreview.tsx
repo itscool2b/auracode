@@ -90,7 +90,8 @@ function resolve(input: string): string {
   const text = input.trim();
   if (/^[a-z]+:\/\//i.test(text)) return text;
   if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(text)) return `http://${text}`;
-  if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/.test(text)) return `https://${text}/`.replace(/\/\/$/, "/");
+  if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/.test(text))
+    return `https://${text}/`.replace(/\/\/$/, "/");
   return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
 
@@ -108,7 +109,10 @@ function describe(element: Element): PickedElement {
         .filter((name) => element.hasAttribute(name))
         .map((name) => [name, element.getAttribute(name) ?? ""]),
     ),
-    selector: [element.parentElement?.localName, element.localName + (element.classList[0] ? `.${element.classList[0]}` : "")]
+    selector: [
+      element.parentElement?.localName,
+      element.localName + (element.classList[0] ? `.${element.classList[0]}` : ""),
+    ]
       .filter(Boolean)
       .join(" > "),
     text: (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
@@ -135,8 +139,18 @@ class FixtureBrowser implements BrowserApi {
   readonly #frames = new Map<string, HTMLIFrameElement>();
   readonly #history: HistoryEntry[] = [
     { url: "http://localhost:3104/", title: "Acme dev", visits: 12, last_visit: now() - 60_000 },
-    { url: "https://github.com/acme/web", title: "acme/web", visits: 4, last_visit: now() - 3_600_000 },
-    { url: "https://docs.example.com/guide", title: "Guide · Example docs", visits: 2, last_visit: now() - 90_000_000 },
+    {
+      url: "https://github.com/acme/web",
+      title: "acme/web",
+      visits: 4,
+      last_visit: now() - 3_600_000,
+    },
+    {
+      url: "https://docs.example.com/guide",
+      title: "Guide · Example docs",
+      visits: 2,
+      last_visit: now() - 90_000_000,
+    },
   ];
   #next = 1;
   /** The fixture opened its first page. */
@@ -266,7 +280,9 @@ class FixtureBrowser implements BrowserApi {
       this.#update(chatId, (current) => {
         const tabs = current.tabs.filter((tab) => tab.id !== tabId);
         const active =
-          current.active === tabId ? (tabs[index] ?? tabs[index - 1] ?? null)?.id ?? null : current.active;
+          current.active === tabId
+            ? ((tabs[index] ?? tabs[index - 1] ?? null)?.id ?? null)
+            : current.active;
         return { ...current, tabs, active };
       });
     }
@@ -342,7 +358,13 @@ class FixtureBrowser implements BrowserApi {
       if (style.backgroundColor && style.backgroundColor !== "rgba(0, 0, 0, 0)") {
         context.fillStyle = style.backgroundColor;
         context.beginPath();
-        context.roundRect(box.x, box.y, box.width, box.height, Number.parseFloat(style.borderRadius) || 0);
+        context.roundRect(
+          box.x,
+          box.y,
+          box.width,
+          box.height,
+          Number.parseFloat(style.borderRadius) || 0,
+        );
         context.fill();
       }
       for (const node of element.childNodes) {
@@ -375,7 +397,8 @@ class FixtureBrowser implements BrowserApi {
   async suggest(input: string): Promise<HistoryEntry[]> {
     const words = input.toLowerCase();
     return this.#history.filter(
-      (entry) => entry.url.toLowerCase().includes(words) || entry.title.toLowerCase().includes(words),
+      (entry) =>
+        entry.url.toLowerCase().includes(words) || entry.title.toLowerCase().includes(words),
     );
   }
   async history(query: string): Promise<HistoryEntry[]> {
@@ -417,7 +440,11 @@ function Preview() {
     shared ??= new FixtureBrowser();
     const browser = shared;
     window.browserFixture = browser.controls;
-    const chat = chatSummary(CHAT, { status: "ready", agent_id: "claude", agent_name: "Claude Code" });
+    const chat = chatSummary(CHAT, {
+      status: "ready",
+      agent_id: "claude",
+      agent_name: "Claude Code",
+    });
     const transport = withPreviewContext(
       new FakeTransport({
         attach: async () =>
@@ -447,7 +474,11 @@ function Preview() {
           }),
         send: async (_chat, text) => {
           browser.controls.sent.push({ text, attachments: [] });
-          return { prompt_id: `p${browser.controls.sent.length}`, queued: false, position: 0 } as never;
+          return {
+            prompt_id: `p${browser.controls.sent.length}`,
+            queued: false,
+            position: 0,
+          } as never;
         },
       }),
     );
@@ -463,7 +494,8 @@ function Preview() {
         draft = input;
       },
       paste: async (_id, bytes, name) => {
-        const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+        const png =
+          bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
         browser.controls.pastes.push({ name, bytes: bytes.length, png });
         const item: ComposerAttachment = {
           id: `paste-${browser.controls.pastes.length}`,
@@ -477,7 +509,11 @@ function Preview() {
       },
       send: async (_id, input) => {
         browser.controls.sent.push({ text: input.text, attachments: [...input.attachments] });
-        return { prompt_id: `p${browser.controls.sent.length}`, queued: false, position: 0 } as never;
+        return {
+          prompt_id: `p${browser.controls.sent.length}`,
+          queued: false,
+          position: 0,
+        } as never;
       },
     };
     const store = new BrowserStore(browser);

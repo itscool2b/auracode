@@ -72,7 +72,7 @@ struct Request {
 }
 
 /// What an agent reads when the person turned the browser off.
-pub(crate) const TURNED_OFF: &str = "The browser is turned off in Aura (Settings > Plugins & MCP > Browser). Ask the person to turn it on, or work without it.";
+pub(crate) const TURNED_OFF: &str = "The browser is turned off in Aura (Settings > Plugins & MCP > Universal plugins > Browser use). Ask the person to turn it on, or work without it.";
 
 impl BrowserGrant {
     /// Listens for the session's helper. `enabled` is the Browser plugin's switch.

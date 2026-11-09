@@ -3,7 +3,7 @@ name: aura-browser
 description: Use the browser beside the chat in Aura to open pages (localhost dev servers too), read them, click and type, take screenshots, and read the console and network, with Aura's session-scoped browser tools.
 ---
 
-Aura gives each Chat session in its app a browser beside the chat, and the Browser plugin (Settings > Plugins & MCP > Universal plugins) gives the session's agent the `aura_browser` MCP tools to use it. The person sees every page you open, can browse there themselves, and may send you annotations: elements of a page they picked, with a note, the element's selector, text, size, styles, component and a screenshot.
+Aura gives each Chat session in its app a browser beside the chat, and the Browser use plugin (Settings > Plugins & MCP > Universal plugins) gives the session's agent the `aura_browser` MCP tools to use it. The person sees every page you open, can browse there themselves, and may send you annotations: elements of a page they picked, with a note, the element's selector, text, size, styles, component and a screenshot.
 
 1. Open a page with `browser_navigate` (a URL, `localhost:5173`, a file path, or words to search for). It waits for the load and says where the tab is.
 2. Read it with `browser_snapshot`: roles, names and values, with a ref (`e12`) on everything you can act on. Act with refs from the latest snapshot: `browser_click`, `browser_type` (replaces a field's text unless `clear` is false; `submit` presses Enter), `browser_press_key`, `browser_hover`, `browser_select`, `browser_scroll`. A ref that is gone means the page changed; take a new snapshot.

@@ -36,6 +36,9 @@ export function createSetupFixture(): SetupApi & { readonly general: () => Gener
         snapshot.preferences.general.copy_instructions_to_worktrees = action.enabled;
       if (action.type === "agent_memory_writes")
         snapshot.preferences.general.agent_memory_writes = action.enabled;
+      if (action.type === "browser") snapshot.preferences.general.browser = action.enabled;
+      if (action.type === "browser_passwords")
+        snapshot.preferences.general.browser_passwords = action.enabled;
       snapshot.preferences.revision++;
       return structuredClone(snapshot);
     },

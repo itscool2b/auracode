@@ -27,7 +27,7 @@ const agent = (id: string, availability: AgentEntry["availability"] = ready): Ag
 });
 
 describe("Settings' General defaults", () => {
-  it("keeps full auto, background services, worktree instruction copies and agents' memory edits on, with automatic checkpoints off", () => {
+  it("keeps full auto, background services, worktree instruction copies, agents' memory edits and Browser use with saved passwords on, with automatic checkpoints off", () => {
     expect(DEFAULT_GENERAL).toEqual({
       default_agent: null,
       default_model: null,
@@ -43,6 +43,8 @@ describe("Settings' General defaults", () => {
       agent_memory_writes: true,
       keep_steps_open: false,
       editor: null,
+      browser: true,
+      browser_passwords: true,
     });
   });
 

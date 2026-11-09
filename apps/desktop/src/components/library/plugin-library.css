@@ -423,3 +423,119 @@
   padding: 0;
   overflow: visible;
 }
+
+/* ------------------------------------------------------------------ universal plugins */
+
+/* auracode's own plugins, for every agent: each a card on the settings group's glass, its mark,
+   name and what it does beside the switch that turns it off everywhere, its settings below. */
+.plugins-universal-logo {
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.plugins-universal-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-card);
+  box-shadow:
+    var(--g-shadow-control),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
+}
+
+.plugins-universal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-height: 76px;
+  padding: var(--g-space-12) var(--g-space-16);
+}
+
+.plugins-universal-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-1);
+}
+
+.plugins-universal-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.plugins-universal-text h3 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 600;
+}
+
+.plugins-universal-text p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.plugins-universal-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+  min-height: 60px;
+  padding: var(--g-space-8) var(--g-space-16);
+  border-top: 1px solid var(--g-glass-rim);
+}
+
+.plugins-universal-setting > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plugins-universal-setting strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.plugins-universal-setting span {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.plugins-universal-note {
+  margin: 0;
+  padding: var(--g-space-12) var(--g-space-16);
+  border-top: 1px solid var(--g-glass-rim);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* History in a dialog: the panel's own view, given a height of its own. */
+.plugins-history {
+  position: relative;
+  height: min(560px, 64vh);
+  overflow: hidden;
+  border-radius: var(--g-radius-12);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+}
+
+.plugins-history .browser-history {
+  background-color: transparent;
+}

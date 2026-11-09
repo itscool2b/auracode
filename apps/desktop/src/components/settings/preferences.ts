@@ -90,6 +90,10 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       };
     case "agent_memory_writes":
       return { ...preferences, general: { ...general, agent_memory_writes: action.enabled } };
+    case "browser":
+      return { ...preferences, general: { ...general, browser: action.enabled } };
+    case "browser_passwords":
+      return { ...preferences, general: { ...general, browser_passwords: action.enabled } };
     case "config_sync_agent": {
       const paused = general.config_sync_paused.filter((agent) => agent !== action.agent_id);
       if (!action.enabled) paused.push(action.agent_id);

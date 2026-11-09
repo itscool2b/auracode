@@ -2,12 +2,14 @@
  * Synthetic service data for Settings' Plugins & MCP, Instructions and Project memory pages (what
  * Customize held). No native operations run.
  */
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppInfo } from "../bindings";
 import { type CustomizeServices, SettingsScreen } from "../components/settings/SettingsScreen";
 import type { SetupApi } from "../lib/setup";
 import { WorkspaceStore } from "../lib/workspace";
+import { createBrowserSettingsFixture } from "./browserSettingsFixture";
 import { createInstructionsFixture } from "./instructionsFixture";
 import { pluginFixture } from "./pluginLibraryPreview";
 import { createProjectMemoryFixture } from "./projectMemoryPreview";
@@ -59,6 +61,7 @@ export function createCustomizeFixture() {
     instructions: createInstructionsFixture("universal").api,
     setup: createSetupFixture(),
     memory: createProjectMemoryFixture().api,
+    browser: createBrowserSettingsFixture().store,
     plugins: {
       api: {
         snapshot: async () => pluginFixture("plugins"),

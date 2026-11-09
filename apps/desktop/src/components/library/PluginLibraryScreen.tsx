@@ -32,6 +32,7 @@ import type { SharedMcpApi } from "../../lib/sharedMcp";
 import { Modal } from "../chat/Modal";
 import { HistoryView, ItemDetail } from "./LibraryItems";
 import { type McpProject, SharedMcpPanel } from "./SharedMcpPanel";
+import { UniversalPlugins, type UniversalSettings } from "./UniversalPlugins";
 import { VendorDialog, type VendorPreset } from "./VendorDialog";
 import "./library.css";
 import "./plugin-library.css";
@@ -185,6 +186,8 @@ export function PluginLibraryScreen({
   projects = [],
   mcpApi,
   activeChatId,
+  universal,
+  select = null,
 }: {
   readonly onBack: () => void;
   readonly onAgents?: () => void;
@@ -200,6 +203,10 @@ export function PluginLibraryScreen({
   readonly projects?: readonly McpProject[];
   readonly mcpApi?: SharedMcpApi;
   readonly activeChatId?: string | null;
+  /** Settings' preferences: Universal plugins is offered with them. */
+  readonly universal?: UniversalSettings;
+  /** Opens a part of the page (a search result in it): a new `id` asks again. */
+  readonly select?: { readonly id: number; readonly agent: string } | null;
 }) {
   const [library, setLibrary] = useState<PluginLibrary | null>(null);
   const [selected, setSelected] = useState(initialAgent);
@@ -216,6 +223,10 @@ export function PluginLibraryScreen({
     receipts: LibraryCopyReceipt[];
     sources: LibrarySourceStatus[];
   } | null>(null);
+  // A search result opens its part of the page before Settings looks for its row.
+  useLayoutEffect(() => {
+    if (select) setSelected(select.agent);
+  }, [select]);
   const alive = useRef(true);
   const loader = useRef(new PluginLibraryLoader());
   useEffect(() => {
@@ -351,6 +362,16 @@ export function PluginLibraryScreen({
       ) : null}
       <div className="plugins-body">
         <nav className="plugins-agents" aria-label="Agents">
+          {universal ? (
+            <button
+              type="button"
+              data-testid="plugins-universal-nav"
+              aria-current={selected === "universal" ? "page" : undefined}
+              onClick={() => setSelected("universal")}
+            >
+              Universal plugins
+            </button>
+          ) : null}
           <button
             type="button"
             aria-current={selected === "shared" ? "page" : undefined}
@@ -380,8 +401,19 @@ export function PluginLibraryScreen({
             <p className="plugins-agents-note">{library.notices[library.notices.length - 1]}</p>
           ) : null}
         </nav>
-        <section className="plugins-main" aria-label={agent ? agent.name : "Plugins & MCP"}>
-          {selected === "shared" ? (
+        <section
+          className="plugins-main"
+          aria-label={
+            agent
+              ? agent.name
+              : selected === "universal" && universal
+                ? "Universal plugins"
+                : "Plugins & MCP"
+          }
+        >
+          {selected === "universal" && universal ? (
+            <UniversalPlugins {...universal} />
+          ) : selected === "shared" ? (
             <SharedMcpPanel
               projects={projects}
               agents={(library?.agents ?? []).map((entry) => ({
