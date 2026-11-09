@@ -87,7 +87,9 @@ jobs:
     needs: bindings
     if: ${{ !cancelled() && !inputs.checkpoint_benchmarks && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
     runs-on: macos-26-intel
-    timeout-minutes: 60
+    # The browser checks here take about 2.4 times as long as on a desktop (measured 2026-11-09),
+    # and a step or job cut off at its limit wastes every minute before it, so the limits leave room.
+    timeout-minutes: 120
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,7 +133,7 @@ jobs:
 
       - name: Build and verify the Rust API and static website runtimes
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install worker-build --version 0.8.7 --locked
@@ -145,19 +147,30 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: pnpm --filter @auracode/desktop exec playwright install --with-deps chromium webkit
 
-      - name: Check the chat in Chromium and WebKit
-        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
-        timeout-minutes: 10
-        run: pnpm --filter @auracode/desktop check:chat
-
-      - name: Check settings and explicit update controls
+      # One engine per step, so each fits its deadline (about 6 and 9 minutes here).
+      - name: Check the chat in Chromium
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:settings
+        run: pnpm --filter @auracode/desktop check:chat --engines chromium
+
+      - name: Check the chat in WebKit
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        run: pnpm --filter @auracode/desktop check:chat --engines webkit
+
+      - name: Check settings and explicit update controls in Chromium
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        run: pnpm --filter @auracode/desktop check:settings --engines chromium
+
+      - name: Check settings and explicit update controls in WebKit
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        run: pnpm --filter @auracode/desktop check:settings --engines webkit
 
       - name: Check the Plugin library, instructions, account vault and configuration recovery
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           pnpm --filter @auracode/desktop exec node scripts/check-plugin-library.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-instructions.mjs
@@ -187,7 +200,7 @@ jobs:
 
       - name: Check Customize, native controls, project memory and shared MCP fixtures
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: pnpm --filter @auracode/desktop check:customization
 
       - name: Check the docked terminal panel
@@ -197,7 +210,7 @@ jobs:
 
       - name: Check dictation, images, the Dashboard, typing, update notices and terminal chats
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: pnpm --filter @auracode/desktop check:fixtures
 
       - name: Check Delete all auracode data
@@ -387,7 +400,9 @@ jobs:
           # The release packages' build system (build.yml), so the oldest supported libraries.
           - ubuntu-22.04
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+    # A branch's first run builds without a cache, and a cut-off run saves none: on Windows that
+    # took 27 minutes of Clippy and 39 of tests before the smoke steps (2026-11-09).
+    timeout-minutes: 120
     steps:
       - name: Keep LF line endings (Windows)
         if: runner.os == 'Windows'
