@@ -66,6 +66,7 @@ function transport(kind: string | null): TerminalChatTransport {
       terminal_id: "term-1",
       omitted: kind === "omitted" ? ["legacy-docs: Codex does not take legacy SSE servers"] : [],
       first_input: null,
+      exit_input: "",
     }),
     read: async (): Promise<TerminalChunk> => {
       while (pending.length === 0 && !done) {

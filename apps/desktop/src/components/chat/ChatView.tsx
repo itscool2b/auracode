@@ -811,7 +811,7 @@ export function ChatView({
             changesOpen={changesOpen}
             onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
             view={
-              state.chat && terminalSupported(state.chat.agent_id)
+              state.chat && terminalSupported(state.chat.agent_id, agents)
                 ? {
                     current: interfaceView,
                     unavailable:

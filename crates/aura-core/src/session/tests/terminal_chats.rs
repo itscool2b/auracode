@@ -187,16 +187,74 @@ async fn a_session_claude_code_never_wrote_down_is_not_resumed_in_the_terminal()
 }
 
 #[tokio::test]
-async fn only_claude_code_and_codex_chats_open_in_the_terminal() {
+async fn a_chat_whose_agent_has_no_interface_of_its_own_stays_in_chat() {
     let rig = rig(Vec::new(), WriterConfig::STANDARD, Knobs::STANDARD);
     let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     let refused = rig.manager.open_terminal(&chat.id).await;
     assert!(
         refused
             .as_ref()
-            .is_err_and(|e| e.to_string().contains("Claude Code and Codex")),
+            .is_err_and(|e| e.to_string().contains("no interface of its own")),
         "{:?}",
         refused.err()
+    );
+}
+
+#[tokio::test]
+async fn a_grok_terminal_names_its_session_brings_its_turns_back_and_resumes_it_next_time() {
+    let (home, rig) = with_home(|| {
+        rig_with_spec(
+            aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
+            WriterConfig::STANDARD,
+            Knobs::STANDARD,
+            aura_agents::get("grok").expect("grok").clone(),
+        )
+    });
+    let chat = rig.manager.create_chat("grok", &rig.folder).await.unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    let args = argv(&opened);
+    // Grok Build's own interface: none of the ACP server's arguments.
+    assert!(
+        !args.iter().any(|a| a == "agent" || a == "stdio"),
+        "{args:?}"
+    );
+    assert_eq!(opened.exit_input, "");
+    let at = args
+        .iter()
+        .position(|a| a == "--session-id")
+        .expect("a new session's ID");
+    let session = args[at + 1].clone();
+    assert!(uuid::Uuid::parse_str(&session).is_ok(), "{session}");
+    // Grok Build writes its history as the person works in the terminal.
+    let folder = home
+        .path()
+        .join(".grok")
+        .join("sessions")
+        .join("C%3A%5Cwork%5Capp")
+        .join(&session);
+    std::fs::create_dir_all(&folder).unwrap();
+    let history = [
+        serde_json::json!({"type":"system","content":"You are Grok Build"}),
+        serde_json::json!({"type":"user","content":[{"type":"text","text":"<rules>"}],"synthetic_reason":"rules"}),
+        serde_json::json!({"type":"user","content":[{"type":"text","text":"Tidy the README"}],"prompt_index":0}),
+        serde_json::json!({"type":"assistant","content":"Tidied."}),
+    ]
+    .iter()
+    .map(|line| line.to_string() + "
+")
+    .collect::<String>();
+    std::fs::write(folder.join("chat_history.jsonl"), history).unwrap();
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    let again = reopened(&rig, &chat.id).await;
+    let args = argv(&again);
+    assert!(
+        args.windows(2)
+            .any(|w| w[0] == "--resume" && w[1] == session),
+        "{args:?}"
+    );
+    assert_eq!(
+        conversation(&rig, &chat.id).await,
+        ["you: Tidy the README", "agent: Tidied."]
     );
 }
 
@@ -277,4 +335,88 @@ async fn a_terminals_conversation_is_recorded_once_it_ends_and_only_what_it_adde
             "agent: Done."
         ]
     );
+}
+
+#[test]
+fn the_agent_list_offers_the_terminal_for_exactly_the_agents_it_can_launch() {
+    for spec in aura_agents::catalog() {
+        assert_eq!(
+            aura_agents::has_terminal(spec.id),
+            aura_drivers::terminal::TerminalAgent::of(spec.agent).is_some(),
+            "{}",
+            spec.id
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_cursor_terminal_keeps_its_own_chat_whose_turns_reach_chat_as_a_handoff() {
+    let (home, rig) = with_home(|| {
+        rig_with_spec(
+            aura_drivers::testing::ScriptedDriverFactory::new(Vec::new()),
+            WriterConfig::STANDARD,
+            Knobs::STANDARD,
+            aura_agents::get("cursor").expect("cursor").clone(),
+        )
+    });
+    let chat = rig
+        .manager
+        .create_chat("cursor", &rig.folder)
+        .await
+        .unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    let args = argv(&opened);
+    assert!(
+        !args.iter().any(|a| a == "acp" || a.starts_with("--resume")),
+        "{args:?}"
+    );
+    // Cursor names its new chat and writes it down as the person works.
+    let id = "f2538249-b0ef-43a7-bb25-69d5c4040056";
+    let meta = home.path().join(".cursor/chats/workspace").join(id);
+    std::fs::create_dir_all(&meta).unwrap();
+    std::fs::write(
+        meta.join("meta.json"),
+        serde_json::json!({
+            "createdAtMs": crate::time::now_millis(),
+            "cwd": rig.folder,
+            "hasConversation": true,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let transcript = home
+        .path()
+        .join(".cursor/projects/C-work-app/agent-transcripts")
+        .join(id);
+    std::fs::create_dir_all(&transcript).unwrap();
+    let lines = [
+        serde_json::json!({"role":"user","message":{"content":[{"type":"text","text":"<timestamp>now</timestamp>\n<user_query>\nList the files\n</user_query>"}]}}),
+        serde_json::json!({"role":"assistant","message":{"content":[{"type":"text","text":"There are two."}]}}),
+        serde_json::json!({"type":"turn_ended","status":"success"}),
+    ];
+    std::fs::write(
+        transcript.join(format!("{id}.jsonl")),
+        lines
+            .iter()
+            .map(|line| line.to_string() + "\n")
+            .collect::<String>(),
+    )
+    .unwrap();
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    // The next terminal continues the terminal's own Cursor chat (Chat keeps its own session).
+    let again = reopened(&rig, &chat.id).await;
+    assert!(
+        argv(&again).contains(&format!("--resume={id}")),
+        "{:?}",
+        argv(&again)
+    );
+    assert_eq!(
+        conversation(&rig, &chat.id).await,
+        ["you: List the files", "agent: There are two."]
+    );
+    let page = rig.manager.history(&chat.id, u32::MAX, None).await.unwrap();
+    assert!(page.items.iter().any(|item| matches!(
+        &item.event,
+        AuraEvent::Notice { message, .. } if message.contains("next Chat message includes the terminal's turns")
+    )));
 }

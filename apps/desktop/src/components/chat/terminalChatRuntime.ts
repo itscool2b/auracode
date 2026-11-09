@@ -58,8 +58,9 @@ export const EXIT_GRACE_MS = 2500;
 /**
  * One chat's terminal: its view and its agent's process, kept while the person looks at another
  * chat (the view detaches; the agent keeps working) and closed only when asked. Closing asks the
- * agent to exit first (Ctrl+C twice, which Claude Code and Codex take as exit) so it finishes its
- * session file, then closes its processes if it has not exited after `EXIT_GRACE_MS`.
+ * agent to exit first, as its own interface exits (Ctrl+C twice for most agents; the keys come
+ * from Rust with the launch), so it finishes its session's record, then closes its processes if it
+ * has not exited after `EXIT_GRACE_MS`.
  */
 export class TerminalChatRuntime {
   readonly host: HTMLDivElement;
@@ -76,6 +77,8 @@ export class TerminalChatRuntime {
   #disposed = false;
   #wantsFocus = false;
   #exited: (() => void) | null = null;
+  /** What asks this agent's interface to exit, one key at a time. */
+  #exitInput = "";
   #lastOutput = 0;
   #activity = new TerminalActivity();
 
@@ -166,6 +169,7 @@ export class TerminalChatRuntime {
         start: async (id, chatId, size) => {
           const started = await transport.start(id, chatId, size);
           this.#set({ omitted: started.omitted });
+          if (started.exit_input) this.#exitInput = started.exit_input;
           if (started.first_input) void this.#typeWhenSettled(started.first_input);
           return started.terminal_id;
         },
@@ -262,9 +266,11 @@ export class TerminalChatRuntime {
       const exited = new Promise<void>((resolve) => {
         this.#exited = resolve;
       });
-      session.write(new Uint8Array([3]));
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      session.write(new Uint8Array([3]));
+      const keys = [...this.#exitInput];
+      for (const [index, key] of keys.entries()) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, 150));
+        session.write(new TextEncoder().encode(key));
+      }
       await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, grace))]);
     }
     await this.#teardown();

@@ -403,6 +403,10 @@ pub struct AgentEntry {
     /// protocol or its ACP adapter). `None` for an agent with one connection.
     #[serde(default)]
     pub connections: Option<AgentConnections>,
+    /// A chat with this agent can open in its own interactive interface, in auracode's
+    /// terminal (Chat | Terminal).
+    #[serde(default)]
+    pub terminal: bool,
 }
 
 /// An agent's connections and the device's Connection setting for it.
@@ -740,6 +744,7 @@ mod tests {
             latest_release: None,
             harness: None,
             connections: None,
+            terminal: false,
         };
         assert_eq!(round_trip(&entry), entry);
         let claude = AgentEntry {

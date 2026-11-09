@@ -208,7 +208,16 @@ pub(crate) fn load_chat(
         Some(session) => replay_check(conn, session)?,
         None => None,
     };
+    let terminal_session = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key=?1",
+            [super::terminal_session_key(device_id, chat_id)],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .and_then(|value| serde_json::from_str(&value).ok());
     Ok(Some(ChatLoad {
+        terminal_session,
         worktree_setup: super::setup_attempt::read(conn, device_id, chat_id)?,
         initial_model,
         remote_history: remote_history(conn, chat_id)?,
@@ -657,6 +666,30 @@ pub(crate) fn insert_attachment(
         "INSERT OR IGNORE INTO attachments (sha256, mime, size, created_at) VALUES (?1, ?2, ?3, ?4)",
     )?
     .execute(params![sha256, mime, i64::try_from(size).unwrap_or(i64::MAX), now])?;
+    Ok(())
+}
+
+/// Keeps the session the chat's terminal last used, as this device's setting (or forgets it).
+pub(crate) fn save_terminal_session(
+    conn: &Connection,
+    device_id: &str,
+    chat_id: &str,
+    record: Option<&super::TerminalSessionRecord>,
+) -> rusqlite::Result<()> {
+    let key = super::terminal_session_key(device_id, chat_id);
+    match record {
+        Some(record) => {
+            let value = serde_json::to_string(record)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            conn.execute(
+                "INSERT INTO settings(key,value,updated_at) VALUES(?1,?2,?3) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+                params![key, value, crate::time::now_millis()],
+            )?;
+        }
+        None => {
+            conn.execute("DELETE FROM settings WHERE key=?1", [key])?;
+        }
+    }
     Ok(())
 }
 

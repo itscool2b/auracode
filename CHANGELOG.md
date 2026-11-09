@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-09
+
+- Terminal is offered for every agent with an interface of its own, not just Claude Code and Codex: Grok Build, OpenCode, Hermes, Pi, oh-my-pi, Cursor and Antigravity open in their own interface with the chat's folder, account and access, continue their session there, and bring the terminal's turns back into the chat. Cursor and Hermes keep their terminal's session apart from Chat's, so their next Chat message carries what happened in the terminal. ([#115](https://github.com/itscool2b/auracode/pull/115))
+
 ## 2026-11-07
 
 - auracode opens on an American military aircraft in ASCII made from a real photograph, one of fifteen and a different one each start, and New chat opens only when you ask for it; notices wait behind a bell beside Settings instead of floating over the page, with only saving problems and a fresh memory edit's Undo still shown over it; and Run in terminal after a failed agent update now opens the terminal and runs the update. ([#114](https://github.com/itscool2b/auracode/pull/114))

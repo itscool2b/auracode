@@ -709,6 +709,11 @@ export type AgentEntry = {
 	 *  protocol or its ACP adapter). `None` for an agent with one connection.
 	 */
 	connections?: AgentConnections | null,
+	/**
+	 *  A chat with this agent can open in its own interactive interface, in auracode's
+	 *  terminal (Chat | Terminal).
+	 */
+	terminal?: boolean,
 };
 
 /**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
@@ -1232,6 +1237,11 @@ export type ChatTerminalStarted = {
 	 *  handoff from another agent), never part of the command line.
 	 */
 	first_input: string | null,
+	/**
+	 *  What the page types to ask the agent's interface to exit before it closes the terminal
+	 *  (Ctrl+C twice for most agents).
+	 */
+	exit_input: string,
 };
 
 export type CheckpointSummary = {

@@ -310,6 +310,9 @@ pub struct ChatTerminalStarted {
     /// What the page types into the terminal once the agent's interface is ready (the visible
     /// handoff from another agent), never part of the command line.
     pub first_input: Option<String>,
+    /// What the page types to ask the agent's interface to exit before it closes the terminal
+    /// (Ctrl+C twice for most agents).
+    pub exit_input: String,
 }
 
 /// Opens a chat in its agent's own interface in a reserved terminal (`terminal_reserve`): the
@@ -346,6 +349,7 @@ pub async fn chat_terminal_start(
     let opened = sessions.open_terminal(&chat_id).await?;
     let generation = opened.generation;
     let first_input = opened.first_input.clone();
+    let exit_input = opened.exit_input.clone();
     let give_back = |error: AppError| {
         sessions.terminal_ended(&chat_id, generation);
         error
@@ -371,6 +375,7 @@ pub async fn chat_terminal_start(
         terminal_id: id,
         omitted: opened.omitted,
         first_input,
+        exit_input,
     })
 }
 

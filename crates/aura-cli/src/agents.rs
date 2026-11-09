@@ -117,6 +117,7 @@ mod tests {
             latest_release: None,
             harness: None,
             connections: None,
+            terminal: false,
         };
         let option = |id: &str, label: &str| aura_protocol::session::AgentConnection {
             id: id.into(),

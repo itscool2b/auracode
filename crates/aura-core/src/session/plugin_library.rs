@@ -794,6 +794,7 @@ mod tests {
             latest_release: None,
             harness,
             connections: None,
+            terminal: false,
         }
     }
 
