@@ -165,7 +165,9 @@ fn run(args: &[String]) -> Result<ExitCode> {
         "orphan-parent" => {
             let pidfile = path(rest, 0)?;
             let grandchild = spawn_self(&["hang"], Placement::Inherit)?;
-            write_pids(&pidfile, &[grandchild])?;
+            // Its own pid second: it is still exiting when the file appears, and a test that
+            // needs it gone waits for that pid.
+            write_pids(&pidfile, &[grandchild, std::process::id()])?;
             Ok(ExitCode::SUCCESS)
         }
         "spawn-pty-child" | "spawn-job-child" => {

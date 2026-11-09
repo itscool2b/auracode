@@ -116,6 +116,12 @@ async fn a_program_whose_parent_exited_still_counts_as_the_agents() {
     let mut reaper = Reaper::new();
     reaper.hold(process.control.pid());
     reaper.hold(orphan);
+    // The parent writes the pid file just before it exits, so the listing waits for its exit.
+    let parent = read_pids(&folder.path().join("spawn-orphan.pid")).await[1];
+    assert!(
+        wait_gone(parent, GONE_WITHIN).await,
+        "the orphan's parent exited"
+    );
 
     let listed = tree(&process.control).await;
     let entry = listed
