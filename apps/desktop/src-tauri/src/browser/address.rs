@@ -137,6 +137,54 @@ fn file_url(text: &str) -> Option<String> {
         .map(Into::into)
 }
 
+/// Whether a `file:` address names a file on this computer, judged by the path the engine will
+/// open: a drive path on Windows, a single-slash absolute path elsewhere. Never a share, however
+/// the address spells it (`file://server/x`, `file:////server/x`, `file://localhost//server/x`,
+/// backslashes).
+fn local_file(url: &Url) -> bool {
+    if url.host_str().is_some_and(|host| !host.is_empty() && host != "localhost") {
+        return false;
+    }
+    let raw = url.path().replace('\\', "/");
+    let decoded = percent_decode(&raw);
+    if decoded.starts_with("//") || decoded.contains("\\\\") {
+        return false;
+    }
+    let Ok(path) = url.to_file_path() else {
+        return false;
+    };
+    let text = path.to_string_lossy();
+    if cfg!(windows) {
+        let bytes = text.as_bytes();
+        bytes.len() > 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/')
+    } else {
+        text.starts_with('/') && !text.starts_with("//")
+    }
+}
+
+/// `%5C` and friends as the engine reads them, for the share check.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let Ok(byte) = u8::from_str_radix(&text[index + 1..index + 3], 16)
+        {
+            out.push(if byte == b'\\' { b'/' } else { byte });
+            index += 3;
+            continue;
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Whether the browser opens `address` itself, hands it to another program, or refuses it.
 pub fn policy(address: &str) -> Policy {
     let Ok(url) = Url::parse(address) else {
@@ -150,10 +198,10 @@ pub fn policy(address: &str) -> Policy {
                 Policy::Open
             }
         }
-        // A file on this computer only: `file://server/share` reaches out over the network with
-        // the person's Windows credentials.
+        // A file on this computer only: a network share (`file://server/share`, and the spellings
+        // with an empty host that still reach one) sends the person's Windows credentials to it.
         "file" => {
-            if url.host_str().is_none_or(|host| host.is_empty() || host == "localhost") {
+            if local_file(&url) {
                 Policy::Open
             } else {
                 Policy::Refuse
@@ -328,8 +376,22 @@ mod tests {
                 "{typed} -> {resolved:?}"
             );
         }
-        assert_eq!(policy("file://server/share/x.html"), Policy::Refuse);
-        assert_eq!(policy("file://localhost/C:/a.html"), Policy::Open);
+        for share in [
+            "file://server/share/x.html",
+            "file:////server/share/x.html",
+            "file://localhost//server/share/x.html",
+            "file:///%5C%5Cserver/share/x.html",
+            "file:///%2F%2Fserver/share",
+            r"file:///\\server\share\x.html",
+        ] {
+            assert_eq!(policy(share), Policy::Refuse, "{share}");
+        }
+        if cfg!(windows) {
+            assert_eq!(policy("file://localhost/C:/a.html"), Policy::Open);
+            assert_eq!(policy("file:///C:/site/a.html"), Policy::Open);
+        } else {
+            assert_eq!(policy("file:///home/me/a.html"), Policy::Open);
+        }
     }
 
     #[test]

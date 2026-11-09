@@ -385,7 +385,12 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
                 lines.push(line);
             }
             lines.reverse();
-            Ok(ToolReply::text(lines.join("\n")))
+            // A script may have printed a password.
+            let secrets = page_secrets(browser, &tab).await.unwrap_or_default();
+            Ok(ToolReply::text(redact(
+                lines.join("\n"),
+                secrets.iter().map(String::as_str),
+            )))
         }
         "browser_network" => {
             let tab = tab_for(browser, chat_id).await?;
@@ -412,9 +417,14 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
                     )
                 })
                 .collect();
-            Ok(ToolReply::text(format!(
-                "Requests this page made (status, kind, time, address; — where the page could not tell):\n{}",
-                lines.join("\n")
+            // A form sent by GET carries its password in the address.
+            let secrets = page_secrets(browser, &tab).await.unwrap_or_default();
+            Ok(ToolReply::text(redact(
+                format!(
+                    "Requests this page made (status, kind, time, address; — where the page could not tell):\n{}",
+                    lines.join("\n")
+                ),
+                secrets.iter().map(String::as_str),
             )))
         }
         "browser_evaluate" => evaluate(browser, chat_id, args).await,
@@ -610,6 +620,9 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
     if code.len() > 200_000 {
         return Err(BrowserError::Invalid("That script is too long.".into()));
     }
+    // The page's passwords as they are before the script runs (it might empty a field after
+    // reading it); the ones after it are added below.
+    let before = page_secrets(browser, &tab).await;
     #[cfg(windows)]
     let value = {
         // The engine runs it as the console would: top-level await, the last expression's value.
@@ -647,7 +660,8 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
                 .as_str()
                 .or_else(|| details["text"].as_str())
                 .unwrap_or("The script threw.");
-            return Ok(ToolReply::failed(message.chars().take(4000).collect::<String>()));
+            let message: String = message.chars().take(4000).collect();
+            return Ok(ToolReply::failed(redact(message, before.iter().flatten().map(String::as_str))));
         }
         let result = &reply["result"];
         match result.get("value") {
@@ -672,7 +686,8 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         );
         let answer = browser.eval(&tab, script, super::SCRIPT_TIMEOUT).await?;
         if let Some(error) = answer["error"].as_str() {
-            return Ok(ToolReply::failed(error.chars().take(4000).collect::<String>()));
+            let error: String = error.chars().take(4000).collect();
+            return Ok(ToolReply::failed(redact(error, before.iter().flatten().map(String::as_str))));
         }
         answer["value"].clone()
     };
@@ -680,12 +695,16 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         Value::String(text) => text.clone(),
         other => serde_json::to_string_pretty(other).unwrap_or_default(),
     };
-    // Agents never see a password the page holds, however a script reaches for it.
-    let secrets = browser.call(&tab, "api.secrets()").await.unwrap_or(Value::Null);
-    text = redact(
-        text,
-        secrets.as_array().into_iter().flatten().filter_map(Value::as_str),
-    );
+    // Agents never see a password the page holds (best effort: a value the script changed past
+    // recognising, or sent off the page itself, is beyond what auracode can check).
+    let after = page_secrets(browser, &tab).await;
+    if before.is_none() && after.is_none() {
+        return Ok(ToolReply::failed(
+            "auracode could not check this page's password fields, so the script's result is withheld.",
+        ));
+    }
+    let secrets: Vec<String> = before.into_iter().chain(after).flatten().collect();
+    text = redact(text, secrets.iter().map(String::as_str));
     if text.len() > 40_000 {
         let mut end = 40_000;
         while !text.is_char_boundary(end) {
@@ -695,6 +714,21 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         text.push_str("\n… (cut at 40 000 characters)");
     }
     Ok(ToolReply::text(if text.is_empty() { "undefined".into() } else { text }))
+}
+
+/// The page's password values, so what agents read can leave them out; `None` when the page
+/// cannot be asked (no page script runs in it).
+async fn page_secrets(browser: &Arc<Browser>, tab: &str) -> Option<Vec<String>> {
+    let found = browser.call(tab, "api.secrets()").await.ok()?;
+    Some(
+        found
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+    )
 }
 
 /// `text` with every password value of the page (`secrets`) taken out, and a line saying so.
