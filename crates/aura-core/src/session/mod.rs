@@ -1314,7 +1314,9 @@ impl SessionManager {
     /// The Browser plugin's switch. Sessions started while it is on get the browser tools; a
     /// running session's tools answer that it is off once it is.
     pub fn set_browser_tools(&self, enabled: bool) {
-        self.shared().browser_tools.store(enabled, Ordering::Release);
+        self.shared()
+            .browser_tools
+            .store(enabled, Ordering::Release);
     }
 
     pub fn browser_tools(&self) -> bool {
@@ -1322,7 +1324,10 @@ impl SessionManager {
     }
 
     /// The app's browser, which runs the tools Chat sessions get.
-    pub fn set_browser_bridge(&self, bridge: Option<Arc<dyn crate::browser_service::BrowserBridge>>) {
+    pub fn set_browser_bridge(
+        &self,
+        bridge: Option<Arc<dyn crate::browser_service::BrowserBridge>>,
+    ) {
         *lock(&self.shared().browser_bridge) = bridge;
     }
 

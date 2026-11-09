@@ -19,7 +19,12 @@ fn request(tool: &str, arguments: Value) -> Value {
     )
 }
 
-fn request_to(endpoint: Option<String>, token: Option<String>, tool: &str, arguments: Value) -> Value {
+fn request_to(
+    endpoint: Option<String>,
+    token: Option<String>,
+    tool: &str,
+    arguments: Value,
+) -> Value {
     let result = (|| -> Result<Value, Box<dyn std::error::Error>> {
         let endpoint = endpoint
             .ok_or("no endpoint")?
@@ -60,8 +65,10 @@ fn content(reply: &Value) -> Value {
         "type": "text",
         "text": reply["text"].as_str().unwrap_or(""),
     })];
-    if let (Some(mime), Some(data)) = (reply["image"]["mime"].as_str(), reply["image"]["data"].as_str())
-    {
+    if let (Some(mime), Some(data)) = (
+        reply["image"]["mime"].as_str(),
+        reply["image"]["data"].as_str(),
+    ) {
         content.push(json!({ "type": "image", "mimeType": mime, "data": data }));
     }
     json!({ "content": content, "isError": reply["error"].as_bool().unwrap_or(false) })
@@ -246,7 +253,9 @@ pub fn run_helper() {
         return;
     }
     if !std::env::args().any(|value| value == "--mcp") {
-        println!("Usage: auracode --aura-browser-helper --mcp (an MCP server for Aura's browser) or --skill");
+        println!(
+            "Usage: auracode --aura-browser-helper --mcp (an MCP server for Aura's browser) or --skill"
+        );
         return;
     }
     let names = tool_names();
@@ -282,7 +291,9 @@ pub fn run_helper() {
                 if names.iter().any(|known| known == name) {
                     content(&request(name, arguments))
                 } else {
-                    content(&json!({ "text": format!("{name} is not one of Aura's browser tools."), "error": true }))
+                    content(
+                        &json!({ "text": format!("{name} is not one of Aura's browser tools."), "error": true }),
+                    )
                 }
             }
             _ => {
@@ -315,7 +326,10 @@ mod tests {
             assert_eq!(tool["inputSchema"]["type"], "object", "{name}");
             assert_eq!(tool["inputSchema"]["additionalProperties"], false, "{name}");
         }
-        let click = tools.iter().find(|tool| tool["name"] == "browser_click").unwrap();
+        let click = tools
+            .iter()
+            .find(|tool| tool["name"] == "browser_click")
+            .unwrap();
         assert_eq!(click["inputSchema"]["required"], json!(["ref"]));
     }
 

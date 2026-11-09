@@ -32,7 +32,9 @@ async fn ask(endpoint: String, line: String) -> serde_json::Value {
         stream.write_all(line.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
         let mut reply = String::new();
-        std::io::BufReader::new(stream).read_line(&mut reply).unwrap();
+        std::io::BufReader::new(stream)
+            .read_line(&mut reply)
+            .unwrap();
         serde_json::from_str(&reply).unwrap()
     })
     .await
@@ -70,7 +72,10 @@ async fn a_call_reaches_the_chats_browser_with_its_screenshot() {
     assert_eq!(reply["image"]["mime"], "image/png");
     let calls = bridge.calls.lock().unwrap().clone();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].0, "chat-1", "the grant's own chat, never one the helper names");
+    assert_eq!(
+        calls[0].0, "chat-1",
+        "the grant's own chat, never one the helper names"
+    );
     assert_eq!(calls[0].2["full_page"], true);
 }
 
@@ -97,10 +102,14 @@ async fn a_wrong_token_and_junk_are_refused() {
     assert_eq!(reply["error"], true);
     let reply = ask(
         endpoint,
-        serde_json::json!({ "token": token, "tool": "browser_snapshot", "chat_id": "other" }).to_string(),
+        serde_json::json!({ "token": token, "tool": "browser_snapshot", "chat_id": "other" })
+            .to_string(),
     )
     .await;
-    assert_eq!(reply["error"], true, "unknown fields (a chat of its own) are refused");
+    assert_eq!(
+        reply["error"], true,
+        "unknown fields (a chat of its own) are refused"
+    );
     assert!(bridge.calls.lock().unwrap().is_empty());
 }
 

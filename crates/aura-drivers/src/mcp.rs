@@ -7,7 +7,8 @@ pub fn managed_memory(server: &ResolvedMcpServer) -> bool {
 }
 /// auracode's browser server (the Browser universal plugin's tools).
 pub fn managed_browser(server: &ResolvedMcpServer) -> bool {
-    server.definition.id == "aura-browser" && server.definition.name.replace('-', "_") == "aura_browser"
+    server.definition.id == "aura-browser"
+        && server.definition.name.replace('-', "_") == "aura_browser"
 }
 /// One of auracode's own optional servers: left out, not failed, where a connection cannot load it.
 pub fn managed(server: &ResolvedMcpServer) -> bool {
