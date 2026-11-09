@@ -1385,6 +1385,9 @@ async function reopenScenario(
   });
 
   await checks.run("reopen-interrupted", async () => {
+    // Read the answer where the virtual list renders it: the history check leaves the list
+    // wherever its sweep ended, and an answer row not rendered reads as no answer at all.
+    const message = await revealTranscriptItem(PROMPTS.atQuit, "message");
     const interrupted = turnOf(PROMPTS.atQuit);
     if (interrupted === null) throw new StepError("the turn that ran at quit is missing");
     if (interrupted.stopReason !== "interrupted" || interrupted.recovered) {
@@ -1392,8 +1395,8 @@ async function reopenScenario(
         `the turn that ran at quit ended ${interrupted.stopReason}, recovered ${interrupted.recovered}`,
       );
     }
-    if (!reply(interrupted).startsWith("Working on it")) {
-      throw new StepError(`its answer reads "${reply(interrupted)}"`);
+    if (!text(message).startsWith("Working on it")) {
+      throw new StepError(`its answer reads "${text(message)}"`);
     }
     return "the quit flow ended the running turn interrupted when its cancel grace ran out, keeping its partial answer";
   });
