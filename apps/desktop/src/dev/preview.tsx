@@ -312,6 +312,36 @@ function synthetic(mode: string): AuraEvent[] {
       ev.messageDone("whole-message"),
       ev.turnEnded("long"),
     ];
+  // A long turn the first history page cuts inside its work (`cut_turn_id`, owner, 9 November
+  // 2026): what loaded still folds under "Worked for" above the answer, counting no steps until
+  // Load earlier brings the rest.
+  if (mode === "partial-work")
+    return [
+      ev.turnStarted("long"),
+      ev.user("long-user", "Review every file in the sidebar."),
+      ...Array.from({ length: 40 }, (_, index) =>
+        ev.toolCall(`long-read-${index}`, {
+          kind: "read",
+          title: `Read src/sidebar/part-${index}.tsx`,
+          status: "completed",
+          locations: [{ path: `src/sidebar/part-${index}.tsx`, line: null }],
+          content: [
+            { type: "text", text: `export const part${index} = ${index};`, truncated: null },
+          ],
+        }),
+      ),
+      ev.message("long-interim", "Now the styles."),
+      ev.messageDone("long-interim"),
+      ev.toolCall("long-edit", {
+        kind: "edit",
+        title: "Edit src/sidebar/sidebar.css",
+        status: "completed",
+        locations: [{ path: "src/sidebar/sidebar.css", line: 4 }],
+      }),
+      ev.message("long-answer", "Every sidebar file is reviewed, and the styles now match."),
+      ev.messageDone("long-answer"),
+      ev.turnEnded("long", "end_turn", { durationMs: 7_200_000 }),
+    ];
   if (mode === "large-turn")
     return [
       ev.turnStarted("large"),
@@ -786,6 +816,7 @@ function Preview() {
     "history-question",
     "partial-history",
     "partial-message",
+    "partial-work",
     "large-turn",
     "long-prompt",
     "long-output",
@@ -1001,9 +1032,11 @@ function Preview() {
         ? 42
         : mode === "partial-history"
           ? 82
-          : mode.startsWith("history")
-            ? 1250
-            : null;
+          : mode === "partial-work"
+            ? 22
+            : mode.startsWith("history")
+              ? 1250
+              : null;
     const initialHistory = before === null ? history : history.slice(before);
     let receive: ((batch: EventBatch) => void) | null = null;
     let currentStatus: SessionStatus = status;
