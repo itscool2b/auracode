@@ -1,7 +1,8 @@
 /**
  * Canvas fixture (`?preview=canvas`): a chat over an in-memory transport, with a scripted
  * microphone and a paste that records what the canvas attaches. No agent, files or microphone.
- * The check says phrases by setting `window.canvasSaid`; the microphone reports them as settled.
+ * The check says phrases by setting `window.canvasSaid`; the microphone reports them as settled,
+ * and `window.canvasForming` as the words still forming after them.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,6 +21,7 @@ import { withPreviewContext } from "./previewContext";
 declare global {
   interface Window {
     canvasSaid?: string[];
+    canvasForming?: string;
     canvasPastes?: { name: string | undefined; bytes: number; png: boolean }[];
     canvasDraft?: () => ComposerInput;
   }
@@ -36,6 +38,7 @@ function scriptedMicrophone(): DictationApi {
       emit = onEvent;
       settled = "";
       window.canvasSaid = [];
+      window.canvasForming = "";
       let tick = 0;
       onEvent({ state: "preparing" });
       timer = setInterval(() => {
@@ -46,7 +49,11 @@ function scriptedMicrophone(): DictationApi {
           seconds: Math.floor(tick * 0.08),
           level: 0.4,
           speaking: true,
-          text: { settled, stable: "", tentative: "" },
+          text: {
+            settled: settled && window.canvasForming ? `${settled} ` : settled,
+            stable: "",
+            tentative: window.canvasForming ?? "",
+          },
         });
       }, 80);
     },

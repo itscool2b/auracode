@@ -36,10 +36,19 @@
   --ui-pane-rim-top: var(--g-glass-highlight);
   --ui-pane-shadow: var(--g-shadow-layer), inset 0 1px 0 var(--g-glass-highlight);
 
-  /* Composer boundaries strengthen for keyboard focus. */
-  --ui-composer-shadow: var(--g-shadow-pop), inset 0 0 0 1px var(--g-glass-rim);
-  --ui-composer-shadow-focus: var(--g-shadow-pop), inset 0 0 0 1px var(--g-glass-rim-strong);
-  --ui-composer-shadow-keyboard: var(--g-shadow-pop), inset 0 0 0 2px var(--g-focus);
+  /*
+   * The composer is a glass capsule: the popover glass, a lit top edge and a sheen fading down
+   * from it, over the long soft shadow. Focus brightens its rim to the strong hairline and nothing
+   * else: no coloured ring (owner, 9 November 2026), since the caret already says where typing
+   * goes. Both appearances and every theme take it from their own glass tokens.
+   */
+  --ui-composer-fill: var(--g-glass-pop);
+  --ui-composer-sheen: linear-gradient(180deg, var(--g-glass-card) 0%, transparent 56%);
+  --ui-composer-shadow:
+    var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight), inset 0 0 0 1px var(--g-glass-rim);
+  --ui-composer-shadow-focus:
+    var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight),
+    inset 0 0 0 1px var(--g-glass-rim-strong);
 
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
