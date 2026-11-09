@@ -374,6 +374,14 @@ const OPENERS = {
     await page.getByRole("dialog", { name: "Recreate the deleted folder?" }).waitFor();
   },
   terminal: async (page) => {
+    // The panel remembers being open, so an earlier view in this page leaves it restored here
+    // without a shell, and the shortcut would close it: start from a first visit instead.
+    if (await page.locator(".terminal-panel-viewport").count()) {
+      await page.evaluate(() => localStorage.removeItem("auracode.terminals.preview"));
+      await page.reload();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(900);
+    }
     await page.keyboard.press("Control+Backquote");
     await terminalReady(page);
   },
