@@ -536,9 +536,7 @@ async fn navigate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         return Ok(ToolReply::text(whereabouts(browser, &tab)));
     }
     let input = required(args, "url")?;
-    let url = address::resolve(input).ok_or_else(|| {
-        BrowserError::Invalid(format!("{input} is not an address the browser can open."))
-    })?;
+    let url = address::resolve_for_agent(input).map_err(BrowserError::Invalid)?;
     let new_tab = args["new_tab"].as_bool().unwrap_or(false);
     let current = active(browser, chat_id);
     let tab = match current {
@@ -628,7 +626,9 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
                         "awaitPromise": true,
                         "returnByValue": true,
                         "replMode": true,
-                        "userGesture": true,
+                        // Never a user gesture: one would let page scripts read a password the
+                        // browser filled in.
+                        "userGesture": false,
                         "timeout": 15000,
                     }),
                 )
@@ -680,6 +680,12 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         Value::String(text) => text.clone(),
         other => serde_json::to_string_pretty(other).unwrap_or_default(),
     };
+    // Agents never see a password the page holds, however a script reaches for it.
+    let secrets = browser.call(&tab, "api.secrets()").await.unwrap_or(Value::Null);
+    text = redact(
+        text,
+        secrets.as_array().into_iter().flatten().filter_map(Value::as_str),
+    );
     if text.len() > 40_000 {
         let mut end = 40_000;
         while !text.is_char_boundary(end) {
@@ -689,6 +695,21 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         text.push_str("\n… (cut at 40 000 characters)");
     }
     Ok(ToolReply::text(if text.is_empty() { "undefined".into() } else { text }))
+}
+
+/// `text` with every password value of the page (`secrets`) taken out, and a line saying so.
+fn redact<'a>(mut text: String, secrets: impl Iterator<Item = &'a str>) -> String {
+    let mut hidden = false;
+    for secret in secrets {
+        if secret.chars().count() >= 4 && text.contains(secret) {
+            text = text.replace(secret, "[a password, hidden from agents]");
+            hidden = true;
+        }
+    }
+    if hidden {
+        text.push_str("\n(Password values are hidden from agents.)");
+    }
+    text
 }
 
 async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<ToolReply, BrowserError> {
@@ -725,9 +746,7 @@ async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<Too
         "list" => Ok(ToolReply::text(list(browser))),
         "new" => {
             let url = match str_arg(args, "url") {
-                Some(input) => Some(address::resolve(input).ok_or_else(|| {
-                    BrowserError::Invalid(format!("{input} is not an address the browser can open."))
-                })?),
+                Some(input) => Some(address::resolve_for_agent(input).map_err(BrowserError::Invalid)?),
                 None => None,
             };
             let tab = browser.open_tab(chat_id, url.clone(), true)?;
@@ -773,6 +792,18 @@ mod tests {
             "Pressing Enter"
         );
         assert_eq!(label("unknown", &json!({})), "Using the browser");
+    }
+
+    #[test]
+    fn page_passwords_never_reach_an_agent() {
+        let text = redact(
+            r#"{"user":"ana","pw":"hunter22"}"#.into(),
+            ["hunter22", "ab"].into_iter(),
+        );
+        assert!(!text.contains("hunter22"));
+        assert!(text.contains("hidden from agents"));
+        // Too short to tell from ordinary text, and absent ones change nothing.
+        assert_eq!(redact("ab cd".into(), ["ab", "zzzzzz"].into_iter()), "ab cd");
     }
 
     #[test]

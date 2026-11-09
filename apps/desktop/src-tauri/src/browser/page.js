@@ -1042,6 +1042,24 @@
     annotate: (on, options) => (on ? startAnnotate(options) : stopAnnotate()),
     annotating: () => annotate !== null,
     pickAt,
+    // The page's own password values, so auracode can keep them out of what agents read.
+    secrets: () => {
+      const values = [];
+      const collect = (root) => {
+        for (const input of root.querySelectorAll("input[type=password]")) {
+          if (input.value) values.push(input.value);
+        }
+      };
+      collect(document);
+      for (const frame of document.querySelectorAll("iframe")) {
+        try {
+          if (frame.contentDocument) collect(frame.contentDocument);
+        } catch {
+          // Another site's frame: not this page's to read.
+        }
+      }
+      return values;
+    },
   });
   Object.defineProperty(window, "__auraBrowser", {
     value: api,

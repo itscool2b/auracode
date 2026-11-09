@@ -573,24 +573,32 @@ pub(super) fn place(
     at: Option<BrowserRect>,
     visible: bool,
 ) -> Result<(), BrowserError> {
-    if let Some(at) = &at {
-        HOST.with_borrow_mut(|host| host.size = Some((at.width, at.height)));
-    }
     let previous = HOST.with_borrow(|host| host.placed.as_ref().map(|(tab, _, _)| tab.clone()));
-    if let Some(previous) = previous
-        && Some(previous.as_str()) != tab_id
-    {
-        hide_or_park(browser, &previous);
-    }
     let Some(tab_id) = tab_id else {
+        // Nothing over the panel at all.
         HOST.with_borrow_mut(|host| host.placed = None);
+        if let Some(previous) = previous {
+            hide_or_park(browser, &previous);
+        }
         return Ok(());
     };
     let Some(at) = at else {
-        HOST.with_borrow_mut(|host| host.placed = None);
+        // Hiding names its own page: a chat switching away never hides the chat switched to,
+        // whichever of the two calls arrives first.
+        HOST.with_borrow_mut(|host| {
+            if host.placed.as_ref().is_some_and(|(tab, _, _)| tab == tab_id) {
+                host.placed = None;
+            }
+        });
         hide_or_park(browser, tab_id);
         return Ok(());
     };
+    HOST.with_borrow_mut(|host| host.size = Some((at.width, at.height)));
+    if let Some(previous) = previous
+        && previous != tab_id
+    {
+        hide_or_park(browser, &previous);
+    }
     HOST.with_borrow_mut(|host| host.placed = Some((tab_id.to_owned(), at, visible)));
     let has_page = lock(&browser.inner)
         .tabs

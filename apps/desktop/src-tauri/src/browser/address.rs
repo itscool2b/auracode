@@ -123,9 +123,10 @@ fn file_url(text: &str) -> Option<String> {
         && bytes[0].is_ascii_alphabetic()
         && bytes[1] == b':'
         && (bytes[2] == b'\\' || bytes[2] == b'/');
-    let unc = text.starts_with("\\\\");
     if cfg!(windows) {
-        if !windows_drive && !unc {
+        // Never a network share (\\server\share): opening one sends the person's Windows
+        // credentials to that server.
+        if !windows_drive {
             return None;
         }
     } else if !text.starts_with('/') || text.starts_with("//") {
@@ -149,7 +150,16 @@ pub fn policy(address: &str) -> Policy {
                 Policy::Open
             }
         }
-        "file" | "data" | "blob" => Policy::Open,
+        // A file on this computer only: `file://server/share` reaches out over the network with
+        // the person's Windows credentials.
+        "file" => {
+            if url.host_str().is_none_or(|host| host.is_empty() || host == "localhost") {
+                Policy::Open
+            } else {
+                Policy::Refuse
+            }
+        }
+        "data" | "blob" => Policy::Open,
         "about" => {
             if matches!(url.as_str(), "about:blank" | "about:srcdoc") {
                 Policy::Open
@@ -172,6 +182,19 @@ pub fn policy(address: &str) -> Policy {
             Policy::Outside
         }
         _ => Policy::Refuse,
+    }
+}
+
+/// What an agent may open: pages of the web (and the blank page), never a local file or anything
+/// else a person could open themselves. An agent reads and edits files with its own tools, under
+/// its own access; the browser is no way around that.
+pub fn resolve_for_agent(input: &str) -> Result<String, String> {
+    let url = resolve(input).ok_or_else(|| format!("{input} is not an address the browser can open."))?;
+    let scheme = url.split(':').next().unwrap_or("");
+    if matches!(scheme, "http" | "https") || url == "about:blank" {
+        Ok(url)
+    } else {
+        Err("Agents open web pages only (http and https). To look at a local page, serve its folder (for example with npx serve) and open its localhost address, or ask the person to open the file in the browser.".into())
     }
 }
 
@@ -294,6 +317,38 @@ mod tests {
             resolve("/home/me/site/index.html").as_deref(),
             Some("file:///home/me/site/index.html")
         );
+    }
+
+    #[test]
+    fn network_shares_never_open() {
+        for typed in [r"\\server\share\page.html", "//server/share", "file://server/share/x.html"] {
+            let resolved = resolve(typed);
+            assert!(
+                resolved.as_deref().is_none_or(|address| !address.starts_with("file:")),
+                "{typed} -> {resolved:?}"
+            );
+        }
+        assert_eq!(policy("file://server/share/x.html"), Policy::Refuse);
+        assert_eq!(policy("file://localhost/C:/a.html"), Policy::Open);
+    }
+
+    #[test]
+    fn agents_open_the_web_only() {
+        assert_eq!(
+            resolve_for_agent("localhost:5173").as_deref(),
+            Ok("http://localhost:5173/")
+        );
+        assert!(resolve_for_agent("https://example.com").is_ok());
+        assert!(resolve_for_agent("rust borrow checker").is_ok(), "a search is a web page");
+        assert!(resolve_for_agent("about:blank").is_ok());
+        for local in ["file:///C:/Users/me/.ssh/id_rsa", "C:/Users/me/secret.html", "/etc/passwd"] {
+            let refused = resolve_for_agent(local);
+            assert!(
+                refused.is_err() || refused.as_deref().is_ok_and(|a| a.starts_with(SEARCH)),
+                "{local} -> {refused:?}"
+            );
+        }
+        assert!(resolve_for_agent("file:///C:/x.html").is_err());
     }
 
     #[test]

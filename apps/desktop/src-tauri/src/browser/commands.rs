@@ -195,36 +195,29 @@ pub async fn browser_open_outside(app: tauri::AppHandle, url: String) -> Result<
         .map_err(|error| BrowserError::Unavailable(format!("The link could not open: {error}")).into())
 }
 
-/// Link kinds that have been used to run programs or commands on Windows without a prompt, never
-/// opened however a page asks.
-const DANGEROUS: &[&str] = &[
-    "ms-msdt",
-    "search-ms",
-    "search",
-    "ms-officecmd",
-    "ms-appinstaller",
-    "ms-cxh",
-    "ms-cxh-full",
-    "ms-word",
-    "ms-excel",
-    "ms-powerpoint",
-    "ms-access",
-    "ms-visio",
-    "ms-project",
-    "ms-publisher",
-    "ms-infopath",
-    "ms-spd",
-    "ms-settings",
-    "shell",
-    "hcp",
-    "its",
-    "mk",
-    "res",
-    "file",
-    "javascript",
-    "vbscript",
-    "data",
-    "jar",
+/// The other programs' links auracode hands to the system, after the person chose to: mail and
+/// calls, and the editors and team apps people work with. Anything else (Windows has handlers
+/// that run commands without a prompt) stays a link the person can copy.
+const OUTSIDE: &[&str] = &[
+    "mailto",
+    "tel",
+    "sms",
+    "vscode",
+    "vscode-insiders",
+    "cursor",
+    "windsurf",
+    "zed",
+    "jetbrains",
+    "slack",
+    "discord",
+    "msteams",
+    "zoommtg",
+    "zoomus",
+    "figma",
+    "linear",
+    "notion",
+    "obsidian",
+    "raycast",
 ];
 
 fn outside_allowed(url: &str) -> bool {
@@ -237,7 +230,7 @@ fn outside_allowed(url: &str) -> bool {
     let scheme = parsed.scheme();
     match address::policy(url) {
         address::Policy::Open => matches!(scheme, "http" | "https"),
-        address::Policy::Outside => !DANGEROUS.contains(&scheme),
+        address::Policy::Outside => OUTSIDE.contains(&scheme),
         address::Policy::Refuse => false,
     }
 }
@@ -259,6 +252,14 @@ mod tests {
             "ms-msdt:/id PCWDiagnostic",
             "search-ms:query=x",
             "ms-officecmd:{}",
+            "ms-its:x",
+            "mhtml:x",
+            "ms-rd:x",
+            "onenote:x",
+            "ldap://x",
+            "microsoft-edge:https://x",
+            "jnlp://x",
+            "an-app-nobody-reviewed://x",
             "file:///C:/Windows/System32/calc.exe",
             "javascript:alert(1)",
             "data:text/html,x",
