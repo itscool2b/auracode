@@ -399,9 +399,12 @@ async function reviewComments(page, theme) {
         `${document.activeElement?.tagName}:${document.activeElement?.getAttribute("aria-label")}`,
     );
   const lines = page.getByRole("region", { name: "Line changes for src/components/Sidebar.tsx" });
-  // One comment button takes Tab, the first changed line's; the arrows move between lines.
+  // One comment button takes Tab, the first changed line's; the arrows move between lines. WebKit
+  // on macOS tabs between text fields only, as Safari does by default; Option+Tab reaches buttons.
   await lines.focus();
-  await page.keyboard.press("Tab");
+  const webkitOnMac =
+    process.platform === "darwin" && page.context().browser()?.browserType().name() === "webkit";
+  await page.keyboard.press(webkitOnMac ? "Alt+Tab" : "Tab");
   assert.equal(await focused(), "BUTTON:Comment on removed line 2");
   for (const key of ["ArrowDown", "ArrowDown", "ArrowDown"]) await page.keyboard.press(key);
   assert.equal(await focused(), "BUTTON:Comment on line 4");
