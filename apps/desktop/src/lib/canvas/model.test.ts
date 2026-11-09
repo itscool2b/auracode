@@ -21,6 +21,7 @@ import {
   strokePath,
   summary,
   within,
+  withLabels,
 } from "./model";
 
 const box = (id: string, x: number, y: number, at = 0): Element => ({
@@ -111,6 +112,16 @@ describe("a canvas drawing", () => {
     const kept = removed.elements.find((element) => element.id === "ab");
     expect(removed.elements).toHaveLength(2);
     expect(kept?.kind === "arrow" && kept.end).toBeNull();
+  });
+
+  it("takes a shape's label along with it", () => {
+    const flow = drawing(
+      box("a", 0, 0),
+      label("la", 10, 15, "API"),
+      label("free", 300, 300, "note"),
+    );
+    expect([...withLabels(flow, new Set(["a"]))].sort()).toEqual(["a", "la"]);
+    expect([...withLabels(flow, new Set(["free"]))]).toEqual(["free"]);
   });
 
   it("hit tests the topmost element, shapes for arrows, and marquee areas", () => {

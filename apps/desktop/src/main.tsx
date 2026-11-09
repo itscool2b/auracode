@@ -105,6 +105,10 @@ void appearanceReady.then(() => {
         void import("./dev/agentUpdatesPreview").then(({ mountAgentUpdatesPreview }) =>
           mountAgentUpdatesPreview(container),
         );
+      else if (mode === "canvas")
+        void import("./dev/canvasPreview").then(({ mountCanvasPreview }) =>
+          mountCanvasPreview(container),
+        );
       else if (mode === "terminal-chat")
         void import("./dev/terminalChatPreview").then(({ mountTerminalChatPreview }) =>
           mountTerminalChatPreview(container),

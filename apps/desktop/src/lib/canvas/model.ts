@@ -273,6 +273,22 @@ function shifted(element: Element, dx: number, dy: number): Element {
   }
 }
 
+/** `ids` and the labels inside the shapes among them: a label moves and goes with its shape. */
+export function withLabels(drawing: Drawing, ids: ReadonlySet<string>): Set<string> {
+  const result = new Set(ids);
+  const shapes = drawing.elements.filter(
+    (element) => ids.has(element.id) && (element.kind === "rect" || element.kind === "ellipse"),
+  );
+  if (!shapes.length) return result;
+  for (const element of drawing.elements) {
+    if (element.kind !== "text" || result.has(element.id)) continue;
+    const box = textBox(element);
+    const centre = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+    if (shapes.some((shape) => inside(centre, bounds(shape)))) result.add(element.id);
+  }
+  return result;
+}
+
 /** Moves the elements `ids`; an arrow attached to a moved shape takes that end along. */
 export function moveElements(
   drawing: Drawing,

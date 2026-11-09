@@ -67,6 +67,7 @@ import {
   WIDTHS,
   type Width,
   within,
+  withLabels,
 } from "../../lib/canvas/model";
 import { type DictationApi, DictationController } from "../../lib/dictation";
 import { errorMessage } from "../../lib/errors";
@@ -110,7 +111,7 @@ interface View {
 /** What a pointer is doing between down and up. */
 type Gesture =
   | { kind: "draw"; element: Element; pressures: number[] }
-  | { kind: "move"; from: Point; moved: Point; before: Drawing }
+  | { kind: "move"; from: Point; moved: Point; before: Drawing; ids: ReadonlySet<string> }
   | { kind: "marquee"; from: Point; to: Point }
   | { kind: "erase"; before: Drawing; removed: Set<string> }
   | { kind: "pan"; from: { x: number; y: number }; view: View };
@@ -260,7 +261,13 @@ export function CanvasPane({
   const [selection, setSelection] = useState<ReadonlySet<string>>(() => new Set());
   const [gesture, setGesture] = useState<Gesture | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
-  const [editing, setEditing] = useState<TextEdit | null>(null);
+  const [editing, setEditingState] = useState<TextEdit | null>(null);
+  // The edit open now: Enter and the blur that follows it commit it once.
+  const editingRef = useRef<TextEdit | null>(null);
+  const setEditing = useCallback((value: TextEdit | null) => {
+    editingRef.current = value;
+    setEditingState(value);
+  }, []);
   const [note, setNote] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [space, setSpace] = useState(false);
@@ -457,8 +464,8 @@ export function CanvasPane({
 
   const commitText = useCallback(
     (edit: TextEdit | null) => {
+      if (!edit || editingRef.current !== edit) return;
       setEditing(null);
-      if (!edit) return;
       const text = edit.value.replace(/\s+$/, "");
       const current = drawingRef.current;
       if (edit.id) {
@@ -482,7 +489,7 @@ export function CanvasPane({
         }),
       );
     },
-    [commit],
+    [commit, setEditing],
   );
 
   useLayoutEffect(() => {
@@ -495,6 +502,9 @@ export function CanvasPane({
       return;
     }
     if (event.button !== 0 && event.button !== 1) return;
+    // The canvas places focus itself: the mousedown after this would move it to the frame, away
+    // from a text box this press opens.
+    event.preventDefault();
     host.current?.focus({ preventScroll: true });
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = toPoint(event.clientX, event.clientY);
@@ -589,6 +599,7 @@ export function CanvasPane({
           from: point,
           moved: { x: 0, y: 0 },
           before: drawingRef.current,
+          ids: withLabels(drawingRef.current, chosen),
         });
         return;
       }
@@ -653,7 +664,7 @@ export function CanvasPane({
       case "move": {
         const dx = point.x - current.from.x;
         const dy = point.y - current.from.y;
-        setDrawing(moveElements(current.before, selection, dx, dy));
+        setDrawing(moveElements(current.before, current.ids, dx, dy));
         gestureRef.current = { ...current, moved: { x: dx, y: dy } };
         return;
       }
@@ -705,7 +716,7 @@ export function CanvasPane({
         history.push(current.before);
         drawingRef.current = moveElements(
           current.before,
-          selection,
+          current.ids,
           current.moved.x,
           current.moved.y,
         );
@@ -736,7 +747,7 @@ export function CanvasPane({
 
   const removeSelection = useCallback(() => {
     if (!selection.size) return;
-    commit(removeElements(drawingRef.current, selection));
+    commit(removeElements(drawingRef.current, withLabels(drawingRef.current, selection)));
     setSelection(new Set());
   }, [commit, selection]);
 
@@ -824,7 +835,8 @@ export function CanvasPane({
     if (nudge && selection.size && target === host.current) {
       event.preventDefault();
       const step = event.shiftKey ? 10 : 1;
-      commit(moveElements(drawingRef.current, selection, nudge[0] * step, nudge[1] * step));
+      const ids = withLabels(drawingRef.current, selection);
+      commit(moveElements(drawingRef.current, ids, nudge[0] * step, nudge[1] * step));
       return;
     }
     if (target.closest(".canvas-toolbar")) return;

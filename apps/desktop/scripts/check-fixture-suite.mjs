@@ -49,6 +49,7 @@ try {
     "check-composer-follow.mjs",
     "check-agent-updates.mjs",
     "check-terminal-chat.mjs",
+    "check-canvas.mjs",
   ]) {
     await new Promise((complete, reject) => {
       const check = spawn(process.execPath, [resolve(app, "scripts", script)], {
