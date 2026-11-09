@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-09
+
+- Canvas, beside Attach in the composer, opens a drawing pane above the message box: sketch flows and ideas with pens, shapes, arrows that follow their boxes and text, press Talk to explain it as you draw (each sentence is numbered on the shapes you drew while saying it), and Add to message attaches the drawing as Canvas.png with an outline of it and what you said. ([#116](https://github.com/itscool2b/auracode/pull/116))
+
 ## 2026-11-07
 
 - auracode opens on an American military aircraft in ASCII made from a real photograph, one of fifteen and a different one each start, and New chat opens only when you ask for it; notices wait behind a bell beside Settings instead of floating over the page, with only saving problems and a fresh memory edit's Undo still shown over it; and Run in terminal after a failed agent update now opens the terminal and runs the update. ([#114](https://github.com/itscool2b/auracode/pull/114))
