@@ -545,8 +545,12 @@ fn js(value: &Option<&str>) -> String {
     }
 }
 
+/// Where an element is to act on: its centre in the viewport (real input events use it on
+/// Windows; elsewhere the page script acts on the element itself), its name and what is over it.
 struct Place {
+    #[cfg_attr(not(windows), allow(dead_code))]
     x: f64,
+    #[cfg_attr(not(windows), allow(dead_code))]
     y: f64,
     name: String,
     covered: Option<String>,

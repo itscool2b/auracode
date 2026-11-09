@@ -372,7 +372,8 @@ pub fn remembered(address: &str) -> bool {
 }
 
 /// Whether `address` is a page of this computer (`localhost`, `127.0.0.1`, `[::1]`,
-/// `*.localhost`): where a dev server runs.
+/// `*.localhost`): where a dev server runs. Windows names a failed load from it.
+#[cfg(any(windows, test))]
 pub fn on_this_computer(address: &str) -> bool {
     let Ok(url) = Url::parse(address) else {
         return false;
