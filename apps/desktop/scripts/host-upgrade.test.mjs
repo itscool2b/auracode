@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, test } from "node:test";
 import {
   backupsSince,
@@ -141,32 +141,38 @@ function recorder() {
   return log;
 }
 
+// Absolute on the system running the tests (C:\Users\a\AppData\Local on Windows): the script
+// resolves paths by that system's rules, and CI runs these tests on macOS.
+const LOCAL = resolve("/", "Users", "a", "AppData", "Local");
+
 test("the folders come from LOCALAPPDATA unless overridden", () => {
-  const paths = folders({ LOCALAPPDATA: "C:\\Users\\a\\AppData\\Local" });
-  assert.equal(paths.installDir, join("C:\\Users\\a\\AppData\\Local", "auracode"));
-  assert.equal(paths.dataDir, join("C:\\Users\\a\\AppData\\Local", "si.auracode.desktop"));
-  assert.equal(paths.stateDir, join("C:\\Users\\a\\AppData\\Local", "auracode-upgrades"));
+  const paths = folders({ LOCALAPPDATA: LOCAL });
+  assert.equal(paths.installDir, join(LOCAL, "auracode"));
+  assert.equal(paths.dataDir, join(LOCAL, "si.auracode.desktop"));
+  assert.equal(paths.stateDir, join(LOCAL, "auracode-upgrades"));
   // AURACODE_DATA_DIR belongs to development launches, never to the installed app here.
   assert.equal(
-    folders({ LOCALAPPDATA: "C:\\L", AURACODE_DATA_DIR: "C:\\scratch" }).dataDir,
-    join("C:\\L", "si.auracode.desktop"),
+    folders({ LOCALAPPDATA: LOCAL, AURACODE_DATA_DIR: resolve("/", "scratch") }).dataDir,
+    join(LOCAL, "si.auracode.desktop"),
   );
   assert.throws(() => folders({}), /LOCALAPPDATA/u);
 });
 
 test("only the installed app's processes count, and helpers apart", () => {
-  const install = "C:\\Users\\a\\AppData\\Local\\auracode";
+  const install = join(LOCAL, "auracode");
+  const debug = resolve("/", "src", "target", "debug", "auracode.exe");
   const { app, helpers } = hostProcesses(
     [
-      { ProcessId: 1, ExecutablePath: `${install}\\auracode.exe`, CommandLine: "auracode.exe" },
+      { ProcessId: 1, ExecutablePath: join(install, "auracode.exe"), CommandLine: "auracode.exe" },
       {
         ProcessId: 2,
-        ExecutablePath: `${install.toUpperCase()}\\AURACODE.EXE`,
+        // Windows paths ignore case.
+        ExecutablePath: join(install.toUpperCase(), "AURACODE.EXE"),
         CommandLine: "auracode.exe --aura-memory-helper --mcp",
       },
       // A development build is never the host.
-      { ProcessId: 3, ExecutablePath: "C:\\src\\target\\debug\\auracode.exe", CommandLine: "" },
-      { ProcessId: 4, ExecutablePath: `${install}-old\\auracode.exe`, CommandLine: "" },
+      { ProcessId: 3, ExecutablePath: debug, CommandLine: "" },
+      { ProcessId: 4, ExecutablePath: join(`${install}-old`, "auracode.exe"), CommandLine: "" },
       { ProcessId: 5, ExecutablePath: null, CommandLine: null },
     ],
     install,

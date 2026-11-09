@@ -202,7 +202,10 @@ async function workingLifecycle(page, engine, theme) {
     0,
   );
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "no-preference" });
-  const motionModule = `/@fs/${resolve(app, "../../packages/ui/src/motion.ts").replaceAll("\\", "/")}`;
+  // Vite serves the module at /@fs/ followed by its path without a leading slash, so a POSIX path
+  // must not add a second one: "/@fs//Users/..." would load a separate copy the app never reads.
+  const motionPath = resolve(app, "../../packages/ui/src/motion.ts").replaceAll("\\", "/");
+  const motionModule = `/@fs/${motionPath.replace(/^\/+/, "")}`;
   for (const preference of ["reduced", "off"]) {
     await page.evaluate(
       async ({ path, preference }) => {
