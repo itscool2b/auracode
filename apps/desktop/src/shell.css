@@ -153,7 +153,68 @@
     left: -4px;
     width: 8px;
   }
+
+  /*
+   * The browser beside the chat (docs/superpowers/plans/2026-11-09-browser.md) takes the same two
+   * panes, at its share of the width (dragged in the gutter); in Full view it covers the chat's
+   * work area instead (components/browser/browser.css).
+   */
+  .chat-main:has(.browser-panel:not([data-full])) {
+    overflow: visible;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .chat-main:has(.browser-panel:not([data-full]))::before {
+    content: none;
+  }
+
+  .chat-main:has(.browser-panel:not([data-full])) > .chat-view {
+    display: grid;
+    grid-template-columns:
+      minmax(360px, 1fr)
+      minmax(360px, calc((100% - var(--ui-pane-inset)) * var(--browser-share, 0.5)));
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: var(--ui-pane-inset);
+  }
+
+  .chat-main:has(.browser-panel:not([data-full])) .chat-header {
+    grid-column: 1;
+    grid-row: 1;
+    border-radius: var(--ui-pane-radius) var(--ui-pane-radius) 0 0;
+    background-color: var(--ui-pane-fill);
+    box-shadow:
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 1px var(--ui-pane-rim-top);
+  }
+
+  .chat-main:has(.browser-panel:not([data-full])) .chat-work-area {
+    display: contents;
+  }
+
+  .chat-main:has(.browser-panel:not([data-full])) .chat-conversation {
+    grid-column: 1;
+    grid-row: 2;
+    overflow: hidden;
+    border-radius: 0 0 var(--ui-pane-radius) var(--ui-pane-radius);
+    background-color: var(--ui-pane-fill);
+    box-shadow:
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 -1px var(--ui-pane-rim),
+      var(--g-shadow-layer);
+  }
+
+  .chat-main:has(.browser-panel:not([data-full])) .browser-panel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    border-radius: var(--ui-pane-radius);
+    background-color: var(--ui-pane-fill);
+    box-shadow: var(--ui-pane-shadow);
+  }
 }
+
 
 /*
  * Pages that stand alone, Agents, the Plugin library and the Dashboard, sit in the same inset glass

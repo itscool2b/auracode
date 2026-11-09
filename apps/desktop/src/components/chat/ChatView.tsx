@@ -1,5 +1,13 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type {
   AgentEntry,
   ChatSummary,
@@ -10,6 +18,7 @@ import type {
   WorktreeRun,
 } from "../../bindings";
 import { takesAccounts } from "../../lib/agentAccounts";
+import { browserPanels } from "../../lib/browser";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { FileLinkContext, type FileLinks, FileResolver } from "../../lib/chat/fileLinks";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
@@ -21,10 +30,12 @@ import type { Transport } from "../../lib/chat/transport";
 import { chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
+import { useMediaQuery } from "../../lib/hooks";
 import { inTauri } from "../../lib/ipc";
 import { editorName } from "../../lib/projectTools";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { runLabel } from "../../lib/worktreeRun";
+import { type AnnotationTarget, BrowserPanel } from "../browser/BrowserPanel";
 import { AccountPicker } from "./AccountPicker";
 import { BackgroundTasks } from "./BackgroundTasks";
 import { CanvasBridge, CanvasPane } from "./CanvasPane";
@@ -57,6 +68,7 @@ import { isPanelToggle } from "./terminalRuntime";
 import { UsageLimitCard } from "./UsageLimitCard";
 
 const noSubscribe = () => () => {};
+const noVersion = () => 0;
 /** Back to the conversation after the terminal panel hides. */
 /** Where typing goes in the open chat: its composer, or a terminal chat's terminal. */
 const focusComposer = () =>
@@ -115,6 +127,27 @@ export function ChatView({
     () => false,
   );
   const [changesOpen, setChangesOpen] = useState(false);
+  // The browser beside the chat (the Browser plugin): open or not, its width and Full view, per
+  // chat on this device. It shares the side with Changes and the task panel.
+  const browserStore = transport.browser ?? null;
+  useSyncExternalStore(browserPanels.subscribe, browserPanels.getVersion, browserPanels.getVersion);
+  useSyncExternalStore(
+    browserStore?.subscribe ?? noSubscribe,
+    browserStore?.getVersion ?? noVersion,
+    browserStore?.getVersion ?? noVersion,
+  );
+  const placement = browserPanels.of(chatId);
+  const wide = useMediaQuery("(min-width: 1200px)");
+  const setBrowserOpen = useCallback(
+    (open: boolean) => {
+      browserPanels.set(chatId, { open });
+      if (open) {
+        setChangesOpen(false);
+        setOpenTaskId(null);
+      }
+    },
+    [chatId],
+  );
   // The canvas takes the transcript's place above the composer; the drawing stays with the chat.
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [canvasBridge] = useState(() => new CanvasBridge());
@@ -195,6 +228,8 @@ export function ChatView({
     if (storage !== null) store.storageChanged(storage);
   }, [store, storage]);
 
+  // The browser's toggle as it is this render, for the shortcut (null while it is not offered).
+  const browserToggle = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -208,6 +243,19 @@ export function ChatView({
       ) {
         event.preventDefault();
         setFindRequest((count) => count + 1);
+        return;
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "b" &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        if (!browserToggle.current) return;
+        event.preventDefault();
+        browserToggle.current();
         return;
       }
       if (
@@ -243,12 +291,18 @@ export function ChatView({
   }, [store, active, terminals, chatId]);
 
   useEffect(() => {
-    if (changesOpen) setOpenTaskId(null);
-  }, [changesOpen]);
-  const openTask = useCallback((taskId: string) => {
-    setChangesOpen(false);
-    setOpenTaskId(taskId);
-  }, []);
+    if (!changesOpen) return;
+    setOpenTaskId(null);
+    if (browserPanels.of(chatId).open) browserPanels.set(chatId, { open: false });
+  }, [changesOpen, chatId]);
+  const openTask = useCallback(
+    (taskId: string) => {
+      setChangesOpen(false);
+      if (browserPanels.of(chatId).open) browserPanels.set(chatId, { open: false });
+      setOpenTaskId(taskId);
+    },
+    [chatId],
+  );
   const tasks = state.transcript.tasks;
   // The transcript's Open actions change only when a call's task or its title does, so a task's
   // progress does not re-render every tool row.
@@ -291,6 +345,24 @@ export function ChatView({
     chatInterfaces.getVersion,
   );
   const interfaceView = state.chat ? chatInterfaces.of(chatId, state.chat.agent_id) : "chat";
+  // Chat view only (owner, 9 November 2026: not in Terminal), while the plugin is on.
+  const browserUsable =
+    browserStore?.usable() === true && interfaceView === "chat" && state.chat !== null;
+  const browserOpen = browserUsable && placement.open;
+  browserToggle.current = browserUsable
+    ? () => setBrowserOpen(!browserPanels.of(chatId).open)
+    : null;
+  // An agent that opens a page shows it, unless Changes or a task holds the side.
+  const sideTaken = useRef(false);
+  sideTaken.current = changesOpen || openTaskId !== null;
+  useEffect(() => {
+    if (!browserStore || !browserUsable) return;
+    return browserStore.onEvent((event) => {
+      if (event.type !== "agent" || event.chat_id !== chatId || !event.opened) return;
+      if (!active || sideTaken.current || browserPanels.of(chatId).open) return;
+      setBrowserOpen(true);
+    });
+  }, [browserStore, browserUsable, chatId, active, setBrowserOpen]);
   // File names in the chat open in the person's editor; without one installed they stay text.
   const files = transport.files;
   const [opensIn, setOpensIn] = useState<string | null>(null);
@@ -672,6 +744,48 @@ export function ChatView({
 
   const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
   const autonomy = state.session?.autonomy ?? "full_auto";
+  // Annotate's note picks the chat's agent, model and thinking too: the same picker, compact.
+  const compactControls = useMemo(
+    () => (
+      <Pickers
+        compact
+        agents={agents}
+        onChooseAgent={
+          transport.conversation
+            ? (agent_id) => setContinuation({ type: "switch_agent", agent_id })
+            : undefined
+        }
+        agent={agent}
+        lists={state.lists}
+        autonomy={autonomy}
+        status={status}
+        error={state.listsError}
+        optionError={state.optionError}
+        optionsSaving={state.optionsSaving}
+        autonomySaving={state.autonomySaving}
+        controlSaving={state.controlSaving}
+        transitionBlocked={state.queue.length > 0 || pendingRequests.length > 0}
+        onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
+        onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+      />
+    ),
+    [
+      agents,
+      transport.conversation,
+      agent,
+      state.lists,
+      autonomy,
+      status,
+      state.listsError,
+      state.optionError,
+      state.optionsSaving,
+      state.autonomySaving,
+      state.controlSaving,
+      state.queue.length,
+      pendingRequests.length,
+      store,
+    ],
+  );
   // The pickers hold every agent, model and effort choice. Streamed text changes none of them, so
   // the same element is reused until one of their inputs changes, and React skips the subtree.
   const controls = useMemo(
@@ -779,6 +893,51 @@ export function ChatView({
   // A quiet turn's line offers Send now itself; the queue's head then just says why it waits.
   const stallSendsNow = state.stillWorkingMinutes !== null && nextQueued !== null && canInterrupt;
   const queueWait = stallSendsNow && wait?.action === "send_now" ? { ...wait, action: null } : wait;
+  const annotationTarget: AnnotationTarget | undefined = transport.composer
+    ? {
+        controls: compactControls,
+        images: state.lists?.capabilities?.images ?? null,
+        // As the composer sends: now, or queued after the running turn.
+        send: async (text, image) => {
+          if (pendingRequests.length > 0)
+            return `Answer ${agentName}'s ${pendingRequests.length === 1 ? "request" : "requests"} first.`;
+          if (!handoffLoaded || canContinueHere || handoffError !== null || state.steeringPending)
+            return "Sending waits until the chat can take a message.";
+          let attachments: string[] = [];
+          if (image && transport.composer) {
+            try {
+              const item = await transport.composer.paste(
+                chatId,
+                Array.from(image),
+                "Annotation.png",
+              );
+              attachments = [item.id];
+            } catch (error) {
+              return errorMessage(error);
+            }
+          }
+          const sent = await store.send(
+            text,
+            attachments.length ? { attachments, mentions: [] } : undefined,
+          );
+          return sent ? null : (store.getSnapshot().sendError ?? "The message could not be sent.");
+        },
+        // Into the message box, for one message about several notes.
+        add: async (text, image) => {
+          const composer = canvasBridge.composer;
+          if (!composer) return "The message box is not ready yet. Try again in a moment.";
+          if (image && composer.full())
+            return "The message already has eight attachments. Remove one, or send this note on its own.";
+          if (image) {
+            const added = await composer.addImage(image, null, "Annotation.png");
+            if (!added) return "The screenshot could not be attached.";
+          }
+          composer.putText(text, null);
+          composer.announce();
+          return null;
+        },
+      }
+    : undefined;
   return (
     <ChatImagesProvider chatId={chatId} api={transport.images}>
       <FileLinkContext.Provider value={fileLinks}>
@@ -787,6 +946,11 @@ export function ChatView({
           data-testid="chat-view"
           data-test-chat-id={chatId}
           data-test-phase={state.phase}
+          style={
+            browserOpen
+              ? ({ "--browser-share": String(placement.share) } as CSSProperties)
+              : undefined
+          }
         >
           <Header
             state={state}
@@ -814,6 +978,11 @@ export function ChatView({
             onDebug={() => setDialog("debug")}
             changesOpen={changesOpen}
             onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
+            browser={
+              browserUsable
+                ? { open: browserOpen, onToggle: () => setBrowserOpen(!browserOpen) }
+                : undefined
+            }
             view={
               state.chat && terminalSupported(state.chat.agent_id, agents)
                 ? {
@@ -1195,7 +1364,21 @@ export function ChatView({
                 />
               ) : null}
             </div>
-            {changesOpen && transport.changes ? (
+            {browserOpen && browserStore ? (
+              <BrowserPanel
+                key={chatId}
+                chatId={chatId}
+                store={browserStore}
+                placement={placement}
+                narrow={!wide}
+                onPlacement={(change) => browserPanels.set(chatId, change)}
+                onClose={() => setBrowserOpen(false)}
+                runUrl={run?.command ? `http://localhost:${run.port}` : null}
+                agentId={state.chat.agent_id}
+                agentName={agentName}
+                annotation={annotationTarget}
+              />
+            ) : changesOpen && transport.changes ? (
               <ChangesPanel
                 state={state}
                 composer={transport.composer}

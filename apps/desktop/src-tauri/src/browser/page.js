@@ -5,8 +5,7 @@
 // It talks to auracode only through `window.ipc` (wry's message handler), which accepts a few typed
 // messages and trusts none of their contents.
 (() => {
-  "use strict";
-  if (window.top !== window || Object.prototype.hasOwnProperty.call(window, "__auraBrowser")) return;
+  if (window.top !== window || Object.hasOwn(window, "__auraBrowser")) return;
 
   // The page may replace these later; keep the originals.
   const post = (() => {
@@ -143,31 +142,6 @@
     "spinbutton",
     "treeitem",
   ]);
-  const CONTAINERS = new Set([
-    "navigation",
-    "main",
-    "banner",
-    "contentinfo",
-    "complementary",
-    "form",
-    "dialog",
-    "alertdialog",
-    "list",
-    "listbox",
-    "menu",
-    "menubar",
-    "tablist",
-    "table",
-    "row",
-    "region",
-    "group",
-    "radiogroup",
-    "tree",
-    "grid",
-    "toolbar",
-    "article",
-    "search",
-  ]);
   const SKIP = new Set([
     "SCRIPT",
     "STYLE",
@@ -286,6 +260,8 @@
     const value = (text || "").replace(/\s+/g, " ").trim();
     return value.length > limit ? `${value.slice(0, limit)}…` : value;
   };
+  // The text as a person reads it (innerText), not the source's (textContent).
+  // biome-ignore lint/performance/useDomNodeTextContent: the rendered text is the point
   const textOf = (element) => clean(element.innerText ?? element.textContent ?? "");
   const labelled = (element) => {
     const ids = element.getAttribute("aria-labelledby");
@@ -433,16 +409,25 @@
           details.push(`expanded=${element.getAttribute("aria-expanded")}`);
         if (element.getAttribute("aria-selected") === "true" || element.selected === true)
           details.push("selected");
-        if (element.getAttribute("aria-current") && element.getAttribute("aria-current") !== "false")
+        if (
+          element.getAttribute("aria-current") &&
+          element.getAttribute("aria-current") !== "false"
+        )
           details.push("current");
         if (details.length) parts.push(`[${details.join("] [")}]`);
         const tag = element.localName;
-        if ((tag === "input" || tag === "textarea") && element.type !== "checkbox" && element.type !== "radio") {
+        if (
+          (tag === "input" || tag === "textarea") &&
+          element.type !== "checkbox" &&
+          element.type !== "radio"
+        ) {
           if (element.type === "password") {
             if (element.value) parts.push("value=(hidden)");
           } else if (element.value) parts.push(`value=${stringify(clean(element.value, 200))}`);
         } else if (tag === "select") {
-          const chosen = Array.from(element.selectedOptions || [], (option) => clean(option.textContent, 60));
+          const chosen = Array.from(element.selectedOptions || [], (option) =>
+            clean(option.textContent, 60),
+          );
           if (chosen.length) parts.push(`value=${stringify(chosen.join(", "))}`);
         } else if (role === "link") {
           const href = element.getAttribute("href");
@@ -463,17 +448,22 @@
           inner = null;
         }
         if (inner?.body) walk(inner.body, childDepth);
-        else push(childDepth, `(another site's frame: ${clean(element.getAttribute("src") || "", 160)})`);
+        else
+          push(
+            childDepth,
+            `(another site's frame: ${clean(element.getAttribute("src") || "", 160)})`,
+          );
         return;
       }
       const root = element.shadowRoot;
-      for (const child of (root ? root.childNodes : element.childNodes)) walk(child, childDepth);
+      for (const child of root ? root.childNodes : element.childNodes) walk(child, childDepth);
       if (root) for (const child of element.childNodes) walk(child, childDepth);
     };
     const start = scope ? document.querySelector(scope) : document.body || document.documentElement;
     if (!start) return { text: `No element matches ${scope}.`, truncated: false };
     walk(start, 0);
-    if (truncated) lines.push("- (the outline stops here: the page is long; scope it with a selector)");
+    if (truncated)
+      lines.push("- (the outline stops here: the page is long; scope it with a selector)");
     return { text: lines.join("\n"), truncated };
   };
 
@@ -530,7 +520,8 @@
       editable:
         element.isContentEditable ||
         element.localName === "textarea" ||
-        (element.localName === "input" && !["checkbox", "radio", "button", "submit"].includes(element.type)),
+        (element.localName === "input" &&
+          !["checkbox", "radio", "button", "submit"].includes(element.type)),
       name: clean(nameOf(element, roleOf(element)) || element.localName, 80),
     };
   };
@@ -542,16 +533,26 @@
         ? KeyboardEvent
         : type === "input" || type === "beforeinput"
           ? InputEvent
-          : type.startsWith("mouse") || type === "click" || type === "dblclick" || type === "contextmenu"
+          : type.startsWith("mouse") ||
+              type === "click" ||
+              type === "dblclick" ||
+              type === "contextmenu"
             ? MouseEvent
             : Event;
-    return element.dispatchEvent(new Kind(type, { bubbles: true, cancelable: true, composed: true, ...init }));
+    return element.dispatchEvent(
+      new Kind(type, { bubbles: true, cancelable: true, composed: true, ...init }),
+    );
   };
   const click = (target, options = {}) => {
     const place = locate(target);
     if (place.error) return place;
     const element = targetOf(target);
-    const init = { clientX: place.x, clientY: place.y, button: options.button === "right" ? 2 : 0, detail: 1 };
+    const init = {
+      clientX: place.x,
+      clientY: place.y,
+      button: options.button === "right" ? 2 : 0,
+      detail: 1,
+    };
     fire(element, "pointerover", init);
     fire(element, "pointerdown", init);
     fire(element, "mousedown", init);
@@ -675,7 +676,14 @@
     if (place.error) return place;
     const element = targetOf(target);
     const init = { clientX: place.x, clientY: place.y };
-    for (const name of ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"])
+    for (const name of [
+      "pointerover",
+      "pointerenter",
+      "mouseover",
+      "mouseenter",
+      "pointermove",
+      "mousemove",
+    ])
       fire(element, name, init);
     return { ok: true, name: place.name };
   };
@@ -700,6 +708,7 @@
         return false;
       }
     }
+    // biome-ignore lint/performance/useDomNodeTextContent: text the page shows, not hidden source
     return (document.body?.innerText || "").includes(text);
   };
   const info = () => ({
@@ -707,7 +716,11 @@
     title: document.title,
     ready: document.readyState,
     scroll: { x: window.scrollX, y: window.scrollY },
-    viewport: { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio },
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio,
+    },
     size: {
       width: document.documentElement.scrollWidth,
       height: document.documentElement.scrollHeight,
@@ -732,7 +745,9 @@
       if (classes.length) part += `.${classes.map((name) => CSS.escape(name)).join(".")}`;
       const parent = node.parentElement;
       if (parent) {
-        const same = Array.from(parent.children).filter((child) => child.localName === node.localName);
+        const same = Array.from(parent.children).filter(
+          (child) => child.localName === node.localName,
+        );
         if (same.length > 1 && !classes.length) part += `:nth-of-type(${same.indexOf(node) + 1})`;
       }
       parts.unshift(part);
@@ -759,7 +774,9 @@
             if (name && !stack.includes(name)) stack.push(name);
             fiber = fiber.return;
           }
-          return stack.length ? { name: stack[0], stack: stack.reverse(), framework: "React" } : null;
+          return stack.length
+            ? { name: stack[0], stack: stack.reverse(), framework: "React" }
+            : null;
         }
       }
       let vue = element.__vueParentComponent;
@@ -779,18 +796,40 @@
     }
     return null;
   };
-  const STYLES = ["color", "background-color", "font-size", "font-family", "font-weight", "display", "position"];
-  const ATTRIBUTES = ["type", "name", "href", "src", "alt", "role", "aria-label", "placeholder", "title", "for", "value", "data-testid"];
+  const STYLES = [
+    "color",
+    "background-color",
+    "font-size",
+    "font-family",
+    "font-weight",
+    "display",
+    "position",
+  ];
+  const ATTRIBUTES = [
+    "type",
+    "name",
+    "href",
+    "src",
+    "alt",
+    "role",
+    "aria-label",
+    "placeholder",
+    "title",
+    "for",
+    "value",
+    "data-testid",
+  ];
   const describeElement = (element) => ({
     tag: element.localName,
     id: element.id || null,
     classes: Array.from(element.classList).slice(0, 12),
     attributes: Object.fromEntries(
-      ATTRIBUTES.filter((name) => element.hasAttribute(name) && !(name === "value" && element.type === "password")).map(
-        (name) => [name, clean(element.getAttribute(name), 200)],
-      ),
+      ATTRIBUTES.filter(
+        (name) => element.hasAttribute(name) && !(name === "value" && element.type === "password"),
+      ).map((name) => [name, clean(element.getAttribute(name), 200)]),
     ),
     selector: selectorOf(element),
+    // biome-ignore lint/performance/useDomNodeTextContent: the text as shown on the page
     text: clean(element.innerText ?? element.textContent ?? "", 200),
     rect: box(element),
     styles: (() => {
@@ -828,7 +867,9 @@
     } catch {
       // Without constructable sheets the overlay still draws from its inline styles.
     }
-    const accent = /^#[0-9a-f]{6}$|^rgb\(/i.test(options?.accent || "") ? options.accent : "#3b82f6";
+    const accent = /^#[0-9a-f]{6}$|^rgb\(/i.test(options?.accent || "")
+      ? options.accent
+      : "#3b82f6";
     const ink = /^#[0-9a-f]{6}$|^rgb\(/i.test(options?.ink || "") ? options.ink : "#ffffff";
     host.style.setProperty("--accent", accent);
     host.style.setProperty("--ink", ink);
@@ -876,8 +917,9 @@
       });
     };
     const under = (x, y) =>
-      fromPoint(x, y).find((node) => node !== host && !host.contains(node) && node !== document.documentElement) ||
-      null;
+      fromPoint(x, y).find(
+        (node) => node !== host && !host.contains(node) && node !== document.documentElement,
+      ) || null;
     const block = (event) => {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -892,7 +934,13 @@
           if (width > 4 || height > 4) {
             state.down.dragged = true;
             show(null);
-            Object.assign(area.style, { display: "block", left: `${x}px`, top: `${y}px`, width: `${width}px`, height: `${height}px` });
+            Object.assign(area.style, {
+              display: "block",
+              left: `${x}px`,
+              top: `${y}px`,
+              width: `${width}px`,
+              height: `${height}px`,
+            });
           }
           return;
         }
@@ -911,7 +959,13 @@
         state.down = null;
         if (!down || event.button !== 0) return;
         area.style.display = "none";
-        const base = { kind: "pick", url: location.href, title: document.title, viewport: info().viewport, add: event.shiftKey };
+        const base = {
+          kind: "pick",
+          url: location.href,
+          title: document.title,
+          viewport: info().viewport,
+          add: event.shiftKey,
+        };
         if (down.dragged) {
           const rect = {
             x: Math.min(down.x, event.clientX),
@@ -920,11 +974,17 @@
             height: Math.abs(event.clientY - down.y),
           };
           const inside = under(rect.x + rect.width / 2, rect.y + rect.height / 2);
-          post({ ...base, mode: "area", area: rect, elements: inside ? [describeElement(inside)] : [] });
+          post({
+            ...base,
+            mode: "area",
+            area: rect,
+            elements: inside ? [describeElement(inside)] : [],
+          });
           return;
         }
         const element = state.hovered || under(event.clientX, event.clientY);
-        if (element) post({ ...base, mode: "element", area: null, elements: [describeElement(element)] });
+        if (element)
+          post({ ...base, mode: "element", area: null, elements: [describeElement(element)] });
       },
       keydown: (event) => {
         if (event.key === "Escape") {
@@ -949,14 +1009,32 @@
         }
         if (event.key === "Enter" && state.hovered) {
           block(event);
-          post({ kind: "pick", url: location.href, title: document.title, viewport: info().viewport, add: event.shiftKey, mode: "element", area: null, elements: [describeElement(state.hovered)] });
+          post({
+            kind: "pick",
+            url: location.href,
+            title: document.title,
+            viewport: info().viewport,
+            add: event.shiftKey,
+            mode: "element",
+            area: null,
+            elements: [describeElement(state.hovered)],
+          });
         }
       },
       scroll: () => {
         if (state.hovered) show(state.hovered);
       },
     };
-    for (const name of ["click", "mousedown", "mouseup", "dblclick", "auxclick", "contextmenu", "touchstart", "touchend"])
+    for (const name of [
+      "click",
+      "mousedown",
+      "mouseup",
+      "dblclick",
+      "auxclick",
+      "contextmenu",
+      "touchstart",
+      "touchend",
+    ])
       listeners[name] = block;
     for (const [name, listener] of Object.entries(listeners))
       window.addEventListener(name, listener, { capture: true, passive: false });
@@ -970,7 +1048,9 @@
       window.removeEventListener(name, listener, { capture: true });
     annotate.host.remove();
     if (annotate.cursor)
-      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== annotate.cursor);
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== annotate.cursor,
+      );
     annotate = null;
     return true;
   };
@@ -998,7 +1078,8 @@
       else if (key === "w" && !event.shiftKey) action = "close-tab";
       else if (key === "b" && event.shiftKey) action = "toggle";
       else if (key === "d" && event.shiftKey) action = "annotate";
-      else if (key === "tab" || event.key === "Tab") action = event.shiftKey ? "previous-tab" : "next-tab";
+      else if (key === "tab" || event.key === "Tab")
+        action = event.shiftKey ? "previous-tab" : "next-tab";
       if (!action) return;
       event.preventDefault();
       event.stopImmediatePropagation();

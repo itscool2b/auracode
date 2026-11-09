@@ -147,6 +147,7 @@ export function Pickers({
   onChooseAgent,
   onSetControl,
   account = null,
+  compact = false,
 }: {
   readonly lists: SessionLists | null;
   /** The chat's autonomy until the lists arrive. */
@@ -169,6 +170,11 @@ export function Pickers({
   readonly onSetControl?: (change: SessionControlChange) => void;
   /** The account picker, for an agent that takes added accounts. */
   readonly account?: ReactNode;
+  /**
+   * Only the agent, model and thinking picker, without its shortcut: a second picker for the same
+   * chat (Annotate's note), beside the composer's own.
+   */
+  readonly compact?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -236,28 +242,32 @@ export function Pickers({
   const shortcutKey =
     typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl";
   return (
-    <div className="chat-pickers">
-      <AccessPicker
-        lists={lists}
-        autonomy={autonomy}
-        saving={autonomySaving}
-        controlSaving={controlSaving}
-        transitionBlocked={transitionBlocked}
-        status={status}
-        error={error}
-        onSetAutonomy={onSetAutonomy}
-        onSetControl={onSetControl}
-      />
+    <div className={compact ? "chat-pickers chat-pickers-compact" : "chat-pickers"}>
+      {compact ? null : (
+        <AccessPicker
+          lists={lists}
+          autonomy={autonomy}
+          saving={autonomySaving}
+          controlSaving={controlSaving}
+          transitionBlocked={transitionBlocked}
+          status={status}
+          error={error}
+          onSetAutonomy={onSetAutonomy}
+          onSetControl={onSetControl}
+        />
+      )}
       {/* Who answers, on which account and model: one group at the row's end, beside Send. */}
       <div className="chat-pickers-end">
-        {account}
+        {compact ? null : account}
         <Popover
           label="Agent, model and thinking"
           triggerLabel={`${[agent?.name, modelLabel, namedLevel ? `${namedLevel} thinking` : null]
             .filter(Boolean)
             .join(", ")}. Agent, model and thinking`}
-          tip={`Agent, model and thinking (${shortcutKey} .)`}
-          shortcut="."
+          tip={
+            compact ? "Agent, model and thinking" : `Agent, model and thinking (${shortcutKey} .)`
+          }
+          shortcut={compact ? undefined : "."}
           className="chat-model-popover"
           onOpenChange={(open) => {
             if (!open) {

@@ -386,7 +386,7 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             }
             lines.reverse();
             // A script may have printed a password.
-            let secrets = page_secrets(browser, &tab).await.unwrap_or_default();
+            let secrets = page_secrets(browser, &tab).await.ok_or_else(|| BrowserError::Page("auracode could not check this page's password fields, so this is withheld. Try again.".into()))?;
             Ok(ToolReply::text(redact(
                 lines.join("\n"),
                 secrets.iter().map(String::as_str),
@@ -418,7 +418,7 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
                 })
                 .collect();
             // A form sent by GET carries its password in the address.
-            let secrets = page_secrets(browser, &tab).await.unwrap_or_default();
+            let secrets = page_secrets(browser, &tab).await.ok_or_else(|| BrowserError::Page("auracode could not check this page's password fields, so this is withheld. Try again.".into()))?;
             Ok(ToolReply::text(redact(
                 format!(
                     "Requests this page made (status, kind, time, address; — where the page could not tell):\n{}",

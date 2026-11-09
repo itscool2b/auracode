@@ -19,6 +19,7 @@ import type {
   UiAnswer,
 } from "../../bindings";
 import { type AgentAccountsApi, agentAccountsApi } from "../agentAccounts";
+import { type BrowserStore, browserStore } from "../browser";
 import { changesApi } from "../changes";
 import { type ChatImagesApi, chatImagesApi } from "../chatImages";
 import { type ComposerTransport, composerApi } from "../composer";
@@ -89,6 +90,8 @@ export interface Transport {
   readonly files?: FileLinkApi;
   /** Run in a worktree chat: the folder setup's Run command, with the worktree's ports. */
   readonly run?: WorktreeRunApi;
+  /** The browser beside the chat (the Browser plugin). Absent: no browser is offered. */
+  readonly browser?: BrowserStore;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -144,6 +147,7 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  browser: browserStore,
   git: gitWorkspaceApi,
   files: fileLinkApi,
   run: worktreeRunApi,

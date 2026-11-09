@@ -83,7 +83,8 @@ export function Composer({
     if (!canvasBridge) return;
     const bridge = canvasBridge;
     bridge.composer = {
-      addImage: (bytes, replace) => contextRef.current.pasteImage(bytes, "Canvas.png", replace),
+      addImage: (bytes, replace, name = "Canvas.png") =>
+        contextRef.current.pasteImage(bytes, name, replace),
       putText: (value, previous) =>
         contextRef.current.setText((current) => {
           if (previous && current.includes(previous))
