@@ -214,6 +214,8 @@ try {
         agent_memory_writes: true,
         keep_steps_open: false,
         editor: null,
+        browser: true,
+        browser_passwords: true,
       });
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();
