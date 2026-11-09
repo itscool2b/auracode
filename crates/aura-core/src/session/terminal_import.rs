@@ -380,6 +380,10 @@ fn codex_meta(path: &Path) -> Option<(String, PathBuf, Millis)> {
     plain_id(&id).then_some((id, cwd, at))
 }
 
+/// Whether `a` and `b` name one folder: as written (case aside on Windows), or on Unix once their
+/// links are resolved. An agent records the resolved folder it runs in, and on macOS the temporary
+/// and many other folders sit behind a link (`/var` is `/private/var`). Windows compares the text
+/// only, so a path on an unreachable share never stalls the read.
 fn same_folder(a: &Path, b: &Path) -> bool {
     let norm = |p: &Path| {
         let text = p.to_string_lossy().replace('\\', "/");
@@ -391,6 +395,7 @@ fn same_folder(a: &Path, b: &Path) -> bool {
         }
     };
     norm(a) == norm(b)
+        || (cfg!(unix) && matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b))
 }
 
 /// `2026-11-06T07:45:16.764Z` (or with an offset) in milliseconds since the epoch.
@@ -1474,6 +1479,23 @@ mod tests {
             env: Vec::new(),
         };
         assert_eq!(missing.run(dir.path(), &[]), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_reached_through_a_link_is_the_same_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("project");
+        std::fs::create_dir(&real).unwrap();
+        let link = dir.path().join("linked");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert!(same_folder(&link, &real));
+        assert!(same_folder(&real.join(""), &real));
+        assert!(!same_folder(&link, dir.path()));
+        // A folder that is gone matches only as written.
+        let gone = dir.path().join("gone");
+        assert!(same_folder(&gone, &gone));
+        assert!(!same_folder(&gone, &real));
     }
 
     #[test]

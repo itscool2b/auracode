@@ -55,6 +55,8 @@ describe("a waiting preference shows as the backend will save it", () => {
       { type: "keep_steps_open", enabled: true },
       { type: "copy_instructions_to_worktrees", enabled: false },
       { type: "agent_memory_writes", enabled: false },
+      { type: "browser", enabled: false },
+      { type: "browser_passwords", enabled: false },
       { type: "config_sync_agent", agent_id: "codex", enabled: false },
       { type: "config_sync_agent", agent_id: "pi", enabled: true },
     ] as const;
@@ -76,6 +78,8 @@ describe("a waiting preference shows as the backend will save it", () => {
       keep_steps_open: true,
       copy_instructions_to_worktrees: false,
       agent_memory_writes: false,
+      browser: false,
+      browser_passwords: false,
       config_sync_paused: ["codex"],
     });
     expect(base.general.config_sync_paused).toEqual(["pi"]);
@@ -101,6 +105,9 @@ describe("Settings' search", () => {
     });
     expect(searchSettings("mic")[0]).toMatchObject({ page: "voice" });
     expect(searchSettings("CLAUDE.md")[0]).toMatchObject({ page: "instructions" });
+    expect(searchSettings("browser")[0]).toMatchObject({ page: "plugins", title: "Browser use" });
+    expect(searchSettings("passwords")[0]).toMatchObject({ title: "Save passwords" });
+    expect(searchSettings("universal plugin")[0]).toMatchObject({ title: "Browser use" });
     // Every word must match; titles that start with the query come first.
     expect(searchSettings("keep")[0]?.title).toMatch(/^Keep/);
     expect(searchSettings("theme nonsense")).toEqual([]);

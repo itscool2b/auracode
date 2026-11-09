@@ -80,6 +80,8 @@ export const MODES = [
   "settings&page=voice",
   "settings&page=agents",
   "settings&page=plugins",
+  // Universal plugins: Browser use on, with its settings.
+  "settings&page=plugins#universal",
   "settings&page=memory&scope=folder",
   "settings&page=privacy",
   "setup",
@@ -191,6 +193,10 @@ export const MODES = [
   "queue-held",
   "queue-failed",
   "queue-missing",
+  // The browser beside the chat: a page, a new tab's start page, and the chat with it closed.
+  "browser",
+  "browser&start",
+  "browser&closed",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */
@@ -314,6 +320,10 @@ const OPENERS = {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
   },
+  universal: async (page) => {
+    await page.getByTestId("plugins-universal-nav").click();
+    await page.getByTestId("plugins-universal").waitFor();
+  },
   "plugin-menu": (page) => openRowMenu(page, "tools actions"),
   "plugin-item": async (page) => {
     // The menu opens with its first item focused; Enter picks it without scrolling the page.
@@ -364,6 +374,14 @@ const OPENERS = {
     await page.getByRole("dialog", { name: "Recreate the deleted folder?" }).waitFor();
   },
   terminal: async (page) => {
+    // The panel remembers being open, so an earlier view in this page leaves it restored here
+    // without a shell, and the shortcut would close it: start from a first visit instead.
+    if (await page.locator(".terminal-panel-viewport").count()) {
+      await page.evaluate(() => localStorage.removeItem("auracode.terminals.preview"));
+      await page.reload();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(900);
+    }
     await page.keyboard.press("Control+Backquote");
     await terminalReady(page);
   },

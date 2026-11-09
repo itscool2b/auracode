@@ -1,5 +1,13 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { Ellipsis, MessageSquare, PanelRight, Play, Square, SquareTerminal } from "lucide-react";
+import {
+  Ellipsis,
+  FileDiff,
+  Globe,
+  MessageSquare,
+  Play,
+  Square,
+  SquareTerminal,
+} from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
@@ -18,7 +26,8 @@ const QUIET = new Set(["ready", "stopped"]);
 
 /**
  * The chat's header (Grok): the title and project at the left, then the status with its live mark
- * only while it says something, and two controls at the right, the Changes panel and the chat menu. The menu holds the session facts
+ * only while it says something, and the controls at the right: Chat or Terminal, the browser beside
+ * the chat, Run, the Changes panel and the chat menu. The menu holds the session facts
  * (the agent and the version that runs, the context and cost when reported) and every other action;
  * the command palette offers the same actions by name.
  */
@@ -44,6 +53,7 @@ export function Header({
   changesOpen = false,
   run,
   view,
+  browser,
 }: {
   readonly state: ChatState;
   /**
@@ -89,6 +99,11 @@ export function Header({
   readonly onExport?: () => void;
   readonly onDebug?: () => void;
   readonly changesOpen?: boolean;
+  /**
+   * The browser beside the chat (the Browser plugin), in Chat view while the plugin is on. The
+   * header's opener for it, where the panel button was (owner, 9 November 2026).
+   */
+  readonly browser?: { readonly open: boolean; readonly onToggle: () => void };
   /** Run, in a worktree chat whose folder setup saved a Run command: start it, or stop it. */
   readonly run?: {
     /** "pnpm dev". */
@@ -214,6 +229,23 @@ export function Header({
             })}
           </fieldset>
         ) : null}
+        {browser ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon g-button-28 chat-browser-toggle"
+            aria-label="Browser"
+            title={`Browser (${commandKey()} Shift B)`}
+            aria-keyshortcuts="Control+Shift+B Meta+Shift+B"
+            aria-expanded={browser.open}
+            data-testid="chat-browser"
+            onClick={(event) => {
+              event.currentTarget.focus();
+              browser.onToggle();
+            }}
+          >
+            <Globe size={16} />
+          </button>
+        ) : null}
         {run ? (
           <button
             type="button"
@@ -248,7 +280,7 @@ export function Header({
               onChanges();
             }}
           >
-            <PanelRight size={16} />
+            <FileDiff size={16} />
           </button>
         ) : null}
         <Popover

@@ -610,8 +610,11 @@ dependencies = [
  "tracing-subscriber",
  "transcribe-cpp",
  "uuid",
+ "webview2-com",
+ "windows",
  "windows-sys 0.61.2",
  "windows-version",
+ "wry",
  "zeroize",
 ]
 

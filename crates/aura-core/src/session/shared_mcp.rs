@@ -119,9 +119,12 @@ pub(super) async fn prepare_launch(
     .await
     .map_err(|_| "Native MCP inventory could not be inspected.".to_owned())??;
     let memory_available = checked
-        && !names
-            .iter()
-            .any(|name| name.replace('-', "_") == "aura_project_memory");
+        && !names.iter().any(|name| {
+            matches!(
+                name.replace('-', "_").as_str(),
+                "aura_project_memory" | "aura_browser"
+            )
+        });
     match context
         .store
         .shared_mcp(crate::mcp::Command::ResolveChat {

@@ -311,6 +311,8 @@ try {
       );
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
+      // The first page from a new dev server compiles the app, which takes over 10 s on CI's macOS.
+      page.setDefaultNavigationTimeout(60000);
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await checkLibrary(page, engine);

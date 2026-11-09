@@ -202,7 +202,10 @@ async function workingLifecycle(page, engine, theme) {
     0,
   );
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "no-preference" });
-  const motionModule = `/@fs/${resolve(app, "../../packages/ui/src/motion.ts").replaceAll("\\", "/")}`;
+  // Vite serves the module at /@fs/ followed by its path without a leading slash, so a POSIX path
+  // must not add a second one: "/@fs//Users/..." would load a separate copy the app never reads.
+  const motionPath = resolve(app, "../../packages/ui/src/motion.ts").replaceAll("\\", "/");
+  const motionModule = `/@fs/${motionPath.replace(/^\/+/, "")}`;
   for (const preference of ["reduced", "off"]) {
     await page.evaluate(
       async ({ path, preference }) => {
@@ -396,9 +399,12 @@ async function reviewComments(page, theme) {
         `${document.activeElement?.tagName}:${document.activeElement?.getAttribute("aria-label")}`,
     );
   const lines = page.getByRole("region", { name: "Line changes for src/components/Sidebar.tsx" });
-  // One comment button takes Tab, the first changed line's; the arrows move between lines.
+  // One comment button takes Tab, the first changed line's; the arrows move between lines. WebKit
+  // on macOS tabs between text fields only, as Safari does by default; Option+Tab reaches buttons.
   await lines.focus();
-  await page.keyboard.press("Tab");
+  const webkitOnMac =
+    process.platform === "darwin" && page.context().browser()?.browserType().name() === "webkit";
+  await page.keyboard.press(webkitOnMac ? "Alt+Tab" : "Tab");
   assert.equal(await focused(), "BUTTON:Comment on removed line 2");
   for (const key of ["ArrowDown", "ArrowDown", "ArrowDown"]) await page.keyboard.press(key);
   assert.equal(await focused(), "BUTTON:Comment on line 4");
@@ -674,17 +680,21 @@ async function fileLinks(page, theme) {
   const card = page.getByTestId("changed-files").last();
   await card.getByTestId("file-link").click();
   await openWork(page);
-  // Each step opens: its group, then the call itself.
-  const closedGroups = page.locator('[data-testid="tool-group"][aria-expanded="false"]');
-  for (let left = await closedGroups.count(); left > 0; left -= 1)
-    await closedGroups.first().click();
-  await page.evaluate(() => {
+  // Each step opens: its group, then the call itself. The edited step is in the last turn, at the
+  // end, where the virtual list renders it, and a group renders its calls a moment after it
+  // opens, so keep the end in view and open what shows until the step's location does.
+  await page.waitForFunction(() => {
+    const transcript = document.querySelector('[data-testid="transcript"]');
+    if (transcript) transcript.scrollTop = transcript.scrollHeight;
+    for (const group of document.querySelectorAll(
+      '[data-testid="tool-group"][aria-expanded="false"]',
+    ))
+      group.click();
     for (const summary of document.querySelectorAll(".chat-tool-head"))
       if (summary.parentElement && !summary.parentElement.open) summary.click();
-  });
-  // The edited step is in the last turn: at the end, where the virtual list renders it.
-  await page.getByTestId("transcript").evaluate((node) => {
-    node.scrollTop = node.scrollHeight;
+    return [...document.querySelectorAll('[data-testid="tool-locations"] button')].some(
+      (button) => button.textContent === "src/styles.css:4",
+    );
   });
   const location = page
     .getByTestId("tool-locations")

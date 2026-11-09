@@ -1,7 +1,7 @@
 # Plugins & MCP
 
 Customize, below Search and New chat, opens Settings on Plugins & MCP, which Settings also lists
-beside its other pages. Shared MCP has its own section, followed by one section per agent. Each agent section shows
+beside its other pages. Universal plugins come first, then Shared MCP, then one section per agent. Each agent section shows
 what that agent supports, read from the agent's own CLI where the CLI has a reviewed,
 machine-readable listing, and from the agent's files where it does not. It also shows the
 harness's update status and the device's sync switch for that agent. Every change runs the
@@ -13,6 +13,23 @@ them. The complete customization behavior is described in [desktop-customization
 
 Plugins stay with their agent. Shared MCP applies to every compatible agent, or the ones a server is for, in the selected scope.
 Server definitions can sync; authentication stays on each device.
+
+## Universal plugins
+
+Universal plugins are auracode's own, built in for every agent (owner, 9 November 2026: "a universal
+plugin" that people cannot add or remove, on by default). Each has a switch and nothing else to
+install: off turns it off for every agent and takes it out of the app. The first is Browser use,
+the browser beside the chat ([plan](superpowers/plans/2026-11-09-browser.md)): the panel, Annotate,
+and the `aura_browser` MCP tools a native Chat session's agent gets, served by auracode's own
+executable (`--aura-browser-helper --mcp`) over a per-session loopback grant, with its skill in the
+server's instructions. Turned off, chats show no browser, sessions that start get no browser
+tools, and a running session's tools answer that it is off. Its card also holds the browser's own
+settings: saved passwords (WebView2's own manager, Windows only), browsing history and Clear
+browsing data (history, cookies and site data, cached files and saved passwords; never the
+person's own browser). The switches are profile preferences (`browser`, `browser_passwords`).
+Agents never see a password: the page outline never shows a password field's value, and
+`browser_evaluate` answers have the page's password values replaced (best effort: a value a
+script changed past recognising, or sent off the page itself, is beyond what auracode can check).
 
 ## Shared MCP
 

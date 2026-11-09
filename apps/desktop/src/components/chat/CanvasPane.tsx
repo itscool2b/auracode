@@ -80,8 +80,11 @@ import { errorMessage } from "../../lib/errors";
 
 /** What the canvas needs from the composer below it, registered by the composer itself. */
 export interface CanvasComposer {
-  /** Adds the drawing as an image attachment, replacing `replace` while it is still attached. */
-  addImage(bytes: Uint8Array, replace: string | null): Promise<string | null>;
+  /**
+   * Adds an image attachment (the drawing as Canvas.png, unless `name` says otherwise), replacing
+   * `replace` while it is still attached.
+   */
+  addImage(bytes: Uint8Array, replace: string | null, name?: string): Promise<string | null>;
   /** Puts `text` in the draft, in place of `previous` where the draft still holds it. */
   putText(text: string, previous: string | null): void;
   /** The message already holds its eight attachments. */

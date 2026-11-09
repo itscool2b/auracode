@@ -162,9 +162,12 @@ export async function checkTerminalChat(browser, url, out, engine) {
         `${engine}/${theme}: exited accessibility`,
       );
       await page.screenshot({ path: resolve(out, `${engine}-${theme}-exited.png`) });
-      // With nothing running, the terminal takes no keys: Tab reaches Start again.
+      // With nothing running, the terminal takes no keys: Tab reaches Start again. WebKit on macOS
+      // tabs between text fields only, as Safari does by default; Option+Tab reaches every control.
       await page.locator(".terminal-chat-host textarea").focus();
-      await page.keyboard.press("Tab");
+      await page.keyboard.press(
+        engine === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab",
+      );
       assert.equal(
         await page.evaluate(() => document.activeElement?.textContent),
         "Start again",

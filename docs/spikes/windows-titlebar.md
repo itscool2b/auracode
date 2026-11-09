@@ -78,9 +78,10 @@ none of them:
     `no_redirection_bitmap`, which avoids the white flash it would show before the first paint.
   - The window starts hidden and is shown after the page's first paint (or a 3 s fallback).
 - The shell reports what it applied in `app_info().glass`, and the UI paints its own opaque base
-  when the material is missing. All values (`GlassEffect`): `liquid_glass`, `vibrancy`, `mica`, `none`.
-  On Windows it is `mica` on Windows 11 and `none` on Windows 10, which is the plan's edge case
-  "Windows 10 (no Mica: fallback theme)".
+  when the material is missing.
+  All values (`GlassEffect`): `liquid_glass`, `vibrancy`, `mica`, `acrylic`, `none`. On Windows it
+  is `acrylic` from build 22523 (system backdrops), `mica` on earlier Windows 11 builds and `none`
+  on Windows 10, which is the plan's edge case "Windows 10 (no Mica: fallback theme)".
 - Never `blur`: tauri-utils documents poor resize and drag performance for it (Windows 11 build
   22621).
 - Acrylic only from build 22523 (`ACRYLIC_WINDOWS_BUILD`). The Halo restyle wants a see-through

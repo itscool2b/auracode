@@ -169,7 +169,7 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
         match &server.definition.transport {
             McpTransport::Stdio { command, args } => {
                 // auracode's own project-memory server uses the reserved names by design.
-                let own_memory = crate::mcp::managed_memory(server);
+                let own_memory = crate::mcp::managed(server);
                 let reserved = !own_memory
                     && server.credentials.env.keys().any(|key| {
                         key.get(..5)
@@ -437,6 +437,8 @@ fn interactive(base: &LaunchSpec) -> LaunchSpec {
 fn server_label(server: &ResolvedMcpServer) -> String {
     if crate::mcp::managed_memory(server) {
         "Project memory tools".to_owned()
+    } else if crate::mcp::managed_browser(server) {
+        "Browser tools".to_owned()
     } else {
         server.definition.name.clone()
     }

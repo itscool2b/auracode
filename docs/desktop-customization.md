@@ -18,7 +18,7 @@ These preferences live in additive versioned `controls_json` state per agent ses
 
 ## Plugins and shared MCP
 
-[Plugins & MCP](plugin-library.md) lists each agent's native inventory and reviewed management capabilities. It uses structured native commands where available and a reviewed terminal route for operations that have no structured interface. The renderer consumes backend capability descriptions rather than maintaining provider-specific command tables.
+[Plugins & MCP](plugin-library.md) starts with Universal plugins, auracode's own for every agent (Browser use: the browser beside the chat, Annotate and the agents' browser tools, with a switch and its own settings), then lists each agent's native inventory and reviewed management capabilities. It uses structured native commands where available and a reviewed terminal route for operations that have no structured interface. The renderer consumes backend capability descriptions rather than maintaining provider-specific command tables.
 
 Shared MCP definitions default to the selected project and can also apply across the profile. A project override replaces an all-projects definition with the same Aura ID. Definitions and conflict history use the profile writer; account profiles encrypt and sync portable revisions. Local environment and header credentials are stored separately and never included in a portable export or sync envelope. OAuth sessions remain with the native agent. Importing a native definition is explicit and leaves the original file intact.
 

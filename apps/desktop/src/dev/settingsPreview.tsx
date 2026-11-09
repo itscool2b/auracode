@@ -179,6 +179,8 @@ const setup: SetupApi = {
     if (action.type === "copy_instructions_to_worktrees")
       general.copy_instructions_to_worktrees = action.enabled;
     if (action.type === "agent_memory_writes") general.agent_memory_writes = action.enabled;
+    if (action.type === "browser") general.browser = action.enabled;
+    if (action.type === "browser_passwords") general.browser_passwords = action.enabled;
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },

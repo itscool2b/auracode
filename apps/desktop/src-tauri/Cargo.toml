@@ -59,6 +59,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
+# The browser beside the chat (src/browser): its tabs are wry webviews of their own, outside
+# Tauri's IPC, at the release Tauri itself runs and with the features it already enables.
+wry = { version = "=0.57.1", default-features = false, features = ["os-webview"] }
 # Native microphone capture and statically linked offline speech recognition: transcribe.cpp
 # runs the bundled Parakeet and Silero VAD models on the CPU (Metal on Apple silicon).
 cpal = "=0.18.2"
@@ -73,6 +76,10 @@ tauri-plugin-notification = "=2.7.0"
 # Already in the tree through tao and window-vibrancy; it reads the real build number (Mica needs
 # build 22000+) without the compatibility shims that make GetVersionEx lie.
 windows-version = "0.1.7"
+# The browser's WebView2 abilities wry does not wrap (DevTools protocol input and screenshots,
+# back and forward state, crashes, saved sign-ins): the releases wry itself uses.
+webview2-com = "=0.39.1"
+windows = { version = "=0.62.2", features = ["Win32_Foundation"] }
 # The data cleanup mode (uninstall.rs): its dialogs, attaching to a terminal, waiting for the app
 # to exit; and the window caption's colours (window.rs). Raw bindings, already in the tree.
 windows-sys = { version = "0.61.2", features = [

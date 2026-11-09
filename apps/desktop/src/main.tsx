@@ -105,6 +105,10 @@ void appearanceReady.then(() => {
         void import("./dev/agentUpdatesPreview").then(({ mountAgentUpdatesPreview }) =>
           mountAgentUpdatesPreview(container),
         );
+      else if (mode === "browser")
+        void import("./dev/browserPreview").then(({ mountBrowserPreview }) =>
+          mountBrowserPreview(container),
+        );
       else if (mode === "canvas")
         void import("./dev/canvasPreview").then(({ mountCanvasPreview }) =>
           mountCanvasPreview(container),

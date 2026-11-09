@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -16,6 +16,8 @@ const README = fileURLToPath(new URL("../README.md", import.meta.url));
 /** The shell to run it with: `sh` is bash on macOS and dash on Ubuntu; set this to try another. */
 const SHELL = process.env.SIGNING_TEST_SHELL ?? "sh";
 const HASH = "E0BAFFD34BF15181B26CA3608C909DB87E2B9D94";
+/** The entitlements the script signs a dev build with (dictation's microphone), as it names them. */
+const ENTITLEMENTS = `${dirname(SCRIPT)}/../src-tauri/Entitlements.plist`;
 const OTHER = "0A36EDAE78CC3FA61AF1A1C5FE1E1C15CDEEE4B9";
 
 /** `security find-identity -p codesigning` output listing `lines` as matching identities. */
@@ -182,7 +184,7 @@ describe.skipIf(process.platform === "win32")("macos-signing.sh", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toBe("ran:an arg\nran:second\n");
       expect(calls()).toContain(
-        `codesign --force --sign ${HASH} --identifier si.auracode.desktop ${app}`,
+        `codesign --force --sign ${HASH} --identifier si.auracode.desktop --entitlements ${ENTITLEMENTS} ${app}`,
       );
     });
 
@@ -193,7 +195,7 @@ describe.skipIf(process.platform === "win32")("macos-signing.sh", () => {
       const app = program("auracode");
       runScript(["run", app]);
       expect(calls()).toContain(
-        `codesign --force --sign ${HASH} --identifier si.auracode.desktop ${app}`,
+        `codesign --force --sign ${HASH} --identifier si.auracode.desktop --entitlements ${ENTITLEMENTS} ${app}`,
       );
     });
 
@@ -203,7 +205,7 @@ describe.skipIf(process.platform === "win32")("macos-signing.sh", () => {
       const app = program("auracode");
       runScript(["run", app], { AURACODE_SIGNING_KEYCHAIN: "/tmp/signing.keychain-db" });
       expect(calls()).toContain(
-        `codesign --force --sign ${HASH} --identifier si.auracode.desktop --keychain /tmp/signing.keychain-db ${app}`,
+        `codesign --force --sign ${HASH} --identifier si.auracode.desktop --keychain /tmp/signing.keychain-db --entitlements ${ENTITLEMENTS} ${app}`,
       );
     });
 

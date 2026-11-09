@@ -38,11 +38,15 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
   about: "About",
 };
 
-/** A setting the search can find: its page, the row's own title, and other words for it. */
+/**
+ * A setting the search can find: its page, the row's own title, and other words for it. `section`
+ * names the part of a page that has to open first (Plugins & MCP's Universal plugins).
+ */
 export interface SettingEntry {
   readonly page: Page;
   readonly title: string;
   readonly words?: string;
+  readonly section?: "universal";
 }
 
 export const SETTINGS_INDEX: readonly SettingEntry[] = [
@@ -92,6 +96,30 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     page: "plugins",
     title: "Plugins & MCP",
     words: "mcp servers marketplaces skills extensions tools",
+  },
+  {
+    page: "plugins",
+    title: "Browser use",
+    section: "universal",
+    words: "browser universal plugins web pages annotate agents tools",
+  },
+  {
+    page: "plugins",
+    title: "Save passwords",
+    section: "universal",
+    words: "browser sign-ins sign in autofill",
+  },
+  {
+    page: "plugins",
+    title: "Browsing history",
+    section: "universal",
+    words: "browser pages visited",
+  },
+  {
+    page: "plugins",
+    title: "Clear browsing data",
+    section: "universal",
+    words: "browser cookies cache history passwords sign out",
   },
   { page: "instructions", title: "Instructions", words: "agents.md claude.md rules prompt" },
   { page: "instructions", title: "Applies to", words: "scope folder project global chat" },

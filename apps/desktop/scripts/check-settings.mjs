@@ -5,6 +5,7 @@ import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
@@ -34,10 +35,19 @@ const settled = (page) =>
   );
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const url = process.argv[2] ?? "http://127.0.0.1:1464";
+// `[server URL] [--engines chromium,webkit]`: CI runs each engine as its own step.
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: { engines: { type: "string", default: "chromium,webkit" } },
+});
+const launchers = Object.entries({ chromium, webkit }).filter(([engine]) =>
+  values.engines.split(",").includes(engine),
+);
+assert.ok(launchers.length > 0, `No supported engine in --engines ${values.engines}`);
+const url = positionals[0] ?? "http://127.0.0.1:1464";
 const out = resolve(app, "../../target/settings-browser");
 const require = createRequire(import.meta.url);
-const server = process.argv[2]
+const server = positionals[0]
   ? null
   : spawn(
       process.execPath,
@@ -71,7 +81,7 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert.ok(ready, output || "The preview server did not start.");
-  for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
+  for (const [engine, launcher] of launchers) {
     const browser = await launcher.launch({ headless: true });
     try {
       const context = await browser.newContext({
@@ -214,6 +224,8 @@ try {
         agent_memory_writes: true,
         keep_steps_open: false,
         editor: null,
+        browser: true,
+        browser_passwords: true,
       });
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();

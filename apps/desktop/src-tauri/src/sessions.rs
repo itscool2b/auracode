@@ -253,6 +253,10 @@ pub struct ChatRuntime {
     pub(crate) sync_identity: Option<aura_core::sync::SyncIdentity>,
     pub(crate) sync_engine: std::sync::OnceLock<Arc<aura_core::sync::engine::SyncEngine>>,
     pub(crate) sync_history_error: std::sync::atomic::AtomicBool,
+    /// The profile's folder: the browser keeps its pages' data in `browser` inside it.
+    pub profile_dir: PathBuf,
+    /// The profile's files are encrypted (an account profile): the browser keeps nothing on disk.
+    pub private: bool,
 }
 
 /// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
@@ -521,6 +525,8 @@ pub(crate) fn start_profile_chats(
         sync_identity: None,
         sync_engine: std::sync::OnceLock::new(),
         sync_history_error: std::sync::atomic::AtomicBool::new(false),
+        profile_dir: profile.dir.clone(),
+        private: file_key.is_some(),
     })
 }
 

@@ -88,6 +88,8 @@ pub fn set_webview_visible(app: &AppHandle, visible: bool) {
         ) {
             tracing::warn!(%error, visible, "could not update webview visibility");
         }
+        // The browser's page over the panel follows the window.
+        crate::browser::window_shown(app, visible);
     }
     #[cfg(not(windows))]
     let _ = (app, visible);

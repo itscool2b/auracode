@@ -28,6 +28,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { AppInfo, InstructionsTarget } from "../../bindings";
+import type { BrowserStore } from "../../lib/browser";
 import type { AppStore } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import type { DataCleanupApi } from "../../lib/dataCleanup";
@@ -91,6 +92,8 @@ export interface CustomizeServices {
   >;
   readonly instructions?: ComponentProps<typeof InstructionsPanel>["api"];
   readonly memory?: ComponentProps<typeof ProjectMemoryPanel>["api"];
+  /** Universal plugins' browser (its status, history and Clear browsing data). */
+  readonly browser?: BrowserStore;
 }
 
 /** One keycap per key in a chord; a repeated key shows twice. */
@@ -313,6 +316,14 @@ export function SettingsScreen({
     };
   }, [found]);
   const results = useMemo(() => searchSettings(query), [query]);
+  // A search result in a part of Plugins & MCP opens that part first.
+  const pluginsSection = useMemo(
+    () =>
+      found?.entry.page === "plugins" && found.entry.section
+        ? { id: found.id, agent: found.entry.section }
+        : null,
+    [found],
+  );
   const offered = (value: Page) => value !== "agents" || agents !== undefined;
   const mac = info.os === "macos";
   const key = mac ? "⌘" : "Ctrl";
@@ -491,6 +502,8 @@ export function SettingsScreen({
               initialProjectId={projectId}
               projects={projects ?? []}
               activeChatId={activeChatId}
+              universal={{ prefs, os: info.os, browser: services?.browser }}
+              select={pluginsSection}
               onBack={onBack}
               onAgents={() => open("agents")}
             />,

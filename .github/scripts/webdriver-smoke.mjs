@@ -89,8 +89,19 @@ export async function exerciseApp(driver, folder, save, checks = []) {
   await driver.click(byTest("new-chat-button"));
   await until("new chat form", () => driver.visible(byTest("new-chat")));
   await driver.click(`select[aria-label="Project folder"] option[value="${folderId}"]`);
+  // The agent is a menu: open it and choose the Demo agent. A new choice closes the menu (it
+  // animates out, marked data-closing); choosing the agent already chosen changes nothing and
+  // leaves it open, so close it then. A second click on a closing menu would keep it open.
+  const picker = `${byTest("new-chat-agent")} details`;
   const demo = 'input[type="radio"][value="mock"]';
-  await driver.click(`${byTest("new-chat-agent")} label:has(${demo})`);
+  await driver.click(`${picker} > summary`);
+  await driver.click(`${picker} label:has(${demo})`);
+  const lingering =
+    "const menu = document.querySelector(arguments[0]); return !!menu && menu.open && !menu.hasAttribute('data-closing');";
+  if (await driver.script(lingering, [picker])) await driver.click(`${picker} > summary`);
+  await until("agent menu closed", () =>
+    driver.script("return !document.querySelector(arguments[0])?.open", [picker]),
+  );
   const radios = await driver.elements(`${byTest("new-chat-agent")} ${demo}`);
   assert.equal(radios.length, 1, "expected exactly one Demo radio choice");
   assert.equal(

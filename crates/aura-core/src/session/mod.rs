@@ -358,6 +358,11 @@ pub(crate) struct Shared {
     /// each request, so the profile's switch reaches running chats at once. On by default, as the
     /// profile preference is.
     pub(crate) agent_memory_writes: Arc<AtomicBool>,
+    /// The Browser universal plugin is on: Chat sessions start with its tools, and every running
+    /// session's tools read it on each call. On by default, as the profile preference is.
+    pub(crate) browser_tools: Arc<AtomicBool>,
+    /// The app's browser, which runs the tools (none in tests and the CLI).
+    pub(crate) browser_bridge: Mutex<Option<Arc<dyn crate::browser_service::BrowserBridge>>>,
     /// The model catalog each agent connection last reported, kept across restarts, so a chat
     /// whose agent is not running still offers models and thinking levels (and Settings too).
     pub(crate) catalogs: Arc<catalogs::Catalogs>,
@@ -372,6 +377,10 @@ pub(crate) struct Shared {
 impl Shared {
     pub(crate) fn agent_accounts(&self) -> Option<Arc<crate::agent_accounts::AgentAccountsStore>> {
         lock(&self.agent_accounts).clone()
+    }
+
+    pub(crate) fn browser_bridge(&self) -> Option<Arc<dyn crate::browser_service::BrowserBridge>> {
+        lock(&self.browser_bridge).clone()
     }
 
     pub(crate) fn is_shutting_down(&self) -> bool {
@@ -507,6 +516,8 @@ impl SessionManager {
                     agent_accounts: Mutex::new(None),
                     agent_usage: crate::agent_usage::UsageBook::default(),
                     agent_memory_writes: Arc::new(AtomicBool::new(true)),
+                    browser_tools: Arc::new(AtomicBool::new(true)),
+                    browser_bridge: Mutex::new(None),
                     catalogs,
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
@@ -1298,6 +1309,26 @@ impl SessionManager {
 
     pub fn agent_memory_writes(&self) -> bool {
         self.shared().agent_memory_writes.load(Ordering::Acquire)
+    }
+
+    /// The Browser plugin's switch. Sessions started while it is on get the browser tools; a
+    /// running session's tools answer that it is off once it is.
+    pub fn set_browser_tools(&self, enabled: bool) {
+        self.shared()
+            .browser_tools
+            .store(enabled, Ordering::Release);
+    }
+
+    pub fn browser_tools(&self) -> bool {
+        self.shared().browser_tools.load(Ordering::Acquire)
+    }
+
+    /// The app's browser, which runs the tools Chat sessions get.
+    pub fn set_browser_bridge(
+        &self,
+        bridge: Option<Arc<dyn crate::browser_service::BrowserBridge>>,
+    ) {
+        *lock(&self.shared().browser_bridge) = bridge;
     }
 
     /// The model choices `agent_id` reported the last time one of its chats ran, on this device:

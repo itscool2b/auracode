@@ -5,6 +5,15 @@ pub fn managed_memory(server: &ResolvedMcpServer) -> bool {
     server.definition.id == "aura-project-memory"
         && server.definition.name.replace('-', "_") == "aura_project_memory"
 }
+/// auracode's browser server (the Browser universal plugin's tools).
+pub fn managed_browser(server: &ResolvedMcpServer) -> bool {
+    server.definition.id == "aura-browser"
+        && server.definition.name.replace('-', "_") == "aura_browser"
+}
+/// One of auracode's own optional servers: left out, not failed, where a connection cannot load it.
+pub fn managed(server: &ResolvedMcpServer) -> bool {
+    managed_memory(server) || managed_browser(server)
+}
 pub fn acp_session(
     servers: &[ResolvedMcpServer],
     stdio: bool,
@@ -16,10 +25,10 @@ pub fn acp_session(
         McpTransport::Http { .. } => http,
         McpTransport::Sse { .. } => sse,
     };
-    let omitted = servers.iter().any(|s| managed_memory(s) && !supported(s));
+    let omitted = servers.iter().any(|s| managed(s) && !supported(s));
     let selected = servers
         .iter()
-        .filter(|s| !managed_memory(s) || supported(s))
+        .filter(|s| !managed(s) || supported(s))
         .cloned()
         .collect::<Vec<_>>();
     if selected.iter().any(|s| !supported(s)) {
@@ -221,6 +230,26 @@ pub(crate) mod tests {
         server.definition.header_keys.clear();
         server.credentials.headers.clear();
         server
+    }
+    pub(crate) fn browser() -> ResolvedMcpServer {
+        let mut server = memory();
+        server.definition.id = "aura-browser".into();
+        server.definition.name = "aura_browser".into();
+        server
+    }
+    /// auracode's browser server is one of its own optional servers, like project memory: a
+    /// connection that cannot load it leaves it out instead of failing the start. A user's
+    /// server only borrowing the name is not.
+    #[test]
+    fn the_browser_server_is_optional_like_memory() {
+        assert!(managed(&browser()) && managed_browser(&browser()));
+        assert!(!managed_memory(&browser()));
+        let mut lookalike = server();
+        lookalike.definition.name = "aura_browser".into();
+        assert!(!managed(&lookalike), "the id must be auracode's too");
+        let (servers, omitted) = acp_session(&[browser(), memory()], false, false, false).unwrap();
+        assert!(omitted);
+        assert_eq!(servers, json!([]));
     }
     #[test]
     fn optional_memory_is_omitted_when_transport_unsupported_but_real_shared_servers_refuse() {
