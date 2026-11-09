@@ -856,6 +856,7 @@ impl Browser {
     /// A page asked to close its tab (`window.close()`, or the engine closing a window it opened
     /// only for a download). The engine reports a download's end through the page that started it,
     /// so the files of any still running tell when they are done instead; then the tab closes.
+    #[cfg(windows)]
     fn close_requested(self: &Arc<Self>, tab_id: &str) {
         let running = {
             let mut inner = lock(&self.inner);
@@ -874,6 +875,7 @@ impl Browser {
 
     /// Reports a download done once its file is in place (the engine writes elsewhere until it
     /// finishes), for up to half an hour.
+    #[cfg(windows)]
     fn watch_download(self: &Arc<Self>, chat_id: &str, tab_id: &str, url: String, file: PathBuf) {
         let this = Arc::clone(self);
         let chat_id = chat_id.to_owned();
