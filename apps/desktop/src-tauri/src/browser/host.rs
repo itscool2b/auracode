@@ -158,7 +158,7 @@ fn evict(browser: &Arc<Browser>) {
                 .filter_map(|id| inner.tabs.get(id))
                 .filter(|tab| !inner.agents.get(&tab.chat_id).is_some_and(|n| *n > 0))
                 // A page with a download running reports its end; it sleeps once that comes.
-                .filter(|tab| tab.downloads == 0)
+                .filter(|tab| tab.downloads.is_empty())
                 .min_by_key(|tab| tab.used)
                 .map(|tab| tab.id.clone())
         };
@@ -189,7 +189,7 @@ fn sleep(browser: &Arc<Browser>, tab_id: &str) {
         tab.loading = false;
         tab.annotating = false;
         // A sleeping page reports no download's end.
-        tab.downloads = 0;
+        tab.downloads.clear();
     });
 }
 
@@ -471,6 +471,7 @@ fn configure<'a>(
     let chat = chat_id.to_owned();
     builder = builder.with_download_started_handler(move |url, path| {
         if let Some(browser) = browser.upgrade() {
+            browser.download_began(&tab, &url, path);
             browser.emit(BrowserEvent::Download {
                 chat_id: chat.clone(),
                 tab_id: tab.clone(),
@@ -480,7 +481,6 @@ fn configure<'a>(
                     .map(|name| name.to_string_lossy().into_owned()),
                 state: DownloadState::Started,
             });
-            browser.download_began(&tab);
         }
         true
     });
@@ -490,6 +490,7 @@ fn configure<'a>(
     let chat = chat_id.to_owned();
     builder.with_download_completed_handler(move |url, path, success| {
         if let Some(browser) = browser.upgrade() {
+            browser.download_ended(&tab, &url);
             browser.emit(BrowserEvent::Download {
                 chat_id: chat.clone(),
                 tab_id: tab.clone(),
@@ -501,7 +502,6 @@ fn configure<'a>(
                     DownloadState::Failed
                 },
             });
-            browser.download_ended(&tab);
         }
     })
 }
@@ -856,7 +856,7 @@ pub(super) fn close_all(browser: &Arc<Browser>) {
             tab.live = false;
             tab.loading = false;
             tab.annotating = false;
-            tab.downloads = 0;
+            tab.downloads.clear();
         });
     }
     HOST.with_borrow_mut(|host| {
@@ -1021,9 +1021,7 @@ pub(super) fn devtools_call(
 /// A popup asked to close itself (`window.close()` after a sign-in): its tab closes.
 #[cfg(windows)]
 pub(super) fn close_requested(browser: &Arc<Browser>, tab_id: &str) {
-    if !browser.hold_for_downloads(tab_id) {
-        let _ = browser.close_tab(tab_id);
-    }
+    browser.close_requested(tab_id);
 }
 
 /// A page's process ended. Its page closes but keeps its place over the panel, so Reload builds
@@ -1054,7 +1052,7 @@ pub(super) fn crashed(browser: &Arc<Browser>, tab_id: &str, whole: bool) {
             tab.loading = false;
             tab.annotating = false;
             tab.crashed = tab.url.is_some();
-            tab.downloads = 0;
+            tab.downloads.clear();
         });
     }
 }

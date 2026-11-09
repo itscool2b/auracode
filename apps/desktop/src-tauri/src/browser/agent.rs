@@ -597,9 +597,41 @@ async fn navigate(
                 )));
             }
         };
+        let (from, possible) = lock(&browser.inner)
+            .tabs
+            .get(&tab)
+            .map(|state| {
+                let possible = match action {
+                    GoAction::Back => state.can_back,
+                    GoAction::Forward => state.can_forward,
+                    _ => true,
+                };
+                (state.url.clone(), possible)
+            })
+            .unwrap_or((None, false));
+        if !possible {
+            let way = if matches!(action, GoAction::Back) {
+                "back"
+            } else {
+                "forward"
+            };
+            return Ok(ToolReply::text(format!(
+                "There is no page to go {way} to. {}",
+                whereabouts(browser, &tab)
+            )));
+        }
         let before = loads(browser, &tab);
         browser.go(&tab, action).await?;
         settle(browser, &tab, before, true).await;
+        // A page kept in memory comes back without loading; wait for the address to move too.
+        if !matches!(action, GoAction::Reload) {
+            let started = Instant::now();
+            while started.elapsed() < Duration::from_secs(3)
+                && lock(&browser.inner).tabs.get(&tab).map(|state| &state.url) == Some(&from)
+            {
+                tokio::time::sleep(Duration::from_millis(80)).await;
+            }
+        }
         return Ok(ToolReply::text(whereabouts(browser, &tab)));
     }
     let input = required(args, "url")?;
@@ -675,6 +707,71 @@ async fn screenshot(
     }
 }
 
+/// The DevTools object group an agent's script values live in until they are read.
+#[cfg(windows)]
+const AGENT_OBJECTS: &str = "aura-agent";
+
+/// Turns a script's value (`this`) into plain data an agent can read: elements as their tags and
+/// text, windows, functions, maps, sets, dates and errors in words, cycles and depth cut short.
+#[cfg(windows)]
+const PLAIN_DATA: &str = r##"function () {
+  const seen = new WeakSet();
+  const element = (node) => {
+    if (node.nodeType !== 1)
+      return node.nodeName + (node.textContent ? ": " + node.textContent.trim().slice(0, 200) : "");
+    const id = node.id ? "#" + node.id : "";
+    const classes =
+      typeof node.className === "string" && node.className.trim()
+        ? "." + node.className.trim().split(/\s+/).slice(0, 3).join(".")
+        : "";
+    const text = (node.innerText || node.textContent || "").trim().replace(/\s+/g, " ").slice(0, 200);
+    return "<" + node.tagName.toLowerCase() + id + classes + ">" + (text ? " " + JSON.stringify(text) : "");
+  };
+  const plain = (value, depth) => {
+    if (value === undefined) return null;
+    if (typeof value === "bigint") return value.toString() + "n";
+    if (typeof value === "symbol") return value.toString();
+    if (typeof value === "function") return "function " + (value.name || "(anonymous)");
+    if (value === null || typeof value !== "object") return value;
+    if (typeof Node === "function" && value instanceof Node) return element(value);
+    if (value.window === value)
+      return "a window (" + (value === window ? location.href : "another page") + ")";
+    if (seen.has(value)) return "(shown above)";
+    if (depth > 6) return Array.isArray(value) ? "(a list of " + value.length + ")" : "(an object)";
+    seen.add(value);
+    if (value instanceof Date) return value.toISOString();
+    if (value instanceof Error) return String(value.stack || value);
+    if (value instanceof Map)
+      return Array.from(value)
+        .slice(0, 200)
+        .map(([key, item]) => [plain(key, depth + 1), plain(item, depth + 1)]);
+    if (
+      Array.isArray(value) ||
+      value instanceof Set ||
+      (typeof NodeList === "function" && value instanceof NodeList) ||
+      (typeof HTMLCollection === "function" && value instanceof HTMLCollection)
+    )
+      return Array.from(value)
+        .slice(0, 500)
+        .map((item) => plain(item, depth + 1));
+    const out = {};
+    let count = 0;
+    for (const key of Object.keys(value)) {
+      if (count++ >= 200) {
+        out["(more)"] = "keys left out";
+        break;
+      }
+      try {
+        out[key] = plain(value[key], depth + 1);
+      } catch {
+        out[key] = "(unreadable)";
+      }
+    }
+    return out;
+  };
+  return plain(this, 0);
+}"##;
+
 async fn evaluate(
     browser: &Arc<Browser>,
     chat_id: &str,
@@ -690,37 +787,66 @@ async fn evaluate(
     let before = page_secrets(browser, &tab).await;
     #[cfg(windows)]
     let value = {
-        // The engine runs it as the console would: top-level await, the last expression's value.
-        let run = |expression: String| {
+        let call = |method: &'static str, params: Value| {
             let browser = Arc::clone(browser);
             let tab = tab.clone();
-            async move {
-                super::webview2::devtools(
-                    &browser,
-                    &tab,
-                    "Runtime.evaluate",
-                    json!({
-                        "expression": expression,
-                        "awaitPromise": true,
-                        "returnByValue": true,
-                        "replMode": true,
-                        // Never a user gesture: one would let page scripts read a password the
-                        // browser filled in.
-                        "userGesture": false,
-                        "timeout": 15000,
-                    }),
-                )
-                .await
-            }
+            async move { super::webview2::devtools(&browser, &tab, method, params).await }
         };
-        let mut reply = run(code.to_owned()).await?;
-        if reply["exceptionDetails"]["exception"]["description"]
-            .as_str()
-            .is_some_and(|text| text.contains("Illegal return"))
-        {
-            reply = run(format!("(async () => {{\n{code}\n}})()")).await?;
+        // Whether it is a function's body with return statements. A return cannot stand in a
+        // class's static block, so parsing it there says so without running anything (a page
+        // that forbids eval answers no, and the engine's own answer below still tells).
+        let literal = serde_json::to_string(code).unwrap_or_else(|_| "\"\"".into());
+        let probe = format!(
+            "(() => {{ try {{ new Function(\"class Probe {{ static {{\\n\" + {literal} + \"\\n}} }}\"); return false; }} catch (error) {{ return /Illegal return/.test(String(error)); }} }})()"
+        );
+        let body = call(
+            "Runtime.evaluate",
+            json!({ "expression": probe, "returnByValue": true, "userGesture": false }),
+        )
+        .await
+        .ok()
+        .and_then(|reply| reply["result"]["value"].as_bool())
+        .unwrap_or(false);
+        let wrapped = format!("(async () => {{\n{code}\n}})()");
+        // Code runs as the console would (top-level await, the last expression's value); a body,
+        // as its function, whose promise the console's mode would not wait for.
+        let run = |expression: String, console: bool| {
+            call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": expression,
+                    "awaitPromise": true,
+                    "returnByValue": false,
+                    "replMode": console,
+                    "objectGroup": AGENT_OBJECTS,
+                    // Never a user gesture: one would let page scripts read a password the
+                    // browser filled in.
+                    "userGesture": false,
+                    "timeout": 15000,
+                }),
+            )
+        };
+        let illegal_return = |reply: &Value| {
+            let details = &reply["exceptionDetails"];
+            details["exception"]["description"]
+                .as_str()
+                .or_else(|| details["text"].as_str())
+                .is_some_and(|text| text.contains("Illegal return"))
+        };
+        let mut reply = if body {
+            run(wrapped.clone(), false).await?
+        } else {
+            run(code.to_owned(), true).await?
+        };
+        if !body && illegal_return(&reply) {
+            reply = run(wrapped, false).await?;
         }
         if let Some(details) = reply.get("exceptionDetails") {
+            let _ = call(
+                "Runtime.releaseObjectGroup",
+                json!({ "objectGroup": AGENT_OBJECTS }),
+            )
+            .await;
             let message = details["exception"]["description"]
                 .as_str()
                 .or_else(|| details["text"].as_str())
@@ -732,15 +858,47 @@ async fn evaluate(
             )));
         }
         let result = &reply["result"];
-        match result.get("value") {
-            Some(value) => value.clone(),
-            None => Value::String(
-                result["description"]
-                    .as_str()
-                    .unwrap_or(result["type"].as_str().unwrap_or("undefined"))
-                    .to_owned(),
-            ),
-        }
+        let value = match result["objectId"].as_str() {
+            // An object becomes plain data in the page: elements as their tags and text, windows,
+            // functions, maps, sets and cycles in words.
+            Some(object) => call(
+                "Runtime.callFunctionOn",
+                json!({
+                    "objectId": object,
+                    "functionDeclaration": PLAIN_DATA,
+                    "returnByValue": true,
+                    "userGesture": false,
+                }),
+            )
+            .await
+            .ok()
+            .filter(|plain| plain.get("exceptionDetails").is_none())
+            .map(|plain| plain["result"]["value"].clone())
+            .unwrap_or_else(|| {
+                Value::String(
+                    result["description"]
+                        .as_str()
+                        .unwrap_or("an object")
+                        .to_owned(),
+                )
+            }),
+            None => match result.get("value") {
+                Some(value) => value.clone(),
+                None => Value::String(
+                    result["unserializableValue"]
+                        .as_str()
+                        .or_else(|| result["description"].as_str())
+                        .unwrap_or(result["type"].as_str().unwrap_or("undefined"))
+                        .to_owned(),
+                ),
+            },
+        };
+        let _ = call(
+            "Runtime.releaseObjectGroup",
+            json!({ "objectGroup": AGENT_OBJECTS }),
+        )
+        .await;
+        value
     };
     #[cfg(not(windows))]
     let value = {

@@ -182,6 +182,13 @@ export function BrowserPanel({
   // Something open over the page: capture its picture, then hide it; show it again once clear.
   const cover = useRef<"clear" | "capturing" | "covered">("clear");
   const holdRef = useRef(false);
+  // A note's picture once the note is gone: the page shows first, its picture goes a moment
+  // later, so nothing flashes (unless something covers the page by then).
+  const releasePicture = useCallback(() => {
+    window.setTimeout(() => {
+      if (!holdRef.current && cover.current === "clear") setPicture(null);
+    }, 80);
+  }, []);
   holdRef.current = frozen || note !== null;
   useEffect(() => {
     if (!tabId) return;
@@ -347,6 +354,7 @@ export function BrowserPanel({
           case "annotate_ended":
             setNote(null);
             setFrozen(false);
+            releasePicture();
             return;
           case "shortcut":
             switch (event.action) {
@@ -405,7 +413,7 @@ export function BrowserPanel({
             return;
         }
       }),
-    [store, chatId, newTab, closeTab, onClose, toggleAnnotate, cycle],
+    [store, chatId, newTab, closeTab, onClose, toggleAnnotate, cycle, releasePicture],
   );
 
   useEffect(() => {
@@ -455,7 +463,8 @@ export function BrowserPanel({
     setNote(null);
     setNoteError(null);
     setFrozen(false);
-  }, []);
+    releasePicture();
+  }, [releasePicture]);
 
   const deliver = async (text: string, how: "send" | "add") => {
     const current = noteRef.current;

@@ -28,11 +28,29 @@ pub async fn workspace_removal_preview(
 #[specta::specta]
 pub async fn workspace_removal_apply(
     state: State<'_, AppState>,
+    browser: State<'_, std::sync::Arc<crate::browser::Browser>>,
     token: String,
 ) -> Result<(), AppError> {
     let lease = state.sessions()?;
     let manager = (*lease).clone();
-    Ok(manager
+    manager
         .workspace_removal_apply(&token, Box::new(lease))
-        .await?)
+        .await?;
+    // The removed chats' browsers close with them.
+    if let Ok(sessions) = state.sessions()
+        && let Ok(snapshot) = sessions
+            .workspace_snapshot(aura_protocol::workspace::WorkspaceFilter {
+                include_archived: true,
+                project_id: None,
+            })
+            .await
+    {
+        let existing = snapshot
+            .chats
+            .into_iter()
+            .map(|chat| chat.chat.id)
+            .collect();
+        browser.prune(&existing);
+    }
+    Ok(())
 }

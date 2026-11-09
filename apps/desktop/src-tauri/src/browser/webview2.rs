@@ -394,7 +394,13 @@ pub(super) fn call(
     let handler =
         CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, json| {
             if let Some(sender) = lock(&sender).take() {
-                let _ = sender.send(result.map(|()| json).map_err(|error| error.message()));
+                // A failed method still answers its own error, which says more than the HRESULT.
+                let _ = sender.send(result.map(|()| json.clone()).map_err(|error| {
+                    serde_json::from_str::<Value>(&json)
+                        .ok()
+                        .and_then(|answer| answer["message"].as_str().map(str::to_owned))
+                        .unwrap_or_else(|| error.message())
+                }));
             }
             Ok(())
         }));

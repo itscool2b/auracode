@@ -377,9 +377,8 @@ struct Tab {
     landed: bool,
     /// A page opened it only to download a file: it closes once its downloads end.
     download_only: bool,
-    /// Downloads it started that have not ended. Its page stays until they do, since the engine
-    /// reports a download's end through the page that started it.
-    downloads: u32,
+    /// Downloads it started that have not ended: each one's address and the file it saves to.
+    downloads: Vec<(String, PathBuf)>,
 }
 
 impl Tab {
@@ -402,7 +401,7 @@ impl Tab {
             opener: None,
             landed: false,
             download_only: false,
-            downloads: 0,
+            downloads: Vec::new(),
         }
     }
 
@@ -854,42 +853,47 @@ impl Browser {
         Ok(())
     }
 
-    /// A page asked to close its tab (`window.close()`, or the engine closing a window it opened only
-    /// for a download). A tab with a download running stays, out of the way, until it ends:
-    /// closing it would lose the download's end. Answers whether it stays.
-    fn hold_for_downloads(&self, tab_id: &str) -> bool {
-        let chat_id = {
+    /// A page asked to close its tab (`window.close()`, or the engine closing a window it opened
+    /// only for a download). The engine reports a download's end through the page that started it,
+    /// so the files of any still running tell when they are done instead; then the tab closes.
+    fn close_requested(self: &Arc<Self>, tab_id: &str) {
+        let running = {
             let mut inner = lock(&self.inner);
-            let Some(tab) = inner.tabs.get_mut(tab_id) else {
-                return false;
-            };
-            if tab.downloads == 0 {
-                return false;
-            }
-            tab.download_only = true;
-            let opener = tab.opener.clone();
-            let chat_id = tab.chat_id.clone();
-            if let Some(chat) = inner.chats.get_mut(&chat_id)
-                && chat.active.as_deref() == Some(tab_id)
-            {
-                let index = chat.tabs.iter().position(|id| id == tab_id).unwrap_or(0);
-                let next = opener
-                    .filter(|opener| chat.tabs.contains(opener))
-                    .or_else(|| {
-                        index
-                            .checked_sub(1)
-                            .and_then(|at| chat.tabs.get(at))
-                            .cloned()
-                    })
-                    .or_else(|| chat.tabs.get(index + 1).cloned());
-                if next.is_some() {
-                    chat.active = next;
-                }
-            }
-            chat_id
+            inner
+                .tabs
+                .get_mut(tab_id)
+                .map(|tab| (tab.chat_id.clone(), std::mem::take(&mut tab.downloads)))
         };
-        self.emit_chat(&chat_id);
-        true
+        if let Some((chat_id, downloads)) = running {
+            for (url, file) in downloads {
+                self.watch_download(&chat_id, tab_id, url, file);
+            }
+        }
+        let _ = self.close_tab(tab_id);
+    }
+
+    /// Reports a download done once its file is in place (the engine writes elsewhere until it
+    /// finishes), for up to half an hour.
+    fn watch_download(self: &Arc<Self>, chat_id: &str, tab_id: &str, url: String, file: PathBuf) {
+        let this = Arc::clone(self);
+        let chat_id = chat_id.to_owned();
+        let tab_id = tab_id.to_owned();
+        tauri::async_runtime::spawn(async move {
+            let deadline = std::time::Instant::now() + Duration::from_secs(30 * 60);
+            while std::time::Instant::now() < deadline {
+                if file.is_file() {
+                    this.emit(BrowserEvent::Download {
+                        chat_id,
+                        tab_id,
+                        url,
+                        file: Some(file.to_string_lossy().into_owned()),
+                        state: DownloadState::Done,
+                    });
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
     }
 
     /// Notes that a page in `opener` opened `tab_id`.
@@ -899,16 +903,17 @@ impl Browser {
         }
     }
 
-    /// A download began in a tab. One with no page of its own (a link to a file opened in a new
-    /// tab, or a file's address typed into an empty tab) shows its start page again, and a tab a
-    /// page opened only for the download hands back to that page and closes once it ends.
-    fn download_began(&self, tab_id: &str) {
+    /// A download began in a tab, saving `url` to `file`. A tab with no page of its own (a link
+    /// to a file opened in a new tab, or a file's address typed into an empty tab) shows its start
+    /// page again, and one a page opened only for the download hands back to that page and closes
+    /// once the download ends.
+    fn download_began(&self, tab_id: &str, url: &str, file: &Path) {
         let chat_id = {
             let mut inner = lock(&self.inner);
             let Some(tab) = inner.tabs.get_mut(tab_id) else {
                 return;
             };
-            tab.downloads = tab.downloads.saturating_add(1);
+            tab.downloads.push((url.to_owned(), file.to_owned()));
             if tab.landed {
                 return;
             }
@@ -931,16 +936,18 @@ impl Browser {
         self.emit_chat(&chat_id);
     }
 
-    /// A download ended: a tab opened only for it closes once its last one does, unless it is its
-    /// chat's only tab.
-    fn download_ended(self: &Arc<Self>, tab_id: &str) {
+    /// A download of `url` ended: a tab opened only for downloads closes once its last one does,
+    /// unless it is its chat's only tab.
+    fn download_ended(self: &Arc<Self>, tab_id: &str, url: &str) {
         let close = {
             let mut inner = lock(&self.inner);
             let Some(tab) = inner.tabs.get_mut(tab_id) else {
                 return;
             };
-            tab.downloads = tab.downloads.saturating_sub(1);
-            let ready = tab.download_only && tab.downloads == 0;
+            if let Some(at) = tab.downloads.iter().position(|(started, _)| started == url) {
+                tab.downloads.remove(at);
+            }
+            let ready = tab.download_only && tab.downloads.is_empty();
             let chat_id = tab.chat_id.clone();
             ready
                 && inner
@@ -999,6 +1006,19 @@ impl Browser {
             }
         });
         self.emit_chat(chat_id);
+    }
+
+    /// Chats that no longer exist (their project or folder was removed) lose their browsers.
+    pub fn prune(self: &Arc<Self>, existing: &std::collections::HashSet<String>) {
+        let gone: Vec<String> = lock(&self.inner)
+            .chats
+            .keys()
+            .filter(|chat| !existing.contains(*chat))
+            .cloned()
+            .collect();
+        for chat in gone {
+            self.forget_chat(&chat);
+        }
     }
 
     /// Loads `input` (an address, a host, a file path or words to search for) in a tab.
@@ -1453,6 +1473,13 @@ impl Browser {
                     .get(tab_id)
                     .is_some_and(|tab| tab.annotating);
                 if annotating {
+                    // Esc in the page ends Annotate as the button does: the picker goes and the
+                    // tab says it is not annotating.
+                    let this = Arc::clone(self);
+                    let tab = tab_id.to_owned();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = this.annotate(&tab, false, "", "").await;
+                    });
                     self.emit(BrowserEvent::AnnotateEnded {
                         chat_id,
                         tab_id: tab_id.to_owned(),
