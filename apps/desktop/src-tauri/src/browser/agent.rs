@@ -260,6 +260,21 @@ async fn run(
             let now = active(browser, chat_id);
             if now.as_deref() != Some(tab.as_str()) {
                 text.push_str(" It opened a new tab, which is now in front.");
+            } else if loads(browser, &tab) == before {
+                // The same page: say what the element reads now, when the click changed it.
+                match browser
+                    .call(&tab, &format!("api.locate({})", js(&Some(target))))
+                    .await
+                {
+                    Ok(after) if after["error"].is_null() => {
+                        let name = after["name"].as_str().unwrap_or("");
+                        if !name.is_empty() && format!("\"{name}\"") != place.name {
+                            text.push_str(&format!(" It now reads \"{name}\"."));
+                        }
+                    }
+                    Ok(_) => text.push_str(" It is no longer on the page."),
+                    Err(_) => {}
+                }
             }
             Ok(ToolReply::text(format!(
                 "{text}\n{}",

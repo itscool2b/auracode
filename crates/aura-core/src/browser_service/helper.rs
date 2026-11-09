@@ -75,7 +75,7 @@ pub(crate) fn tools() -> Value {
     json!([
         {
             "name": "browser_navigate",
-            "description": "Open an address in the chat's browser tab in front (a URL, a host such as localhost:5173, a file path, or words to search for), or go back, forward or reload with action. Waits for the page to load and says where it is.",
+            "description": "Open an address in the chat's browser tab in front (a URL, a host such as localhost:5173, or words to search for; web pages only), or go back, forward or reload with action. Waits for the page to load and says where it is.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
