@@ -275,14 +275,18 @@ fn share_spelling(address: &str) -> bool {
 
 /// `%5C` and friends as the engine reads them, for the share check.
 fn percent_decode(text: &str) -> String {
+    // Byte by byte: an address as written may hold any character after a `%`, and a string is
+    // never cut inside one.
+    let hex = |byte: u8| (byte as char).to_digit(16).map(|digit| digit as u8);
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%'
-            && index + 2 < bytes.len()
-            && let Ok(byte) = u8::from_str_radix(&text[index + 1..index + 3], 16)
+            && index + 3 <= bytes.len()
+            && let (Some(high), Some(low)) = (hex(bytes[index + 1]), hex(bytes[index + 2]))
         {
+            let byte = high * 16 + low;
             out.push(if byte == b'\\' { b'/' } else { byte });
             index += 3;
             continue;
@@ -547,6 +551,27 @@ mod tests {
             resolve("/home/me/site/index.html").as_deref(),
             Some("file:///home/me/site/index.html")
         );
+    }
+
+    #[test]
+    fn any_character_after_a_percent_is_read_safely() {
+        // A `%` before a character of several bytes, or at the very end, must never cut a string.
+        for written in [
+            "file:///%é/x.html",
+            "file:///%éé",
+            "file:///a%",
+            "file:///a%4",
+            "file:////%€server/share",
+            "https://example.com/%😀",
+        ] {
+            let _ = policy(written);
+            let _ = share_spelling(written);
+            let _ = resolve(written);
+        }
+        assert_eq!(percent_decode("a%2Fb%5Cc%zz%"), "a/b/c%zz%");
+        assert_eq!(percent_decode("%é%41"), "%éA");
+        assert!(share_spelling("file:///%5C%5Cserver/share"));
+        assert!(!share_spelling("file:///%é/x.html"));
     }
 
     #[test]
