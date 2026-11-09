@@ -47,7 +47,9 @@ const BIN = `$${"{"}MAINBINARYNAME}`;
 const SEP = String.fromCharCode(92);
 
 test("the bundle builds only the NSIS installer on Windows, with the hooks and strings", () => {
-  assert.deepEqual(config.bundle.targets, ["app", "dmg", "nsis"], "no MSI without the cleanup");
+  // Windows builds NSIS only: no MSI without the cleanup (the Linux packages sit beside them).
+  assert.ok(config.bundle.targets.includes("nsis"), "the NSIS installer");
+  assert.ok(!config.bundle.targets.includes("msi"), "no MSI without the cleanup");
   assert.deepEqual(nsis.languages, ["English"]);
   assert.match(hooks, /^!macro NSIS_HOOK_PREUNINSTALL$/mu);
   assert.match(hooks, /^!macro NSIS_HOOK_POSTUNINSTALL$/mu);
