@@ -182,3 +182,17 @@ oh-my-pi (not installed here), from its published documentation:
   in "Left out of this terminal", as shared servers already were.
 - Availability comes from the agent's entry (`AgentEntry.terminal`), not a list of names in the
   page, so the header switch and New chat agree with what Rust can launch.
+- **OpenCode and Pi on Windows (9 November).** Both showed as broken here ("The shell shim has no
+  supported package bin"), so neither Chat nor Terminal could start them. OpenCode's npm package
+  (`opencode-ai`) declares its native `bin/opencode.exe`, which now runs directly. Pi's own
+  installer keeps each release in `<agent>/install/releases/<version>` behind `bin/pi.cmd`:
+  auracode reads its marker (`managed-install.json`, layout `releases-v1`) and `current-version`
+  as data, runs that release's bin through Node with `PI_MANAGED_INSTALL_ROOT` set as Pi's own
+  launcher sets it, and files the install under Pi's own channel, so npm never updates it. Node
+  cannot start a verbatim (`\\?\C:\...`) main script, which `std::fs::canonicalize` returns, so
+  every npm package entry now runs in its plain spelling. Natively: Pi's interface opened in the
+  terminal twice and left with Ctrl+C twice; Pi's Chat passes `aura-cli probe` except the restart
+  after a deliberate interrupt, where Pi waits about 30 seconds for a lock the killed process held
+  (with or without the new variable). OpenCode's interface starts, but OpenCode 1.19.4 fails on
+  this machine by itself, outside auracode too: "Database is not empty and has no session table"
+  (its `~/.local/share/opencode/opencode.db`).
