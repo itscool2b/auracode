@@ -61,7 +61,9 @@ tempfile.workspace = true
 sha2.workspace = true
 # The browser beside the chat (src/browser): its tabs are wry webviews of their own, outside
 # Tauri's IPC, at the release Tauri itself runs and with the features it already enables.
-wry = { version = "=0.57.1", default-features = false, features = ["os-webview"] }
+# `devtools` keeps the panel's DevTools in release builds: without it wry offers `open_devtools`
+# to debug builds only. Tauri's own window still gets DevTools only from Tauri's feature.
+wry = { version = "=0.57.1", default-features = false, features = ["os-webview", "devtools"] }
 # Native microphone capture and statically linked offline speech recognition: transcribe.cpp
 # runs the bundled Parakeet and Silero VAD models on the CPU (Metal on Apple silicon).
 cpal = "=0.18.2"
