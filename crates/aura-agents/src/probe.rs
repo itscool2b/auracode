@@ -39,6 +39,8 @@ pub(crate) struct Located {
     pub(crate) prefix_args: Vec<OsString>,
     /// An adapter's `node`.
     pub(crate) node: Option<PathBuf>,
+    /// What the vendor's own launcher would set for the program (Pi's install root).
+    pub(crate) set_env: Vec<(OsString, OsString)>,
 }
 
 impl Detection {
@@ -298,7 +300,7 @@ async fn launch_command(
     id: &str,
     path: &Path,
     env: &EnvMap,
-) -> Result<(PathBuf, Vec<OsString>), String> {
+) -> Result<crate::npm_entry::Command, String> {
     let (id, path, env) = (id.to_owned(), path.to_owned(), env.clone());
     tokio::task::spawn_blocking(move || crate::npm_entry::command(&id, &path, &env))
         .await
@@ -383,7 +385,11 @@ async fn detect_inner(
             else {
                 return Detection::missing(format!("{program} was not found on your PATH."));
             };
-            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+            let crate::npm_entry::Command {
+                program,
+                prefix: prefix_args,
+                set_env,
+            } = match launch_command(spec.id, &path, &env.vars).await {
                 Ok(command) => command,
                 Err(reason) => return Detection::broken(reason),
             };
@@ -436,6 +442,7 @@ async fn detect_inner(
                     program,
                     prefix_args,
                     node: None,
+                    set_env,
                 }),
             }
         }
@@ -484,6 +491,7 @@ async fn detect_inner(
                     program: path,
                     prefix_args: Vec::new(),
                     node: None,
+                    set_env: Vec::new(),
                 }),
             }
         }
@@ -503,7 +511,11 @@ async fn detect_inner(
                     spec.name
                 ));
             };
-            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+            let crate::npm_entry::Command {
+                program,
+                prefix: prefix_args,
+                set_env,
+            } = match launch_command(spec.id, &path, &env.vars).await {
                 Ok(command) => command,
                 Err(reason) => return Detection::broken(reason),
             };
@@ -535,6 +547,7 @@ async fn detect_inner(
                     program,
                     prefix_args,
                     node: None,
+                    set_env,
                 }),
             }
         }
@@ -621,6 +634,7 @@ async fn detect_inner(
                     program: user,
                     prefix_args: Vec::new(),
                     node: Some(node),
+                    set_env: Vec::new(),
                 }),
             }
         }

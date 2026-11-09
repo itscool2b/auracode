@@ -305,6 +305,7 @@ mod tests {
                         program: old_path,
                         prefix_args: vec!["old-index.js".into()],
                         node: None,
+                        set_env: Vec::new(),
                     }),
                 },
             ),
