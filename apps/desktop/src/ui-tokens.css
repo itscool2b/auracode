@@ -38,12 +38,14 @@
 
   /*
    * The composer is a glass capsule: the popover glass, a lit top edge and a sheen fading down
-   * from it, over the long soft shadow. Focus brightens its rim to the strong hairline and nothing
+   * from it within its top 10px, over the long soft shadow. The sheen stays above the first line:
+   * text over a gradient draws its edges differently, and dictation's ghost must draw the draft
+   * exactly as the message box does. Focus brightens its rim to the strong hairline and nothing
    * else: no coloured ring (owner, 9 November 2026), since the caret already says where typing
    * goes. Both appearances and every theme take it from their own glass tokens.
    */
   --ui-composer-fill: var(--g-glass-pop);
-  --ui-composer-sheen: linear-gradient(180deg, var(--g-glass-card) 0%, transparent 56%);
+  --ui-composer-sheen: linear-gradient(180deg, var(--g-glass-card) 0, transparent 10px);
   --ui-composer-shadow:
     var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight), inset 0 0 0 1px var(--g-glass-rim);
   --ui-composer-shadow-focus:

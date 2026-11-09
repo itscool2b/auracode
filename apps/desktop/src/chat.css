@@ -2289,7 +2289,7 @@
  */
 /*
  * The composer is a glass capsule floating over the pane, radius 22: the popover glass under the
- * stronger blur, a lit top edge with a sheen fading down from it, a hairline rim and one long soft
+ * stronger blur, a lit top edge with a short sheen under it, a hairline rim and one long soft
  * shadow. Focus within brightens the rim a step and draws no coloured ring (owner, 9 November
  * 2026: "remove the outline of color and make this whole thing like a nice glass styling").
  * Nothing glows (owner, 2 November 2026), and nothing swims along the rim while the agent works
