@@ -470,7 +470,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
   min-width: 0;
 }
 
