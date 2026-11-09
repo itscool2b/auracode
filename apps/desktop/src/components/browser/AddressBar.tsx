@@ -1,7 +1,13 @@
 import { Globe, Lock, Search, TriangleAlert } from "lucide-react";
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import type { HistoryEntry } from "../../bindings";
-import { type BrowserStore, secureAddress, shownAddress, siteOf } from "../../lib/browser";
+import {
+  type BrowserStore,
+  knownTld,
+  secureAddress,
+  shownAddress,
+  siteOf,
+} from "../../lib/browser";
 import { OVER_BROWSER } from "../../lib/browserOcclusion";
 
 /** Whether typed words are an address (Enter opens it) or a search, as the browser will read them. */
@@ -14,7 +20,10 @@ export function looksLikeAddress(text: string): boolean {
   if (/^(localhost|\[[0-9a-f:]+\])(:\d+)?$/i.test(host)) return true;
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(host)) return true;
   if (/^[a-z0-9-]+:\d+$/i.test(host)) return true;
-  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(:\d+)?$/i.test(host);
+  // A real domain ends in a country's two letters or a known generic name, so file.txt and v1.2
+  // stay searches, as the browser reads them.
+  const domain = host.match(/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.([a-z0-9-]{2,})(?::\d+)?$/i);
+  return domain !== null && knownTld(domain[1] ?? "");
 }
 
 export interface AddressBarHandle {

@@ -29,7 +29,12 @@ export function overlaps(a: Box, b: Box): boolean {
 export function covered(page: Box, root: ParentNode = document, ignore?: Element | null): boolean {
   for (const element of root.querySelectorAll<HTMLElement>(FLOATING)) {
     if (ignore?.contains(element)) continue;
-    if (element instanceof HTMLDialogElement && isModal(element)) return true;
+    if (
+      typeof HTMLDialogElement !== "undefined" &&
+      element instanceof HTMLDialogElement &&
+      isModal(element)
+    )
+      return true;
     const box = element.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) continue;
     if (overlaps(box, page)) return true;

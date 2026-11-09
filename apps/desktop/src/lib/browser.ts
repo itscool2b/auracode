@@ -315,6 +315,9 @@ export class BrowserPanels {
     next.share = clampShare(next.share);
     if (change.share !== undefined) this.#write(SHARE_KEY, String(next.share));
     this.#write(PANEL_PREFIX + chatId, JSON.stringify(next));
+    // One change, one notice.
+    this.#version += 1;
+    for (const listener of [...this.#listeners]) listener();
   }
 
   #read(key: string): string | null {
@@ -331,8 +334,6 @@ export class BrowserPanels {
     } catch {
       /* A full or blocked storage keeps the last placement. */
     }
-    this.#version += 1;
-    for (const listener of [...this.#listeners]) listener();
   }
 }
 
@@ -365,6 +366,125 @@ export function siteOf(url: string | null): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * The generic top-level domains people type, as GENERIC_TLDS in src-tauri/src/browser/address.rs
+ * has them (browser.test.ts keeps the two equal): with any two letters, the endings the address bar
+ * opens as an address rather than searches for.
+ */
+export const GENERIC_TLDS: readonly string[] = [
+  "com",
+  "org",
+  "net",
+  "edu",
+  "gov",
+  "mil",
+  "int",
+  "app",
+  "dev",
+  "page",
+  "info",
+  "biz",
+  "xyz",
+  "site",
+  "online",
+  "tech",
+  "store",
+  "shop",
+  "blog",
+  "cloud",
+  "design",
+  "studio",
+  "art",
+  "live",
+  "news",
+  "wiki",
+  "pro",
+  "name",
+  "mobi",
+  "agency",
+  "digital",
+  "media",
+  "systems",
+  "software",
+  "codes",
+  "tools",
+  "run",
+  "build",
+  "chat",
+  "bot",
+  "inc",
+  "llc",
+  "company",
+  "world",
+  "space",
+  "today",
+  "life",
+  "website",
+  "team",
+  "work",
+  "works",
+  "zone",
+  "network",
+  "email",
+  "link",
+  "click",
+  "fun",
+  "games",
+  "game",
+  "video",
+  "music",
+  "photo",
+  "photos",
+  "solutions",
+  "services",
+  "help",
+  "support",
+  "academy",
+  "school",
+  "rocks",
+  "ninja",
+  "guru",
+  "lol",
+  "wtf",
+  "cool",
+  "one",
+  "new",
+  "top",
+  "vip",
+  "plus",
+  "global",
+  "google",
+  "amazon",
+  "microsoft",
+  "apple",
+  "museum",
+  "aero",
+  "coop",
+  "jobs",
+  "travel",
+  "cat",
+  "asia",
+  "eus",
+  "berlin",
+  "london",
+  "nyc",
+  "paris",
+  "tokyo",
+  "africa",
+  "onion",
+];
+
+/** Whether `tld` ends a real domain, or names this computer (`.localhost`, `.local`, `.test`). */
+export function knownTld(tld: string): boolean {
+  const name = tld.toLowerCase();
+  return (
+    /^[a-z]{2}$/.test(name) ||
+    GENERIC_TLDS.includes(name) ||
+    (name.startsWith("xn--") && name.length > 4) ||
+    ["localhost", "local", "test", "internal"].includes(name)
+  );
 }
 
 export function isLocal(hostname: string): boolean {
