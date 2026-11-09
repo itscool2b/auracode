@@ -916,6 +916,13 @@
         top: `${rect.y > 26 ? rect.y - 24 : rect.y + rect.height + 4}px`,
       });
     };
+    // A pick goes once the picker's own marks are off the page, so its screenshot shows the page
+    // as it is; the next move of the pointer marks again.
+    const pick = (message) => {
+      show(null);
+      area.style.display = "none";
+      requestAnimationFrame(() => requestAnimationFrame(() => post(message)));
+    };
     const under = (x, y) =>
       fromPoint(x, y).find(
         (node) => node !== host && !host.contains(node) && node !== document.documentElement,
@@ -974,7 +981,7 @@
             height: Math.abs(event.clientY - down.y),
           };
           const inside = under(rect.x + rect.width / 2, rect.y + rect.height / 2);
-          post({
+          pick({
             ...base,
             mode: "area",
             area: rect,
@@ -984,7 +991,7 @@
         }
         const element = state.hovered || under(event.clientX, event.clientY);
         if (element)
-          post({ ...base, mode: "element", area: null, elements: [describeElement(element)] });
+          pick({ ...base, mode: "element", area: null, elements: [describeElement(element)] });
       },
       keydown: (event) => {
         if (event.key === "Escape") {
@@ -1009,7 +1016,7 @@
         }
         if (event.key === "Enter" && state.hovered) {
           block(event);
-          post({
+          pick({
             kind: "pick",
             url: location.href,
             title: document.title,

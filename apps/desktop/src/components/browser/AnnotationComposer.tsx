@@ -171,9 +171,7 @@ export function AnnotationComposer({
         <p className="browser-note-hint">
           {agentName} cannot see images, so the note goes without the screenshot.
         </p>
-      ) : (
-        <p className="browser-note-hint">Shift-click the page to add another element.</p>
-      )}
+      ) : null}
       <div className="browser-note-actions">
         {controls ? <div className="browser-note-pickers">{controls}</div> : null}
         <button

@@ -491,7 +491,10 @@ export function BrowserPanel({
   const pickOnPicture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!note || !tab || !event.shiftKey) return;
     const box = event.currentTarget.getBoundingClientRect();
-    store.api.pickAt(tab.id, event.clientX - box.left, event.clientY - box.top).then((element) => {
+    const scale = note.pick.viewport.width ? box.width / note.pick.viewport.width : 1;
+    const x = (event.clientX - box.left) / scale;
+    const y = (event.clientY - box.top) / scale;
+    store.api.pickAt(tab.id, x, y).then((element) => {
       const current = noteRef.current;
       if (element && current) setNote({ ...current, elements: [...current.elements, element] });
     }, fail);
@@ -507,6 +510,10 @@ export function BrowserPanel({
   const pageSize = page.current
     ? { width: page.current.clientWidth, height: page.current.clientHeight }
     : { width: 800, height: 600 };
+  // The note's picture is the page's view in the page's own pixels; it and its marks scale
+  // together to the panel's width (the page may be zoomed, or the panel resized since).
+  const pickView = note?.pick.viewport;
+  const fit = pickView?.width ? pageSize.width / pickView.width : 1;
   const anchor = note
     ? (() => {
         const boxes = marks(note);
@@ -515,7 +522,12 @@ export function BrowserPanel({
         const top = Math.min(...boxes.map((box) => box.y ?? 0));
         const right = Math.max(...boxes.map((box) => (box.x ?? 0) + (box.width ?? 0)));
         const bottom = Math.max(...boxes.map((box) => (box.y ?? 0) + (box.height ?? 0)));
-        return { x: left, y: top, width: right - left, height: bottom - top };
+        return {
+          x: left * fit,
+          y: top * fit,
+          width: (right - left) * fit,
+          height: (bottom - top) * fit,
+        };
       })()
     : null;
   const full = placement.full || narrow;
@@ -787,10 +799,15 @@ export function BrowserPanel({
           </span>
         </output>
       ) : null}
-      {annotating && !note ? (
-        <p className="browser-hint" data-testid="browser-annotate-hint">
-          Click part of the page, or drag over an area. Arrow Up and Down pick the parent or child;
-          Esc stops.
+      {/* The hint stays while a note is open, so the page never moves under it. */}
+      {annotating || note ? (
+        <p
+          className="browser-hint"
+          data-testid={note ? "browser-note-hint" : "browser-annotate-hint"}
+        >
+          {note
+            ? "Shift-click the page to add another element. Esc closes the note."
+            : "Click part of the page, or drag over an area. Arrow Up and Down pick the parent or child; Esc stops."}
         </p>
       ) : null}
       {tab?.error && !tab.loading && view === "page" ? (
@@ -868,9 +885,19 @@ export function BrowserPanel({
           </div>
         ) : picture !== null || frozen ? (
           <div className="browser-picture" aria-hidden={note ? undefined : true}>
-            {picture ? <img src={picture} alt="" draggable={false} /> : null}
-            {note
-              ? marks(note).map((box, index) => (
+            {note && pickView?.width && pickView.height ? (
+              <div
+                className="browser-picture-frame"
+                style={
+                  {
+                    width: pickView.width,
+                    height: pickView.height,
+                    transform: `scale(${fit})`,
+                  } as CSSProperties
+                }
+              >
+                {picture ? <img src={picture} alt="" draggable={false} /> : null}
+                {marks(note).map((box, index) => (
                   <span
                     // biome-ignore lint/suspicious/noArrayIndexKey: marks are positional
                     key={index}
@@ -888,8 +915,11 @@ export function BrowserPanel({
                       <span className="browser-mark-number">{index + 1}</span>
                     ) : null}
                   </span>
-                ))
-              : null}
+                ))}
+              </div>
+            ) : picture ? (
+              <img src={picture} alt="" draggable={false} />
+            ) : null}
           </div>
         ) : tab.asleep ? (
           <div className="browser-empty" role="status">

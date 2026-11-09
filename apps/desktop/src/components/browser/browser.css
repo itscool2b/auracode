@@ -1069,3 +1069,20 @@
   width: 100%;
   opacity: 0.4;
 }
+
+/* A note's picture and its marks: the page's view in the page's own pixels, scaled as one to the
+   panel's width, so the marks stay on what they mark when the page is zoomed or the panel moves. */
+.browser-picture-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.browser-picture-frame > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
