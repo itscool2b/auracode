@@ -55,6 +55,12 @@ export const commands = {
 	 *  link a page asked for (`mailto:`, `vscode:`), after the person chose to.
 	 */
 	browserOpenOutside: (url: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_open_outside", { url })),
+	/**
+	 *  Runs one of the agents' browser tools in a chat's browser, as an agent's call would (`input`
+	 *  is its arguments, as JSON). Development builds only: the browser checks drive every tool
+	 *  through it. A release build refuses, so the window never acts as an agent there.
+	 */
+	browserAgentCall: (chatId: string, tool: string, input: string) => typedError<BrowserToolCheck, AppError>(__TAURI_INVOKE("browser_agent_call", { chatId, tool, input })),
 	signInLinkPending: () => __TAURI_INVOKE<SignInLink | null>("sign_in_link_pending"),
 	signInLinkAcknowledge: (id: string) => __TAURI_INVOKE<void>("sign_in_link_acknowledge", { id }),
 	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
@@ -1113,7 +1119,12 @@ export type BrowserEvent =
  */
 { type: "agent"; chat_id: string; tab_id: string | null; label: string | null; opened: boolean } | { type: "download"; chat_id: string; tab_id: string; url: string; file: string | null; state: DownloadState } | 
 /**  A page tried to open another program's link (`mailto:`, `vscode:`); the person may. */
-{ type: "outside"; chat_id: string; tab_id: string; url: string } | { type: "status"; status: BrowserStatus };
+{ type: "outside"; chat_id: string; tab_id: string; url: string } | 
+/**
+ *  A page tried to open a window without a person's click or key (a pop-up); the person may
+ *  open it as a tab.
+ */
+{ type: "blocked"; chat_id: string; tab_id: string; url: string } | { type: "status"; status: BrowserStatus };
 
 /**  What Annotate picked: one element, or an area and the element at its centre. */
 export type BrowserPick = {
@@ -1172,6 +1183,16 @@ export type BrowserTab = {
 	asleep: boolean,
 	/**  Annotate's picker runs in its page. */
 	annotating: boolean,
+};
+
+/**  What one of the agents' browser tools answered, for development checks. */
+export type BrowserToolCheck = {
+	text: string,
+	/**  The screenshot's MIME type, when the tool took one. */
+	image_mime: string | null,
+	/**  The screenshot's length in base64 characters. */
+	image_length: number,
+	error: boolean,
 };
 
 /**  What a driver supports. The UI shows or hides features from this, never from agent names. */

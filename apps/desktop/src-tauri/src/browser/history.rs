@@ -292,7 +292,11 @@ mod tests {
     #[test]
     fn the_list_searches_every_word_newest_first_and_pages() {
         let mut history = History::default();
-        history.visit("https://github.com/itscool2b/auracode", "auracode repo", NOW - 3.0);
+        history.visit(
+            "https://github.com/itscool2b/auracode",
+            "auracode repo",
+            NOW - 3.0,
+        );
         history.visit("http://localhost:5173/", "Vite App", NOW - 2.0);
         history.visit("https://docs.rs/wry", "wry - Rust", NOW - 1.0);
         let all: Vec<String> = history
@@ -341,8 +345,14 @@ mod tests {
             history.visit(&format!("https://e.com/{index}"), "", index as f64);
         }
         assert_eq!(history.len(), LIMIT);
-        assert!(history.list("e.com/0", 1, None).is_empty(), "the oldest went");
-        assert_eq!(history.list("", 1, None)[0].url, format!("https://e.com/{}", LIMIT + 4));
+        assert!(
+            history.list("e.com/0", 1, None).is_empty(),
+            "the oldest went"
+        );
+        assert_eq!(
+            history.list("", 1, None)[0].url,
+            format!("https://e.com/{}", LIMIT + 4)
+        );
     }
 
     #[test]
@@ -365,7 +375,10 @@ mod tests {
         let mut history = History::default();
         history.visit("https://a.com/", "A", NOW);
         history.visit("https://b.com/", "B", NOW);
-        assert_eq!(history.remove(&["https://a.com/".into(), "https://zzz/".into()]), 1);
+        assert_eq!(
+            history.remove(&["https://a.com/".into(), "https://zzz/".into()]),
+            1
+        );
         history.clear();
         assert_eq!(history.len(), 0);
     }

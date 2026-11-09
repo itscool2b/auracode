@@ -77,9 +77,7 @@ fn host_url(text: &str) -> Option<String> {
                 true
             } else if !name.contains('.') {
                 // A dotless word is a search unless it names a port (`devbox:3000`).
-                if probe.port().is_none() {
-                    return None;
-                }
+                probe.port()?;
                 true
             } else {
                 // A real domain ends in a country's two letters or a known generic name, so
@@ -92,21 +90,113 @@ fn host_url(text: &str) -> Option<String> {
         }
     };
     let scheme = if local { "http" } else { "https" };
-    Url::parse(&format!("{scheme}://{text}")).ok().map(Into::into)
+    Url::parse(&format!("{scheme}://{text}"))
+        .ok()
+        .map(Into::into)
 }
 
 /// Generic top-level domains people type (country codes are any two letters).
 const GENERIC_TLDS: &[&str] = &[
-    "com", "org", "net", "edu", "gov", "mil", "int", "app", "dev", "page", "info", "biz", "xyz",
-    "site", "online", "tech", "store", "shop", "blog", "cloud", "design", "studio", "art", "live",
-    "news", "wiki", "pro", "name", "mobi", "agency", "digital", "media", "systems", "software",
-    "codes", "tools", "run", "build", "chat", "bot", "inc", "llc", "company", "world", "space",
-    "today", "life", "website", "team", "work", "works", "zone", "network", "email", "link",
-    "click", "fun", "games", "game", "video", "music", "photo", "photos", "solutions", "services",
-    "help", "support", "academy", "school", "rocks", "ninja", "guru", "lol", "wtf", "cool", "one",
-    "new", "top", "vip", "plus", "global", "google", "amazon", "microsoft", "apple", "museum",
-    "aero", "coop", "jobs", "travel", "cat", "asia", "eus", "berlin", "london", "nyc", "paris",
-    "tokyo", "africa", "onion",
+    "com",
+    "org",
+    "net",
+    "edu",
+    "gov",
+    "mil",
+    "int",
+    "app",
+    "dev",
+    "page",
+    "info",
+    "biz",
+    "xyz",
+    "site",
+    "online",
+    "tech",
+    "store",
+    "shop",
+    "blog",
+    "cloud",
+    "design",
+    "studio",
+    "art",
+    "live",
+    "news",
+    "wiki",
+    "pro",
+    "name",
+    "mobi",
+    "agency",
+    "digital",
+    "media",
+    "systems",
+    "software",
+    "codes",
+    "tools",
+    "run",
+    "build",
+    "chat",
+    "bot",
+    "inc",
+    "llc",
+    "company",
+    "world",
+    "space",
+    "today",
+    "life",
+    "website",
+    "team",
+    "work",
+    "works",
+    "zone",
+    "network",
+    "email",
+    "link",
+    "click",
+    "fun",
+    "games",
+    "game",
+    "video",
+    "music",
+    "photo",
+    "photos",
+    "solutions",
+    "services",
+    "help",
+    "support",
+    "academy",
+    "school",
+    "rocks",
+    "ninja",
+    "guru",
+    "lol",
+    "wtf",
+    "cool",
+    "one",
+    "new",
+    "top",
+    "vip",
+    "plus",
+    "global",
+    "google",
+    "amazon",
+    "microsoft",
+    "apple",
+    "museum",
+    "aero",
+    "coop",
+    "jobs",
+    "travel",
+    "cat",
+    "asia",
+    "eus",
+    "berlin",
+    "london",
+    "nyc",
+    "paris",
+    "tokyo",
+    "africa",
+    "onion",
 ];
 
 fn known_tld(tld: &str) -> bool {
@@ -142,7 +232,10 @@ fn file_url(text: &str) -> Option<String> {
 /// the address spells it (`file://server/x`, `file:////server/x`, `file://localhost//server/x`,
 /// backslashes).
 fn local_file(url: &Url) -> bool {
-    if url.host_str().is_some_and(|host| !host.is_empty() && host != "localhost") {
+    if url
+        .host_str()
+        .is_some_and(|host| !host.is_empty() && host != "localhost")
+    {
         return false;
     }
     let raw = url.path().replace('\\', "/");
@@ -218,9 +311,7 @@ pub fn policy(address: &str) -> Policy {
         // The engines' own pages, script and anything that would read local data are never pages
         // of this browser.
         "javascript" | "vbscript" | "chrome" | "edge" | "devtools" | "chrome-extension"
-        | "view-source" | "filesystem" | "ws" | "wss" | "intent" | "ms-settings" => {
-            Policy::Refuse
-        }
+        | "view-source" | "filesystem" | "ws" | "wss" | "intent" | "ms-settings" => Policy::Refuse,
         scheme
             if scheme.len() >= 2
                 && scheme
@@ -237,7 +328,22 @@ pub fn policy(address: &str) -> Policy {
 /// else a person could open themselves. An agent reads and edits files with its own tools, under
 /// its own access; the browser is no way around that.
 pub fn resolve_for_agent(input: &str) -> Result<String, String> {
-    let url = resolve(input).ok_or_else(|| format!("{input} is not an address the browser can open."))?;
+    let text = input.trim();
+    // Another kind of address (`javascript:`, `data:`, `mailto:`) is no page: the person's address
+    // bar would search for it, but an agent asked for something else and hears so. A host and
+    // port (`localhost:5173`) reads as a scheme too; a drive letter (`C:\`) is a file.
+    if let Ok(url) = Url::parse(text)
+        && url.scheme().len() > 1
+        && !matches!(url.scheme(), "http" | "https" | "about" | "file")
+        && !host_and_port(text)
+    {
+        return Err(match url.scheme() {
+            "javascript" => "javascript: addresses do not open. To run script in the page, use browser_evaluate.".into(),
+            scheme => format!("{scheme}: is not a web page, so the browser does not open it for agents. Agents open web pages only (http and https)."),
+        });
+    }
+    let url =
+        resolve(input).ok_or_else(|| format!("{input} is not an address the browser can open."))?;
     let scheme = url.split(':').next().unwrap_or("");
     if matches!(scheme, "http" | "https") || url == "about:blank" {
         Ok(url)
@@ -246,10 +352,46 @@ pub fn resolve_for_agent(input: &str) -> Result<String, String> {
     }
 }
 
+/// `localhost:5173`, `devbox:8080/app`: a host, a colon and a port, which a URL parser reads as a
+/// scheme and a path.
+fn host_and_port(text: &str) -> bool {
+    text.split_once(':').is_some_and(|(_, rest)| {
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        digits > 0
+            && rest[digits..]
+                .chars()
+                .next()
+                .is_none_or(|c| matches!(c, '/' | '?' | '#'))
+    })
+}
+
 /// Whether `address` is worth keeping in history: a web page or a local file.
 pub fn remembered(address: &str) -> bool {
     address.len() <= 4096
         && Url::parse(address).is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "file"))
+}
+
+/// Whether `address` is a page of this computer (`localhost`, `127.0.0.1`, `[::1]`,
+/// `*.localhost`): where a dev server runs.
+pub fn on_this_computer(address: &str) -> bool {
+    let Ok(url) = Url::parse(address) else {
+        return false;
+    };
+    let Some(host) = url
+        .host_str()
+        .filter(|_| matches!(url.scheme(), "http" | "https"))
+    else {
+        return false;
+    };
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_ascii_lowercase();
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 /// The host a person recognises an address by (`localhost:5173`, `github.com`), or the file name.
@@ -274,6 +416,30 @@ pub fn site(address: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pages_of_this_computer_are_known() {
+        for address in [
+            "http://localhost:4599/",
+            "http://LOCALHOST:3000/x",
+            "https://app.localhost/",
+            "http://127.0.0.1:8080/",
+            "http://127.4.5.6/",
+            "http://[::1]:5173/",
+        ] {
+            assert!(on_this_computer(address), "{address}");
+        }
+        for address in [
+            "https://example.com/",
+            "http://192.168.1.20:3000/",
+            "http://localhost.example.com/",
+            "file:///C:/site/index.html",
+            "about:blank",
+            "not an address",
+        ] {
+            assert!(!on_this_computer(address), "{address}");
+        }
+    }
 
     #[test]
     fn addresses_open_as_typed() {
@@ -369,10 +535,16 @@ mod tests {
 
     #[test]
     fn network_shares_never_open() {
-        for typed in [r"\\server\share\page.html", "//server/share", "file://server/share/x.html"] {
+        for typed in [
+            r"\\server\share\page.html",
+            "//server/share",
+            "file://server/share/x.html",
+        ] {
             let resolved = resolve(typed);
             assert!(
-                resolved.as_deref().is_none_or(|address| !address.starts_with("file:")),
+                resolved
+                    .as_deref()
+                    .is_none_or(|address| !address.starts_with("file:")),
                 "{typed} -> {resolved:?}"
             );
         }
@@ -401,9 +573,16 @@ mod tests {
             Ok("http://localhost:5173/")
         );
         assert!(resolve_for_agent("https://example.com").is_ok());
-        assert!(resolve_for_agent("rust borrow checker").is_ok(), "a search is a web page");
+        assert!(
+            resolve_for_agent("rust borrow checker").is_ok(),
+            "a search is a web page"
+        );
         assert!(resolve_for_agent("about:blank").is_ok());
-        for local in ["file:///C:/Users/me/.ssh/id_rsa", "C:/Users/me/secret.html", "/etc/passwd"] {
+        for local in [
+            "file:///C:/Users/me/.ssh/id_rsa",
+            "C:/Users/me/secret.html",
+            "/etc/passwd",
+        ] {
             let refused = resolve_for_agent(local);
             assert!(
                 refused.is_err() || refused.as_deref().is_ok_and(|a| a.starts_with(SEARCH)),
@@ -411,6 +590,30 @@ mod tests {
             );
         }
         assert!(resolve_for_agent("file:///C:/x.html").is_err());
+        // Other kinds of address are refused by name, never turned into a search.
+        let script = resolve_for_agent("javascript:alert(1)").unwrap_err();
+        assert!(script.contains("browser_evaluate"), "{script}");
+        for other in [
+            "data:text/html,<h1>x</h1>",
+            "mailto:someone@example.com",
+            "vscode://file/x",
+            "chrome://settings",
+        ] {
+            let refused = resolve_for_agent(other).unwrap_err();
+            assert!(refused.contains("not a web page"), "{other} -> {refused}");
+        }
+        // A host and port still reads as a host.
+        for host in [
+            "devbox:8080",
+            "devbox:8080/app?x=1",
+            "localhost:3000#top",
+            "example.com:8443",
+        ] {
+            assert!(
+                resolve_for_agent(host).is_ok_and(|url| url.starts_with("http")),
+                "{host}"
+            );
+        }
     }
 
     #[test]

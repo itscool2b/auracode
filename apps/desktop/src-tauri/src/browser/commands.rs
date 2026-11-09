@@ -36,7 +36,11 @@ pub async fn browser_open(
     input: Option<String>,
     activate: bool,
 ) -> Result<BrowserTab, AppError> {
-    let url = match input.as_deref().map(str::trim).filter(|text| !text.is_empty()) {
+    let url = match input
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
         Some(text) => Some(address::resolve(text).ok_or_else(|| {
             BrowserError::Invalid("That is not an address the browser can open.".into())
         })?),
@@ -63,7 +67,11 @@ pub async fn browser_activate(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_move(browser: Service<'_>, tab_id: String, index: u32) -> Result<(), AppError> {
+pub async fn browser_move(
+    browser: Service<'_>,
+    tab_id: String,
+    index: u32,
+) -> Result<(), AppError> {
     Ok(browser.move_tab(&tab_id, index as usize)?)
 }
 
@@ -80,7 +88,11 @@ pub async fn browser_navigate(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_go(browser: Service<'_>, tab_id: String, action: GoAction) -> Result<(), AppError> {
+pub async fn browser_go(
+    browser: Service<'_>,
+    tab_id: String,
+    action: GoAction,
+) -> Result<(), AppError> {
     Ok(browser.inner().go(&tab_id, action).await?)
 }
 
@@ -101,13 +113,20 @@ pub async fn browser_place(
 /// opens over it (`None` where the engine cannot take one).
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_capture(browser: Service<'_>, tab_id: String) -> Result<Option<String>, AppError> {
+pub async fn browser_capture(
+    browser: Service<'_>,
+    tab_id: String,
+) -> Result<Option<String>, AppError> {
     Ok(browser.inner().capture(&tab_id).await?)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_zoom(browser: Service<'_>, tab_id: String, zoom: f64) -> Result<f64, AppError> {
+pub async fn browser_zoom(
+    browser: Service<'_>,
+    tab_id: String,
+    zoom: f64,
+) -> Result<f64, AppError> {
     Ok(browser.inner().set_zoom(&tab_id, zoom).await?)
 }
 
@@ -152,7 +171,10 @@ pub async fn browser_pick_at(
 /// Pages from history for what is typed in the address bar, best first.
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_suggest(browser: Service<'_>, input: String) -> Result<Vec<HistoryEntry>, AppError> {
+pub async fn browser_suggest(
+    browser: Service<'_>,
+    input: String,
+) -> Result<Vec<HistoryEntry>, AppError> {
     Ok(browser.suggest(&input, 6))
 }
 
@@ -170,7 +192,10 @@ pub async fn browser_history(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn browser_history_remove(browser: Service<'_>, urls: Vec<String>) -> Result<u32, AppError> {
+pub async fn browser_history_remove(
+    browser: Service<'_>,
+    urls: Vec<String>,
+) -> Result<u32, AppError> {
     let removed = browser.remove_history(&urls);
     browser.save();
     Ok(u32::try_from(removed).unwrap_or(u32::MAX))
@@ -182,17 +207,61 @@ pub async fn browser_clear(browser: Service<'_>, data: ClearData) -> Result<(), 
     Ok(browser.inner().clear(data).await?)
 }
 
+/// What one of the agents' browser tools answered, for development checks.
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+pub struct BrowserToolCheck {
+    pub text: String,
+    /// The screenshot's MIME type, when the tool took one.
+    pub image_mime: Option<String>,
+    /// The screenshot's length in base64 characters.
+    pub image_length: u32,
+    pub error: bool,
+}
+
+/// Runs one of the agents' browser tools in a chat's browser, as an agent's call would (`input`
+/// is its arguments, as JSON). Development builds only: the browser checks drive every tool
+/// through it. A release build refuses, so the window never acts as an agent there.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_agent_call(
+    browser: Service<'_>,
+    chat_id: String,
+    tool: String,
+    input: String,
+) -> Result<BrowserToolCheck, AppError> {
+    if !cfg!(debug_assertions) {
+        return Err(BrowserError::Invalid(
+            "Only development builds run the browser tools from the window.".into(),
+        )
+        .into());
+    }
+    let arguments: serde_json::Value = serde_json::from_str(&input)
+        .map_err(|_| BrowserError::Invalid("The arguments are not JSON.".into()))?;
+    let reply = super::agent::call(browser.inner(), &chat_id, &tool, &arguments).await;
+    Ok(BrowserToolCheck {
+        text: reply.text,
+        image_mime: reply.image.as_ref().map(|(mime, _)| mime.clone()),
+        image_length: reply
+            .image
+            .as_ref()
+            .map_or(0, |(_, data)| u32::try_from(data.len()).unwrap_or(u32::MAX)),
+        error: reply.error,
+    })
+}
+
 /// Opens an address outside auracode: a web page in the system's browser, or another program's
 /// link a page asked for (`mailto:`, `vscode:`), after the person chose to.
 #[tauri::command]
 #[specta::specta]
 pub async fn browser_open_outside(app: tauri::AppHandle, url: String) -> Result<(), AppError> {
     if !outside_allowed(&url) {
-        return Err(BrowserError::Invalid("auracode does not open that kind of link.".into()).into());
+        return Err(
+            BrowserError::Invalid("auracode does not open that kind of link.".into()).into(),
+        );
     }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|error| BrowserError::Unavailable(format!("The link could not open: {error}")).into())
+    app.opener().open_url(url, None::<&str>).map_err(|error| {
+        BrowserError::Unavailable(format!("The link could not open: {error}")).into()
+    })
 }
 
 /// The other programs' links auracode hands to the system, after the person chose to: mail and

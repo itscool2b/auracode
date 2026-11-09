@@ -72,7 +72,9 @@ fn active(browser: &Browser, chat_id: &str) -> Option<String> {
 }
 
 fn str_arg<'a>(args: &'a Value, name: &str) -> Option<&'a str> {
-    args.get(name).and_then(Value::as_str).filter(|value| !value.is_empty())
+    args.get(name)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
 }
 
 fn label(tool: &str, args: &Value) -> String {
@@ -107,7 +109,9 @@ fn label(tool: &str, args: &Value) -> String {
 /// The chat's tab in front, built and drawing; a new one when the chat has none and `open`.
 async fn tab_for(browser: &Arc<Browser>, chat_id: &str) -> Result<String, BrowserError> {
     let tab = active(browser, chat_id).ok_or_else(|| {
-        BrowserError::Invalid("No page is open in this chat's browser. Call browser_navigate first.".into())
+        BrowserError::Invalid(
+            "No page is open in this chat's browser. Call browser_navigate first.".into(),
+        )
     })?;
     let has_page = lock(&browser.inner)
         .tabs
@@ -126,7 +130,10 @@ async fn tab_for(browser: &Arc<Browser>, chat_id: &str) -> Result<String, Browse
 }
 
 fn loads(browser: &Browser, tab: &str) -> u64 {
-    lock(&browser.inner).tabs.get(tab).map_or(0, |tab| tab.loads)
+    lock(&browser.inner)
+        .tabs
+        .get(tab)
+        .map_or(0, |tab| tab.loads)
 }
 
 /// Waits for what an action set off: a new page that finishes loading, or (when nothing starts
@@ -176,7 +183,12 @@ fn whereabouts(browser: &Browser, tab: &str) -> String {
     line
 }
 
-async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) -> Result<ToolReply, BrowserError> {
+async fn run(
+    browser: &Arc<Browser>,
+    chat_id: &str,
+    tool: &str,
+    args: &Value,
+) -> Result<ToolReply, BrowserError> {
     match tool {
         "browser_navigate" => navigate(browser, chat_id, args).await,
         "browser_snapshot" => {
@@ -208,7 +220,11 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             {
                 let modifiers: Vec<String> = args["modifiers"]
                     .as_array()
-                    .map(|list| list.iter().filter_map(|m| m.as_str().map(str::to_owned)).collect())
+                    .map(|list| {
+                        list.iter()
+                            .filter_map(|m| m.as_str().map(str::to_owned))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 super::webview2::click(
                     browser,
@@ -225,7 +241,10 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             {
                 let options = json!({ "button": button, "double": double });
                 browser
-                    .call(&tab, &format!("api.click({}, {options})", js(&Some(target))))
+                    .call(
+                        &tab,
+                        &format!("api.click({}, {options})", js(&Some(target))),
+                    )
                     .await?;
             }
             settle(browser, &tab, before, false).await;
@@ -254,7 +273,9 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
                 .as_str()
                 .ok_or_else(|| BrowserError::Invalid("Say what to type in \"text\".".into()))?;
             if text.len() > 100_000 {
-                return Err(BrowserError::Invalid("That is too much text to type at once.".into()));
+                return Err(BrowserError::Invalid(
+                    "That is too much text to type at once.".into(),
+                ));
             }
             let clear = args["clear"].as_bool().unwrap_or(true);
             let submit = args["submit"].as_bool().unwrap_or(false);
@@ -277,7 +298,14 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             #[cfg(not(windows))]
             {
                 let typed = browser
-                    .call(&tab, &format!("api.type({}, {}, {clear})", js(&Some(target)), js(&Some(text))))
+                    .call(
+                        &tab,
+                        &format!(
+                            "api.type({}, {}, {clear})",
+                            js(&Some(target)),
+                            js(&Some(text))
+                        ),
+                    )
                     .await?;
                 if let Some(error) = typed["error"].as_str() {
                     return Err(BrowserError::Page(error.to_owned()));
@@ -305,11 +333,17 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
                 let mut parts: Vec<&str> = key.split('+').collect();
                 let main = parts.pop().unwrap_or(key);
                 browser
-                    .call(&tab, &format!("api.press({}, {})", js(&Some(main)), json!(parts)))
+                    .call(
+                        &tab,
+                        &format!("api.press({}, {})", js(&Some(main)), json!(parts)),
+                    )
                     .await?;
             }
             settle(browser, &tab, before, key.ends_with("Enter")).await;
-            Ok(ToolReply::text(format!("Pressed {key}.\n{}", whereabouts(browser, &tab))))
+            Ok(ToolReply::text(format!(
+                "Pressed {key}.\n{}",
+                whereabouts(browser, &tab)
+            )))
         }
         "browser_hover" => {
             let tab = tab_for(browser, chat_id).await?;
@@ -321,20 +355,32 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             browser
                 .call(&tab, &format!("api.hover({})", js(&Some(target))))
                 .await?;
-            Ok(ToolReply::text(format!("The pointer is over {}.", place.name)))
+            Ok(ToolReply::text(format!(
+                "The pointer is over {}.",
+                place.name
+            )))
         }
         "browser_select" => {
             let tab = tab_for(browser, chat_id).await?;
             let target = required(args, "ref")?;
             let values: Vec<String> = args["values"]
                 .as_array()
-                .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+                .map(|list| {
+                    list.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
                 .unwrap_or_default();
             if values.is_empty() {
-                return Err(BrowserError::Invalid("Name the options to choose in \"values\".".into()));
+                return Err(BrowserError::Invalid(
+                    "Name the options to choose in \"values\".".into(),
+                ));
             }
             let chosen = browser
-                .call(&tab, &format!("api.select({}, {})", js(&Some(target)), json!(values)))
+                .call(
+                    &tab,
+                    &format!("api.select({}, {})", js(&Some(target)), json!(values)),
+                )
                 .await?;
             if let Some(error) = chosen["error"].as_str() {
                 return Err(BrowserError::Page(error.to_owned()));
@@ -345,7 +391,9 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             let tab = tab_for(browser, chat_id).await?;
             let target = str_arg(args, "ref");
             let dx = args["dx"].as_f64().unwrap_or(0.0);
-            let dy = args["dy"].as_f64().unwrap_or(if target.is_some() { 0.0 } else { 600.0 });
+            let dy = args["dy"]
+                .as_f64()
+                .unwrap_or(if target.is_some() { 0.0 } else { 600.0 });
             let scrolled = browser
                 .call(&tab, &format!("api.scroll({}, {dx}, {dy})", js(&target)))
                 .await?;
@@ -464,7 +512,9 @@ async fn run(browser: &Arc<Browser>, chat_id: &str, tool: &str, args: &Value) ->
             }
         }
         "browser_tabs" => tabs(browser, chat_id, args).await,
-        _ => Err(BrowserError::Invalid(format!("{tool} is not a browser tool."))),
+        _ => Err(BrowserError::Invalid(format!(
+            "{tool} is not a browser tool."
+        ))),
     }
 }
 
@@ -514,7 +564,10 @@ async fn locate(browser: &Arc<Browser>, tab: &str, target: &str) -> Result<Place
             if text.is_empty() {
                 format!("a {tag}")
             } else {
-                format!("a {tag} (\"{}\")", text.chars().take(60).collect::<String>())
+                format!(
+                    "a {tag} (\"{}\")",
+                    text.chars().take(60).collect::<String>()
+                )
             }
         }),
         disabled: place["disabled"].as_bool().unwrap_or(false),
@@ -527,7 +580,11 @@ async fn locate(browser: &Arc<Browser>, tab: &str, target: &str) -> Result<Place
     })
 }
 
-async fn navigate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<ToolReply, BrowserError> {
+async fn navigate(
+    browser: &Arc<Browser>,
+    chat_id: &str,
+    args: &Value,
+) -> Result<ToolReply, BrowserError> {
     if let Some(action) = str_arg(args, "action") {
         let tab = tab_for(browser, chat_id).await?;
         let action = match action {
@@ -578,7 +635,11 @@ async fn navigate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
     )))
 }
 
-async fn screenshot(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<ToolReply, BrowserError> {
+async fn screenshot(
+    browser: &Arc<Browser>,
+    chat_id: &str,
+    args: &Value,
+) -> Result<ToolReply, BrowserError> {
     let tab = tab_for(browser, chat_id).await?;
     let full = args["full_page"].as_bool().unwrap_or(false);
     let shot = match str_arg(args, "ref") {
@@ -614,7 +675,11 @@ async fn screenshot(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Resu
     }
 }
 
-async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<ToolReply, BrowserError> {
+async fn evaluate(
+    browser: &Arc<Browser>,
+    chat_id: &str,
+    args: &Value,
+) -> Result<ToolReply, BrowserError> {
     let tab = tab_for(browser, chat_id).await?;
     let code = required(args, "expression")?;
     if code.len() > 200_000 {
@@ -661,7 +726,10 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
                 .or_else(|| details["text"].as_str())
                 .unwrap_or("The script threw.");
             let message: String = message.chars().take(4000).collect();
-            return Ok(ToolReply::failed(redact(message, before.iter().flatten().map(String::as_str))));
+            return Ok(ToolReply::failed(redact(
+                message,
+                before.iter().flatten().map(String::as_str),
+            )));
         }
         let result = &reply["result"];
         match result.get("value") {
@@ -687,7 +755,10 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         let answer = browser.eval(&tab, script, super::SCRIPT_TIMEOUT).await?;
         if let Some(error) = answer["error"].as_str() {
             let error: String = error.chars().take(4000).collect();
-            return Ok(ToolReply::failed(redact(error, before.iter().flatten().map(String::as_str))));
+            return Ok(ToolReply::failed(redact(
+                error,
+                before.iter().flatten().map(String::as_str),
+            )));
         }
         answer["value"].clone()
     };
@@ -713,7 +784,11 @@ async fn evaluate(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result
         text.truncate(end);
         text.push_str("\n… (cut at 40 000 characters)");
     }
-    Ok(ToolReply::text(if text.is_empty() { "undefined".into() } else { text }))
+    Ok(ToolReply::text(if text.is_empty() {
+        "undefined".into()
+    } else {
+        text
+    }))
 }
 
 /// The page's password values, so what agents read can leave them out; `None` when the page
@@ -746,7 +821,11 @@ fn redact<'a>(mut text: String, secrets: impl Iterator<Item = &'a str>) -> Strin
     text
 }
 
-async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<ToolReply, BrowserError> {
+async fn tabs(
+    browser: &Arc<Browser>,
+    chat_id: &str,
+    args: &Value,
+) -> Result<ToolReply, BrowserError> {
     let list = |browser: &Browser| {
         let chat = browser.chat(chat_id);
         if chat.tabs.is_empty() {
@@ -758,8 +837,16 @@ async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<Too
             .map(|(index, tab)| {
                 format!(
                     "{}{index}: {} {}",
-                    if chat.active.as_deref() == Some(tab.id.as_str()) { "* " } else { "  " },
-                    if tab.title.is_empty() { "(untitled)" } else { tab.title.as_str() },
+                    if chat.active.as_deref() == Some(tab.id.as_str()) {
+                        "* "
+                    } else {
+                        "  "
+                    },
+                    if tab.title.is_empty() {
+                        "(untitled)"
+                    } else {
+                        tab.title.as_str()
+                    },
                     tab.url.as_deref().unwrap_or("(new tab)")
                 )
             })
@@ -768,9 +855,9 @@ async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<Too
     };
     let index = |browser: &Browser| -> Result<String, BrowserError> {
         let chat = browser.chat(chat_id);
-        let index = args["index"]
-            .as_u64()
-            .ok_or_else(|| BrowserError::Invalid("Give the tab's \"index\" from the list.".into()))?;
+        let index = args["index"].as_u64().ok_or_else(|| {
+            BrowserError::Invalid("Give the tab's \"index\" from the list.".into())
+        })?;
         chat.tabs
             .get(usize::try_from(index).unwrap_or(usize::MAX))
             .map(|tab| tab.id.clone())
@@ -780,7 +867,9 @@ async fn tabs(browser: &Arc<Browser>, chat_id: &str, args: &Value) -> Result<Too
         "list" => Ok(ToolReply::text(list(browser))),
         "new" => {
             let url = match str_arg(args, "url") {
-                Some(input) => Some(address::resolve_for_agent(input).map_err(BrowserError::Invalid)?),
+                Some(input) => {
+                    Some(address::resolve_for_agent(input).map_err(BrowserError::Invalid)?)
+                }
                 None => None,
             };
             let tab = browser.open_tab(chat_id, url.clone(), true)?;
@@ -819,8 +908,14 @@ mod tests {
             label("browser_navigate", &json!({ "url": "localhost:3000" })),
             "Opening localhost:3000"
         );
-        assert_eq!(label("browser_navigate", &json!({ "action": "back" })), "Going back");
-        assert_eq!(label("browser_click", &json!({ "ref": "e12" })), "Clicking e12");
+        assert_eq!(
+            label("browser_navigate", &json!({ "action": "back" })),
+            "Going back"
+        );
+        assert_eq!(
+            label("browser_click", &json!({ "ref": "e12" })),
+            "Clicking e12"
+        );
         assert_eq!(
             label("browser_press_key", &json!({ "key": "Enter" })),
             "Pressing Enter"
@@ -837,7 +932,10 @@ mod tests {
         assert!(!text.contains("hunter22"));
         assert!(text.contains("hidden from agents"));
         // Too short to tell from ordinary text, and absent ones change nothing.
-        assert_eq!(redact("ab cd".into(), ["ab", "zzzzzz"].into_iter()), "ab cd");
+        assert_eq!(
+            redact("ab cd".into(), ["ab", "zzzzzz"].into_iter()),
+            "ab cd"
+        );
     }
 
     #[test]

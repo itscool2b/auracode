@@ -14,11 +14,11 @@ use tauri::Manager;
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::{NewWindowResponse, PageLoadEvent, WebViewBuilder};
 
+use super::{Browser, Shot};
 use super::{
     BrowserError, BrowserEvent, BrowserRect, ClearData, DownloadState, GoAction, LIVE_LIMIT,
     PAGE_SCRIPT, address,
 };
-use super::{Browser, Shot};
 use crate::sync::lock;
 use crate::window::MAIN_WINDOW;
 
@@ -157,6 +157,8 @@ fn evict(browser: &Arc<Browser>) {
                 .filter(|id| Some(*id) != placed.as_ref())
                 .filter_map(|id| inner.tabs.get(id))
                 .filter(|tab| !inner.agents.get(&tab.chat_id).is_some_and(|n| *n > 0))
+                // A page with a download running reports its end; it sleeps once that comes.
+                .filter(|tab| tab.downloads == 0)
                 .min_by_key(|tab| tab.used)
                 .map(|tab| tab.id.clone())
         };
@@ -180,10 +182,14 @@ fn sleep(browser: &Arc<Browser>, tab_id: &str) {
         host.views.remove(tab_id)
     });
     drop(view);
+    #[cfg(windows)]
+    super::webview2::forget(tab_id);
     browser.page_state(tab_id, |tab| {
         tab.live = false;
         tab.loading = false;
         tab.annotating = false;
+        // A sleeping page reports no download's end.
+        tab.downloads = 0;
     });
 }
 
@@ -214,9 +220,17 @@ fn build(
         let webview = match environment {
             Some(environment) => {
                 use wry::WebViewBuilderExtWindows;
-                configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds, &profile)
-                    .with_environment(environment)
-                    .build_as_child(&window)
+                configure(
+                    WebViewBuilder::new(),
+                    &weak,
+                    tab_id,
+                    chat_id,
+                    url,
+                    &bounds,
+                    &profile,
+                )
+                .with_environment(environment)
+                .build_as_child(&window)
             }
             None => with_context(&profile, |context| {
                 configure(
@@ -246,7 +260,15 @@ fn build(
     #[cfg(target_os = "macos")]
     {
         let _ = passwords;
-        let builder = configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds, &profile);
+        let builder = configure(
+            WebViewBuilder::new(),
+            &weak,
+            tab_id,
+            chat_id,
+            url,
+            &bounds,
+            &profile,
+        );
         let builder = if profile.private {
             builder.with_incognito(true)
         } else {
@@ -279,22 +301,20 @@ fn build(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn with_context<T>(
-    profile: &super::Profile,
-    build: impl FnOnce(&mut wry::WebContext) -> T,
-) -> T {
+fn with_context<T>(profile: &super::Profile, build: impl FnOnce(&mut wry::WebContext) -> T) -> T {
     let folder = profile.dir.join("webview");
     CONTEXT.with_borrow_mut(|context| {
-        let fresh = !matches!(context, Some((dir, private, _)) if *dir == folder && *private == profile.private);
-        if fresh {
+        if !matches!(context, Some((dir, private, _)) if *dir == folder && *private == profile.private) {
+            *context = None;
+        }
+        let (_, _, web) = context.get_or_insert_with(|| {
             let _ = std::fs::create_dir_all(&folder);
-            *context = Some((
+            (
                 folder.clone(),
                 profile.private,
                 wry::WebContext::new(Some(folder.clone())),
-            ));
-        }
-        let (_, _, web) = context.as_mut().expect("just set");
+            )
+        });
         build(web)
     })
 }
@@ -303,6 +323,22 @@ fn with_context<T>(
 /// SmartScreen, and pages keep running while hidden or covered so an agent's page keeps working.
 #[cfg(windows)]
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding";
+
+/// The engine's switches. A development build launched for automation may also open the
+/// browser's DevTools port (`AURACODE_BROWSER_DEBUG_PORT`), so checks can drive real pages;
+/// release builds never read it.
+#[cfg(windows)]
+fn browser_args() -> String {
+    #[cfg(debug_assertions)]
+    if let Some(port) = std::env::var("AURACODE_BROWSER_DEBUG_PORT")
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok())
+        .filter(|port| *port >= 1024)
+    {
+        return format!("{BROWSER_ARGS} --remote-debugging-port={port}");
+    }
+    BROWSER_ARGS.to_owned()
+}
 
 fn configure<'a>(
     builder: WebViewBuilder<'a>,
@@ -329,9 +365,10 @@ fn configure<'a>(
     {
         use wry::WebViewBuilderExtWindows;
         builder = builder
-            .with_additional_browser_args(BROWSER_ARGS)
+            .with_additional_browser_args(browser_args())
             .with_browser_accelerator_keys(true)
-            .with_default_context_menus(true);
+            .with_default_context_menus(true)
+            .with_scroll_bar_style(wry::ScrollBarStyle::FluentOverlay);
     }
     if let Some(url) = url {
         builder = builder.with_url(url);
@@ -382,10 +419,14 @@ fn configure<'a>(
         };
         match event {
             PageLoadEvent::Started => browser.page_started(&tab, &url),
+            // On Windows the engine's own completion event says more (whether a document came, and
+            // why a load failed), so `webview2` reports the finish there.
             PageLoadEvent::Finished => {
-                browser.page_finished(&tab, &url);
                 #[cfg(not(windows))]
-                browser.page_state(&tab, |tab| tab.can_back = tab.loads > 1);
+                {
+                    browser.page_finished(&tab, Some(&url), super::Finished::loaded());
+                    browser.page_state(&tab, |tab| tab.can_back = tab.loads > 1);
+                }
             }
         }
     });
@@ -394,6 +435,12 @@ fn configure<'a>(
     let tab = tab_id.to_owned();
     let chat = chat_id.to_owned();
     builder = builder.with_new_window_req_handler(move |url, _features| {
+        // Only a person's click or key opens a window, as a browser's pop-up blocker has it; the
+        // person may still open a blocked one.
+        #[cfg(windows)]
+        let person = super::webview2::asked_by_person(&tab, &url);
+        #[cfg(not(windows))]
+        let person = true;
         let Some(browser) = browser.upgrade() else {
             return NewWindowResponse::Deny;
         };
@@ -407,7 +454,15 @@ fn configure<'a>(
                 NewWindowResponse::Deny
             }
             address::Policy::Refuse => NewWindowResponse::Deny,
-            address::Policy::Open => popup(&browser, &chat, &url),
+            address::Policy::Open if !person => {
+                browser.emit(BrowserEvent::Blocked {
+                    chat_id: chat.clone(),
+                    tab_id: tab.clone(),
+                    url,
+                });
+                NewWindowResponse::Deny
+            }
+            address::Policy::Open => popup(&browser, &chat, &tab, &url),
         }
     });
 
@@ -425,6 +480,7 @@ fn configure<'a>(
                     .map(|name| name.to_string_lossy().into_owned()),
                 state: DownloadState::Started,
             });
+            browser.download_began(&tab);
         }
         true
     });
@@ -445,6 +501,7 @@ fn configure<'a>(
                     DownloadState::Failed
                 },
             });
+            browser.download_ended(&tab);
         }
     })
 }
@@ -452,12 +509,13 @@ fn configure<'a>(
 /// A page asked for a new window (a link with `target=_blank`, `window.open`, a sign-in popup):
 /// it opens as a tab of the same chat. On Windows the tab is the window the page asked for, so a
 /// sign-in popup can still talk to its opener and close itself.
-fn popup(browser: &Arc<Browser>, chat_id: &str, url: &str) -> NewWindowResponse {
+fn popup(browser: &Arc<Browser>, chat_id: &str, opener: &str, url: &str) -> NewWindowResponse {
     #[cfg(windows)]
     {
         let Ok(tab) = browser.open_tab(chat_id, Some(url.to_owned()), true) else {
             return NewWindowResponse::Deny;
         };
+        browser.opened_by(&tab.id, opener);
         let weak = Arc::downgrade(browser);
         let environment = HOST.with_borrow(|host| host.environment.clone());
         let (Some(environment), Some(window), Some(profile)) = (
@@ -471,9 +529,17 @@ fn popup(browser: &Arc<Browser>, chat_id: &str, url: &str) -> NewWindowResponse 
         let bounds = parked_rect();
         use wry::WebViewBuilderExtWindows;
         // No address of its own: the engine hands it the one the page asked for.
-        let built = configure(WebViewBuilder::new(), &weak, &tab.id, chat_id, None, &bounds, &profile)
-            .with_environment(environment)
-            .build_as_child(&window);
+        let built = configure(
+            WebViewBuilder::new(),
+            &weak,
+            &tab.id,
+            chat_id,
+            None,
+            &bounds,
+            &profile,
+        )
+        .with_environment(environment)
+        .build_as_child(&window);
         match built {
             Ok(webview) => {
                 use wry::WebViewExtWindows;
@@ -500,7 +566,9 @@ fn popup(browser: &Arc<Browser>, chat_id: &str, url: &str) -> NewWindowResponse 
     }
     #[cfg(not(windows))]
     {
-        let _ = browser.open_tab(chat_id, Some(url.to_owned()), true);
+        if let Ok(tab) = browser.open_tab(chat_id, Some(url.to_owned()), true) {
+            browser.opened_by(&tab.id, opener);
+        }
         NewWindowResponse::Deny
     }
 }
@@ -519,7 +587,11 @@ pub(super) fn load(browser: &Arc<Browser>, tab_id: &str, url: &str) -> Result<()
         .map_err(|error| BrowserError::Page(format!("The page could not load: {error}")))
 }
 
-pub(super) fn go(browser: &Arc<Browser>, tab_id: &str, action: GoAction) -> Result<(), BrowserError> {
+pub(super) fn go(
+    browser: &Arc<Browser>,
+    tab_id: &str,
+    action: GoAction,
+) -> Result<(), BrowserError> {
     if action == GoAction::Reload && !HOST.with_borrow(|host| host.views.contains_key(tab_id)) {
         // A sleeping or crashed page reloads by being built again.
         ensure(browser, tab_id)?;
@@ -586,7 +658,11 @@ pub(super) fn place(
         // Hiding names its own page: a chat switching away never hides the chat switched to,
         // whichever of the two calls arrives first.
         HOST.with_borrow_mut(|host| {
-            if host.placed.as_ref().is_some_and(|(tab, _, _)| tab == tab_id) {
+            if host
+                .placed
+                .as_ref()
+                .is_some_and(|(tab, _, _)| tab == tab_id)
+            {
                 host.placed = None;
             }
         });
@@ -742,7 +818,9 @@ pub(super) fn refresh_location(browser: &Arc<Browser>, tab_id: &str) {
         browser.page_state(tab_id, |tab| tab.url = Some(url));
     }
     #[cfg(windows)]
-    let _ = with_view(tab_id, |view| super::webview2::refresh(browser, tab_id, &view.webview));
+    let _ = with_view(tab_id, |view| {
+        super::webview2::refresh(browser, tab_id, &view.webview)
+    });
 }
 
 pub(super) fn close(browser: &Arc<Browser>, tab_id: &str) {
@@ -757,6 +835,8 @@ pub(super) fn close(browser: &Arc<Browser>, tab_id: &str) {
         host.views.remove(tab_id)
     });
     drop(view);
+    #[cfg(windows)]
+    super::webview2::forget(tab_id);
     let _ = browser;
 }
 
@@ -770,10 +850,13 @@ pub(super) fn close_all(browser: &Arc<Browser>) {
     let ids: Vec<String> = lock(&browser.inner).tabs.keys().cloned().collect();
     drop(views);
     for id in ids {
+        #[cfg(windows)]
+        super::webview2::forget(&id);
         browser.page_state(&id, |tab| {
             tab.live = false;
             tab.loading = false;
             tab.annotating = false;
+            tab.downloads = 0;
         });
     }
     HOST.with_borrow_mut(|host| {
@@ -817,9 +900,17 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
             match environment {
                 Some(environment) => {
                     use wry::WebViewBuilderExtWindows;
-                    configure(WebViewBuilder::new(), &weak, &id, "", None, &bounds, &profile)
-                        .with_environment(environment)
-                        .build_as_child(&window)
+                    configure(
+                        WebViewBuilder::new(),
+                        &weak,
+                        &id,
+                        "",
+                        None,
+                        &bounds,
+                        &profile,
+                    )
+                    .with_environment(environment)
+                    .build_as_child(&window)
                 }
                 None => with_context(&profile, |context| {
                     configure(
@@ -838,9 +929,17 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
         #[cfg(target_os = "macos")]
         let built = {
             use wry::WebViewBuilderExtDarwin;
-            configure(WebViewBuilder::new(), &weak, &id, "", None, &bounds, &profile)
-                .with_data_store_identifier(*b"auracode-browser")
-                .build_as_child(&window)
+            configure(
+                WebViewBuilder::new(),
+                &weak,
+                &id,
+                "",
+                None,
+                &bounds,
+                &profile,
+            )
+            .with_data_store_identifier(*b"auracode-browser")
+            .build_as_child(&window)
         };
         #[cfg(not(any(windows, target_os = "macos")))]
         let built = with_context(&profile, |context| {
@@ -895,7 +994,9 @@ pub(super) async fn screenshot(
 ) -> Result<Option<String>, BrowserError> {
     #[cfg(windows)]
     {
-        super::webview2::screenshot(browser, tab_id, shot).await.map(Some)
+        super::webview2::screenshot(browser, tab_id, shot)
+            .await
+            .map(Some)
     }
     #[cfg(not(windows))]
     {
@@ -920,7 +1021,9 @@ pub(super) fn devtools_call(
 /// A popup asked to close itself (`window.close()` after a sign-in): its tab closes.
 #[cfg(windows)]
 pub(super) fn close_requested(browser: &Arc<Browser>, tab_id: &str) {
-    let _ = browser.close_tab(tab_id);
+    if !browser.hold_for_downloads(tab_id) {
+        let _ = browser.close_tab(tab_id);
+    }
 }
 
 /// A page's process ended. Its page closes but keeps its place over the panel, so Reload builds
@@ -945,11 +1048,13 @@ pub(super) fn crashed(browser: &Arc<Browser>, tab_id: &str, whole: bool) {
     let ids: Vec<String> = gone.iter().map(|(id, _)| id.clone()).collect();
     drop(gone);
     for id in ids {
+        super::webview2::forget(&id);
         browser.page_state(&id, |tab| {
             tab.live = false;
             tab.loading = false;
             tab.annotating = false;
             tab.crashed = tab.url.is_some();
+            tab.downloads = 0;
         });
     }
 }

@@ -1,6 +1,7 @@
 import "./browser.css";
 import { AgentMark } from "@auracode/ui/graphite";
 import {
+  AppWindow,
   ArrowLeft,
   ArrowRight,
   Code,
@@ -79,7 +80,8 @@ interface Notice {
   readonly key: number;
   readonly text: string;
   readonly url?: string;
-  readonly action?: "outside";
+  /** `outside`: another program's link to open there; `popup`: a window to open as a tab. */
+  readonly action?: "outside" | "popup";
 }
 
 /**
@@ -380,6 +382,14 @@ export function BrowserPanel({
               action: "outside",
             });
             return;
+          case "blocked":
+            setNotice({
+              key: Date.now(),
+              text: `This page tried to open a window: ${shownAddress(event.url)}`,
+              url: event.url,
+              action: "popup",
+            });
+            return;
           case "download":
             setNotice({
               key: Date.now(),
@@ -399,7 +409,8 @@ export function BrowserPanel({
   );
 
   useEffect(() => {
-    if (!notice || notice.action === "outside") return;
+    // A choice waits for the person; news goes after a moment.
+    if (!notice || notice.action) return;
     const clear = window.setTimeout(() => setNotice(null), 6000);
     return () => window.clearTimeout(clear);
   }, [notice]);
@@ -829,7 +840,7 @@ export function BrowserPanel({
             <Globe size={22} aria-hidden="true" />
             <p>
               {status?.unavailable ??
-                "The browser is turned off. Turn it on in Settings > Plugins & MCP."}
+                "Browser use is turned off. Turn it on in Settings > Plugins & MCP > Universal plugins."}
             </p>
           </div>
         ) : !tab ? null : !tab.url ? (
@@ -903,6 +914,8 @@ export function BrowserPanel({
         <div className="browser-notice" role="status" key={notice.key}>
           {notice.action === "outside" ? (
             <ExternalLink size={14} aria-hidden="true" />
+          ) : notice.action === "popup" ? (
+            <AppWindow size={14} aria-hidden="true" />
           ) : (
             <Download size={14} aria-hidden="true" />
           )}
@@ -920,6 +933,19 @@ export function BrowserPanel({
               }}
             >
               Open
+            </button>
+          ) : null}
+          {notice.action === "popup" && notice.url ? (
+            <button
+              type="button"
+              className="g-button g-button-24"
+              onClick={() => {
+                const url = notice.url;
+                setNotice(null);
+                if (url) store.api.open(chatId, url, true).catch(fail);
+              }}
+            >
+              Open as a tab
             </button>
           ) : null}
           <button

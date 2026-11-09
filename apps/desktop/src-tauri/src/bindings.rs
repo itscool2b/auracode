@@ -75,6 +75,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::browser::commands::browser_history_remove,
             crate::browser::commands::browser_clear,
             crate::browser::commands::browser_open_outside,
+            crate::browser::commands::browser_agent_call,
             crate::deep_links::sign_in_link_pending,
             crate::deep_links::sign_in_link_acknowledge,
             crate::accounts::account_config,

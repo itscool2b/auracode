@@ -268,7 +268,9 @@ fn clip(text: &mut String, limit: usize) {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BrowserEvent {
     /// A chat's tabs changed (opened, closed, moved front, loading, titled, crashed).
-    Chat { browser: ChatBrowser },
+    Chat {
+        browser: ChatBrowser,
+    },
     /// Annotate picked part of a page.
     Pick {
         chat_id: String,
@@ -276,7 +278,10 @@ pub enum BrowserEvent {
         pick: BrowserPick,
     },
     /// Annotate ended from the page (Esc).
-    AnnotateEnded { chat_id: String, tab_id: String },
+    AnnotateEnded {
+        chat_id: String,
+        tab_id: String,
+    },
     /// One of the browser's own shortcuts, pressed while a page had the keyboard.
     Shortcut {
         chat_id: String,
@@ -304,13 +309,24 @@ pub enum BrowserEvent {
         tab_id: String,
         url: String,
     },
-    Status { status: BrowserStatus },
+    /// A page tried to open a window without a person's click or key (a pop-up); the person may
+    /// open it as a tab.
+    Blocked {
+        chat_id: String,
+        tab_id: String,
+        url: String,
+    },
+    Status {
+        status: BrowserStatus,
+    },
 }
 
 /// Why a browser call failed, in words for a person or an agent.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BrowserError {
-    #[error("The browser is turned off. Turn it on in Settings > Plugins & MCP.")]
+    #[error(
+        "Browser use is turned off. Turn it on in Settings > Plugins & MCP > Universal plugins."
+    )]
     Disabled,
     #[error("{0}")]
     Unavailable(String),
@@ -354,6 +370,16 @@ struct Tab {
     used: u64,
     /// Finished loads, so a wait can tell a new page from the old one.
     loads: u64,
+    /// The tab whose page opened this one (a link to a new tab, a sign-in popup), until the person
+    /// picks another tab.
+    opener: Option<String>,
+    /// A document has loaded in it. A tab a page opened only to download a file never has one.
+    landed: bool,
+    /// A page opened it only to download a file: it closes once its downloads end.
+    download_only: bool,
+    /// Downloads it started that have not ended. Its page stays until they do, since the engine
+    /// reports a download's end through the page that started it.
+    downloads: u32,
 }
 
 impl Tab {
@@ -373,6 +399,10 @@ impl Tab {
             annotating: false,
             used: 0,
             loads: 0,
+            opener: None,
+            landed: false,
+            download_only: false,
+            downloads: 0,
         }
     }
 
@@ -389,6 +419,31 @@ impl Tab {
             zoom: self.zoom,
             asleep: !self.live && self.url.is_some(),
             annotating: self.annotating,
+        }
+    }
+}
+
+/// What a navigation that ended came to.
+struct Finished {
+    /// It is the latest the page started (an earlier one ends when a newer one replaces it).
+    latest: bool,
+    /// It brought a document. A download, a stop or an empty answer brings none and leaves the
+    /// page as it was.
+    landed: bool,
+    success: bool,
+    /// Why the document it brought is the engine's error page.
+    error: Option<String>,
+}
+
+impl Finished {
+    /// A load that finished, where the engine says no more than that.
+    #[cfg(not(windows))]
+    fn loaded() -> Finished {
+        Finished {
+            latest: true,
+            landed: true,
+            success: true,
+            error: None,
         }
     }
 }
@@ -559,9 +614,10 @@ impl Browser {
                         .url
                         .filter(|url| address::policy(url) == address::Policy::Open);
                     chat.tabs.push(tab.id.clone());
-                    fresh
-                        .tabs
-                        .insert(tab.id.clone(), Tab::new(tab.id, chat_id.clone(), url, tab.title));
+                    fresh.tabs.insert(
+                        tab.id.clone(),
+                        Tab::new(tab.id, chat_id.clone(), url, tab.title),
+                    );
                 }
                 chat.active = saved
                     .active
@@ -749,9 +805,13 @@ impl Browser {
                 let index = chat.tabs.iter().position(|id| id == tab_id).unwrap_or(0);
                 chat.tabs.retain(|id| id != tab_id);
                 if chat.active.as_deref() == Some(tab_id) {
-                    chat.active = chat
-                        .tabs
-                        .get(index)
+                    // A popup that closes hands back to the page that opened it.
+                    let opener = tab
+                        .opener
+                        .as_ref()
+                        .filter(|opener| chat.tabs.contains(opener));
+                    chat.active = opener
+                        .or_else(|| chat.tabs.get(index))
                         .or_else(|| chat.tabs.get(index.saturating_sub(1)))
                         .cloned();
                 }
@@ -781,11 +841,116 @@ impl Browser {
             if !chat.tabs.iter().any(|id| id == tab_id) {
                 return Err(BrowserError::NoTab(tab_id.to_owned()));
             }
-            chat.active = Some(tab_id.to_owned());
+            let before = chat.active.replace(tab_id.to_owned());
+            // Picking another tab ends a popup's claim to hand back to its opener.
+            if let Some(before) = before.filter(|before| before != tab_id)
+                && let Some(tab) = inner.tabs.get_mut(&before)
+            {
+                tab.opener = None;
+            }
             inner.sessions_dirty = true;
         }
         self.emit_chat(chat_id);
         Ok(())
+    }
+
+    /// A page asked to close its tab (`window.close()`, or the engine closing a window it opened only
+    /// for a download). A tab with a download running stays, out of the way, until it ends:
+    /// closing it would lose the download's end. Answers whether it stays.
+    fn hold_for_downloads(&self, tab_id: &str) -> bool {
+        let chat_id = {
+            let mut inner = lock(&self.inner);
+            let Some(tab) = inner.tabs.get_mut(tab_id) else {
+                return false;
+            };
+            if tab.downloads == 0 {
+                return false;
+            }
+            tab.download_only = true;
+            let opener = tab.opener.clone();
+            let chat_id = tab.chat_id.clone();
+            if let Some(chat) = inner.chats.get_mut(&chat_id)
+                && chat.active.as_deref() == Some(tab_id)
+            {
+                let index = chat.tabs.iter().position(|id| id == tab_id).unwrap_or(0);
+                let next = opener
+                    .filter(|opener| chat.tabs.contains(opener))
+                    .or_else(|| {
+                        index
+                            .checked_sub(1)
+                            .and_then(|at| chat.tabs.get(at))
+                            .cloned()
+                    })
+                    .or_else(|| chat.tabs.get(index + 1).cloned());
+                if next.is_some() {
+                    chat.active = next;
+                }
+            }
+            chat_id
+        };
+        self.emit_chat(&chat_id);
+        true
+    }
+
+    /// Notes that a page in `opener` opened `tab_id`.
+    fn opened_by(&self, tab_id: &str, opener: &str) {
+        if let Some(tab) = lock(&self.inner).tabs.get_mut(tab_id) {
+            tab.opener = Some(opener.to_owned());
+        }
+    }
+
+    /// A download began in a tab. One with no page of its own (a link to a file opened in a new
+    /// tab, or a file's address typed into an empty tab) shows its start page again, and a tab a
+    /// page opened only for the download hands back to that page and closes once it ends.
+    fn download_began(&self, tab_id: &str) {
+        let chat_id = {
+            let mut inner = lock(&self.inner);
+            let Some(tab) = inner.tabs.get_mut(tab_id) else {
+                return;
+            };
+            tab.downloads = tab.downloads.saturating_add(1);
+            if tab.landed {
+                return;
+            }
+            tab.url = None;
+            tab.loading = false;
+            tab.title.clear();
+            let opener = tab.opener.clone();
+            tab.download_only = opener.is_some();
+            let chat_id = tab.chat_id.clone();
+            if let Some(opener) = opener
+                && let Some(chat) = inner.chats.get_mut(&chat_id)
+                && chat.active.as_deref() == Some(tab_id)
+                && chat.tabs.contains(&opener)
+            {
+                chat.active = Some(opener);
+            }
+            inner.sessions_dirty = true;
+            chat_id
+        };
+        self.emit_chat(&chat_id);
+    }
+
+    /// A download ended: a tab opened only for it closes once its last one does, unless it is its
+    /// chat's only tab.
+    fn download_ended(self: &Arc<Self>, tab_id: &str) {
+        let close = {
+            let mut inner = lock(&self.inner);
+            let Some(tab) = inner.tabs.get_mut(tab_id) else {
+                return;
+            };
+            tab.downloads = tab.downloads.saturating_sub(1);
+            let ready = tab.download_only && tab.downloads == 0;
+            let chat_id = tab.chat_id.clone();
+            ready
+                && inner
+                    .chats
+                    .get(&chat_id)
+                    .is_some_and(|chat| chat.tabs.len() > 1)
+        };
+        if close {
+            let _ = self.close_tab(tab_id);
+        }
     }
 
     /// Moves a tab to `index` in its chat's strip.
@@ -837,7 +1002,11 @@ impl Browser {
     }
 
     /// Loads `input` (an address, a host, a file path or words to search for) in a tab.
-    pub async fn navigate(self: &Arc<Self>, tab_id: &str, input: &str) -> Result<String, BrowserError> {
+    pub async fn navigate(
+        self: &Arc<Self>,
+        tab_id: &str,
+        input: &str,
+    ) -> Result<String, BrowserError> {
         self.check()?;
         let url = address::resolve(input).ok_or_else(|| {
             BrowserError::Invalid("That is not an address the browser can open.".into())
@@ -991,14 +1160,17 @@ impl Browser {
     ) -> Result<Option<PickedElement>, BrowserError> {
         self.check()?;
         if !x.is_finite() || !y.is_finite() {
-            return Err(BrowserError::Invalid("The point is not on the page.".into()));
+            return Err(BrowserError::Invalid(
+                "The point is not on the page.".into(),
+            ));
         }
         let value = self.call(tab_id, &format!("api.pickAt({x}, {y})")).await?;
         if value.is_null() {
             return Ok(None);
         }
-        let element: PickedElement = serde_json::from_value(value)
-            .map_err(|_| BrowserError::Page("The page answered with something unreadable.".into()))?;
+        let element: PickedElement = serde_json::from_value(value).map_err(|_| {
+            BrowserError::Page("The page answered with something unreadable.".into())
+        })?;
         let pick = BrowserPick {
             mode: "element".into(),
             url: String::new(),
@@ -1019,7 +1191,11 @@ impl Browser {
 
     /// Calls the page script in a tab: `api` is auracode's page agent. Answers what the call
     /// returned, or the page's error.
-    pub(crate) async fn call(self: &Arc<Self>, tab_id: &str, expression: &str) -> Result<Value, BrowserError> {
+    pub(crate) async fn call(
+        self: &Arc<Self>,
+        tab_id: &str,
+        expression: &str,
+    ) -> Result<Value, BrowserError> {
         let script = format!(
             "(() => {{ try {{ const api = window.__auraBrowser; if (!api) return JSON.stringify({{ missing: true }}); const value = ({expression}); return JSON.stringify({{ ok: true, value: value === undefined ? null : value }}); }} catch (error) {{ return JSON.stringify({{ error: String((error && error.message) || error) }}); }} }})()"
         );
@@ -1130,6 +1306,8 @@ impl Browser {
             tab.loading = true;
             tab.crashed = false;
             tab.error = None;
+            tab.landed = true;
+            tab.download_only = false;
             if address::policy(url) == address::Policy::Open && url != "about:blank" {
                 tab.url = Some(url.to_owned());
             }
@@ -1147,20 +1325,32 @@ impl Browser {
         self.emit_chat(&chat);
     }
 
-    fn page_finished(&self, tab_id: &str, url: &str) {
+    fn page_finished(&self, tab_id: &str, url: Option<&str>, finished: Finished) {
         let chat = {
             let mut inner = lock(&self.inner);
             let Some(tab) = inner.tabs.get_mut(tab_id) else {
                 return;
             };
-            tab.loading = false;
+            if finished.latest {
+                tab.loading = false;
+            }
             tab.loads += 1;
-            if address::policy(url) == address::Policy::Open && url != "about:blank" {
+            if finished.landed {
+                tab.error = finished.error;
+            }
+            let url = url.filter(|url| {
+                address::policy(url) == address::Policy::Open && *url != "about:blank"
+            });
+            if let Some(url) = url {
                 tab.url = Some(url.to_owned());
             }
             let title = tab.title.clone();
             let chat = tab.chat_id.clone();
-            inner.history.visit(url, &title, now_ms());
+            if finished.success
+                && let Some(url) = url
+            {
+                inner.history.visit(url, &title, now_ms());
+            }
             inner.sessions_dirty = true;
             chat
         };
@@ -1309,7 +1499,13 @@ impl Browser {
     // ------------------------------------------------------------ agents
 
     /// An agent's call starts (`label` says what it does) or ends (`None`) in a chat's browser.
-    pub(crate) fn agent_activity(&self, chat_id: &str, tab_id: Option<&str>, label: Option<&str>, opened: bool) {
+    pub(crate) fn agent_activity(
+        &self,
+        chat_id: &str,
+        tab_id: Option<&str>,
+        label: Option<&str>,
+        opened: bool,
+    ) {
         {
             let mut inner = lock(&self.inner);
             let count = inner.agents.entry(chat_id.to_owned()).or_insert(0);
@@ -1362,7 +1558,12 @@ pub(crate) enum Shot {
     /// The whole page, as a PNG.
     FullPage,
     /// One part of the page (CSS pixels of the viewport), as a PNG.
-    Clip { x: f64, y: f64, width: f64, height: f64 },
+    Clip {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
 }
 
 /// Agents' calls from aura-core's browser grants, run in the app's browser.
@@ -1530,7 +1731,10 @@ mod tests {
 
     #[test]
     fn script_answers_decode_once_or_twice() {
-        assert_eq!(decode(r#""{\"ok\":true}""#), serde_json::json!({ "ok": true }));
+        assert_eq!(
+            decode(r#""{\"ok\":true}""#),
+            serde_json::json!({ "ok": true })
+        );
         assert_eq!(decode(r#"{"a":1}"#), serde_json::json!({ "a": 1 }));
         assert_eq!(decode(r#""plain""#), Value::String("plain".into()));
         assert_eq!(decode("null"), Value::Null);
@@ -1552,7 +1756,9 @@ mod tests {
             tag: tag.into(),
             id: None,
             classes: vec!["a".repeat(500); 40],
-            attributes: (0..40).map(|i| (format!("data-{i}"), "v".repeat(900))).collect(),
+            attributes: (0..40)
+                .map(|i| (format!("data-{i}"), "v".repeat(900)))
+                .collect(),
             selector: "s".repeat(2000),
             text: "t".repeat(2000),
             rect: PickRect {
@@ -1611,7 +1817,10 @@ mod tests {
             elements: vec![],
             screenshot: None,
         };
-        assert!(base.clone().bounded().is_none(), "an element pick needs an element");
+        assert!(
+            base.clone().bounded().is_none(),
+            "an element pick needs an element"
+        );
         assert!(
             BrowserPick {
                 mode: "script".into(),
