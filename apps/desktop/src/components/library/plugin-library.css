@@ -203,6 +203,38 @@
   color: var(--g-fg-3);
 }
 
+/* The fine print of shared servers, closed until asked for. */
+.plugins-more {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.plugins-more > summary {
+  width: fit-content;
+  color: var(--g-fg-2);
+  cursor: pointer;
+  border-radius: var(--g-radius-6);
+}
+
+.plugins-more > summary:hover {
+  color: var(--g-fg-1);
+}
+
+.plugins-more > summary:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.plugins-more > ul {
+  display: grid;
+  gap: var(--g-space-8);
+  margin: var(--g-space-12) 0 0;
+  padding-left: var(--g-space-20);
+  max-width: 68ch;
+  color: var(--g-fg-3);
+}
+
 /* Sync: one settings row, the words at left and the switch at right, on a settings group's card. */
 .plugins-sync {
   display: flex;

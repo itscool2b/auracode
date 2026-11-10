@@ -6,7 +6,7 @@ use crate::chatstore::{
 };
 use aura_protocol::{
     mcp::{McpCredentials, McpDefinition, McpTransport, ResolvedMcpServer},
-    memory::{ProposeProjectMemory, SaveProjectMemory},
+    memory::SaveProjectMemory,
 };
 use serde::Deserialize;
 use std::{
@@ -49,11 +49,15 @@ struct Request {
     markdown: Option<String>,
     #[serde(default)]
     reason: Option<String>,
-    #[serde(default)]
-    idempotency_key: String,
+    /// Proposals carried one. A helper from before they were removed still sends it, and unknown
+    /// fields are refused, so it is accepted and unused.
+    #[serde(default, rename = "idempotency_key")]
+    _idempotency_key: String,
 }
-/// What an agent reads when the profile keeps memory review-only.
-pub(crate) const REVIEW_ONLY: &str = "Direct memory edits are off: the user reviews every update in Aura. Use aura_memory_propose to propose this change instead.";
+/// What an agent reads when the person has turned agents' edits off.
+pub(crate) const READ_ONLY: &str = "The user has turned off agents' edits to project memory, so nothing was saved. Do not try again: tell the user what you would have saved, so they can add it in Aura's Project memory page.";
+/// What an agent reads when it asks for a review that no longer exists (owner, 10 November 2026).
+pub(crate) const NO_PROPOSALS: &str = "Project memory has no proposals any more. Save the change with aura_memory_write, or tell the user what to add.";
 impl MemoryGrant {
     /// `direct_writes` is the profile's switch, read on every request, so turning it off or on
     /// applies to running chats at once.
@@ -94,12 +98,13 @@ impl MemoryGrant {
                     let command=match request.operation.as_str(){
                         "read"=>Command::Read(project),
                         "write"=>{
-                            if !direct_writes.load(Ordering::Acquire){return Ok(serde_json::json!({"error":REVIEW_ONLY}));}
+                            if !direct_writes.load(Ordering::Acquire){return Ok(serde_json::json!({"error":READ_ONLY}));}
                             let (Some(markdown),Some(reason))=(request.markdown,request.reason) else {return Ok(serde_json::json!({"error":"A memory write needs the complete replacement Markdown, its base revision and a reason."}));};
                             Command::AgentSave{input:SaveProjectMemory{project_id:project,expected_revision:request.base_revision,markdown,reason},chat_id:chat_id.clone()}
                         }
-                        "propose"=>Command::Propose(ProposeProjectMemory{project_id:project,base_revision:request.base_revision,markdown:request.markdown.unwrap_or_default(),reason:request.reason.unwrap_or_default(),chat_id:Some(chat_id.clone()),idempotency_key:request.idempotency_key}),
-                        _=>return Ok(serde_json::json!({"error":"Unsupported memory operation. Use read, write or propose."}))
+                        // A session started before proposals went still has the tool: it is told so.
+                        "propose"=>return Ok(serde_json::json!({"error":NO_PROPOSALS})),
+                        _=>return Ok(serde_json::json!({"error":"Unsupported memory operation. Use read or write."}))
                     };
                     Ok(match store.memory(command).await {Ok(Reply::Memory(v))=>serde_json::json!({"result":v}),Ok(Reply::Proposal(v))=>serde_json::json!({"result":v}),Ok(_)=>serde_json::json!({"error":"Unexpected memory response."}),Err(error)=>serde_json::json!({"error":error.to_string()})})
                 }).await;

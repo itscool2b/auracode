@@ -1,6 +1,8 @@
-//! Immutable revision sync. Parallel edits become proposals, preserving both texts for review.
+//! Immutable revision sync. Every device receives every revision. When two devices edited the
+//! same memory in parallel, the newer edit becomes the memory on both; the other stays in the
+//! revision table. Nothing waits for review (owner, 10 November 2026).
 use super::*;
-use aura_protocol::memory::{MemoryRevision, ProposeProjectMemory};
+use aura_protocol::memory::MemoryRevision;
 use aura_sync::merge::FieldValue;
 use serde_json::Value;
 
@@ -82,22 +84,10 @@ pub(crate) fn project(
     if !already {
         conn.execute("INSERT INTO project_memory_revisions(revision,project_id,parent_revision,markdown,reason,source,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![row.revision,row.project_id,row.parent_revision,row.markdown,row.reason,row.source,row.created_at])?;
         let current = crate::chatstore::memory::read(conn, &row.project_id)?;
-        if current.revision == row.parent_revision {
+        if current.revision == row.parent_revision
+            || supersedes(conn, &row, current.revision.as_deref())?
+        {
             conn.execute("INSERT INTO project_memory(project_id,revision,markdown,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(project_id) DO UPDATE SET revision=excluded.revision,markdown=excluded.markdown,updated_at=excluded.updated_at",params![row.project_id,row.revision,row.markdown,row.created_at])?;
-        } else {
-            let command = crate::chatstore::memory::Command::Propose(ProposeProjectMemory {
-                project_id: row.project_id.clone(),
-                base_revision: row.parent_revision.clone(),
-                markdown: row.markdown.clone(),
-                reason: format!(
-                    "Sync conflict: {}",
-                    crate::conversation::cut(&row.reason, 1900)
-                ),
-                chat_id: None,
-                idempotency_key: format!("sync:{}", row.revision),
-            });
-            crate::chatstore::memory::execute(conn, command, row.created_at)?;
-            conn.execute("UPDATE project_memory_proposals SET state='conflict' WHERE project_id=?1 AND idempotency_key=?2",params![row.project_id,format!("sync:{}",row.revision)])?;
         }
     }
     conn.execute(
@@ -105,6 +95,46 @@ pub(crate) fn project(
         [row.revision],
     )?;
     Ok(true)
+}
+
+/// How far back a revision's ancestry is followed. Memory changes by hand and by agents a few
+/// times a day; a chain this long is years of it.
+const ANCESTRY: usize = 10_000;
+
+/// Whether a revision that does not follow this device's current one takes its place.
+///
+/// Two devices that edited in parallel each hold both revisions in the end and must choose the
+/// same one, with nobody to ask: the newer wins, by when it was saved and then by its id. A
+/// revision the current one already descends from is history that arrived late, never a choice.
+fn supersedes(conn: &Connection, row: &MemoryRevision, current: Option<&str>) -> Result<bool> {
+    let Some(current) = current else {
+        return Ok(true);
+    };
+    let mut at = Some(current.to_owned());
+    let mut saved_at = None;
+    for _ in 0..ANCESTRY {
+        let Some(revision) = at else { break };
+        if revision == row.revision {
+            return Ok(false);
+        }
+        let found = conn
+            .query_row(
+                "SELECT parent_revision,created_at FROM project_memory_revisions WHERE revision=?1 AND project_id=?2",
+                params![revision, row.project_id],
+                |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, i64>(1)?)),
+            )
+            .optional()?;
+        let Some((parent, created_at)) = found else {
+            break;
+        };
+        saved_at.get_or_insert(created_at);
+        at = parent;
+    }
+    // A current revision this device has no record of cannot be weighed: the one it has wins.
+    let Some(saved_at) = saved_at else {
+        return Ok(true);
+    };
+    Ok((row.created_at, row.revision.as_str()) > (saved_at, current))
 }
 
 #[cfg(test)]
@@ -186,6 +216,17 @@ mod tests {
         capture::finish(&tx, context, now as i64).unwrap();
         tx.commit().unwrap();
         memory.revision.unwrap()
+    }
+    /// The project's first revision: the one with no parent.
+    fn first_revision(store: &Store, project: &str) -> String {
+        store
+            .conn()
+            .query_row(
+                "SELECT revision FROM project_memory_revisions WHERE project_id=?1 AND parent_revision IS NULL",
+                [project],
+                |r| r.get(0),
+            )
+            .unwrap()
     }
     fn memory_head(store: &Store, id: &str) -> EncryptedRecord {
         head(store.conn(), "projects", &format!("memory-{id}"))
@@ -285,7 +326,8 @@ mod tests {
                 .revision,
             Some(target_next.clone())
         );
-        let MemoryReply::Proposals(conflicts) = crate::chatstore::memory::execute(
+        // The target's edit is the newer of the two: it stays, and nothing waits for review.
+        let MemoryReply::Proposals(waiting) = crate::chatstore::memory::execute(
             target.conn(),
             MemoryCommand::Proposals(id.clone()),
             now as i64,
@@ -293,9 +335,7 @@ mod tests {
         .unwrap() else {
             panic!()
         };
-        assert_eq!(conflicts.len(), 1);
-        assert_eq!(conflicts[0].state, "conflict");
-        assert_eq!(conflicts[0].markdown, "Source parallel edit");
+        assert!(waiting.is_empty());
         assert_eq!(
             target
                 .conn()
@@ -307,7 +347,7 @@ mod tests {
                 .unwrap(),
             3
         );
-        // A replay cannot duplicate a proposal or replace the accepted head.
+        // A replay changes nothing.
         pull(
             &mut target,
             &target_context,
@@ -316,6 +356,68 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
+            crate::chatstore::memory::read(target.conn(), &id)
+                .unwrap()
+                .revision,
+            Some(target_next.clone())
+        );
+        // The source receives the target's newer edit and takes it: both devices now agree.
+        pull(
+            &mut source,
+            &source_context,
+            vec![change(memory_head(&target, &target_next), 5)],
+            now + 8,
+        )
+        .unwrap();
+        let agreed = crate::chatstore::memory::read(source.conn(), &id).unwrap();
+        assert_eq!(agreed.revision, Some(target_next.clone()));
+        assert_eq!(agreed.markdown, "Target parallel edit");
+        // The older parallel edit is kept as a revision on both, and is the memory on neither.
+        for store in [&source, &target] {
+            assert_eq!(
+                store
+                    .conn()
+                    .query_row(
+                        "SELECT markdown FROM project_memory_revisions WHERE revision=?1",
+                        [&source_next],
+                        |r| r.get::<_, String>(0)
+                    )
+                    .unwrap(),
+                "Source parallel edit"
+            );
+        }
+        // An edit on top of the agreed one follows it everywhere, and history that arrives late
+        // (the first revision again) takes nothing back.
+        let later = save(
+            &mut source,
+            &source_context,
+            &id,
+            Some(target_next.clone()),
+            "Later edit",
+            now + 9,
+        );
+        pull(
+            &mut target,
+            &target_context,
+            vec![change(memory_head(&source, &later), 6)],
+            now + 10,
+        )
+        .unwrap();
+        let first_again = memory_head(&source, &first_revision(&source, &id));
+        pull(
+            &mut target,
+            &target_context,
+            vec![change(first_again, 7)],
+            now + 11,
+        )
+        .unwrap();
+        assert_eq!(
+            crate::chatstore::memory::read(target.conn(), &id)
+                .unwrap()
+                .markdown,
+            "Later edit"
+        );
+        assert_eq!(
             target
                 .conn()
                 .query_row("SELECT COUNT(*) FROM project_memory_proposals", [], |r| r
@@ -323,7 +425,7 @@ mod tests {
                     0
                 ))
                 .unwrap(),
-            1
+            0
         );
         target
             .conn()

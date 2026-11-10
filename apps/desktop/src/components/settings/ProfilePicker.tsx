@@ -11,7 +11,7 @@ export function ProfilePicker({
   activeId,
   locked = false,
   api = profileApi,
-  onSwitch = switchProfile,
+  onSwitch = (id: string) => switchProfile(id, "account"),
 }: {
   readonly activeId: string | null;
   readonly locked?: boolean;
@@ -53,15 +53,13 @@ export function ProfilePicker({
       setPending(null);
     }
   };
+  // One profile is not a choice: the list appears once there is a second one to open, or the
+  // only one is locked and has to be opened.
+  if (!error && (!profiles || (profiles.length < 2 && !locked))) return null;
   return (
     <section className="settings-section" aria-labelledby="profile-title">
       <h2 id="profile-title">Profiles</h2>
       <p className="settings-lead">Each profile keeps its own projects, chats and drafts.</p>
-      {!profiles && !error ? (
-        <p role="status" className="settings-footnote">
-          Loading profiles…
-        </p>
-      ) : null}
       <ul className="settings-group">
         {profiles?.map((profile) => {
           const current = profile.id === activeId;

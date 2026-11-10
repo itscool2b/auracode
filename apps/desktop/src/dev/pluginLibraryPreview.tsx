@@ -68,8 +68,8 @@ const files = (
   available_total: 0,
 });
 
-const SKILLS = "No CLI lists skills, so these come from the agent's skills folder.";
-const FOLDER = "The CLI has no listing for these, so they come from the agent's folder.";
+const SKILLS = "From the agent's skills folder.";
+const FOLDER = "From the agent's folder.";
 function recordedManagement(provider: "claude" | "codex" | "pi"): PluginManagement {
   return {
     version: 1,
@@ -470,9 +470,7 @@ export function pluginFixture(mode: string): PluginLibrary {
       nativeAgent("antigravity", "Antigravity", false),
       nativeAgent("omp", "oh-my-pi", false),
     ],
-    notices: [
-      "Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.",
-    ],
+    notices: [],
   };
 }
 

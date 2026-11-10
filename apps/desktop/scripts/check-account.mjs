@@ -55,7 +55,17 @@ export async function checkAccount(browser, url, out, engine) {
     await page.screenshot({ path: resolve(out, `${engine}-account-recovery.png`) });
     await page.getByLabel("I saved my recovery key somewhere safe").check();
     await confirm.click();
-    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByText("Sync is not on yet", { exact: true }).waitFor();
+    // Signed in and approved is not syncing: the last step is named, marked and one click away.
+    assert.equal(
+      await page
+        .getByRole("list", { name: "Steps to sync" })
+        .locator('[aria-current="step"]')
+        .textContent(),
+      "4Turn on sync",
+    );
+    await page.getByRole("button", { name: "Turn on sync", exact: true }).waitFor();
+    assert.equal(await page.getByText("This device is approved").count(), 0);
     assert.equal(
       await page.getByRole("textbox", { name: "Recovery key", exact: false }).count(),
       0,
@@ -93,7 +103,7 @@ export async function checkAccount(browser, url, out, engine) {
       .waitFor();
     await signOut.getByRole("button", { name: "Stay signed in" }).click();
     await signOut.waitFor({ state: "detached" });
-    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByText("Sync is not on yet", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await signOut.getByRole("button", { name: "Sign out now" }).click();
     await page.getByRole("heading", { name: "Sign in to auracode" }).waitFor();
@@ -104,7 +114,7 @@ export async function checkAccount(browser, url, out, engine) {
     assert.equal(await trust.isDisabled(), true);
     await page.getByLabel("I compared the complete fingerprint and it matches").check();
     await trust.click();
-    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByText("Sync is not on yet", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await signOut
       .getByText("The last sync report shows 3 changes waiting to upload.", { exact: false })
@@ -112,7 +122,7 @@ export async function checkAccount(browser, url, out, engine) {
     await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await signOut.getByRole("button", { name: "Stay signed in" }).click();
-    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByText("Sync is not on yet", { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     for (const stage of ["invite-request", "invite-verify"]) {
       await page.goto(`${url}/?preview=account&stage=${stage}`);

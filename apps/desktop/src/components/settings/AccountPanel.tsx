@@ -33,6 +33,56 @@ const time = (value: number | null) =>
  * One step of the account flow as a settings row: its title, one line on what it does, at most one
  * control at right, and anything the step needs (a form, a key, a list) under them.
  */
+const SETUP_STEPS = ["Sign in", "This computer", "Encryption key", "Turn on sync"] as const;
+
+/** Which of the four steps to a syncing account an access state is at; `null` once all are done. */
+export function setupStep(access: AccountStatus["access"], syncOff: boolean): number | null {
+  switch (access) {
+    case "signed_out":
+    case "expired":
+    case "denied":
+    case "verification_required":
+      return 0;
+    case "needs_device":
+      return 1;
+    case "needs_first_key":
+    case "pending_approval":
+    case "verify_account_key":
+      return 2;
+    case "ready":
+      return syncOff ? 3 : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The way from signed out to syncing, as four named steps with the current one marked. Signing in
+ * is only the first: without this, an approved device that never opened its account workspace
+ * looked finished while nothing synced.
+ */
+function SetupSteps({ current }: { readonly current: number }) {
+  return (
+    <ol className="account-steps" aria-label="Steps to sync">
+      {SETUP_STEPS.map((label, index) => (
+        <li
+          key={label}
+          data-state={index < current ? "done" : index === current ? "current" : "ahead"}
+          aria-current={index === current ? "step" : undefined}
+        >
+          <span className="account-steps-mark" aria-hidden="true">
+            {index < current ? <Check size={12} /> : index + 1}
+          </span>
+          <span>
+            {label}
+            {index < current ? <span className="sr-only"> (done)</span> : null}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Step({
   title,
   detail,
@@ -63,7 +113,8 @@ export function AccountPanel({
   deviceName = "My computer",
   Verification = AccountVerification,
   activeProfileId = null,
-  onActivate = switchProfile,
+  // Turning sync on opens the account's workspace; Settings shows again there, on this page.
+  onActivate = () => switchProfile(undefined, "account"),
   recoveryOnly = false,
   recoveryProfileId = null,
   recoveryActionLabel = "Unlock selected account",
@@ -317,6 +368,19 @@ export function AccountPanel({
         .filter(Boolean)
         .join(" · ")
     : "";
+  // Signed in and approved, but still in another profile: nothing syncs until the account's
+  // workspace is the one that is open. This is the step people miss, so it reads as a step.
+  const syncOff =
+    status?.access === "ready" &&
+    !recoveryOnly &&
+    (!status.profile_id || status.profile_id !== activeProfileId);
+  const step = status ? setupStep(status.access, syncOff) : null;
+  // Key storage and removal concern an account that is on this computer, or one whose status
+  // could not be read (a locked key store is fixed there). Someone who never signed in has neither.
+  const showSecurity =
+    recoveryOnly ||
+    Boolean(status?.account_id || status?.profile_id || status?.local_key_available) ||
+    (!status && error !== null);
 
   return (
     <div className="account-panel" aria-busy={busy}>
@@ -332,6 +396,7 @@ export function AccountPanel({
             Reading account status…
           </p>
         ) : null}
+        {step !== null && !recoveryOnly ? <SetupSteps current={step} /> : null}
         <div className="settings-group">
           {signedOut ? (
             <Step
@@ -676,8 +741,12 @@ export function AccountPanel({
                   <Check size={16} />
                 </span>
                 <div>
-                  <strong>This device is approved</strong>
-                  <p>{syncSummary}</p>
+                  <strong>{syncOff ? "Sync is not on yet" : "This device is approved"}</strong>
+                  <p>
+                    {syncOff
+                      ? "You are signed in, and this computer is approved. Sync runs in your account workspace, which is separate from Local: turn it on to open that workspace. Local stays as it is, and you can bring its projects along next."
+                      : syncSummary}
+                  </p>
                 </div>
               </div>
               {recoveryOnly || !status.profile_id || status.profile_id !== activeProfileId ? (
@@ -687,7 +756,7 @@ export function AccountPanel({
                   disabled={locked || wrongRecoveryAccount}
                   onClick={() => void run(onActivate)}
                 >
-                  {recoveryOnly ? recoveryActionLabel : "Open account workspace"}
+                  {recoveryOnly ? recoveryActionLabel : "Turn on sync"}
                 </button>
               ) : null}
               {status.sync.message ? (
@@ -842,59 +911,61 @@ export function AccountPanel({
           </ul>
         </section>
       ) : null}
-      <section className="settings-section" aria-labelledby="account-security-title">
-        <h2 id="account-security-title">Security</h2>
-        <div className="settings-group">
-          <div className="settings-row">
-            <div className="settings-row-text">
-              <div>
-                <strong>Secure storage</strong>
-                <p>Where this computer keeps your account keys.</p>
+      {showSecurity ? (
+        <section className="settings-section" aria-labelledby="account-security-title">
+          <h2 id="account-security-title">Security</h2>
+          <div className="settings-group">
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <div>
+                  <strong>Secure storage</strong>
+                  <p>Where this computer keeps your account keys.</p>
+                </div>
               </div>
+              <button
+                className="g-button g-button-outline g-button-28"
+                type="button"
+                aria-expanded={showVault}
+                aria-label={showVault ? "Close secure storage" : "Manage secure storage"}
+                disabled={busy}
+                onClick={() => setShowVault((value) => !value)}
+              >
+                {showVault ? "Close" : "Manage"}
+              </button>
+              {showVault ? (
+                <div className="settings-span">
+                  <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} />
+                </div>
+              ) : null}
             </div>
-            <button
-              className="g-button g-button-outline g-button-28"
-              type="button"
-              aria-expanded={showVault}
-              aria-label={showVault ? "Close secure storage" : "Manage secure storage"}
-              disabled={busy}
-              onClick={() => setShowVault((value) => !value)}
-            >
-              {showVault ? "Close" : "Manage"}
-            </button>
-            {showVault ? (
-              <div className="settings-span">
-                <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} />
-              </div>
+            {status?.local_key_available && !status.profile_id ? (
+              <RebindProfilePanel
+                key={status.account_id}
+                profileId={recoveryOnly ? recoveryProfileId : null}
+                disabled={locked}
+                onStatus={setStatus}
+              />
+            ) : null}
+            {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
+              <ResetSyncPanel
+                key={status.account_id}
+                access={status.access}
+                allowReview={!status.local_key_available}
+                disabled={locked}
+                onStatus={(value) => setStatus(value)}
+              />
+            ) : null}
+            {!recoveryOnly ? (
+              <RemoveAccountPanel
+                localActive={activeProfileId === "local"}
+                disabled={locked}
+                onLocal={() => switchProfile("local")}
+                onStatus={setStatus}
+              />
             ) : null}
           </div>
-          {status?.local_key_available && !status.profile_id ? (
-            <RebindProfilePanel
-              key={status.account_id}
-              profileId={recoveryOnly ? recoveryProfileId : null}
-              disabled={locked}
-              onStatus={setStatus}
-            />
-          ) : null}
-          {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
-            <ResetSyncPanel
-              key={status.account_id}
-              access={status.access}
-              allowReview={!status.local_key_available}
-              disabled={locked}
-              onStatus={(value) => setStatus(value)}
-            />
-          ) : null}
-          {!recoveryOnly ? (
-            <RemoveAccountPanel
-              localActive={activeProfileId === "local"}
-              disabled={locked}
-              onLocal={() => switchProfile("local")}
-              onStatus={setStatus}
-            />
-          ) : null}
-        </div>
-      </section>
+        </section>
+      ) : null}
       {!recoveryOnly && signOutReview ? (
         <SignOutDialog
           pending={status?.sync.pending_changes ?? null}

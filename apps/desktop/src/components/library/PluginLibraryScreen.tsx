@@ -332,10 +332,7 @@ export function PluginLibraryScreen({
       <div className="library-heading">
         <div>
           {titled ? <h1>Plugins & MCP</h1> : null}
-          <p>
-            Plugins stay with their agent. Shared MCP applies to compatible agents in the selected
-            scope. Server definitions can sync; authentication stays on each device.
-          </p>
+          <p>What each agent has installed, and the MCP servers your agents share.</p>
         </div>
         <div className="library-heading-actions">
           <button
@@ -676,6 +673,10 @@ function Feature({
       .includes(query.toLowerCase()),
   );
   const headingId = `plugins-${agent.agent_id}-${feature.feature}`;
+  // The command a listing was read with is the heading's tooltip. The page says where rows came
+  // from only when that is not the agent's own listing: its folder, a failure, or nothing.
+  const source = sourceText(feature.state, feature.command);
+  const plain = feature.state.state === "live";
   // Adding a marketplace sits where its list is, not only in the agent's menu.
   const adds =
     feature.feature === "marketplaces" &&
@@ -685,12 +686,14 @@ function Feature({
   return (
     <section className="plugins-feature" aria-labelledby={headingId}>
       <div className="plugins-feature-head">
-        <h3 id={headingId}>
+        <h3 id={headingId} title={plain ? source : undefined}>
           {label} <span className="plugins-count">{feature.entries.length}</span>
         </h3>
-        <p className="plugins-source" data-failed={failed || undefined}>
-          {sourceText(feature.state, feature.command)}
-        </p>
+        {plain ? null : (
+          <p className="plugins-source" data-failed={failed || undefined}>
+            {source}
+          </p>
+        )}
         {adds && provider ? (
           <button
             type="button"

@@ -62,7 +62,7 @@ fn grant(store: &Arc<ChatStore>, chat: &str, direct: &Arc<AtomicBool>) -> Memory
     .unwrap()
 }
 #[tokio::test]
-async fn review_only_memory_service_reads_and_proposes_and_drop_revokes_credential() {
+async fn read_only_memory_service_reads_refuses_changes_and_drop_revokes_credential() {
     let (_dir, store, chat) = fixture();
     let grant = grant(&store, &chat, &Arc::new(AtomicBool::new(false)));
     let endpoint = grant.endpoint.clone();
@@ -72,8 +72,9 @@ async fn review_only_memory_service_reads_and_proposes_and_drop_revokes_credenti
     assert!(denied.get("error").is_some());
     let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
     assert_eq!(read["result"]["markdown"], "");
+    // A session from before proposals went may still ask for one: it is told they are gone.
     let proposed=call(&endpoint,&token,serde_json::json!({"operation":"propose","base_revision":null,"markdown":"Proposed durable fact","reason":"Useful across chats","idempotency_key":"service-test"})).await;
-    assert_eq!(proposed["result"]["state"], "pending");
+    assert_eq!(proposed["error"], NO_PROPOSALS);
     let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
     assert_eq!(read["result"]["markdown"], "");
     let write = call(
@@ -82,13 +83,13 @@ async fn review_only_memory_service_reads_and_proposes_and_drop_revokes_credenti
         serde_json::json!({"operation":"write","base_revision":null,"markdown":"Direct","reason":"Not allowed"}),
     )
     .await;
-    assert_eq!(write["error"], REVIEW_ONLY);
+    assert_eq!(write["error"], READ_ONLY);
     let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
     assert_eq!(read["result"]["markdown"], "");
     let accept = call(&endpoint, &token, serde_json::json!({"operation":"accept"})).await;
     assert_eq!(
         accept["error"],
-        "Unsupported memory operation. Use read, write or propose."
+        "Unsupported memory operation. Use read or write."
     );
     let cross = call(
         &endpoint,
@@ -184,17 +185,17 @@ async fn direct_writes_follow_the_profile_switch_mid_grant_and_still_need_the_to
     )
     .await;
     assert!(unknown.get("error").is_some());
-    // Turning the switch off applies to this running grant at once; reading and proposing stay.
+    // Turning the switch off applies to this running grant at once; reading stays.
     direct.store(false, std::sync::atomic::Ordering::Release);
     let refused = call(&endpoint, &token, write(revision.clone(), "While off")).await;
-    assert_eq!(refused["error"], REVIEW_ONLY);
+    assert_eq!(refused["error"], READ_ONLY);
     let proposed = call(
         &endpoint,
         &token,
         serde_json::json!({"operation":"propose","base_revision":revision,"markdown":"While off","reason":"Review this","idempotency_key":"off"}),
     )
     .await;
-    assert_eq!(proposed["result"]["state"], "pending");
+    assert_eq!(proposed["error"], NO_PROPOSALS);
     let read = call(&endpoint, &token, serde_json::json!({"operation":"read"})).await;
     assert_eq!(read["result"]["markdown"], "Run cargo test.");
     direct.store(true, std::sync::atomic::Ordering::Release);

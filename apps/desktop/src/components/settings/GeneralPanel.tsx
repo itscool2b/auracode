@@ -475,117 +475,100 @@ export function ChatsPage({
       : (installed?.[0] ?? null);
   return (
     <>
-      <section className="settings-section" aria-labelledby="settings-new-chats">
-        <h2 id="settings-new-chats">New chats</h2>
-        <div className="settings-group">
-          <Row
-            title="Open new chats in"
-            detail={
-              newChatInterface === "terminal"
-                ? "Claude Code and Codex open in their own interface, in auracode's terminal; other agents open in Chat. Any chat switches from its header. This device only."
-                : "auracode's chat. Claude Code and Codex chats can switch to their own interface from the header."
+      {/* Four choices, one list: a heading over each single row only made the page longer. */}
+      <div className="settings-group">
+        <Row
+          title="Open new chats in"
+          detail={
+            newChatInterface === "terminal"
+              ? "Claude Code and Codex open in their own interface, in auracode's terminal; other agents open in Chat. Any chat switches from its header. This device only."
+              : "auracode's chat. Claude Code and Codex chats can switch to their own interface from the header."
+          }
+        >
+          <select
+            className="g-select settings-control settings-select"
+            aria-label="Open new chats in"
+            data-testid="settings-new-chat-interface"
+            value={newChatInterface}
+            onChange={(event) =>
+              chatInterfaces.setDefault(
+                event.currentTarget.value === "terminal" ? "terminal" : "chat",
+              )
             }
           >
-            <select
-              className="g-select settings-control settings-select"
-              aria-label="Open new chats in"
-              data-testid="settings-new-chat-interface"
-              value={newChatInterface}
-              onChange={(event) =>
-                chatInterfaces.setDefault(
-                  event.currentTarget.value === "terminal" ? "terminal" : "chat",
-                )
-              }
-            >
-              <option value="chat">Chat</option>
-              <option value="terminal">Terminal</option>
-            </select>
-          </Row>
-        </div>
-      </section>
-      <section className="settings-section" aria-labelledby="settings-turns">
-        <h2 id="settings-turns">Finished turns</h2>
-        <div className="settings-group">
+            <option value="chat">Chat</option>
+            <option value="terminal">Terminal</option>
+          </select>
+        </Row>
+        {installed ? (
           <Row
-            title="Keep steps open"
+            title="Open files in"
             detail={
-              general.keep_steps_open
-                ? "A finished turn shows its messages, tools and thinking above its answer."
-                : "A finished turn folds its work under Worked for, above its answer."
+              chosen
+                ? "File names in answers, steps and Changes open in this editor, at their line."
+                : "No supported editor was found in its standard location (Cursor, Visual Studio Code, Zed or a JetBrains IDE). File names stay text until one is installed."
             }
           >
-            <Switch
-              label="Keep steps open"
-              testId="settings-keep-steps-open"
-              checked={general.keep_steps_open}
-              disabled={disabled}
-              onChange={(enabled) => prefs.change({ type: "keep_steps_open", enabled })}
-            />
+            {chosen ? (
+              <select
+                className="g-select settings-control settings-select"
+                aria-label="Open files in"
+                data-testid="settings-editor"
+                value={chosen}
+                disabled={disabled}
+                onChange={(event) =>
+                  prefs.change({
+                    type: "editor",
+                    editor: event.currentTarget.value as ProjectEditor,
+                  })
+                }
+              >
+                {installed.map((editor) => (
+                  <option key={editor} value={editor}>
+                    {editorName[editor]}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </Row>
-        </div>
-      </section>
-      {installed ? (
-        <section className="settings-section" aria-labelledby="settings-files">
-          <h2 id="settings-files">Files</h2>
-          <div className="settings-group">
-            <Row
-              title="Open files in"
-              detail={
-                chosen
-                  ? "File names in answers, steps and Changes open in this editor, at their line."
-                  : "No supported editor was found in its standard location (Cursor, Visual Studio Code, Zed or a JetBrains IDE). File names stay text until one is installed."
-              }
-            >
-              {chosen ? (
-                <select
-                  className="g-select settings-control settings-select"
-                  aria-label="Open files in"
-                  data-testid="settings-editor"
-                  value={chosen}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    prefs.change({
-                      type: "editor",
-                      editor: event.currentTarget.value as ProjectEditor,
-                    })
-                  }
-                >
-                  {installed.map((editor) => (
-                    <option key={editor} value={editor}>
-                      {editorName[editor]}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </Row>
-          </div>
-        </section>
-      ) : null}
-      <section className="settings-section" aria-labelledby="settings-checkpoints">
-        <h2 id="settings-checkpoints">Checkpoints</h2>
-        <div className="settings-group">
-          <Row
-            title="Automatic checkpoints"
-            detail={
-              general.automatic_checkpoints
-                ? "Save workspace files before each message for per-turn file undo in Changes. Saving delays sending."
-                : "Send without saving a checkpoint first. Aura's per-turn file undo is unavailable for new messages."
-            }
-          >
-            <Switch
-              label="Automatic checkpoints"
-              testId="settings-automatic-checkpoints"
-              checked={general.automatic_checkpoints}
-              disabled={disabled}
-              onChange={(enabled) => prefs.change({ type: "automatic_checkpoints", enabled })}
-            />
-          </Row>
-        </div>
-        <p className="settings-footnote">
-          Applies to the next message in this profile. Saved checkpoints remain available in
-          Changes.
-        </p>
-      </section>
+        ) : null}
+        <Row
+          title="Keep steps open"
+          detail={
+            general.keep_steps_open
+              ? "A finished turn shows its messages, tools and thinking above its answer."
+              : "A finished turn folds its work under Worked for, above its answer."
+          }
+        >
+          <Switch
+            label="Keep steps open"
+            testId="settings-keep-steps-open"
+            checked={general.keep_steps_open}
+            disabled={disabled}
+            onChange={(enabled) => prefs.change({ type: "keep_steps_open", enabled })}
+          />
+        </Row>
+        <Row
+          title="Automatic checkpoints"
+          detail={
+            general.automatic_checkpoints
+              ? "Save workspace files before each message for per-turn file undo in Changes. Saving delays sending."
+              : "Send without saving a checkpoint first. Aura's per-turn file undo is unavailable for new messages."
+          }
+        >
+          <Switch
+            label="Automatic checkpoints"
+            testId="settings-automatic-checkpoints"
+            checked={general.automatic_checkpoints}
+            disabled={disabled}
+            onChange={(enabled) => prefs.change({ type: "automatic_checkpoints", enabled })}
+          />
+        </Row>
+      </div>
+      <p className="settings-footnote">
+        Checkpoints apply from the next message in this profile. Saved checkpoints remain available
+        in Changes.
+      </p>
       <PreferencesError prefs={prefs} />
     </>
   );

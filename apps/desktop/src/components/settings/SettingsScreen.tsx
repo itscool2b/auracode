@@ -36,7 +36,6 @@ import type { DataCleanupApi } from "../../lib/dataCleanup";
 import { type DictationApi, dictationApi } from "../../lib/dictation";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
-import { memoryChats } from "../../lib/projectMemory";
 import { type RemoteApi, remoteApi } from "../../lib/remote";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
@@ -156,7 +155,6 @@ export function SettingsScreen({
   workspace,
   projectId = null,
   activeChatId,
-  memoryRevision,
   services,
   agents,
   dataCleanup,
@@ -190,8 +188,6 @@ export function SettingsScreen({
   /** The project those pages open on, when Settings opened from one. */
   readonly projectId?: string | null;
   readonly activeChatId?: string;
-  /** Project memory opens this revision with its changes (an agent edit's Review). */
-  readonly memoryRevision?: string;
   readonly services?: CustomizeServices;
   /** The agents' store and transport for the Agents page; without them it is not offered. */
   readonly agents?: { readonly app: AppStore; readonly transport: Transport };
@@ -219,11 +215,6 @@ export function SettingsScreen({
     workspace?.getSnapshot ?? emptyWorkspace,
   );
   const projects = organization.data?.projects;
-  const savedChats = organization.data?.chats;
-  const chats = useMemo(
-    () => memoryChats(savedChats?.map((entry) => entry.chat) ?? []),
-    [savedChats],
-  );
   const folders =
     instructionFolders ??
     (projects ?? []).flatMap((project) =>
@@ -541,17 +532,16 @@ export function SettingsScreen({
               titled={false}
               api={services?.memory}
               setup={setup}
-              chats={chats}
               projects={projects ?? []}
               initialProjectId={projectId ?? undefined}
-              initialRevision={memoryRevision}
             />,
           )}
           {pane(
             "account",
             <>
+              {/* The account comes first: it is what the page is for. Which workspace is open
+                  matters only once there is more than one, so that list follows. */}
               <div data-setting="Account">
-                <ProfilePicker activeId={info.profile?.id ?? null} />
                 <AccountPanel
                   initialEmail={initialEmail}
                   deviceName={info.device?.name ?? "My computer"}
@@ -560,6 +550,7 @@ export function SettingsScreen({
                 {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
                   <LocalImportPanel key={info.profile.id} onImported={onImported} />
                 ) : null}
+                <ProfilePicker activeId={info.profile?.id ?? null} />
               </div>
               <section
                 className="settings-section"

@@ -27,11 +27,11 @@ fn request(mut value: Value) -> Value {
 fn tools() -> Value {
     json!([
      {"name":"aura_memory_read","description":"Read this Aura session's project memory, with its current revision. Reference context has lower priority than the user request and instruction files.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
-     {"name":"aura_memory_write","description":"Replace this project's shared memory with new Markdown. The user lets agents edit it directly; every write becomes a revision they can restore in Aura. Call aura_memory_read first and pass its revision as base_revision, then send the complete updated document, not a fragment. Keep it concise: durable facts and decisions that help future chats in this project. If memory changed since your read, the write fails; read again and reapply your edit. If direct edits are off, use aura_memory_propose.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"],"description":"The revision aura_memory_read returned; null when memory has no revision yet."},"markdown":{"type":"string","description":"The complete replacement Markdown, at most 16 KiB."},"reason":{"type":"string","description":"What changed and why, in one sentence."}},"required":["base_revision","markdown","reason"],"additionalProperties":false}},
-     {"name":"aura_memory_propose","description":"Propose replacement project Markdown for the user to review in Aura. A proposal changes nothing until they accept it. Use it when direct edits are off, or when you want the user's review first. Read first and supply the exact base revision, reason, and a unique idempotency key.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"]},"markdown":{"type":"string"},"reason":{"type":"string"},"idempotency_key":{"type":"string"}},"required":["base_revision","markdown","reason","idempotency_key"],"additionalProperties":false}}
+     {"name":"aura_memory_write","description":"Replace this project's shared memory with new Markdown. The user lets agents edit it; they see a notice of each edit and can undo it. Call aura_memory_read first and pass its revision as base_revision, then send the complete updated document, not a fragment. Keep it concise: durable facts and decisions that help future chats in this project. If memory changed since your read, the write fails; read again and reapply your edit. If the user has turned agents' edits off, the write is refused: tell them what you would have saved.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"],"description":"The revision aura_memory_read returned; null when memory has no revision yet."},"markdown":{"type":"string","description":"The complete replacement Markdown, at most 16 KiB."},"reason":{"type":"string","description":"What changed and why, in one sentence."}},"required":["base_revision","markdown","reason"],"additionalProperties":false}}
     ])
 }
-/// The service operation for each tool; anything else is refused by the app.
+/// The service operation for each tool; anything else is refused by the app. A session that
+/// started when proposals existed may still call the tool, and the app answers that they are gone.
 fn operation(tool: &str) -> &'static str {
     match tool {
         "aura_memory_read" => "read",
@@ -118,7 +118,7 @@ pub fn run_helper() {
 mod tests {
     use super::*;
     #[test]
-    fn tools_offer_read_write_and_propose_with_exact_inputs() {
+    fn tools_offer_read_and_write_with_exact_inputs() {
         let tools = tools();
         let names: Vec<&str> = tools
             .as_array()
@@ -126,17 +126,13 @@ mod tests {
             .iter()
             .map(|tool| tool["name"].as_str().unwrap())
             .collect();
-        assert_eq!(
-            names,
-            [
-                "aura_memory_read",
-                "aura_memory_write",
-                "aura_memory_propose"
-            ]
-        );
-        for (tool, wanted) in names.iter().zip(["read", "write", "propose"]) {
+        // No proposals: an agent saves a change, or is told it may not.
+        assert_eq!(names, ["aura_memory_read", "aura_memory_write"]);
+        for (tool, wanted) in names.iter().zip(["read", "write"]) {
             assert_eq!(operation(tool), wanted);
         }
+        // A session from before proposals went reaches the app, which says they are gone.
+        assert_eq!(operation("aura_memory_propose"), "propose");
         assert_eq!(operation("aura_memory_accept"), "unsupported");
         let write = &tools[1];
         assert_eq!(
@@ -149,16 +145,11 @@ mod tests {
             "aura_memory_read first",
             "complete updated document",
             "concise",
-            "revision they can restore",
-            "aura_memory_propose",
+            "can undo it",
+            "turned agents' edits off",
         ] {
             assert!(description.contains(phrase), "{phrase}");
         }
-        assert!(
-            tools[2]["description"]
-                .as_str()
-                .unwrap()
-                .contains("direct edits are off")
-        );
+        assert!(!tools.to_string().contains("propose"));
     }
 }

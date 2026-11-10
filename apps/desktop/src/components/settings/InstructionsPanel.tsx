@@ -370,45 +370,6 @@ export function InstructionsPanel({
               ))}
             </select>
           </Row>
-          <div className="instructions-mode-choice">
-            <h2>How instructions are shared</h2>
-            <p>{snapshot ? modeSentence(snapshot) : "Reading files…"}</p>
-            <fieldset
-              className="instructions-mode-options"
-              disabled={!snapshot || pending !== null}
-              data-testid="instructions-mode"
-            >
-              <legend className="sr-only">How instructions are shared</legend>
-              {(
-                [
-                  [
-                    "universal",
-                    "Shared instructions",
-                    "Maintain one shared source. Aura shows how each agent reads it.",
-                  ],
-                  [
-                    "per_agent",
-                    "Agent-specific files",
-                    "Edit native files separately. Some agents may read the same files.",
-                  ],
-                ] as const
-              ).map(([value, label, description]) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="instructions-mode"
-                    value={value}
-                    checked={snapshot?.mode === "none" ? view === value : snapshot?.mode === value}
-                    onChange={() => switchMode(value)}
-                  />
-                  <span>
-                    <strong>{label}</strong>
-                    <small>{description}</small>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          </div>
           {snapshot?.agents
             .filter((agent) => agent.status === "drift" && agent.installed)
             .map((agent) => (
@@ -455,37 +416,6 @@ export function InstructionsPanel({
               Try again
             </button>
           </div>
-        ) : null}
-      </section>
-
-      <section className="settings-section" aria-labelledby="instructions-worktrees">
-        <h2 id="instructions-worktrees">Worktree chats</h2>
-        <div className="settings-group">
-          <Row
-            title="Copy into new worktree chats"
-            detail={
-              copiesIgnored
-                ? "Instruction files Git ignores, like a local AGENTS.md or CLAUDE.md, are copied into each new worktree chat, so its agents read them too. Files already there are kept."
-                : "New worktree chats get only the instruction files committed to Git."
-            }
-          >
-            <Switch
-              label="Copy instruction files into new worktree chats"
-              testId="instructions-worktree-copies"
-              checked={copiesIgnored}
-              disabled={!preferences || savingCopies}
-              onChange={(enabled) => void setCopies(enabled)}
-            />
-          </Row>
-        </div>
-        <p className="settings-footnote">
-          Files that are new but not ignored are not copied, since an agent could commit them on the
-          chat's branch. Commit them instead.
-        </p>
-        {copiesError ? (
-          <p className="settings-footnote instructions-error" role="alert">
-            {copiesError}
-          </p>
         ) : null}
       </section>
 
@@ -673,6 +603,75 @@ export function InstructionsPanel({
           </div>
         </Modal>
       ) : null}
+      <section className="settings-section" aria-labelledby="instructions-sharing">
+        <h2 id="instructions-sharing">Sharing</h2>
+        <div className="settings-group">
+          <div className="instructions-mode-choice">
+            <h3>How instructions are shared</h3>
+            <p>{snapshot ? modeSentence(snapshot) : "Reading files…"}</p>
+            <fieldset
+              className="instructions-mode-options"
+              disabled={!snapshot || pending !== null}
+              data-testid="instructions-mode"
+            >
+              <legend className="sr-only">How instructions are shared</legend>
+              {(
+                [
+                  [
+                    "universal",
+                    "Shared instructions",
+                    "Maintain one shared source. Aura shows how each agent reads it.",
+                  ],
+                  [
+                    "per_agent",
+                    "Agent-specific files",
+                    "Edit native files separately. Some agents may read the same files.",
+                  ],
+                ] as const
+              ).map(([value, label, description]) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="instructions-mode"
+                    value={value}
+                    checked={snapshot?.mode === "none" ? view === value : snapshot?.mode === value}
+                    onChange={() => switchMode(value)}
+                  />
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{description}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </div>
+          <Row
+            title="Copy into new worktree chats"
+            detail={
+              copiesIgnored
+                ? "Instruction files Git ignores, like a local AGENTS.md or CLAUDE.md, are copied into each new worktree chat, so its agents read them too. Files already there are kept."
+                : "New worktree chats get only the instruction files committed to Git."
+            }
+          >
+            <Switch
+              label="Copy instruction files into new worktree chats"
+              testId="instructions-worktree-copies"
+              checked={copiesIgnored}
+              disabled={!preferences || savingCopies}
+              onChange={(enabled) => void setCopies(enabled)}
+            />
+          </Row>
+        </div>
+        <p className="settings-footnote">
+          Files that are new but not ignored are not copied, since an agent could commit them on the
+          chat's branch. Commit them instead.
+        </p>
+        {copiesError ? (
+          <p className="settings-footnote instructions-error" role="alert">
+            {copiesError}
+          </p>
+        ) : null}
+      </section>
     </div>
   );
 }

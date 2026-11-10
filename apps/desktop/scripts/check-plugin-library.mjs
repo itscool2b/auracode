@@ -57,7 +57,7 @@ async function checkProgressive(page, engine) {
   await page.getByText("Checking installation…", { exact: false }).waitFor();
   await page.evaluate(() => window.pluginsFixture.finishProvider("codex"));
   await agents.getByRole("button", { name: "Codex", exact: true }).click();
-  await page.getByText("From codex mcp list --json").waitFor();
+  await page.locator('h3[title="From codex mcp list --json"]').first().waitFor();
   await agents.getByRole("button", { name: "Claude Code", exact: true }).click();
   await page
     .getByText("Reading the agent listing. Cached and file entries are available.")
@@ -65,7 +65,7 @@ async function checkProgressive(page, engine) {
     .waitFor();
   await audit(page, `${engine} progressively loaded Plugins & MCP`);
   await page.evaluate(() => window.pluginsFixture.finishProvider("claude"));
-  await page.getByText("From claude plugin list --json --available").waitFor();
+  await page.locator('h3[title="From claude plugin list --json --available"]').first().waitFor();
   await page.evaluate(() => window.pluginsFixture.unmount());
   await page.evaluate(() => {
     window.pluginsFixture.finishProvider("pi");
@@ -78,11 +78,11 @@ async function checkLibrary(page, engine) {
   await checkProgressive(page, engine);
   await page.goto(`${url}/?preview=plugins`);
   await page.getByRole("heading", { name: "Plugins & MCP", exact: true }).waitFor();
+  // The page says what it is in one line, and keeps how listings were read off its face.
   await page
-    .getByText(
-      "Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.",
-    )
+    .getByText("What each agent has installed, and the MCP servers your agents share.")
     .waitFor();
+  assert.equal(await page.getByText("From claude plugin list", { exact: false }).count(), 0);
   const agents = page.getByRole("navigation", { name: "Agents" });
   for (const name of [
     "Claude Code",
@@ -96,7 +96,7 @@ async function checkLibrary(page, engine) {
     "oh-my-pi",
   ])
     await agents.getByRole("button", { name, exact: true }).waitFor();
-  await page.getByText("From claude plugin list --json --available").waitFor();
+  await page.locator('h3[title="From claude plugin list --json --available"]').first().waitFor();
   assert.equal(await page.getByText("Instructions", { exact: true }).count(), 0);
   // Opening reads the cache (StrictMode mounts twice in development); only Refresh reruns the CLIs.
   assert.ok((await calls(page)).every((call) => call === "snapshot:false"));
@@ -166,7 +166,7 @@ async function checkLibrary(page, engine) {
   // An available Grok plugin installs in Grok: its CLI installs from sources, not names.
   assert.equal(await page.getByRole("button", { name: "Install vercel", exact: true }).count(), 0);
   await page.getByRole("button", { name: "Install vercel in Grok" }).waitFor();
-  await page.getByText("grok plugin marketplace list --json", { exact: false }).waitFor();
+  await page.locator('h3[title*="grok plugin marketplace list --json"]').first().waitFor();
   await page.getByRole("button", { name: "Add marketplace", exact: true }).click();
   const source = page.getByRole("textbox", { name: "Marketplace source" });
   await source.waitFor();

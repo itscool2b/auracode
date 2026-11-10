@@ -267,8 +267,8 @@ export function noticeItems({
 /**
  * An agent's direct edit to project memory: a calm toast that never blocks the chat and moves on
  * by itself, or with `lasting` a row in the notifications panel that stays until its X
- * (Customize > Project memory keeps every revision). Review opens the edit's changes; Undo
- * restores what it replaced as a new revision of the person's.
+ * (owner's plan, 4 November 2026). Open shows the memory as it is now in Settings; Undo restores
+ * what the edit replaced.
  */
 export function MemoryEditBannerView({
   edit,
@@ -319,7 +319,7 @@ export function MemoryEditBannerView({
                 disabled={busy}
                 onClick={edit.onReview}
               >
-                Review
+                Open
               </button>
             ) : null}
             {state.status === "shown" || busy ? (

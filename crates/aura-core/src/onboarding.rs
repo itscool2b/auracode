@@ -143,9 +143,9 @@ pub struct GeneralPreferences {
     /// `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
     /// person turns it off in Instructions.
     pub copy_instructions_to_worktrees: bool,
-    /// Agents edit project memory directly; every edit is a revision the person can restore. Off:
-    /// agents propose updates for review. On unless the person turns it off in Project memory
-    /// (the owner reversed the earlier review-only decision on 1 November 2026).
+    /// Agents edit project memory; each edit shows a notice with Undo. Off: agents read it and
+    /// cannot change it. On unless the person turns it off in Project memory (the owner reversed
+    /// the earlier review-only decision on 1 November 2026, and dropped proposals on 10 November).
     pub agent_memory_writes: bool,
     /// A finished turn shows its work (interim messages, tools, thinking) instead of folding it
     /// under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
@@ -258,7 +258,7 @@ pub enum SetupAction {
     CopyInstructionsToWorktrees {
         enabled: bool,
     },
-    /// Turns on or off agents' direct edits to project memory. Off keeps review-only proposals.
+    /// Turns on or off agents' edits to project memory. Off leaves it read-only for them.
     AgentMemoryWrites {
         enabled: bool,
     },
@@ -300,6 +300,22 @@ impl Default for Record {
                 general: GeneralPreferences::default(),
             },
         }
+    }
+}
+
+/// What a workspace opened for the first time takes from the one being left: how auracode looks
+/// and behaves, and how far setup got. The first project stays behind, since projects belong to
+/// their workspace.
+#[cfg(feature = "account-sync")]
+fn adopted(from: &SetupPreferences) -> Record {
+    Record {
+        version: VERSION,
+        boot_seen: true,
+        preferences: SetupPreferences {
+            revision: 1,
+            first_project_id: None,
+            ..from.clone()
+        },
     }
 }
 
@@ -378,10 +394,14 @@ impl OnboardingStore {
         })
     }
 
+    /// `leaving`: the preferences of the workspace being left for this one. An account's
+    /// workspace in which nothing has been chosen yet takes them, so turning sync on does not
+    /// put a person back in first-run setup with their appearance and defaults gone.
     #[cfg(feature = "account-sync")]
     pub fn open_account(
         profile: &crate::profile::Profile,
         key: std::sync::Arc<aura_sync::crypto::files::ProfileFileKey>,
+        leaving: Option<&SetupPreferences>,
     ) -> Result<Self, SetupError> {
         if profile.meta.kind != crate::profile::ProfileKind::Account {
             return Err(SetupError::Invalid(
@@ -431,6 +451,17 @@ impl OnboardingStore {
                 }
                 record
             }
+        };
+        let record = match leaving {
+            // Every choice raises the revision: at zero this workspace holds only defaults.
+            Some(from) if record.preferences.revision == 0 => {
+                let adopted = adopted(from);
+                let bytes = serde_json::to_vec(&adopted)
+                    .map_err(|_| SetupError::Invalid("Setup preferences could not be encoded."))?;
+                file.write(&bytes).map_err(crate::CoreError::io(&path))?;
+                adopted
+            }
+            _ => record,
         };
         Ok(Self {
             path,
@@ -1446,6 +1477,81 @@ mod tests {
     }
     #[cfg(feature = "account-sync")]
     #[test]
+    fn a_new_account_workspace_takes_the_preferences_of_the_one_being_left() {
+        use crate::profile::{Profile, ProfileKind, ProfileMeta};
+        use aura_sync::crypto::AccountKey;
+        let local = tempfile::tempdir().unwrap();
+        let left = OnboardingStore::open(local.path()).unwrap();
+        for (revision, action) in [
+            SetupAction::Appearance {
+                value: AppearancePreference::Dark,
+            },
+            SetupAction::Motion {
+                value: MotionPreference::Off,
+            },
+            SetupAction::Project {
+                project_id: "local project".into(),
+            },
+            SetupAction::AutomaticCheckpoints { enabled: true },
+            SetupAction::Finish,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            left.apply(revision as u32, action).unwrap();
+        }
+        let leaving = left.preferences();
+
+        let temp = tempfile::tempdir().unwrap();
+        let profile = Profile {
+            meta: ProfileMeta {
+                id: "profile".into(),
+                kind: ProfileKind::Account,
+                display_name: "Account".into(),
+                created_at: 0,
+            },
+            dir: temp.path().to_path_buf(),
+        };
+        write_json_atomic(&profile.meta_path(), &profile.meta).unwrap();
+        let key = std::sync::Arc::new(
+            AccountKey::generate()
+                .unwrap()
+                .profile_file_key("account", "profile")
+                .unwrap(),
+        );
+        // A workspace opened once before sync was turned on holds only defaults: it still adopts.
+        OnboardingStore::open_account(&profile, key.clone(), None)
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        let opened = OnboardingStore::open_account(&profile, key.clone(), Some(&leaving)).unwrap();
+        let taken = opened.snapshot().unwrap();
+        assert!(!taken.cold_start, "first-run setup would play again");
+        assert!(taken.preferences.completed);
+        assert_eq!(taken.preferences.appearance, AppearancePreference::Dark);
+        assert_eq!(taken.preferences.motion, MotionPreference::Off);
+        assert!(taken.preferences.general.automatic_checkpoints);
+        // Projects belong to their workspace.
+        assert_eq!(taken.preferences.first_project_id, None);
+        assert_eq!(taken.preferences.revision, 1);
+
+        // Choices made in the account's workspace are its own from then on.
+        opened
+            .apply(
+                1,
+                SetupAction::Appearance {
+                    value: AppearancePreference::Light,
+                },
+            )
+            .unwrap();
+        let again = OnboardingStore::open_account(&profile, key, Some(&leaving))
+            .unwrap()
+            .preferences();
+        assert_eq!(again.appearance, AppearancePreference::Light);
+        assert_eq!(again.revision, 2);
+    }
+    #[cfg(feature = "account-sync")]
+    #[test]
     fn account_preferences_reopen_encrypted_and_reject_plaintext_or_unknown_formats() {
         use crate::profile::{Profile, ProfileKind, ProfileMeta};
         use aura_sync::crypto::AccountKey;
@@ -1467,7 +1573,7 @@ mod tests {
                 .profile_file_key("account", "profile")
                 .unwrap(),
         );
-        let store = OnboardingStore::open_account(&profile, key.clone()).unwrap();
+        let store = OnboardingStore::open_account(&profile, key.clone(), None).unwrap();
         store.snapshot().unwrap();
         store
             .apply(
@@ -1485,7 +1591,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let reopened = OnboardingStore::open_account(&profile, key.clone())
+        let reopened = OnboardingStore::open_account(&profile, key.clone(), None)
             .unwrap()
             .snapshot()
             .unwrap();
@@ -1507,7 +1613,7 @@ mod tests {
         let file = store.encrypted.as_ref().unwrap();
         file.write(br#"{"version":999,"future":true}"#).unwrap();
         assert!(matches!(
-            OnboardingStore::open_account(&profile, key.clone()),
+            OnboardingStore::open_account(&profile, key.clone(), None),
             Err(SetupError::NewerVersion)
         ));
         assert_eq!(
@@ -1515,7 +1621,7 @@ mod tests {
             br#"{"version":999,"future":true}"#
         );
         std::fs::write(profile.dir.join("onboarding.json"), b"legacy").unwrap();
-        assert!(OnboardingStore::open_account(&profile, key).is_err());
+        assert!(OnboardingStore::open_account(&profile, key, None).is_err());
         assert_eq!(
             std::fs::read(profile.dir.join("onboarding.json")).unwrap(),
             b"legacy"

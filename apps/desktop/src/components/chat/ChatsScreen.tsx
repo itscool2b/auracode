@@ -90,7 +90,7 @@ export function ChatsScreen({
   openChatRequest,
   setup = setupApi,
   memory = projectMemoryApi,
-  onReviewMemory,
+  onOpenMemory,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -113,7 +113,8 @@ export function ChatsScreen({
   /** Project memory: an agent's direct edit shows a banner with Review and Undo. */
   readonly memory?: ProjectMemoryApi;
   /** Opens Customize > Project memory on a revision, with its changes. */
-  readonly onReviewMemory?: (projectId: string, revision: string) => void;
+  /** Opens Settings' Project memory on a project, from a notice of an agent's edit. */
+  readonly onOpenMemory?: (projectId: string) => void;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const dismissedUpdates = useSyncExternalStore(
@@ -202,10 +203,10 @@ export function ChatsScreen({
       ...agentEditToast(notice, knownChats, project),
       text: agentEditText(notice, knownChats, project),
       state: notice.state,
-      onReview: onReviewMemory
+      onReview: onOpenMemory
         ? () => {
             memoryEdits.dismiss(notice);
-            onReviewMemory(notice.projectId, notice.revision);
+            onOpenMemory(notice.projectId);
           }
         : undefined,
       onUndo: () => void memoryEdits.undo(notice, knownChats),
