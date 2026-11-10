@@ -3,6 +3,7 @@
 pub mod crypto;
 pub mod deletion_sql;
 pub mod invites;
+pub mod mail;
 pub mod policy;
 pub mod possession;
 pub mod reset_sql;

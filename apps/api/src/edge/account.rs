@@ -76,7 +76,10 @@ impl Api {
         if changed.is_none() {
             return Err(ApiError::RateLimited);
         }
-        let delivered = self.deliver(&email, &code).await.is_ok();
+        let delivered = self
+            .deliver(crate::mail::Purpose::NewEmail, &email, &code)
+            .await
+            .is_ok();
         self.db
             .run(
                 "UPDATE email_changes SET delivery=?2 WHERE id=?1 AND delivery='pending'",

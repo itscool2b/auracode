@@ -106,7 +106,10 @@ impl Api {
         if row.is_none() {
             return Err(ApiError::RateLimited);
         }
-        let delivered = self.deliver(&email, &code).await.is_ok();
+        let delivered = self
+            .deliver(crate::mail::Purpose::SignIn, &email, &code)
+            .await
+            .is_ok();
         self.db
             .run(
                 "UPDATE auth_challenges SET delivery=?2 WHERE id=?1 AND delivery='pending'",
@@ -167,15 +170,37 @@ impl Api {
         }
         Ok(())
     }
-    pub(super) async fn deliver(&self, email: &str, code: &str) -> Result<()> {
+    pub(super) async fn deliver(
+        &self,
+        purpose: crate::mail::Purpose,
+        email: &str,
+        code: &str,
+    ) -> Result<()> {
         let sender = policy::email(&self.env.var("EMAIL_FROM").map_err(unavailable)?.to_string())
             .map_err(|_| ApiError::Unavailable)?;
         let domain = sender.rsplit_once('@').ok_or(ApiError::Unavailable)?.1;
-        let message_id = crypto::random_token()?;
-        let date = js_sys::Date::new_0().to_utc_string();
-        let raw = format!(
-            "From: auracode <{sender}>\r\nTo: {email}\r\nDate: {date}\r\nMessage-ID: <{message_id}@{domain}>\r\nSubject: Your auracode sign-in code\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nYour auracode code is {code}.\r\nIt expires in 10 minutes. If you did not request it, ignore this email.\r\n"
-        );
+        // Random tokens are base64url; the boundary and the message id keep their letters and
+        // digits, which is all either may hold.
+        let token = |token: String| -> String {
+            token.chars().filter(char::is_ascii_alphanumeric).collect()
+        };
+        let message_id = token(crypto::random_token()?);
+        let boundary = token(crypto::random_token()?);
+        let date: String = js_sys::Date::new_0().to_utc_string().into();
+        let raw = crate::mail::message(
+            purpose,
+            &crate::mail::Envelope {
+                sender: &sender,
+                to: email,
+                date: &date,
+                message_id: &message_id,
+                domain,
+                boundary: &boundary,
+            },
+            code,
+            policy::CODE_TTL / 60,
+        )
+        .ok_or(ApiError::DeliveryFailed)?;
         let message = EmailMessage::new(&sender, email, &raw).map_err(unavailable)?;
         let binding = self.env.send_email("EMAIL").map_err(unavailable)?;
         // Never replay an ambiguous send automatically. A failed or timed-out challenge cannot be
