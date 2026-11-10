@@ -23,6 +23,7 @@ import type {
   UsageInfo,
   Value,
 } from "../../bindings";
+import { type MemoryContext, splitMemoryContext } from "./memoryContext";
 import { mergeTask, newestTurnKey, type TaskItem, withStep } from "./tasks";
 
 /**
@@ -58,7 +59,12 @@ export type Entry = EventEntry | GapEntry;
 export interface UserItem {
   readonly kind: "user";
   readonly key: string;
+  /** What the person sent. Project memory attached after it is in `memory`, not here. */
   readonly text: string;
+  /** Project memory Aura attached to this message as reference context, when it attached any. */
+  readonly memory?: MemoryContext;
+  /** With `memory`: the whole saved message, which later pieces of it are appended to. */
+  readonly sent?: string;
   readonly steering?: { readonly state: SteeringState; readonly detail: string | null };
 }
 
@@ -393,12 +399,18 @@ class Draft {
       case "user_message_delta": {
         const key = `user:${event.message_id}`;
         const previous = this.#get(key);
-        const text = (previous?.kind === "user" ? previous.text : "") + event.text;
+        const sent =
+          (previous?.kind === "user" ? (previous.sent ?? previous.text) : "") + event.text;
+        const { text, memory } = splitMemoryContext(sent);
         this.#place(key, seq, {
-          ...(previous?.kind === "user" ? previous : {}),
           kind: "user",
           key,
           text,
+          // Without attached memory the message is its own whole text.
+          ...(memory ? { memory, sent } : {}),
+          ...(previous?.kind === "user" && previous.steering
+            ? { steering: previous.steering }
+            : {}),
         });
         break;
       }
@@ -406,9 +418,9 @@ class Draft {
         const key = `user:${event.message_id}`;
         const previous = this.#get(key);
         this.#place(key, seq, {
+          ...(previous?.kind === "user" ? previous : { text: "" }),
           kind: "user",
           key,
-          text: previous?.kind === "user" ? previous.text : "",
           steering: { state: event.state, detail: event.detail },
         });
         break;

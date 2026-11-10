@@ -8,6 +8,14 @@ pub(crate) const MAX_SOURCE: usize = 128;
 /// A revision an agent saved directly names its chat: `agent:<chat id>`, well within
 /// [`MAX_SOURCE`].
 pub(crate) const AGENT_SOURCE: &str = "agent:";
+/// How the reference block [`visible_context`] appends to a prompt begins. The chat reads the
+/// block back apart from the person's words by this heading and the line after it
+/// (`apps/desktop/src/lib/chat/memoryContext.ts`), so the two change together.
+pub(crate) const CONTEXT_PREFIX: &str = "\n\nProject memory (Aura reference context, revision ";
+/// Whether a prompt part is project memory attached as reference, not context the person added.
+pub(crate) fn is_context(part: &aura_protocol::PromptPart) -> bool {
+    matches!(part, aura_protocol::PromptPart::Text { text } if text.starts_with(CONTEXT_PREFIX))
+}
 pub(crate) enum Command {
     ReadChat(String),
     Read(String),

@@ -103,6 +103,26 @@ describe("the transcript reducer", () => {
     expect(initial.items.get("user:steer")).toMatchObject({ steering: { state: "pending" } });
   });
 
+  it("keeps project memory attached to a message apart from the person's words", () => {
+    const heading = "\n\nProject memory (Aura reference context, revision r1)\n";
+    const attached = `${heading}Use this as project background. The request takes precedence.\n\n# Notes\nKeep the index\n`;
+    // History can hand the saved message over in pieces, cut anywhere.
+    const model = build(
+      numbered([
+        [null, ev.turnStarted("first")],
+        [null, ev.user("first.u", `Fix the search${attached.slice(0, 24)}`)],
+        [null, ev.user("first.u", attached.slice(24))],
+      ]),
+    );
+    expect(model.items.get("user:first.u")).toEqual({
+      kind: "user",
+      key: "user:first.u",
+      text: "Fix the search",
+      sent: `Fix the search${attached}`,
+      memory: { revision: "r1", editedBy: null, markdown: "# Notes\nKeep the index" },
+    });
+  });
+
   it("shows unresolved ended or recovered steering as unconfirmed, preserving final outcomes", () => {
     for (const state of ["pending", "accepted", "rejected", "unconfirmed"] as const) {
       const item = {

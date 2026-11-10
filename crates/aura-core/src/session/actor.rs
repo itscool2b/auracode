@@ -2543,11 +2543,7 @@ impl ChatActor {
                 .skip(1)
                 .rev()
                 .find_map(|part| match part {
-                    PromptPart::Text { text }
-                        if text.starts_with(
-                            "\n\nProject memory (Aura reference context, revision ",
-                        ) =>
-                    {
+                    PromptPart::Text { text } if crate::chatstore::memory::is_context(part) => {
                         Some(text.clone())
                     }
                     _ => None,

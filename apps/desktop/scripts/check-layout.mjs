@@ -53,6 +53,7 @@ export const MODES = [
   "partial-work",
   "large-turn",
   "long-prompt",
+  "memory-prompt",
   "long-output",
   "focus-group",
   "diff",
