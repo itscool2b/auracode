@@ -502,7 +502,7 @@
   min-width: 0;
 }
 
-.plugins-universal-text h3 {
+.plugins-universal-text h2 {
   margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);

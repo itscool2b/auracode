@@ -63,7 +63,7 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
             <Globe size={18} />
           </span>
           <div className="plugins-universal-text">
-            <h3 id="plugins-universal-browser">Browser use</h3>
+            <h2 id="plugins-universal-browser">Browser use</h2>
             <p>
               {on
                 ? "A browser beside each chat, Annotate to point at what you mean on a page, and tools agents use to open, read, click through and test pages."
