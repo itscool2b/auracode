@@ -52,8 +52,8 @@ pub struct PluginFacts {
     pub paused: Vec<String>,
 }
 
-const SKILLS: &str = "No CLI lists skills, so these come from the agent's skills folder.";
-const FOLDER: &str = "The CLI has no listing for these, so they come from the agent's folder.";
+const SKILLS: &str = "From the agent's skills folder.";
+const FOLDER: &str = "From the agent's folder.";
 
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
@@ -522,7 +522,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
     library
         .notices
         .extend(facts.inventory.notices.iter().cloned());
-    library.notices.push("Shared MCP definitions work across compatible sessions. Native plugins and authentication remain owned by each agent; unavailable interfaces are shown explicitly.".into());
     library
 }
 
@@ -868,12 +867,6 @@ mod tests {
             initial.agents[3].sync,
             AgentSync::Unsupported { .. }
         ));
-        assert!(
-            initial
-                .notices
-                .iter()
-                .any(|notice| notice.contains("Native plugins"))
-        );
     }
 
     #[test]

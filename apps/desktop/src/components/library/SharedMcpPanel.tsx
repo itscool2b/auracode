@@ -133,15 +133,8 @@ export function SharedMcpPanel({
         </button>
       </header>
       <p className="plugins-summary">
-        Shared MCP connects your agents to the same tools: every agent, including ones you install
-        later, or only the agents you choose for a server. Plugins, packages, hooks and commands
-        belong to each agent. Definitions sync with your Aura account; authentication stays on this
-        device.
-      </p>
-      <p className="plugins-note">
-        Project definitions apply to all its folders and worktrees. A project override replaces the
-        all-projects definition with the same Aura ID. Native configuration stays in place. Matching
-        native server names require review. Changes apply after an idle chat restarts.
+        Add a server once and every agent can use it, or only the agents you choose. Signing in to a
+        server stays on this device.
       </p>
       <div className="shared-mcp-toolbar">
         <label>
@@ -389,19 +382,32 @@ export function SharedMcpPanel({
           </button>
         </section>
       ))}
-      <section className="plugins-feature">
-        <h3>Session support</h3>
-        <p className="plugins-note">
-          Codex supports stdio and HTTP through thread configuration. Claude uses a session
-          descriptor alongside its native configuration. Pi verifies its session extension before
-          accepting prompts. ACP connects stdio and transports advertised by that agent. Restricted
-          fallback connections and remote hosts cannot load Aura shared MCP.
-        </p>
-        <p className="plugins-note">
-          A successful direct connection test confirms server initialization. Agent-specific tool
-          availability and OAuth state must be inspected in that agent's running session.
-        </p>
-      </section>
+      <details className="plugins-more">
+        <summary>How shared servers work</summary>
+        <ul>
+          <li>
+            A server added for a project applies to all its folders and worktrees, and replaces the
+            all-projects server with the same ID there.
+          </li>
+          <li>
+            Each agent's own configuration stays as it is. A server of the same name in it is shown
+            for review, never overwritten.
+          </li>
+          <li>Changes apply when an idle chat restarts.</li>
+          <li>
+            Definitions sync with your Aura account. Sign-ins and tokens do not leave this device.
+          </li>
+          <li>
+            Test checks that the server starts. Which tools an agent then sees, and its own sign-in,
+            show in that agent's chat.
+          </li>
+          <li>
+            Codex, Claude Code and Pi load shared servers in their chats. Other agents load the
+            kinds of server they say they support. Remote hosts and restricted fallback connections
+            cannot load them.
+          </li>
+        </ul>
+      </details>
       {editing && snapshot ? (
         <McpEditor
           definition={editing}
