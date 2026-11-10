@@ -1,5 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
-import { performProfileSwitch } from "./profiles";
+import { performProfileSwitch, takeSettingsReturn } from "./profiles";
+
+describe("the page a switch made in Settings returns to", () => {
+  const storage = (value: string | null) => {
+    const held = new Map(value === null ? [] : [["auracode.settings-return", value]]);
+    return {
+      held,
+      getItem: (key: string) => held.get(key) ?? null,
+      removeItem: (key: string) => void held.delete(key),
+    };
+  };
+  it("is read once, so a later reload opens the chats", () => {
+    const store = storage("account");
+    expect(takeSettingsReturn(store)).toBe("account");
+    expect(store.held.size).toBe(0);
+    expect(takeSettingsReturn(store)).toBeNull();
+  });
+  it("ignores anything it did not write, and storage that cannot be read", () => {
+    expect(takeSettingsReturn(storage("plugins"))).toBeNull();
+    expect(takeSettingsReturn(storage(null))).toBeNull();
+    expect(takeSettingsReturn(null)).toBeNull();
+    expect(
+      takeSettingsReturn({
+        getItem: () => {
+          throw new Error("denied");
+        },
+        removeItem: () => undefined,
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("profile publication", () => {
   it("waits for every draft before activating and discards the old page on success", async () => {

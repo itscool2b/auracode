@@ -113,7 +113,8 @@ export function AccountPanel({
   deviceName = "My computer",
   Verification = AccountVerification,
   activeProfileId = null,
-  onActivate = switchProfile,
+  // Turning sync on opens the account's workspace; Settings shows again there, on this page.
+  onActivate = () => switchProfile(undefined, "account"),
   recoveryOnly = false,
   recoveryProfileId = null,
   recoveryActionLabel = "Unlock selected account",

@@ -24,6 +24,25 @@ export async function performProfileSwitch(
   reload();
 }
 
+const RETURN_KEY = "auracode.settings-return";
+
+/**
+ * A switch made in Settings reloads the page into another workspace. Opening the chats of a
+ * workspace that was just made, and is empty, reads as everything having vanished; so the page
+ * that asked for the switch asks to be shown again, where what comes next is offered.
+ */
+export function takeSettingsReturn(
+  storage: Pick<Storage, "getItem" | "removeItem"> | null,
+): "account" | null {
+  try {
+    const page = storage?.getItem(RETURN_KEY);
+    storage?.removeItem(RETURN_KEY);
+    return page === "account" ? "account" : null;
+  } catch {
+    return null;
+  }
+}
+
 let switching = false;
 let reloading = false;
 const reload = () => {
@@ -62,7 +81,8 @@ export function installProfileEvents(): Promise<void> {
   return eventReady;
 }
 
-export async function switchProfile(profileId?: string): Promise<void> {
+/** `returnTo`: the Settings page to open again once the other workspace has loaded. */
+export async function switchProfile(profileId?: string, returnTo?: "account"): Promise<void> {
   if (switching) throw new Error("A profile is already opening.");
   switching = true;
   setBusy(true);
@@ -70,7 +90,14 @@ export async function switchProfile(profileId?: string): Promise<void> {
     await performProfileSwitch(
       () => (profileId ? profileApi.activate(profileId) : profileApi.activateAccount()),
       () => flushComposerDrafts(composerApi),
-      reload,
+      () => {
+        try {
+          if (returnTo) sessionStorage.setItem(RETURN_KEY, returnTo);
+        } catch {
+          // Without it the workspace opens on its chats, as before.
+        }
+        reload();
+      },
     );
   } catch (error) {
     switching = false;

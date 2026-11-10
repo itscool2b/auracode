@@ -24,9 +24,10 @@ import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
-import { installProfileEvents, switchProfile } from "./lib/profiles";
+import { installProfileEvents, switchProfile, takeSettingsReturn } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import type { StreamStore } from "./lib/session";
+import { setupApi } from "./lib/setup";
 import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
@@ -190,6 +191,20 @@ export function App({
             setView("stress");
           }
           if (info.launch.type === "smoke") setView("chats");
+          // A workspace opened from Settings shows Settings again, on the page that opened it.
+          else if (takeSettingsReturn(sessionStorage) === "account") {
+            // Back leads to setup while this workspace has not finished it, as a launch would.
+            setSettingsReturn("setup");
+            setSettingsEntry({ id: "profile-switch", page: "account", email: "" });
+            setView("settings");
+            void setupApi.snapshot().then(
+              (setup) => {
+                if (live && setup.preferences.completed)
+                  setSettingsReturn((previous) => (previous === "setup" ? "chats" : previous));
+              },
+              () => undefined,
+            );
+          }
           setBoot({ status: "ready", info });
         },
         (error: unknown) => {

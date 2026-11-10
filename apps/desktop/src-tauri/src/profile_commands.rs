@@ -464,6 +464,7 @@ async fn activate_one(
     let rt = tokio::runtime::Handle::current();
     let version = state.app_info().app_version;
     let reuse = old.as_ref().map(|old| old.services.clone());
+    let leaving = state.setup_service();
     let (mut prepared, onboarding, next, context) = tokio::task::spawn_blocking(move || {
         if selected.key.is_some() {
             aura_core::accounts::audit_profile(&selected.profile).map_err(account_error)?;
@@ -488,7 +489,13 @@ async fn activate_one(
             return Err(unavailable(message));
         }
         let onboarding = Arc::new(match &file_key {
-            Some(key) => SetupService::account(&selected.profile, key.clone())?,
+            Some(key) => SetupService::account(
+                &selected.profile,
+                key.clone(),
+                leaving
+                    .and_then(|service| service.preferences().ok())
+                    .as_ref(),
+            )?,
             None => SetupService::new(selected.profile.dir.clone()),
         });
         let journal = file_key.as_ref().map(|key| {

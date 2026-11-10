@@ -11,7 +11,7 @@ export function ProfilePicker({
   activeId,
   locked = false,
   api = profileApi,
-  onSwitch = switchProfile,
+  onSwitch = (id: string) => switchProfile(id, "account"),
 }: {
   readonly activeId: string | null;
   readonly locked?: boolean;

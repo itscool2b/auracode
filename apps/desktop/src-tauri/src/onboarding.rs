@@ -18,14 +18,17 @@ pub struct SetupService {
 }
 
 impl SetupService {
+    /// `leaving`: the preferences of the workspace being left, which an account's workspace
+    /// takes while nothing has been chosen in it.
     pub(crate) fn account(
         profile: &aura_core::profile::Profile,
         key: Arc<aura_sync::crypto::files::ProfileFileKey>,
+        leaving: Option<&SetupPreferences>,
     ) -> Result<Self, AppError> {
         Ok(Self {
             profile_dir: profile.dir.clone(),
             store: Mutex::new(Some(
-                OnboardingStore::open_account(profile, key).map_err(map_error)?,
+                OnboardingStore::open_account(profile, key, leaving).map_err(map_error)?,
             )),
         })
     }

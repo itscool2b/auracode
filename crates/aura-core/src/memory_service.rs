@@ -49,8 +49,10 @@ struct Request {
     markdown: Option<String>,
     #[serde(default)]
     reason: Option<String>,
-    #[serde(default)]
-    idempotency_key: String,
+    /// Proposals carried one. A helper from before they were removed still sends it, and unknown
+    /// fields are refused, so it is accepted and unused.
+    #[serde(default, rename = "idempotency_key")]
+    _idempotency_key: String,
 }
 /// What an agent reads when the person has turned agents' edits off.
 pub(crate) const READ_ONLY: &str = "The user has turned off agents' edits to project memory, so nothing was saved. Do not try again: tell the user what you would have saved, so they can add it in Aura's Project memory page.";
