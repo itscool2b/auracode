@@ -23,6 +23,7 @@ import { checkSessionFallback } from "./check-session-fallback.mjs";
 import { checkSettingsNavigation } from "./check-settings-navigation.mjs";
 import { checkSetupRecovery } from "./check-setup-recovery.mjs";
 import { checkSteering } from "./check-steering.mjs";
+import { checkRemote } from "./check-remote.mjs";
 import { checkThemes } from "./check-themes.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
@@ -330,6 +331,7 @@ try {
       await checkQuestions(browser, url, out, engine);
       await checkSessionFallback(browser, url, out, engine);
       await checkThemes(browser, url, out, engine);
+      await checkRemote(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: settings persistence failures, focus, accessibility and explicit updater actions passed`,

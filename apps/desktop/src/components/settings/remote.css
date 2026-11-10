@@ -1,0 +1,55 @@
+/* Remote access (docs/remote-sessions.md): the pairing and bot-link dialogs. */
+
+/* A code to scan: black on white in either appearance, on a card with room around it. */
+.remote-qr {
+  display: block;
+  width: 208px;
+  height: 208px;
+  margin: var(--g-space-4) auto var(--g-space-16);
+  border-radius: var(--g-radius-12);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.remote-note,
+.remote-result {
+  margin: 0 0 var(--g-space-12);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.remote-result {
+  color: var(--g-fg-1);
+}
+
+/* A secret shown once: one line, selected whole on focus, with Copy beside it. */
+.remote-copy {
+  display: flex;
+  align-items: stretch;
+  gap: var(--g-space-8);
+  margin-bottom: var(--g-space-12);
+}
+
+.remote-secret {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  text-overflow: ellipsis;
+}
+
+.remote-copy > .g-button {
+  flex: none;
+  height: auto;
+  min-width: 72px;
+}
+
+.remote-steps {
+  display: grid;
+  gap: var(--g-space-6);
+  margin: 0 0 var(--g-space-12);
+  padding-left: var(--g-space-20);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}

@@ -10,6 +10,7 @@ const PAGES = [
   "Plugins & MCP",
   "Instructions",
   "Project memory",
+  "Remote access",
   "Account & sync",
   "Data & privacy",
   "About",

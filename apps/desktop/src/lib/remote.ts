@@ -1,0 +1,79 @@
+import { listen } from "@tauri-apps/api/event";
+import { commands, type RemoteBotLink, type RemotePairing, type RemoteStatus } from "../bindings";
+import { inTauri, settle } from "./ipc";
+
+/**
+ * Remote access (docs/remote-sessions.md): this computer's chats from a paired browser or a
+ * linked bot, through auracode's relay. Settings is its only surface in the app.
+ */
+export interface RemoteApi {
+  readonly status: () => Promise<RemoteStatus>;
+  readonly setEnabled: (enabled: boolean) => Promise<RemoteStatus>;
+  /** Opens a pairing link, good once and for ten minutes. It replaces the one before it. */
+  readonly pair: () => Promise<RemotePairing>;
+  readonly cancelPairing: () => Promise<RemoteStatus>;
+  readonly removeDevice: (id: string) => Promise<RemoteStatus>;
+  /** A new bot link. Its address carries the bot's token and is returned only here. */
+  readonly createBot: (name: string) => Promise<RemoteBotLink>;
+  readonly removeBot: (id: string) => Promise<RemoteStatus>;
+  /** Calls back whenever the status changed (a device paired, connected or left). */
+  readonly subscribe: (changed: (status: RemoteStatus) => void) => () => void;
+}
+
+export const remoteApi: RemoteApi = {
+  status: () => settle(commands.remoteStatus()),
+  setEnabled: (enabled) => settle(commands.remoteSetEnabled(enabled)),
+  pair: () => settle(commands.remotePair()),
+  cancelPairing: () => settle(commands.remoteCancelPairing()),
+  removeDevice: (id) => settle(commands.remoteRemoveDevice(id)),
+  createBot: (name) => settle(commands.remoteCreateBot(name)),
+  removeBot: (id) => settle(commands.remoteRemoveBot(id)),
+  subscribe: (changed) => {
+    if (!inTauri()) return () => {};
+    let stopped = false;
+    let stop: (() => void) | null = null;
+    void listen<RemoteStatus>("auracode-remote-changed", (event) => changed(event.payload)).then(
+      (unlisten) => {
+        if (stopped) unlisten();
+        else stop = unlisten;
+      },
+      () => {},
+    );
+    return () => {
+      stopped = true;
+      stop?.();
+    };
+  },
+};
+
+/** The connection in a few words, for the row under the switch. */
+export function linkLabel(status: RemoteStatus): string {
+  if (!status.enabled) return "Off. Nothing on this computer can be reached from outside.";
+  switch (status.link.state) {
+    case "online":
+      return "On. This computer can be reached by the devices and bots below.";
+    case "connecting":
+    case "off":
+      return "Connecting to auracode's relay…";
+    case "offline":
+      return `Not reachable right now; trying again. ${status.link.reason}`;
+  }
+}
+
+/** When something last happened, as a short phrase. */
+export function ago(at: number, now: number): string {
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return days === 1 ? "yesterday" : `${days} days ago`;
+  return new Date(at).toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+/** The minutes and seconds a pairing link still opens for. */
+export function remaining(expiresAt: number, now: number): string {
+  const seconds = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}

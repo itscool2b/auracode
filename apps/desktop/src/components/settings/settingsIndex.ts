@@ -13,6 +13,7 @@ export type Page =
   | "plugins"
   | "instructions"
   | "memory"
+  | "remote"
   | "account"
   | "privacy"
   | "about";
@@ -20,7 +21,7 @@ export type Page =
 export const PAGE_GROUPS: readonly (readonly Page[])[] = [
   ["general", "appearance", "chats", "voice", "shortcuts"],
   ["agents", "plugins", "instructions", "memory"],
-  ["account", "privacy", "about"],
+  ["remote", "account", "privacy", "about"],
 ];
 
 export const PAGE_LABELS: Readonly<Record<Page, string>> = {
@@ -33,6 +34,7 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
   plugins: "Plugins & MCP",
   instructions: "Instructions",
   memory: "Project memory",
+  remote: "Remote access",
   account: "Account & sync",
   privacy: "Data & privacy",
   about: "About",
@@ -134,6 +136,13 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     title: "Let agents edit memory directly",
     words: "agent edits revisions review",
   },
+  {
+    page: "remote",
+    title: "Remote access",
+    words: "phone mobile browser relay connect away sessions",
+  },
+  { page: "remote", title: "Pair a device", words: "phone qr code link scan remote" },
+  { page: "remote", title: "Link a bot", words: "grok bot mcp connector assistant remote" },
   { page: "account", title: "Account", words: "sign in email profile log in" },
   { page: "account", title: "Configuration sync", words: "devices sync settings agents" },
   { page: "privacy", title: "Data folder", words: "files location storage" },
