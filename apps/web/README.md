@@ -1,6 +1,6 @@
 # auracode.si
 
-Light-only React Router 7 interface, prerendered to static HTML. Cloudflare serves `build/client`.
+React Router 7 interface that follows the system appearance, prerendered to static HTML. Cloudflare serves `build/client`.
 `entry.server.tsx` is build-time React rendering only; the server output is removed by `ssr:false`.
 There is no JavaScript application backend. The Rust Worker in `apps/api` owns every account,
 authentication, authorization, email, export and sync operation.
@@ -15,10 +15,9 @@ corepack pnpm --filter @auracode/web dev
 ```
 
 Browser checks use owned headless Chromium and WebKit, synthetic API/Turnstile responses, and
-block external requests. They cover desktop/mobile overflow, keyboard focus, the agents' row at
-every width (complete, in view, still), the phone menu, the capabilities tab list (axe on each view,
-arrow keys, Home and End, and its cycle holding under the pointer and in a hidden tab), no canvas
-and no Pause button, no-JavaScript downloads, invalid-code recovery, email-only app links, CSRF headers, revocation confirmation and
+block external requests. They cover dark and light with the system (and the verification frame pinned light),
+desktop/mobile overflow, keyboard focus, the agents' chips at every width (complete, in view,
+still) and as toggle buttons, the feature cards, the phone menu, no canvas and no Pause button, no-JavaScript downloads, invalid-code recovery, email-only app links, CSRF headers, revocation confirmation and
 typed deletion confirmation. Axe checks the home and account views. Chromium verifies native Tab
 order; Windows WebKit lacks the OS full-keyboard-access setting, so that harness explicitly focuses
 the skip link and verifies keyboard activation. Real Safari/macOS acceptance remains pending.
@@ -29,17 +28,17 @@ shared Geist font package and semantic tokens from `@auracode/ui`.
 
 ## Reference evidence
 
-The website was rebuilt on 10 November 2026 after the SpaceXAI, Vercel, Aside, Linear and Harvey landing pages, as [visual-language.md](../../docs/design/visual-language.md) describes. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
+The website was rebuilt on 10 November 2026 as a close copy of dot.com (the Grok Bot page), as [visual-language.md](../../docs/design/visual-language.md) describes. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it whenever the app changes visibly with
 `node apps/web/scripts/product-images.mjs`: it captures the desktop's `?preview=settled` at 1440 by
-900 and 2x and writes the WebP sources (480, 960, 1440 and 2240 wide) and the PNG fallback. The
-capabilities panel's views are drawn from tokens after the app's own preview modes (New chat, a
-pending handoff, the Changes panel, the picker, the queue and the sidebar); update them with the
+760 and 2x, in light and in dark, and writes the WebP sources (480, 960, 1440 and 2240 wide) and
+the light PNG fallback. The card views are drawn from tokens after the app's own preview modes (New
+chat, a pending handoff, the Changes panel and the queue); update them with the
 app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
-logo's own paths. Without JavaScript the site remains light, the capabilities panel shows
-the default example and the FAQ opens natively. The standalone notices page is script-free and remains light. The website has no appearance control or persisted theme. Reduced motion disables automatic cycling and transitions.
+logo's own paths. Without JavaScript the site still follows the system appearance, the agents' chips show the
+default choice and the FAQ opens natively. The standalone notices page is script-free and stays light. The website has no appearance control or persisted theme. Reduced motion disables the live window and transitions.
 
 ## Deployment prerequisites
 

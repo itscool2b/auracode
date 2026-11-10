@@ -8,7 +8,7 @@ The proposed full Aura styling pass supersedes the older Graphite, Orbit and Sha
 The owner narrowed the current release to Windows and macOS and deferred Linux/WSL, then added Linux
 back on 2026-11-04 (deb, rpm and AppImage, built on Ubuntu 22.04); WSL agent hosts stay deferred. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
-fixes rerun as needed. Visual work follows the proposed Aura system, with a light-only website and light and dark desktop appearances, and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
+fixes rerun as needed. Visual work follows the proposed Aura system, with a website that follows the system appearance and light and dark desktop appearances, and the audited references in [visual-language.md](design/visual-language.md). The full styling pass is being tested; owner visual approval and native release verification remain pending.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
