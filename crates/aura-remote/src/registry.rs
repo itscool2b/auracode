@@ -73,6 +73,10 @@ pub struct Bot {
     /// The workspace it was made in, and the only one it reaches.
     #[serde(default)]
     pub profile: String,
+    /// Full control: every tool, where a link without it has the chat tools only. Chosen when the
+    /// link is made and never changed after: a wider link is a new link.
+    #[serde(default)]
+    pub full: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -351,7 +355,7 @@ impl Registry {
         Ok(true)
     }
 
-    pub fn add_bot(&mut self, name: &str, now: i64) -> Result<NewBot, RegistryError> {
+    pub fn add_bot(&mut self, name: &str, full: bool, now: i64) -> Result<NewBot, RegistryError> {
         if self.scope.is_empty() {
             return Err(RegistryError::NoWorkspace);
         }
@@ -369,6 +373,7 @@ impl Registry {
             created_at: now,
             last_used_at: None,
             profile: self.scope.clone(),
+            full,
         });
         if let Err(error) = self.save() {
             self.stored.bots.pop();
@@ -398,6 +403,13 @@ impl Registry {
             let _ = self.save();
         }
         true
+    }
+
+    /// Whether the open workspace's bot link `id` was made with full control.
+    pub fn bot_full(&self, id: &str) -> bool {
+        self.bots()
+            .iter()
+            .any(|bot| crypto::same(&bot.id, id) && bot.full)
     }
 
     pub fn remove_bot(&mut self, id: &str) -> Result<bool, RegistryError> {
@@ -451,7 +463,7 @@ mod tests {
             Err(RegistryError::NoWorkspace)
         ));
         assert!(matches!(
-            registry.add_bot("Grok", 0),
+            registry.add_bot("Grok", false, 0),
             Err(RegistryError::NoWorkspace)
         ));
 
@@ -461,7 +473,7 @@ mod tests {
             .pair(&pairing.id, "Phone", 1)
             .expect("pair")
             .expect("device");
-        let bot = registry.add_bot("Grok", 1).expect("bot");
+        let bot = registry.add_bot("Grok", false, 1).expect("bot");
         let open = registry.start_pairing(2).expect("pairing");
 
         // The account's workspace opens: Local's phone, bot and open link are not its own.
@@ -643,7 +655,7 @@ mod tests {
         assert!(!registry.remove_device(&first).expect("remove again"));
         assert_eq!(registry.device_key(&first), None);
 
-        let bot = registry.add_bot("", 7).expect("bot");
+        let bot = registry.add_bot("", false, 7).expect("bot");
         assert_eq!((bot.id.len(), bot.token.len()), (11, 43));
         assert_eq!(registry.bots()[0].name, "Bot");
         assert_ne!(
@@ -657,10 +669,10 @@ mod tests {
         assert!(registry.verify_bot(&bot.id, &bot.token, 9));
         assert_eq!(registry.bots()[0].last_used_at, Some(9));
         for _ in 1..MAX_BOTS {
-            registry.add_bot("Grok", 7).expect("bot");
+            registry.add_bot("Grok", true, 7).expect("bot");
         }
         assert!(matches!(
-            registry.add_bot("Grok", 7),
+            registry.add_bot("Grok", false, 7),
             Err(RegistryError::TooManyBots)
         ));
 
@@ -670,6 +682,11 @@ mod tests {
         assert_eq!(again.devices().len(), MAX_DEVICES - 1);
         assert_eq!(again.bots().len(), MAX_BOTS);
         assert!(again.verify_bot(&bot.id, &bot.token, 10));
+        // The level a link was made with is kept, and is each link's own.
+        assert!(!again.bot_full(&bot.id));
+        let full = again.bots()[1].id.clone();
+        assert!(again.bot_full(&full));
+        assert!(!again.bot_full("no-such-bot"));
         assert!(again.remove_bot(&bot.id).expect("remove"));
         assert!(!again.verify_bot(&bot.id, &bot.token, 11));
         assert!(

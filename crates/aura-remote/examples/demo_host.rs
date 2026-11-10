@@ -568,7 +568,10 @@ async fn main() {
     .expect("service");
     service.set_enabled(true).expect("enable");
     println!("PAIR {}", service.pair().expect("pairing").url);
-    println!("BOT {}", service.create_bot("Demo bot").expect("bot").url);
+    println!(
+        "BOT {}",
+        service.create_bot("Demo bot", false).expect("bot").url
+    );
     // Each line on standard input asks for a fresh pairing link; its end stops the demo.
     let lines = tokio::task::spawn_blocking(move || {
         for line in std::io::stdin().lock().lines() {

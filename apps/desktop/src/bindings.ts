@@ -395,7 +395,7 @@ export const commands = {
 	/**  Removes a paired device. Its open sessions end and its key stops working. */
 	remoteRemoveDevice: (id: string) => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_remove_device", { id })),
 	/**  Creates a bot link. Its address carries the bot's token and is returned only here. */
-	remoteCreateBot: (name: string) => typedError<RemoteBotLink, AppError>(__TAURI_INVOKE("remote_create_bot", { name })),
+	remoteCreateBot: (name: string, full: boolean) => typedError<RemoteBotLink, AppError>(__TAURI_INVOKE("remote_create_bot", { name, full })),
 	remoteRemoveBot: (id: string) => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_remove_bot", { id })),
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
@@ -3194,6 +3194,8 @@ export type RemoteBot = {
 	name: string,
 	created_at: number,
 	last_used_at: number | null,
+	/**  Made with full control: every tool, where a link without it has the chat tools only. */
+	full: boolean,
 };
 
 /**  A new bot link, shown once: the MCP address a bot connects to. It carries the bot's token. */

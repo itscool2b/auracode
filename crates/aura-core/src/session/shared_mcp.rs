@@ -123,6 +123,13 @@ pub(super) async fn prepare_launch(
     // agent added later gets them with no step (owner, 10 November 2026: "if they add a new agent
     // ... those skills should transfer over"). A listed agent whose configuration could not be
     // read whole still waits for review, and a server of the same name keeps them out.
+    //
+    // The tradeoff, for an agent whose configuration cannot be read at all: a server of a reserved
+    // name in that agent's own configuration is not seen here, and could shadow auracode's tool in
+    // the agent's list. It gains nothing auracode holds: the browser and project memory answer
+    // only auracode's own helper, which carries a token made for this session and passed in its
+    // environment, never written to any configuration. A shadowing server can do what any server
+    // in the agent's configuration already can, and no more.
     let memory_available = (checked || !compatible)
         && !names.iter().any(|name| {
             matches!(

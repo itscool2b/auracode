@@ -19,7 +19,8 @@ use aura_protocol::{
     workspace::WorkspaceChat,
 };
 use aura_remote::{
-    Backend, BackendError, BoxFuture, Config, Frames, Overview, RemoteAgent, Service, Statuses,
+    Action, Backend, BackendError, BoxFuture, ChatOptions, Choice, Config, Frames, Outcome,
+    Overview, RemoteAgent, Service, Statuses,
     crypto::{self, Channel, Side},
 };
 use futures::{SinkExt, StreamExt};
@@ -38,6 +39,8 @@ struct App {
     frames: Mutex<HashMap<String, Frames>>,
     statuses: Mutex<HashMap<String, Statuses>>,
     sent: Mutex<Vec<(String, String)>>,
+    /// The full-control actions the app was asked for.
+    acted: Mutex<Vec<Action>>,
     /// The workspace the app serves now. Empty reads as "local", where every test starts.
     open: Mutex<String>,
     answered: Mutex<Vec<String>>,
@@ -165,6 +168,12 @@ impl Backend for Bound {
         Box::pin(async move {
             self.admitted()?;
             self.app.interrupt(chat_id).await
+        })
+    }
+    fn act(&self, action: Action) -> BoxFuture<'_, Result<Outcome, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.act(action).await
         })
     }
     fn permission<'a>(
@@ -338,6 +347,41 @@ impl Backend for App {
                 .expect("answered")
                 .push(format!("stop {chat_id}"));
             Ok(())
+        })
+    }
+
+    fn act(&self, action: Action) -> BoxFuture<'_, Result<Outcome, BackendError>> {
+        Box::pin(async move {
+            self.acted.lock().expect("acted").push(action.clone());
+            Ok(match action {
+                Action::Options { .. } => Outcome::Options(ChatOptions {
+                    models: vec![
+                        Choice {
+                            value: "opus".into(),
+                            name: "Opus 5.5".into(),
+                        },
+                        Choice {
+                            value: "sonnet".into(),
+                            name: "Sonnet 5.5".into(),
+                        },
+                    ],
+                    model: Some("sonnet".into()),
+                    thinking: Vec::new(),
+                    thinking_level: None,
+                    access: vec![Choice {
+                        value: "full_auto".into(),
+                        name: "Full access".into(),
+                    }],
+                    access_mode: Some("full_auto".into()),
+                }),
+                Action::CreateProject { name, .. } => Outcome::Project {
+                    id: "p2".into(),
+                    name: name.unwrap_or_else(|| "site".into()),
+                    folder_id: Some("f2".into()),
+                },
+                Action::SwitchAgent { .. } => Outcome::Chat { id: "c9".into() },
+                _ => Outcome::Done("Done.".into()),
+            })
         })
     }
 
@@ -1051,7 +1095,7 @@ async fn a_device_and_a_bot_reach_only_the_workspace_they_were_made_in() {
     let rig = rig().await;
     let mut relay = online(&rig).await;
     let (mut phone, device, key) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
-    let link = rig.service.create_bot("Grok").expect("bot");
+    let link = rig.service.create_bot("Grok", false).expect("bot");
     let listed = relay.next().await;
     assert!(listed.starts_with("l[{"), "{listed}");
     let reference = link.url.rsplit('/').next().expect("reference").to_owned();
@@ -1148,7 +1192,7 @@ async fn what_was_accepted_for_one_workspace_is_never_served_another() {
     let rig = rig().await;
     let mut relay = online(&rig).await;
     let (mut phone, _, _) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
-    let link = rig.service.create_bot("Grok").expect("bot");
+    let link = rig.service.create_bot("Grok", false).expect("bot");
     assert!(relay.next().await.starts_with("l[{"));
     let reference = link.url.rsplit('/').next().expect("reference").to_owned();
     let (bot, token) = reference.split_once('.').expect("id.token");
@@ -1202,6 +1246,170 @@ async fn what_was_accepted_for_one_workspace_is_never_served_another() {
     assert!(rig.app.frames.lock().expect("frames").is_empty());
 }
 
+#[tokio::test]
+async fn full_control_is_a_links_own_level_and_the_computer_enforces_it() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let address = |url: &str| {
+        let reference = url.rsplit('/').next().expect("reference").to_owned();
+        let (bot, token) = reference.split_once('.').expect("id.token");
+        (bot.to_owned(), token.to_owned())
+    };
+    let chats = address(
+        &rig.service
+            .create_bot("Chats only", false)
+            .expect("bot")
+            .url,
+    );
+    relay.next().await;
+    let full = address(&rig.service.create_bot("Full", true).expect("bot").url);
+    // The relay is told each link's level, so the list a bot is shown is honest.
+    let listed: Value =
+        serde_json::from_str(relay.next().await.strip_prefix('l').expect("links")).expect("json");
+    assert_eq!(
+        listed,
+        json!([
+            { "id": chats.0, "hash": crypto::hash(&chats.1), "full": false },
+            { "id": full.0, "hash": crypto::hash(&full.1), "full": true },
+        ])
+    );
+    let status = rig.service.status();
+    assert_eq!(
+        status.bots.iter().map(|bot| bot.full).collect::<Vec<_>>(),
+        [false, true]
+    );
+
+    let mut rid = 0;
+    let mut call = async |relay: &mut Relay, link: &(String, String), tool: &str, args: Value| {
+        rid += 1;
+        relay
+            .send(format!(
+                "b{}",
+                json!({ "rid": format!("r{rid}"), "bot": link.0, "token": link.1, "tool": tool, "args": args })
+            ))
+            .await;
+        let answer: Value =
+            serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer"))
+                .expect("json");
+        answer
+    };
+
+    // A chats link asking for more is refused by the computer, whatever the relay let through,
+    // and nothing reaches the app.
+    for (tool, args) in [
+        ("create_project", json!({ "path": "/work/site" })),
+        ("set_model", json!({ "chat_id": "c1", "model": "opus" })),
+        (
+            "set_access",
+            json!({ "chat_id": "c1", "access": "full_auto" }),
+        ),
+        (
+            "switch_agent",
+            json!({ "chat_id": "c1", "agent_id": "codex" }),
+        ),
+        (
+            "read_change",
+            json!({ "chat_id": "c1", "path": "src/main.rs" }),
+        ),
+        (
+            "write_memory",
+            json!({ "project_id": "p1", "markdown": "x" }),
+        ),
+    ] {
+        let answer = call(&mut relay, &chats, tool, args).await;
+        assert_eq!(answer["error"], true, "{tool}: {answer}");
+        assert!(
+            answer["text"]
+                .as_str()
+                .expect("text")
+                .contains("chat tools only"),
+            "{tool}: {answer}"
+        );
+    }
+    assert!(rig.app.acted.lock().expect("acted").is_empty());
+    // It still has every chat tool.
+    assert_eq!(
+        call(&mut relay, &chats, "list_chats", json!({})).await["error"],
+        false
+    );
+
+    // The full link does all of it.
+    let options = call(
+        &mut relay,
+        &full,
+        "chat_options",
+        json!({ "chat_id": "c1" }),
+    )
+    .await;
+    assert_eq!(options["error"], false, "{options}");
+    let text = options["text"].as_str().expect("text");
+    assert!(text.contains("- sonnet (Sonnet 5.5) [current]"), "{text}");
+    assert!(text.contains("change with set_model"), "{text}");
+    assert!(
+        text.contains("Thinking levels: this agent offers no choice here."),
+        "{text}"
+    );
+    let project = call(
+        &mut relay,
+        &full,
+        "create_project",
+        json!({ "path": "/work/site", "name": "Site" }),
+    )
+    .await;
+    assert!(
+        project["text"]
+            .as_str()
+            .expect("text")
+            .contains("Its folder id is f2"),
+        "{project}"
+    );
+    let moved = call(
+        &mut relay,
+        &full,
+        "switch_agent",
+        json!({ "chat_id": "c1", "agent_id": "codex" }),
+    )
+    .await;
+    assert!(
+        moved["text"].as_str().expect("text").contains("c9"),
+        "{moved}"
+    );
+    for (tool, args) in [
+        ("set_model", json!({ "chat_id": "c1", "model": "opus" })),
+        ("rename_chat", json!({ "chat_id": "c1", "title": "Login" })),
+        ("archive_chat", json!({ "chat_id": "c1" })),
+    ] {
+        let answer = call(&mut relay, &full, tool, args).await;
+        assert_eq!(answer["error"], false, "{tool}: {answer}");
+    }
+    assert_eq!(
+        rig.app.acted.lock().expect("acted").last(),
+        Some(&Action::Archive {
+            chat_id: "c1".into(),
+            archived: true
+        })
+    );
+    // Arguments are checked before the app hears of them.
+    let before = rig.app.acted.lock().expect("acted").len();
+    for (tool, args) in [
+        ("set_access", json!({ "chat_id": "c1", "access": "root" })),
+        ("rename_chat", json!({ "chat_id": "c1", "title": "  " })),
+        ("create_project", json!({ "path": "" })),
+        (
+            "write_memory",
+            json!({ "project_id": "p1", "markdown": "x".repeat(20_000) }),
+        ),
+        (
+            "set_model",
+            json!({ "chat_id": "c1", "model": "opus", "extra": 1 }),
+        ),
+    ] {
+        let answer = call(&mut relay, &full, tool, args).await;
+        assert_eq!(answer["error"], true, "{tool}: {answer}");
+    }
+    assert_eq!(rig.app.acted.lock().expect("acted").len(), before);
+}
+
 /// A pairing link's pairing id and key.
 fn link_of(url: &str) -> (String, [u8; 32]) {
     let (_, pairing, key) = link(url);
@@ -1241,7 +1449,7 @@ async fn a_browser_can_forget_the_desktop() {
 async fn a_linked_bot_calls_tools_with_its_token() {
     let rig = rig().await;
     let mut relay = online(&rig).await;
-    let link = rig.service.create_bot("Grok").expect("bot");
+    let link = rig.service.create_bot("Grok", false).expect("bot");
     assert_eq!(link.name, "Grok");
     let reference = link
         .url
@@ -1256,7 +1464,10 @@ async fn a_linked_bot_calls_tools_with_its_token() {
     let listed = relay.next().await;
     assert_eq!(
         listed,
-        format!("l{}", json!([{ "id": bot, "hash": crypto::hash(token) }]))
+        format!(
+            "l{}",
+            json!([{ "id": bot, "hash": crypto::hash(token), "full": false }])
+        )
     );
     assert!(
         !std::fs::read_to_string(&rig.path)
