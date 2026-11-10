@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { AGENT_NAMES } from "../agents";
 import { useReducedMotion } from "../motion";
-import { Words } from "../reveal";
 import { Arrow } from "../ui";
 import { AGENTS, SpriteMark } from "./Sprite";
 
@@ -113,13 +112,10 @@ export function Faq() {
 
   return (
     <section className="section faq" id="faq" aria-labelledby="faq-title">
-      <div className="wrap faq-grid">
-        <div className="faq-head">
+      <div className="inner two-col">
+        <div className="two-col-head faq-head" data-reveal="">
           <h2 id="faq-title" className="title">
-            <Words text="Questions, answered." />{" "}
-            <span className="title-soft">
-              <Words text="Before you install." offset={2} />
-            </span>
+            FAQs
           </h2>
           <a className="text-link faq-link" href="/privacy">
             Privacy notice <Arrow />

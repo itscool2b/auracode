@@ -6,7 +6,7 @@ interface TurnstileApi {
     element: HTMLElement,
     options: {
       sitekey: string;
-      theme: "light" | "dark";
+      theme: "light" | "dark" | "auto";
       action: "signin";
       callback: (token: string) => void;
       "expired-callback": () => void;
@@ -67,7 +67,8 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
         if (active && container.current && window.turnstile)
           id = window.turnstile.render(container.current, {
             sitekey: config.turnstile_site_key,
-            theme: "light",
+            // The check follows the system as the page does; a page pinned light pins it too.
+            theme: document.documentElement.dataset.theme === "light" ? "light" : "auto",
             action: "signin",
             callback: (token) => callback.current(token),
             "expired-callback": () => callback.current(""),

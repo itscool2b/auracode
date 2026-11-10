@@ -4,13 +4,18 @@ import { access, readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../build/client/", import.meta.url);
-test("public pages are prerendered in light appearance without JavaScript", async () => {
+test("public pages are prerendered to follow the system appearance without JavaScript", async () => {
   for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
-    assert.match(html, /<html[^>]*data-theme="light"/);
+    // Nothing pins an appearance: the stylesheet follows prefers-color-scheme.
+    assert.doesNotMatch(html, /<html[^>]*data-theme=/);
+    assert.match(html, /<meta name="color-scheme" content="dark light"/);
     assert.match(html, /<main/);
     assert.match(html, /<h1/);
   }
+  // The frame the desktop shows inside its own dialog stays light.
+  const frame = await readFile(new URL("verify-device/index.html", root), "utf8");
+  assert.match(frame, /<html[^>]*data-theme="light"/);
   const downloads = await readFile(new URL("download/index.html", root), "utf8");
   assert.match(downloads, /macOS/);
   assert.match(downloads, /Windows/);
@@ -18,15 +23,23 @@ test("public pages are prerendered in light appearance without JavaScript", asyn
   assert.match(downloads, /Not published/);
   assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
   await access(new URL("images/desktop-light.png", root));
-  for (const width of [480, 960, 1440, 2240])
-    await access(new URL(`images/desktop-light-${width}.webp`, root));
+  for (const theme of ["light", "dark"])
+    for (const width of [480, 960, 1440, 2240])
+      await access(new URL(`images/desktop-${theme}-${width}.webp`, root));
   const home = await readFile(new URL("index.html", root), "utf8");
-  assert.match(home, /<picture[^>]*><source[^>]*type="image\/webp"/);
+  // The real app in the page's appearance: the dark capture under a dark system, else the light.
   assert.match(
     home,
-    /desktop-light-480.webp 480w, \/images\/desktop-light-960.webp 960w, \/images\/desktop-light-1440.webp 1440w/,
+    /<picture[^>]*><source[^>]*media="\(prefers-color-scheme: dark\)"[^>]*type="image\/webp"/,
   );
-  assert.match(home, /sizes="\(max-width: 1247px\) calc\(100vw - 56px\), 1104px"/);
+  for (const theme of ["light", "dark"])
+    assert.ok(
+      home.includes(
+        `/images/desktop-${theme}-480.webp 480w, /images/desktop-${theme}-960.webp 960w, /images/desktop-${theme}-1440.webp 1440w`,
+      ),
+      theme,
+    );
+  assert.match(home, /sizes="\(max-width: 1327px\) calc\(100vw - 48px\), 1280px"/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");

@@ -6,6 +6,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
   useRouteError,
 } from "react-router";
 // Geist and Geist Mono, the site's only faces, come with Graphite.
@@ -16,12 +17,16 @@ import { SiteFooter } from "./footer";
 import { SiteHeader } from "./header";
 
 export function Layout({ children }: { children: ReactNode }) {
+  // The site follows the system appearance (dark unless the system asks for light), with no
+  // switch and nothing stored. Only the device verification frame, which the desktop shows inside
+  // its own dialog, is pinned light.
+  const pinned = useLocation().pathname.startsWith("/verify-device");
   return (
-    <html lang="en" data-theme="light" className="g-root">
+    <html lang="en" data-theme={pinned ? "light" : undefined} className="g-root">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light" />
+        <meta name="color-scheme" content={pinned ? "light" : "dark light"} />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

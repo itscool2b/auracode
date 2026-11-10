@@ -1,42 +1,33 @@
 /* ------------------------------------------------------------------------------- header */
 
 /*
- * A plain bar across the top: the wordmark, the page's sections, Sign in and the one Download.
- * Clear over the page's start; once the page scrolls it takes the paper's tone and a hairline.
- * It keeps its place across page navigations (view transitions).
+ * The bar dot.com has: the wordmark, the page's sections beside it, and two pills at the right
+ * (the quiet Sign in and the primary Download). It stays at the top over the page's colour at 85%
+ * and a blur, and keeps its place across page navigations (view transitions).
  */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 60;
   box-sizing: border-box;
-  height: var(--s-nav);
-  border-bottom: 1px solid transparent;
-  transition:
-    background-color 300ms var(--s-swift),
-    border-color 300ms var(--s-swift);
+  height: var(--s-nav-h);
+  background-color: var(--s-nav);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
   view-transition-name: site-nav;
 }
 
-.site-nav[data-scrolled],
-.site-nav:has(.nav-menu[open]) {
-  border-bottom-color: var(--s-line);
-  background-color: rgb(250 250 250 / 0.82);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  backdrop-filter: blur(16px) saturate(180%);
-}
-
 .nav-bar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
+  gap: 32px;
   height: 100%;
 }
 
 .nav-home {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  justify-self: start;
   height: 40px;
   color: var(--s-ink);
   text-decoration: none;
@@ -48,34 +39,29 @@
   gap: 4px;
 }
 
-.nav-links a,
-.nav-signin {
+.nav-links a {
   display: inline-flex;
   align-items: center;
-  height: 34px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  color: var(--g-fg-2);
-  font-size: 14px;
+  color: var(--s-ink);
+  font-size: 13px;
   line-height: 20px;
-  font-weight: 450;
+  font-weight: 500;
   text-decoration: none;
-  transition:
-    color 160ms var(--s-swift),
-    background-color 160ms var(--s-swift);
+  transition: background-color 160ms var(--s-swift);
 }
 
-.nav-links a:hover,
-.nav-signin:hover {
-  background-color: rgb(10 10 11 / 0.05);
-  color: var(--s-ink);
+.nav-links a:hover {
+  background-color: var(--s-quiet);
 }
 
 .nav-end {
   display: flex;
   align-items: center;
-  gap: 6px;
-  justify-self: end;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .nav-menu {
@@ -83,10 +69,6 @@
 }
 
 @media (max-width: 767px) {
-  .nav-bar {
-    grid-template-columns: 1fr auto;
-  }
-
   .nav-links,
   .nav-signin {
     display: none;
@@ -101,7 +83,7 @@
     place-items: center;
     width: 36px;
     height: 36px;
-    margin-right: -8px;
+    margin-right: -6px;
     border-radius: 999px;
     color: var(--s-ink);
     list-style: none;
@@ -129,17 +111,16 @@
     transform: translateY(-2.5px) rotate(-45deg);
   }
 
-  /* The menu is a solid sheet under the bar, the page's width, so its links read over any content. */
+  /* The menu is a solid sheet under the bar, the page's width, so its links read over anything. */
   .nav-sheet {
     position: absolute;
     top: 100%;
     right: 0;
     left: 0;
     display: grid;
-    padding: 8px var(--s-pad) 16px;
+    padding: 8px calc(var(--s-gutter) + 4px) 16px;
     border-bottom: 1px solid var(--s-line);
-    background-color: var(--g-bg);
-    box-shadow: 0 24px 40px -24px rgb(10 10 11 / 0.18);
+    background-color: var(--s-bg);
     animation: sheet-in 320ms var(--s-expo) both;
   }
 
@@ -173,9 +154,8 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .site-nav[data-scrolled],
-  .site-nav:has(.nav-menu[open]) {
-    background-color: var(--g-bg);
+  .site-nav {
+    background-color: var(--s-bg);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -183,17 +163,20 @@
 
 /* ------------------------------------------------------------------------------- footer */
 
-/* The page's last hairline, then the wordmark with what it stands for and three columns of links. */
+/*
+ * Under the page's one hairline: the wordmark with its line at left, a dotted rule, and columns of
+ * small links at right.
+ */
 .site-footer {
   border-top: 1px solid var(--s-line);
-  padding: 64px 0 56px;
+  padding: 48px 0 56px;
 }
 
 .footer-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 48px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .footer-home a {
@@ -203,23 +186,26 @@
 }
 
 .footer-statement {
-  margin-top: 14px;
-  color: var(--g-fg-3);
-  font-size: 14px;
-  line-height: 22px;
+  margin-top: 12px;
+  color: var(--s-soft);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .footer-links {
   display: grid;
-  grid-template-columns: repeat(3, minmax(128px, auto));
-  gap: 32px 48px;
+  grid-template-columns: repeat(3, minmax(140px, auto));
+  gap: 32px 40px;
+  padding-left: 64px;
+  border-left: 1px dotted var(--s-line-strong);
 }
 
 .footer-heading {
-  margin-bottom: 12px;
-  color: var(--g-fg-3);
-  font-size: 14px;
-  line-height: 22px;
+  margin-bottom: 10px;
+  color: var(--s-ink);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
 }
 
 .footer-col ul {
@@ -231,21 +217,17 @@
 
 .footer-col a {
   color: var(--s-ink);
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 13px;
+  line-height: 20px;
   text-decoration: none;
   transition: color 160ms var(--s-swift);
 }
 
 .footer-col a:hover {
-  color: var(--g-fg-3);
+  color: var(--s-soft);
 }
 
 @media (max-width: 767px) {
-  .site-footer {
-    padding: 48px 0;
-  }
-
   .footer-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
@@ -254,6 +236,8 @@
   .footer-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 32px 24px;
+    padding-left: 0;
+    border-left: 0;
   }
 }
 

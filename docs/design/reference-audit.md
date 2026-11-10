@@ -1,8 +1,31 @@
 # Reference audit
 
-Status: these reference observations support Halo, the 1 November 2026 styling pass, and the website rebuild of 10 November 2026. Both await the owner's visual lock. The website is permanently light; the desktop keeps light and dark appearances. The observations do not establish visual approval or complete product parity.
+Status: these reference observations support Halo, the 1 November 2026 styling pass, and the website rebuild of 10 November 2026. Both await the owner's visual lock. The website follows the system appearance and the desktop keeps System, Light and Dark. The observations do not establish visual approval or complete product parity.
 
-## Website rebuild references, 10 November 2026
+## dot.com, 10 November 2026 (current)
+
+After the blended rebuild below went live, the owner narrowed the reference to one site: "pretty much just copy dot.com". dot.com redirects to x.ai/bot, the Grok Bot landing page (titled "AI teammates that finish the work"). It refuses headless browsers, so it was studied in a real browser beside the chat, section by section, with its computed styles read from the page at a 1132px viewport. It sets its appearance from the system through a stored theme that defaults to "system"; the owner chose to follow the system too, without the switch.
+
+Measured there, in dark: page `rgb(10, 10, 10)`, text white, secondary text `rgb(125, 129, 135)`, cards `rgb(26, 26, 26)` with a 24px radius and no border or shadow (16px for download rows), a 24px page gutter. Headline 60px/60px at weight 500 with -0.01em tracking; section titles 36px/40px at 500; leads 18px/29.25px; card titles and text 16px/26px; navigation 13px at 500; footer 13px. The header is 64px over the page at 85%. Pills: 44px with 16px text in statements, 40px with 14px text at weight 500 elsewhere, 36px in the header; the primary is white with near-black text and the quiet one a dark grey.
+
+| dot.com section | Observed | auracode's copy |
+| --- | --- | --- |
+| Header | Logo, sections beside it, a quiet "Contact Sales" pill and a white "Download" pill with a menu | The same bar with Sign in and Download; no menu on the pill |
+| Hero | A badge, "Meet", the mascot on a white disc and the name on one centred line, two grey lines, "Download for Windows" and a quiet pill, then the app window at full width | "Meet auracode" with the logo on a disc, two grey lines, the same two pills and the live window. The badge is not copied (no eyebrows) |
+| "Message Bots like teammates" | One wide card: a title and grey paragraph at left, the mascot very large at right, cropped by the card | The intro card with the logo set large on a disc |
+| "Work with many Bots at once" | A centred title and one line over a two-by-two grid of cards, each a title and text above a product visual | The four feature cards with their product views, and six smaller cards for the rest of the workspace |
+| "Give each Bot a job" | A title, chips for each job, one sentence for the chosen chip and a quiet pill at left; a phone showing it at right | The agents as chips beside the New chat view |
+| "The team runs on Grok Bot" | One centred line over one large rounded film frame | The real desktop screenshot in one large rounded frame |
+| Pricing | Plans | Not copied: auracode is free |
+| "Download Grok Bot" | A title and grey line at left; a row per platform at right | The same, for Windows, macOS and Linux, with generic glyphs |
+| "Grok Bot Guides" | A centred title, one line and a quiet pill | The pointer to the changelog |
+| "FAQs" | The title at left; hairline-divided questions with a plus at right | The same |
+| "Meet your first Bot" | A centred line, a sentence, two pills, and the mascot drawn very large in a hairline | The closing call over the logo drawn in a hairline |
+| Footer | A hairline, the logo and a copyright line at left, a dotted rule, columns of 13px links, and an appearance switch | The same without the switch; the left line is auracode's own |
+
+Nothing of dot.com's ships: no logo, mascot, artwork, copy, font or asset. The mascot's places are taken by auracode's own logo.
+
+## Website rebuild references, 10 November 2026 (earlier the same day, superseded)
 
 The owner asked for the website to look like SpaceXAI, Vercel, Aside, Linear and Harvey: "pretty much just copy them, but for our thing". Each was studied again on Mobbin, and the live linear.app, vercel.com, aside.com and harvey.ai home pages were captured at 1440px with Playwright, with their computed type read from the page. x.ai refused automated browsers, so SpaceXAI rests on Mobbin alone. The rebuild takes their type scale, structure and restraint. It ships none of their logos, artwork, copy or assets, and the labels and badges several of them set above headings are still not adopted (see the no-eyebrow rule in [visual-language.md](visual-language.md)).
 

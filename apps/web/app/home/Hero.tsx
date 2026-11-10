@@ -1,41 +1,56 @@
-import { useRef } from "react";
-import { Arrow } from "../ui";
+import { Logo } from "@auracode/ui/graphite";
+import { useEffect, useRef, useState } from "react";
 import { HeroWindow, useHandoffLoop } from "./HeroWindow";
 
+/** The visitor's system, once the page runs, so the action can name it. Null until then. */
+function usePlatform(): string | null {
+  const [platform, setPlatform] = useState<string | null>(null);
+  useEffect(() => {
+    const agent = navigator.userAgent;
+    if (/Android|iPhone|iPad|iPod/.test(agent)) return;
+    if (/Windows/.test(agent)) setPlatform("Windows");
+    else if (/Macintosh|Mac OS X/.test(agent)) setPlatform("macOS");
+    else if (/Linux|X11/.test(agent)) setPlatform("Linux");
+  }, []);
+  return platform;
+}
+
 /**
- * What auracode is in one line, set at a calm size and left, with what it means and the two
- * actions on the row under it. The window below is the proof: one session replayed live, handed
- * from agent to agent.
+ * The page's opening, composed as dot.com's is: the name with its mark set into the line, two
+ * grey lines saying what it is, the two pills, and the app itself under them. The window is live:
+ * one session replayed, handed from agent to agent.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
   const state = useHandoffLoop(stage);
+  const platform = usePlatform();
 
   return (
     <section className="hero" aria-labelledby="hero-title" data-zone="">
-      <div className="wrap">
-        <h1 id="hero-title" className="hero-title">
-          One window for <span className="hero-soft">every coding agent.</span>
+      <div className="hero-copy">
+        <h1 id="hero-title" className="hero-title" aria-label="Meet auracode">
+          <span aria-hidden="true">Meet</span>
+          <span className="hero-mark" aria-hidden="true">
+            <Logo size={40} />
+          </span>
+          <span aria-hidden="true">auracode</span>
         </h1>
-        <div className="hero-row">
-          <p className="hero-lead">
-            Claude Code, Codex, Cursor and six more, side by side in one desktop app on your
-            machine. Free, with nothing to sign up for.
-          </p>
-          <div className="hero-actions">
-            <a className="btn btn-ink" href="/download">
-              Download
-              <Arrow direction="down" />
-            </a>
-            <a className="btn btn-line" href="#features">
-              See what it does
-            </a>
-          </div>
+        <p className="hero-lead">
+          One window for every coding agent. Run Claude Code, Codex, Cursor and six more side by
+          side on your machine, free, with nothing to sign up for.
+        </p>
+        <div className="hero-actions">
+          <a className="btn btn-primary btn-lg" href="/download">
+            {platform ? `Download for ${platform}` : "Download"}
+          </a>
+          <a className="btn btn-quiet btn-lg" href="#features">
+            See what it does
+          </a>
         </div>
-        <div className="hero-stage" ref={stage}>
-          <div className="hero-detail" aria-hidden="true">
-            <HeroWindow state={state} />
-          </div>
+      </div>
+      <div className="wrap hero-stage" ref={stage}>
+        <div className="hero-detail" aria-hidden="true">
+          <HeroWindow state={state} />
         </div>
       </div>
     </section>

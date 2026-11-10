@@ -14,12 +14,12 @@ const settled = (page) =>
   );
 
 /**
- * The agents' row: every agent named once, each wholly inside the viewport and none overlapping
- * the next, and nothing in it moving.
+ * The agents' chips: every agent named once, each wholly inside the viewport and none overlapping
+ * the next, and nothing in them moving.
  */
 const agentWall = (page) =>
   page.evaluate(() => {
-    const shown = [...document.querySelectorAll(".agent-cell")].filter(
+    const shown = [...document.querySelectorAll(".agent-chip")].filter(
       (item) => item.getClientRects().length > 0,
     );
     const boxes = shown.map((item) => item.getBoundingClientRect());
@@ -114,66 +114,39 @@ try {
       const heroStage = page.locator(".hero-detail .handoff-stage");
       assert.equal(await heroStage.locator(".handoff-prior").isVisible(), true);
       assert.equal(await heroStage.locator(".handoff-next").isVisible(), true);
-      assert.equal(
-        await page
-          .getByRole("tab", { name: "Optional file checkpoints" })
-          .getAttribute("aria-selected"),
-        "true",
-      );
-      assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+      // The site follows the system appearance: this context asks for dark, so the page is dark,
+      // with no switch, nothing pinned on the root and nothing read from storage.
+      assert.equal(await page.locator("html").getAttribute("data-theme"), null);
       assert.equal(await page.getByLabel("Appearance").count(), 0);
       assert.equal(
         await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
-        "rgb(250, 250, 250)",
+        "rgb(10, 10, 10)",
       );
-      // The agents' row: every agent once, in view, in one line at this width.
+      // The agents' chips: every agent once, in view.
       assertWall(await agentWall(page), "1440px");
       assert.equal(await page.getByRole("list", { name: "Agents auracode runs" }).count(), 1);
       assert.equal(
-        await page.evaluate(
-          () =>
-            new Set(
-              [...document.querySelectorAll(".agent-cell")].map((cell) =>
-                Math.round(cell.getBoundingClientRect().top),
-              ),
-            ).size,
-        ),
-        1,
-        "the agents sit on one line at 1440px",
-      );
-      // The header is a plain bar, and nothing on the page is a dark band.
-      assert.equal(await page.locator(".night").count(), 0);
-      assert.equal(
         await page.getByRole("navigation", { name: "Main" }).getByRole("link").count(),
-        4,
+        5,
       );
-      await page.waitForFunction(() => {
-        const image = document.querySelector(".product-frame img");
-        return image?.complete && image.naturalWidth > 0;
-      });
+      const shot = () =>
+        page.waitForFunction(() => {
+          const image = document.querySelector(".showcase-frame img");
+          return image?.complete && image.naturalWidth > 0;
+        });
+      await shot();
       await settled(page);
-      await page.screenshot({ path: join(artifacts, `${name}-home-light.png`), fullPage: true });
-      await page.getByRole("tab", { name: "Switch agents mid-chat" }).click();
-      // Park the pointer: a capture scrolls the page, and a tab passing under a resting pointer
-      // would take the view (hover intent).
-      await page.mouse.move(2, 2);
-      await page
-        .locator(".caps .handoff-stage")
-        .screenshot({ path: join(artifacts, `${name}-handoff-light.png`) });
+      await page.screenshot({ path: join(artifacts, `${name}-home-dark.png`), fullPage: true });
       await page.reload();
-      assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
-      await page.getByRole("heading", { name: "One window for every coding agent." }).waitFor();
-      await page.waitForFunction(() => {
-        const image = document.querySelector(".product-frame img");
-        return image?.complete && image.naturalWidth > 0;
-      });
+      await page.getByRole("heading", { name: "Meet auracode" }).waitFor();
+      await shot();
+      // The real app is shown in the appearance the page is in.
       assert.match(
-        await page.locator(".product-frame img").evaluate((image) => image.currentSrc),
-        /desktop-light-\d+\.webp$/,
+        await page.locator(".showcase-frame img").evaluate((image) => image.currentSrc),
+        /desktop-dark-\d+\.webp$/,
       );
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: join(artifacts, `${name}-home.png`), fullPage: true });
-      assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
       await settled(page);
       let axe = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -196,30 +169,10 @@ try {
       // No canvas anywhere (the window is CSS) and no film Pause button.
       assert.equal(await page.locator("canvas").count(), 0);
       assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
-      // The capabilities panel: six tabs, each view clean under axe once shown.
-      const tabs = page.getByRole("tab");
-      assert.equal(await tabs.count(), 6);
-      for (let i = 0; i < 6; i++) {
-        await tabs.nth(i).click();
-        assert.equal(await tabs.nth(i).getAttribute("aria-selected"), "true");
-        await settled(page);
-        axe = await new AxeBuilder({ page })
-          .include(".caps")
-          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-          .analyze();
-        assert.deepEqual(
-          axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
-          [],
-          `capability ${i}`,
-        );
-      }
-      // Arrow keys move the selection and the focus; Home and End jump to the ends.
-      await tabs.first().focus();
-      await page.keyboard.press("ArrowDown");
-      assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
-      assert.equal(await page.evaluate(() => document.activeElement?.id), "caps-tab-handoff");
-      const handoff = page.locator(".caps .handoff-stage");
-      assert.equal(await handoff.isVisible(), true);
+      // The feature cards: four, each a title over a product view; the handoff shows both planes.
+      assert.equal(await page.locator(".work-card").count(), 4);
+      const handoff = page.locator(".work-view .handoff-stage");
+      await handoff.scrollIntoViewIfNeeded();
       assert.equal(await handoff.locator(".handoff-prior").isVisible(), true);
       assert.equal(await handoff.locator(".handoff-next").isVisible(), true);
       assert.match(await handoff.locator(".handoff-prior").textContent(), /Frame pacing now waits/);
@@ -228,29 +181,49 @@ try {
         /Next message includes a handoff to Codex/,
       );
       await handoff.screenshot({ path: join(artifacts, `${name}-handoff.png`) });
-      await page.keyboard.press("End");
-      assert.equal(await tabs.nth(5).getAttribute("aria-selected"), "true");
-      await page.keyboard.press("Home");
-      assert.equal(await tabs.nth(0).getAttribute("aria-selected"), "true");
+      // The agents' chips are toggle buttons: one is pressed, choosing another names it under the
+      // chips and picks it in the New chat view, by pointer and by keyboard.
+      const chips = page.locator(".agent-chip");
+      const pressed = page.locator(".agent-chip[aria-pressed=true]");
+      assert.equal(await chips.count(), 9);
+      assert.equal(await pressed.count(), 1);
+      for (const agent of ["Codex", "Hermes", "Pi"]) {
+        const chip = page.getByRole("button", { name: agent, exact: true });
+        await chip.click();
+        assert.equal(await chip.getAttribute("aria-pressed"), "true");
+        assert.equal(await pressed.count(), 1);
+        assert.match(await page.locator(".agents-note").textContent(), new RegExp(`^${agent}, as`));
+        await settled(page);
+        axe = await new AxeBuilder({ page })
+          .include(".agents")
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze();
+        assert.deepEqual(
+          axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+          [],
+          `agent ${agent}`,
+        );
+      }
+      const cursor = page.getByRole("button", { name: "Cursor", exact: true });
+      await cursor.focus();
+      await page.keyboard.press("Enter");
+      assert.equal(await cursor.getAttribute("aria-pressed"), "true");
+      assert.equal(await page.locator(".agents-view .m-pill.is-on").textContent(), "Cursor");
       await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
-      await tabs.nth(1).click();
-      await page.mouse.move(2, 2);
       await handoff.screenshot({ path: join(artifacts, `${name}-handoff-mobile.png`) });
-      await tabs.first().click();
       await page.screenshot({ path: join(artifacts, `${name}-mobile.png`), fullPage: true });
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       );
+      // A chip's colours settle over a moment after it is chosen; measure them once they have.
+      await settled(page);
       assertWall(await agentWall(page), "390px");
       // The phone menu is a solid sheet under the bar, over whatever the page shows behind it.
       await page.evaluate(() => {
         const band = document.querySelector("#features");
         window.scrollTo(0, band.getBoundingClientRect().top + window.scrollY + 400);
       });
-      await page.waitForFunction(() =>
-        document.querySelector(".site-nav")?.hasAttribute("data-scrolled"),
-      );
       await page.locator(".nav-menu-button").click();
       await page.getByRole("navigation", { name: "Menu" }).waitFor();
       await page.waitForFunction(() =>
@@ -273,7 +246,7 @@ try {
         await page
           .locator(".nav-sheet")
           .evaluate((sheet) => getComputedStyle(sheet).backgroundColor),
-        "rgb(250, 250, 250)",
+        "rgb(10, 10, 10)",
         "the phone menu is solid",
       );
       await page.keyboard.press("Escape");
@@ -326,7 +299,7 @@ try {
       });
       await page.goto(`${base}/signup`);
       await page.getByRole("heading", { name: "Invited sign-in" }).waitFor();
-      await page.waitForFunction(() => window.testTurnstileTheme === "light");
+      await page.waitForFunction(() => window.testTurnstileTheme === "auto");
       await page.getByLabel("Email address").fill("uninvited@example.invalid");
       await page.getByRole("button", { name: "Send a code" }).click();
       await page.getByRole("alert").filter({ hasText: "invite-only" }).waitFor();
@@ -542,49 +515,27 @@ try {
       );
       await motion.waitForTimeout(1200);
       await motion.screenshot({ path: join(artifacts, `${name}-motion-hero.png`) });
-      // The agents' row holds still and fits at every width, with motion on as well.
+      // The agents' chips hold still and fit at every width, with motion on as well. This context
+      // asks for light, so the page is white and shows the light capture of the app.
+      assert.equal(
+        await motion.evaluate(() => getComputedStyle(document.body).backgroundColor),
+        "rgb(255, 255, 255)",
+      );
       for (const width of [1440, 2560, 1024, 768, 390, 320]) {
         await motion.setViewportSize({ width, height: 900 });
         await motion.evaluate(() => window.scrollTo(0, 0));
         assertWall(await agentWall(motion), `${width}px with motion`);
       }
       await motion.setViewportSize({ width: 1440, height: 900 });
-      // The capability cycle runs while its section is in view, holds while the pointer rests in
-      // it, and holds in a hidden tab.
-      const cycle = (attribute, present, why) =>
-        motion
-          .waitForFunction(
-            ([name, want]) => document.querySelector(".caps-frame")?.hasAttribute(name) === want,
-            [attribute, present],
-            { timeout: 4000 },
-          )
-          .catch(() => assert.fail(why));
-      await motion.locator(".caps-view").scrollIntoViewIfNeeded();
-      await motion.mouse.move(4, 4);
-      await cycle("data-running", true, "the capability cycle runs in view");
-      const stage = await motion.locator(".caps-view").boundingBox();
-      await motion.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
-      await cycle("data-auto", false, "the capability cycle holds under the pointer");
-      await motion.mouse.move(4, 4);
-      await cycle("data-running", true, "the capability cycle runs again once the pointer leaves");
-      await motion.evaluate(() => {
-        Object.defineProperty(document, "visibilityState", {
-          configurable: true,
-          get: () => "hidden",
-        });
-        Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-        document.dispatchEvent(new Event("visibilitychange"));
+      await motion.locator(".showcase-frame").scrollIntoViewIfNeeded();
+      await motion.waitForFunction(() => {
+        const image = document.querySelector(".showcase-frame img");
+        return image?.complete && image.naturalWidth > 0;
       });
-      await cycle("data-running", false, "the capability cycle holds in a hidden tab");
-      await motion.evaluate(() => {
-        Object.defineProperty(document, "visibilityState", {
-          configurable: true,
-          get: () => "visible",
-        });
-        Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
-      await cycle("data-running", true, "the capability cycle runs again in a visible tab");
+      assert.match(
+        await motion.locator(".showcase-frame img").evaluate((image) => image.currentSrc),
+        /desktop-light-\d+\.webp$/,
+      );
       for (const top of [1100, 2200, 3300, 4400, 5500, 6400, 1e6]) {
         await motion.evaluate((y) => window.scrollTo(0, y), top);
         await motion.waitForTimeout(600);
@@ -593,6 +544,19 @@ try {
           `the moving home page scrolls sideways at ${top}`,
         );
       }
+      // Every block has arrived by now, so the light page can be audited whole.
+      await motion.waitForFunction(
+        () => document.querySelectorAll("[data-reveal]:not([data-revealed])").length === 0,
+      );
+      await motion.waitForTimeout(1200);
+      const lightAxe = await new AxeBuilder({ page: motion })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze();
+      assert.deepEqual(
+        lightAxe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+        [],
+        "the home page in light",
+      );
       await motion.screenshot({ path: join(artifacts, `${name}-motion-end.png`) });
       await motion.setViewportSize({ width: 390, height: 844 });
       await motion.evaluate(() => window.scrollTo(0, 0));
@@ -606,7 +570,7 @@ try {
       await moving.close();
       const nojs = await browser.newContext({ javaScriptEnabled: false, colorScheme: "dark" });
       const staticPage = await nojs.newPage();
-      // Without scripts the agents' row is the same complete list, at desktop and phone widths.
+      // Without scripts the agents' chips are the same complete list, at desktop and phone widths.
       await staticPage.goto(base);
       for (const width of [1440, 390]) {
         await staticPage.setViewportSize({ width, height: 900 });
@@ -616,14 +580,22 @@ try {
       await staticPage.getByRole("heading", { name: "Windows", exact: true }).waitFor();
       await staticPage.getByRole("heading", { name: "macOS", exact: true }).waitFor();
       await staticPage.getByRole("heading", { name: "Linux", exact: true }).waitFor();
+      // The appearance needs no script: dark under a dark system, and the frame the desktop
+      // shows stays light.
       assert.equal(
         await staticPage.evaluate(() => getComputedStyle(document.body).backgroundColor),
-        "rgb(250, 250, 250)",
+        "rgb(10, 10, 10)",
+      );
+      await staticPage.goto(`${base}/verify-device`);
+      assert.equal(await staticPage.locator("html").getAttribute("data-theme"), "light");
+      assert.equal(
+        await staticPage.evaluate(() => getComputedStyle(document.body).backgroundColor),
+        "rgb(255, 255, 255)",
       );
       await nojs.close();
       await context.close();
       console.log(
-        `${name}: light desktop/mobile under dark system, no-JS download, code errors, deep link, account actions, keyboard and accessibility passed`,
+        `${name}: dark and light with the system, desktop/mobile, no-JS download, code errors, deep link, account actions, keyboard and accessibility passed`,
       );
     } finally {
       await browser.close();
