@@ -313,6 +313,7 @@ async function botFlow(address) {
     clientInfo: { name: "e2e", version: "1" },
   });
   assert.equal(hello.serverInfo.name, "auracode");
+  // The demo's link has the chat tools: the wider ones are not shown to it.
   assert.equal((await rpc("tools/list")).tools.length, 8);
 
   const chats = await tool("list_chats");

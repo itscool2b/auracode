@@ -158,11 +158,11 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
               key={bot.id}
               title={bot.name}
               setting="Bots"
-              detail={
+              detail={`${bot.full ? "Full control" : "Chats"} · ${
                 bot.last_used_at === null
                   ? "Not used yet"
                   : `Last used ${ago(bot.last_used_at, now)}`
-              }
+              }`}
             >
               <button
                 className="g-button g-button-outline g-button-28"
@@ -209,7 +209,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       ) : null}
       {linking ? (
         <BotDialog
-          create={(name) => api.createBot(name)}
+          create={(name, full) => api.createBot(name, full)}
           onClose={() => {
             setLinking(false);
             void run(() => api.status());
@@ -355,10 +355,12 @@ function BotDialog({
   create,
   onClose,
 }: {
-  readonly create: (name: string) => Promise<RemoteBotLink>;
+  readonly create: (name: string, full: boolean) => Promise<RemoteBotLink>;
   readonly onClose: () => void;
 }) {
   const [name, setName] = useState("Grok Bot");
+  // What the link may do is chosen here and is the link's for good: a wider one is a new link.
+  const [full, setFull] = useState(false);
   const [link, setLink] = useState<RemoteBotLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -367,7 +369,7 @@ function BotDialog({
     setBusy(true);
     setError(null);
     try {
-      setLink(await create(name));
+      setLink(await create(name, full));
     } catch (failure) {
       setError(message(failure));
     } finally {
@@ -407,10 +409,45 @@ function BotDialog({
           }}
         >
           <p className="remote-note">
-            A linked bot gets tools to list and read your chats, send messages to your agents, start
-            chats, stop turns and answer permission requests. Agents can edit files and run
+            A linked bot gets tools to work with your agents. Agents can edit files and run
             commands, so link only a bot you trust with this computer.
           </p>
+          <fieldset className="remote-levels">
+            <legend>What it can do</legend>
+            <label className="remote-level">
+              <input
+                type="radio"
+                name="remote-bot-level"
+                checked={!full}
+                onChange={() => setFull(false)}
+              />
+              <span>
+                <strong>Chats</strong>
+                <span>
+                  List and read your chats, send messages, start chats, stop turns and answer
+                  permission requests.
+                </span>
+              </span>
+            </label>
+            <label className="remote-level">
+              <input
+                type="radio"
+                name="remote-bot-level"
+                checked={full}
+                onChange={() => setFull(true)}
+              />
+              <span>
+                <strong>Full control</strong>
+                <span>
+                  Everything in Chats, and what you do in this window: make a project from any
+                  folder on this computer, choose a chat's model, thinking and access level, hand a
+                  chat to another agent, rename and archive chats, read a turn's file changes, and
+                  read and write project memory. It cannot change Settings, sign in, install
+                  anything or delete data.
+                </span>
+              </span>
+            </label>
+          </fieldset>
           <label className="settings-field" htmlFor={field}>
             <span>Name</span>
             <input

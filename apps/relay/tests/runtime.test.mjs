@@ -122,7 +122,7 @@ const mcp = (hostId, reference, body, init = {}) =>
 test("reports health and hides everything else", async () => {
   const health = await runtime.dispatchFetch(`${BASE}/health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true, protocol: 1, tools: 8 });
+  assert.deepEqual(await health.json(), { ok: true, protocol: 1, tools: 8, full_tools: 21 });
   assert.equal(health.headers.get("cache-control"), "no-store");
   for (const path of ["", "nothing", "host", "host/short", `other/${id(16)}`])
     assert.equal((await runtime.dispatchFetch(`${BASE}/${path}`)).status, 404, path);
@@ -288,10 +288,14 @@ test("serves a bot's MCP calls through the desktop", async () => {
   // No such link until the desktop lists it.
   const desk = await host(hostId, id(32));
   assert.equal((await mcp(hostId, reference, initialize)).status, 404);
+  // A second link, made with full control. Anything but `true` is not full control.
+  const wide = id(8);
+  const wideToken = id(32);
   desk.send(
     `l${JSON.stringify([
-      { id: bot, hash: hash(token) },
-      { id: "bad", hash: "bad" },
+      { id: bot, hash: hash(token), full: "yes" },
+      { id: wide, hash: hash(wideToken), full: true },
+      { id: "bad", hash: "bad", full: true },
     ])}`,
   );
   await desk.quiet(100);
@@ -344,6 +348,68 @@ test("serves a bot's MCP calls through the desktop", async () => {
     assert.equal(tool.inputSchema.type, "object");
     assert.ok(tool.description.length > 40);
   }
+  // A link without full control is not shown the wider tools, and they do not exist for it:
+  // nothing reaches the desktop.
+  const refused = await (
+    await mcp(hostId, reference, {
+      jsonrpc: "2.0",
+      id: "w",
+      method: "tools/call",
+      params: { name: "set_access", arguments: { chat_id: "c1", access: "full_auto" } },
+    })
+  ).json();
+  assert.equal(refused.error.code, -32602);
+  await desk.quiet(100);
+  // The full-control link is shown all of them, each a plain MCP tool with no mark of ours.
+  const everything = await (
+    await mcp(hostId, `${wide}.${wideToken}`, { jsonrpc: "2.0", id: "b", method: "tools/list" })
+  ).json();
+  const names = everything.result.tools.map((tool) => tool.name);
+  assert.equal(names.length, 21);
+  assert.deepEqual(
+    names.slice(0, 8),
+    listed.result.tools.map((tool) => tool.name),
+  );
+  for (const name of [
+    "create_project",
+    "chat_options",
+    "set_model",
+    "set_thinking",
+    "set_access",
+    "switch_agent",
+    "rename_chat",
+    "archive_chat",
+    "start_agent",
+    "list_changes",
+    "read_change",
+    "read_memory",
+    "write_memory",
+  ])
+    assert.ok(names.includes(name), name);
+  for (const tool of everything.result.tools) {
+    assert.equal("full" in tool, false, tool.name);
+    assert.equal(tool.inputSchema.additionalProperties, false, tool.name);
+    assert.ok(tool.description.length > 20, tool.name);
+  }
+  const widened = mcp(hostId, `${wide}.${wideToken}`, {
+    jsonrpc: "2.0",
+    id: "c",
+    method: "tools/call",
+    params: { name: "set_access", arguments: { chat_id: "c1", access: "ask" } },
+  });
+  const passed = JSON.parse((await desk.message()).slice(1));
+  assert.deepEqual(
+    { ...passed, rid: "" },
+    {
+      rid: "",
+      bot: wide,
+      token: wideToken,
+      tool: "set_access",
+      args: { chat_id: "c1", access: "ask" },
+    },
+  );
+  desk.send(`b${JSON.stringify({ rid: passed.rid, text: "Access is now ask.", error: false })}`);
+  assert.equal((await (await widened).json()).result.isError, false);
 
   // Notifications get no body.
   const noted = await mcp(hostId, reference, {

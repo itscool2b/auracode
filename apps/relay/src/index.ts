@@ -11,7 +11,14 @@
  * desktop's key and the hashes of its bot tokens.
  */
 import { DurableObject } from "cloudflare:workers";
-import TOOLS from "./tools.json";
+import ALL_TOOLS from "./tools.json";
+
+type Tool = (typeof ALL_TOOLS)[number] & { full?: boolean };
+/** The tools as MCP lists them: `full` is this relay's own mark, not part of a tool. */
+const listed = (tools: readonly Tool[]) => tools.map(({ full: _full, ...tool }) => tool);
+/** What every bot link has, and what a full-control link has. */
+const CHAT_TOOLS = listed((ALL_TOOLS as readonly Tool[]).filter((tool) => !tool.full));
+const FULL_TOOLS = listed(ALL_TOOLS as readonly Tool[]);
 
 export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
@@ -85,7 +92,12 @@ export default {
     if (!url.pathname.startsWith(PREFIX)) return notFound();
     const [kind, hostId] = url.pathname.slice(PREFIX.length).split("/");
     if (kind === "health" && hostId === undefined)
-      return json(200, { ok: true, protocol: 1, tools: TOOLS.length });
+      return json(200, {
+        ok: true,
+        protocol: 1,
+        tools: CHAT_TOOLS.length,
+        full_tools: FULL_TOOLS.length,
+      });
     if (!hostId || !HOST_ID.test(hostId)) return notFound();
     const origin = request.headers.get("Origin");
     if (kind === "host") {
@@ -336,21 +348,36 @@ export class Room extends DurableObject<Env> {
     socket.close(1008, "unexpected");
   }
 
-  /** The desktop's current bot links, as `[{ id, hash }]`: what a bot's URL is checked against. */
+  /**
+   * The desktop's current bot links, as `[{ id, hash, full }]`: what a bot's URL is checked
+   * against, and whether it is shown the full-control tools. The desktop checks each call's level
+   * itself; the mark here only keeps the list a bot is shown honest.
+   */
   async #saveBots(body: unknown) {
     const bots: Record<string, string> = {};
+    const full: string[] = [];
     if (Array.isArray(body))
       for (const entry of body.slice(0, MAX_BOTS)) {
-        const { id, hash } = (entry ?? {}) as { id?: unknown; hash?: unknown };
+        const {
+          id,
+          hash,
+          full: wide,
+        } = (entry ?? {}) as {
+          id?: unknown;
+          hash?: unknown;
+          full?: unknown;
+        };
         if (
           typeof id === "string" &&
           BOT_ID.test(id) &&
           typeof hash === "string" &&
           SECRET.test(hash)
-        )
+        ) {
           bots[id] = hash;
+          if (wide === true) full.push(id);
+        }
       }
-    await this.ctx.storage.put("bots", bots);
+    await this.ctx.storage.put({ bots, full });
   }
 
   override async webSocketClose(socket: WebSocket, code: number, reason: string) {
@@ -404,9 +431,10 @@ export class Room extends DurableObject<Env> {
     const messages = (batch ? body : [body]) as RpcMessage[];
     if (messages.length === 0 || messages.length > 16)
       return json(400, rpcError(null, -32600, "Invalid request"), CORS);
+    const wide = ((await this.ctx.storage.get<string[]>("full")) ?? []).includes(id);
     const replies: unknown[] = [];
     for (const message of messages) {
-      const reply = await this.#rpc(message, id, token);
+      const reply = await this.#rpc(message, id, token, wide ? FULL_TOOLS : CHAT_TOOLS);
       if (reply !== null) replies.push(reply);
     }
     // Notifications and responses get no body.
@@ -414,7 +442,12 @@ export class Room extends DurableObject<Env> {
     return json(200, batch ? replies : replies[0], CORS);
   }
 
-  async #rpc(message: RpcMessage, bot: string, token: string): Promise<unknown> {
+  async #rpc(
+    message: RpcMessage,
+    bot: string,
+    token: string,
+    tools: readonly { readonly name: string }[],
+  ): Promise<unknown> {
     if (message === null || typeof message !== "object" || message.jsonrpc !== "2.0")
       return rpcError(null, -32600, "Invalid request");
     const id = message.id;
@@ -436,11 +469,12 @@ export class Room extends DurableObject<Env> {
       case "ping":
         return rpcResult(id, {});
       case "tools/list":
-        return rpcResult(id, { tools: TOOLS });
+        return rpcResult(id, { tools });
       case "tools/call": {
         const name = params.name;
         const args = params.arguments ?? {};
-        if (typeof name !== "string" || !TOOLS.some((tool) => tool.name === name))
+        // A tool outside this link's level does not exist for it.
+        if (typeof name !== "string" || !tools.some((tool) => tool.name === name))
           return rpcError(id, -32602, "Unknown tool");
         if (args === null || typeof args !== "object" || Array.isArray(args))
           return rpcError(id, -32602, "Tool arguments must be an object");
