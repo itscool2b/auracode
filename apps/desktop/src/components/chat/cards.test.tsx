@@ -46,6 +46,25 @@ describe("a sent message", () => {
     );
     expect(steer).not.toContain("Rewind");
   });
+
+  it("folds attached project memory behind one line and shows only the person's words", () => {
+    const memory = { revision: "r1", editedBy: null, markdown: "Remembered fact" };
+    const sent = renderToStaticMarkup(
+      <UserMessage item={{ kind: "user", key: "user:t1", text: "Make it wider", memory }} />,
+    );
+    expect(sent).toContain('data-testid="prompt-text"><div>Make it wider</div>');
+    expect(sent).toMatch(/aria-expanded="false"[^>]*>.*Project memory/);
+    expect(sent).not.toContain("Remembered fact");
+    // A message that was only attached memory has no empty block above the line.
+    const only = renderToStaticMarkup(
+      <UserMessage item={{ kind: "user", key: "user:t2", text: "", memory }} />,
+    );
+    expect(only).not.toContain('class="chat-user"');
+    expect(only).toContain("Project memory");
+    expect(
+      renderToStaticMarkup(<UserMessage item={{ kind: "user", key: "user:t3", text: "" }} />),
+    ).toContain('class="chat-user"');
+  });
 });
 
 function permission(overrides: Partial<PermissionItem["request"]> = {}): PermissionItem {

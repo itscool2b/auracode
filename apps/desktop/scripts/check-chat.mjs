@@ -1283,6 +1283,59 @@ async function inspect(engine, launcher) {
     );
     await page.getByRole("button", { name: "Show less", exact: true }).click();
 
+    // Project memory sent with a message folds to one line; the message is the person's words.
+    await page.goto(`${url}/?preview=memory-prompt`);
+    const memory = page.getByRole("button", { name: "Project memory", exact: true });
+    await memory.waitFor();
+    assert.equal(
+      await page.getByTestId("prompt-text").textContent(),
+      "Make the sidebar wider",
+      "the message showed more than the person's words",
+    );
+    assert.equal(await memory.getAttribute("aria-expanded"), "false");
+    assert.equal(
+      await page.getByText("Remembered fact 40").count(),
+      0,
+      "memory showed while folded",
+    );
+    assert.equal(
+      await page.locator("[data-test-prompt]").first().getAttribute("data-test-prompt"),
+      "Make the sidebar wider",
+    );
+    await page.getByRole("button", { name: "Copy prompt", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    assert.equal(
+      await page.evaluate(() => window.__copiedText),
+      "Make the sidebar wider",
+      "copying a message copied its attached memory",
+    );
+    await memory.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await memory.getAttribute("aria-expanded"), "true");
+    const sentMemory = page.locator(".chat-user-memory-text");
+    assert.match(await sentMemory.textContent(), /^# Sidebar project\n\n- Remembered fact 1:/);
+    assert.match(
+      await sentMemory.textContent(),
+      /Remembered fact 40: the sidebar keeps its width\.$/,
+    );
+    assert.match(
+      await page.locator(".chat-user-memory-note").textContent(),
+      /Last edited by an agent in the chat "Tighten the header"\.$/,
+    );
+    assert.ok(
+      await sentMemory.evaluate((node) => node.scrollHeight > node.clientHeight),
+      "a long memory did not scroll inside its own well",
+    );
+    assert.ok(
+      await page
+        .locator(".chat-user-memory")
+        .evaluate((node) => node.getBoundingClientRect().right <= innerWidth),
+      "the opened memory ran past the window",
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(await memory.getAttribute("aria-expanded"), "false");
+    assert.equal(await sentMemory.count(), 0);
+
     await page.goto(`${url}/?preview=long-output`);
     const output = page.getByTestId("terminal-output");
     await output.waitFor();

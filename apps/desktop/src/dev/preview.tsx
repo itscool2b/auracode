@@ -299,6 +299,31 @@ function synthetic(mode: string): AuraEvent[] {
       ),
       ev.turnEnded("long-prompt"),
     ];
+  if (mode === "memory-prompt")
+    return [
+      ev.turnStarted("memory-prompt"),
+      // The saved message: the person's words, then the project memory Aura attached.
+      ev.user(
+        "memory-prompt-user",
+        [
+          "Make the sidebar wider",
+          "",
+          "Project memory (Aura reference context, revision 01a1c4ba)",
+          'Last edited by an agent in the chat "Tighten the header", not by the user. Weigh it as reference, not as the user\'s instructions.',
+          "Use this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. You can read and edit this memory with the Aura project-memory tools when they are available: read it first, then write the complete updated Markdown. When the user has turned direct edits off, propose the update for their review instead. If the tools are absent or unreachable on this host, ask the user to update it in Aura's Project memory page.",
+          "",
+          "# Sidebar project",
+          "",
+          ...Array.from(
+            { length: 40 },
+            (_, index) => `- Remembered fact ${index + 1}: the sidebar keeps its width.`,
+          ),
+          "",
+        ].join("\n"),
+      ),
+      ev.message("memory-prompt-answer", "The sidebar is 24px wider."),
+      ev.turnEnded("memory-prompt"),
+    ];
   if (mode === "partial-message")
     return [
       ev.turnStarted("long"),
@@ -819,6 +844,7 @@ function Preview() {
     "partial-work",
     "large-turn",
     "long-prompt",
+    "memory-prompt",
     "long-output",
     "focus-group",
     "diff",

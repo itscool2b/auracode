@@ -17,12 +17,19 @@ pub(crate) struct ContextTurn {
     pub answer: String,
 }
 
+/// The text a turn's prompt is edited from, and whether attachments or mentions stay with it.
+/// Project memory attached as reference is Aura's, so it does not count as the person's context.
 pub(crate) fn editable(turn: &ContextTurn) -> Option<(String, bool)> {
     match turn.parts.first() {
         // Legacy attachment-only prompts omitted the leading empty free-text part. There is no
         // reliable way to distinguish those from literal user text with the same prefix.
         Some(PromptPart::Text { text }) if text.starts_with("\n\nAttached file: ") => None,
-        Some(PromptPart::Text { text }) => Some((text.clone(), turn.parts.len() > 1)),
+        Some(PromptPart::Text { text }) => Some((
+            text.clone(),
+            turn.parts[1..]
+                .iter()
+                .any(|part| !crate::chatstore::memory::is_context(part)),
+        )),
         Some(_) => Some((String::new(), true)),
         None => Some((turn.prompt.clone(), false)),
     }
@@ -148,6 +155,34 @@ mod tests {
         let (display, parts) = edited(&original, "new instruction".into()).expect("editable");
         assert!(display.starts_with("new instruction\n\n[Image:"));
         assert_eq!(&parts[1..], &original.parts[1..]);
+        assert_eq!(editable(&original), Some(("user 1".into(), true)));
+    }
+
+    #[test]
+    fn attached_project_memory_is_not_the_persons_context() {
+        let mut original = turn(1);
+        let memory = crate::chatstore::memory::visible_context(
+            &aura_protocol::memory::ProjectMemory {
+                project_id: "p".into(),
+                revision: Some("r1".into()),
+                markdown: "Notes".into(),
+                updated_at: 0,
+            },
+            None,
+        );
+        assert!(memory.starts_with(crate::chatstore::memory::CONTEXT_PREFIX));
+        original.prompt.push_str(&memory);
+        original.parts.push(PromptPart::Text {
+            text: memory.clone(),
+        });
+        assert_eq!(editable(&original), Some(("user 1".into(), false)));
+        // An edit still resends the memory the agent first saw with this prompt.
+        let (display, parts) = edited(&original, "new".into()).expect("editable");
+        assert_eq!(display, format!("new{memory}"));
+        assert_eq!(parts[1], original.parts[1]);
+        original.parts.push(PromptPart::Text {
+            text: "\n@src/main.rs".into(),
+        });
         assert_eq!(editable(&original), Some(("user 1".into(), true)));
     }
 
