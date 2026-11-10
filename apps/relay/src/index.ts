@@ -174,6 +174,8 @@ type Attachment =
       readonly from: string;
       /** The desktop accepted its session. */
       readonly proven: boolean;
+      /** Messages sent before the desktop accepted it. Kept here, so it outlives hibernation. */
+      readonly sent?: number;
       /** Set when the desktop reconnected: accepted only until then unless it accepts again. */
       readonly until?: number;
       /** This side ended the socket and the desktop already knows. */
@@ -329,8 +331,8 @@ export class Room extends DurableObject<Env> {
     if (message.length > CLIENT_MESSAGE_BYTES) return socket.close(1009, "too large");
     if (!message.startsWith("m")) return socket.close(1008, "unexpected");
     if (!accepted(attachment)) {
-      const sent = (this.#unproven.get(attachment.cid) ?? 0) + 1;
-      this.#unproven.set(attachment.cid, sent);
+      const sent = (attachment.sent ?? 0) + 1;
+      socket.serializeAttachment({ ...attachment, sent } satisfies Attachment);
       if (message.length > UNPROVEN_MESSAGE_BYTES || sent > UNPROVEN_MESSAGES)
         return socket.close(1008, "prove a key first");
     }
@@ -339,9 +341,6 @@ export class Room extends DurableObject<Env> {
     if (host) host.send(`m${attachment.cid} ${message.slice(1)}`);
     else socket.send("h0");
   }
-
-  /** Messages sent by sockets the desktop has not accepted yet, by connection. */
-  #unproven = new Map<string, number>();
 
   /** Nobody has used this room for a long time: forget its bot links and its owner's mark. */
   override async alarm() {
@@ -460,7 +459,6 @@ export class Room extends DurableObject<Env> {
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (attachment?.role === "client") {
       this.#rates.delete(attachment.cid);
-      this.#unproven.delete(attachment.cid);
       if (!attachment.told) this.#host()?.send(`c${attachment.cid}`);
       return;
     }

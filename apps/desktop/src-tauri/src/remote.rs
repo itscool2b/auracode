@@ -329,6 +329,31 @@ fn default_agent(state: &AppState) -> Option<String> {
         .and_then(|preferences| preferences.general.default_agent)
 }
 
+/// Whether `path` names a folder by a full path on this computer's own drives. A network share
+/// in any spelling (`\\server\share`, `//server/share`, mixed slashes, the `\\?\UNC\` and device
+/// forms) is not: opening one makes Windows sign in to that machine. The path is parsed as the
+/// system parses it, after its separators are made one kind, so no spelling slips past.
+///
+/// A drive letter mapped to a network share is the person's own setup and passes: it reaches
+/// nothing they have not already connected.
+fn on_this_computer(path: &str) -> bool {
+    use std::path::{Component, Path, Prefix};
+    if cfg!(windows) {
+        let unified = path.replace('/', "\\");
+        if unified.starts_with("\\\\") {
+            return false;
+        }
+        let mut parts = Path::new(&unified).components();
+        matches!(
+            (parts.next(), parts.next()),
+            (Some(Component::Prefix(prefix)), Some(Component::RootDir))
+                if matches!(prefix.kind(), Prefix::Disk(_))
+        )
+    } else {
+        !path.starts_with("//") && Path::new(path).is_absolute()
+    }
+}
+
 /// The words a bot uses for the three access levels.
 fn access_word(autonomy: aura_protocol::Autonomy) -> &'static str {
     match autonomy {
@@ -473,7 +498,7 @@ impl Backend for AppBackend {
                 Action::CreateProject { path, name } => {
                     // A folder on this computer, by its full path: not a network share, whose
                     // name alone makes Windows reach out to another machine.
-                    if path.starts_with(r"\\") || path.starts_with("//") {
+                    if !on_this_computer(&path) {
                         return Err(BackendError::new(
                             "invalid",
                             "Give a folder on the computer itself, not a network path.",
@@ -852,5 +877,49 @@ impl Backend for AppBackend {
                 .await
                 .map_err(|error| failed(error.into()))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::on_this_computer;
+
+    #[test]
+    fn a_project_folder_is_a_full_path_on_this_computers_own_drives() {
+        #[cfg(windows)]
+        {
+            for local in [
+                r"C:\work\site",
+                "C:/work/site",
+                r"d:\",
+                r"C:\work/mixed\path",
+            ] {
+                assert!(on_this_computer(local), "{local}");
+            }
+            // A network share, however it is spelled, and the forms that reach one.
+            for remote in [
+                r"\server\share",
+                "//server/share",
+                r"\/server\share",
+                r"/\server/share",
+                r"\?\UNC\server\share",
+                r"\.\pipe\name",
+                r"\?\C:\work",
+                "//?/UNC/server/share",
+            ] {
+                assert!(!on_this_computer(remote), "{remote}");
+            }
+            // Not a full path: relative, drive-relative, or rooted with no drive.
+            for partial in ["work", r"C:work", r"\work", "/work", "", "C:"] {
+                assert!(!on_this_computer(partial), "{partial}");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(on_this_computer("/home/someone/site"));
+            for other in ["//server/share", "site", ""] {
+                assert!(!on_this_computer(other), "{other}");
+            }
+        }
     }
 }
