@@ -113,8 +113,10 @@ export async function checkRemote(browser, url, out, engine) {
     const levels = bot.getByRole("group", { name: "What it can do" });
     assert.equal(await levels.getByRole("radio", { name: /^Chats/ }).isChecked(), true);
     await levels
-      .getByText("It cannot change Settings, sign in, install", { exact: false })
+      .getByText("It has no tool for Settings", { exact: false })
       .waitFor();
+    // Neither level is a wall: an agent the bot directs can still run commands.
+    await bot.getByText("the level limits the bot's own tools", { exact: false }).waitFor();
     await levels.getByRole("radio", { name: /^Full control/ }).check();
     await name.fill("Research bot");
     await name.press("Enter");

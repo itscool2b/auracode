@@ -57,9 +57,14 @@ function relayOrigin(): string {
 
 export default function RemotePage() {
   const [client, setClient] = useState<RemoteClient | null>(null);
+  // A pairing link waits for a tap. Opening the page pairs nothing by itself, so a program that
+  // only opens links (a mail or chat scanner) cannot spend the link or become a device.
+  const [asking, setAsking] = useState<string | null>(null);
   useEffect(() => {
     const next = new RemoteClient(relayOrigin());
-    void next.start(takeFragment());
+    const fragment = takeFragment();
+    if (fragment.replace(/^#/, "") === "") void next.start("");
+    else setAsking(fragment);
     setClient(next);
     const wake = () => {
       if (document.visibilityState === "visible") next.wake();
@@ -74,7 +79,37 @@ export default function RemotePage() {
   }, []);
   return (
     <main id="main" className="remote">
-      {client ? (
+      {client && asking !== null ? (
+        <Centered title="Pair this browser?">
+          <p>
+            This link pairs this browser with your computer. Once paired, it can read your chats
+            there and direct your agents, which can edit files and run commands.
+          </p>
+          <p>Go on only if you opened this link from your own computer just now.</p>
+          <p className="remote-card-actions">
+            <button
+              type="button"
+              className="g-button g-button-primary g-button-44"
+              onClick={() => {
+                setAsking(null);
+                void client.start(asking);
+              }}
+            >
+              Pair this browser
+            </button>
+            <button
+              type="button"
+              className="g-button g-button-outline g-button-44"
+              onClick={() => {
+                setAsking(null);
+                void client.start("");
+              }}
+            >
+              Not now
+            </button>
+          </p>
+        </Centered>
+      ) : client ? (
         <Remote client={client} />
       ) : (
         <Centered title="Remote">

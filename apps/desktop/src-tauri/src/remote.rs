@@ -471,6 +471,14 @@ impl Backend for AppBackend {
             };
             match action {
                 Action::CreateProject { path, name } => {
+                    // A folder on this computer, by its full path: not a network share, whose
+                    // name alone makes Windows reach out to another machine.
+                    if path.starts_with(r"\\") || path.starts_with("//") {
+                        return Err(BackendError::new(
+                            "invalid",
+                            "Give a folder on the computer itself, not a network path.",
+                        ));
+                    }
                     let name = name.unwrap_or_else(|| {
                         std::path::Path::new(&path)
                             .file_name()

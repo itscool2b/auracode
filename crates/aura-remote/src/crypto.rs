@@ -56,6 +56,19 @@ pub fn decode<const N: usize>(text: &str) -> Option<[u8; N]> {
 }
 
 /// SHA-256 of a secret's text form, as the relay stores it to recognise the secret again.
+/// A computer's id at the relay: the start of a hash of its key, so only the key can claim the
+/// id. The relay makes the same check before a request reaches the computer's room.
+pub fn host_id(key: &[u8; KEY_BYTES]) -> [u8; 16] {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::new()
+        .chain_update(b"auracode remote v1 host id")
+        .chain_update(key)
+        .finalize();
+    let mut id = [0_u8; 16];
+    id.copy_from_slice(&digest[..16]);
+    id
+}
+
 pub fn hash(text: &str) -> String {
     encode(&Sha256::digest(text.as_bytes()))
 }

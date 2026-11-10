@@ -188,6 +188,7 @@ try {
   const errors = [];
   tab.on("pageerror", (error) => errors.push(error.message));
   await tab.goto(pairing.url.replace("/remote#", `/remote?relay=ws://127.0.0.1:${RELAY_PORT}#`));
+  await tab.getByRole("button", { name: "Pair this browser", exact: true }).click();
   await tab.getByRole("heading", { level: 1, name: status.host_name }).waitFor();
   await tab.getByText("Connected", { exact: true }).waitFor();
   const paired = await invoke("remote_status");

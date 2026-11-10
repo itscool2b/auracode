@@ -192,8 +192,8 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       </section>
       <p className="settings-footnote">
         A paired browser's session is encrypted end to end: the relay passes it along and cannot
-        read it. A bot's calls are readable by the relay and by the bot's own service. Remote access
-        works while auracode is open, including in the tray.
+        read it. A bot's calls are not: the relay and the bot's own service read them, and either
+        could act as that bot. Remote access works while auracode is open, including in the tray.
       </p>
 
       {pairing ? (
@@ -382,7 +382,7 @@ function BotDialog({
         <>
           <p className="remote-note">
             This is {link.name}'s address. It is shown once and works like a password: anyone who
-            has it can read your chats and direct your agents until you remove the link.
+            has it can read your chats and direct your agents. Removing the link here stops it.
           </p>
           <CopyField value={link.url} label="Bot address" />
           <ol className="remote-steps">
@@ -409,8 +409,9 @@ function BotDialog({
           }}
         >
           <p className="remote-note">
-            A linked bot gets tools to work with your agents. Agents can edit files and run
-            commands, so link only a bot you trust with this computer.
+            A linked bot gets tools to direct your agents, and agents can edit files and run
+            commands. So either level below is as much trust as handing someone this computer: the
+            level limits the bot's own tools, not what an agent it directs can do.
           </p>
           <fieldset className="remote-levels">
             <legend>What it can do</legend>
@@ -440,10 +441,11 @@ function BotDialog({
                 <strong>Full control</strong>
                 <span>
                   Everything in Chats, and what you do in this window: make a project from any
-                  folder on this computer, choose a chat's model, thinking and access level, hand a
-                  chat to another agent, rename and archive chats, read a turn's file changes, and
-                  read and write project memory. It cannot change Settings, sign in, install
-                  anything or delete data.
+                  folder on this computer, choose a chat's model and thinking, set its access level
+                  (full auto included), start a stopped agent, hand a chat to another agent, rename
+                  and archive chats, read a turn's file changes, and read and write project memory,
+                  which every later chat in that project starts with. It has no tool for Settings,
+                  sign-in, installing software or deleting data.
                 </span>
               </span>
             </label>

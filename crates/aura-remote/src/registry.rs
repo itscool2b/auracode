@@ -122,22 +122,31 @@ impl Registry {
             Ok(bytes) => {
                 let stored: Stored = serde_json::from_slice(&bytes)
                     .map_err(|error| RegistryError::Read(error.to_string()))?;
-                if stored.version != 1
-                    || crypto::decode::<16>(&stored.host_id).is_none()
-                    || crypto::decode::<KEY_BYTES>(&stored.host_key).is_none()
-                {
+                let mut stored = stored;
+                let key = crypto::decode::<KEY_BYTES>(&stored.host_key);
+                if stored.version != 1 || crypto::decode::<16>(&stored.host_id).is_none() {
                     return Err(RegistryError::Read("unsupported contents".into()));
                 }
+                let Some(key) = key else {
+                    return Err(RegistryError::Read("unsupported contents".into()));
+                };
+                // An id from before ids were made from the key (development builds only): the
+                // relay no longer takes it, so the computer gets the id its key makes. Browsers
+                // paired under the old id look for it there and are paired again.
+                stored.host_id = crypto::encode(&crypto::host_id(&key));
                 stored
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Stored {
-                version: 1,
-                enabled: false,
-                host_id: crypto::encode(&crypto::random::<16>()?),
-                host_key: crypto::encode(&crypto::random::<KEY_BYTES>()?),
-                devices: Vec::new(),
-                bots: Vec::new(),
-            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let key = crypto::random::<KEY_BYTES>()?;
+                Stored {
+                    version: 1,
+                    enabled: false,
+                    host_id: crypto::encode(&crypto::host_id(&key)),
+                    host_key: crypto::encode(&key),
+                    devices: Vec::new(),
+                    bots: Vec::new(),
+                }
+            }
             Err(error) => return Err(RegistryError::Read(error.to_string())),
         };
         Ok(Self {
@@ -543,6 +552,9 @@ mod tests {
         assert!(!path.exists(), "nothing is written until something changes");
         assert_eq!(registry.host_id().len(), 22);
         assert_eq!(registry.host_key().len(), 43);
+        // The id is made from the key: nobody else can claim it at the relay.
+        let key = crypto::decode::<KEY_BYTES>(registry.host_key()).expect("key");
+        assert_eq!(registry.host_id(), crypto::encode(&crypto::host_id(&key)));
         registry.set_enabled(true).expect("enable");
         let (id, key) = (
             registry.host_id().to_owned(),

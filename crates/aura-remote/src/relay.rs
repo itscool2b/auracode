@@ -10,6 +10,8 @@ use tokio_tungstenite::{
 
 pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// The largest message taken from the relay.
+const MAX_FROM_RELAY: usize = 1024 * 1024;
 const CONNECT_WITHIN: Duration = Duration::from_secs(20);
 
 /// Opens this desktop's host socket. `relay` is a `wss://` origin; `ws://` is accepted only for
@@ -28,7 +30,17 @@ pub async fn connect(relay: &str, host_id: &str, host_key: &str) -> Result<Socke
             .parse()
             .map_err(|_| "The host key is not valid.".to_owned())?,
     );
-    match tokio::time::timeout(CONNECT_WITHIN, tokio_tungstenite::connect_async(request)).await {
+    // The relay sends a browser's message (96 KiB at most) or a bot's call (256 KiB at most).
+    // Nothing larger is taken from it, whatever it turns into.
+    let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+        .max_message_size(Some(MAX_FROM_RELAY))
+        .max_frame_size(Some(MAX_FROM_RELAY));
+    match tokio::time::timeout(
+        CONNECT_WITHIN,
+        tokio_tungstenite::connect_async_with_config(request, Some(config), false),
+    )
+    .await
+    {
         Ok(Ok((socket, _))) => Ok(socket),
         Ok(Err(error)) => Err(reason(&error)),
         Err(_) => Err("The relay did not answer in time.".into()),
