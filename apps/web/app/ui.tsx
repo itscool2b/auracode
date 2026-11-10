@@ -55,10 +55,10 @@ export function Page({
  * The app as an object: the auracode logo on a raised white tile with a hairline rim, the way the
  * desktop app's icon sits on a dock. Decorative; the page around it names the app.
  */
-export function AppTile() {
+export function AppTile({ small = false }: { small?: boolean }) {
   return (
-    <span className="app-tile">
-      <Logo size={64} />
+    <span className={small ? "app-tile app-tile-small" : "app-tile"}>
+      <Logo size={small ? 36 : 56} />
     </span>
   );
 }

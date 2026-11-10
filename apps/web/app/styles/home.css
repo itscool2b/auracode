@@ -1,16 +1,15 @@
-/* ---------------------------------------------------------------------------------- hero */
+/* --------------------------------------------------------------------------------- frame */
 
 /*
- * The home page is drawn on a frame: two hairline rails down the content column, and a hairline
- * across the page between its paper sections (after the frames of Linear's and Aside's pages).
- * The night slabs cover the rails, so the frame belongs to the paper only.
+ * The home page is drawn on a frame, as Vercel's and Aside's are: two hairline rails down the
+ * content column and a hairline across the page between sections. Content keeps --s-pad of room
+ * inside the rails, and grids of cells run rail to rail. Phones drop the rails.
  */
 .home {
-  --rail: rgb(10 10 11 / 0.075);
   --rail-x: max(var(--s-gutter), calc(50% - var(--s-max) / 2));
   overflow-x: clip;
   background-image:
-    linear-gradient(var(--rail), var(--rail)), linear-gradient(var(--rail), var(--rail));
+    linear-gradient(var(--s-line), var(--s-line)), linear-gradient(var(--s-line), var(--s-line));
   background-position:
     left var(--rail-x) top 0,
     right var(--rail-x) top 0;
@@ -18,498 +17,172 @@
   background-repeat: no-repeat;
 }
 
-.hero {
-  position: relative;
-  isolation: isolate;
-  padding: 88px 0 0;
+.home > section + section {
+  border-top: 1px solid var(--s-line);
 }
 
-/* The statement and what to do with it: the headline large on the left, the rest beside it. */
-.hero-copy {
+/* A grid of cells that runs rail to rail, out of the column's padding. */
+.pillars,
+.more-grid {
+  margin-right: calc(-1 * var(--s-pad));
+  margin-left: calc(-1 * var(--s-pad));
+  padding: 0;
+  list-style: none;
+}
+
+/* ---------------------------------------------------------------------------------- hero */
+
+.hero {
   position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  gap: 32px 64px;
-  align-items: end;
+  padding: 104px 0 88px;
 }
 
 .hero-title {
+  max-width: 960px;
   color: var(--s-ink);
-  font-size: clamp(52px, 7.2vw, 116px);
-  line-height: 0.94;
-  font-weight: 560;
-  letter-spacing: -0.056em;
-}
-
-/* The narrowest phones keep "One window for" on one line. */
-@media (max-width: 380px) {
-  .hero-title {
-    font-size: 12.8vw;
-  }
-}
-
-.hero-line {
-  display: block;
-}
-
-/* The agent's name: the accent italic, a touch larger, rolling letter by letter (AgentRoll). */
-.hero-line-agent {
-  padding-bottom: 0.06em;
-  font-family: var(--s-serif);
-  font-size: 1.08em;
+  font-size: clamp(40px, 5.7vw, 76px);
   line-height: 1;
-  font-style: italic;
-  font-weight: var(--s-serif-weight);
-  letter-spacing: var(--s-serif-track);
-  font-synthesis: none;
+  font-weight: 500;
+  letter-spacing: -0.052em;
+  animation: hero-in 1000ms var(--s-expo) both;
 }
 
-/*
- * The hidden measure stays in flow and gives the box its height (and its width before scripts
- * measure it). Both words sit centred over it, so a long name and a short one share one centre
- * while the box glides between their widths.
- */
-.roll {
-  position: relative;
-  display: inline-block;
-  white-space: nowrap;
-  vertical-align: bottom;
+.hero-soft {
+  display: block;
+  color: var(--s-soft);
 }
 
-.roll[data-measured] {
-  width: var(--roll-w);
-  transition: width 900ms var(--s-glide);
-}
-
-.roll-measure {
-  display: inline-block;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-/* The same word split into letter boxes, read for its kerning and kept out of the layout. */
-.roll-measure-split {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-}
-
-.roll-word {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  display: inline-block;
-  perspective: 900px;
-  translate: -50% 0;
-}
-
-.roll-char {
-  display: inline-block;
-  white-space: pre;
-  transform-origin: 50% 70%;
-}
-
-.roll-in {
-  animation: roll-in 900ms var(--s-expo) both;
-  animation-delay: calc(var(--i) * 32ms + 140ms);
-}
-
-.roll-out {
-  animation: roll-out 560ms var(--s-swift) both;
-  animation-delay: calc(var(--i) * 22ms);
-}
-
-@keyframes roll-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.5em) rotateX(-75deg);
-    filter: blur(10px);
-  }
-}
-
-@keyframes roll-out {
-  to {
-    opacity: 0;
-    transform: translateY(-0.4em) rotateX(75deg);
-    filter: blur(8px);
-  }
-}
-
-/* In the hero the headline reads from the left, so each name starts where "One window for" does. */
-.hero .roll-word {
-  left: 0;
-  translate: none;
-}
-
-.hero-side {
-  padding-bottom: 12px;
+.hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px 48px;
+  margin-top: 32px;
+  animation: hero-in 1000ms var(--s-expo) 90ms both;
 }
 
 .hero-lead {
-  max-width: 400px;
+  max-width: 470px;
   color: var(--g-fg-2);
-  font-size: 19px;
-  line-height: 29px;
+  font-size: 18px;
+  line-height: 28px;
   text-wrap: pretty;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 30px;
+  gap: 10px;
 }
 
-/* The first view assembles itself once, on load. */
-.hero-line,
-.hero-lead,
-.hero-actions {
-  animation: hero-rise 1300ms var(--s-expo) both;
-}
-
-.hero-line + .hero-line {
-  animation-delay: 110ms;
-}
-
-.hero-lead {
-  animation-delay: 260ms;
-}
-
-.hero-actions {
-  animation-delay: 360ms;
-}
-
-@keyframes hero-rise {
+@keyframes hero-in {
   from {
     opacity: 0;
-    transform: translateY(28px);
-    filter: blur(8px);
+    transform: translateY(14px);
   }
 }
 
-/*
- * The stage the window stands on: a rounded slab of cool grey ruled in a fine grid, set across the
- * rails, so the glass window has a surface to stand out from. A material tone, never light: the
- * grid, the slab's rim and the window's own shadow give the depth.
- */
-.hero-floor {
-  position: relative;
-  isolation: isolate;
-  margin-top: 88px;
-  padding-bottom: 64px;
-}
-
-.hero-floor::before {
-  content: "";
-  position: absolute;
-  top: 136px;
-  bottom: 0;
-  left: 50%;
-  z-index: -1;
-  width: min(calc(100% - 2 * var(--s-inset)), calc(var(--s-max) + 2 * var(--s-gutter) + 64px));
-  border-radius: var(--s-slab);
-  background:
-    linear-gradient(rgb(10 10 11 / 0.045) 1px, transparent 1px) center top / 48px 48px,
-    linear-gradient(90deg, rgb(10 10 11 / 0.045) 1px, transparent 1px) center top / 48px 48px,
-    linear-gradient(180deg, #f0f0f2, #e7e7ea);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.06);
-  translate: -50% 0;
-  pointer-events: none;
-}
-
+/* The window stands on the paper, flat and at the column's full width. */
 .hero-stage {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: center;
-  padding: 0 var(--s-gutter);
-  perspective: 2000px;
+  margin-top: 72px;
 }
 
 .hero-detail {
-  position: relative;
-  width: min(100%, var(--s-max));
-  border-radius: 24px;
-  animation: window-in 1600ms var(--s-expo) 420ms both;
+  animation: window-in 1300ms var(--s-expo) 200ms both;
 }
 
 @keyframes window-in {
   from {
     opacity: 0;
-    transform: translateY(80px) scale(0.94);
-    filter: blur(12px);
+    transform: translateY(28px) scale(0.985);
   }
 }
 
-.hero-tilt {
-  border-radius: 24px;
-  transform-origin: 50% 0;
+/* -------------------------------------------------------------------------------- agents */
+
+.agents {
+  padding: 44px 0 40px;
 }
 
-/* Scrolling lays the window flat from a backward lean. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-tilt {
-      animation: lean-flat linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 52%;
-    }
-  }
-}
-
-@keyframes lean-flat {
-  from {
-    transform: rotateX(18deg) scale(0.93);
-  }
-  to {
-    transform: none;
-  }
-}
-
-/* ------------------------------------------------------------------------------- marquee */
-
-.marquee-block {
-  position: relative;
-  z-index: 2;
-  padding-top: 76px;
-}
-
-/*
- * Two lanes the width of the floor's slab, faded out at its edges: named pills in front, gliding
- * left, and the bare marks behind them, smaller steps of tone, gliding right. Hairline rails top
- * and bottom hold the lanes like a track. Depth is tone and scale; nothing glows.
- */
-.marquee {
-  --marquee-fade: min(16%, 180px);
-  --marquee-gap: 12px;
-  position: relative;
+.agent-wall {
   display: grid;
-  gap: 14px;
-  width: min(calc(100% - 2 * var(--s-inset)), calc(var(--s-wide) + 2 * var(--s-gutter)));
-  margin: 0 auto;
-  padding: 22px 0;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent,
-    #000 var(--marquee-fade),
-    #000 calc(100% - var(--marquee-fade)),
-    transparent
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent,
-    #000 var(--marquee-fade),
-    #000 calc(100% - var(--marquee-fade)),
-    transparent
-  );
-}
-
-.marquee::before,
-.marquee::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background-color: rgb(10 10 11 / 0.08);
-  pointer-events: none;
-}
-
-.marquee::before {
-  top: 0;
-}
-
-.marquee::after {
-  bottom: 0;
-}
-
-/* A lane is one run of sets; scripts repeat the set and start the glide once it is measured. */
-.marquee-lane {
-  display: flex;
-  width: max-content;
-}
-
-.marquee-set {
-  display: flex;
-  flex: none;
-  gap: var(--marquee-gap);
+  grid-template-columns: repeat(9, auto);
+  justify-content: space-between;
+  gap: 20px 16px;
   margin: 0;
-  padding: 0 var(--marquee-gap) 0 0;
+  padding: 0;
   list-style: none;
 }
 
-/* Longhands, so the holds below (pointer, offscreen, hidden tab) can set the play state alone. */
-html.js .marquee-lane[data-ready] {
-  animation-name: marquee;
-  animation-duration: var(--marquee-seconds);
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-html.js .marquee-lane-back[data-ready] {
-  animation-direction: reverse;
-}
-
-@keyframes marquee {
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .marquee:hover .marquee-lane {
-    animation-play-state: paused;
-  }
-}
-
-.marquee-item {
+.agent-cell {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
-  height: 54px;
-  padding: 0 22px 0 15px;
-  border-radius: 999px;
-  background-color: #ffffff;
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    0 1px 2px rgb(10 10 11 / 0.05),
-    0 10px 22px -14px rgb(10 10 11 / 0.24);
-  color: var(--g-fg-1);
-  font-size: 16px;
-  line-height: 20px;
+  gap: 9px;
+  min-width: 0;
+  color: var(--s-ink);
+  font-size: 15px;
+  line-height: 22px;
   font-weight: 500;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  transition:
-    transform 420ms var(--s-glide),
-    box-shadow 420ms var(--s-swift);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .marquee-lane:not(.marquee-lane-back) .marquee-item:hover {
-    transform: translateY(-3px);
-    box-shadow:
-      inset 0 0 0 1px rgb(10 10 11 / 0.09),
-      0 2px 4px rgb(10 10 11 / 0.05),
-      0 18px 30px -16px rgb(10 10 11 / 0.32);
-  }
-}
-
-/* The back lane: smaller, flatter pills a step back in tone, the marks themselves unchanged. */
-.marquee-lane-back .marquee-item {
-  gap: 9px;
-  height: 42px;
-  padding: 0 17px 0 11px;
-  background-color: rgb(255 255 255 / 0.42);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.07);
-  color: var(--g-fg-2);
-  font-size: 14px;
-  line-height: 18px;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .marquee-lane-back .marquee-item {
-    background-color: var(--g-surface-2);
-  }
-}
-
-.marquee-note {
-  max-width: 600px;
-  margin: 22px auto 0;
-  padding: 0 var(--s-gutter);
+.agents-note {
+  margin-top: 28px;
   color: var(--g-fg-3);
   font-size: 14px;
   line-height: 22px;
   text-align: center;
-  text-wrap: balance;
-}
-
-/*
- * Without scripts, or with reduced motion, the named lane stands still and wraps inside the slab,
- * so every agent shows at every width; the copies and the back lane are not shown.
- */
-html:not(.js) .marquee {
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-html:not(.js) .marquee-lane,
-html:not(.js) .marquee-set {
-  flex-wrap: wrap;
-  justify-content: center;
-  width: auto;
-}
-
-html:not(.js) .marquee-set {
-  flex: 1 1 100%;
-  padding: 0 var(--s-gutter);
-}
-
-html:not(.js) :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
-  display: none;
 }
 
 /* ----------------------------------------------------------------------------- statement */
 
-/* Paper sections are divided by a hairline across the page, crossing the rails. */
-.statement,
-.product,
-.faq {
-  border-top: 1px solid var(--rail);
+.statement {
+  padding-bottom: 0;
 }
 
 /*
- * What auracode is, said once and large: the first sentence in ink, the rest stepping back to
- * grey (Linear's statement, Aside's introduction).
+ * What auracode is, said once: the first sentence in ink, the rest stepping back to grey
+ * (Linear's statement, Aside's introduction, Harvey's opening paragraph).
  */
 .statement-text {
-  max-width: 1100px;
-  color: var(--g-fg-1);
-  font-size: clamp(30px, 3.5vw, 50px);
-  line-height: 1.12;
-  font-weight: 540;
+  max-width: 940px;
+  color: var(--s-ink);
+  font-size: clamp(24px, 2.75vw, 36px);
+  line-height: 1.22;
+  font-weight: 500;
   letter-spacing: -0.034em;
   text-wrap: pretty;
 }
 
 .statement-soft {
-  color: var(--g-fg-3);
+  color: var(--s-soft);
 }
 
-/* Three things it holds to, between hairlines, each drawn in line art. */
+/* Three things it holds to, in cells between the rails, each drawn in line art. */
 .pillars {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 120px 0 0;
-  padding: 0;
-  border-top: 1px solid var(--rail);
-  list-style: none;
+  margin-top: var(--s-section);
+  border-top: 1px solid var(--s-line);
 }
 
 .pillar {
   display: flex;
   flex-direction: column;
-  gap: 32px;
-  padding: 44px 36px 0;
-}
-
-.pillar:first-child {
-  padding-left: 0;
-}
-
-.pillar:last-child {
-  padding-right: 0;
+  gap: 28px;
+  padding: 44px var(--s-pad) 52px;
 }
 
 .pillar + .pillar {
-  border-left: 1px solid var(--rail);
+  border-left: 1px solid var(--s-line);
 }
 
 .pillar-art {
   display: block;
   width: 100%;
+  max-width: 300px;
   height: auto;
   overflow: visible;
   color: var(--s-ink);
@@ -518,10 +191,10 @@ html:not(.js) :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
 .art-line {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.1;
+  stroke-width: 1;
   stroke-linejoin: round;
   stroke-linecap: round;
-  stroke-opacity: 0.78;
+  stroke-opacity: 0.72;
 }
 
 /* Faces are paper, so a nearer slab or cube covers the lines behind it. */
@@ -533,17 +206,22 @@ html:not(.js) :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
   fill: currentColor;
 }
 
-.pillar-text {
-  max-width: 340px;
+.pillar-text,
+.feature-text,
+.more-text {
   color: var(--g-fg-3);
-  font-size: 16px;
-  line-height: 25px;
+  font-size: 15px;
+  line-height: 24px;
   text-wrap: pretty;
 }
 
-.pillar-text strong {
-  color: var(--g-fg-1);
-  font-weight: 560;
+.pillar-text {
+  max-width: 320px;
+}
+
+:is(.pillar-text, .feature-text, .more-text) strong {
+  color: var(--s-ink);
+  font-weight: 500;
 }
 
 /*
@@ -577,146 +255,34 @@ html.js .pillar:nth-child(3) .pillar-art .art-line {
 
 /* ------------------------------------------------------------------------------- product */
 
-/* A split header: the title on the left, what it means and where to go next on the right. */
-/* Section titles on the home page sit a step smaller than display, so split headers keep two lines. */
-.home .title {
-  font-size: clamp(38px, 4.6vw, 66px);
-}
-
-.product-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: 32px 64px;
-  align-items: end;
-}
-
-.split-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 22px;
-  justify-self: end;
-  max-width: 440px;
-}
-
-.product-stage {
-  position: relative;
-  margin-top: 64px;
-  perspective: 2400px;
-}
-
+/* The real app in a plain bezel: a tinted mat, a hairline, and the screenshot. */
 .product-frame {
-  position: relative;
-  padding: 10px;
-  border-radius: 26px;
-  background-color: rgb(255 255 255 / 0.5);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
-  backdrop-filter: blur(24px) saturate(170%);
+  margin-top: 64px;
+  padding: 8px;
+  border-radius: 20px;
+  background-color: var(--s-stage);
+  box-shadow: inset 0 0 0 1px var(--s-line);
+}
+
+.product-frame picture {
+  display: block;
+  overflow: hidden;
+  border-radius: 12px;
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    inset 0 1px 0 #ffffff,
-    0 60px 120px -50px rgb(10 10 11 / 0.42),
-    0 20px 40px -20px rgb(10 10 11 / 0.18);
-  transform-origin: 50% 100%;
+    0 0 0 1px var(--s-line),
+    0 16px 40px -24px rgb(10 10 11 / 0.2);
 }
 
 .product-frame img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 17px;
-  box-shadow: 0 0 0 1px rgb(10 10 11 / 0.06);
-}
-
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .product-frame {
-      animation: frame-flat linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 42%;
-    }
-  }
-}
-
-@keyframes frame-flat {
-  from {
-    opacity: 0.35;
-    transform: rotateX(24deg) scale(0.88) translateY(60px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.callouts {
-  position: absolute;
-  inset: 10px;
-  pointer-events: none;
-}
-
-.callout {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 16px 9px 11px;
-  border-radius: 999px;
-  background-color: rgb(255 255 255 / 0.8);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  backdrop-filter: blur(16px) saturate(180%);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    inset 0 1px 0 #ffffff,
-    0 16px 36px -14px rgb(10 10 11 / 0.35);
-  color: var(--g-fg-1);
-  font-size: 14px;
-  line-height: 18px;
-  font-weight: 500;
-  white-space: nowrap;
-  translate: -50% -50%;
-  transition:
-    opacity 800ms var(--s-expo),
-    scale 900ms var(--s-expo);
-}
-
-html.js .product-frame:not([data-revealed]) .callout {
-  opacity: 0;
-  scale: 0.86;
-}
-
-.callout-dot {
-  position: relative;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background-color: var(--s-ink);
-}
-
-.callout-dot::after {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px rgb(10 10 11 / 0.35);
-  animation: ping 2.6s var(--s-expo) infinite;
-}
-
-@keyframes ping {
-  from {
-    opacity: 1;
-    transform: scale(0.6);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.8);
-  }
 }
 
 /* ------------------------------------------------------------------------------ features */
 
 .features {
-  border-top: 1px solid var(--rail);
+  padding-bottom: 0;
 }
 
 .feature-grid {
@@ -726,11 +292,11 @@ html.js .product-frame:not([data-revealed]) .callout {
   margin-top: 64px;
 }
 
-/* A card: the feature on a stage of cool grey, then a caption that starts in ink. */
+/* A card: the feature on a tinted stage, then a caption that starts in ink. */
 .feature-card {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
   min-width: 0;
 }
 
@@ -742,24 +308,29 @@ html.js .product-frame:not([data-revealed]) .callout {
   justify-content: center;
   aspect-ratio: 16 / 11;
   overflow: hidden;
-  padding: 40px 40px 0;
-  border-radius: 24px;
-  background:
-    linear-gradient(rgb(10 10 11 / 0.04) 1px, transparent 1px) center top / 40px 40px,
-    linear-gradient(90deg, rgb(10 10 11 / 0.04) 1px, transparent 1px) center top / 40px 40px,
-    linear-gradient(180deg, #f0f0f2, #e6e6e9);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.06);
+  padding: 36px 36px 0;
+  border-radius: 16px;
+  background-color: var(--s-stage);
+  box-shadow: inset 0 0 0 1px var(--s-line);
 }
 
-/* The canvas, as the app draws it, standing on the stage and running off its foot. */
+/*
+ * The canvas, as the app draws it, set large enough to read: it starts at the stage's top left and
+ * runs off its right edge and its foot.
+ */
+.feature-stage-shot {
+  justify-content: flex-start;
+}
+
 .feature-stage-shot picture {
   display: block;
-  width: 100%;
-  border-radius: 14px 14px 0 0;
+  flex: none;
+  width: 136%;
   overflow: hidden;
+  border-radius: 10px 0 0;
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.08),
-    0 30px 60px -30px rgb(10 10 11 / 0.45);
+    0 0 0 1px var(--s-line),
+    0 20px 44px -28px rgb(10 10 11 / 0.3);
 }
 
 .feature-stage-shot img {
@@ -769,27 +340,23 @@ html.js .product-frame:not([data-revealed]) .callout {
 }
 
 .feature-text {
-  max-width: 520px;
-  color: var(--g-fg-3);
-  font-size: 16px;
-  line-height: 25px;
-  text-wrap: pretty;
+  max-width: 480px;
 }
 
-.feature-text strong {
-  color: var(--g-fg-1);
-  font-weight: 560;
+/* The terminal fills its stage down to the foot, whatever shape the stage takes. */
+.feature-stage-terminal {
+  align-items: stretch;
 }
 
-/* The terminal card: a chat in its agent's own interface, on the night surface. */
+/* The terminal card: a chat in its agent's own interface, the one dark surface on the page. */
 .tm {
   width: 100%;
   overflow: hidden;
-  border-radius: 14px 14px 0 0;
+  border-radius: 10px 10px 0 0;
   background-color: var(--s-night);
   box-shadow:
     0 0 0 1px rgb(10 10 11 / 0.2),
-    0 30px 60px -30px rgb(10 10 11 / 0.55);
+    0 20px 44px -28px rgb(10 10 11 / 0.45);
   color: var(--s-night-fg-1);
 }
 
@@ -798,7 +365,7 @@ html.js .product-frame:not([data-revealed]) .callout {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px 12px 18px;
+  padding: 10px 12px 10px 16px;
   border-bottom: 1px solid rgb(255 255 255 / 0.08);
   font-size: 13px;
   line-height: 18px;
@@ -846,7 +413,7 @@ html.js .product-frame:not([data-revealed]) .callout {
 .tm-screen {
   display: flex;
   flex-direction: column;
-  padding: 18px 20px 26px;
+  padding: 16px 18px 24px;
   font-family: var(--g-mono);
   font-size: 13px;
   line-height: 21px;
@@ -912,56 +479,63 @@ html.js .product-frame:not([data-revealed]) .callout {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tm-cursor {
-    animation: none;
-  }
+/* The rest of the workspace: six cells between the rails, three to a row. */
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--s-section);
+}
+
+.more-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 36px var(--s-pad) 44px;
+  border-top: 1px solid var(--s-line);
+}
+
+.more-cell:not(:nth-child(3n + 1)) {
+  border-left: 1px solid var(--s-line);
+}
+
+.more-glyph {
+  display: block;
+  color: var(--s-ink);
+}
+
+.more-text {
+  max-width: 320px;
 }
 
 /* ----------------------------------------------------------------------------------- faq */
 
 .faq-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
   gap: 64px;
   align-items: start;
 }
 
 .faq-head {
   position: sticky;
-  top: 120px;
+  top: calc(var(--s-nav) + 40px);
   display: grid;
-  gap: 28px;
+  gap: 24px;
   justify-items: start;
 }
 
 .faq-head .title {
-  font-size: clamp(36px, 4vw, 56px);
+  font-size: clamp(28px, 3.1vw, 40px);
 }
 
-/*
- * The questions sit on one white sheet, the utility pages' surface, a hairline between each pair
- * of rows and inset from the sheet's edges.
- */
+/* The questions are rows between hairlines; nothing boxes them. */
 .faq-list {
   display: grid;
-  padding: 6px;
-  border-radius: 26px;
-  background-color: #ffffff;
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.075),
-    0 1px 2px rgb(10 10 11 / 0.04),
-    0 18px 40px -26px rgb(10 10 11 / 0.22);
+  border-top: 1px solid var(--s-line);
 }
 
 .faq-item {
-  --faq-x: 22px;
-  border-radius: 20px;
-  transition: background-color 400ms var(--s-swift);
-}
-
-.faq-item:is([data-state="open"], [open]:not([data-state])) {
-  background-color: var(--g-surface-2);
+  border-bottom: 1px solid var(--s-line);
 }
 
 .faq-item > summary {
@@ -969,73 +543,49 @@ html.js .product-frame:not([data-revealed]) .callout {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px var(--faq-x);
-  border-radius: 20px;
-  color: var(--g-fg-1);
-  font-size: 18px;
+  padding: 20px 0;
+  color: var(--s-ink);
+  font-size: 17px;
   line-height: 26px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
   list-style: none;
   cursor: pointer;
-}
-
-/* The hairline above every row after the first, hidden next to an open row's tone. */
-.faq-item + .faq-item > summary {
-  background:
-    linear-gradient(rgb(10 10 11 / 0.08), rgb(10 10 11 / 0.08)) center top /
-    calc(100% - 2 * var(--faq-x)) 1px no-repeat;
-}
-
-.faq-item:is([data-state="open"], [open]:not([data-state])) > summary,
-.faq-item:is([data-state="open"], [open]:not([data-state])) + .faq-item > summary {
-  background: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .faq-item > summary:hover .faq-icon {
-    background-color: rgb(10 10 11 / 0.09);
-  }
 }
 
 .faq-item > summary::-webkit-details-marker {
   display: none;
 }
 
+/* A plus that closes into a minus as its answer opens. */
 .faq-icon {
   position: relative;
   flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.05);
-  transition:
-    background-color 300ms var(--s-swift),
-    rotate 600ms var(--s-glide);
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  color: var(--g-fg-3);
+  transition: color 200ms var(--s-swift);
+}
+
+.faq-item > summary:hover .faq-icon,
+.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon {
+  color: var(--s-ink);
 }
 
 .faq-icon > span {
   position: absolute;
-  top: 14.25px;
-  left: 9px;
-  width: 12px;
+  top: 6.25px;
+  left: 0;
+  width: 14px;
   height: 1.5px;
   border-radius: 2px;
-  background-color: var(--g-fg-1);
-  transition: rotate 600ms var(--s-glide);
+  background-color: currentColor;
+  transition: rotate 500ms var(--s-glide);
 }
 
 .faq-icon > span + span {
   rotate: 90deg;
-}
-
-.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon {
-  rotate: 180deg;
-  background-color: var(--s-ink);
-}
-
-.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon > span {
-  background-color: #ffffff;
 }
 
 .faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon > span + span {
@@ -1058,11 +608,11 @@ html.js .product-frame:not([data-revealed]) .callout {
 }
 
 .faq-answer > p {
-  max-width: 600px;
-  padding: 0 var(--faq-x) 24px;
+  max-width: 580px;
+  padding: 0 0 22px;
   color: var(--g-fg-2);
-  font-size: 16px;
-  line-height: 26px;
+  font-size: 15px;
+  line-height: 25px;
   text-wrap: pretty;
 }
 
@@ -1070,69 +620,33 @@ html.js .product-frame:not([data-revealed]) .callout {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 var(--faq-x) 24px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .faq-body,
-  .faq-icon,
-  .faq-icon > span {
-    transition: none;
-  }
+  padding: 0 0 24px;
 }
 
 /* -------------------------------------------------------------------------------- finale */
 
-/* The finale and the footer under it are one slab of night: round on top here, below there. */
 .finale {
-  overflow: hidden;
-  margin: 0 var(--s-inset);
-  padding-bottom: 40px;
-  border-radius: var(--s-slab) var(--s-slab) 0 0;
   text-align: center;
 }
 
-/* The capabilities band's hairline grid, faded at both ends, so the two nights read as one set. */
-.finale::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--s-grid);
-  -webkit-mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent);
-  mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent);
-  pointer-events: none;
-}
-
 .finale-inner {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
+.finale-tile {
+  margin-bottom: 32px;
+}
+
 .finale-title {
-  max-width: 1000px;
-  color: var(--g-fg-1);
-  font-size: clamp(56px, 9vw, 148px);
-  line-height: 0.94;
-  font-weight: 560;
-  letter-spacing: -0.055em;
-}
-
-.finale-soft {
-  color: var(--g-fg-3);
-}
-
-/* One clause per line: "Your agents." over "Your machine." */
-.finale-title > :is(.words, .finale-soft) {
-  display: block;
+  max-width: none;
 }
 
 .finale-note {
-  max-width: 520px;
-  margin-top: 30px;
+  margin-top: 20px;
   color: var(--g-fg-2);
-  font-size: 19px;
+  font-size: 17px;
   line-height: 28px;
   text-wrap: balance;
 }
@@ -1141,49 +655,36 @@ html.js .product-frame:not([data-revealed]) .callout {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin-top: 40px;
+  gap: 10px;
+  margin-top: 32px;
   --i: 1;
 }
 
 /* --------------------------------------------------------------- reduced motion, mobile */
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-line,
-  .hero-lead,
-  .hero-actions,
+  .hero-title,
+  .hero-row,
   .hero-detail,
-  html.js .marquee-lane[data-ready],
-  .callout-dot::after,
-  .roll-in,
-  .roll-out {
+  .tm-cursor {
     animation: none;
   }
 
-  /* The named lane wraps inside the slab, so every agent shows at every width. */
-  .marquee {
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .marquee-lane,
-  .marquee-set {
-    flex-wrap: wrap;
-    justify-content: center;
-    width: auto;
-  }
-
-  .marquee-set {
-    flex: 1 1 100%;
-    padding: 0 var(--s-gutter);
-  }
-
-  :is(.marquee-lane-back, .marquee-set[aria-hidden="true"]) {
-    display: none;
-  }
-
-  .roll[data-measured] {
+  .faq-body,
+  .faq-icon > span {
     transition: none;
+  }
+}
+
+/* Nine names no longer fit one row: three rows of three. */
+@media (max-width: 1139px) {
+  .agent-wall {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px 16px;
+  }
+
+  .agents-note {
+    text-align: left;
   }
 }
 
@@ -1197,29 +698,21 @@ html.js .product-frame:not([data-revealed]) .callout {
   }
 
   .hw-main {
-    margin-left: 10px;
+    margin-left: 8px;
   }
 
-  .product-head,
   .faq-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
+    gap: 40px;
   }
 
-  .hero-copy {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hero-lead {
-    max-width: 560px;
-  }
-
-  .split-side {
-    justify-self: start;
+  .faq-head {
+    position: static;
   }
 
   .feature-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
   }
 
   .feature-stage {
@@ -1228,71 +721,85 @@ html.js .product-frame:not([data-revealed]) .callout {
 
   .pillars {
     grid-template-columns: minmax(0, 1fr);
-    margin-top: 80px;
   }
 
-  .pillar,
-  .pillar:first-child,
-  .pillar:last-child {
-    padding: 40px 0;
+  .pillar {
+    padding: 40px var(--s-pad);
   }
 
   .pillar + .pillar {
-    border-top: 1px solid var(--rail);
+    border-top: 1px solid var(--s-line);
     border-left: 0;
   }
 
-  .pillar-art {
-    max-width: 420px;
+  .more-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .faq-head {
-    position: static;
+  .more-cell:not(:nth-child(3n + 1)) {
+    border-left: 0;
+  }
+
+  .more-cell:nth-child(2n) {
+    border-left: 1px solid var(--s-line);
+  }
+}
+
+/* On a tablet each drawing sits beside its caption. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .pillar {
+    flex-direction: row;
+    align-items: center;
+    gap: 48px;
+  }
+
+  .pillar-art {
+    flex: none;
+    width: 38%;
+  }
+
+  .feature-stage {
+    aspect-ratio: 16 / 9;
   }
 }
 
 @media (max-width: 767px) {
+  .home {
+    background-image: none;
+  }
+
   .hero {
-    padding-top: 36px;
+    padding: 56px 0 56px;
   }
 
-  /* Phones get a lighter lane: shorter pills, the same marks. */
-  .marquee {
-    --marquee-gap: 10px;
-    gap: 12px;
-    padding: 18px 0;
-  }
-
-  .marquee-item {
-    gap: 10px;
-    height: 46px;
-    padding: 0 18px 0 12px;
-    font-size: 15px;
-  }
-
-  .marquee-lane-back .marquee-item {
-    height: 38px;
-    padding: 0 14px 0 10px;
-    font-size: 13px;
+  .hero-row {
+    margin-top: 24px;
   }
 
   .hero-lead {
     font-size: 17px;
-    line-height: 26px;
-  }
-
-  .hero-floor {
-    margin-top: 48px;
-    padding-bottom: 48px;
+    line-height: 27px;
   }
 
   .hero-stage {
-    padding: 0 20px;
+    margin-top: 48px;
+  }
+
+  /* Each name under its mark, three to a row, so every agent fits the narrowest phone. */
+  .agent-cell {
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .agents-note {
+    text-align: center;
   }
 
   .hw {
     height: 520px;
-    border-radius: 20px;
   }
 
   .hw-transcript {
@@ -1308,8 +815,10 @@ html.js .product-frame:not([data-revealed]) .callout {
     left: 24px;
   }
 
-  .callouts {
-    display: none;
+  .product-frame {
+    margin-top: 40px;
+    padding: 6px;
+    border-radius: 16px;
   }
 
   /*
@@ -1318,44 +827,40 @@ html.js .product-frame:not([data-revealed]) .callout {
    * than as a thumbnail of it.
    */
   .product-frame picture {
-    display: block;
-    overflow: hidden;
-    border-radius: 14px;
-    box-shadow: 0 0 0 1px rgb(10 10 11 / 0.06);
+    border-radius: 10px;
   }
 
   .product-frame img {
     width: 186%;
     max-width: none;
-    border-radius: 0;
-    box-shadow: none;
     translate: -17.9% 0;
   }
 
-  .faq-list {
-    padding: 4px;
-    border-radius: 22px;
+  .feature-grid {
+    margin-top: 40px;
   }
 
-  .faq-item {
-    --faq-x: 16px;
-    border-radius: 18px;
+  .feature-stage {
+    padding: 20px 16px 0;
+  }
+
+  .more-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .more-cell,
+  .more-cell:nth-child(2n) {
+    border-left: 0;
+  }
+
+  .more-cell {
+    padding: 28px var(--s-pad) 32px;
   }
 
   .faq-item > summary {
-    padding: 18px var(--faq-x);
-    border-radius: 18px;
+    padding: 18px 0;
     font-size: 16px;
     line-height: 24px;
-  }
-
-  .faq-answer > p,
-  .faq-agents {
-    padding-bottom: 20px;
-  }
-
-  .finale-note {
-    font-size: 17px;
   }
 
   .finale-actions {

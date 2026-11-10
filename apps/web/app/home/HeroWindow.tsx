@@ -21,8 +21,7 @@ import { SpriteMark } from "./Sprite";
 
 /**
  * One session handed from agent to agent: each turn is a real kind of work (an edit, a test run, a
- * search) and each handoff is the app's own "Next message includes a handoff" flow. The hero's
- * headline follows whichever agent is working.
+ * search) and each handoff is the app's own "Next message includes a handoff" flow.
  */
 interface Turn {
   readonly agent: AgentBrandId;
@@ -157,7 +156,7 @@ export interface HandoffState {
 /**
  * The page as it is printed and as it stays without motion: Codex's turn, the handoff to Claude
  * Code and its finished turn, and the next message, to Pi, typed in the composer. The window shows
- * the app's core move complete, and the headline names Claude Code.
+ * the app's core move complete.
  */
 export const INITIAL: HandoffState = { k: 2, phase: "type", lap: 0, settled: true };
 
@@ -169,12 +168,6 @@ function advance(state: HandoffState): HandoffState {
 }
 
 const turnAt = (k: number): Turn => TURNS[(k + TURNS.length) % TURNS.length] ?? (TURNS[0] as Turn);
-
-/** The agent the headline follows: the one whose turn is newest in the transcript. */
-export function workingAgent(state: HandoffState): AgentBrandId {
-  const before = state.phase === "pick" || state.phase === "type";
-  return turnAt(before ? state.k - 1 : state.k).agent;
-}
 
 /**
  * Runs the handoff loop while the hero is on screen, the tab is visible and motion is allowed.

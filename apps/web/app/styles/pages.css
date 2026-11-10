@@ -1,20 +1,17 @@
 /*
- * Inner pages: glass sheets on paper. The title is two-tone (ink, then the grey serif) and stands
- * on its own; nothing sits above it.
+ * Inner pages: a two-tone title that stands on its own (ink, then grey on its own line), and plain
+ * white sheets with a hairline rim on the paper. Nothing sits above a title.
  */
 .page {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 88px 0 152px;
+  padding: 80px 0 128px;
 }
 
 .frame {
   box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--s-max) + 2 * var(--s-gutter));
+  width: min(100% - 2 * var(--s-gutter), var(--s-max));
   margin: 0 auto;
-  padding: 0 var(--s-gutter);
+  padding: 0 var(--s-pad);
 }
 
 .page-column {
@@ -22,18 +19,19 @@
   margin: 0 auto;
 }
 
+/* Wide pages take the whole column, so their titles start where the header's wordmark does. */
 .page-column-wide {
-  max-width: 1040px;
+  max-width: none;
 }
 
 .page-head,
 .page-head-text {
   display: grid;
-  gap: 22px;
+  gap: 20px;
 }
 
 .page-head {
-  margin-bottom: 56px;
+  margin-bottom: 48px;
 }
 
 /* A head with a picture: the words at left, the picture at right, their bottoms aligned. */
@@ -43,51 +41,51 @@
   gap: 40px;
 }
 
+/* The app as an object: the logo on a raised white tile, as an icon sits on a dock. */
 .app-tile {
   display: grid;
   place-items: center;
-  width: 132px;
-  height: 132px;
-  border-radius: 34px;
+  width: 104px;
+  height: 104px;
+  border-radius: 26px;
   background-color: #ffffff;
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    inset 0 -2px 0 rgb(10 10 11 / 0.04),
-    0 1px 2px rgb(10 10 11 / 0.06),
-    0 22px 44px -26px rgb(10 10 11 / 0.34);
+    inset 0 0 0 1px var(--s-line),
+    0 1px 2px rgb(10 10 11 / 0.05),
+    0 16px 32px -20px rgb(10 10 11 / 0.28);
   color: var(--s-ink);
 }
 
+.app-tile-small {
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+}
+
 .page-title {
-  color: var(--g-fg-1);
-  font-size: clamp(42px, 6vw, 76px);
-  line-height: 1;
-  font-weight: 560;
-  letter-spacing: -0.048em;
+  color: var(--s-ink);
+  font-size: clamp(34px, 4.4vw, 56px);
+  line-height: 1.04;
+  font-weight: 500;
+  letter-spacing: -0.045em;
   text-wrap: balance;
 }
 
 .page-title > span {
   display: block;
-  color: var(--g-fg-3);
-  font-family: var(--s-serif);
-  font-size: 1.04em;
-  font-style: italic;
-  font-weight: var(--s-serif-weight);
-  letter-spacing: var(--s-serif-track);
-  font-synthesis: none;
+  color: var(--s-soft);
 }
 
 .page-lead {
-  max-width: 600px;
+  max-width: 560px;
   color: var(--g-fg-2);
-  font-size: 19px;
-  line-height: 29px;
+  font-size: 17px;
+  line-height: 28px;
 }
 
 /*
- * A sheet: the one surface inner pages put content on. White on the paper, held by a hairline rim
- * and a short, close shadow; nothing behind it to blur, so it is solid.
+ * A sheet: the one surface inner pages put content on. White on the paper, held by a hairline rim;
+ * nothing behind it to blur, so it is solid.
  */
 .download-cell,
 .auth-panel,
@@ -97,12 +95,11 @@
 .account-signed-out,
 .error-panel,
 .page-column > .prose {
-  border-radius: 24px;
+  border-radius: 16px;
   background-color: #ffffff;
   box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.075),
-    0 1px 2px rgb(10 10 11 / 0.04),
-    0 16px 36px -24px rgb(10 10 11 / 0.2);
+    inset 0 0 0 1px var(--s-line),
+    0 1px 2px rgb(10 10 11 / 0.03);
 }
 
 /* -------------------------------------------------------------------------------- prose */
@@ -120,9 +117,9 @@
 .prose h2 {
   margin-top: 40px;
   color: var(--g-fg-1);
-  font-size: 26px;
-  line-height: 32px;
-  font-weight: 560;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
   letter-spacing: -0.025em;
 }
 
@@ -135,7 +132,7 @@
   color: var(--g-fg-1);
   font-size: 18px;
   line-height: 26px;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .prose ul,
@@ -155,7 +152,7 @@
 
 .prose strong {
   color: var(--g-fg-1);
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .prose code {
@@ -196,23 +193,16 @@
 .download-cell {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 28px;
-  padding: 32px;
-  transition:
-    transform 500ms var(--s-glide),
-    box-shadow 500ms var(--s-swift);
-}
-
-.download-cell:hover {
-  transform: translateY(-3px);
+  gap: 24px;
+  padding: 28px;
 }
 
 .download-name {
   color: var(--g-fg-1);
-  font-size: 34px;
-  line-height: 38px;
-  font-weight: 560;
-  letter-spacing: -0.035em;
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .download-sub {
@@ -275,7 +265,7 @@
 }
 
 .auth-head .page-title {
-  font-size: clamp(40px, 5.4vw, 60px);
+  font-size: clamp(32px, 4vw, 44px);
 }
 
 .auth-intro {
@@ -300,7 +290,7 @@
   color: var(--g-fg-1);
   font-size: 22px;
   line-height: 28px;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
@@ -328,7 +318,7 @@
 /* A verification that could not start reads as the site's other alerts do. */
 .verification > p[role="alert"] {
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: 10px;
   background-color: var(--g-red-tint);
   box-shadow: inset 0 0 0 1px rgb(185 28 28 / 0.16);
   color: var(--g-fg-1);
@@ -370,9 +360,9 @@
 }
 
 .field-input {
-  height: 46px;
-  padding: 0 16px;
-  border-radius: 14px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
   font-size: 15px;
 }
 
@@ -445,7 +435,7 @@
   color: var(--g-fg-1);
   font-size: 20px;
   line-height: 26px;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
@@ -482,7 +472,7 @@
   color: var(--g-fg-1);
   font-size: 26px;
   line-height: 32px;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.025em;
 }
 
@@ -510,9 +500,9 @@
   align-items: center;
   gap: 12px 16px;
   padding: 14px 16px;
-  border-radius: 16px;
-  background-color: rgb(10 10 11 / 0.035);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  border-radius: 12px;
+  background-color: rgb(10 10 11 / 0.03);
+  box-shadow: inset 0 0 0 1px var(--s-line);
 }
 
 .device-main {
@@ -561,9 +551,9 @@
   display: grid;
   gap: 8px;
   padding: 16px;
-  border-radius: 16px;
-  background-color: rgb(10 10 11 / 0.035);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  border-radius: 12px;
+  background-color: rgb(10 10 11 / 0.03);
+  box-shadow: inset 0 0 0 1px var(--s-line);
 }
 
 .meter-label {
@@ -624,15 +614,15 @@
   justify-content: space-between;
   gap: 12px 24px;
   padding: 16px 18px;
-  border-radius: 16px;
-  background-color: rgb(10 10 11 / 0.035);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  border-radius: 12px;
+  background-color: rgb(10 10 11 / 0.03);
+  box-shadow: inset 0 0 0 1px var(--s-line);
 }
 
 .security-row h3 {
   color: var(--g-fg-1);
   font-size: 15px;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .security-row p {
@@ -655,7 +645,7 @@
 .confirm-dialog h2 {
   font-size: 22px;
   line-height: 28px;
-  font-weight: 560;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
@@ -718,33 +708,17 @@
   padding: 48px;
 }
 
-.error-code {
-  font-size: clamp(120px, 18vw, 220px);
-  line-height: 0.82;
-  font-weight: 300;
-  letter-spacing: -0.08em;
-  background: linear-gradient(180deg, var(--s-ink) 35%, #8b8d94 115%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 .error-title {
-  color: var(--g-fg-1);
-  font-size: clamp(32px, 4vw, 48px);
-  line-height: 1.05;
-  font-weight: 560;
+  color: var(--s-ink);
+  font-size: clamp(30px, 3.7vw, 44px);
+  line-height: 1.08;
+  font-weight: 500;
   letter-spacing: -0.04em;
 }
 
 .error-title span {
   display: block;
-  color: var(--g-fg-3);
-  font-family: var(--s-serif);
-  font-style: italic;
-  font-weight: var(--s-serif-weight);
-  letter-spacing: var(--s-serif-track);
-  font-synthesis: none;
+  color: var(--s-soft);
 }
 
 /* ---------------------------------------------------------------------- device verification */
@@ -762,7 +736,7 @@
   color: var(--g-fg-1);
   font-size: 18px;
   line-height: 24px;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .device-verification p {
@@ -792,7 +766,7 @@
 
 @media (max-width: 767px) {
   .page {
-    padding: 56px 0 104px;
+    padding: 48px 0 88px;
   }
 
   .page-head-art {
@@ -816,7 +790,7 @@
   .prose-section,
   .error-panel {
     padding: 24px 20px;
-    border-radius: 20px;
+    border-radius: 14px;
   }
 
   .page-column > .prose {
@@ -826,22 +800,5 @@
   .data-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 2px;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  :is(
-    .download-cell,
-    .auth-panel,
-    .account-block,
-    .release-entry,
-    .prose-section,
-    .account-signed-out,
-    .error-panel,
-    .page-column > .prose
-  ) {
-    background-color: #ffffff;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
 }

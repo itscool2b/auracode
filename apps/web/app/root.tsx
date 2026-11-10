@@ -8,10 +8,8 @@ import {
   ScrollRestoration,
   useRouteError,
 } from "react-router";
+// Geist and Geist Mono, the site's only faces, come with Graphite.
 import "@auracode/ui/graphite.css";
-// Fraunces Italic, for the accent phrases: only the italic, with its optical-size and weight axes
-// (Geist and Geist Mono come with Graphite).
-import "@fontsource-variable/fraunces/opsz-italic.css";
 import "./styles/index.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
 import { SiteFooter } from "./footer";
@@ -64,11 +62,6 @@ export function ErrorBoundary() {
     <main id="main" className="page error-page">
       <div className="frame page-frame">
         <div className="error-panel">
-          {missing ? (
-            <p className="error-code" aria-hidden="true">
-              404
-            </p>
-          ) : null}
           <h1 className="error-title">
             {missing ? "This page does not exist." : "This page could not load."}{" "}
             <span>{missing ? "It may have moved." : "Your local workspace is unaffected."}</span>

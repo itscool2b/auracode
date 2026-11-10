@@ -1,67 +1,64 @@
 /*
- * auracode.si: glass windows on paper, two night bands, and no glow anywhere. "Aura" is the
- * product's name, not a colour scheme (owner, 2 November 2026): depth comes from hairlines,
- * texture, layered shadows and type contrast. Shared Graphite tokens (--g-*) carry colour, type
- * and motion; the site adds its layout, its night bands and its motion here (--s-*).
- * docs/design/visual-language.md is the spec. The page is light in every system appearance; the
- * night bands are sections, not a theme.
+ * auracode.si: paper, ink and hairlines. One sans face at calm sizes, a plain bar across the top,
+ * a framed content column, and the product itself as the picture (owner, 10 November 2026: clean
+ * like SpaceXAI, Vercel, Aside, Linear and Harvey). No glow anywhere and no dark bands: "aura" is
+ * the product's name, not a colour scheme. Shared Graphite tokens (--g-*) carry colour and type;
+ * the site adds its layout and motion here (--s-*). docs/design/visual-language.md is the spec.
+ * The page is light in every system appearance.
  */
 
 :root {
   --s-ink: #0a0a0b;
+  /* The grey a title's second clause and a statement's later sentences step back to (large type). */
+  --s-soft: #85858f;
+  --s-line: rgb(10 10 11 / 0.08);
+  --s-line-strong: rgb(10 10 11 / 0.14);
+  /* The tone product pictures stand on. */
+  --s-stage: #f2f2f4;
+  /* The terminal's own surface, the one dark thing on the page. */
   --s-night: #0a0b0d;
   --s-night-fg-1: #f5f5f6;
   --s-night-fg-2: #a9a9b3;
   --s-night-fg-3: #93939e;
+  /* Rail to rail, and the room content keeps inside the rails. */
   --s-max: 1200px;
-  --s-wide: 1360px;
-  --s-gutter: 32px;
-  --s-section: 168px;
-  --s-nav: 76px;
-  /* The night bands and the hero stage are slabs set into the paper: this far in, this round. */
-  --s-inset: 12px;
-  --s-slab: 32px;
-  /*
-   * The accent face: Fraunces Italic, the only cut the site loads. Its optical size follows the
-   * type size, so a 40px clause keeps sturdy hairlines; display settings pin it at its sharpest.
-   */
-  --s-serif: "Fraunces Variable", "Iowan Old Style", "New York", Georgia, serif;
-  --s-serif-weight: 360;
-  --s-serif-track: -0.028em;
+  --s-pad: 40px;
+  --s-gutter: 24px;
+  --s-section: 128px;
+  --s-nav: 64px;
   /* Arrive fast, land softly. */
   --s-expo: cubic-bezier(0.16, 1, 0.3, 1);
   /* Travel and settle without a bounce. */
   --s-glide: cubic-bezier(0.32, 0.72, 0, 1);
   /* Symmetric, for things that leave as they arrived. */
   --s-swift: cubic-bezier(0.65, 0, 0.35, 1);
-  /* Print grain for the night bands. Same-origin SVG noise as a data URL (img-src allows data:). */
-  --s-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  /* The night bands' hairline grid, 72px square. */
-  --s-grid:
-    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px) center top / 72px 72px,
-    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) center top / 72px 72px;
-  /* The app's pixel, printed in a 10px grid: the texture of the stages the windows stand on. */
-  --s-pixels: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Crect x='4' y='4' width='2' height='2' fill='rgb(10,10,11)' fill-opacity='0.11'/%3E%3C/svg%3E");
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   :root {
-    --s-gutter: 20px;
+    --s-pad: 28px;
     --s-section: 104px;
-    --s-nav: 68px;
-    --s-inset: 8px;
-    --s-slab: 24px;
   }
 }
 
-/* Cross-document view transitions: pages cross-fade and the header capsule stays in place. */
+/* Phones drop the rails: content keeps one 20px margin. */
+@media (max-width: 767px) {
+  :root {
+    --s-pad: 20px;
+    --s-gutter: 0px;
+    --s-section: 80px;
+    --s-nav: 56px;
+  }
+}
+
+/* Cross-document view transitions: pages cross-fade and the header stays in place. */
 @view-transition {
   navigation: auto;
 }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 320ms;
+  animation-duration: 240ms;
   animation-timing-function: var(--s-swift);
 }
 
@@ -75,7 +72,7 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 96px;
+  scroll-padding-top: calc(var(--s-nav) + 24px);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -93,7 +90,10 @@ body {
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: 16px;
-  line-height: 24px;
+  line-height: 26px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 :where(h1, h2, h3, p, ul, ol, figure, dl, dd) {
@@ -133,13 +133,15 @@ svg {
   top: 12px;
   left: 12px;
   z-index: 100;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: 999px;
   background: var(--s-ink);
   color: #ffffff;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 500;
   text-decoration: none;
-  transform: translateY(-160%);
+  transform: translateY(-200%);
   transition: transform 300ms var(--s-expo);
 }
 
@@ -152,20 +154,12 @@ svg {
   outline-offset: 3px;
 }
 
+/* The content column: as wide as the rails allow, padded inside them. */
 .wrap {
   box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--s-max) + 2 * var(--s-gutter));
+  width: min(100% - 2 * var(--s-gutter), var(--s-max));
   margin: 0 auto;
-  padding: 0 var(--s-gutter);
-}
-
-.wrap-wide {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--s-wide) + 2 * var(--s-gutter));
-  margin: 0 auto;
-  padding: 0 var(--s-gutter);
+  padding: 0 var(--s-pad);
 }
 
 .mono {
@@ -175,48 +169,26 @@ svg {
 
 /* --------------------------------------------------------------------------- typography */
 
+/* A section's title: two clauses, the first in ink and the second stepping back to grey. */
 .title {
-  max-width: 900px;
-  color: var(--g-fg-1);
-  font-size: clamp(38px, 5vw, 72px);
-  line-height: 1.02;
-  font-weight: 560;
-  letter-spacing: -0.045em;
+  max-width: 720px;
+  color: var(--s-ink);
+  font-size: clamp(30px, 3.7vw, 48px);
+  line-height: 1.08;
+  font-weight: 500;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 
-/* The second clause steps back to its own line: grey, and usually in the serif. */
 .title-soft {
   display: block;
-  color: var(--g-fg-3);
-}
-
-.serif {
-  font-family: var(--s-serif);
-  font-style: italic;
-  font-weight: var(--s-serif-weight);
-  letter-spacing: var(--s-serif-track);
-  font-synthesis: none;
-}
-
-.title .serif,
-.finale-title .serif {
-  font-size: 1.06em;
-}
-
-/* At display sizes the accent sets at Fraunces' largest optical size: finest hairlines, tightest fit. */
-@media (min-width: 768px) {
-  :is(.title, .finale-title) .serif,
-  .page-title > span,
-  .hero-line-agent {
-    font-variation-settings: "opsz" 144;
-  }
+  color: var(--s-soft);
 }
 
 .lead {
-  max-width: 520px;
+  max-width: 460px;
   color: var(--g-fg-2);
-  font-size: 18px;
+  font-size: 17px;
   line-height: 28px;
   text-wrap: pretty;
 }
@@ -226,11 +198,39 @@ svg {
   padding: var(--s-section) 0;
 }
 
+/* A title at left and what it means at right, on one baseline. */
+.split-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 24px 64px;
+  align-items: end;
+}
+
+.split-side {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  justify-self: end;
+  max-width: 460px;
+}
+
+@media (max-width: 1023px) {
+  .split-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .split-side {
+    justify-self: start;
+  }
+}
+
 .text-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--g-fg-1);
+  font-size: 15px;
+  line-height: 24px;
   font-weight: 500;
   text-decoration: none;
   background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
@@ -285,9 +285,9 @@ svg {
   align-items: baseline;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: rgb(10 10 11 / 0.04);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.06);
+  border-radius: 10px;
+  background: rgb(10 10 11 / 0.035);
+  box-shadow: inset 0 0 0 1px var(--s-line);
   color: var(--g-fg-1);
   font-size: 14px;
   line-height: 22px;
@@ -313,131 +313,61 @@ svg {
 
 /* -------------------------------------------------------------------------- calls to act */
 
-/*
- * The site's large pills. Ink is the one action; glass and night sit beside it. A magnetic pill
- * leans a few pixels toward the pointer (enhance.tsx sets --mx and --my) and springs back.
- */
-.cta {
-  --cta-h: 52px;
+/* The site's pills: ink is the one action, the outlined one sits beside it. */
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   box-sizing: border-box;
-  height: var(--cta-h);
-  padding: 0 26px;
+  height: 42px;
+  padding: 0 18px;
   border: 0;
   border-radius: 999px;
   font-family: var(--g-sans);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 20px;
   font-weight: 500;
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
-  transform: translate(var(--mx, 0), var(--my, 0));
   transition:
-    transform 500ms var(--s-glide),
     background-color 200ms var(--s-swift),
-    box-shadow 300ms var(--s-swift),
-    color 200ms var(--s-swift);
+    box-shadow 200ms var(--s-swift),
+    scale 120ms var(--s-swift);
 }
 
-.cta[data-pulled] {
-  transition-duration: 160ms, 200ms, 300ms, 200ms;
-}
-
-.cta:active {
+.btn:active {
   scale: 0.97;
 }
 
-.cta:hover .arrow {
-  transform: translateY(2px);
+.btn-sm {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 14px;
 }
 
-.cta-ink {
+.btn-ink {
   background-color: var(--s-ink);
-  box-shadow:
-    0 1px 1px rgb(10 10 11 / 0.18),
-    0 10px 28px -10px rgb(10 10 11 / 0.5),
-    inset 0 1px 0 rgb(255 255 255 / 0.16);
   color: #ffffff;
 }
 
-.cta-ink:hover {
-  background-color: #1d1d21;
-  box-shadow:
-    0 1px 1px rgb(10 10 11 / 0.18),
-    0 16px 36px -12px rgb(10 10 11 / 0.55),
-    inset 0 1px 0 rgb(255 255 255 / 0.2);
+.btn-ink:hover {
+  background-color: #2a2a2e;
 }
 
-.cta-glass {
-  background-color: rgb(255 255 255 / 0.62);
-  -webkit-backdrop-filter: blur(16px) saturate(170%);
-  backdrop-filter: blur(16px) saturate(170%);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.09),
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 1px 2px rgb(10 10 11 / 0.05);
-  color: var(--g-fg-1);
-}
-
-.cta-glass:hover {
-  background-color: rgb(255 255 255 / 0.86);
-}
-
-.cta-light {
+.btn-line {
   background-color: #ffffff;
-  box-shadow:
-    0 1px 1px rgb(0 0 0 / 0.3),
-    0 10px 28px -12px rgb(0 0 0 / 0.7),
-    inset 0 -1px 0 rgb(0 0 0 / 0.08);
+  box-shadow: inset 0 0 0 1px var(--s-line-strong);
   color: var(--s-ink);
 }
 
-.cta-light:hover {
-  background-color: #ececee;
+.btn-line:hover {
+  background-color: #f4f4f5;
 }
 
-.cta-night {
-  background-color: rgb(255 255 255 / 0.07);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.13),
-    inset 0 1px 0 rgb(255 255 255 / 0.08);
-  color: var(--s-night-fg-1);
-}
-
-.cta-night:hover {
-  background-color: rgb(255 255 255 / 0.12);
-}
-
-/* -------------------------------------------------------------------------- night band */
-
-/*
- * A night section re-points the text tokens at light values; product windows inside it go back to
- * paper (.on-paper) so they read like the light app they show.
- */
-.night {
-  --g-fg-1: var(--s-night-fg-1);
-  --g-fg-2: var(--s-night-fg-2);
-  --g-fg-3: var(--s-night-fg-3);
-  --g-fg-4: #6e6e78;
-  --g-focus: #e4e4e7;
-  background-color: var(--s-night);
-  color: var(--g-fg-1);
-  color-scheme: dark;
-}
-
-.on-paper,
-.night .m-window,
-.night .handoff-stage {
-  --g-fg-1: #18181b;
-  --g-fg-2: #52525b;
-  --g-fg-3: #63636d;
-  --g-fg-4: #8b8d94;
-  --g-focus: #71717a;
-  color-scheme: light;
+.btn:hover .arrow {
+  transform: translateY(2px);
 }
 
 /* -------------------------------------------------------------------------------- reveals */
@@ -449,13 +379,13 @@ svg {
  */
 html.js [data-reveal=""]:not([data-revealed]) {
   opacity: 0;
-  transform: translateY(22px);
+  transform: translateY(16px);
 }
 
 html.js [data-reveal=""] {
   transition:
-    opacity 1000ms var(--s-expo),
-    transform 1200ms var(--s-expo);
+    opacity 900ms var(--s-expo),
+    transform 1000ms var(--s-expo);
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 
@@ -472,8 +402,8 @@ html.js [data-reveal=""] {
 }
 
 html.js .words .w-in {
-  transition: transform 1100ms var(--s-expo);
-  transition-delay: calc(var(--w, 0) * 60ms);
+  transition: transform 900ms var(--s-expo);
+  transition-delay: calc(var(--w, 0) * 40ms);
 }
 
 html.js .words:not([data-revealed]) .w-in {
@@ -494,15 +424,6 @@ html.js .words:not([data-revealed]) .w-in {
 }
 
 /* Offscreen zones, and the whole page in a hidden tab, hold their ambient loops (enhance.tsx). */
-:is([data-off], [data-hidden]) :is(.marquee-lane, .m-loader rect, .m-caret, .m-shimmer, .m-steer),
-[data-hidden] .callout-dot::after {
+:is([data-off], [data-hidden]) :is(.m-loader rect, .m-caret, .m-shimmer, .m-steer, .tm-cursor) {
   animation-play-state: paused;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .cta-glass {
-    background-color: #ffffff;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }

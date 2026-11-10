@@ -1,17 +1,22 @@
 import { Wordmark } from "@auracode/ui/graphite";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+
+const SECTIONS = [
+  { href: "/#features", text: "Features" },
+  { href: "/#agents", text: "Agents" },
+  { href: "/#faq", text: "FAQ" },
+  { href: "/changelog", text: "Changelog" },
+] as const;
 
 /**
- * A floating glass capsule: the wordmark at left, Changelog and Sign in, and the one primary
- * Download. A lit pill glides under whichever link the pointer rests on. Scrolling firms the glass
- * up. Under 768px the links fold into a menu built on <details>, so it opens without JavaScript
- * too; Download stays in the bar.
+ * A plain bar: the wordmark at left, the page's sections in the middle, Sign in and the one
+ * Download at right. Clear at the top of a page; scrolling gives it the paper's tone and a
+ * hairline. Under 768px the links fold into a menu built on <details>, so it opens without
+ * JavaScript too; Download stays in the bar.
  */
 export function SiteHeader() {
   const header = useRef<HTMLElement>(null);
-  const links = useRef<HTMLElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
-  const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
 
   useEffect(() => {
     const node = header.current;
@@ -25,45 +30,10 @@ export function SiteHeader() {
       if (!frame) frame = window.requestAnimationFrame(update);
     };
     update();
-    node.toggleAttribute("data-live", true);
     window.addEventListener("scroll", schedule, { passive: true });
     return () => {
       window.removeEventListener("scroll", schedule);
       if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-
-  // Over a night band the capsule turns to dark glass, so it never sits pale on black. It turns
-  // when the band's edge crosses the capsule's middle, not while most of it is still on paper.
-  useEffect(() => {
-    const node = header.current;
-    const nights = document.querySelectorAll(".night");
-    if (!node || nights.length === 0 || typeof IntersectionObserver === "undefined") return;
-    const under = new Set<Element>();
-    let observer: IntersectionObserver | null = null;
-    const watch = () => {
-      observer?.disconnect();
-      under.clear();
-      const capsule = node.querySelector(".nav-capsule")?.getBoundingClientRect();
-      const line = capsule ? Math.round(capsule.top + capsule.height / 2) : 38;
-      observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting) under.add(entry.target);
-            else under.delete(entry.target);
-          }
-          node.toggleAttribute("data-night", under.size > 0);
-        },
-        // A one-pixel line through the capsule's middle.
-        { rootMargin: `-${line}px 0px -${Math.max(0, window.innerHeight - line - 1)}px 0px` },
-      );
-      for (const night of nights) observer.observe(night);
-    };
-    watch();
-    window.addEventListener("resize", watch);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", watch);
     };
   }, []);
 
@@ -81,73 +51,59 @@ export function SiteHeader() {
     const onPointer = (event: PointerEvent) => {
       if (event.target instanceof Node && !details.contains(event.target)) close(false);
     };
+    // A link to a section of this page leaves the menu open otherwise.
+    const onClick = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("a")) close(false);
+    };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointer);
+    details.addEventListener("click", onClick);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointer);
+      details.removeEventListener("click", onClick);
     };
   }, []);
 
-  const point = (target: EventTarget | null) => {
-    const nav = links.current;
-    if (!nav || !(target instanceof HTMLElement)) return;
-    setPill({ x: target.offsetLeft, w: target.offsetWidth });
-  };
-
   return (
     <header className="site-nav" ref={header}>
-      <div className="nav-capsule">
+      <div className="wrap nav-bar">
         <a className="nav-home" href="/" aria-label="auracode home">
           <Wordmark size={17} />
         </a>
-        <nav
-          className="nav-links"
-          aria-label="Main"
-          ref={links}
-          data-pill={pill ? "" : undefined}
-          style={
-            pill
-              ? ({ "--pill-x": `${pill.x}px`, "--pill-w": `${pill.w}px` } as CSSProperties)
-              : undefined
-          }
-          onPointerLeave={() => setPill(null)}
-          onBlur={() => setPill(null)}
-        >
-          <span className="nav-pill" aria-hidden="true" />
-          <a
-            href="/changelog"
-            onPointerEnter={(e) => point(e.currentTarget)}
-            onFocus={(e) => point(e.currentTarget)}
-          >
-            Changelog
-          </a>
-          <a
-            href="/signin"
-            onPointerEnter={(e) => point(e.currentTarget)}
-            onFocus={(e) => point(e.currentTarget)}
-          >
+        <nav className="nav-links" aria-label="Main">
+          {SECTIONS.map((link) => (
+            <a key={link.href} href={link.href}>
+              {link.text}
+            </a>
+          ))}
+        </nav>
+        <div className="nav-end">
+          <a className="nav-signin" href="/signin">
             Sign in
           </a>
-        </nav>
-        <a className="g-button g-button-primary nav-cta" href="/download" data-magnetic="">
-          Download
-        </a>
-        <details className="nav-menu" ref={menu}>
-          <summary className="nav-menu-button">
-            <span className="sr-only">Menu</span>
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path className="nav-menu-bar" d="M2 5.5h12" />
-              <path className="nav-menu-bar" d="M2 10.5h12" />
-            </svg>
-          </summary>
-          <nav className="nav-sheet" aria-label="Menu">
-            <a href="/download">Download</a>
-            <a href="/changelog">Changelog</a>
-            <a href="/signin">Sign in</a>
-            <a href="/account">Account</a>
-          </nav>
-        </details>
+          <a className="btn btn-ink btn-sm" href="/download">
+            Download
+          </a>
+          <details className="nav-menu" ref={menu}>
+            <summary className="nav-menu-button">
+              <span className="sr-only">Menu</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path className="nav-menu-bar" d="M2 5.5h12" />
+                <path className="nav-menu-bar" d="M2 10.5h12" />
+              </svg>
+            </summary>
+            <nav className="nav-sheet" aria-label="Menu">
+              {SECTIONS.map((link) => (
+                <a key={link.href} href={link.href}>
+                  {link.text}
+                </a>
+              ))}
+              <a href="/signin">Sign in</a>
+              <a href="/account">Account</a>
+            </nav>
+          </details>
+        </div>
       </div>
     </header>
   );

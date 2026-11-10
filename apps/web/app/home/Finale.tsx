@@ -1,17 +1,19 @@
 import { Words } from "../reveal";
-import { Arrow } from "../ui";
+import { AppTile, Arrow } from "../ui";
 
 /**
- * The night band's last word before the footer: one line and one action. The footer continues
- * the same night below it.
+ * The page's last word before the footer: the app as an object, one line, and the one action.
  */
 export function Finale() {
   return (
-    <section className="section finale night" aria-labelledby="finale-title">
+    <section className="section finale" aria-labelledby="finale-title">
       <div className="wrap finale-inner">
-        <h2 id="finale-title" className="finale-title">
+        <div className="finale-tile" aria-hidden="true" data-reveal="">
+          <AppTile small />
+        </div>
+        <h2 id="finale-title" className="title finale-title">
           <Words text="Your agents." />{" "}
-          <span className="finale-soft">
+          <span className="title-soft">
             <Words text="Your machine." offset={2} />
           </span>
         </h2>
@@ -19,11 +21,11 @@ export function Finale() {
           Free for Windows, macOS and Linux. No account needed.
         </p>
         <div className="finale-actions" data-reveal="">
-          <a className="cta cta-light" href="/download" data-magnetic="">
+          <a className="btn btn-ink" href="/download">
             Download
             <Arrow direction="down" />
           </a>
-          <a className="cta cta-night" href="/changelog">
+          <a className="btn btn-line" href="/changelog">
             Read the changelog
           </a>
         </div>

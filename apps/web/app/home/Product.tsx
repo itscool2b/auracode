@@ -1,43 +1,37 @@
 import { Words } from "../reveal";
 
-const CALLOUTS = [
-  { id: "projects", text: "Projects and chats", x: "9.5%", y: "52%" },
-  { id: "composer", text: "Agent, model, access and account", x: "44%", y: "79%" },
-  { id: "changes", text: "Every change, file by file", x: "86%", y: "62%" },
-] as const;
-
 /**
- * The real desktop, screenshotted from its preview (scripts/product-images.mjs), in a glass bezel.
- * Scrolling it into view lays it flat from a tilt; three glass notes then point at real parts of it.
+ * The real desktop, screenshotted from its preview (scripts/product-images.mjs), in a plain bezel:
+ * a title and what it means above it, and nothing drawn over it.
  */
 export function Product() {
   return (
     <section className="section product" aria-labelledby="product-title">
-      <div className="wrap product-head">
-        <h2 id="product-title" className="title">
-          <Words text="One workspace." />{" "}
-          <span className="title-soft">
-            <Words text="Every agent you run." offset={2} />
-          </span>
-        </h2>
-        <div className="split-side" data-reveal="">
-          <p className="lead">
-            Projects, chats, changes and a terminal in a native app for Windows, macOS and Linux.
-            Agents run on your machine, through their own command-line tools.
-          </p>
-          <a className="text-link" href="#capabilities">
-            See what it does
-            <span aria-hidden="true">→</span>
-          </a>
+      <div className="wrap">
+        <div className="split-head">
+          <h2 id="product-title" className="title">
+            <Words text="One workspace." />{" "}
+            <span className="title-soft">
+              <Words text="Every agent you run." offset={2} />
+            </span>
+          </h2>
+          <div className="split-side" data-reveal="">
+            <p className="lead">
+              Projects, chats, changes and a terminal in a native app for Windows, macOS and Linux.
+              Agents run on your machine, through their own command-line tools.
+            </p>
+            <a className="text-link" href="/download">
+              Get the app
+              <span aria-hidden="true">→</span>
+            </a>
+          </div>
         </div>
-      </div>
-      <div className="product-stage wrap-wide">
-        <figure className="product-frame" data-reveal="trigger">
+        <figure className="product-frame" data-reveal="">
           <picture>
             <source
               type="image/webp"
               srcSet="/images/desktop-light-480.webp 480w, /images/desktop-light-960.webp 960w, /images/desktop-light-1440.webp 1440w, /images/desktop-light-2240.webp 2240w"
-              sizes="(max-width: 1240px) calc(100vw - 40px), 1200px"
+              sizes="(max-width: 1247px) calc(100vw - 56px), 1104px"
             />
             <img
               src="/images/desktop-light.png"
@@ -47,19 +41,6 @@ export function Product() {
               alt="The auracode desktop: projects and chats in the sidebar, an agent's reply with code, the composer with agent, model and access controls, and the Changes panel listing edited files."
             />
           </picture>
-          <figcaption className="callouts" aria-hidden="true">
-            {CALLOUTS.map((callout, i) => (
-              <span
-                key={callout.id}
-                className="callout"
-                data-side={callout.id}
-                style={{ left: callout.x, top: callout.y, transitionDelay: `${600 + i * 160}ms` }}
-              >
-                <span className="callout-dot" />
-                {callout.text}
-              </span>
-            ))}
-          </figcaption>
         </figure>
       </div>
     </section>

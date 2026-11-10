@@ -29,12 +29,13 @@ import { AGENTS, SpriteMark } from "./Sprite";
 const HOVER_INTENT_MS = 90;
 
 /*
- * Six rows at left and one product view at right, on the page's night band. A glass capsule glides
- * to the active row and fills as its timer runs; the next row takes over when it fills. Focusing or
- * clicking a row shows its view at once, a pointer resting on one for 90ms does too, and the cycle
- * holds while the pointer or focus stays in the panel. The rows are a real tab list (arrow keys,
- * Home, End); each tab's panel is its one-sentence description, and the views illustrate them, so
- * the views stay out of the accessibility tree. Each view plays its own short scene when shown.
+ * Six rows at left and one product view at right, on a tinted stage. The active row is set in ink
+ * and the hairline under it fills as its timer runs; the next row takes over when it fills.
+ * Focusing or clicking a row shows its view at once, a pointer resting on one for 90ms does too,
+ * and the cycle holds while the pointer or focus stays in the panel. The rows are a real tab list
+ * (arrow keys, Home, End); each tab's panel is its one-sentence description, and the views
+ * illustrate them, so the views stay out of the accessibility tree. Each view plays its own short
+ * scene when shown.
  */
 
 /** The agents New chat finds in this view; the rest wait under "Other agents". */
@@ -565,27 +566,28 @@ export function Capabilities() {
   }, [active, reduced]);
 
   return (
-    <section
-      className="section caps night"
-      id="capabilities"
-      aria-labelledby="caps-title"
-      data-zone=""
-    >
-      <div className="caps-sky" aria-hidden="true" />
+    <section className="section caps" id="features" aria-labelledby="caps-title" data-zone="">
       <div className="wrap">
-        <h2 id="caps-title" className="title">
-          <Words text="Built for long turns." />{" "}
-          <span className="title-soft">
-            <Words text="And for changing your mind." offset={4} />
-          </span>
-        </h2>
+        <div className="split-head">
+          <h2 id="caps-title" className="title">
+            <Words text="Built for long turns." />{" "}
+            <span className="title-soft">
+              <Words text="And for changing your mind." offset={4} />
+            </span>
+          </h2>
+          <div className="split-side" data-reveal="">
+            <p className="lead">
+              Queue the next message, steer a turn while it runs, hand the chat to another agent,
+              and take back any change.
+            </p>
+          </div>
+        </div>
         <div
           className="caps-frame"
           data-reveal=""
           ref={panel}
           data-auto={auto ? "" : undefined}
           data-running={running ? "" : undefined}
-          style={{ "--active": active } as CSSProperties}
         >
           <div className="caps-side">
             <div
@@ -596,7 +598,6 @@ export function Capabilities() {
               aria-label="What auracode does"
               onKeyDown={onKey}
             >
-              <span className="caps-glider" aria-hidden="true" />
               {ITEMS.map((item, i) => (
                 <button
                   key={item.id}
@@ -621,9 +622,6 @@ export function Capabilities() {
                   onClick={() => select(i)}
                   onFocus={() => select(i)}
                 >
-                  <span className="caps-tab-index" aria-hidden="true">
-                    <span className="caps-tab-dot" />
-                  </span>
                   <span className="caps-tab-title">{item.title}</span>
                   <span className="caps-track" aria-hidden="true">
                     <span
