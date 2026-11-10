@@ -47,8 +47,11 @@ export type Phase =
   /** The relay answers; the computer is off, asleep or has auracode closed. */
   | { readonly name: "away" }
   | { readonly name: "ready" }
-  /** This pairing is over: the link was spent or the device was removed. */
-  | { readonly name: "ended"; readonly reason: string };
+  /**
+   * This pairing is over: the link was spent, or the computer no longer accepts this browser
+   * (`refused` names it, so the page can offer to try again or to forget it).
+   */
+  | { readonly name: "ended"; readonly reason: string; readonly refused?: string };
 
 export interface OpenChat {
   readonly id: string;
@@ -328,11 +331,19 @@ export class RemoteClient {
     if (this.#state.phase.name === "away") this.#set({ phase: { name: "connecting" } });
   }
 
+  /**
+   * The computer's answer to this side's hello. Exactly one is accepted per hello: a second one,
+   * replayed by whoever carries the messages, would derive the same keys again and start their
+   * message numbers over, which must never happen. So the nonce is spent the moment it is used,
+   * and a welcome with no hello waiting for it ends the session.
+   */
   async #welcome(body: string) {
     const credential = this.#credential;
+    const nonce = this.#nonce;
+    this.#nonce = null;
     const welcome = JSON.parse(body) as { v?: unknown; nonce?: unknown };
     const hostNonce = typeof welcome.nonce === "string" ? decode(welcome.nonce, 16) : null;
-    if (!credential || !this.#nonce || welcome.v !== VERSION || !hostNonce)
+    if (!credential || !nonce || this.#channel || welcome.v !== VERSION || !hostNonce)
       throw new Error("unexpected welcome");
     const [key, id] =
       credential.kind === "pair"
@@ -341,7 +352,7 @@ export class RemoteClient {
     this.#channel = await Channel.create(
       "client",
       key,
-      this.#nonce,
+      nonce,
       hostNonce,
       `${credential.kind}|${id}`,
     );
@@ -356,11 +367,13 @@ export class RemoteClient {
       return;
     }
     if (credential?.kind === "device") {
-      // The computer no longer knows this device: it was removed there.
+      // Nothing proves who sent a refusal, so it deletes nothing: the key stays until the person
+      // decides. If the device was removed on the computer, forgetting it here tidies up.
       const host = credential.host;
-      void deleteHost(host.hostId);
-      this.#set({ hosts: this.#state.hosts.filter((entry) => entry.hostId !== host.hostId) });
-      this.#end(`This browser was removed from ${host.hostName}. Pair it again from auracode.`);
+      this.#end(
+        `${host.hostName} no longer accepts this browser. If you removed it in auracode's Settings, pair again from there.`,
+        host.hostId,
+      );
     } else {
       this.#end(
         "This pairing link was already used or has expired. Create a new one in auracode: Settings, Remote access, Pair.",
@@ -368,10 +381,10 @@ export class RemoteClient {
     }
   }
 
-  #end(reason: string) {
+  #end(reason: string, refused?: string) {
     this.#credential = null;
     this.#set({
-      phase: { name: "ended", reason },
+      phase: refused ? { name: "ended", reason, refused } : { name: "ended", reason },
       host: null,
       overview: null,
       chat: null,
@@ -383,6 +396,8 @@ export class RemoteClient {
   /** One opened message: a reply to a request, or something the computer says by itself. */
   async #opened(text: string) {
     const message = JSON.parse(text) as Record<string, unknown>;
+    // A session's first sealed message is the computer's "ready", once; nothing else comes first.
+    if ((message.ev === "ready") === this.#ready) throw new Error("out of place");
     if (typeof message.re === "number") {
       const pending = this.#pending.get(message.re);
       this.#pending.delete(message.re);
@@ -696,6 +711,15 @@ export class RemoteClient {
     })) as { chat: WorkspaceChat };
     await this.refresh().catch(() => {});
     await this.open(created.chat.chat.id);
+  }
+
+  /** Deletes a computer's key from this browser, without asking the computer anything. */
+  async discard(hostId: string): Promise<void> {
+    await deleteHost(hostId);
+    const hosts = this.#state.hosts.filter((entry) => entry.hostId !== hostId);
+    this.#set({ hosts });
+    if (hosts[0]) this.use(hosts[0].hostId);
+    else this.#set({ phase: { name: "empty" } });
   }
 
   /** Unpairs this browser: the computer forgets the device and this browser its key. */

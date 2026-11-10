@@ -108,7 +108,9 @@ function Remote({ client }: { readonly client: RemoteClient }) {
     return (
       <Centered title="This pairing is over.">
         <p role="status">{state.phase.reason}</p>
-        {state.hosts.length > 0 ? (
+        {state.phase.refused ? (
+          <Refused client={client} hostId={state.phase.refused} />
+        ) : state.hosts.length > 0 ? (
           <p>
             <button
               type="button"
@@ -123,6 +125,28 @@ function Remote({ client }: { readonly client: RemoteClient }) {
     );
   if (state.chat || state.opening) return <ChatScreen client={client} state={state} />;
   return <ListScreen client={client} state={state} />;
+}
+
+/** A computer turned this browser away: try again, or delete its key here. */
+function Refused({ client, hostId }: { readonly client: RemoteClient; readonly hostId: string }) {
+  return (
+    <p className="remote-card-actions">
+      <button
+        type="button"
+        className="g-button g-button-primary g-button-44"
+        onClick={() => client.use(hostId)}
+      >
+        Try again
+      </button>
+      <button
+        type="button"
+        className="g-button g-button-outline g-button-44"
+        onClick={() => void client.discard(hostId)}
+      >
+        Forget this computer
+      </button>
+    </p>
+  );
 }
 
 function Centered({ title, children }: { readonly title: string; readonly children: ReactNode }) {
@@ -468,9 +492,9 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
     state.overview?.chats.find((entry) => entry.chat.id === state.opening)?.chat ??
     null;
   const status = summary ? statusWords(summary) : null;
-  const working = summary
-    ? ["running", "starting", "cancelling"].includes(summary.status) && !summary.needs_attention
-    : false;
+  // A turn is under way, whether the agent is working or waiting on an answer.
+  const running = summary ? ["running", "starting", "cancelling"].includes(summary.status) : false;
+  const working = running && !summary?.needs_attention;
   const [error, setError] = useState("");
   const link = linkWords(state);
   return (
@@ -512,7 +536,7 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
       {chat ? (
         <Composer
           disabled={state.phase.name !== "ready"}
-          working={working}
+          working={running}
           onSend={async (text) => {
             setError("");
             await client.send(chat.id, text);

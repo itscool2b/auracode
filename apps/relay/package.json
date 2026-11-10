@@ -5,6 +5,7 @@
   "scripts": {
     "worker:build": "wrangler deploy --dry-run --env= --outdir build",
     "worker:test": "wrangler deploy --dry-run --env= --outdir build && node --test tests/runtime.test.mjs",
+    "worker:e2e": "wrangler deploy --dry-run --env= --outdir build && node tests/e2e.mjs",
     "worker:check": "wrangler deploy --dry-run --env production --outdir ../../target/relay-dry-run",
     "typecheck": "tsc --noEmit -p ."
   },

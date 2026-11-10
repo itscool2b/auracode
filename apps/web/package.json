@@ -7,7 +7,7 @@
     "dev": "react-router dev --port 1429",
     "build": "react-router build && node scripts/headers.mjs",
     "typecheck": "react-router typegen && tsc --noEmit -p .",
-    "test": "pnpm run build && node --test tests/static.test.mjs",
+    "test": "pnpm run build && node --test tests/static.test.mjs tests/remote.test.ts",
     "test:browser": "pnpm run build && node tests/browser.mjs",
     "test:release": "node tests/release.test.mjs"
   },

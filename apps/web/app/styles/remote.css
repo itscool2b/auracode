@@ -11,6 +11,14 @@
   color: var(--s-ink);
 }
 
+/* The page's own buttons (rows and icons) start from nothing: no bevel, the page's face. */
+.remote :is(.remote-icon, .remote-chat-row) {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+
 .remote-centered {
   display: grid;
   gap: 20px;
@@ -517,6 +525,8 @@
   min-width: 0;
   min-height: 44px;
   resize: none;
+  padding: 10px 16px;
+  border-radius: 22px;
   /* Sixteen pixels, or iOS zooms the page when the box is tapped. */
   font-size: 16px;
   line-height: 22px;
