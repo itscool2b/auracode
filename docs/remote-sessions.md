@@ -54,6 +54,14 @@ decision about who may do what is made in Rust on the computer.
 - **A bot's calls are not sealed.** A bot speaks MCP over HTTPS to the relay, so the relay reads
   each call and answer in passing, as does the bot's own service. The Settings page says so. The
   computer still checks the bot's token on every call, so a relay cannot invent a bot.
+- **A device or a bot link reaches one workspace**: the profile that was open when it was made
+  (Local, or an account's). `remote.json` is the installation's, but each record names its
+  profile, and the computer accepts a key or a token only while that profile is the open one.
+  When another profile opens, browsers are told to start over, the other profile's sessions end,
+  an open pairing link closes, and the relay is given only the open profile's bot links, so the
+  others' addresses answer 404. A refused browser is told the computer has another workspace
+  open (`elsewhere`) and keeps its key for when its own is open again. Settings lists the open
+  workspace's devices and bots only. With no profile open, nothing is accepted.
 - **Anyone holding a device key or a bot address controls the chats**, and agents can edit files
   and run commands. There are no narrower permissions yet: pair your own devices, and link only
   a bot you would trust at the keyboard.

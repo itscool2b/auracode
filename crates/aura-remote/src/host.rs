@@ -68,6 +68,9 @@ pub struct Config {
     pub site: String,
     /// What paired browsers call this computer.
     pub host_name: String,
+    /// The open workspace's id; empty while none is open. Devices and bot links reach only the
+    /// workspace they were made in.
+    pub profile: String,
     pub backend: Arc<dyn Backend>,
     /// Called after anything Settings shows has changed.
     pub changed: Arc<dyn Fn() + Send + Sync>,
@@ -111,7 +114,8 @@ impl Service {
     /// Reads the saved settings and starts the connection task on `runtime`. Nothing connects
     /// until remote access is on.
     pub fn start(config: Config, runtime: &tokio::runtime::Handle) -> Result<Self, RegistryError> {
-        let registry = Registry::load(&config.path)?;
+        let mut registry = Registry::load(&config.path)?;
+        registry.set_scope(&config.profile);
         let shared = Arc::new(Shared {
             link: Mutex::new(if registry.enabled() {
                 RemoteLink::Connecting
@@ -233,8 +237,10 @@ impl Service {
     }
 
     /// Another profile was opened: browsers start over from its chats.
-    pub fn profile_changed(&self) {
+    pub fn profile_changed(&self, profile: &str) {
+        lock(&self.shared.registry).set_scope(profile);
         let _ = self.control.send(Control::Reset);
+        (self.shared.config.changed)();
     }
 
     /// Ends the connection task. Paired devices and bot links stay saved.
@@ -408,8 +414,10 @@ async fn serve(
             message = control.recv() => match message {
                 Some(Control::Shutdown) | None => Some(Ended::Shutdown),
                 Some(Control::Reset) => {
+                    // The browsers are told first; then the other workspace's devices are ended
+                    // and the relay learns which bot links are this workspace's.
                     state.reset();
-                    None
+                    state.refresh()
                 }
                 Some(Control::Refresh) => state.refresh(),
             },
@@ -613,7 +621,8 @@ impl Serving {
         }
     }
 
-    /// Another profile was opened: nothing a browser followed exists any more.
+    /// Another profile was opened: nothing a browser followed exists any more. The registry is
+    /// already scoped to it, so the caller's refresh ends the devices that are not its own.
     fn reset(&mut self) {
         for (cid, connection) in &mut self.connections {
             self.backend.release(&owner(cid));

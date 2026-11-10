@@ -554,6 +554,7 @@ async fn main() {
             relay,
             site,
             host_name: "Demo computer".into(),
+            profile: "demo".into(),
             backend: Arc::new(Shared(demo)),
             changed: Arc::new(|| {}),
         },

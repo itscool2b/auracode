@@ -1,8 +1,10 @@
 //! Remote access: paired browsers and linked bots reaching this computer's chats through the
 //! relay (`aura-remote`, `docs/remote-sessions.md`). Off until the person turns it on in Settings.
 //!
-//! The service belongs to the installation, not to a profile: it serves whichever profile is
-//! open, and tells browsers to start over when another one opens.
+//! The service belongs to the installation: one connection to the relay, whichever profile is
+//! open. A device or a bot link belongs to the profile it was made in and reaches no other
+//! (`aura_remote::Registry`): when another profile opens, browsers are told to start over, the
+//! other profile's devices are ended, and the relay is given only this profile's bot links.
 
 use std::sync::Arc;
 
@@ -69,6 +71,7 @@ pub(crate) fn setup(app: &tauri::AppHandle, runtime: &tokio::runtime::Handle) {
         relay,
         site,
         host_name,
+        profile: open_profile(&state),
         backend: Arc::new(AppBackend { app: app.clone() }),
         changed: Arc::new(move || {
             if let Some(service) = notify.try_state::<Service>() {
@@ -91,9 +94,18 @@ pub(crate) fn setup(app: &tauri::AppHandle, runtime: &tokio::runtime::Handle) {
 /// Why the service could not start: its saved settings could not be read.
 struct Unavailable(String);
 
+/// The open profile's id, which a device or a bot link is bound to; empty while none is open.
+fn open_profile(state: &AppState) -> String {
+    state
+        .app_info()
+        .profile
+        .map(|profile| profile.id)
+        .unwrap_or_default()
+}
+
 pub(crate) fn profile_changed(app: &tauri::AppHandle) {
     if let Some(service) = app.try_state::<Service>() {
-        service.profile_changed();
+        service.profile_changed(&open_profile(&app.state::<AppState>()));
     }
 }
 
@@ -118,7 +130,9 @@ fn service(app: &tauri::AppHandle) -> Result<Service, AppError> {
 
 fn refused(error: RegistryError) -> AppError {
     let code = match error {
-        RegistryError::TooManyDevices | RegistryError::TooManyBots => AppErrorCode::InvalidArgument,
+        RegistryError::TooManyDevices | RegistryError::TooManyBots | RegistryError::NoWorkspace => {
+            AppErrorCode::InvalidArgument
+        }
         _ => AppErrorCode::StorageUnavailable,
     };
     AppError::new(code, error.to_string())

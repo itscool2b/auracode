@@ -132,7 +132,13 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
         }
     };
     let Some(key) = key else {
-        return refuse(Refusal::Unknown);
+        let elsewhere = hello.kind == CredentialKind::Device
+            && lock(&shared.registry).device_elsewhere(&hello.id);
+        return refuse(if elsewhere {
+            Refusal::Elsewhere
+        } else {
+            Refusal::Unknown
+        });
     };
     let Ok(host_nonce) = crypto::random::<NONCE_BYTES>() else {
         return Received::Refuse(None);

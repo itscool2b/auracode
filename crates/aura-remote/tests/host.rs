@@ -464,6 +464,7 @@ async fn rig() -> Rig {
             ),
             site: "https://auracode.test".into(),
             host_name: "Studio".into(),
+            profile: "local".into(),
             backend: app.clone(),
             changed: Arc::new(move || {
                 counted.fetch_add(1, Ordering::Relaxed);
@@ -747,8 +748,9 @@ async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
     assert_eq!(big["data"]["history"]["has_more"], true);
     assert_eq!(big["data"]["history"]["before_seq"], items[0]["seq"]);
 
-    // Another profile opens: the browser is told to start over, and nothing is followed.
-    rig.service.profile_changed();
+    // The profile opens again (unlocked, say): the browser is told to start over, and nothing
+    // is followed. It is still this workspace's device, so its session stays.
+    rig.service.profile_changed("local");
     assert_eq!(phone.event(&mut relay).await, json!({ "ev": "reset" }));
     assert!(rig.app.frames.lock().expect("frames").is_empty());
 
@@ -919,6 +921,107 @@ async fn only_the_holder_of_a_current_key_gets_a_session() {
     assert_eq!(relay.next().await, "cllllllllllllllll");
     assert!(rig.service.status().devices.is_empty());
     relay.silent().await;
+}
+
+#[tokio::test]
+async fn a_device_and_a_bot_reach_only_the_workspace_they_were_made_in() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (mut phone, device, key) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    let link = rig.service.create_bot("Grok").expect("bot");
+    let listed = relay.next().await;
+    assert!(listed.starts_with("l[{"), "{listed}");
+    let reference = link.url.rsplit('/').next().expect("reference").to_owned();
+    let (bot, token) = reference.split_once('.').expect("id.token");
+    let hello = |cid: &str| {
+        format!(
+            "m{cid} H{}",
+            json!({ "v": 1, "kind": "device", "id": device, "nonce": crypto::encode(&key[..16]) })
+        )
+    };
+    let call = |rid: &str| {
+        format!(
+            "b{}",
+            json!({ "rid": rid, "bot": bot, "token": token, "tool": "list_chats", "args": {} })
+        )
+    };
+    let open_link = link_of(&rig.service.pair().expect("pairing").url);
+
+    // The account's workspace opens. The phone is told to start over and is then let go, and the
+    // relay is told this workspace has no bot links, so the bot's address stops answering there.
+    rig.service.profile_changed("account");
+    assert_eq!(phone.event(&mut relay).await, json!({ "ev": "reset" }));
+    assert_eq!(relay.next().await, "l[]");
+    assert_eq!(relay.next().await, "caaaaaaaaaaaaaaaa");
+    let status = rig.service.status();
+    assert!(
+        status.devices.is_empty() && status.bots.is_empty(),
+        "{status:?}"
+    );
+    assert_eq!(
+        status.pairing_expires_at, None,
+        "a link shown for the other workspace"
+    );
+
+    // Its key opens nothing here, and the refusal says why without ending the pairing.
+    relay.send("obbbbbbbbbbbbbbbb").await;
+    relay.send(hello("bbbbbbbbbbbbbbbb")).await;
+    assert_eq!(
+        relay.next().await,
+        r#"mbbbbbbbbbbbbbbbb R{"reason":"elsewhere"}"#
+    );
+    assert_eq!(relay.next().await, "cbbbbbbbbbbbbbbbb");
+    // Nor does the link that was open, or the bot's token, whatever the relay let through.
+    relay.send("occcccccccccccccc").await;
+    relay
+        .send(format!(
+            "mcccccccccccccccc H{}",
+            json!({ "v": 1, "kind": "pair", "id": open_link.0, "nonce": crypto::encode(&key[..16]) })
+        ))
+        .await;
+    assert_eq!(
+        relay.next().await,
+        r#"mcccccccccccccccc R{"reason":"unknown"}"#
+    );
+    assert_eq!(relay.next().await, "ccccccccccccccccc");
+    relay.send(call("r1")).await;
+    let refused: Value =
+        serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer")).expect("json");
+    assert_eq!(refused["error"], true, "{refused}");
+    assert!(rig.app.sent.lock().expect("sent").is_empty());
+
+    // This workspace pairs its own device, which the first one never sees.
+    let (_tablet, tablet, _) = pair(&rig, &mut relay, "dddddddddddddddd").await;
+    assert_eq!(rig.service.status().devices.len(), 1);
+
+    // Back in the first workspace: its phone and its bot work again, and the tablet does not.
+    rig.service.profile_changed("local");
+    let mut after = vec![relay.next().await, relay.next().await, relay.next().await];
+    after.sort();
+    assert_eq!(after[0], "cdddddddddddddddd");
+    assert!(after[1].starts_with("l[{"), "{after:?}");
+    assert!(after[2].starts_with("mdddddddddddddddd E"), "{after:?}");
+    let status = rig.service.status();
+    assert_eq!(status.devices.len(), 1);
+    assert_eq!(status.devices[0].id, device);
+    assert_ne!(status.devices[0].id, tablet);
+    let (mut again, ready) =
+        Browser::hello(&mut relay, "eeeeeeeeeeeeeeee", "device", &device, &key).await;
+    assert_eq!(ready["paired"], true);
+    assert_eq!(
+        again.request(&mut relay, json!({ "op": "overview" })).await["ok"],
+        true
+    );
+    relay.send(call("r2")).await;
+    let answered: Value =
+        serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer")).expect("json");
+    assert_eq!(answered["error"], false, "{answered}");
+}
+
+/// A pairing link's pairing id and key.
+fn link_of(url: &str) -> (String, [u8; 32]) {
+    let (_, pairing, key) = link(url);
+    (pairing, key)
 }
 
 #[tokio::test]

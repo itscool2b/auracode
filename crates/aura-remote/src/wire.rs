@@ -103,6 +103,8 @@ pub enum Refusal {
     Version,
     /// Too many browsers are connected.
     Busy,
+    /// The device is paired with another workspace of this computer than the one open now.
+    Elsewhere,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]

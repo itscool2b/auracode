@@ -366,6 +366,15 @@ export class RemoteClient {
       this.#end("This page and the auracode on that computer do not match. Update auracode.");
       return;
     }
+    if (credential?.kind === "device" && reason === "elsewhere") {
+      // A pairing reaches the workspace it was made in. The key is still good there.
+      const host = credential.host;
+      this.#end(
+        `${host.hostName} has another workspace open. This browser is paired with a different one: open that workspace in auracode, or pair this browser again from the one that is open.`,
+        host.hostId,
+      );
+      return;
+    }
     if (credential?.kind === "device") {
       // Nothing proves who sent a refusal, so it deletes nothing: the key stays until the person
       // decides. If the device was removed on the computer, forgetting it here tidies up.
