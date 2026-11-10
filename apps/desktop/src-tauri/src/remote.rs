@@ -1,8 +1,10 @@
 //! Remote access: paired browsers and linked bots reaching this computer's chats through the
 //! relay (`aura-remote`, `docs/remote-sessions.md`). Off until the person turns it on in Settings.
 //!
-//! The service belongs to the installation, not to a profile: it serves whichever profile is
-//! open, and tells browsers to start over when another one opens.
+//! The service belongs to the installation: one connection to the relay, whichever profile is
+//! open. A device or a bot link belongs to the profile it was made in and reaches no other
+//! (`aura_remote::Registry`): when another profile opens, browsers are told to start over, the
+//! other profile's devices are ended, and the relay is given only this profile's bot links.
 
 use std::sync::Arc;
 
@@ -69,7 +71,11 @@ pub(crate) fn setup(app: &tauri::AppHandle, runtime: &tokio::runtime::Handle) {
         relay,
         site,
         host_name,
-        backend: Arc::new(AppBackend { app: app.clone() }),
+        profile: open_profile(&state),
+        backend: Arc::new(AppBackend {
+            app: app.clone(),
+            profile: String::new(),
+        }),
         changed: Arc::new(move || {
             if let Some(service) = notify.try_state::<Service>() {
                 let _ = notify.emit(REMOTE_CHANGED, service.status());
@@ -91,9 +97,18 @@ pub(crate) fn setup(app: &tauri::AppHandle, runtime: &tokio::runtime::Handle) {
 /// Why the service could not start: its saved settings could not be read.
 struct Unavailable(String);
 
+/// The open profile's id, which a device or a bot link is bound to; empty while none is open.
+fn open_profile(state: &AppState) -> String {
+    state
+        .app_info()
+        .profile
+        .map(|profile| profile.id)
+        .unwrap_or_default()
+}
+
 pub(crate) fn profile_changed(app: &tauri::AppHandle) {
     if let Some(service) = app.try_state::<Service>() {
-        service.profile_changed();
+        service.profile_changed(&open_profile(&app.state::<AppState>()));
     }
 }
 
@@ -118,7 +133,9 @@ fn service(app: &tauri::AppHandle) -> Result<Service, AppError> {
 
 fn refused(error: RegistryError) -> AppError {
     let code = match error {
-        RegistryError::TooManyDevices | RegistryError::TooManyBots => AppErrorCode::InvalidArgument,
+        RegistryError::TooManyDevices | RegistryError::TooManyBots | RegistryError::NoWorkspace => {
+            AppErrorCode::InvalidArgument
+        }
         _ => AppErrorCode::StorageUnavailable,
     };
     AppError::new(code, error.to_string())
@@ -185,10 +202,13 @@ pub fn remote_remove_bot(app: tauri::AppHandle, id: String) -> Result<RemoteStat
     Ok(service.status())
 }
 
-/// The open profile's chats, as remote sessions reach them. Every call takes the same lease a
-/// window's command does, so a profile switch is never raced.
+/// One profile's chats, as remote sessions reach them. Every call takes the same lease a window's
+/// command does, and takes it only while `profile` is the open profile, both read under one lock:
+/// a session accepted for one profile is never served another's chats, wherever a switch lands.
+/// The service binds a profile before every call; unbound (`profile` empty), nothing is served.
 struct AppBackend {
     app: tauri::AppHandle,
+    profile: String,
 }
 
 fn failed(error: AppError) -> BackendError {
@@ -252,14 +272,20 @@ impl AppBackend {
         self.app.state::<AppState>()
     }
 
+    /// The bound profile's session manager, under a command lease.
+    fn sessions(
+        &self,
+    ) -> Result<crate::state::ProfileLease<aura_core::session::SessionManager>, AppError> {
+        self.state().sessions_of(&self.profile)
+    }
+
     /// The agent a new chat starts with: the one asked for, else the project's, else the one
     /// Settings names, else the first that is ready.
     async fn agent_for(&self, folder_id: &str, asked: Option<&str>) -> Result<String, AppError> {
         if let Some(agent) = asked {
             return Ok(agent.to_owned());
         }
-        let state = self.state();
-        let sessions = state.sessions()?;
+        let sessions = self.sessions()?;
         let snapshot = sessions
             .workspace_snapshot(WorkspaceFilter {
                 include_archived: false,
@@ -274,7 +300,7 @@ impl AppBackend {
         if let Some(agent) = &project.default_agent {
             return Ok(agent.clone());
         }
-        if let Some(agent) = default_agent(&state) {
+        if let Some(agent) = default_agent(&self.state()) {
             return Ok(agent);
         }
         sessions
@@ -300,10 +326,17 @@ fn default_agent(state: &AppState) -> Option<String> {
 }
 
 impl Backend for AppBackend {
+    fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend> {
+        Arc::new(Self {
+            app: self.app.clone(),
+            profile: profile.to_owned(),
+        })
+    }
+
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
         Box::pin(async move {
             let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             let snapshot = sessions
                 .workspace_snapshot(WorkspaceFilter {
                     include_archived: false,
@@ -337,9 +370,7 @@ impl Backend for AppBackend {
 
     fn watch(&self, owner: &str, statuses: Statuses) -> Result<(), BackendError> {
         // No lease: the subscription belongs to the manager, and ends with it.
-        let chats = self.state().chats().ok_or_else(|| {
-            BackendError::new("unavailable", "No profile is open on this computer.")
-        })?;
+        let chats = self.state().chats_of(&self.profile).map_err(failed)?;
         chats.manager.status_subscribe(Arc::new(StatusAdapter {
             owner: owner.to_owned(),
             statuses,
@@ -354,8 +385,7 @@ impl Backend for AppBackend {
         frames: Frames,
     ) -> BoxFuture<'a, Result<ChatAttach, BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             // One chat per browser: what it followed before is let go first.
             sessions.drop_owner(owner);
             sessions
@@ -383,8 +413,7 @@ impl Backend for AppBackend {
         before_seq: u32,
     ) -> BoxFuture<'a, Result<HistoryPage, BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .history(chat_id, before_seq, Some(PAGE_BYTES))
                 .await
@@ -398,8 +427,7 @@ impl Backend for AppBackend {
         text: String,
     ) -> BoxFuture<'a, Result<PromptAck, BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .send(chat_id, text)
                 .await
@@ -409,8 +437,7 @@ impl Backend for AppBackend {
 
     fn interrupt<'a>(&'a self, chat_id: &'a str) -> BoxFuture<'a, Result<(), BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .interrupt(chat_id)
                 .await
@@ -425,8 +452,7 @@ impl Backend for AppBackend {
         option_id: Option<String>,
     ) -> BoxFuture<'a, Result<(), BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .respond_permission(chat_id, request_id, option_id)
                 .await
@@ -441,8 +467,7 @@ impl Backend for AppBackend {
         answer: Option<UiAnswer>,
     ) -> BoxFuture<'a, Result<(), BackendError>> {
         Box::pin(async move {
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .respond_ui(chat_id, request_id, answer)
                 .await
@@ -457,8 +482,7 @@ impl Backend for AppBackend {
     ) -> BoxFuture<'a, Result<WorkspaceChat, BackendError>> {
         Box::pin(async move {
             let agent_id = self.agent_for(folder_id, agent_id).await.map_err(failed)?;
-            let state = self.state();
-            let sessions = state.sessions().map_err(failed)?;
+            let sessions = self.sessions().map_err(failed)?;
             sessions
                 .chat_project_create(ProjectChatCreate {
                     agent_id,

@@ -246,6 +246,11 @@ fn missing() -> BackendError {
 struct Shared(Arc<Demo>);
 
 impl Backend for Shared {
+    // The demo computer has one workspace.
+    fn bound(self: Arc<Self>, _profile: &str) -> Arc<dyn Backend> {
+        self
+    }
+
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
         Box::pin(async move {
             let mut chats: Vec<WorkspaceChat> = self
@@ -554,6 +559,7 @@ async fn main() {
             relay,
             site,
             host_name: "Demo computer".into(),
+            profile: "demo".into(),
             backend: Arc::new(Shared(demo)),
             changed: Arc::new(|| {}),
         },

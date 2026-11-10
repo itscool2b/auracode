@@ -288,6 +288,38 @@ impl AppState {
         Ok(self.lease(manager))
     }
 
+    /// As [`Self::sessions`], and only while `profile` is the open profile. The profile and its
+    /// chats are read under one lock, so a caller admitted for one profile is never handed
+    /// another's chats, whenever a switch lands (remote access binds every call this way).
+    pub(crate) fn sessions_of(
+        &self,
+        profile: &str,
+    ) -> Result<ProfileLease<SessionManager>, AppError> {
+        let runtime = lock(&self.runtime);
+        self.check_profile_access(&runtime)?;
+        let manager = Self::chats_of_open(&runtime, profile)?.manager.clone();
+        Ok(self.lease(manager))
+    }
+
+    /// The open profile's chats without a lease, only while `profile` is that profile.
+    pub(crate) fn chats_of(&self, profile: &str) -> Result<Arc<ChatRuntime>, AppError> {
+        Self::chats_of_open(&lock(&self.runtime), profile).cloned()
+    }
+
+    fn chats_of_open<'a>(
+        runtime: &'a ProfileRuntime,
+        profile: &str,
+    ) -> Result<&'a Arc<ChatRuntime>, AppError> {
+        let open = runtime.info.profile.as_ref().map(|open| open.id.as_str());
+        match (&runtime.chats, open) {
+            (Some(chats), Some(open)) if !profile.is_empty() && open == profile => Ok(chats),
+            _ => Err(AppError::new(
+                AppErrorCode::StorageUnavailable,
+                "Another workspace is open on this computer.",
+            )),
+        }
+    }
+
     /// The active profile's setup preferences without a command lease, for reads the app makes on
     /// its own (startup and profile switches apply Settings' General page). Never for changes.
     pub(crate) fn setup_service(&self) -> Option<Arc<crate::onboarding::SetupService>> {
@@ -660,6 +692,31 @@ mod tests {
             );
             state.at_exit();
         }
+    }
+
+    /// Remote access asks for one profile's chats by name: only the open profile's are handed out.
+    #[tokio::test]
+    async fn chats_are_handed_out_by_name_only_for_the_open_profile() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let state = state(boot(Ok(DataRoot::at(dir.path().join("data")))));
+        let open = state.app_info().profile.expect("profile").id;
+        assert!(state.sessions_of(&open).is_ok());
+        assert!(state.chats_of(&open).is_ok());
+        for other in ["", "another-profile", &format!("{open} ")] {
+            let Err(refused) = state.sessions_of(other) else {
+                panic!("{other:?} was handed chats");
+            };
+            assert_eq!(refused.code, AppErrorCode::StorageUnavailable, "{other:?}");
+            assert!(state.chats_of(other).is_err(), "{other:?}");
+        }
+        // While a switch is under way nothing is handed out, whatever the name.
+        lock(&state.runtime).info.profile_switching = true;
+        assert!(state.sessions_of(&open).is_err());
+        lock(&state.runtime).info.profile_switching = false;
+        // With no profile open, an empty name is not a match.
+        lock(&state.runtime).info.profile = None;
+        assert!(state.sessions_of("").is_err() && state.chats_of("").is_err());
+        state.at_exit();
     }
 
     /// The sweep's notice arrives after startup and shows with the others from then on.

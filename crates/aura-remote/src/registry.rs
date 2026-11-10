@@ -3,6 +3,11 @@
 //!
 //! A pairing link is the exception: it lives in memory, opens once and expires in minutes, so a
 //! link left in a screenshot or a browser's history is worth nothing later.
+//!
+//! A device or a bot link belongs to the workspace (profile) that was open when it was made, and
+//! reaches that workspace only. The file is the installation's, but nothing in it opens another
+//! workspace's chats: a phone paired in Local does not reach an account's encrypted workspace, nor
+//! the other way round. With no workspace open, nothing is accepted.
 
 use std::{
     io::Write,
@@ -33,6 +38,8 @@ pub enum RegistryError {
     TooManyBots,
     #[error("The system's random source is unavailable.")]
     Random,
+    #[error("Open a workspace before pairing a device or linking a bot.")]
+    NoWorkspace,
 }
 
 impl From<crypto::CryptoError> for RegistryError {
@@ -49,6 +56,10 @@ pub struct Device {
     pub name: String,
     pub created_at: i64,
     pub last_seen_at: i64,
+    /// The workspace it was paired in, and the only one it reaches. A record without one (none
+    /// was ever written by a release) reaches nothing.
+    #[serde(default)]
+    pub profile: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -59,6 +70,9 @@ pub struct Bot {
     pub name: String,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
+    /// The workspace it was made in, and the only one it reaches.
+    #[serde(default)]
+    pub profile: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,6 +106,8 @@ pub struct Registry {
     path: PathBuf,
     stored: Stored,
     pairing: Option<Pairing>,
+    /// The open workspace's id. Empty while none is open.
+    scope: String,
 }
 
 impl Registry {
@@ -124,7 +140,27 @@ impl Registry {
             path: path.to_owned(),
             stored,
             pairing: None,
+            scope: String::new(),
         })
+    }
+
+    /// Names the open workspace. Devices and bot links of any other stop being accepted, and an
+    /// open pairing link closes: it was shown for the workspace being left.
+    pub fn set_scope(&mut self, profile: &str) {
+        if self.scope != profile {
+            self.scope = profile.to_owned();
+            self.pairing = None;
+        }
+    }
+
+    /// The open workspace's id; empty while none is open.
+    pub fn scope(&self) -> &str {
+        &self.scope
+    }
+
+    /// Whether a record made in `profile` belongs to the open workspace.
+    fn open(&self, profile: &str) -> bool {
+        !self.scope.is_empty() && self.scope == profile
     }
 
     fn save(&self) -> Result<(), RegistryError> {
@@ -157,12 +193,22 @@ impl Registry {
         &self.stored.host_key
     }
 
-    pub fn devices(&self) -> &[Device] {
-        &self.stored.devices
+    /// The open workspace's devices.
+    pub fn devices(&self) -> Vec<&Device> {
+        self.stored
+            .devices
+            .iter()
+            .filter(|device| self.open(&device.profile))
+            .collect()
     }
 
-    pub fn bots(&self) -> &[Bot] {
-        &self.stored.bots
+    /// The open workspace's bot links.
+    pub fn bots(&self) -> Vec<&Bot> {
+        self.stored
+            .bots
+            .iter()
+            .filter(|bot| self.open(&bot.profile))
+            .collect()
     }
 
     /// Turning remote access off also ends any open pairing link.
@@ -179,6 +225,9 @@ impl Registry {
 
     /// A new pairing link. It replaces the one before it: only the newest link opens.
     pub fn start_pairing(&mut self, now: i64) -> Result<Pairing, RegistryError> {
+        if self.scope.is_empty() {
+            return Err(RegistryError::NoWorkspace);
+        }
         let pairing = Pairing {
             id: crypto::encode(&crypto::random::<8>()?),
             key: crypto::random()?,
@@ -232,7 +281,7 @@ impl Registry {
         if self.pairing_key(id, now).is_none() {
             return Ok(None);
         }
-        if self.stored.devices.len() >= MAX_DEVICES {
+        if self.devices().len() >= MAX_DEVICES {
             return Err(RegistryError::TooManyDevices);
         }
         let device = Device {
@@ -241,6 +290,7 @@ impl Registry {
             name: name_of(name, "Browser"),
             created_at: now,
             last_seen_at: now,
+            profile: self.scope.clone(),
         };
         self.stored.devices.push(device.clone());
         if let Err(error) = self.save() {
@@ -251,17 +301,32 @@ impl Registry {
         Ok(Some(device))
     }
 
+    /// The key of the device `id`, if it was paired in the open workspace.
     pub fn device_key(&self, id: &str) -> Option<[u8; KEY_BYTES]> {
         self.stored
             .devices
             .iter()
-            .find(|device| crypto::same(&device.id, id))
+            .find(|device| crypto::same(&device.id, id) && self.open(&device.profile))
             .and_then(|device| crypto::decode(&device.key))
+    }
+
+    /// Whether the device `id` is paired, but in a workspace that is not the open one.
+    pub fn device_elsewhere(&self, id: &str) -> bool {
+        self.stored
+            .devices
+            .iter()
+            .any(|device| crypto::same(&device.id, id) && !self.open(&device.profile))
     }
 
     /// Notes that a device connected. A failed save only loses the time.
     pub fn seen(&mut self, id: &str, now: i64) {
-        if let Some(device) = self.stored.devices.iter_mut().find(|d| d.id == id) {
+        let scope = self.scope.clone();
+        if let Some(device) = self
+            .stored
+            .devices
+            .iter_mut()
+            .find(|d| d.id == id && !scope.is_empty() && d.profile == scope)
+        {
             // Reconnects are frequent; a minute's precision is enough to be worth a write.
             if now - device.last_seen_at >= 60_000 {
                 device.last_seen_at = now;
@@ -272,7 +337,10 @@ impl Registry {
 
     pub fn remove_device(&mut self, id: &str) -> Result<bool, RegistryError> {
         let before = self.stored.devices.clone();
-        self.stored.devices.retain(|device| device.id != id);
+        let scope = self.scope.clone();
+        self.stored
+            .devices
+            .retain(|device| !(device.id == id && !scope.is_empty() && device.profile == scope));
         if self.stored.devices.len() == before.len() {
             return Ok(false);
         }
@@ -284,7 +352,10 @@ impl Registry {
     }
 
     pub fn add_bot(&mut self, name: &str, now: i64) -> Result<NewBot, RegistryError> {
-        if self.stored.bots.len() >= MAX_BOTS {
+        if self.scope.is_empty() {
+            return Err(RegistryError::NoWorkspace);
+        }
+        if self.bots().len() >= MAX_BOTS {
             return Err(RegistryError::TooManyBots);
         }
         let new = NewBot {
@@ -297,6 +368,7 @@ impl Registry {
             name: name_of(name, "Bot"),
             created_at: now,
             last_used_at: None,
+            profile: self.scope.clone(),
         });
         if let Err(error) = self.save() {
             self.stored.bots.pop();
@@ -305,14 +377,16 @@ impl Registry {
         Ok(new)
     }
 
-    /// Whether `token` is the bot `id`'s. Notes the use.
+    /// Whether `token` is the bot `id`'s, and that bot was linked in the open workspace. Notes
+    /// the use.
     pub fn verify_bot(&mut self, id: &str, token: &str, now: i64) -> bool {
         let hash = crypto::hash(token);
+        let scope = self.scope.clone();
         let Some(bot) = self
             .stored
             .bots
             .iter_mut()
-            .find(|bot| crypto::same(&bot.id, id))
+            .find(|bot| crypto::same(&bot.id, id) && !scope.is_empty() && bot.profile == scope)
         else {
             return false;
         };
@@ -328,7 +402,10 @@ impl Registry {
 
     pub fn remove_bot(&mut self, id: &str) -> Result<bool, RegistryError> {
         let before = self.stored.bots.clone();
-        self.stored.bots.retain(|bot| bot.id != id);
+        let scope = self.scope.clone();
+        self.stored
+            .bots
+            .retain(|bot| !(bot.id == id && !scope.is_empty() && bot.profile == scope));
         if self.stored.bots.len() == before.len() {
             return Ok(false);
         }
@@ -363,9 +440,86 @@ fn name_of(name: &str, fallback: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_device_or_bot_reaches_only_the_workspace_it_was_made_in() {
+        let folder = tempfile::tempdir().expect("folder");
+        let path = folder.path().join("remote.json");
+        let mut registry = Registry::load(&path).expect("load");
+        // No workspace open: nothing can be made, and nothing is accepted.
+        assert!(matches!(
+            registry.start_pairing(0),
+            Err(RegistryError::NoWorkspace)
+        ));
+        assert!(matches!(
+            registry.add_bot("Grok", 0),
+            Err(RegistryError::NoWorkspace)
+        ));
+
+        registry.set_scope("local");
+        let pairing = registry.start_pairing(0).expect("pairing");
+        let phone = registry
+            .pair(&pairing.id, "Phone", 1)
+            .expect("pair")
+            .expect("device");
+        let bot = registry.add_bot("Grok", 1).expect("bot");
+        let open = registry.start_pairing(2).expect("pairing");
+
+        // The account's workspace opens: Local's phone, bot and open link are not its own.
+        registry.set_scope("account");
+        assert_eq!(registry.device_key(&phone.id), None);
+        assert!(registry.device_elsewhere(&phone.id));
+        assert!(!registry.device_elsewhere("no-such-one"));
+        assert!(!registry.verify_bot(&bot.id, &bot.token, 3));
+        assert_eq!(
+            registry.pairing_key(&open.id, 3),
+            None,
+            "a link shown for Local"
+        );
+        assert!(registry.devices().is_empty() && registry.bots().is_empty());
+        // Nor can they be removed from here, or counted against this workspace.
+        assert!(!registry.remove_device(&phone.id).expect("remove"));
+        assert!(!registry.remove_bot(&bot.id).expect("remove"));
+        registry.seen(&phone.id, 10_000_000);
+        let pairing = registry.start_pairing(4).expect("pairing");
+        let tablet = registry
+            .pair(&pairing.id, "Tablet", 5)
+            .expect("pair")
+            .expect("device");
+        assert_eq!(tablet.profile, "account");
+        assert_eq!(registry.devices().len(), 1);
+
+        // Back in Local, and after a restart: each workspace has its own again.
+        let mut again = Registry::load(&path).expect("reload");
+        again.set_scope("local");
+        assert_eq!(again.device_key(&phone.id), crypto::decode(&phone.key));
+        assert_eq!(
+            again.devices()[0].last_seen_at,
+            1,
+            "untouched from the other workspace"
+        );
+        assert!(again.verify_bot(&bot.id, &bot.token, 6));
+        assert_eq!(again.device_key(&tablet.id), None);
+        assert!(again.device_elsewhere(&tablet.id));
+
+        // A record with no workspace (never written by a release) reaches nothing, anywhere.
+        let text = std::fs::read_to_string(&path).expect("file");
+        std::fs::write(
+            &path,
+            text.replace(r#""profile": "local""#, r#""profile": """#),
+        )
+        .expect("write");
+        let mut legacy = Registry::load(&path).expect("reload");
+        for scope in ["local", "account", ""] {
+            legacy.set_scope(scope);
+            assert_eq!(legacy.device_key(&phone.id), None, "{scope}");
+            assert!(!legacy.verify_bot(&bot.id, &bot.token, 7), "{scope}");
+        }
+    }
+
     fn fresh() -> (tempfile::TempDir, Registry) {
         let folder = tempfile::tempdir().expect("folder");
-        let registry = Registry::load(&folder.path().join("remote.json")).expect("load");
+        let mut registry = Registry::load(&folder.path().join("remote.json")).expect("load");
+        registry.set_scope("local");
         (folder, registry)
     }
 
@@ -511,6 +665,8 @@ mod tests {
         ));
 
         let mut again = Registry::load(&path).expect("reload");
+        assert!(again.devices().is_empty(), "no workspace is open yet");
+        again.set_scope("local");
         assert_eq!(again.devices().len(), MAX_DEVICES - 1);
         assert_eq!(again.bots().len(), MAX_BOTS);
         assert!(again.verify_bot(&bot.id, &bot.token, 10));

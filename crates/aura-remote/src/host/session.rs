@@ -124,15 +124,23 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
     let Some(client_nonce) = crypto::decode::<NONCE_BYTES>(&hello.nonce) else {
         return Received::Refuse(None);
     };
-    let key = {
+    // The key and the workspace it is good for, read together.
+    let (key, scope) = {
         let mut registry = lock(&shared.registry);
-        match hello.kind {
+        let key = match hello.kind {
             CredentialKind::Pair => registry.pairing_key(&hello.id, now()),
             CredentialKind::Device => registry.device_key(&hello.id),
-        }
+        };
+        (key, registry.scope().to_owned())
     };
     let Some(key) = key else {
-        return refuse(Refusal::Unknown);
+        let elsewhere = hello.kind == CredentialKind::Device
+            && lock(&shared.registry).device_elsewhere(&hello.id);
+        return refuse(if elsewhere {
+            Refusal::Elsewhere
+        } else {
+            Refusal::Unknown
+        });
     };
     let Ok(host_nonce) = crypto::random::<NONCE_BYTES>() else {
         return Received::Refuse(None);
@@ -161,6 +169,7 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
         channel,
         pairing: (!paired).then(|| hello.id.clone()),
         device: paired.then_some(hello.id),
+        scope,
         proven: false,
         calls: Arc::new(AtomicUsize::new(0)),
         backlog: Arc::new(AtomicUsize::new(0)),
@@ -310,8 +319,12 @@ fn start(
     }
     session.calls.fetch_add(1, Ordering::Relaxed);
     let (calls, backlog) = (session.calls.clone(), session.backlog.clone());
-    let (shared, backend, out, cid) =
-        (shared.clone(), backend.clone(), out.clone(), cid.to_owned());
+    let (shared, backend, out, cid) = (
+        shared.clone(),
+        backend.clone().bound(&session.scope),
+        out.clone(),
+        cid.to_owned(),
+    );
     tokio::spawn(async move {
         let result = perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await;
         calls.fetch_sub(1, Ordering::Relaxed);
