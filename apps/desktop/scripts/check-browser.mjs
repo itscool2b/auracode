@@ -192,11 +192,23 @@ export async function checkBrowser(browser, url, out, engine) {
       await page.getByRole("button", { name: "Close history" }).click();
       assert.deepEqual(errors, [], `${label}: no page errors`);
 
-      // Browser use under Universal plugins.
+      // Browser use on its own Settings page, with what agents get said outright.
       await page.goto(`${url}/?preview=customize&theme=${theme}`);
-      await page.getByTestId("plugins-universal-nav").click();
+      await page
+        .getByRole("navigation", { name: "Settings sections" })
+        .getByRole("button", { name: "Browser", exact: true })
+        .click();
       const card = page.getByTestId("plugins-universal");
       await card.waitFor();
+      await card.getByText("Exposed to every AI agent", { exact: true }).waitFor();
+      assert.equal(
+        await card
+          .getByRole("list", { name: "Browser tools agents get" })
+          .getByRole("listitem")
+          .count(),
+        14,
+        `${label}: every browser tool is listed`,
+      );
       await axe(page, `${label} universal plugins`, "[data-testid=plugins-universal]");
       await page.screenshot({ path: resolve(out, `${engine}-${theme}-universal.png`) });
       const toggle = page.getByTestId("plugins-browser");

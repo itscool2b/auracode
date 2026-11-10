@@ -4,6 +4,8 @@ import type { McpActionResult, McpDefinition, McpSessionAction, McpSnapshot } fr
 import { errorMessage } from "../../lib/errors";
 import { type SharedMcpApi, sharedMcpApi } from "../../lib/sharedMcp";
 import { Modal } from "../chat/Modal";
+import { Switch } from "../settings/SettingsRow";
+import { RowMenu } from "./RowMenu";
 import "./shared-mcp.css";
 
 export interface McpProject {
@@ -46,12 +48,15 @@ export function SharedMcpPanel({
   initialProjectId = null,
   api = sharedMcpApi,
   activeChatId,
+  addFor = null,
 }: {
   readonly projects?: readonly McpProject[];
   readonly agents?: readonly McpAgent[];
   readonly initialProjectId?: string | null;
   readonly api?: SharedMcpApi;
   readonly activeChatId?: string | null;
+  /** Asked from an agent's own list: opens the editor for a server only that agent loads. */
+  readonly addFor?: { readonly id: number; readonly agent: string } | null;
 }) {
   const [snapshot, setSnapshot] = useState<McpSnapshot | null>(null);
   const [explicitScope, setExplicitScope] = useState<string | null>(null);
@@ -71,6 +76,20 @@ export function SharedMcpPanel({
     setExplicitScope(scope);
     setEditing(definition);
   }
+  const blank = (only: string | null): McpDefinition => ({
+    id: crypto.randomUUID(),
+    name: "",
+    project_id: scope || null,
+    enabled: true,
+    transport: { type: "stdio", command: "", args: [] },
+    env_keys: [],
+    header_keys: [],
+    agents: only ? [only] : null,
+  });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: One request opens one editor.
+  useEffect(() => {
+    if (addFor) openEditor(blank(addFor.agent));
+  }, [addFor?.id]);
   useEffect(() => {
     alive.current = true;
     void api
@@ -109,32 +128,42 @@ export function SharedMcpPanel({
     <div className="plugins-agent shared-mcp-panel">
       <header className="plugins-agent-head">
         <div className="plugins-agent-title">
-          <h2>Shared MCP</h2>
-          <p>One definition, for every agent or the ones you choose</p>
+          <h2>MCP servers</h2>
+          <p>For every agent, or only the ones you choose</p>
         </div>
         <button
           className="g-button g-button-primary g-button-28"
           type="button"
           disabled={busy || !snapshot}
-          onClick={() =>
-            openEditor({
-              id: crypto.randomUUID(),
-              name: "",
-              project_id: scope || null,
-              enabled: true,
-              transport: { type: "stdio", command: "", args: [] },
-              env_keys: [],
-              header_keys: [],
-              agents: null,
-            })
-          }
+          onClick={() => openEditor(blank(null))}
         >
           Add server
         </button>
+        <RowMenu
+          label="MCP servers actions"
+          items={[
+            {
+              label: "Import",
+              onSelect: () => {
+                setExplicitScope(scope);
+                setDocument({ mode: "import", text: "" });
+              },
+            },
+            {
+              label: "Export",
+              onSelect: () =>
+                void run(async () => {
+                  const text = await api.export();
+                  if (alive.current) setDocument({ mode: "export", text });
+                }),
+            },
+            { label: "Refresh", onSelect: () => void run(() => api.snapshot()) },
+          ]}
+        />
       </header>
       <p className="plugins-summary">
         Add a server once and every agent can use it, or only the agents you choose. Signing in to a
-        server stays on this device.
+        server stays on this device. An agent's own servers are listed on its page.
       </p>
       <div className="shared-mcp-toolbar">
         <label>
@@ -153,40 +182,6 @@ export function SharedMcpPanel({
             <option value="">All projects</option>
           </select>
         </label>
-        <div>
-          <button
-            className="g-button g-button-outline g-button-28"
-            type="button"
-            disabled={busy || !snapshot}
-            onClick={() => {
-              setExplicitScope(scope);
-              setDocument({ mode: "import", text: "" });
-            }}
-          >
-            Import
-          </button>
-          <button
-            className="g-button g-button-outline g-button-28"
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const text = await api.export();
-                if (alive.current) setDocument({ mode: "export", text });
-              })
-            }
-          >
-            Export
-          </button>
-          <button
-            className="g-button g-button-ghost g-button-28"
-            type="button"
-            disabled={busy}
-            onClick={() => void run(() => api.snapshot())}
-          >
-            Refresh
-          </button>
-        </div>
       </div>
       {error ? (
         <p className="library-feedback" role="alert">
@@ -225,7 +220,7 @@ export function SharedMcpPanel({
         <p role="status">Reading shared MCP…</p>
       ) : !visible.length ? (
         <p className="plugins-none">
-          No shared servers in this scope. Add a server or import an Aura definition.
+          No servers here yet. Add one, or paste the config from a server's README.
         </p>
       ) : (
         <ul className="plugins-rows">
@@ -238,7 +233,7 @@ export function SharedMcpPanel({
                   <span data-testid="shared-mcp-agents">
                     {agentsSummary(record.definition.agents, agents)}
                   </span>{" "}
-                  · Revision {record.revision} ·{" "}
+                  ·{" "}
                   {record.definition.enabled
                     ? record.missing_credentials.length
                       ? "Needs local authentication"
@@ -250,105 +245,83 @@ export function SharedMcpPanel({
                 ) : null}
               </div>
               <div className="shared-mcp-actions">
+                <Switch
+                  label={`${record.definition.name} enabled`}
+                  checked={record.definition.enabled}
+                  disabled={busy}
+                  onChange={(enabled) =>
+                    void run(() => api.save(snapshot.revision, { ...record.definition, enabled }))
+                  }
+                />
+                {record.definition.env_keys.length || record.definition.header_keys.length ? (
+                  <button
+                    type="button"
+                    className="g-button g-button-outline g-button-28"
+                    disabled={busy}
+                    onClick={() => setCredentials(record.definition)}
+                  >
+                    Authentication
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="g-button g-button-ghost g-button-28"
+                  className="g-button g-button-outline g-button-28"
                   disabled={busy}
                   onClick={() => openEditor(record.definition)}
                 >
                   Edit
                 </button>
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  disabled={busy}
-                  onClick={() => setCredentials(record.definition)}
-                >
-                  Authentication
-                </button>
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const result = await api.test(
-                        snapshot.revision,
-                        record.definition,
-                        activeChatId,
-                      );
-                      if (alive.current) setStatus(`${record.definition.name}: ${result.message}`);
-                    })
-                  }
-                >
-                  Test connection
-                </button>
-                {activeChatId ? (
-                  <>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      disabled={busy}
-                      onClick={() => sessionAction(record.definition, "status")}
-                    >
-                      Session status
-                    </button>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      disabled={busy}
-                      onClick={() => sessionAction(record.definition, "login")}
-                    >
-                      Sign in
-                    </button>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      disabled={busy}
-                      onClick={() => sessionAction(record.definition, "restart")}
-                    >
-                      Restart active chat
-                    </button>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() =>
-                      api.save(snapshot.revision, {
-                        ...record.definition,
-                        enabled: !record.definition.enabled,
-                      }),
-                    )
-                  }
-                >
-                  {record.definition.enabled ? "Disable" : "Enable"}
-                </button>
-                {scope === "" && projects.length ? (
-                  <button
-                    type="button"
-                    className="g-button g-button-ghost g-button-28"
-                    disabled={busy}
-                    onClick={() =>
-                      openEditor({
-                        ...record.definition,
-                        project_id: initialProjectId ?? projects[0]?.id ?? null,
-                      })
-                    }
-                  >
-                    Create project override
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  disabled={busy}
-                  onClick={() => void run(() => api.remove(snapshot.revision, record.definition))}
-                >
-                  Remove
-                </button>
+                <RowMenu
+                  label={`${record.definition.name} actions`}
+                  items={[
+                    {
+                      label: "Test connection",
+                      onSelect: () =>
+                        void run(async () => {
+                          const result = await api.test(
+                            snapshot.revision,
+                            record.definition,
+                            activeChatId,
+                          );
+                          if (alive.current)
+                            setStatus(`${record.definition.name}: ${result.message}`);
+                        }),
+                    },
+                    ...(activeChatId
+                      ? [
+                          {
+                            label: "Session status",
+                            onSelect: () => sessionAction(record.definition, "status"),
+                          },
+                          {
+                            label: "Sign in",
+                            onSelect: () => sessionAction(record.definition, "login"),
+                          },
+                          {
+                            label: "Restart active chat",
+                            onSelect: () => sessionAction(record.definition, "restart"),
+                          },
+                        ]
+                      : []),
+                    ...(scope === "" && projects.length
+                      ? [
+                          {
+                            label: "Create project override",
+                            onSelect: () =>
+                              openEditor({
+                                ...record.definition,
+                                project_id: initialProjectId ?? projects[0]?.id ?? null,
+                              }),
+                          },
+                        ]
+                      : []),
+                    {
+                      label: "Remove",
+                      onSelect: () =>
+                        void run(() => api.remove(snapshot.revision, record.definition)),
+                    },
+                  ]}
+                />
               </div>
             </li>
           ))}
@@ -420,6 +393,14 @@ export function SharedMcpPanel({
               const result = await api.save(snapshot.revision, definition);
               if (alive.current) setEditing(null);
               setStatus("Definition saved. Restart compatible idle chats to apply this revision.");
+              return result;
+            })
+          }
+          onPaste={(text, projectId) =>
+            void run(async () => {
+              const result = await api.importNative(snapshot.revision, projectId, text);
+              if (alive.current) setEditing(null);
+              setStatus("Servers added. Restart compatible idle chats to load them.");
               return result;
             })
           }
@@ -520,6 +501,7 @@ function McpEditor({
   busy,
   onClose,
   onSave,
+  onPaste,
 }: {
   readonly definition: McpDefinition;
   readonly projects: readonly McpProject[];
@@ -527,8 +509,14 @@ function McpEditor({
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onSave: (definition: McpDefinition) => void;
+  /** Adds every server a pasted `mcpServers` config names, in the chosen scope. */
+  readonly onPaste: (text: string, projectId: string | null) => void;
 }) {
   const [value, setValue] = useState(definition);
+  // A new server can be typed in or pasted as the JSON its README gives.
+  const adding = definition.name === "";
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState("");
   const [args, setArgs] = useState(
     definition.transport.type === "stdio" ? definition.transport.args.join("\n") : "",
   );
@@ -542,12 +530,71 @@ function McpEditor({
   );
   return (
     <Modal
-      title={definition.name ? "Edit shared MCP server" : "Add shared MCP server"}
+      title={definition.name ? "Edit MCP server" : "Add MCP server"}
       size="lg"
       onClose={onClose}
     >
+      {adding ? (
+        <fieldset className="shared-mcp-how">
+          <legend>How to add it</legend>
+          <label>
+            <input
+              type="radio"
+              name="mcp-how"
+              checked={!pasting}
+              onChange={() => setPasting(false)}
+            />
+            Fill in the form
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="mcp-how"
+              checked={pasting}
+              onChange={() => setPasting(true)}
+            />
+            Paste a config
+          </label>
+        </fieldset>
+      ) : null}
+      {adding && pasting ? (
+        <form
+          className="shared-mcp-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onPaste(pasted, value.project_id);
+          }}
+        >
+          <label className="shared-mcp-field">
+            Config JSON
+            <textarea
+              className="g-input shared-mcp-paste"
+              rows={10}
+              spellCheck={false}
+              required
+              placeholder={
+                '{\n  "mcpServers": {\n    "docs": { "command": "npx", "args": ["-y", "docs-mcp"] }\n  }\n}'
+              }
+              value={pasted}
+              onChange={(e) => setPasted(e.currentTarget.value)}
+            />
+          </label>
+          <p className="plugins-note">
+            The <code>mcpServers</code> block a server's README gives you. Every server in it is
+            added for every agent. Secret values in it stay on this device and are not synced.
+          </p>
+          <button
+            type="submit"
+            className="g-button g-button-primary"
+            disabled={busy || !pasted.trim()}
+          >
+            Add from config
+          </button>
+        </form>
+      ) : null}
       <form
         className="shared-mcp-form"
+        hidden={adding && pasting}
         onSubmit={(e) => {
           e.preventDefault();
           if (!every && chosen.size === 0) return;

@@ -118,7 +118,12 @@ pub(super) async fn prepare_launch(
     })
     .await
     .map_err(|_| "Native MCP inventory could not be inspected.".to_owned())??;
-    let memory_available = checked
+    // auracode's own tools (project memory, the browser) carry reserved names, so they join every
+    // agent that takes MCP servers, also one whose own configuration auracode cannot read: an
+    // agent added later gets them with no step (owner, 10 November 2026: "if they add a new agent
+    // ... those skills should transfer over"). A listed agent whose configuration could not be
+    // read whole still waits for review, and a server of the same name keeps them out.
+    let memory_available = (checked || !compatible)
         && !names.iter().any(|name| {
             matches!(
                 name.replace('-', "_").as_str(),

@@ -21,8 +21,28 @@
 .shared-mcp-toolbar select {
   max-width: 260px;
 }
+/* One server to a row, each a flat card: its name and state at left, its controls at right. */
+.shared-mcp-panel .plugins-rows {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--g-space-8);
+}
 .shared-mcp-row {
   flex-wrap: wrap;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-card-flat);
+}
+.shared-mcp-row .plugins-row-text {
+  flex: 1 1 240px;
+}
+.shared-mcp-row .plugins-row-text > strong {
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 600;
+}
+.shared-mcp-panel .plugins-agent-head {
+  gap: var(--g-space-8);
 }
 .shared-mcp-actions {
   justify-content: flex-end;
@@ -31,6 +51,34 @@
 .shared-mcp-form {
   display: grid;
   gap: var(--g-space-16);
+}
+/* Adding: type it in, or paste what a server's README gives. */
+.shared-mcp-how {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-16);
+  margin: 0 0 var(--g-space-16);
+  padding: 0;
+  border: 0;
+}
+.shared-mcp-how > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.shared-mcp-how > label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  cursor: pointer;
+}
+.shared-mcp-paste {
+  min-height: 180px;
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
 }
 .shared-mcp-field {
   display: grid;

@@ -8,6 +8,7 @@ const PAGES = [
   "Shortcuts",
   "Agents",
   "Plugins & MCP",
+  "Browser",
   "Instructions",
   "Project memory",
   "Remote access",

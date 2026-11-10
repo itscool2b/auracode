@@ -105,7 +105,8 @@ describe("Settings' search", () => {
     });
     expect(searchSettings("mic")[0]).toMatchObject({ page: "voice" });
     expect(searchSettings("CLAUDE.md")[0]).toMatchObject({ page: "instructions" });
-    expect(searchSettings("browser")[0]).toMatchObject({ page: "plugins", title: "Browser use" });
+    expect(searchSettings("browser")[0]).toMatchObject({ page: "browser", title: "Browser use" });
+    expect(searchSettings("exposed")[0]).toMatchObject({ title: "Tools for agents" });
     expect(searchSettings("passwords")[0]).toMatchObject({ title: "Save passwords" });
     expect(searchSettings("universal plugin")[0]).toMatchObject({ title: "Browser use" });
     // Every word must match; titles that start with the query come first.

@@ -1,7 +1,6 @@
 import { AgentMark, StatusDot } from "@auracode/ui/graphite";
-import { ArrowLeft, Ellipsis, Plus, RefreshCw, Search } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ArrowLeft, Plus, RefreshCw, Search } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   AgentPlugins,
   FeatureListing,
@@ -31,140 +30,14 @@ import { PluginLibraryLoader } from "../../lib/plugins/loading";
 import type { SharedMcpApi } from "../../lib/sharedMcp";
 import { Modal } from "../chat/Modal";
 import { HistoryView, ItemDetail } from "./LibraryItems";
-import { type McpProject, SharedMcpPanel } from "./SharedMcpPanel";
+import { type MenuItem, RowMenu } from "./RowMenu";
+import { type McpProject, SHARED_MCP_AGENTS, SharedMcpPanel } from "./SharedMcpPanel";
 import { UniversalPlugins, type UniversalSettings } from "./UniversalPlugins";
 import { VendorDialog, type VendorPreset } from "./VendorDialog";
 import "./library.css";
 import "./plugin-library.css";
 
 const AVAILABLE_SHOWN = 20;
-
-interface MenuItem {
-  readonly label: string;
-  readonly onSelect: () => void;
-}
-
-/**
- * A row's kebab (Vercel's project menu): plain items; arrows move, Escape closes and returns.
- *
- * The menu is fixed beside its trigger, so it closes once the trigger moves under it (a scroll of
- * the page, a resized window). A scroll event alone does not close it: one that ends a scroll made
- * before the menu opened (bringing the row into view, then clicking) arrives a frame later, and
- * the trigger has not moved since the menu was placed.
- */
-function RowMenu({
-  label,
-  items,
-}: {
-  readonly label: string;
-  readonly items: readonly MenuItem[];
-}) {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const placedAt = useRef<{ top: number; right: number } | null>(null);
-  const [open, setOpen] = useState(false);
-  const [place, setPlace] = useState<CSSProperties>({});
-  const close = (focus = true) => {
-    setOpen(false);
-    if (focus) trigger.current?.focus();
-  };
-  useLayoutEffect(() => {
-    if (!open) return;
-    const box = trigger.current?.getBoundingClientRect();
-    if (!box) return;
-    placedAt.current = { top: box.top, right: box.right };
-    const height = menu.current?.offsetHeight ?? 0;
-    const below = box.bottom + 4 + height <= window.innerHeight - 8;
-    setPlace({
-      top: below ? box.bottom + 4 : Math.max(8, box.top - 4 - height),
-      right: Math.max(8, window.innerWidth - box.right),
-    });
-    // The menu is not placed until the next render: focusing it must not scroll anything.
-    menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!menu.current?.contains(target) && !trigger.current?.contains(target)) close(false);
-    };
-    const dismiss = () => close(false);
-    const moved = () => {
-      const box = trigger.current?.getBoundingClientRect();
-      const placed = placedAt.current;
-      if (
-        !box ||
-        !placed ||
-        Math.abs(box.top - placed.top) > 1 ||
-        Math.abs(box.right - placed.right) > 1
-      )
-        close(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", moved, true);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", moved, true);
-    };
-  });
-  const move = (event: React.KeyboardEvent) => {
-    const entries = [...(menu.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
-    const at = entries.indexOf(document.activeElement as HTMLElement);
-    const go = (index: number) => entries[(index + entries.length) % entries.length]?.focus();
-    if (event.key === "ArrowDown") go(at + 1);
-    else if (event.key === "ArrowUp") go(at - 1);
-    else if (event.key === "Escape" || event.key === "Tab") close();
-    else return;
-    if (event.key !== "Tab") event.preventDefault();
-    event.stopPropagation();
-  };
-  return (
-    <>
-      <button
-        ref={trigger}
-        type="button"
-        className="g-button g-button-ghost g-button-icon g-button-28"
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <Ellipsis size={16} aria-hidden="true" />
-      </button>
-      {open
-        ? createPortal(
-            <div
-              ref={menu}
-              role="menu"
-              aria-label={label}
-              className="g-root g-menu plugins-menu"
-              style={place}
-              onKeyDown={move}
-            >
-              {items.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  role="menuitem"
-                  tabIndex={-1}
-                  className="g-menu-item"
-                  onClick={() => {
-                    close();
-                    item.onSelect();
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>,
-            trigger.current?.closest("main") ?? document.body,
-          )
-        : null}
-    </>
-  );
-}
 
 /**
  * The Plugins & MCP (Vercel's project pages): the agents on the left, and for the chosen agent
@@ -175,7 +48,7 @@ function RowMenu({
 export function PluginLibraryScreen({
   onBack,
   onAgents,
-  initialAgent = "claude",
+  initialAgent = "shared",
   api = nativePluginsApi,
   libraryApi = nativeLibraryApi,
   vendorApi = nativeVendorApi,
@@ -209,7 +82,13 @@ export function PluginLibraryScreen({
   readonly select?: { readonly id: number; readonly agent: string } | null;
 }) {
   const [library, setLibrary] = useState<PluginLibrary | null>(null);
+  // The page opens on MCP servers (owner, 10 November 2026: they were "hiding" under an agent's
+  // plugin lists, with no plain way to add one).
   const [selected, setSelected] = useState(initialAgent);
+  // An agent's own list asks for a server just for that agent: the shared list adds it.
+  const [addFor, setAddFor] = useState<{ readonly id: number; readonly agent: string } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -359,6 +238,13 @@ export function PluginLibraryScreen({
       ) : null}
       <div className="plugins-body">
         <nav className="plugins-agents" aria-label="Agents">
+          <button
+            type="button"
+            aria-current={selected === "shared" ? "page" : undefined}
+            onClick={() => setSelected("shared")}
+          >
+            MCP servers
+          </button>
           {universal ? (
             <button
               type="button"
@@ -369,13 +255,6 @@ export function PluginLibraryScreen({
               Universal plugins
             </button>
           ) : null}
-          <button
-            type="button"
-            aria-current={selected === "shared" ? "page" : undefined}
-            onClick={() => setSelected("shared")}
-          >
-            Shared MCP
-          </button>
           {(library?.agents ?? []).map((entry) => (
             <button
               type="button"
@@ -421,6 +300,7 @@ export function PluginLibraryScreen({
               initialProjectId={initialProjectId}
               api={mcpApi}
               activeChatId={activeChatId}
+              addFor={addFor}
             />
           ) : loading ? (
             <p className="plugins-empty" role="status">
@@ -439,6 +319,14 @@ export function PluginLibraryScreen({
               onHistory={() => void openHistory()}
               onRefresh={() => void load(true)}
               onAgents={onAgents}
+              onAddMcp={
+                SHARED_MCP_AGENTS.has(agent.agent_id)
+                  ? () => {
+                      setAddFor({ id: Date.now(), agent: agent.agent_id });
+                      setSelected("shared");
+                    }
+                  : undefined
+              }
             />
           ) : (
             <div className="plugins-empty">
@@ -516,6 +404,7 @@ export function AgentSection({
   onHistory,
   onRefresh,
   onAgents,
+  onAddMcp,
 }: {
   readonly agent: AgentPlugins;
   readonly busy: "refresh" | "update" | "sync" | null;
@@ -527,6 +416,8 @@ export function AgentSection({
   readonly onHistory: () => void;
   readonly onRefresh: () => void;
   readonly onAgents?: () => void;
+  /** Adds a server for this agent alone, where the shared list keeps it. */
+  readonly onAddMcp?: () => void;
 }) {
   const management = agent.management?.version === 1 ? agent.management : null;
   const provider = management?.provider;
@@ -637,16 +528,20 @@ export function AgentSection({
           {notice}
         </p>
       ))}
-      {agent.features.map((feature) => (
-        <Feature
-          key={feature.feature}
-          agent={agent}
-          feature={feature}
-          provider={provider}
-          onVendor={onVendor}
-          onOpen={onOpen}
-        />
-      ))}
+      {/* MCP servers lead: under the plugin lists they took a long scroll to find. */}
+      {[...agent.features]
+        .sort((a, b) => Number(b.feature === "mcp_servers") - Number(a.feature === "mcp_servers"))
+        .map((feature) => (
+          <Feature
+            key={feature.feature}
+            agent={agent}
+            feature={feature}
+            provider={provider}
+            onVendor={onVendor}
+            onOpen={onOpen}
+            onAddMcp={feature.feature === "mcp_servers" ? onAddMcp : undefined}
+          />
+        ))}
     </div>
   );
 }
@@ -657,12 +552,14 @@ function Feature({
   provider,
   onVendor,
   onOpen,
+  onAddMcp,
 }: {
   readonly agent: AgentPlugins;
   readonly feature: FeatureListing;
   readonly provider: VendorProvider | undefined;
   readonly onVendor: (preset: VendorPreset) => void;
   readonly onOpen: (entry: PluginEntry) => void;
+  readonly onAddMcp?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const label = featureLabel(feature.feature, agent.agent_id);
@@ -694,6 +591,17 @@ function Feature({
             {source}
           </p>
         )}
+        {onAddMcp ? (
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28 plugins-add"
+            data-testid="add-agent-mcp"
+            onClick={onAddMcp}
+          >
+            <Plus size={14} aria-hidden="true" />
+            Add MCP server
+          </button>
+        ) : null}
         {adds && provider ? (
           <button
             type="button"
