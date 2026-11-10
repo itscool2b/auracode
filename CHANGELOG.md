@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-10
 
+- The website is rebuilt after the SpaceXAI, Vercel, Aside, Linear and Harvey landing pages: one sans face at calm sizes, a plain header bar, a light page framed in hairlines with no dark bands, the live app window as the hero, a still row of the agents, and a grid for the browser, dashboard, dictation, review, project memory and themes. ([#124](https://github.com/itscool2b/auracode/pull/124))
 - Several chats open in the terminal at once: a second terminal chat was refused while the first ran, because terminal chats took sign-in's one place per window, and Start again asked for that place again. They now have their own, up to eight across the app. ([#123](https://github.com/itscool2b/auracode/pull/123))
 
 ## 2026-11-09

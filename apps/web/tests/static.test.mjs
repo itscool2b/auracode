@@ -26,7 +26,7 @@ test("public pages are prerendered in light appearance without JavaScript", asyn
     home,
     /desktop-light-480.webp 480w, \/images\/desktop-light-960.webp 960w, \/images\/desktop-light-1440.webp 1440w/,
   );
-  assert.match(home, /sizes="\(max-width: 1240px\) calc\(100vw - 40px\)/);
+  assert.match(home, /sizes="\(max-width: 1247px\) calc\(100vw - 56px\), 1104px"/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");

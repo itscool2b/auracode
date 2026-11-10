@@ -1,25 +1,18 @@
 import { Wordmark } from "@auracode/ui/graphite";
-import type { CSSProperties } from "react";
-
-const GIANT = "auracode";
 
 /**
- * The night footer on every page: the wordmark and the promise, three link columns, and the name
- * set as large as the page allows, its letters rising in once it scrolls into view.
+ * The footer on every page: the wordmark with what it stands for, then three columns of links,
+ * under the page's last hairline.
  */
 export function SiteFooter() {
   return (
-    <footer className="site-footer night">
+    <footer className="site-footer">
       <div className="wrap footer-grid">
         <div className="footer-home">
           <a href="/" aria-label="auracode home">
             <Wordmark size={17} />
           </a>
-          <p className="footer-statement">
-            Your agents.
-            <br />
-            Your machine.
-          </p>
+          <p className="footer-statement">Your agents. Your machine.</p>
         </div>
         <nav className="footer-links" aria-label="Footer">
           <div className="footer-col">
@@ -60,14 +53,6 @@ export function SiteFooter() {
           </div>
         </nav>
       </div>
-      <p className="footer-giant" aria-hidden="true" data-reveal="trigger">
-        {Array.from(GIANT).map((letter, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: letters repeat; the position is identity.
-          <span key={i} style={{ "--n": i } as CSSProperties}>
-            {letter}
-          </span>
-        ))}
-      </p>
     </footer>
   );
 }

@@ -13,81 +13,41 @@ const settled = (page) =>
     document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
   );
 
-/** The marquee as a still list: every agent shown once, inside the viewport, nothing moving. */
-const stillMarquee = (page) =>
+/**
+ * The agents' row: every agent named once, each wholly inside the viewport and none overlapping
+ * the next, and nothing in it moving.
+ */
+const agentWall = (page) =>
   page.evaluate(() => {
-    const shown = [...document.querySelectorAll(".marquee-item")].filter(
+    const shown = [...document.querySelectorAll(".agent-cell")].filter(
       (item) => item.getClientRects().length > 0,
     );
+    const boxes = shown.map((item) => item.getBoundingClientRect());
     return {
       names: shown.map((item) => item.textContent),
-      inView: shown.every((item) => {
-        const box = item.getBoundingClientRect();
-        return box.left >= 0 && box.right <= document.documentElement.clientWidth;
-      }),
-      moving: [...document.querySelectorAll(".marquee-lane")].some(
-        (lane) => lane.getAnimations().length > 0,
+      inView: boxes.every(
+        (box) => box.left >= 0 && box.right <= document.documentElement.clientWidth,
       ),
+      apart: boxes.every((box, i) =>
+        boxes.every(
+          (other, j) =>
+            i === j ||
+            box.right <= other.left + 0.5 ||
+            other.right <= box.left + 0.5 ||
+            box.bottom <= other.top + 0.5 ||
+            other.bottom <= box.top + 0.5,
+        ),
+      ),
+      moving: shown.some((item) => item.getAnimations({ subtree: true }).length > 0),
     };
   });
 
-/**
- * Each moving lane, measured: its view, its sets, and where its loop ends. The loop is seamless
- * when every set is the same width, the track is at least twice the view, the animation moves it by
- * exactly half its length, and the set that starts the second half ends the loop exactly where the
- * first set began. The speed is in pixels per second: half the track over the loop's duration.
- */
-const movingMarquee = (page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll(".marquee-lane")].map((lane) => {
-      const sets = [...lane.querySelectorAll(":scope > .marquee-set")];
-      const widths = sets.map((set) => set.getBoundingClientRect().width);
-      const animation = lane.getAnimations()[0];
-      const duration = Number(animation.effect.getTiming().duration);
-      const reverse = getComputedStyle(lane).animationDirection === "reverse";
-      const half = sets.length / 2;
-      const seek = (time) => {
-        animation.pause();
-        animation.currentTime = time;
-      };
-      // The frame that starts the loop and the frame that ends it.
-      seek(reverse ? duration - 0.001 : 0);
-      const start = sets[0].getBoundingClientRect().left;
-      seek(reverse ? 0 : duration - 0.001);
-      const end = sets[half].getBoundingClientRect().left;
-      const shift = Math.abs(new DOMMatrixReadOnly(getComputedStyle(lane).transform).m41);
-      // Seeking took the animation out of CSS's hands; restart it so CSS holds it again.
-      lane.style.animationName = "none";
-      void lane.offsetWidth;
-      lane.style.animationName = "";
-      const track = lane.getBoundingClientRect().width;
-      return {
-        back: lane.classList.contains("marquee-lane-back"),
-        view: lane.parentElement.clientWidth,
-        track,
-        sets: sets.length,
-        setSpread: Math.max(...widths) - Math.min(...widths),
-        setWidth: widths[0],
-        shift,
-        seam: Math.abs(end - start),
-        pxPerSecond: (half * widths[0]) / (duration / 1000),
-      };
-    }),
-  );
-
-const assertSeamless = (lanes, where) => {
-  assert.equal(lanes.length, 2, `${where}: two lanes`);
-  for (const lane of lanes) {
-    const name = `${where}, ${lane.back ? "back" : "front"} lane`;
-    assert.ok(lane.sets >= 2 && lane.sets % 2 === 0, `${name}: an even run of sets`);
-    assert.ok(lane.setSpread < 0.01, `${name}: every set is the same width`);
-    assert.ok(lane.track >= 2 * lane.view, `${name}: the track is at least twice the view`);
-    assert.ok(
-      Math.abs(lane.shift - (lane.sets / 2) * lane.setWidth) < 0.5,
-      `${name}: the loop moves by exactly half the track (${lane.shift})`,
-    );
-    assert.ok(lane.seam < 0.5, `${name}: the loop's last frame matches its first (${lane.seam}px)`);
-  }
+const assertWall = (wall, where) => {
+  assert.equal(wall.names.length, 9, `${where}: the row names every agent`);
+  assert.equal(new Set(wall.names).size, 9, `${where}: each agent once`);
+  assert.ok(wall.inView, `${where}: the row fits the page`);
+  assert.ok(wall.apart, `${where}: no two names overlap`);
+  assert.equal(wall.moving, false, `${where}: the row holds still`);
 };
 
 const root = resolve(fileURLToPath(new URL("../build/client/", import.meta.url)));
@@ -154,7 +114,6 @@ try {
       const heroStage = page.locator(".hero-detail .handoff-stage");
       assert.equal(await heroStage.locator(".handoff-prior").isVisible(), true);
       assert.equal(await heroStage.locator(".handoff-next").isVisible(), true);
-      assert.equal(await heroStage.locator(".handoff-link").count(), 1);
       assert.equal(
         await page
           .getByRole("tab", { name: "Optional file checkpoints" })
@@ -167,13 +126,27 @@ try {
         await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
         "rgb(250, 250, 250)",
       );
-      // Reduced motion: the agent marquee is a still list, every agent once and in view.
-      let still = await stillMarquee(page);
-      assert.equal(still.names.length, 9, "the still marquee names every agent once");
-      assert.equal(new Set(still.names).size, 9);
-      assert.ok(still.inView, "the still marquee fits the page");
-      assert.equal(still.moving, false, "the marquee holds still under reduced motion");
+      // The agents' row: every agent once, in view, in one line at this width.
+      assertWall(await agentWall(page), "1440px");
       assert.equal(await page.getByRole("list", { name: "Agents auracode runs" }).count(), 1);
+      assert.equal(
+        await page.evaluate(
+          () =>
+            new Set(
+              [...document.querySelectorAll(".agent-cell")].map((cell) =>
+                Math.round(cell.getBoundingClientRect().top),
+              ),
+            ).size,
+        ),
+        1,
+        "the agents sit on one line at 1440px",
+      );
+      // The header is a plain bar, and nothing on the page is a dark band.
+      assert.equal(await page.locator(".night").count(), 0);
+      assert.equal(
+        await page.getByRole("navigation", { name: "Main" }).getByRole("link").count(),
+        4,
+      );
       await page.waitForFunction(() => {
         const image = document.querySelector(".product-frame img");
         return image?.complete && image.naturalWidth > 0;
@@ -181,12 +154,15 @@ try {
       await settled(page);
       await page.screenshot({ path: join(artifacts, `${name}-home-light.png`), fullPage: true });
       await page.getByRole("tab", { name: "Switch agents mid-chat" }).click();
+      // Park the pointer: a capture scrolls the page, and a tab passing under a resting pointer
+      // would take the view (hover intent).
+      await page.mouse.move(2, 2);
       await page
         .locator(".caps .handoff-stage")
         .screenshot({ path: join(artifacts, `${name}-handoff-light.png`) });
       await page.reload();
       assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
-      await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
+      await page.getByRole("heading", { name: "One window for every coding agent." }).waitFor();
       await page.waitForFunction(() => {
         const image = document.querySelector(".product-frame img");
         return image?.complete && image.naturalWidth > 0;
@@ -259,22 +235,21 @@ try {
       await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
       await tabs.nth(1).click();
+      await page.mouse.move(2, 2);
       await handoff.screenshot({ path: join(artifacts, `${name}-handoff-mobile.png`) });
       await tabs.first().click();
       await page.screenshot({ path: join(artifacts, `${name}-mobile.png`), fullPage: true });
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       );
-      still = await stillMarquee(page);
-      assert.equal(still.names.length, 9);
-      assert.ok(still.inView, "the still marquee wraps inside a 390px page");
-      // The phone menu reads clearly over a night band: a solid night sheet with light links.
+      assertWall(await agentWall(page), "390px");
+      // The phone menu is a solid sheet under the bar, over whatever the page shows behind it.
       await page.evaluate(() => {
-        const band = document.querySelector("#capabilities");
+        const band = document.querySelector("#features");
         window.scrollTo(0, band.getBoundingClientRect().top + window.scrollY + 400);
       });
       await page.waitForFunction(() =>
-        document.querySelector(".site-nav")?.hasAttribute("data-night"),
+        document.querySelector(".site-nav")?.hasAttribute("data-scrolled"),
       );
       await page.locator(".nav-menu-button").click();
       await page.getByRole("navigation", { name: "Menu" }).waitFor();
@@ -292,10 +267,25 @@ try {
       assert.deepEqual(
         axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
         [],
-        "the phone menu over a night band",
+        "the phone menu",
+      );
+      assert.equal(
+        await page
+          .locator(".nav-sheet")
+          .evaluate((sheet) => getComputedStyle(sheet).backgroundColor),
+        "rgb(250, 250, 250)",
+        "the phone menu is solid",
       );
       await page.keyboard.press("Escape");
       await page.getByRole("navigation", { name: "Menu" }).waitFor({ state: "hidden" });
+      // A link to a section of this page closes the menu and goes there.
+      await page.locator(".nav-menu-button").click();
+      await page
+        .getByRole("navigation", { name: "Menu" })
+        .getByRole("link", { name: "FAQ" })
+        .click();
+      await page.getByRole("navigation", { name: "Menu" }).waitFor({ state: "hidden" });
+      assert.equal(new URL(page.url()).hash, "#faq");
       await page.evaluate(() => window.scrollTo(0, 0));
       // The narrowest phones still in use: nothing may scroll sideways at 320px either.
       await page.setViewportSize({ width: 320, height: 640 });
@@ -303,9 +293,7 @@ try {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         "the home page scrolls sideways at 320px",
       );
-      still = await stillMarquee(page);
-      assert.equal(still.names.length, 9);
-      assert.ok(still.inView, "the still marquee wraps inside a 320px page");
+      assertWall(await agentWall(page), "320px");
       await page.goto(`${base}/download`);
       assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 3);
       await page.route("**/api/v1/config", (route) =>
@@ -528,8 +516,8 @@ try {
         fullPage: true,
       });
       assert.deepEqual(failures, []);
-      // Full motion: the hero's handoff loop, the reveals, the wheel and the night bands run
-      // without errors or sideways scrolling, and the loop leaves its printed first frame.
+      // Full motion: the hero's handoff loop, the reveals and the capability cycle run without
+      // errors or sideways scrolling, and the loop leaves its printed first frame.
       const moving = await browser.newContext({
         viewport: { width: 1440, height: 900 },
         reducedMotion: "no-preference",
@@ -554,82 +542,50 @@ try {
       );
       await motion.waitForTimeout(1200);
       await motion.screenshot({ path: join(artifacts, `${name}-motion-hero.png`) });
-      // The marquee loops seamlessly at every width, at the same pixels per second at each.
-      const ready = () =>
-        motion.waitForFunction(() => {
-          const lanes = [...document.querySelectorAll(".marquee-lane")];
-          return (
-            lanes.length === 2 &&
-            lanes.every(
-              (lane) =>
-                lane.hasAttribute("data-ready") &&
-                lane.getAnimations().length === 1 &&
-                lane.querySelectorAll(":scope > .marquee-set").length === Number(lane.dataset.sets),
-            )
-          );
-        });
-      const speeds = [];
+      // The agents' row holds still and fits at every width, with motion on as well.
       for (const width of [1440, 2560, 1024, 768, 390, 320]) {
         await motion.setViewportSize({ width, height: 900 });
         await motion.evaluate(() => window.scrollTo(0, 0));
-        await ready();
-        await motion.waitForTimeout(200);
-        await ready();
-        const lanes = await movingMarquee(motion);
-        assertSeamless(lanes, `${width}px`);
-        speeds.push(lanes.map((lane) => lane.pxPerSecond));
-      }
-      for (const lane of [0, 1]) {
-        const values = speeds.map((pair) => pair[lane]);
-        assert.ok(
-          Math.max(...values) - Math.min(...values) < 0.05,
-          `the marquee's ${lane ? "back" : "front"} lane keeps one speed in px/s: ${values}`,
-        );
+        assertWall(await agentWall(motion), `${width}px with motion`);
       }
       await motion.setViewportSize({ width: 1440, height: 900 });
-      await ready();
-      // It holds under a fine pointer, and while the tab is hidden. Hover settles on the next
-      // frame, so each state is awaited, then confirmed.
-      const states = () =>
-        motion.evaluate(() =>
-          [...document.querySelectorAll(".marquee-lane")].map(
-            (lane) => lane.getAnimations()[0]?.playState,
-          ),
-        );
-      const lanesIn = async (state, why) => {
-        await motion
+      // The capability cycle runs while its section is in view, holds while the pointer rests in
+      // it, and holds in a hidden tab.
+      const cycle = (attribute, present, why) =>
+        motion
           .waitForFunction(
-            (want) =>
-              [...document.querySelectorAll(".marquee-lane")].every(
-                (lane) => lane.getAnimations()[0]?.playState === want,
-              ),
-            state,
-            { timeout: 3000 },
+            ([name, want]) => document.querySelector(".caps-frame")?.hasAttribute(name) === want,
+            [attribute, present],
+            { timeout: 4000 },
           )
-          .catch(() => {});
-        assert.deepEqual(await states(), [state, state], why);
-      };
-      // The pills never stand still, so the pointer goes to the lanes' stable frame.
-      await motion.locator(".marquee").scrollIntoViewIfNeeded();
-      const lanesBox = await motion.locator(".marquee").boundingBox();
-      await motion.mouse.move(
-        lanesBox.x + lanesBox.width / 2,
-        lanesBox.y + Math.min(40, lanesBox.height / 2),
-      );
-      await lanesIn("paused", "the marquee holds under the pointer");
+          .catch(() => assert.fail(why));
+      await motion.locator(".caps-view").scrollIntoViewIfNeeded();
       await motion.mouse.move(4, 4);
-      await lanesIn("running", "the marquee runs again once the pointer leaves");
+      await cycle("data-running", true, "the capability cycle runs in view");
+      const stage = await motion.locator(".caps-view").boundingBox();
+      await motion.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
+      await cycle("data-auto", false, "the capability cycle holds under the pointer");
+      await motion.mouse.move(4, 4);
+      await cycle("data-running", true, "the capability cycle runs again once the pointer leaves");
       await motion.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "hidden",
+        });
         Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      await lanesIn("paused", "the marquee holds in a hidden tab");
+      await cycle("data-running", false, "the capability cycle holds in a hidden tab");
       await motion.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "visible",
+        });
         Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      await lanesIn("running", "the marquee runs again in a visible tab");
-      for (const top of [1100, 2500, 3600, 4800, 5600, 6400, 7600, 1e6]) {
+      await cycle("data-running", true, "the capability cycle runs again in a visible tab");
+      for (const top of [1100, 2200, 3300, 4400, 5500, 6400, 1e6]) {
         await motion.evaluate((y) => window.scrollTo(0, y), top);
         await motion.waitForTimeout(600);
         assert.ok(
@@ -650,18 +606,11 @@ try {
       await moving.close();
       const nojs = await browser.newContext({ javaScriptEnabled: false, colorScheme: "dark" });
       const staticPage = await nojs.newPage();
-      // Without scripts the marquee is the same still, complete list, at desktop and phone widths.
+      // Without scripts the agents' row is the same complete list, at desktop and phone widths.
       await staticPage.goto(base);
       for (const width of [1440, 390]) {
         await staticPage.setViewportSize({ width, height: 900 });
-        const list = await stillMarquee(staticPage);
-        assert.equal(
-          list.names.length,
-          9,
-          `the script-free marquee names every agent at ${width}px`,
-        );
-        assert.ok(list.inView, `the script-free marquee fits a ${width}px page`);
-        assert.equal(list.moving, false);
+        assertWall(await agentWall(staticPage), `${width}px without scripts`);
       }
       await staticPage.goto(`${base}/download`);
       await staticPage.getByRole("heading", { name: "Windows", exact: true }).waitFor();

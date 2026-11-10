@@ -1,146 +1,81 @@
 /* ------------------------------------------------------------------------------- header */
 
 /*
- * A floating glass capsule. The bar itself is transparent and lets clicks through; only the
- * capsule takes them. It keeps its place across page navigations (view transitions).
+ * A plain bar across the top: the wordmark, the page's sections, Sign in and the one Download.
+ * Clear over the page's start; once the page scrolls it takes the paper's tone and a hairline.
+ * It keeps its place across page navigations (view transitions).
  */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 60;
-  display: flex;
-  justify-content: center;
   box-sizing: border-box;
   height: var(--s-nav);
-  padding: 12px var(--s-gutter) 0;
-  pointer-events: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color 300ms var(--s-swift),
+    border-color 300ms var(--s-swift);
   view-transition-name: site-nav;
 }
 
-.nav-capsule {
-  display: flex;
+.site-nav[data-scrolled],
+.site-nav:has(.nav-menu[open]) {
+  border-bottom-color: var(--s-line);
+  background-color: rgb(250 250 250 / 0.82);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+}
+
+.nav-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 4px;
-  box-sizing: border-box;
-  width: min(100%, 780px);
-  height: 52px;
-  padding: 0 7px 0 20px;
-  border-radius: 999px;
-  background-color: rgb(255 255 255 / 0.56);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.07),
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 1px 2px rgb(10 10 11 / 0.04),
-    0 10px 30px -14px rgb(10 10 11 / 0.14);
-  pointer-events: auto;
-  transition:
-    background-color 400ms var(--s-swift),
-    box-shadow 400ms var(--s-swift);
-}
-
-.site-nav[data-scrolled] .nav-capsule {
-  background-color: rgb(255 255 255 / 0.8);
-  box-shadow:
-    inset 0 0 0 1px rgb(10 10 11 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.95),
-    0 1px 2px rgb(10 10 11 / 0.05),
-    0 18px 40px -16px rgb(10 10 11 / 0.22);
-}
-
-.site-nav[data-night] .nav-capsule {
-  --g-fg-1: #f5f5f6;
-  --g-fg-2: #b4b4bd;
-  --g-primary: #fafafa;
-  --g-primary-hover: #e4e4e7;
-  --g-primary-active: #d4d4d8;
-  --g-on-light: #18181b;
-  --g-shadow-primary: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 -1px 0 rgb(0 0 0 / 0.14);
-  background-color: rgb(24 25 28 / 0.6);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.1),
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    0 14px 36px -14px rgb(0 0 0 / 0.6);
+  height: 100%;
 }
 
 .nav-home {
   display: inline-flex;
   align-items: center;
+  justify-self: start;
   height: 40px;
-  margin-right: auto;
-  color: var(--g-fg-1);
+  color: var(--s-ink);
   text-decoration: none;
 }
 
 .nav-links {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
-.nav-links a {
-  position: relative;
-  z-index: 1;
+.nav-links a,
+.nav-signin {
   display: inline-flex;
   align-items: center;
-  height: 38px;
-  padding: 0 15px;
+  height: 34px;
+  padding: 0 12px;
   border-radius: 999px;
   color: var(--g-fg-2);
   font-size: 14px;
   line-height: 20px;
-  font-weight: 500;
+  font-weight: 450;
   text-decoration: none;
-  transition: color 200ms var(--s-swift);
+  transition:
+    color 160ms var(--s-swift),
+    background-color 160ms var(--s-swift);
 }
 
 .nav-links a:hover,
-.nav-links a:focus-visible {
-  color: var(--g-fg-1);
+.nav-signin:hover {
+  background-color: rgb(10 10 11 / 0.05);
+  color: var(--s-ink);
 }
 
-/* The lit pill that glides to the link under the pointer. */
-.nav-pill {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: var(--pill-w, 0);
-  height: 38px;
-  border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.06);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.04);
-  opacity: 0;
-  transform: translate(var(--pill-x, 0), -50%);
-  transition:
-    transform 420ms var(--s-glide),
-    width 420ms var(--s-glide),
-    opacity 240ms var(--s-swift);
-}
-
-.nav-links[data-pill] .nav-pill {
-  opacity: 1;
-}
-
-.site-nav[data-night] .nav-pill {
-  background-color: rgb(255 255 255 / 0.1);
-  box-shadow: none;
-}
-
-.nav-cta {
-  --g-button-h: 38px;
-  margin-left: 6px;
-  padding: 0 18px;
-  font-size: 14px;
-  transform: translate(var(--mx, 0), var(--my, 0));
-  transition:
-    transform 500ms var(--s-glide),
-    background-color 200ms var(--s-swift);
-}
-
-.nav-cta[data-pulled] {
-  transition-duration: 160ms, 200ms;
+.nav-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
 }
 
 .nav-menu {
@@ -148,27 +83,27 @@
 }
 
 @media (max-width: 767px) {
-  .nav-capsule {
-    padding-left: 16px;
+  .nav-bar {
+    grid-template-columns: 1fr auto;
   }
 
-  .nav-links {
+  .nav-links,
+  .nav-signin {
     display: none;
   }
 
   .nav-menu {
-    position: relative;
     display: block;
-    margin-left: 4px;
   }
 
   .nav-menu-button {
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
+    margin-right: -8px;
     border-radius: 999px;
-    color: var(--g-fg-1);
+    color: var(--s-ink);
     list-style: none;
     cursor: pointer;
   }
@@ -194,219 +129,131 @@
     transform: translateY(-2.5px) rotate(-45deg);
   }
 
-  /*
-   * The menu is solid, as the app's menus are, so its links read clearly over any content: white
-   * on paper, and night over a night band, matching the capsule it drops from.
-   */
+  /* The menu is a solid sheet under the bar, the page's width, so its links read over any content. */
   .nav-sheet {
     position: absolute;
-    top: calc(100% + 14px);
-    right: -7px;
+    top: 100%;
+    right: 0;
+    left: 0;
     display: grid;
-    gap: 2px;
-    min-width: 220px;
-    padding: 8px;
-    border-radius: 22px;
-    background-color: #ffffff;
-    box-shadow:
-      inset 0 0 0 1px rgb(10 10 11 / 0.08),
-      0 2px 4px rgb(10 10 11 / 0.04),
-      0 24px 60px -20px rgb(10 10 11 / 0.3);
-    animation: sheet-in 420ms var(--s-expo) both;
-    transform-origin: top right;
+    padding: 8px var(--s-pad) 16px;
+    border-bottom: 1px solid var(--s-line);
+    background-color: var(--g-bg);
+    box-shadow: 0 24px 40px -24px rgb(10 10 11 / 0.18);
+    animation: sheet-in 320ms var(--s-expo) both;
   }
 
   .nav-sheet a {
     display: flex;
     align-items: center;
-    height: 44px;
-    padding: 0 14px;
-    border-radius: 14px;
+    height: 48px;
+    border-bottom: 1px solid var(--s-line);
     color: var(--s-ink);
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 500;
     text-decoration: none;
   }
 
-  .nav-sheet a:hover {
-    background-color: rgb(10 10 11 / 0.05);
-  }
-
-  .site-nav[data-night] .nav-sheet {
-    background-color: #18191c;
-    box-shadow:
-      inset 0 0 0 1px rgb(255 255 255 / 0.1),
-      0 24px 60px -20px rgb(0 0 0 / 0.7);
-  }
-
-  .site-nav[data-night] .nav-sheet a {
-    color: var(--s-night-fg-1);
-  }
-
-  .site-nav[data-night] .nav-sheet a:hover {
-    background-color: rgb(255 255 255 / 0.08);
+  .nav-sheet a:last-child {
+    border-bottom: 0;
   }
 }
 
 @keyframes sheet-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.96);
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-sheet {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .site-nav[data-scrolled],
+  .site-nav:has(.nav-menu[open]) {
+    background-color: var(--g-bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
 /* ------------------------------------------------------------------------------- footer */
 
-/*
- * The night footer is a slab set into the paper, its last edge cutting the giant name off. On the
- * home page it continues the finale's slab, so only its lower corners round.
- */
+/* The page's last hairline, then the wordmark with what it stands for and three columns of links. */
 .site-footer {
-  position: relative;
-  overflow: hidden;
-  margin: 0 var(--s-inset) var(--s-inset);
-  padding: 104px 0 0;
-  border-radius: var(--s-slab);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
-}
-
-.home ~ .site-footer {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-top: 1px solid var(--s-line);
+  padding: 64px 0 56px;
 }
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 56px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 48px;
   align-items: start;
 }
 
 .footer-home a {
   display: inline-flex;
-  color: var(--g-fg-1);
+  color: var(--s-ink);
   text-decoration: none;
 }
 
 .footer-statement {
-  margin-top: 22px;
-  color: var(--g-fg-2);
-  font-family: var(--s-serif);
-  font-size: 34px;
-  line-height: 38px;
-  font-style: italic;
-  font-weight: var(--s-serif-weight);
-  letter-spacing: var(--s-serif-track);
-  font-synthesis: none;
-}
-
-/* The home page's finale has just said it, in larger type. */
-.home ~ .site-footer .footer-statement {
-  display: none;
+  margin-top: 14px;
+  color: var(--g-fg-3);
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .footer-links {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, auto));
-  gap: 32px 72px;
+  grid-template-columns: repeat(3, minmax(128px, auto));
+  gap: 32px 48px;
 }
 
 .footer-heading {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   color: var(--g-fg-3);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .footer-col ul {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 0;
   list-style: none;
 }
 
 .footer-col a {
-  color: var(--g-fg-1);
-  font-size: 15px;
+  color: var(--s-ink);
+  font-size: 14px;
   line-height: 22px;
   text-decoration: none;
-  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
-  transition: background-size 400ms var(--s-expo);
+  transition: color 160ms var(--s-swift);
 }
 
 .footer-col a:hover {
-  background-size: 100% 1px;
-}
-
-/* The name, as large as the page allows, cut off by the page's end. */
-.footer-giant {
-  display: flex;
-  justify-content: center;
-  margin: 112px 0 0;
-  padding: 0 var(--s-gutter);
-  font-size: clamp(56px, 21.5vw, 330px);
-  line-height: 0.78;
-  font-weight: 600;
-  letter-spacing: -0.07em;
-  white-space: nowrap;
-  user-select: none;
-  transform: translateY(16%);
-}
-
-.footer-giant span {
-  display: inline-block;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.02) 82%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  transition:
-    transform 1400ms var(--s-expo),
-    opacity 1400ms var(--s-expo);
-  transition-delay: calc(var(--n) * 55ms);
-}
-
-html.js .footer-giant:not([data-revealed]) span {
-  opacity: 0;
-  transform: translateY(45%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.js .footer-giant:not([data-revealed]) span {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Below a laptop the wordmark and its line stand over the links, so neither column is squeezed. */
-@media (max-width: 1023px) {
-  .footer-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
-  }
-
-  .footer-links {
-    justify-content: start;
-    gap: 32px 64px;
-  }
+  color: var(--g-fg-3);
 }
 
 @media (max-width: 767px) {
   .site-footer {
-    padding-top: 72px;
+    padding: 48px 0;
   }
 
   .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
     gap: 40px;
   }
 
   .footer-links {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 32px 24px;
-  }
-
-  .footer-giant {
-    margin-top: 72px;
   }
 }
 

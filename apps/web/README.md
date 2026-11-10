@@ -15,9 +15,10 @@ corepack pnpm --filter @auracode/web dev
 ```
 
 Browser checks use owned headless Chromium and WebKit, synthetic API/Turnstile responses, and
-block external requests. They cover desktop/mobile overflow, keyboard focus, the capabilities tab
-list (axe on each view, arrow keys, Home and End), no dither canvas and no Pause button, no-JavaScript
-downloads, invalid-code recovery, email-only app links, CSRF headers, revocation confirmation and
+block external requests. They cover desktop/mobile overflow, keyboard focus, the agents' row at
+every width (complete, in view, still), the phone menu, the capabilities tab list (axe on each view,
+arrow keys, Home and End, and its cycle holding under the pointer and in a hidden tab), no canvas
+and no Pause button, no-JavaScript downloads, invalid-code recovery, email-only app links, CSRF headers, revocation confirmation and
 typed deletion confirmation. Axe checks the home and account views. Chromium verifies native Tab
 order; Windows WebKit lacks the OS full-keyboard-access setting, so that harness explicitly focuses
 the skip link and verifies keyboard activation. Real Safari/macOS acceptance remains pending.
@@ -28,7 +29,7 @@ shared Geist font package and semantic tokens from `@auracode/ui`.
 
 ## Reference evidence
 
-The full proposed styling pass follows [visual-language.md](../../docs/design/visual-language.md), drawing on Typesafe/Jev, Harvey and Vercel. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
+The website was rebuilt on 10 November 2026 after the SpaceXAI, Vercel, Aside, Linear and Harvey landing pages, as [visual-language.md](../../docs/design/visual-language.md) describes. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it whenever the app changes visibly with
