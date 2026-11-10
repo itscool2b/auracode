@@ -539,8 +539,9 @@ export function SettingsScreen({
           {pane(
             "account",
             <>
+              {/* The account comes first: it is what the page is for. Which workspace is open
+                  matters only once there is more than one, so that list follows. */}
               <div data-setting="Account">
-                <ProfilePicker activeId={info.profile?.id ?? null} />
                 <AccountPanel
                   initialEmail={initialEmail}
                   deviceName={info.device?.name ?? "My computer"}
@@ -549,6 +550,7 @@ export function SettingsScreen({
                 {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
                   <LocalImportPanel key={info.profile.id} onImported={onImported} />
                 ) : null}
+                <ProfilePicker activeId={info.profile?.id ?? null} />
               </div>
               <section
                 className="settings-section"

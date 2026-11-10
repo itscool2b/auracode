@@ -5,12 +5,11 @@
  * tokens.
  */
 
-.account-panel {
-  max-width: 680px;
-}
-
+/* The account's sections take the page's column, like every section around them, and the
+   section after the account's block keeps a section's distance from it. */
 .settings-section + .account-panel,
-.account-panel + .settings-section {
+.account-panel + .settings-section,
+[data-setting="Account"] + .settings-section {
   margin-top: var(--g-space-32);
 }
 
@@ -316,4 +315,57 @@ textarea.account-secret {
 
 .locked-profile-header h1 {
   margin: 0;
+}
+
+/*
+ * The way from signed out to syncing: four named steps on one line, the current one in ink.
+ * Signing in is only the first of them, and this is what says so.
+ */
+.account-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-6) var(--g-space-16);
+  margin: var(--g-space-12) 0;
+  padding: 0;
+  list-style: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.account-steps > li {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-6);
+}
+
+.account-steps-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--g-radius-pill);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  font-size: var(--g-text-key);
+  font-variant-numeric: tabular-nums;
+}
+
+.account-steps > li[data-state="done"] {
+  color: var(--g-fg-2);
+}
+
+.account-steps > li[data-state="done"] > .account-steps-mark {
+  background-color: var(--g-glass-control-hover);
+}
+
+.account-steps > li[data-state="current"] {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.account-steps > li[data-state="current"] > .account-steps-mark {
+  background-color: var(--g-primary);
+  box-shadow: none;
+  color: var(--g-on-light);
 }

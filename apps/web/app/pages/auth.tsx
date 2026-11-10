@@ -41,9 +41,11 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
               {email ? (
                 <>
                   <div>
-                    <h2 className="auth-panel-title">You’re signed in.</h2>
+                    <h2 className="auth-panel-title">You’re signed in on the web.</h2>
                     <p className="auth-panel-copy">
-                      Open auracode to connect this device and set up encryption. This link shares
+                      The app signs in by itself, so your encryption key never leaves your computer.
+                      Open auracode: Settings, Account &amp; sync has this email filled in, sends
+                      one more code, and walks through the steps that turn on sync. The link shares
                       only your email address.
                     </p>
                   </div>
