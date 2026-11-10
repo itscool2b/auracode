@@ -36,6 +36,14 @@ export async function checkRemote(browser, url, out, engine) {
     await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
 
+    // Reading what a bot link allows turns nothing on: closing the dialog leaves it off.
+    await page.getByRole("button", { name: "Create link" }).click();
+    await page.getByRole("dialog", { name: "Link a bot" }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Link a bot" }).waitFor({ state: "detached" });
+    assert.deepEqual(await calls(), []);
+    assert.equal(await toggle.isChecked(), false);
+
     // Pairing turns remote access on by itself and shows the link once, as a code and as text.
     await page.getByRole("button", { name: "Pair", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Pair a device" });
@@ -160,6 +168,14 @@ export async function checkRemote(browser, url, out, engine) {
       .getByRole("button", { name: /Link a bot/ })
       .click();
     await page.getByRole("heading", { level: 1, name: "Remote access" }).waitFor();
+
+    // From off, creating a bot link is what turns remote access on.
+    await page.goto(`${url}/?preview=settings&page=remote`);
+    await page.getByRole("button", { name: "Create link" }).click();
+    await bot.getByRole("button", { name: "Create link" }).click();
+    await bot.getByRole("textbox", { name: "Bot address" }).waitFor();
+    assert.deepEqual(await calls(), ["enabled:true", "create-bot:Grok Bot"]);
+    assert.equal(await toggle.isChecked(), true);
     assert.deepEqual(errors, []);
     await context.close();
   }

@@ -56,7 +56,11 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     }
   }, []);
 
-  /** Pairing and linking need remote access on: asking for either turns it on. */
+  /**
+   * Pairing and linking need remote access on. A pairing link exists from the moment its dialog
+   * opens, so asking for one turns it on; a bot link turns it on only when the link is created,
+   * so reading what a link allows and closing the dialog connects this computer to nothing.
+   */
   const ensureOn = useCallback(async () => {
     if (status?.enabled) return;
     setStatus(await api.setEnabled(true));
@@ -73,14 +77,9 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     }
   };
 
-  const link = async () => {
+  const link = () => {
     setError(null);
-    try {
-      await ensureOn();
-      setLinking(true);
-    } catch (failure) {
-      setError(message(failure));
-    }
+    setLinking(true);
   };
 
   const enabled = status?.enabled ?? false;
@@ -183,7 +182,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
               type="button"
               data-testid="remote-link-bot"
               disabled={status === null}
-              onClick={() => void link()}
+              onClick={link}
             >
               Create link
             </button>
@@ -209,7 +208,10 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       ) : null}
       {linking ? (
         <BotDialog
-          create={(name, full) => api.createBot(name, full)}
+          create={async (name, full) => {
+            await ensureOn();
+            return api.createBot(name, full);
+          }}
           onClose={() => {
             setLinking(false);
             void run(() => api.status());
