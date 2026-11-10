@@ -1,0 +1,131 @@
+[
+  {
+    "name": "list_chats",
+    "title": "List chats",
+    "description": "List the coding-agent chats on the connected computer, most recently active first. Each line gives the chat id, its title, project, agent, status (working, idle, stopped, failed or needs sign-in) and whether it is waiting for an answer from a person. Call this first to find a chat id.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "list_projects",
+    "title": "List projects and agents",
+    "description": "List the projects on the connected computer with their folders, and the coding agents installed there. Use a folder id and an agent id from this list with start_chat.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "read_chat",
+    "title": "Read a chat",
+    "description": "Read the most recent turns of one chat: what was asked, the steps the agent took, its answer, and any request still waiting for an answer (with the request id and the option ids respond_to_request accepts).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat_id": { "type": "string", "description": "The chat's id, from list_chats." },
+        "turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "How many of the latest turns to read. Defaults to 2."
+        }
+      },
+      "required": ["chat_id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "send_message",
+    "title": "Send a message",
+    "description": "Send a message to a chat's coding agent, as the person at the computer would. It starts a turn, or waits in the chat's queue when the agent is already working. The agent can edit files and run commands on that computer. Follow with wait_for_chat to get the result.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat_id": { "type": "string", "description": "The chat's id, from list_chats." },
+        "text": { "type": "string", "minLength": 1, "description": "The message to send." }
+      },
+      "required": ["chat_id", "text"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "wait_for_chat",
+    "title": "Wait for a chat",
+    "description": "Wait until a chat's agent finishes its turn or needs an answer, then report its status, its latest answer and any waiting request. Returns after at most timeout_seconds even if the agent is still working; call it again to keep waiting.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat_id": { "type": "string", "description": "The chat's id, from list_chats." },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 45,
+          "description": "The longest to wait. Defaults to 30."
+        }
+      },
+      "required": ["chat_id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "respond_to_request",
+    "title": "Answer a waiting request",
+    "description": "Answer a request a chat's agent is waiting on. For a permission request, pass one of its option ids from read_chat (for example to allow or reject a command). Leave option_id out to decline the request or dismiss a question; then send your answer as a message.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat_id": { "type": "string", "description": "The chat's id, from list_chats." },
+        "request_id": { "type": "string", "description": "The request's id, from read_chat." },
+        "option_id": {
+          "type": "string",
+          "description": "The chosen option's id. Leave it out to decline or dismiss."
+        }
+      },
+      "required": ["chat_id", "request_id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "stop_chat",
+    "title": "Stop a turn",
+    "description": "Stop the turn a chat's agent is working on. The chat and its history stay; the agent stops what it was doing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat_id": { "type": "string", "description": "The chat's id, from list_chats." }
+      },
+      "required": ["chat_id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false }
+  },
+  {
+    "name": "start_chat",
+    "title": "Start a chat",
+    "description": "Start a new chat with a coding agent in one of a project's folders and send its first message. Returns the new chat's id. Follow with wait_for_chat to get the result.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "folder_id": { "type": "string", "description": "A folder id from list_projects." },
+        "agent_id": {
+          "type": "string",
+          "description": "An agent id from list_projects. Leave it out to use the project's usual agent."
+        },
+        "text": { "type": "string", "minLength": 1, "description": "The first message to send." }
+      },
+      "required": ["folder_id", "text"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "openWorldHint": false }
+  }
+]
