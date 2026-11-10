@@ -30,6 +30,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-chat);
   line-height: var(--g-leading-chat);
+  letter-spacing: var(--g-tracking-chat);
   white-space: pre-wrap;
   overflow-wrap: break-word;
   pointer-events: none;

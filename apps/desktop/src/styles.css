@@ -100,6 +100,18 @@
     height: auto;
   }
 
+  /* Interface text sits a hair tight, as the Grok Bot app sets its own; code keeps its grid. */
+  :root.g-root {
+    letter-spacing: var(--g-tracking-ui);
+  }
+
+  pre,
+  code,
+  kbd,
+  samp {
+    letter-spacing: 0;
+  }
+
   button,
   input,
   select,

@@ -230,6 +230,7 @@ export function ChatList({
         <button
           type="button"
           className="chat-nav-action"
+          data-field=""
           aria-keyshortcuts="Control+K Meta+K"
           onClick={() => (onSearch ? onSearch() : setSearching((value) => !value))}
           aria-expanded={onSearch ? undefined : searching}

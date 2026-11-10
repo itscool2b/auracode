@@ -97,6 +97,21 @@ The owner asked for the landing page to look like linear.app, SpaceXAI and aside
 
 ## Desktop references
 
+### The Grok Bot app, 10 November 2026
+
+The owner asked for the Grok Bot app's styling across the desktop. Its page (x.ai/bot, which dot.com redirects to) draws the app live in HTML, so these are its computed styles, read in Aura's browser under a dark system, at the page's scale:
+
+- **Window.** `rgba(28, 28, 26, 0.62)` with a 24px radius; the sidebar a darker `rgba(20, 20, 20, 0.28)` over it and 280px wide; the chat `rgba(38, 38, 38, 0.84)`. Text `rgb(242, 242, 242)`, then white at 0.55 to 0.58 and at 0.32 to 0.36.
+- **Search.** 32px tall, 10px radius, white at 0.07 with a hairline of white at 0.12, placeholder at 0.32.
+- **Rows.** 10px radius, 8px inside, the open one white at 0.075 with no rim. Name 14/20 at -0.15px tracking, time 12/16 at 0.32, preview 12/16 at 0.55.
+- **Messages.** The person's is `rgb(236, 236, 232)` with `rgb(20, 20, 20)` on it; the agent's is white at 0.06. Both 16px radius, 8px by 12px inside, 14/20 at -0.15px. Notes between them are centred, 12 to 13px at 0.58.
+- **Cards.** White at 0.06, 16px radius, 10px by 12px inside, no rim; the title 14px at weight 600. A badge is a 19px pill in a 0.14 tint of its colour with a 5px dot and 12px words.
+- **Composer.** A full pill 45px tall with a hairline of white at 0.12; a 28px disc at white 0.06 for attaching and a 28px `rgb(240, 240, 240)` disc with dark ink for the microphone or Send.
+- **Buttons.** Pills: the first in paper with ink, the second dark with a hairline.
+- **Header and footer.** Title 13/18 at -0.08px; the account a 28px disc at white 0.075 with 10px initials.
+
+Taken: the paper message, both trackings, the search field, the attach disc and the badge. Already the desktop's own before this pass: the darker sidebar beside a lighter chat, 10px rows, the capsule composer with its white Send disc, pill buttons and solid menus. Not taken: bubbles around agents' replies (answers run the column), avatars in the chat list, and its palette (each theme keeps its own; the paper derives from the theme). Only the dark appearance was seen.
+
 The desktop keeps the audited Devin organization: compact work surfaces, navigation and settings structure in light and dark. Halo adds glass layers over the native window material: Acrylic or Mica on Windows, vibrancy or Liquid Glass on macOS. Accent, focus and selection stay neutral. No fresh live Devin inspection is claimed for Halo.
 
 The earlier inspection covered Devin Preferences in light and dark, a short greeting conversation with its side panel in light mode, and all six Customize sections in light mode: Plugins, Skills, MCPs, Hooks, Rules and Memory. The prior inspection covered 18 organization settings sections plus overview, five personal sections, six Customize sections, three Security sections, the main interface and nested screens in both themes. A terminal and a tool-heavy task were not inspected. These observations do not prove how those missing states look or behave.
