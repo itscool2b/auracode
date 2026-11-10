@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+import catalog from "#release-catalog";
+
+/** Whether installers are published; the rows say where they lead either way. */
+const PUBLISHED = catalog.release !== null;
 
 const PLATFORMS: readonly { name: string; detail: string; glyph: ReactNode }[] = [
   {
@@ -41,7 +45,11 @@ export function GetIt() {
           <h2 id="getit-title" className="title">
             Download auracode
           </h2>
-          <p className="lead">Free for Windows, macOS and Linux. No account needed.</p>
+          <p className="lead">
+            {PUBLISHED
+              ? "Free for Windows, macOS and Linux. No account needed."
+              : "Free for Windows, macOS and Linux, with no account needed. Installers are on the way."}
+          </p>
         </div>
         <ul className="getit-rows" data-reveal="">
           {PLATFORMS.map((platform) => (
@@ -79,7 +87,14 @@ export function GetIt() {
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <path d="M9 3v8.5M5.5 8 9 11.5 12.5 8M3.5 14.5h11" />
+                  {/* A download tray once installers are published; until then, an arrow onward. */}
+                  <path
+                    d={
+                      PUBLISHED
+                        ? "M9 3v8.5M5.5 8 9 11.5 12.5 8M3.5 14.5h11"
+                        : "M3.5 9h11M10.5 5l4 4-4 4"
+                    }
+                  />
                 </svg>
               </a>
             </li>

@@ -95,11 +95,8 @@
 .account-signed-out,
 .error-panel,
 .page-column > .prose {
-  border-radius: 16px;
+  border-radius: var(--s-radius);
   background-color: var(--s-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--s-line),
-    0 1px 2px rgb(0 0 0 / 0.03);
 }
 
 /* -------------------------------------------------------------------------------- prose */
@@ -669,28 +666,92 @@
 
 /* ---------------------------------------------------------------------------- changelog */
 
+/* The days, newest first: each a card with its date at left and its changes at right. */
+.changes {
+  display: grid;
+  gap: 20px;
+}
+
 .release-entry {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
   gap: 36px;
-  padding: 40px;
+  padding: 32px 40px;
 }
 
 .release-meta {
   display: grid;
   gap: 4px;
   align-content: start;
-  color: var(--g-fg-3);
+  color: var(--s-soft);
   font-size: 14px;
+  line-height: 22px;
 }
 
-.release-meta time {
-  color: var(--g-fg-1);
+.release-meta h2 {
+  color: var(--s-ink);
+  font-size: 16px;
+  line-height: 26px;
   font-weight: 500;
 }
 
-.release-body .text-link {
-  margin-top: 24px;
+.change-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A change: what it is in ink, why in grey, and its pull request at the row's end. */
+.change {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: baseline;
+  padding: 14px 0;
+}
+
+.change:first-child {
+  padding-top: 0;
+}
+
+.change:last-child {
+  padding-bottom: 0;
+}
+
+.change + .change {
+  border-top: 1px solid rgb(var(--s-k) / 0.08);
+}
+
+.change p {
+  color: var(--s-soft);
+  font-size: 15px;
+  line-height: 24px;
+  text-wrap: pretty;
+}
+
+.change strong {
+  color: var(--s-ink);
+  font-weight: 500;
+}
+
+.change code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background-color: rgb(var(--s-k) / 0.07);
+  font-family: var(--g-mono);
+  font-size: 0.88em;
+}
+
+.change-pull {
+  color: var(--s-soft);
+  font-family: var(--g-mono);
+  font-size: 13px;
+  line-height: 24px;
+}
+
+.page-lead .text-link {
+  margin-left: 4px;
 }
 
 /* -------------------------------------------------------------------------------- error */

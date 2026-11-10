@@ -41,6 +41,26 @@ test("public pages are prerendered to follow the system appearance without JavaS
     );
   assert.match(home, /sizes="\(max-width: 1327px\) calc\(100vw - 48px\), 1280px"/);
 });
+test("the changelog page lists every pull request in CHANGELOG.md, newest first", async () => {
+  const source = await readFile(new URL("../../../CHANGELOG.md", import.meta.url), "utf8");
+  const merged = [...source.matchAll(/^- .+ \(\[#(\d+)\]\(https:[^)]+\)\)\s*$/gm)].map((match) =>
+    Number(match[1]),
+  );
+  assert.ok(merged.length > 100, "CHANGELOG.md was read");
+  const html = await readFile(new URL("changelog/index.html", root), "utf8");
+  // React splits "#" and the number into two text nodes.
+  const shown = [...html.matchAll(/class="change-pull">.*?#(?:<!-- -->)?(\d+)<\/span>/g)].map(
+    (match) => Number(match[1]),
+  );
+  assert.deepEqual(shown, merged);
+  const days = [...source.matchAll(/^## (\d{4}-\d{2}-\d{2})\s*$/gm)].map((match) => match[1]);
+  assert.deepEqual(
+    [...html.matchAll(/<time dateTime="(\d{4}-\d{2}-\d{2})"/gi)].map((match) => match[1]),
+    days,
+  );
+  // The repository is private: no page or script may carry a link into it.
+  assert.doesNotMatch(html, /github\.com/);
+});
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");
   assert.match(headers, /frame-ancestors 'none'/);
@@ -86,9 +106,10 @@ test("third-party notices are emitted and linked from every page footer", async 
   assert.match(text, /react-router/);
   assert.doesNotMatch(text, /SQLCipher|openssl-src/);
   const page = await readFile(new URL("third-party-notices/index.html", root), "utf8");
-  assert.match(page, /color-scheme:light/);
-  assert.match(page, /--notice-bg:#fafafa/);
-  assert.doesNotMatch(page, /prefers-color-scheme:dark/);
+  // It follows the system appearance as the site does, without a script.
+  assert.match(page, /color-scheme:light dark/);
+  assert.match(page, /--notice-bg:#ffffff/);
+  assert.match(page, /prefers-color-scheme:dark\)\{html\{--notice-bg:#0a0a0a/);
   assert.doesNotMatch(page, /<script/);
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /<a href="\/third-party-notices">Notices<\/a>/);

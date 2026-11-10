@@ -27,6 +27,11 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content={pinned ? "light" : "dark light"} />
+        {/* The browser's own bars take the page's colour in each appearance. */}
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        {pinned ? null : (
+          <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+        )}
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

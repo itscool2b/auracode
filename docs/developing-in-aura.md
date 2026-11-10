@@ -97,6 +97,13 @@ number, then commit the line. If it merges on a later day than planned, move the
 runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the links and that
 each pull request appears once.
 
+The website's changelog page is built from this file (`apps/web/scripts/changelog.ts`), and every
+push to `main` redeploys the site, so a merged line is public within minutes (owner, 10 November
+2026: every merge adds to the changelog, "which updates on the website as well"). Write each line
+for that reader. The page shows a line's words and its pull request number, never the link: the
+repository is private. The words up to the line's first colon or full stop are set in ink as its
+headline, so open with what changed.
+
 ## Getting a change into the installed app
 
 On Windows, `apps/desktop/scripts/host-upgrade.mjs` replaces the installed app with a local build

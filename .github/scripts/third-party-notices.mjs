@@ -381,14 +381,17 @@ export function renderHtml(text, distribution = "desktop") {
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
   );
-  // The website is always light. The separate desktop document follows System; both remain
-  // script-free and leave the notice text unchanged.
-  const scheme = distribution === "web" ? "light" : "light dark";
-  const dark =
-    distribution === "web"
-      ? ""
-      : "@media(prefers-color-scheme:dark){html{--notice-bg:#101112;--notice-fg:#a1a1aa;--notice-title:#fafafa;--notice-line:#303236;--notice-selection:#333}}";
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${scheme}"><title>Third-party notices | auracode</title><style>html{color-scheme:${scheme};--notice-bg:#fafafa;--notice-fg:#52525b;--notice-title:#18181b;--notice-line:#e4e4e7;--notice-selection:#dde2ea;background:var(--notice-bg);color:var(--notice-fg);font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}${dark}body{max-width:72rem;margin:clamp(2rem,6vw,6rem) auto;padding:0 1.25rem}h1{margin:0 0 2rem;color:var(--notice-title);font-size:2rem;line-height:1.2;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid var(--notice-line);white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:var(--notice-selection);color:var(--notice-title)}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
+  // Both documents follow System, each in its own surface's colours (the website's plain page,
+  // the desktop's Graphite); both remain script-free and leave the notice text unchanged.
+  const scheme = "light dark";
+  const web = distribution === "web";
+  const light = web
+    ? "--notice-bg:#ffffff;--notice-fg:#63666d;--notice-title:#0a0a0a;--notice-line:#e7e8eb;--notice-selection:#dde2ea"
+    : "--notice-bg:#fafafa;--notice-fg:#52525b;--notice-title:#18181b;--notice-line:#e4e4e7;--notice-selection:#dde2ea";
+  const dark = web
+    ? "@media(prefers-color-scheme:dark){html{--notice-bg:#0a0a0a;--notice-fg:#8d9199;--notice-title:#ffffff;--notice-line:#1f2228;--notice-selection:#333}}"
+    : "@media(prefers-color-scheme:dark){html{--notice-bg:#101112;--notice-fg:#a1a1aa;--notice-title:#fafafa;--notice-line:#303236;--notice-selection:#333}}";
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${scheme}"><title>Third-party notices | auracode</title><style>html{color-scheme:${scheme};${light};background:var(--notice-bg);color:var(--notice-fg);font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}${dark}body{max-width:72rem;margin:clamp(2rem,6vw,6rem) auto;padding:0 1.25rem}h1{margin:0 0 2rem;color:var(--notice-title);font-size:2rem;line-height:1.2;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid var(--notice-line);white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:var(--notice-selection);color:var(--notice-title)}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
 }
 
 const virtualNotices = "virtual:third-party-notices";

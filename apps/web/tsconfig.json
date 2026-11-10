@@ -9,6 +9,7 @@
     "app",
     ".react-router/types",
     "scripts/site-images.ts",
+    "scripts/changelog.ts",
     "vite.config.ts",
     "react-router.config.ts"
   ]

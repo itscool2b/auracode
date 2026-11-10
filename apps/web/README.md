@@ -38,7 +38,7 @@ the light PNG fallback. The card views are drawn from tokens after the app's own
 chat, a pending handoff, the Changes panel and the queue); update them with the
 app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
 logo's own paths. Without JavaScript the site still follows the system appearance, the agents' chips show the
-default choice and the FAQ opens natively. The standalone notices page is script-free and stays light. The website has no appearance control or persisted theme. Reduced motion disables the live window and transitions.
+default choice and the FAQ opens natively. The standalone notices page is script-free and follows the system appearance too. The changelog page is built from the repository's `CHANGELOG.md` by `scripts/changelog.ts`. The website has no appearance control or persisted theme. Reduced motion disables the live window and transitions.
 
 ## Deployment prerequisites
 
