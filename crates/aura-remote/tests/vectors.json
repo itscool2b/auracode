@@ -1,0 +1,34 @@
+{
+  "secret": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI",
+  "client_nonce": "AAECAwQFBgcICQoLDA0ODw",
+  "host_nonce": "EBESExQVFhcYGRobHB0eHw",
+  "context": "device|AAECAwQFBgc",
+  "client_to_host": [
+    [
+      "",
+      "9JboOBcZCWyrvRXFrs_ATw"
+    ],
+    [
+      "{\"id\":1,\"op\":\"overview\"}",
+      "uJXnqddFoHhPk-HO0TlgX858k9N-eIGxdVeJqQ5VWu7O9CyU-oZnsg"
+    ],
+    [
+      "Prüfe das, bitte ✓",
+      "FLX9dT5-5tV-swUsyaBJCNDpin_k4C7PHpNxy8vSP6MJJNwRwA"
+    ]
+  ],
+  "host_to_client": [
+    [
+      "{\"ev\":\"ready\",\"host_name\":\"Studio\",\"paired\":true}",
+      "_UVRBxorblV5Vkxg4wisAAyrDh4BKhB_R97PRfimrMYt95P-a3U_Z8HNi46rWNvOq9L5mrpEVTxe01qrYW1N8BU"
+    ],
+    [
+      "",
+      "tUikefFvfbdLXDgIIyH3Vg"
+    ],
+    [
+      "日本語",
+      "ukNsl-tiJNckiefw2Otn7Dr9919B5BSp3A"
+    ]
+  ]
+}

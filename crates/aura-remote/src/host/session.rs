@@ -1,0 +1,447 @@
+//! One browser's session: its hello, its sealed requests and what each starts.
+
+use super::*;
+
+/// What a browser's message leads to.
+pub(super) enum Received {
+    /// Frames to write to the relay.
+    Send(Vec<String>),
+    /// The session is over: an optional last word, then the connection is dropped.
+    Refuse(Option<String>),
+}
+
+pub(super) fn refusal(reason: Refusal) -> String {
+    serde_json::to_string(&Refused { reason }).unwrap_or_default()
+}
+
+pub(super) fn bot_answer(rid: &str, text: &str, error: bool) -> String {
+    format!(
+        "b{}",
+        serde_json::to_string(&BotAnswer { rid, text, error }).unwrap_or_default()
+    )
+}
+
+/// The bot links as the relay checks them: ids and token hashes, never tokens.
+pub(super) fn bot_links(shared: &Shared) -> String {
+    let registry = lock(&shared.registry);
+    let links: Vec<BotLink<'_>> = registry
+        .bots()
+        .iter()
+        .map(|bot| BotLink {
+            id: &bot.id,
+            hash: &bot.token_hash,
+        })
+        .collect();
+    format!(
+        "l{}",
+        serde_json::to_string(&links).unwrap_or_else(|_| "[]".into())
+    )
+}
+
+pub(super) fn seal(
+    channel: &mut Channel,
+    event: &Event<'_>,
+) -> Result<String, crypto::CryptoError> {
+    let json = serde_json::to_string(event).map_err(|_| crypto::CryptoError::Seal)?;
+    channel.seal(json.as_bytes())
+}
+
+/// A browser is gone: nothing follows a chat on its behalf any more.
+pub(super) fn closed(shared: &Shared, backend: &dyn Backend, cid: &str, connection: Connection) {
+    backend.release(&owner(cid));
+    let Some(session) = connection.session else {
+        return;
+    };
+    let Some(device) = session.device.filter(|_| session.proven) else {
+        return;
+    };
+    let mut connected = lock(&shared.connected);
+    if let Some(count) = connected.get_mut(&device) {
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            connected.remove(&device);
+        }
+    }
+    drop(connected);
+    (shared.config.changed)();
+}
+
+/// Handles one payload from a browser. Runs on the connection task: it opens the message and
+/// starts whatever the request needs, and never waits.
+pub(super) fn receive(
+    shared: &Arc<Shared>,
+    backend: &Arc<dyn Backend>,
+    out: &UnboundedSender<Out>,
+    cid: &str,
+    connection: &mut Connection,
+    payload: &str,
+) -> Received {
+    let Some((kind, body)) = payload.split_at_checked(1) else {
+        return Received::Refuse(None);
+    };
+    match (kind, connection.session.as_mut()) {
+        ("H", None) => hello(shared, cid, connection, body),
+        ("E", Some(session)) => {
+            let Ok(message) = session.channel.open(body) else {
+                // Not sealed with this session's key, or out of order: the session is over.
+                if let Some(pairing) = &session.pairing {
+                    lock(&shared.registry).pairing_failed(pairing);
+                }
+                return Received::Refuse(None);
+            };
+            let mut frames = Vec::new();
+            if !session.proven {
+                session.proven = true;
+                frames.push(format!("a{cid}"));
+                if let Some(device) = &session.device {
+                    lock(&shared.registry).seen(device, now());
+                    *lock(&shared.connected).entry(device.clone()).or_default() += 1;
+                    (shared.config.changed)();
+                }
+            }
+            let Ok(request) = serde_json::from_slice::<Request>(&message) else {
+                return Received::Refuse(None);
+            };
+            match start(shared, backend, out, cid, session, request) {
+                Ok(()) => Received::Send(frames),
+                Err(()) => Received::Refuse(None),
+            }
+        }
+        _ => Received::Refuse(None),
+    }
+}
+
+/// A browser's hello: find the key it claims to hold and answer with this side's nonce and a
+/// first sealed message, which only the holder of that key can open.
+fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &str) -> Received {
+    let refuse = |reason| Received::Refuse(Some(format!("m{cid} R{}", refusal(reason))));
+    let Ok(hello) = serde_json::from_str::<Hello>(body) else {
+        return Received::Refuse(None);
+    };
+    if hello.v != wire::VERSION {
+        return refuse(Refusal::Version);
+    }
+    let Some(client_nonce) = crypto::decode::<NONCE_BYTES>(&hello.nonce) else {
+        return Received::Refuse(None);
+    };
+    let key = {
+        let mut registry = lock(&shared.registry);
+        match hello.kind {
+            CredentialKind::Pair => registry.pairing_key(&hello.id, now()),
+            CredentialKind::Device => registry.device_key(&hello.id),
+        }
+    };
+    let Some(key) = key else {
+        return refuse(Refusal::Unknown);
+    };
+    let Ok(host_nonce) = crypto::random::<NONCE_BYTES>() else {
+        return Received::Refuse(None);
+    };
+    let context = format!("{}|{}", hello.kind.as_str(), hello.id);
+    let Ok(mut channel) = Channel::new(Side::Host, &key, &client_nonce, &host_nonce, &context)
+    else {
+        return Received::Refuse(None);
+    };
+    let paired = hello.kind == CredentialKind::Device;
+    let Ok(ready) = seal(
+        &mut channel,
+        &Event::Ready {
+            host_name: &shared.config.host_name,
+            paired,
+        },
+    ) else {
+        return Received::Refuse(None);
+    };
+    let welcome = serde_json::to_string(&Welcome {
+        v: wire::VERSION,
+        nonce: crypto::encode(&host_nonce),
+    })
+    .unwrap_or_default();
+    connection.session = Some(Session {
+        channel,
+        pairing: (!paired).then(|| hello.id.clone()),
+        device: paired.then_some(hello.id),
+        proven: false,
+        calls: Arc::new(AtomicUsize::new(0)),
+        backlog: Arc::new(AtomicUsize::new(0)),
+    });
+    Received::Send(vec![
+        format!("m{cid} W{welcome}"),
+        format!("m{cid} E{ready}"),
+    ])
+}
+
+fn reply(out: &UnboundedSender<Out>, cid: &str, id: u32, result: Result<Data, BackendError>) {
+    let json = match &result {
+        Ok(data) => serde_json::to_string(&Reply {
+            re: id,
+            ok: true,
+            data: Some(data),
+            error: None,
+        }),
+        Err(error) => serde_json::to_string(&Reply {
+            re: id,
+            ok: false,
+            data: None,
+            error: Some(&ErrorBody {
+                code: error.code,
+                message: error.message.clone(),
+            }),
+        }),
+    };
+    // A value that will not serialize is a fault here, never the browser's doing: say so.
+    let json = json.unwrap_or_else(|_| {
+        serde_json::json!({
+            "re": id,
+            "ok": false,
+            "error": { "code": "internal", "message": "The answer could not be sent." },
+        })
+        .to_string()
+    });
+    let _ = out.send(Out::Sealed {
+        cid: cid.to_owned(),
+        json,
+        backlog: 0,
+    });
+}
+
+/// Halves a page from its oldest end until it fits one message; the rest is the next page.
+pub(super) fn fit(page: &mut HistoryPage) {
+    while page.items.len() > 1
+        && serde_json::to_vec(&*page).map_or(0, |bytes| bytes.len()) > MAX_PLAINTEXT
+    {
+        let keep = page.items.len() / 2;
+        page.items.drain(..page.items.len() - keep);
+        if let Some(first) = page.items.first() {
+            page.has_more = true;
+            page.before_seq = Some(first.seq);
+            page.cut_turn_id.clone_from(&first.turn_id);
+        }
+    }
+}
+
+fn text_ok(text: &str) -> Result<(), BackendError> {
+    if text.trim().is_empty() {
+        Err(BackendError::new("empty", "The message is empty."))
+    } else if text.len() > MAX_TEXT {
+        Err(BackendError::new("too_large", "The message is too long."))
+    } else {
+        Ok(())
+    }
+}
+
+/// Starts a request. `Err` ends the session: the request broke the protocol.
+fn start(
+    shared: &Arc<Shared>,
+    backend: &Arc<dyn Backend>,
+    out: &UnboundedSender<Out>,
+    cid: &str,
+    session: &mut Session,
+    request: Request,
+) -> Result<(), ()> {
+    let id = request.id;
+    // A pairing link does one thing: become a device.
+    if let Some(pairing) = session.pairing.clone() {
+        let Op::Pair { name } = request.op else {
+            reply(
+                out,
+                cid,
+                id,
+                Err(BackendError::new("pair_first", "Pair this browser first.")),
+            );
+            return Ok(());
+        };
+        let result = lock(&shared.registry).pair(&pairing, &name, now());
+        match result {
+            Ok(Some(device)) => {
+                // The session is the device's from here on.
+                session.pairing = None;
+                session.device = Some(device.id.clone());
+                *lock(&shared.connected)
+                    .entry(device.id.clone())
+                    .or_default() += 1;
+                (shared.config.changed)();
+                reply(
+                    out,
+                    cid,
+                    id,
+                    Ok(Data::Paired(Paired {
+                        device_id: device.id,
+                        device_key: device.key,
+                    })),
+                );
+            }
+            Ok(None) => reply(
+                out,
+                cid,
+                id,
+                Err(BackendError::new(
+                    "expired",
+                    "This pairing link is no longer open. Create a new one in auracode.",
+                )),
+            ),
+            Err(error) => reply(
+                out,
+                cid,
+                id,
+                Err(BackendError::new("refused", error.to_string())),
+            ),
+        }
+        return Ok(());
+    }
+    let Some(device) = session.device.clone() else {
+        return Err(());
+    };
+    // A device removed in Settings is gone at once, even mid-session.
+    if lock(&shared.registry).device_key(&device).is_none() {
+        return Err(());
+    }
+    if session.calls.load(Ordering::Relaxed) >= MAX_CALLS {
+        reply(
+            out,
+            cid,
+            id,
+            Err(BackendError::new("busy", "Too many requests at once.")),
+        );
+        return Ok(());
+    }
+    if matches!(request.op, Op::Open { .. } | Op::Close) {
+        session.backlog.store(0, Ordering::Relaxed);
+    }
+    session.calls.fetch_add(1, Ordering::Relaxed);
+    let (calls, backlog) = (session.calls.clone(), session.backlog.clone());
+    let (shared, backend, out, cid) =
+        (shared.clone(), backend.clone(), out.clone(), cid.to_owned());
+    tokio::spawn(async move {
+        let result = perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await;
+        calls.fetch_sub(1, Ordering::Relaxed);
+        let forgot = matches!(result, Ok(Performed::Forgot));
+        reply(&out, &cid, id, result.map(Performed::data));
+        if forgot {
+            let _ = out.send(Out::Drop { cid });
+        }
+    });
+    Ok(())
+}
+
+enum Performed {
+    Data(Data),
+    /// The device removed itself: answer, then end the session.
+    Forgot,
+}
+
+impl Performed {
+    fn data(self) -> Data {
+        match self {
+            Self::Data(data) => data,
+            Self::Forgot => Data::None {},
+        }
+    }
+}
+
+async fn perform(
+    shared: &Arc<Shared>,
+    backend: &Arc<dyn Backend>,
+    out: &UnboundedSender<Out>,
+    cid: &str,
+    device: &str,
+    backlog: Arc<AtomicUsize>,
+    op: Op,
+) -> Result<Performed, BackendError> {
+    let done = |data| Ok(Performed::Data(data));
+    match op {
+        Op::Pair { .. } => Err(BackendError::new(
+            "paired",
+            "This browser is already paired.",
+        )),
+        Op::Overview => done(Data::Overview(Box::new(backend.overview().await?))),
+        Op::Open { chat_id } => {
+            let (sender, to, following) = (out.clone(), cid.to_owned(), chat_id.clone());
+            let frames: Frames = Arc::new(move |batch| {
+                let Ok(json) = serde_json::to_string(&Event::Frame { batch }) else {
+                    return true;
+                };
+                let size = json.len();
+                if backlog.fetch_add(size, Ordering::Relaxed) + size > MAX_BACKLOG {
+                    // The browser is not keeping up: stop here and have it open the chat again.
+                    let lost = serde_json::to_string(&Event::Lost {
+                        chat_id: &following,
+                    })
+                    .unwrap_or_default();
+                    let _ = sender.send(Out::Sealed {
+                        cid: to.clone(),
+                        json: lost,
+                        backlog: size,
+                    });
+                    return false;
+                }
+                sender
+                    .send(Out::Sealed {
+                        cid: to.clone(),
+                        json,
+                        backlog: size,
+                    })
+                    .is_ok()
+            });
+            let mut attach = backend.attach(&chat_id, &owner(cid), frames).await?;
+            fit(&mut attach.history);
+            done(Data::Attach(Box::new(attach)))
+        }
+        Op::Close => {
+            backend.release(&owner(cid));
+            done(Data::None {})
+        }
+        Op::History {
+            chat_id,
+            before_seq,
+        } => {
+            let mut page = backend.history(&chat_id, before_seq).await?;
+            fit(&mut page);
+            done(Data::History(Box::new(page)))
+        }
+        Op::Send { chat_id, text } => {
+            text_ok(&text)?;
+            done(Data::Sent(backend.send(&chat_id, text).await?))
+        }
+        Op::Interrupt { chat_id } => {
+            backend.interrupt(&chat_id).await?;
+            done(Data::None {})
+        }
+        Op::Permission {
+            chat_id,
+            request_id,
+            option_id,
+        } => {
+            backend.permission(&chat_id, &request_id, option_id).await?;
+            done(Data::None {})
+        }
+        Op::Answer {
+            chat_id,
+            request_id,
+            answer,
+        } => {
+            backend.answer(&chat_id, &request_id, answer).await?;
+            done(Data::None {})
+        }
+        Op::Create {
+            folder_id,
+            agent_id,
+            text,
+        } => {
+            text_ok(&text)?;
+            let chat = backend.create(&folder_id, agent_id.as_deref()).await?;
+            let sent = backend.send(&chat.chat.id, text).await?;
+            done(Data::Created {
+                chat: Box::new(chat),
+                sent,
+            })
+        }
+        Op::Forget => {
+            lock(&shared.registry)
+                .remove_device(device)
+                .map_err(|error| BackendError::new("refused", error.to_string()))?;
+            (shared.config.changed)();
+            Ok(Performed::Forgot)
+        }
+    }
+}

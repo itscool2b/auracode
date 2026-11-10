@@ -29,6 +29,7 @@ pub mod mcp;
 pub mod memory;
 pub mod plugins;
 pub mod project_tools;
+pub mod remote;
 pub mod repository_publication;
 pub mod search;
 pub mod session;

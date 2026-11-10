@@ -1,0 +1,682 @@
+//! The desktop's end of remote sessions: one task that keeps the socket to the relay, and behind
+//! it a session per connected browser.
+//!
+//! The task owns every session's keys and counters, so each message is opened and sealed in
+//! order. Work that waits (a call into the app) runs beside it and hands back a finished answer.
+
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex, MutexGuard, PoisonError,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use aura_protocol::{
+    remote::{RemoteBot, RemoteBotLink, RemoteDevice, RemoteLink, RemotePairing, RemoteStatus},
+    session::{ChatStatusUpdate, HistoryPage},
+};
+use futures::{SinkExt, StreamExt};
+use tokio::{
+    sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+    time::Instant,
+};
+use tokio_tungstenite::tungstenite::Message;
+
+use crate::{
+    backend::{Backend, BackendError, Frames, Statuses},
+    bot,
+    crypto::{self, Channel, NONCE_BYTES, Side},
+    registry::{Registry, RegistryError},
+    relay,
+    wire::{
+        self, BotAnswer, BotCall, BotLink, CredentialKind, Data, ErrorBody, Event, FromRelay,
+        Hello, Op, Paired, Refusal, Refused, Reply, Request, Welcome,
+    },
+};
+
+mod session;
+use session::{Received, bot_answer, bot_links, closed, receive, refusal, seal};
+
+/// Browsers connected at once, proven or not.
+const MAX_CONNECTIONS: usize = 32;
+/// How long a browser has to prove it holds a key.
+const PROVE_WITHIN: Duration = Duration::from_secs(20);
+/// Calls one browser may have running at once.
+const MAX_CALLS: usize = 16;
+/// Bot calls running at once.
+const MAX_BOT_CALLS: usize = 8;
+/// Live events queued for one browser before it is told to open its chat again.
+const MAX_BACKLOG: usize = 4 * 1024 * 1024;
+/// The most one sealed message carries: under the relay's limit once sealed and encoded.
+const MAX_PLAINTEXT: usize = 600 * 1024;
+const MAX_TEXT: usize = 64 * 1024;
+const PING_EVERY: Duration = Duration::from_secs(25);
+const SWEEP_EVERY: Duration = Duration::from_secs(5);
+/// No answer to a keep-alive for this long: the socket is dead.
+const SILENCE: Duration = Duration::from_secs(70);
+const WATCHER: &str = "auracode-remote";
+
+pub struct Config {
+    /// `remote.json` in the data folder.
+    pub path: PathBuf,
+    /// The relay's WebSocket origin, such as `wss://auracode.si`.
+    pub relay: String,
+    /// The website's origin, which pairing links and bot addresses start with.
+    pub site: String,
+    /// What paired browsers call this computer.
+    pub host_name: String,
+    pub backend: Arc<dyn Backend>,
+    /// Called after anything Settings shows has changed.
+    pub changed: Arc<dyn Fn() + Send + Sync>,
+}
+
+enum Control {
+    /// Settings changed: remote access was turned on or off, or a device or bot link was removed.
+    Refresh,
+    /// Another profile was opened: every followed chat is gone.
+    Reset,
+    Shutdown,
+}
+
+struct Shared {
+    registry: Mutex<Registry>,
+    link: Mutex<RemoteLink>,
+    /// Sessions open per device.
+    connected: Mutex<HashMap<String, usize>>,
+    config: Config,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    // A panic elsewhere must not take remote access down with it; the data is plain state.
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis() as i64)
+}
+
+/// Remote access for one installation. Cloning shares it.
+#[derive(Clone)]
+pub struct Service {
+    shared: Arc<Shared>,
+    control: UnboundedSender<Control>,
+}
+
+impl Service {
+    /// Reads the saved settings and starts the connection task on `runtime`. Nothing connects
+    /// until remote access is on.
+    pub fn start(config: Config, runtime: &tokio::runtime::Handle) -> Result<Self, RegistryError> {
+        let registry = Registry::load(&config.path)?;
+        let shared = Arc::new(Shared {
+            link: Mutex::new(if registry.enabled() {
+                RemoteLink::Connecting
+            } else {
+                RemoteLink::Off
+            }),
+            registry: Mutex::new(registry),
+            connected: Mutex::new(HashMap::new()),
+            config,
+        });
+        let (control, receiver) = unbounded_channel();
+        runtime.spawn(run(shared.clone(), receiver));
+        Ok(Self { shared, control })
+    }
+
+    pub fn status(&self) -> RemoteStatus {
+        let mut registry = lock(&self.shared.registry);
+        let connected = lock(&self.shared.connected);
+        RemoteStatus {
+            enabled: registry.enabled(),
+            link: lock(&self.shared.link).clone(),
+            host_name: self.shared.config.host_name.clone(),
+            devices: registry
+                .devices()
+                .iter()
+                .map(|device| RemoteDevice {
+                    id: device.id.clone(),
+                    name: device.name.clone(),
+                    created_at: device.created_at,
+                    last_seen_at: device.last_seen_at,
+                    connected: connected.get(&device.id).is_some_and(|count| *count > 0),
+                })
+                .collect(),
+            bots: registry
+                .bots()
+                .iter()
+                .map(|bot| RemoteBot {
+                    id: bot.id.clone(),
+                    name: bot.name.clone(),
+                    created_at: bot.created_at,
+                    last_used_at: bot.last_used_at,
+                })
+                .collect(),
+            pairing_expires_at: registry.pairing(now()).map(|pairing| pairing.expires_at),
+        }
+    }
+
+    fn refresh(&self) {
+        let _ = self.control.send(Control::Refresh);
+        (self.shared.config.changed)();
+    }
+
+    pub fn set_enabled(&self, enabled: bool) -> Result<(), RegistryError> {
+        lock(&self.shared.registry).set_enabled(enabled)?;
+        if !enabled {
+            *lock(&self.shared.link) = RemoteLink::Off;
+        }
+        self.refresh();
+        Ok(())
+    }
+
+    /// Opens a new pairing link, closing the one before it.
+    pub fn pair(&self) -> Result<RemotePairing, RegistryError> {
+        let mut registry = lock(&self.shared.registry);
+        let pairing = registry.start_pairing(now())?;
+        let url = format!(
+            "{}/remote#{}.{}.{}",
+            self.shared.config.site,
+            registry.host_id(),
+            pairing.id,
+            crypto::encode(&pairing.key)
+        );
+        drop(registry);
+        (self.shared.config.changed)();
+        Ok(RemotePairing {
+            url,
+            expires_at: pairing.expires_at,
+        })
+    }
+
+    pub fn cancel_pairing(&self) {
+        lock(&self.shared.registry).cancel_pairing();
+        (self.shared.config.changed)();
+    }
+
+    pub fn remove_device(&self, id: &str) -> Result<(), RegistryError> {
+        lock(&self.shared.registry).remove_device(id)?;
+        self.refresh();
+        Ok(())
+    }
+
+    pub fn create_bot(&self, name: &str) -> Result<RemoteBotLink, RegistryError> {
+        let mut registry = lock(&self.shared.registry);
+        let new = registry.add_bot(name, now())?;
+        let link = RemoteBotLink {
+            name: registry
+                .bots()
+                .iter()
+                .find(|bot| bot.id == new.id)
+                .map_or_else(String::new, |bot| bot.name.clone()),
+            url: format!(
+                "{}/api/remote/v1/mcp/{}/{}.{}",
+                self.shared.config.site,
+                registry.host_id(),
+                new.id,
+                new.token
+            ),
+            id: new.id,
+        };
+        drop(registry);
+        self.refresh();
+        Ok(link)
+    }
+
+    pub fn remove_bot(&self, id: &str) -> Result<(), RegistryError> {
+        lock(&self.shared.registry).remove_bot(id)?;
+        self.refresh();
+        Ok(())
+    }
+
+    /// Another profile was opened: browsers start over from its chats.
+    pub fn profile_changed(&self) {
+        let _ = self.control.send(Control::Reset);
+    }
+
+    /// Ends the connection task. Paired devices and bot links stay saved.
+    pub fn shutdown(&self) {
+        let _ = self.control.send(Control::Shutdown);
+    }
+}
+
+/// A browser's session once it said hello.
+struct Session {
+    channel: Channel,
+    /// The pairing link the session was opened with, until it pairs.
+    pairing: Option<String>,
+    /// The device, once known: at once for a paired device, after `pair` for a pairing link.
+    device: Option<String>,
+    /// A sealed message from the browser opened: it holds the key.
+    proven: bool,
+    calls: Arc<AtomicUsize>,
+    backlog: Arc<AtomicUsize>,
+}
+
+struct Connection {
+    since: Instant,
+    session: Option<Session>,
+}
+
+/// Finished work on its way back to the socket.
+enum Out {
+    /// A sealed message for one browser. `backlog` is given back once it is written.
+    Sealed {
+        cid: String,
+        json: String,
+        backlog: usize,
+    },
+    /// End this browser's session, after what was queued before it.
+    Drop {
+        cid: String,
+    },
+    Status(ChatStatusUpdate),
+    Bot {
+        rid: String,
+        answer: bot::Answer,
+    },
+}
+
+enum Ended {
+    /// Remote access was turned off.
+    Disabled,
+    Shutdown,
+    /// The socket closed or failed: connect again.
+    Lost(String),
+}
+
+async fn run(shared: Arc<Shared>, mut control: UnboundedReceiver<Control>) {
+    let mut failures: u32 = 0;
+    loop {
+        if !lock(&shared.registry).enabled() {
+            set_link(&shared, RemoteLink::Off);
+            match control.recv().await {
+                Some(Control::Shutdown) | None => return,
+                Some(_) => continue,
+            }
+        }
+        if failures == 0 {
+            set_link(&shared, RemoteLink::Connecting);
+        }
+        let (id, key) = {
+            let registry = lock(&shared.registry);
+            (
+                registry.host_id().to_owned(),
+                registry.host_key().to_owned(),
+            )
+        };
+        let reason = match relay::connect(&shared.config.relay, &id, &key).await {
+            Ok(socket) => {
+                failures = 0;
+                set_link(&shared, RemoteLink::Online);
+                let ended = serve(&shared, socket, &mut control).await;
+                lock(&shared.connected).clear();
+                match ended {
+                    Ended::Shutdown => return,
+                    Ended::Disabled => continue,
+                    Ended::Lost(reason) => reason,
+                }
+            }
+            Err(reason) => reason,
+        };
+        failures = failures.saturating_add(1);
+        set_link(&shared, RemoteLink::Offline { reason });
+        // 2, 4, 8 ... 60 seconds, and at once when Settings changes.
+        let wait = Duration::from_secs(2u64.saturating_pow(failures.min(6)).min(60));
+        tokio::select! {
+            () = tokio::time::sleep(wait) => {}
+            message = control.recv() => match message {
+                Some(Control::Shutdown) | None => return,
+                Some(_) => {}
+            },
+        }
+    }
+}
+
+fn set_link(shared: &Shared, link: RemoteLink) {
+    let changed = {
+        let mut current = lock(&shared.link);
+        let changed = *current != link;
+        *current = link;
+        changed
+    };
+    if changed {
+        (shared.config.changed)();
+    }
+}
+
+fn owner(cid: &str) -> String {
+    format!("{WATCHER}:{cid}")
+}
+
+/// One connection to the relay, until it ends.
+async fn serve(
+    shared: &Arc<Shared>,
+    socket: relay::Socket,
+    control: &mut UnboundedReceiver<Control>,
+) -> Ended {
+    let (mut sink, mut stream) = socket.split();
+    let (out, mut finished) = unbounded_channel::<Out>();
+    let backend = shared.config.backend.clone();
+    let mut state = Serving {
+        shared: shared.clone(),
+        backend: backend.clone(),
+        out,
+        connections: HashMap::new(),
+        bot_calls: Arc::new(AtomicUsize::new(0)),
+        links: bot_links(shared),
+        outbox: Vec::new(),
+    };
+    let mut ping = tokio::time::interval(PING_EVERY);
+    let mut sweep = tokio::time::interval(SWEEP_EVERY);
+    let mut heard = Instant::now();
+    state.watch();
+    // This socket learns the bot links before anything else.
+    state.outbox.push(state.links.clone());
+
+    let ended = loop {
+        // Everything a step decided to say goes out before the next step is taken.
+        let mut failed = None;
+        for frame in state.outbox.drain(..) {
+            if let Err(error) = sink.send(Message::text(frame)).await {
+                failed = Some(error.to_string());
+                break;
+            }
+        }
+        if let Some(reason) = failed {
+            break Ended::Lost(reason);
+        }
+        let ended = tokio::select! {
+            frame = stream.next() => match frame {
+                Some(Ok(Message::Text(text))) => {
+                    heard = Instant::now();
+                    state.relay_frame(text.as_str())
+                }
+                Some(Ok(Message::Close(_))) | None => {
+                    Some(Ended::Lost("The relay closed the connection.".into()))
+                }
+                Some(Ok(_)) => None,
+                Some(Err(error)) => Some(Ended::Lost(error.to_string())),
+            },
+            Some(done) = finished.recv() => {
+                state.finished(done);
+                None
+            }
+            message = control.recv() => match message {
+                Some(Control::Shutdown) | None => Some(Ended::Shutdown),
+                Some(Control::Reset) => {
+                    state.reset();
+                    None
+                }
+                Some(Control::Refresh) => state.refresh(),
+            },
+            _ = ping.tick() => {
+                if heard.elapsed() > SILENCE {
+                    Some(Ended::Lost("The relay stopped answering.".into()))
+                } else {
+                    state.outbox.push("ping".into());
+                    None
+                }
+            }
+            _ = sweep.tick() => {
+                state.sweep();
+                None
+            }
+        };
+        if let Some(ended) = ended {
+            break ended;
+        }
+    };
+    for (cid, connection) in state.connections.drain() {
+        closed(shared, &*backend, &cid, connection);
+    }
+    backend.release(WATCHER);
+    let _ = sink.close().await;
+    ended
+}
+
+/// The state of one connection to the relay. Each method is one step: it never waits, and it
+/// leaves what it wants written in `outbox`.
+struct Serving {
+    shared: Arc<Shared>,
+    backend: Arc<dyn Backend>,
+    out: UnboundedSender<Out>,
+    connections: HashMap<String, Connection>,
+    bot_calls: Arc<AtomicUsize>,
+    /// The bot links as the relay last heard them.
+    links: String,
+    outbox: Vec<String>,
+}
+
+impl Serving {
+    /// Follows every chat's status on behalf of all browsers.
+    fn watch(&self) {
+        let out = self.out.clone();
+        let statuses: Statuses =
+            Arc::new(move |update| out.send(Out::Status(update.clone())).is_ok());
+        // Before a profile is open there is nothing to watch; a reset watches again.
+        let _ = self.backend.watch(WATCHER, statuses);
+    }
+
+    /// Ends a browser's session and tells the relay to drop its socket.
+    fn drop_connection(&mut self, cid: &str) {
+        if let Some(connection) = self.connections.remove(cid) {
+            closed(&self.shared, &*self.backend, cid, connection);
+        }
+        self.outbox.push(format!("c{cid}"));
+    }
+
+    fn relay_frame(&mut self, text: &str) -> Option<Ended> {
+        match wire::from_relay(text)? {
+            FromRelay::Pong => {}
+            FromRelay::Replaced => {
+                return Some(Ended::Lost(
+                    "Another auracode took over this computer's remote access.".into(),
+                ));
+            }
+            FromRelay::Opened(cid) => {
+                if self.connections.len() >= MAX_CONNECTIONS {
+                    self.outbox
+                        .push(format!("m{cid} R{}", refusal(Refusal::Busy)));
+                    self.outbox.push(format!("c{cid}"));
+                } else {
+                    self.connections.insert(
+                        cid.to_owned(),
+                        Connection {
+                            since: Instant::now(),
+                            session: None,
+                        },
+                    );
+                }
+            }
+            FromRelay::Closed(cid) => {
+                if let Some(connection) = self.connections.remove(cid) {
+                    closed(&self.shared, &*self.backend, cid, connection);
+                }
+            }
+            FromRelay::Bot(body) => self.bot(body),
+            FromRelay::Message { cid, payload } => {
+                let Some(connection) = self.connections.get_mut(cid) else {
+                    self.outbox.push(format!("c{cid}"));
+                    return None;
+                };
+                match receive(
+                    &self.shared,
+                    &self.backend,
+                    &self.out,
+                    cid,
+                    connection,
+                    payload,
+                ) {
+                    Received::Send(frames) => self.outbox.extend(frames),
+                    Received::Refuse(last) => {
+                        self.outbox.extend(last);
+                        self.drop_connection(cid);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// A bot's tool call: checked against the link's token here, whatever the relay checked.
+    fn bot(&mut self, body: &str) {
+        let Ok(call) = serde_json::from_str::<BotCall>(body) else {
+            return;
+        };
+        let refused = if !lock(&self.shared.registry).verify_bot(&call.bot, &call.token, now()) {
+            Some("This bot link was removed. Its owner can create a new one in auracode.")
+        } else if !bot::TOOLS.contains(&call.tool.as_str()) {
+            Some("There is no such tool.")
+        } else if self.bot_calls.load(Ordering::Relaxed) >= MAX_BOT_CALLS {
+            Some("Too many calls are running. Wait for one to finish.")
+        } else {
+            None
+        };
+        if let Some(text) = refused {
+            self.outbox.push(bot_answer(&call.rid, text, true));
+            return;
+        }
+        self.bot_calls.fetch_add(1, Ordering::Relaxed);
+        let (backend, out, running) = (
+            self.backend.clone(),
+            self.out.clone(),
+            self.bot_calls.clone(),
+        );
+        tokio::spawn(async move {
+            let owner = format!("{WATCHER}-bot:{}", call.rid);
+            let answer = bot::call(&backend, &owner, &call.tool, &call.args).await;
+            running.fetch_sub(1, Ordering::Relaxed);
+            let _ = out.send(Out::Bot {
+                rid: call.rid,
+                answer,
+            });
+        });
+    }
+
+    /// Work that finished beside the connection task: seal it in order and send it.
+    fn finished(&mut self, done: Out) {
+        match done {
+            Out::Sealed { cid, json, backlog } => {
+                let Some(session) = self
+                    .connections
+                    .get_mut(&cid)
+                    .and_then(|connection| connection.session.as_mut())
+                else {
+                    return;
+                };
+                let held = session.backlog.load(Ordering::Relaxed);
+                session
+                    .backlog
+                    .fetch_sub(backlog.min(held), Ordering::Relaxed);
+                match session.channel.seal(json.as_bytes()) {
+                    Ok(sealed) => self.outbox.push(format!("m{cid} E{sealed}")),
+                    Err(_) => self.drop_connection(&cid),
+                }
+            }
+            Out::Drop { cid } => {
+                if self.connections.contains_key(&cid) {
+                    self.drop_connection(&cid);
+                }
+            }
+            Out::Status(update) => {
+                let Ok(json) = serde_json::to_string(&Event::Chat { update: &update }) else {
+                    return;
+                };
+                let mut failed = Vec::new();
+                for (cid, connection) in &mut self.connections {
+                    let Some(session) = connection
+                        .session
+                        .as_mut()
+                        .filter(|session| session.proven && session.device.is_some())
+                    else {
+                        continue;
+                    };
+                    match session.channel.seal(json.as_bytes()) {
+                        Ok(sealed) => self.outbox.push(format!("m{cid} E{sealed}")),
+                        Err(_) => failed.push(cid.clone()),
+                    }
+                }
+                for cid in failed {
+                    self.drop_connection(&cid);
+                }
+            }
+            Out::Bot { rid, answer } => {
+                self.outbox
+                    .push(bot_answer(&rid, &answer.text, answer.error));
+            }
+        }
+    }
+
+    /// Another profile was opened: nothing a browser followed exists any more.
+    fn reset(&mut self) {
+        for (cid, connection) in &mut self.connections {
+            self.backend.release(&owner(cid));
+            let Some(session) = connection
+                .session
+                .as_mut()
+                .filter(|session| session.proven && session.device.is_some())
+            else {
+                continue;
+            };
+            session.backlog.store(0, Ordering::Relaxed);
+            if let Ok(sealed) = seal(&mut session.channel, &Event::Reset) {
+                self.outbox.push(format!("m{cid} E{sealed}"));
+            }
+        }
+        self.watch();
+    }
+
+    /// Settings changed: stop if remote access is off, tell the relay the bot links, and end the
+    /// sessions of removed devices now rather than at their next message.
+    fn refresh(&mut self) -> Option<Ended> {
+        if !lock(&self.shared.registry).enabled() {
+            return Some(Ended::Disabled);
+        }
+        let links = bot_links(&self.shared);
+        if links != self.links {
+            self.outbox.push(links.clone());
+            self.links = links;
+        }
+        let gone: Vec<String> = {
+            let registry = lock(&self.shared.registry);
+            self.connections
+                .iter()
+                .filter(|(_, connection)| {
+                    connection
+                        .session
+                        .as_ref()
+                        .and_then(|session| session.device.as_deref())
+                        .is_some_and(|device| registry.device_key(device).is_none())
+                })
+                .map(|(cid, _)| cid.clone())
+                .collect()
+        };
+        for cid in gone {
+            self.drop_connection(&cid);
+        }
+        None
+    }
+
+    /// Ends connections that never proved they hold a key.
+    fn sweep(&mut self) {
+        let late: Vec<String> = self
+            .connections
+            .iter()
+            .filter(|(_, connection)| {
+                connection.since.elapsed() > PROVE_WITHIN
+                    && !connection
+                        .session
+                        .as_ref()
+                        .is_some_and(|session| session.proven)
+            })
+            .map(|(cid, _)| cid.clone())
+            .collect();
+        for cid in late {
+            self.drop_connection(&cid);
+        }
+    }
+}
