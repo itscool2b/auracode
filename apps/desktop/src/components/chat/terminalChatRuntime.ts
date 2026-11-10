@@ -1,10 +1,10 @@
 import type { ChatTerminalStarted, TerminalChunk } from "../../bindings";
 import {
   chatTerminalEnded,
+  chatTerminalReserve,
   chatTerminalStart,
   terminalClose,
   terminalRead,
-  terminalReserve,
   terminalResize,
   terminalWrite,
 } from "../../lib/ipc";
@@ -38,7 +38,8 @@ export interface TerminalChatTransport {
 }
 
 export const chatTerminalTransport: TerminalChatTransport = {
-  reserve: terminalReserve,
+  // Terminal chats have a pool of their own: a chat left running never refuses the next one.
+  reserve: chatTerminalReserve,
   start: (id, chatId, size) => chatTerminalStart(id, chatId, size.rows, size.cols),
   read: terminalRead,
   write: terminalWrite,

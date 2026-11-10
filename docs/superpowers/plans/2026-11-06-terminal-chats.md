@@ -77,8 +77,8 @@ notification hooks (phase 2), since a question at the prompt is as quiet as an i
   live; a theme switch never restarts the agent.
 - Copy and paste, links, Ctrl+C semantics, IME and dead keys, bracketed paste, mouse reporting,
   scrollback: xterm's, with Ctrl+Shift+C/V and the platform shortcuts.
-- Several terminal chats at once: each has its own PTY; the app-wide terminal limit applies and says
-  so when reached.
+- Several terminal chats at once: each has its own PTY, in a pool of terminal chats apart from
+  sign-in's one per window, at most eight in the app, and the eighth's limit says so when reached.
 - Another device opens the chat: it sees the imported turns, opens it as Chat, and can resume the
   vendor session only if that device has the same session file (otherwise a handoff from history).
 
@@ -196,3 +196,12 @@ oh-my-pi (not installed here), from its published documentation:
   (with or without the new variable). OpenCode's interface starts, but OpenCode 1.19.4 fails on
   this machine by itself, outside auracode too: "Database is not empty and has no session table"
   (its `~/.local/share/opencode/opencode.db`).
+- **Several terminal chats (10 November).** The owner opened a chat in the terminal, then a second,
+  and the second was refused: "A terminal is already open in this window." Terminal chats reserved
+  sign-in's terminal, one per window, while each keeps running when another chat is open, so the
+  first held the window's only place, and Start again asked for it again. Terminal chats now have
+  a pool of their own (`Terminals::reserve_chat`, `chat_terminal_reserve`): several per window, at
+  most eight in the app, and `chat_terminal_start` takes only a place from it. Sign-in,
+  installation and setup keep one per window, and quit still closes terminal chats with them.
+  Natively, with Claude Code: two chats ran in the terminal at once, the first kept running while
+  the second was open, and Start again started an agent that had exited.

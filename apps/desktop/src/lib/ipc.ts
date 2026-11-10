@@ -216,7 +216,11 @@ export function agentUpdateStart(
 ): Promise<string> {
   return settle(commands.agentUpdateStart(terminalId, agentId, rows, cols));
 }
-/** Opens a chat in its agent's own interface in a reserved terminal. */
+/** A terminal for a chat in its agent's own interface: several per window, unlike sign-in's. */
+export function chatTerminalReserve(): Promise<string> {
+  return settle(commands.chatTerminalReserve());
+}
+/** Opens a chat in its agent's own interface in a terminal from `chatTerminalReserve`. */
 export function chatTerminalStart(
   terminalId: string,
   chatId: string,

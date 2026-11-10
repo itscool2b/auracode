@@ -192,6 +192,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             terminal::agent_update_start,
             terminal::agent_install_review,
             terminal::agent_install_start,
+            terminal::chat_terminal_reserve,
             terminal::chat_terminal_start,
             terminal::chat_terminal_ended,
             crate::clone_commands::clone_check,

@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-10
+
+- Several chats open in the terminal at once: a second terminal chat was refused while the first ran, because terminal chats took sign-in's one place per window, and Start again asked for that place again. They now have their own, up to eight across the app. ([#123](https://github.com/itscool2b/auracode/pull/123))
+
 ## 2026-11-09
 
 - A long turn ends on its answer when its chat opens again: a turn too large for the first page of history loaded from the middle of its work and showed every step, and now folds what loaded under "Worked for" like any other finished turn. ([#122](https://github.com/itscool2b/auracode/pull/122))

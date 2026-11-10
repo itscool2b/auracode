@@ -12,9 +12,10 @@ impl From<TerminalError> for AppError {
     fn from(error: TerminalError) -> Self {
         let code = match error {
             TerminalError::Closed => AppErrorCode::SessionNotReady,
-            TerminalError::AlreadyOpen | TerminalError::Full | TerminalError::ProjectFull => {
-                AppErrorCode::TooManyStreams
-            }
+            TerminalError::AlreadyOpen
+            | TerminalError::Full
+            | TerminalError::ChatFull
+            | TerminalError::ProjectFull => AppErrorCode::TooManyStreams,
             TerminalError::Start(_) | TerminalError::TimedOut => AppErrorCode::AgentUnavailable,
             _ => AppErrorCode::InvalidArgument,
         };
@@ -85,6 +86,26 @@ pub fn terminal_reserve(webview: Webview, state: State<'_, AppState>) -> Result<
         return Err(TerminalError::Closed.into());
     }
     Ok(state.terminals.reserve(webview.label())?.pending())
+}
+
+/// Reserves a terminal for a chat in its agent's own interface (`chat_terminal_start`). Terminal
+/// chats keep running while another chat is open, so a window holds several, unlike sign-in.
+#[tauri::command]
+#[specta::specta]
+pub fn chat_terminal_reserve(
+    webview: Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    if state.quit.is_quitting() {
+        return Err(AppError::new(
+            AppErrorCode::ShuttingDown,
+            "auracode is quitting.",
+        ));
+    }
+    if !state.pages.for_view(webview.label()).is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    Ok(state.terminals.reserve_chat(webview.label())?.pending())
 }
 
 #[tauri::command]
@@ -315,7 +336,7 @@ pub struct ChatTerminalStarted {
     pub exit_input: String,
 }
 
-/// Opens a chat in its agent's own interface in a reserved terminal (`terminal_reserve`): the
+/// Opens a chat in its agent's own interface in a reserved terminal (`chat_terminal_reserve`): the
 /// chat is prepared as a start would be (folder, account, shared MCP, project memory, its
 /// session), then its agent's interactive interface starts there. While it runs, the chat's
 /// session is the terminal's; `chat_terminal_ended` hands it back.
@@ -344,7 +365,7 @@ pub async fn chat_terminal_start(
         .validate()
         .map_err(|_| TerminalError::Resize)?;
     // Reserve before the preparation, so a reload can cancel this pending launch.
-    let ticket = state.terminals.claim(&owner, &terminal_id)?;
+    let ticket = state.terminals.claim_chat(&owner, &terminal_id)?;
     let sessions = state.sessions()?;
     let opened = sessions.open_terminal(&chat_id).await?;
     let generation = opened.generation;
