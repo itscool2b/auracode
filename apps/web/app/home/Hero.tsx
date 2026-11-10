@@ -1,6 +1,13 @@
 import { Logo } from "@auracode/ui/graphite";
 import { useEffect, useRef, useState } from "react";
+import catalog from "#release-catalog";
 import { HeroWindow, useHandoffLoop } from "./HeroWindow";
+
+/**
+ * Whether installers are published. Until they are, the action does not name the visitor's system:
+ * "Download for Windows" would promise a file the download page cannot give yet.
+ */
+const PUBLISHED = catalog.release !== null;
 
 /** The visitor's system, once the page runs, so the action can name it. Null until then. */
 function usePlatform(): string | null {
@@ -41,7 +48,7 @@ export function Hero() {
         </p>
         <div className="hero-actions">
           <a className="btn btn-primary btn-lg" href="/download">
-            {platform ? `Download for ${platform}` : "Download"}
+            {PUBLISHED && platform ? `Download for ${platform}` : "Download"}
           </a>
           <a className="btn btn-quiet btn-lg" href="#features">
             See what it does

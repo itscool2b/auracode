@@ -267,6 +267,24 @@ try {
         "the home page scrolls sideways at 320px",
       );
       assertWall(await agentWall(page), "320px");
+      // The changelog page is built from CHANGELOG.md: its newest day leads, every change names its
+      // pull request without a link, and it holds at the narrowest width.
+      await page.goto(`${base}/changelog`);
+      await page.getByRole("heading", { name: "Changelog. Every change, as it lands." }).waitFor();
+      assert.ok((await page.locator(".change").count()) > 100, "the changelog lists its changes");
+      assert.equal(await page.locator(".change a").count(), 0);
+      assert.match(await page.locator(".release-meta").first().textContent(), /20\d\d/);
+      assert.ok(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        "the changelog scrolls sideways at 320px",
+      );
+      await settled(page);
+      axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+      assert.deepEqual(
+        axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+        [],
+        "the changelog page",
+      );
       await page.goto(`${base}/download`);
       assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 3);
       await page.route("**/api/v1/config", (route) =>

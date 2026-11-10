@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
 import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
+import { changelogPlugin } from "./scripts/changelog.ts";
 import { siteImagesPlugin } from "./scripts/site-images.ts";
 
 const app = fileURLToPath(new URL(".", import.meta.url));
@@ -20,7 +21,7 @@ if (stage) {
   }
 }
 export default defineConfig({
-  plugins: [reactRouter(), noticesPlugin("web"), siteImagesPlugin()],
+  plugins: [reactRouter(), noticesPlugin("web"), siteImagesPlugin(), changelogPlugin()],
   resolve: {
     alias: {
       "#release-catalog": stage

@@ -1,9 +1,36 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("../build/client/", import.meta.url);
+
+/**
+ * The Worker that serves the site embeds this folder and refuses a build it cannot plan
+ * (apps/web-worker/src/manifest.rs, `walk` and `mime`). That check runs only in the deploy's Wasm
+ * build, so its rules are mirrored here: #126's first build failed there on a chunk Vite had named
+ * `__changelog-….js`.
+ */
+test("every built file is one the website Worker accepts", async () => {
+  const served = /\.(?:js|css|json|txt|svg|png|jpe?g|webp|ico|woff2?)$|(?:^|\/)index\.html$/;
+  const folder = fileURLToPath(root);
+  const files = (await readdir(folder, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(folder, join(entry.parentPath, entry.name)).replaceAll("\\", "/"))
+    .filter((path) => path !== "_headers" && path !== "__spa-fallback.html");
+  assert.ok(files.length > 20 && files.length <= 1024, `${files.length} files`);
+  for (const path of files) {
+    assert.ok(
+      path.split("/").every((part) => part !== "" && !/^[._]/.test(part)),
+      `${path}: no part of a path may start with "." or "_"`,
+    );
+    assert.match(path, /^[A-Za-z0-9/_.-]+$/, `${path}: unsupported character`);
+    assert.ok(path !== "api" && !path.startsWith("api/"), `${path}: reserved for the API`);
+    assert.match(path, served, `${path}: unsupported file type`);
+  }
+});
 test("public pages are prerendered to follow the system appearance without JavaScript", async () => {
   for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
@@ -40,6 +67,26 @@ test("public pages are prerendered to follow the system appearance without JavaS
       theme,
     );
   assert.match(home, /sizes="\(max-width: 1327px\) calc\(100vw - 48px\), 1280px"/);
+});
+test("the changelog page lists every pull request in CHANGELOG.md, newest first", async () => {
+  const source = await readFile(new URL("../../../CHANGELOG.md", import.meta.url), "utf8");
+  const merged = [...source.matchAll(/^- .+ \(\[#(\d+)\]\(https:[^)]+\)\)\s*$/gm)].map((match) =>
+    Number(match[1]),
+  );
+  assert.ok(merged.length > 100, "CHANGELOG.md was read");
+  const html = await readFile(new URL("changelog/index.html", root), "utf8");
+  // React splits "#" and the number into two text nodes.
+  const shown = [...html.matchAll(/class="change-pull">.*?#(?:<!-- -->)?(\d+)<\/span>/g)].map(
+    (match) => Number(match[1]),
+  );
+  assert.deepEqual(shown, merged);
+  const days = [...source.matchAll(/^## (\d{4}-\d{2}-\d{2})\s*$/gm)].map((match) => match[1]);
+  assert.deepEqual(
+    [...html.matchAll(/<time dateTime="(\d{4}-\d{2}-\d{2})"/gi)].map((match) => match[1]),
+    days,
+  );
+  // The repository is private: no page or script may carry a link into it.
+  assert.doesNotMatch(html, /github\.com/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");
@@ -86,9 +133,10 @@ test("third-party notices are emitted and linked from every page footer", async 
   assert.match(text, /react-router/);
   assert.doesNotMatch(text, /SQLCipher|openssl-src/);
   const page = await readFile(new URL("third-party-notices/index.html", root), "utf8");
-  assert.match(page, /color-scheme:light/);
-  assert.match(page, /--notice-bg:#fafafa/);
-  assert.doesNotMatch(page, /prefers-color-scheme:dark/);
+  // It follows the system appearance as the site does, without a script.
+  assert.match(page, /color-scheme:light dark/);
+  assert.match(page, /--notice-bg:#ffffff/);
+  assert.match(page, /prefers-color-scheme:dark\)\{html\{--notice-bg:#0a0a0a/);
   assert.doesNotMatch(page, /<script/);
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /<a href="\/third-party-notices">Notices<\/a>/);
