@@ -28,7 +28,15 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const BOT_ID = /^[A-Za-z0-9_-]{11}$/;
 const CID_LENGTH = 16;
 
-const MAX_CLIENTS = 16;
+/** Browsers the desktop has accepted: each proved it holds a pairing or device key. */
+const MAX_PROVEN = 16;
+/**
+ * Browsers that have not proved anything yet. Knowing a desktop's id is not a credential, so
+ * these sockets are few, and a newcomer takes the place of the oldest: nobody can hold the door
+ * shut against a paired device by opening sockets.
+ */
+const MAX_WAITING = 8;
+const MAX_WAITING_PER_ADDRESS = 3;
 const MAX_BOTS = 32;
 /** A browser's largest message: a prompt of a few thousand words, sealed. */
 const CLIENT_MESSAGE_BYTES = 96 * 1024;
@@ -93,7 +101,20 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-type Attachment = { readonly role: "host" } | { readonly role: "client"; readonly cid: string };
+type Attachment =
+  | { readonly role: "host" }
+  | {
+      readonly role: "client";
+      readonly cid: string;
+      /** When the socket opened, and the address it came from. */
+      readonly since: number;
+      readonly from: string;
+      /** The desktop accepted its session. */
+      readonly proven: boolean;
+      /** This side ended the socket and the desktop already knows. */
+      readonly told?: boolean;
+    };
+type ClientAttachment = Extract<Attachment, { role: "client" }>;
 
 interface BotReply {
   readonly text: string;
@@ -147,7 +168,7 @@ export class Room extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     const [kind, , reference] = new URL(request.url).pathname.slice(PREFIX.length).split("/");
     if (kind === "host") return this.#acceptHost(request);
-    if (kind === "client") return this.#acceptClient();
+    if (kind === "client") return this.#acceptClient(request);
     if (kind === "mcp") return this.#mcp(request, reference ?? "");
     return notFound();
   }
@@ -182,6 +203,12 @@ export class Room extends DurableObject<Env> {
     for (const client of this.#clients()) {
       const attachment = client.deserializeAttachment() as Attachment;
       if (attachment.role !== "client") continue;
+      // What a browser proved to the last socket, it proves again to this one.
+      client.serializeAttachment({
+        ...attachment,
+        since: Date.now(),
+        proven: false,
+      } satisfies Attachment);
       if (earlier.length > 0) client.send("h0");
       client.send("h1");
       pair[1].send(`o${attachment.cid}`);
@@ -189,14 +216,35 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  async #acceptClient(): Promise<Response> {
+  async #acceptClient(request: Request): Promise<Response> {
     // An id no desktop ever claimed has nothing behind it.
     if ((await this.ctx.storage.get<string>("host")) === undefined) return notFound();
-    if (this.#clients().length >= MAX_CLIENTS) return json(429, { error: "too_many" });
+    const from = request.headers.get("CF-Connecting-IP") ?? "";
+    const waiting = this.#clients()
+      .map((socket) => ({ socket, is: socket.deserializeAttachment() as ClientAttachment }))
+      .filter((entry) => !entry.is.proven)
+      .sort((a, b) => a.is.since - b.is.since);
+    const fromHere = waiting.filter((entry) => entry.is.from === from);
+    const leaving =
+      fromHere.length >= MAX_WAITING_PER_ADDRESS
+        ? fromHere[0]
+        : waiting.length >= MAX_WAITING
+          ? waiting[0]
+          : undefined;
+    if (leaving) {
+      end(leaving.socket, 4002, "unproven");
+      this.#host()?.send(`c${leaving.is.cid}`);
+    }
     const cid = randomId(12);
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], ["client", `c:${cid}`]);
-    pair[1].serializeAttachment({ role: "client", cid } satisfies Attachment);
+    pair[1].serializeAttachment({
+      role: "client",
+      cid,
+      since: Date.now(),
+      from,
+      proven: false,
+    } satisfies Attachment);
     const host = this.#host();
     pair[1].send(host ? "h1" : "h0");
     host?.send(`o${cid}`);
@@ -229,11 +277,24 @@ export class Room extends DurableObject<Env> {
   async #fromHost(socket: WebSocket, message: string) {
     if (message.length > HOST_MESSAGE_BYTES) return socket.close(1009, "too large");
     const kind = message[0];
-    if (kind === "m" || kind === "c") {
+    if (kind === "m" || kind === "c" || kind === "a") {
       const cid = message.slice(1, 1 + CID_LENGTH);
       const client = this.ctx.getWebSockets(`c:${cid}`)[0];
       if (!client || client.readyState !== WebSocket.OPEN) {
-        if (kind === "m") socket.send(`c${cid}`);
+        if (kind !== "c") socket.send(`c${cid}`);
+      } else if (kind === "a") {
+        // The desktop opened a sealed message from this browser: it holds a key.
+        const is = client.deserializeAttachment() as ClientAttachment;
+        if (is.proven) return;
+        const proven = this.#clients().filter(
+          (other) => (other.deserializeAttachment() as ClientAttachment).proven,
+        ).length;
+        if (proven >= MAX_PROVEN) {
+          end(client, 4003, "too many");
+          socket.send(`c${cid}`);
+        } else {
+          client.serializeAttachment({ ...is, proven: true } satisfies Attachment);
+        }
       } else if (kind === "m") {
         client.send(`m${message.slice(2 + CID_LENGTH)}`);
       } else {
@@ -294,7 +355,7 @@ export class Room extends DurableObject<Env> {
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (attachment?.role === "client") {
       this.#rates.delete(attachment.cid);
-      this.#host()?.send(`c${attachment.cid}`);
+      if (!attachment.told) this.#host()?.send(`c${attachment.cid}`);
       return;
     }
     // A replaced host socket closes after its successor opened: the desktop is still here.
@@ -415,6 +476,9 @@ export class Room extends DurableObject<Env> {
  */
 function end(socket: WebSocket, code: number, reason: string) {
   try {
+    const attachment = socket.deserializeAttachment() as Attachment | null;
+    if (attachment?.role === "client")
+      socket.serializeAttachment({ ...attachment, told: true } satisfies Attachment);
     socket.send("x");
     socket.close(code, reason);
   } catch {

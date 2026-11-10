@@ -200,7 +200,6 @@ test("forwards a browser's messages to its desktop and back, and says who is the
   desk.send(`c${other}`);
   assert.equal(await tablet.message(), "x");
   tablet.close();
-  assert.equal(await desk.message(), `c${other}`);
   desk.send(`m${other} Egone`);
   assert.equal(await desk.message(), `c${other}`);
 
@@ -461,5 +460,63 @@ test("a removed bot link stops working", async () => {
   desk.send("l[]");
   await desk.quiet(100);
   assert.equal((await mcp(hostId, `${bot}.${token}`, ping)).status, 404);
+  desk.close();
+});
+
+test("sockets that prove nothing cannot keep a paired browser out", async () => {
+  const hostId = id(16);
+  const desk = await host(hostId, id(32));
+  const open = async (from) => {
+    const response = await upgrade(`client/${hostId}`, {
+      Origin: ORIGIN,
+      "CF-Connecting-IP": from,
+    });
+    assert.equal(response.status, 101);
+    const socket = reader(response.webSocket);
+    assert.equal(await socket.message(), "h1");
+    return { socket, cid: (await desk.message()).slice(1) };
+  };
+
+  // The desktop accepted this browser's session; nothing below can take its place.
+  const paired = await open("192.0.2.1");
+  desk.send(`a${paired.cid}`);
+  await desk.quiet(100);
+
+  // One address holds three unproven sockets at most: its fourth replaces its oldest.
+  const same = [];
+  for (let count = 0; count < 3; count += 1) same.push(await open("192.0.2.9"));
+  const fourth = await upgrade(`client/${hostId}`, {
+    Origin: ORIGIN,
+    "CF-Connecting-IP": "192.0.2.9",
+  });
+  assert.equal(fourth.status, 101);
+  assert.equal(await same[0].socket.message(), "x");
+  assert.equal(await desk.message(), `c${same[0].cid}`);
+  const fourthSocket = reader(fourth.webSocket);
+  assert.equal(await fourthSocket.message(), "h1");
+  await desk.message();
+
+  // Eight unproven sockets in all: a ninth, from anywhere, replaces the oldest of them.
+  const others = [];
+  for (let count = 0; count < 5; count += 1) others.push(await open(`198.51.100.${count}`));
+  const ninth = await upgrade(`client/${hostId}`, {
+    Origin: ORIGIN,
+    "CF-Connecting-IP": "203.0.113.5",
+  });
+  assert.equal(ninth.status, 101);
+  assert.equal(await same[1].socket.message(), "x");
+  assert.equal(await desk.message(), `c${same[1].cid}`);
+
+  // The paired browser was never touched and still talks to its desktop.
+  await paired.socket.quiet(50);
+  paired.socket.send("mEstill here");
+  assert.equal(
+    await desk.message().then((first) => (first.startsWith("o") ? desk.message() : first)),
+    `m${paired.cid} Estill here`,
+  );
+
+  // Accepting a browser that already left is answered as closed.
+  desk.send(`a${same[0].cid}`);
+  assert.equal(await desk.message(), `c${same[0].cid}`);
   desk.close();
 });
