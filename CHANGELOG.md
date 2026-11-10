@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-10
 
+- The website's changelog lists every change as it ships: the page is built from the project's own changelog instead of a note written by hand, the home page counts it, and the notices page follows your system's light or dark appearance like the rest of the site. ([#126](https://github.com/itscool2b/auracode/pull/126))
 - The website is rebuilt as a close copy of dot.com and now follows the system appearance, black in dark and white in light: "Meet auracode" over the live app window, rounded cards for what it does, the agents as chips beside the New chat view, the real app captured in both appearances, download rows, FAQs and the logo drawn large at the foot. ([#125](https://github.com/itscool2b/auracode/pull/125))
 - The website is rebuilt after the SpaceXAI, Vercel, Aside, Linear and Harvey landing pages: one sans face at calm sizes, a plain header bar, a light page framed in hairlines with no dark bands, the live app window as the hero, a still row of the agents, and a grid for the browser, dashboard, dictation, review, project memory and themes. ([#124](https://github.com/itscool2b/auracode/pull/124))
 - Several chats open in the terminal at once: a second terminal chat was refused while the first ran, because terminal chats took sign-in's one place per window, and Start again asked for that place again. They now have their own, up to eight across the app. ([#123](https://github.com/itscool2b/auracode/pull/123))
