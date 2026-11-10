@@ -60,6 +60,7 @@ pub mod processes;
 pub mod profile_commands;
 pub mod profile_config;
 pub mod project_tools;
+pub mod remote;
 pub mod repository_publication_commands;
 pub mod reveal;
 pub mod search_commands;
@@ -255,6 +256,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(Arc::new(clones));
     browser::setup(app.handle());
     native_shell::setup(app.handle());
+    remote::setup(app.handle(), &rt);
     general_preferences::refresh(app.handle());
     appearance::refresh(app.handle());
     memory_commands::forward_changes(app.handle());
@@ -423,6 +425,7 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
         RunEvent::Exit => {
             // The browser's pages close before the window they live in.
             browser::shutdown(app);
+            remote::shutdown(app);
             if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
                 clones.cancel_all();
             }

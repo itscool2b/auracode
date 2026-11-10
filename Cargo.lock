@@ -615,6 +615,7 @@ dependencies = [
  "aura-drivers",
  "aura-process",
  "aura-protocol",
+ "aura-remote",
  "aura-sync",
  "cpal",
  "dlopen2",
