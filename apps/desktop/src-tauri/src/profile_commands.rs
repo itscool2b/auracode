@@ -283,6 +283,9 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
                 if current.profile != before.profile
                     || current.config_profile_recovery != before.config_profile_recovery
                 {
+                    // A switch that failed after the profile changed still changed whose chats
+                    // are open: remote access follows it.
+                    crate::remote::profile_changed(&app);
                     crate::appearance::refresh(&app);
                     let _ = app.emit(PROFILE_CHANGED, current);
                 }

@@ -62,6 +62,12 @@ decision about who may do what is made in Rust on the computer.
   others' addresses answer 404. A refused browser is told the computer has another workspace
   open (`elsewhere`) and keeps its key for when its own is open again. Settings lists the open
   workspace's devices and bots only. With no profile open, nothing is accepted.
+  The same binding holds at the point of use: a session keeps the profile its key was accepted
+  under, a bot call the profile its token was, and every call into the app's chats is made
+  through `Backend::bound(profile)`. The app hands out a profile's chats only while that profile
+  is the open one, reading both under the lock a switch takes (`AppState::sessions_of`). So in
+  the moment between the app opening another profile and the service hearing of it, a session of
+  the old profile is refused rather than served the new one's chats.
 - **Anyone holding a device key or a bot address controls the chats**, and agents can edit files
   and run commands. There are no narrower permissions yet: pair your own devices, and link only
   a bot you would trust at the keyboard.

@@ -153,6 +153,11 @@ impl Registry {
         }
     }
 
+    /// The open workspace's id; empty while none is open.
+    pub fn scope(&self) -> &str {
+        &self.scope
+    }
+
     /// Whether a record made in `profile` belongs to the open workspace.
     fn open(&self, profile: &str) -> bool {
         !self.scope.is_empty() && self.scope == profile

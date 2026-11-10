@@ -256,6 +256,8 @@ struct Session {
     pairing: Option<String>,
     /// The device, once known: at once for a paired device, after `pair` for a pairing link.
     device: Option<String>,
+    /// The workspace its key was accepted under. Everything it asks for is asked of that one.
+    scope: String,
     /// A sealed message from the browser opened: it holds the key.
     proven: bool,
     calls: Arc<AtomicUsize>,
@@ -417,7 +419,9 @@ async fn serve(
                     // The browsers are told first; then the other workspace's devices are ended
                     // and the relay learns which bot links are this workspace's.
                     state.reset();
-                    state.refresh()
+                    let ended = state.refresh();
+                    state.watch();
+                    ended
                 }
                 Some(Control::Refresh) => state.refresh(),
             },
@@ -466,7 +470,8 @@ impl Serving {
         let statuses: Statuses =
             Arc::new(move |update| out.send(Out::Status(update.clone())).is_ok());
         // Before a profile is open there is nothing to watch; a reset watches again.
-        let _ = self.backend.watch(WATCHER, statuses);
+        let scope = lock(&self.shared.registry).scope().to_owned();
+        let _ = self.backend.clone().bound(&scope).watch(WATCHER, statuses);
     }
 
     /// Ends a browser's session and tells the relay to drop its socket.
@@ -535,7 +540,15 @@ impl Serving {
         let Ok(call) = serde_json::from_str::<BotCall>(body) else {
             return;
         };
-        let refused = if !lock(&self.shared.registry).verify_bot(&call.bot, &call.token, now()) {
+        // The token and the workspace it is good for, read together.
+        let (verified, scope) = {
+            let mut registry = lock(&self.shared.registry);
+            (
+                registry.verify_bot(&call.bot, &call.token, now()),
+                registry.scope().to_owned(),
+            )
+        };
+        let refused = if !verified {
             Some("This bot link was removed. Its owner can create a new one in auracode.")
         } else if !bot::TOOLS.contains(&call.tool.as_str()) {
             Some("There is no such tool.")
@@ -550,7 +563,7 @@ impl Serving {
         }
         self.bot_calls.fetch_add(1, Ordering::Relaxed);
         let (backend, out, running) = (
-            self.backend.clone(),
+            self.backend.clone().bound(&scope),
             self.out.clone(),
             self.bot_calls.clone(),
         );
@@ -622,7 +635,8 @@ impl Serving {
     }
 
     /// Another profile was opened: nothing a browser followed exists any more. The registry is
-    /// already scoped to it, so the caller's refresh ends the devices that are not its own.
+    /// already scoped to it, so the caller's refresh ends the devices that are not its own, and
+    /// only then are the new profile's chats watched.
     fn reset(&mut self) {
         for (cid, connection) in &mut self.connections {
             self.backend.release(&owner(cid));
@@ -638,7 +652,6 @@ impl Serving {
                 self.outbox.push(format!("m{cid} E{sealed}"));
             }
         }
-        self.watch();
     }
 
     /// Settings changed: stop if remote access is off, tell the relay the bot links, and end the

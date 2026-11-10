@@ -41,6 +41,12 @@ pub type Frames = Arc<dyn Fn(&EventBatch) -> bool + Send + Sync>;
 pub type Statuses = Arc<dyn Fn(&ChatStatusUpdate) -> bool + Send + Sync>;
 
 pub trait Backend: Send + Sync + 'static {
+    /// This backend for one workspace only: every call but `release` fails unless `profile` is
+    /// the open workspace at the moment the call reaches its chats, checked together with taking
+    /// them. The service calls nothing but a bound backend, with the workspace a session's key or
+    /// a bot's token was accepted under. So however a switch of workspace and the service's own
+    /// rescoping interleave, what was accepted for one workspace is never served another's chats.
+    fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend>;
     /// Projects, their chats and the agents installed here.
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>>;
     /// Sends every chat's status changes to `statuses` until `owner` is released. A second call

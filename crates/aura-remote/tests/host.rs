@@ -38,6 +38,8 @@ struct App {
     frames: Mutex<HashMap<String, Frames>>,
     statuses: Mutex<HashMap<String, Statuses>>,
     sent: Mutex<Vec<(String, String)>>,
+    /// The workspace the app serves now. Empty reads as "local", where every test starts.
+    open: Mutex<String>,
     answered: Mutex<Vec<String>>,
     released: Mutex<Vec<String>>,
     status: Mutex<Option<SessionStatus>>,
@@ -85,7 +87,128 @@ fn missing() -> BackendError {
     BackendError::new("not_found", "That chat is no longer here.")
 }
 
+/// The app for one workspace, as the service is given it: every call but `release` is refused
+/// once the app serves another.
+struct Bound {
+    app: Arc<App>,
+    profile: String,
+}
+
+impl Bound {
+    fn admitted(&self) -> Result<(), BackendError> {
+        let open = self.app.open.lock().expect("open").clone();
+        let open = if open.is_empty() {
+            "local"
+        } else {
+            open.as_str()
+        };
+        if self.profile == open {
+            Ok(())
+        } else {
+            Err(BackendError::new(
+                "unavailable",
+                "Another workspace is open.",
+            ))
+        }
+    }
+}
+
+impl Backend for Bound {
+    fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend> {
+        self.app.clone().bound(profile)
+    }
+    fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.overview().await
+        })
+    }
+    fn watch(&self, owner: &str, statuses: Statuses) -> Result<(), BackendError> {
+        self.admitted()?;
+        self.app.watch(owner, statuses)
+    }
+    fn attach<'a>(
+        &'a self,
+        chat_id: &'a str,
+        owner: &'a str,
+        frames: Frames,
+    ) -> BoxFuture<'a, Result<ChatAttach, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.attach(chat_id, owner, frames).await
+        })
+    }
+    fn release(&self, owner: &str) {
+        self.app.release(owner);
+    }
+    fn history<'a>(
+        &'a self,
+        chat_id: &'a str,
+        before_seq: u32,
+    ) -> BoxFuture<'a, Result<HistoryPage, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.history(chat_id, before_seq).await
+        })
+    }
+    fn send<'a>(
+        &'a self,
+        chat_id: &'a str,
+        text: String,
+    ) -> BoxFuture<'a, Result<PromptAck, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.send(chat_id, text).await
+        })
+    }
+    fn interrupt<'a>(&'a self, chat_id: &'a str) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.interrupt(chat_id).await
+        })
+    }
+    fn permission<'a>(
+        &'a self,
+        chat_id: &'a str,
+        request_id: &'a str,
+        option_id: Option<String>,
+    ) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.permission(chat_id, request_id, option_id).await
+        })
+    }
+    fn answer<'a>(
+        &'a self,
+        chat_id: &'a str,
+        request_id: &'a str,
+        answer: Option<UiAnswer>,
+    ) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.answer(chat_id, request_id, answer).await
+        })
+    }
+    fn create<'a>(
+        &'a self,
+        folder_id: &'a str,
+        agent_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<WorkspaceChat, BackendError>> {
+        Box::pin(async move {
+            self.admitted()?;
+            self.app.create(folder_id, agent_id).await
+        })
+    }
+}
+
 impl Backend for App {
+    fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend> {
+        Arc::new(Bound {
+            app: self,
+            profile: profile.to_owned(),
+        })
+    }
+
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
         Box::pin(async move {
             let status = self
@@ -949,6 +1072,7 @@ async fn a_device_and_a_bot_reach_only_the_workspace_they_were_made_in() {
 
     // The account's workspace opens. The phone is told to start over and is then let go, and the
     // relay is told this workspace has no bot links, so the bot's address stops answering there.
+    *rig.app.open.lock().expect("open") = "account".into();
     rig.service.profile_changed("account");
     assert_eq!(phone.event(&mut relay).await, json!({ "ev": "reset" }));
     assert_eq!(relay.next().await, "l[]");
@@ -995,6 +1119,7 @@ async fn a_device_and_a_bot_reach_only_the_workspace_they_were_made_in() {
     assert_eq!(rig.service.status().devices.len(), 1);
 
     // Back in the first workspace: its phone and its bot work again, and the tablet does not.
+    *rig.app.open.lock().expect("open") = "local".into();
     rig.service.profile_changed("local");
     let mut after = vec![relay.next().await, relay.next().await, relay.next().await];
     after.sort();
@@ -1016,6 +1141,65 @@ async fn a_device_and_a_bot_reach_only_the_workspace_they_were_made_in() {
     let answered: Value =
         serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer")).expect("json");
     assert_eq!(answered["error"], false, "{answered}");
+}
+
+#[tokio::test]
+async fn what_was_accepted_for_one_workspace_is_never_served_another() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (mut phone, _, _) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    let link = rig.service.create_bot("Grok").expect("bot");
+    assert!(relay.next().await.starts_with("l[{"));
+    let reference = link.url.rsplit('/').next().expect("reference").to_owned();
+    let (bot, token) = reference.split_once('.').expect("id.token");
+    assert_eq!(
+        phone.request(&mut relay, json!({ "op": "overview" })).await["ok"],
+        true
+    );
+
+    // The app has opened another workspace, and the service has not been told yet: the moment
+    // between the two. The phone's session and the bot's token are still accepted, and must
+    // reach nothing.
+    *rig.app.open.lock().expect("open") = "account".into();
+    for request in [
+        json!({ "op": "overview" }),
+        json!({ "op": "open", "chat_id": "c1" }),
+        json!({ "op": "history", "chat_id": "c1", "before_seq": 5 }),
+        json!({ "op": "send", "chat_id": "c1", "text": "Hello" }),
+        json!({ "op": "interrupt", "chat_id": "c1" }),
+        json!({ "op": "create", "folder_id": "f1", "text": "Hello" }),
+    ] {
+        let reply = phone.request(&mut relay, request.clone()).await;
+        assert_eq!(reply["ok"], false, "{request}: {reply}");
+        assert_eq!(reply["error"]["code"], "unavailable", "{request}: {reply}");
+    }
+    for (rid, tool, args) in [
+        ("r1", "list_chats", json!({})),
+        ("r2", "read_chat", json!({ "chat_id": "c1" })),
+        (
+            "r3",
+            "send_message",
+            json!({ "chat_id": "c1", "text": "Hello" }),
+        ),
+        (
+            "r4",
+            "start_chat",
+            json!({ "project": "app", "text": "Hello" }),
+        ),
+    ] {
+        relay
+            .send(format!(
+                "b{}",
+                json!({ "rid": rid, "bot": bot, "token": token, "tool": tool, "args": args })
+            ))
+            .await;
+        let answer: Value =
+            serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer"))
+                .expect("json");
+        assert_eq!(answer["error"], true, "{tool}: {answer}");
+    }
+    assert!(rig.app.sent.lock().expect("sent").is_empty());
+    assert!(rig.app.frames.lock().expect("frames").is_empty());
 }
 
 /// A pairing link's pairing id and key.
