@@ -1,5 +1,5 @@
-import qrcode from "qrcode-generator";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { encode } from "uqr";
 import type { RemoteBotLink, RemoteDevice, RemotePairing, RemoteStatus } from "../../bindings";
 import { ago, linkLabel, type RemoteApi, remaining, remoteApi } from "../../lib/remote";
 import { Modal } from "../chat/Modal";
@@ -223,16 +223,15 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
 /** A QR code as one SVG path: dark modules on white, whatever the app's appearance. */
 export function QrCode({ text, label }: { readonly text: string; readonly label: string }) {
   const { size, path } = useMemo(() => {
-    const code = qrcode(0, "M");
-    code.addData(text);
-    code.make();
-    const count = code.getModuleCount();
-    let d = "";
-    for (let row = 0; row < count; row += 1)
-      for (let column = 0; column < count; column += 1)
-        if (code.isDark(row, column)) d += `M${column + 4} ${row + 4}h1v1h-1z`;
     // Four modules of quiet space on every side, as scanners expect.
-    return { size: count + 8, path: d };
+    const code = encode(text, { ecc: "M", border: 4 });
+    let d = "";
+    code.data.forEach((row, y) => {
+      row.forEach((dark, x) => {
+        if (dark) d += `M${x} ${y}h1v1h-1z`;
+      });
+    });
+    return { size: code.size, path: d };
   }, [text]);
   return (
     <svg

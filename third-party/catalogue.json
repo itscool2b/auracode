@@ -2,14 +2,15 @@
   "version": 1,
   "scope": "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher, Windows vendored OpenSSL, transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
   "inputs": {
-    "Cargo.lock": "8525f467ad7fb07c1206ea35341a921c89967ed7f1c792d377beae057b7877d6",
-    "Cargo.toml": "fa7a4ad1ae18ee6891bc86117d7a9d6e4e712e9fe15d5e658cf715c859a69d6f",
+    "Cargo.lock": "7998889f49f60800ac20297e9265941ecf0bf875ebffdc8bc9cc904932af0eb9",
+    "Cargo.toml": "d87d21a4dff1b32e919e7b8807f35466a9f491bd76cec40f781573b1051efa14",
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "fa181c90211a9ff214754da144b8ed2b0eb89901a951fd3d990028449ab7df91",
+    "apps/desktop/package.json": "1f84062d76edb3e96cd0d6992b2296ca33c58289378ef4fc2afb5913beab1c17",
     "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
-    "apps/desktop/src-tauri/Cargo.toml": "282efaad27b8c3f6c894bc42a64238f5f36037abd23a8d5d1d785f3d201a09f7",
+    "apps/desktop/src-tauri/Cargo.toml": "3e9068bf55255807c8a2ec68bdad9802b884324dcf00cee237c592727e4bebff",
+    "apps/relay/package.json": "e1b4ff64bdd9e47154f298d40bccc3078607e01f9b32eb7b394d8ef898f15036",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "c5fdd28a728541a829c399d0a78cf6044970a5a15aebcf6f42460ca9cfebaf7a",
@@ -21,9 +22,10 @@
     "crates/aura-process/Cargo.toml": "32fecd9b59aacf59a88c790bd9d03d72c84e59e2b9dcd7e4d10b53cee99095ed",
     "crates/aura-protocol/Cargo.toml": "5d2b9ca24f6c0cc9ebe7a08fa6de7aa25d9fb28be8ae2443b3100dc40dc36c70",
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
+    "crates/aura-remote/Cargo.toml": "537f41c571082972f2d47303c7a49a31f236bbb464492ca7b16507d2c05ffa5d",
     "crates/aura-sync/Cargo.toml": "b7d587591b42ffb7f5b6eaf2dad6396ac82aceb8855e7fd3bfd9a64792c6e08c",
     "packages/ui/package.json": "aa571a30eac1836db5311e26622541afce99b0c0fb8db4269ae5b647a2260970",
-    "pnpm-lock.yaml": "50b976a8dbedb358bb2c9b5c214de8ea0c9951da8fa3446b9bf6c4645c3584a2",
+    "pnpm-lock.yaml": "df10e1d7e0f04e16cc64951e95e75c871d5e4ef897c84fe08028248094292a9e",
     "third-party/models.json": "6c702b42c6052f5e9da76f4c4fd770fe1133326d960df4323a13835a73e856da",
     "third-party/overrides.json": "afbc29886b3d5703468c5c869c5c0b77ce5fef1aee2bac8be889a88fc36387b2"
   },
@@ -84,12 +86,43 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "aes-gcm",
+      "version": "0.11.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/aes-gcm/0.11.1/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/aes-gcm/0.11.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0",
+          "source": "https://crates.io/api/v1/crates/aes-gcm/0.11.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "aes",
       "version": "0.9.4",
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/aes/0.9.4/download",
       "distributions": ["desktop"],
-      "targets": ["x86_64-unknown-linux-gnu"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
       "files": [
         {
           "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
@@ -1688,7 +1721,13 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://crates.io/api/v1/crates/cpubits/0.1.1/download",
       "distributions": ["desktop"],
-      "targets": ["x86_64-unknown-linux-gnu"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
       "files": [
         {
           "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
@@ -1927,6 +1966,31 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "ctr",
+      "version": "0.10.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/ctr/0.10.1/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/ctr/0.10.1/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68",
+          "source": "https://crates.io/api/v1/crates/ctr/0.10.1/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "ctutils",
       "version": "0.4.6",
       "license": "Apache-2.0 OR MIT",
@@ -2050,6 +2114,27 @@
         {
           "sha256": "b1d6df41ed3aa96806e74c729444d7c121d90e6660a6aed01d298e03fde475a0",
           "source": "https://raw.githubusercontent.com/RustAudio/dasp/97c3bb9b2363c0b46ac1633858bf1054fd02a980/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "data-encoding",
+      "version": "2.11.1",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/data-encoding/2.11.1/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "b68ad1a3367b825447089e1f8d6829b97f47a89eb78d2f4ebaef4672f5606186",
+          "source": "https://crates.io/api/v1/crates/data-encoding/2.11.1/download#LICENSE"
         }
       ]
     },
@@ -3475,6 +3560,31 @@
         {
           "sha256": "523a42c25d245dde9c015f882cec7f4555aad883382a6cf19b4b7d9b2cd5419b",
           "source": "https://crates.io/api/v1/crates/getrandom/0.4.3/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "ghash",
+      "version": "0.6.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/ghash/0.6.0/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/ghash/0.6.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0",
+          "source": "https://crates.io/api/v1/crates/ghash/0.6.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -6525,6 +6635,31 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "polyval",
+      "version": "0.7.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://crates.io/api/v1/crates/polyval/0.7.3/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/polyval/0.7.3/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0",
+          "source": "https://crates.io/api/v1/crates/polyval/0.7.3/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "potential_utf",
       "version": "0.1.6",
       "license": "Unicode-3.0",
@@ -6934,6 +7069,31 @@
         {
           "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b",
           "source": "https://crates.io/api/v1/crates/rand_core/0.9.5/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "rand",
+      "version": "0.10.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/rand/0.10.3/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab",
+          "source": "https://crates.io/api/v1/crates/rand/0.10.3/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b",
+          "source": "https://crates.io/api/v1/crates/rand/0.10.3/download#LICENSE-MIT"
         }
       ]
     },
@@ -7854,6 +8014,31 @@
         {
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
           "source": "https://crates.io/api/v1/crates/servo_arc/0.4.3/download#LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "sha1",
+      "version": "0.11.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/sha1/0.11.0/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+          "source": "https://crates.io/api/v1/crates/sha1/0.11.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "831e0f43ad0bf014c1c4fec5767aae470434c1d66d6e671be2d823e729063e25",
+          "source": "https://crates.io/api/v1/crates/sha1/0.11.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -9148,6 +9333,27 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "tokio-tungstenite",
+      "version": "0.30.0",
+      "license": "MIT",
+      "source": "https://crates.io/api/v1/crates/tokio-tungstenite/0.30.0/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "fdd55e2b2da854b0fbdc1e607df7c2ba1e1ebf91ecb77c515511ebeef972bc8f",
+          "source": "https://crates.io/api/v1/crates/tokio-tungstenite/0.30.0/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
       "name": "tokio-util",
       "version": "0.7.20",
       "license": "MIT",
@@ -9669,6 +9875,31 @@
         {
           "sha256": "c816a0749cdc6bf062a5111c159723de51b2bfac66a1dac2655abd9e6b1583eb",
           "source": "https://crates.io/api/v1/crates/try-lock/0.2.5/download#LICENSE"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "tungstenite",
+      "version": "0.30.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/api/v1/crates/tungstenite/0.30.0/download",
+      "distributions": ["desktop"],
+      "targets": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "files": [
+        {
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source": "https://crates.io/api/v1/crates/tungstenite/0.30.0/download#LICENSE-APACHE"
+        },
+        {
+          "sha256": "7fea0ee51a4ca5d5cea7464135fd55e8b09caf3a61da3d451ac8a22af95c033f",
+          "source": "https://crates.io/api/v1/crates/tungstenite/0.30.0/download#LICENSE-MIT"
         }
       ]
     },
@@ -13398,6 +13629,21 @@
         {
           "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
           "source": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz#LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "name": "uqr",
+      "version": "0.1.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/uqr/-/uqr-0.1.3.tgz",
+      "distributions": ["desktop"],
+      "targets": [],
+      "files": [
+        {
+          "sha256": "b39d50e24727f341a0ebdb2ab040c57efaf4076a8ad5b1d0c8c45beb975b4571",
+          "source": "https://registry.npmjs.org/uqr/-/uqr-0.1.3.tgz#LICENSE"
         }
       ]
     }

@@ -11,5 +11,6 @@ export default {
     "/privacy",
     "/terms",
     "/changelog",
+    "/remote",
   ],
 } satisfies Config;
