@@ -267,7 +267,7 @@ const SIDEBAR_CHATS = [
 
 /**
  * The hero's glass window: the app's sidebar, the chat's toolbar, a transcript that keeps the last
- * turns, and the composer with its handoff. `.handoff-prior`, `.handoff-link` and `.handoff-next`
+ * turns, and the composer with its handoff. `.handoff-prior` and `.handoff-next`
  * name the parts the browser checks look for.
  */
 export function HeroWindow({ state }: { state: HandoffState }) {
@@ -363,9 +363,6 @@ export function HeroWindow({ state }: { state: HandoffState }) {
                 />
               ))}
             </div>
-            <span className="handoff-link" aria-hidden="true">
-              <span className="handoff-bead" />
-            </span>
             <div className="handoff-next">
               <p className="m-handoff" data-shown={before ? "" : undefined}>
                 <SpriteMark agent={cur.agent} size={16} />

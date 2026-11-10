@@ -107,9 +107,6 @@ function HandoffView() {
           </div>
         </div>
       </div>
-      <span className="handoff-link" aria-hidden="true">
-        <span className="handoff-bead" />
-      </span>
       <div className="handoff-next">
         <p className="m-handoff" data-shown="">
           <SpriteMark agent="codex" size={16} />

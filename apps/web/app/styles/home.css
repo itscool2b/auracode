@@ -826,10 +826,6 @@ html.js .feature-card:not([data-revealed]) .tm-line {
     display: none;
   }
 
-  .handoff-link {
-    left: 24px;
-  }
-
   .product-frame {
     margin-top: 40px;
     padding: 6px;

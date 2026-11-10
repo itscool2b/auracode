@@ -114,7 +114,6 @@ try {
       const heroStage = page.locator(".hero-detail .handoff-stage");
       assert.equal(await heroStage.locator(".handoff-prior").isVisible(), true);
       assert.equal(await heroStage.locator(".handoff-next").isVisible(), true);
-      assert.equal(await heroStage.locator(".handoff-link").count(), 1);
       assert.equal(
         await page
           .getByRole("tab", { name: "Optional file checkpoints" })

@@ -724,58 +724,6 @@
   transform: none;
 }
 
-/*
- * A thread from the work above to the handoff waiting below, and a bead that runs down it when a
- * new agent is picked. It shows only while a handoff waits.
- */
-.handoff-link {
-  position: absolute;
-  left: 39px;
-  bottom: 160px;
-  width: 1.5px;
-  height: 40px;
-  border-radius: 2px;
-  background: linear-gradient(to bottom, transparent, rgb(10 10 11 / 0.16));
-  pointer-events: none;
-  transition: opacity 400ms var(--s-swift);
-}
-
-.hw:not([data-phase="pick"], [data-phase="type"]) .handoff-link {
-  opacity: 0;
-}
-
-.handoff-bead {
-  position: absolute;
-  top: 0;
-  left: -2.75px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: var(--m-ink);
-  opacity: 0;
-}
-
-.hw[data-phase="pick"] .handoff-bead {
-  animation: bead-run 1000ms var(--s-swift) both;
-}
-
-@keyframes bead-run {
-  0% {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  20% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(46px);
-  }
-}
-
 /* Arrivals in the live window: each new part settles out of a soft blur. */
 .hw:not([data-settled]) .hw-turn > *,
 .hw:not([data-settled]) .m-turn > * {
@@ -1331,19 +1279,11 @@
   margin: -72px 0 0 auto;
 }
 
-.caps .handoff-stage > .handoff-link {
-  left: 30%;
-  bottom: 112px;
-  height: 60px;
-  background: linear-gradient(to bottom, transparent, rgb(10 10 11 / 0.2));
-}
-
 /* Reduced motion: loaders, carets and shimmers hold still; the live window never starts. */
 @media (prefers-reduced-motion: reduce) {
   .m-loader rect,
   .m-caret,
-  .m-shimmer,
-  .handoff-bead {
+  .m-shimmer {
     animation: none;
   }
 
