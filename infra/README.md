@@ -11,6 +11,8 @@ These identifiers are not credentials.
 | Email Sending domain | `auracode.si`, `84273eb1ef3c4b108b774bc0e0a000ed` | Passwordless sign-in sender |
 | Preview D1 database | `auracode-preview`, `11d6fa29-5c39-49c5-a85b-1ecc7645dbd5` | Isolated acceptance data, US jurisdiction |
 | Preview R2 bucket | `auracode-preview-blobs` | Private acceptance ciphertext |
+| Worker | `auracode-relay`, route `auracode.si/api/remote/*` | Remote sessions relay: one Durable Object (`Room`, SQLite-backed) per computer. Stores key and token hashes only |
+| Preview Worker | `auracode-relay-preview`, route `preview.auracode.si/api/remote/*` | The same relay for the preview site |
 
 D1 uses US jurisdiction, with read replication disabled. R2 was created with the eastern North
 America location hint, which is not a data-residency guarantee. Both buckets start private; release

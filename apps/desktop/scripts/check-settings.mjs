@@ -19,11 +19,11 @@ import { checkNotices } from "./check-notices.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
 import { checkProjectTools } from "./check-project-tools.mjs";
 import { checkQuestions } from "./check-questions.mjs";
+import { checkRemote } from "./check-remote.mjs";
 import { checkSessionFallback } from "./check-session-fallback.mjs";
 import { checkSettingsNavigation } from "./check-settings-navigation.mjs";
 import { checkSetupRecovery } from "./check-setup-recovery.mjs";
 import { checkSteering } from "./check-steering.mjs";
-import { checkRemote } from "./check-remote.mjs";
 import { checkThemes } from "./check-themes.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
