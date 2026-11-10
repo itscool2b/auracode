@@ -1,9 +1,36 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("../build/client/", import.meta.url);
+
+/**
+ * The Worker that serves the site embeds this folder and refuses a build it cannot plan
+ * (apps/web-worker/src/manifest.rs, `walk` and `mime`). That check runs only in the deploy's Wasm
+ * build, so its rules are mirrored here: #126's first build failed there on a chunk Vite had named
+ * `__changelog-….js`.
+ */
+test("every built file is one the website Worker accepts", async () => {
+  const served = /\.(?:js|css|json|txt|svg|png|jpe?g|webp|ico|woff2?)$|(?:^|\/)index\.html$/;
+  const folder = fileURLToPath(root);
+  const files = (await readdir(folder, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(folder, join(entry.parentPath, entry.name)).replaceAll("\\", "/"))
+    .filter((path) => path !== "_headers" && path !== "__spa-fallback.html");
+  assert.ok(files.length > 20 && files.length <= 1024, `${files.length} files`);
+  for (const path of files) {
+    assert.ok(
+      path.split("/").every((part) => part !== "" && !/^[._]/.test(part)),
+      `${path}: no part of a path may start with "." or "_"`,
+    );
+    assert.match(path, /^[A-Za-z0-9/_.-]+$/, `${path}: unsupported character`);
+    assert.ok(path !== "api" && !path.startsWith("api/"), `${path}: reserved for the API`);
+    assert.match(path, served, `${path}: unsupported file type`);
+  }
+});
 test("public pages are prerendered to follow the system appearance without JavaScript", async () => {
   for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");

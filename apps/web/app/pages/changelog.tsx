@@ -1,6 +1,7 @@
 // The repository's CHANGELOG.md, parsed when the site is built (scripts/changelog.ts).
-import days from "#changelog";
+
 import catalog from "#release-catalog";
+import days from "../changelog-data";
 import { Arrow, Page } from "../ui";
 
 export const meta = () => [{ title: "Changelog · auracode" }];

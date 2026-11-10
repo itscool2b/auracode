@@ -1,18 +1,21 @@
 // Build glue for the website's changelog: the repository's CHANGELOG.md, parsed when the site is
-// built and offered to the page as the module "#changelog". Every pull request merged into main
-// adds its line to that file (docs/developing-in-aura.md, "Changelog"), and every push to main
-// rebuilds the site, so the page is current without anyone editing it.
+// built and written into app/changelog-data.ts as that module is loaded. Every pull request merged
+// into main adds its line to the file (docs/developing-in-aura.md, "Changelog"), and every push to
+// main rebuilds the site, so the page is current without anyone editing it.
 // `.github/scripts/check-changelog.mjs` keeps the file in the shape this reads. Only each line's
 // words and its pull request number reach the page; the links stay out, since they lead to a
 // private repository.
+//
+// The data replaces a real module rather than a virtual one on purpose: Vite names a shared chunk
+// after the module it holds, a virtual module's name starts with an underscore, and the Worker that
+// serves the site refuses such a file (apps/web-worker/src/manifest.rs).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import type { ChangelogDay, ChangelogEntry } from "../app/changelog-types.ts";
 
 const FILE = fileURLToPath(new URL("../../../CHANGELOG.md", import.meta.url));
-const MODULE = "#changelog";
-const RESOLVED = `\0${MODULE}`;
+const DATA = "/app/changelog-data.ts";
 
 const MONTHS = [
   "January",
@@ -73,19 +76,21 @@ export function parseChangelog(source: string): ChangelogDay[] {
   return days.filter((day) => day.entries.length > 0);
 }
 
-/** Serves "#changelog": the parsed days as a module, reloaded in development when the file changes. */
+/**
+ * Fills app/changelog-data.ts with the parsed days as it is loaded, and reloads it in development
+ * when CHANGELOG.md changes.
+ */
 export function changelogPlugin(): Plugin {
   return {
     name: "auracode-changelog",
-    resolveId(id) {
-      return id === MODULE ? RESOLVED : null;
-    },
-    load(id) {
-      if (id !== RESOLVED) return null;
+    enforce: "pre",
+    transform(_code, id) {
+      const path = (id.split("?")[0] ?? "").replaceAll("\\", "/");
+      if (!path.endsWith(DATA)) return null;
       this.addWatchFile(FILE);
       const days = parseChangelog(readFileSync(FILE, "utf8"));
       if (days.length === 0) throw new Error(`No changelog entries could be read from ${FILE}.`);
-      return `export default ${JSON.stringify(days)};`;
+      return { code: `export default ${JSON.stringify(days)};`, map: null };
     },
   };
 }

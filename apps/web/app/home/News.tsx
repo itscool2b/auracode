@@ -1,5 +1,5 @@
 // The repository's CHANGELOG.md, parsed when the site is built (scripts/changelog.ts).
-import days from "#changelog";
+import days from "../changelog-data";
 
 const CHANGES = days.reduce((count, day) => count + day.entries.length, 0);
 const LATEST = days[0]?.label;
