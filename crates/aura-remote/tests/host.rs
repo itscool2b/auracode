@@ -926,9 +926,19 @@ async fn a_browser_can_forget_the_desktop() {
     let rig = rig().await;
     let mut relay = online(&rig).await;
     let (mut phone, device, key) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    // The same device, open in a second tab.
+    let (mut tab, _) =
+        Browser::hello(&mut relay, "cccccccccccccccc", "device", &device, &key).await;
+    assert_eq!(
+        tab.request(&mut relay, json!({ "op": "overview" })).await["ok"],
+        true
+    );
     let forgot = phone.request(&mut relay, json!({ "op": "forget" })).await;
     assert_eq!(forgot["ok"], true);
-    assert_eq!(relay.next().await, "caaaaaaaaaaaaaaaa");
+    // Every session of the device ends, not only the one that asked.
+    let mut ended = vec![relay.next().await, relay.next().await];
+    ended.sort();
+    assert_eq!(ended, ["caaaaaaaaaaaaaaaa", "ccccccccccccccccc"]);
     assert!(rig.service.status().devices.is_empty());
     relay.send("obbbbbbbbbbbbbbbb").await;
     relay

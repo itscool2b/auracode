@@ -581,6 +581,8 @@ impl Serving {
                 if self.connections.contains_key(&cid) {
                     self.drop_connection(&cid);
                 }
+                // A device that removed itself is gone everywhere, not only where it asked.
+                self.end_removed_devices();
             }
             Out::Status(update) => {
                 let Ok(json) = serde_json::to_string(&Event::Chat { update: &update }) else {
@@ -641,6 +643,12 @@ impl Serving {
             self.outbox.push(links.clone());
             self.links = links;
         }
+        self.end_removed_devices();
+        None
+    }
+
+    /// Ends every session whose device is no longer paired.
+    fn end_removed_devices(&mut self) {
         let gone: Vec<String> = {
             let registry = lock(&self.shared.registry);
             self.connections
@@ -658,7 +666,6 @@ impl Serving {
         for cid in gone {
             self.drop_connection(&cid);
         }
-        None
     }
 
     /// Ends connections that never proved they hold a key.
