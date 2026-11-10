@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  MemoryProposal,
-  MemoryRevision,
-  ProjectMemory,
-  ProjectMemoryChanged,
-} from "../bindings";
+import type { MemoryRevision, ProjectMemory, ProjectMemoryChanged } from "../bindings";
 
 const native = vi.hoisted(() => ({ available: true, listen: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: native.listen }));
@@ -23,10 +18,6 @@ import {
   newerVersion,
   noticeAgentEdit,
   PROJECT_MEMORY_CHANGED,
-  previousText,
-  proposalIsCurrent,
-  restoreReason,
-  revisionAuthor,
   subscribeProjectMemory,
   undoAgentEdit,
 } from "./projectMemory";
@@ -36,17 +27,6 @@ const memory: ProjectMemory = {
   revision: "r2",
   markdown: "Current",
   updated_at: 1,
-};
-const proposal: MemoryProposal = {
-  id: "p",
-  project_id: "one",
-  base_revision: "r2",
-  markdown: "Proposed",
-  reason: "Learned fact",
-  chat_id: "chat",
-  idempotency_key: "key",
-  state: "pending",
-  created_at: 1,
 };
 const revision = (id: string, parent: string | null, markdown: string, source = "user") =>
   ({
@@ -67,54 +47,21 @@ const edit = (id: string, parent: string | null, chat = "login"): ProjectMemoryC
   agent_edit: { revision: id, parent_revision: parent, chat_id: chat },
 });
 
-describe("project memory review", () => {
+describe("project memory", () => {
   it("counts UTF-8 bytes without silently truncating Markdown", () => {
     expect(memoryBytes("é")).toBe(2);
     expect(memoryBytes("é".repeat(MAX_MEMORY_BYTES / 2))).toBe(MAX_MEMORY_BYTES);
     expect(memoryBytes("é".repeat(MAX_MEMORY_BYTES / 2 + 1))).toBeGreaterThan(MAX_MEMORY_BYTES);
   });
-  it("only enables exact current-base pending proposals from the same project", () => {
-    expect(proposalIsCurrent(proposal, memory)).toBe(true);
-    expect(proposalIsCurrent({ ...proposal, base_revision: "r1" }, memory)).toBe(false);
-    expect(proposalIsCurrent({ ...proposal, project_id: "two" }, memory)).toBe(false);
-    expect(proposalIsCurrent({ ...proposal, state: "accepted" }, memory)).toBe(false);
-    expect(proposalIsCurrent({ ...proposal, state: "conflict" }, memory)).toBe(true);
-  });
 });
 
-describe("revision authors", () => {
-  it("names an agent's chat when it is known and an agent otherwise", () => {
-    expect(revisionAuthor("agent:login", chats)).toBe("Claude Code in Fix the login flow");
-    expect(revisionAuthor("agent:untitled", chats)).toBe("Codex");
-    expect(revisionAuthor("agent:gone", chats)).toBe("An agent");
-    expect(agentLabel("gone", chats, false)).toBe("an agent");
-    expect(revisionAuthor("agent:", chats)).toBe("agent:");
-    expect(revisionAuthor("user", chats)).toBe("You");
-    expect(revisionAuthor("proposal", chats)).toBe("Accepted proposal");
-    expect(revisionAuthor("import", chats)).toBe("Imported");
-    expect(revisionAuthor("from-a-newer-aura", chats)).toBe("from-a-newer-aura");
-  });
+describe("agent names", () => {
   it("lets live chat titles follow saved ones", () => {
     const named = memoryChats([
       { id: "login", title: null, agent_name: "Claude Code" },
       { id: "login", title: "Renamed chat", agent_name: "Claude Code" },
     ]);
     expect(agentLabel("login", named)).toBe("Claude Code in Renamed chat");
-  });
-  it("restores with a reason that names when the revision was saved", () => {
-    const old = revision("r1", null, "Old");
-    expect(restoreReason(old)).toBe(
-      `Restored the revision from ${new Date(old.created_at).toLocaleString()}`,
-    );
-  });
-});
-
-describe("revision diffs", () => {
-  it("compares a revision with its parent, the first with empty memory, and admits a gap", () => {
-    const history = [revision("r2", "r1", "Two"), revision("r1", null, "One")];
-    expect(previousText(history[0] as MemoryRevision, history)).toBe("One");
-    expect(previousText(history[1] as MemoryRevision, history)).toBe("");
-    expect(previousText(revision("r3", "missing", "Three"), history)).toBeNull();
   });
 });
 

@@ -230,7 +230,7 @@ async fn the_profile_switch_reaches_a_running_generations_memory_writes_at_once(
         refused["error"]
             .as_str()
             .unwrap()
-            .contains("aura_memory_propose")
+            .contains("turned off agents' edits")
     );
     assert_eq!(
         rig.manager

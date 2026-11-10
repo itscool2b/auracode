@@ -3,15 +3,17 @@
   gap: var(--g-space-16);
   min-width: 0;
 }
+
 .project-memory h2,
-.project-memory h3,
 .project-memory p {
   margin: 0;
 }
+
 .project-memory p {
   color: var(--g-fg-2);
   line-height: var(--g-leading-ui);
 }
+
 /* The panel's title reads like Instructions' and Plugins & MCP's beside it in Customize. */
 .project-memory > .settings-section-heading > h2 {
   color: var(--g-fg-1);
@@ -20,109 +22,71 @@
   font-weight: 500;
   letter-spacing: var(--g-tracking-title);
 }
-.project-memory > .settings-section-heading > p {
+
+.project-memory > .settings-section-heading > h2 + p {
   margin-top: var(--g-space-4);
 }
-.project-memory-field {
+
+/* The notes themselves: one tall box, with its size and its two actions on the line under it. */
+.project-memory-editor {
   display: grid;
   gap: var(--g-space-8);
-  font-size: var(--g-text-ui);
-  font-weight: var(--g-weight-medium);
+  min-width: 0;
 }
-.project-memory-field textarea,
-.project-memory-field input,
-.project-memory-field select {
+
+.project-memory-text {
   box-sizing: border-box;
   width: 100%;
-  min-width: 0;
-  color: var(--g-fg-1);
-  background: var(--g-surface-1);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-10);
-  padding: var(--g-space-8) var(--g-space-12);
-  font: inherit;
-}
-.project-memory-field textarea {
+  min-height: 240px;
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-ui);
   resize: vertical;
 }
-.project-memory-field :focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: 2px;
-}
-.project-memory-note,
-.project-memory-meta {
-  font-size: var(--g-text-meta);
-  color: var(--g-fg-2);
-  overflow-wrap: anywhere;
-}
-.project-memory-actions {
+
+.project-memory-foot {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--g-space-8);
 }
-/* The agents switch is the settings row of the other pages; the panel's grid spaces it. */
-.project-memory > .settings-group {
-  margin: 0;
+
+.project-memory-meta {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
-/* A newer saved version beside a draft: the window's calm notice, never a blocking dialog. */
-.project-memory-newer > span {
+
+.project-memory-meta[data-over] {
+  color: var(--g-red);
+}
+
+/* What just happened sits between the size and the buttons, and pushes the buttons right. */
+.project-memory-status {
+  flex: 1;
+  min-width: 0;
   color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-align: right;
+}
+
+/* A version saved elsewhere while a draft is open: said once, above the draft it would replace. */
+.project-memory-newer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-8) var(--g-space-12);
+  padding: var(--g-space-8) var(--g-space-12);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
-.project-memory-row-actions {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
-}
-.project-memory-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.project-memory-list li {
-  display: flex;
-  gap: var(--g-space-12);
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--g-space-12) 0;
-  border-bottom: 1px solid var(--g-glass-rim);
-}
-.project-memory-list li > div {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.project-memory-list p {
-  font-size: var(--g-text-meta);
-}
-.project-memory p.project-memory-error {
+
+.project-memory-error {
   color: var(--g-red);
-}
-.project-memory-comparison {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--g-space-16);
-}
-.project-memory-comparison pre,
-.project-memory-document {
-  max-height: 340px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: var(--g-space-12);
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-12);
-  color: var(--g-fg-1);
-  background: var(--g-surface-1);
-  font: var(--g-text-meta) / var(--g-leading-code) var(--g-mono);
-}
-@media (max-width: 700px) {
-  .project-memory-comparison {
-    grid-template-columns: 1fr;
-  }
 }

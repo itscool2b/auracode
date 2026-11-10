@@ -133,8 +133,8 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "memory", title: "Project memory", words: "context notes shared" },
   {
     page: "memory",
-    title: "Let agents edit memory directly",
-    words: "agent edits revisions review",
+    title: "Let agents edit memory",
+    words: "agent edits write update read only",
   },
   {
     page: "remote",

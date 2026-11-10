@@ -1300,7 +1300,7 @@ impl SessionManager {
     }
 
     /// Applies the active profile's choice to every chat's memory tools at once, running chats
-    /// included. Off: agents can still read memory and propose updates for review.
+    /// included. Off: agents can still read memory, and cannot change it.
     pub fn set_agent_memory_writes(&self, enabled: bool) {
         self.shared()
             .agent_memory_writes

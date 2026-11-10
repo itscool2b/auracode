@@ -82,7 +82,6 @@ export function App({
     chatLabel?: string;
     projectId?: string | null;
     activeChatId?: string;
-    memoryRevision?: string;
   }>({
     id: "initial",
     page: "general",
@@ -414,9 +413,7 @@ export function App({
             onCustomize={(projectId, activeChatId) =>
               openSettings("plugins", { projectId, activeChatId })
             }
-            onReviewMemory={(projectId, revision) =>
-              openSettings("memory", { projectId, memoryRevision: revision })
-            }
+            onOpenMemory={(projectId) => openSettings("memory", { projectId })}
             onSettings={() => openSettings("general")}
             onInstructions={(target, chatLabel) => {
               const organization = workspace?.getSnapshot().data;
@@ -448,7 +445,6 @@ export function App({
             workspace={workspace}
             projectId={settingsEntry.projectId ?? null}
             activeChatId={settingsEntry.activeChatId}
-            memoryRevision={settingsEntry.memoryRevision}
             agents={{ app: chats, transport }}
             backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}

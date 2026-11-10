@@ -1,14 +1,10 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import {
-  type AcceptMemoryProposal,
   type ChatSummary,
   commands,
-  type ImportProjectMemory,
-  type MemoryProposal,
   type MemoryRevision,
   type ProjectMemory,
-  type ProjectMemoryBundle,
   type ProjectMemoryChanged,
   type SaveProjectMemory,
 } from "../bindings";
@@ -18,12 +14,8 @@ import { inTauri, settle } from "./ipc";
 export interface ProjectMemoryApi {
   read(projectId: string): Promise<ProjectMemory>;
   save(input: SaveProjectMemory): Promise<ProjectMemory>;
-  accept(input: AcceptMemoryProposal): Promise<ProjectMemory>;
-  reject(projectId: string, proposalId: string): Promise<MemoryProposal[]>;
+  /** Every saved version, newest first. Nothing shows it; Undo reads what an edit replaced. */
   history(projectId: string): Promise<MemoryRevision[]>;
-  proposals(projectId: string): Promise<MemoryProposal[]>;
-  export(projectId: string): Promise<ProjectMemoryBundle>;
-  import(input: ImportProjectMemory): Promise<ProjectMemory>;
   /**
    * Calls `changed` after every committed memory change, the editor's or an agent's, until the
    * returned function is called. An agent's direct edit is named in `agent_edit`.
@@ -67,24 +59,12 @@ export function subscribeProjectMemory(
 export const projectMemoryApi: ProjectMemoryApi = {
   read: (id) => settle(commands.readProjectMemory(id)),
   save: (input) => settle(commands.saveProjectMemory(input)),
-  accept: (input) => settle(commands.acceptMemoryProposal(input)),
-  reject: (id, proposal) => settle(commands.rejectMemoryProposal(id, proposal)),
   history: (id) => settle(commands.projectMemoryHistory(id)),
-  proposals: (id) => settle(commands.projectMemoryProposals(id)),
-  export: (id) => settle(commands.exportProjectMemory(id)),
-  import: (input) => settle(commands.importProjectMemory(input)),
   subscribe: subscribeProjectMemory,
 };
 export const MAX_MEMORY_BYTES = 16 * 1024;
 export function memoryBytes(markdown: string): number {
   return new TextEncoder().encode(markdown).length;
-}
-export function proposalIsCurrent(proposal: MemoryProposal, memory: ProjectMemory): boolean {
-  return (
-    proposal.project_id === memory.project_id &&
-    proposal.base_revision === memory.revision &&
-    (proposal.state === "pending" || proposal.state === "conflict")
-  );
 }
 
 /** What memory shows of a chat: its title and its agent's name. */
@@ -116,43 +96,6 @@ export function agentLabel(chatId: string, chats: MemoryChats, sentenceStart = t
   if (!chat) return sentenceStart ? "An agent" : "an agent";
   const title = chat.title?.trim();
   return title ? `${chat.agent} in ${title}` : chat.agent;
-}
-
-/** Who made a revision, for its history entry. */
-export function revisionAuthor(source: string, chats: MemoryChats): string {
-  const chat = agentChat(source);
-  if (chat !== null) return agentLabel(chat, chats);
-  switch (source) {
-    case "user":
-      return "You";
-    case "proposal":
-      return "Accepted proposal";
-    case "import":
-      return "Imported";
-    default:
-      return source;
-  }
-}
-
-export function revisionTime(revision: Pick<MemoryRevision, "created_at">): string {
-  return new Date(revision.created_at).toLocaleString();
-}
-
-/** The reason a one-click restore saves with. */
-export function restoreReason(revision: MemoryRevision): string {
-  return `Restored the revision from ${revisionTime(revision)}`;
-}
-
-/**
- * The text a revision replaced, for its diff: its parent's, empty for the first revision, or
- * `null` when the parent is not on this device.
- */
-export function previousText(
-  revision: MemoryRevision,
-  history: readonly MemoryRevision[],
-): string | null {
-  if (revision.parent_revision === null) return "";
-  return history.find((entry) => entry.revision === revision.parent_revision)?.markdown ?? null;
 }
 
 /** A newer saved version than the one a draft started from. It is shown, never applied over it. */
@@ -311,7 +254,7 @@ export async function undoAgentEdit(
     );
     if (!previous)
       throw new Error(
-        "The revision before this edit is not on this device. Review the history in Project memory.",
+        "What this edit replaced is not on this device. Open Project memory to change it by hand.",
       );
     markdown = previous.markdown;
   }

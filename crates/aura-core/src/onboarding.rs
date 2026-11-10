@@ -143,9 +143,9 @@ pub struct GeneralPreferences {
     /// `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
     /// person turns it off in Instructions.
     pub copy_instructions_to_worktrees: bool,
-    /// Agents edit project memory directly; every edit is a revision the person can restore. Off:
-    /// agents propose updates for review. On unless the person turns it off in Project memory
-    /// (the owner reversed the earlier review-only decision on 1 November 2026).
+    /// Agents edit project memory; each edit shows a notice with Undo. Off: agents read it and
+    /// cannot change it. On unless the person turns it off in Project memory (the owner reversed
+    /// the earlier review-only decision on 1 November 2026, and dropped proposals on 10 November).
     pub agent_memory_writes: bool,
     /// A finished turn shows its work (interim messages, tools, thinking) instead of folding it
     /// under "Worked for" above the answer. Off unless the person turns it on in Settings > Chats.
@@ -258,7 +258,7 @@ pub enum SetupAction {
     CopyInstructionsToWorktrees {
         enabled: bool,
     },
-    /// Turns on or off agents' direct edits to project memory. Off keeps review-only proposals.
+    /// Turns on or off agents' edits to project memory. Off leaves it read-only for them.
     AgentMemoryWrites {
         enabled: bool,
     },
