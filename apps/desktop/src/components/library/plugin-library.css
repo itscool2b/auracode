@@ -243,11 +243,9 @@
   gap: var(--g-space-16);
   min-height: 60px;
   padding: var(--g-space-8) var(--g-space-16);
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
 }
 
 .plugins-sync > div {
@@ -470,11 +468,9 @@
 .plugins-universal-card {
   display: flex;
   flex-direction: column;
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
 }
 
 .plugins-universal-head {

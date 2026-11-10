@@ -149,9 +149,9 @@
   min-height: 0;
   margin: 0 var(--g-space-32) var(--g-space-24);
   overflow: hidden;
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow: var(--g-shadow-control);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
 }
 
 .library-body::after {

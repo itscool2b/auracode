@@ -60,6 +60,12 @@
   --ui-paper: color-mix(in srgb, var(--g-fg-1) 92%, var(--g-bg));
   --ui-paper-ink: var(--g-bg);
 
+  /*
+   * A card, as the Grok Bot app draws one: a faint fill of the theme's ink, a 16px radius, no rim
+   * and no shadow. Grouped settings rows, transcript cards, the dashboard's cards and the like.
+   */
+  --ui-card-flat: color-mix(in srgb, var(--g-fg-1) 6%, transparent);
+
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
 
