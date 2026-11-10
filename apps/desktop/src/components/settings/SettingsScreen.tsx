@@ -10,6 +10,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Mic,
+  MonitorSmartphone,
   Palette,
   Puzzle,
   Search,
@@ -36,6 +37,7 @@ import { type DictationApi, dictationApi } from "../../lib/dictation";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
 import { memoryChats } from "../../lib/projectMemory";
+import { type RemoteApi, remoteApi } from "../../lib/remote";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
@@ -51,6 +53,7 @@ import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
 import { ProjectMemoryPanel } from "./ProjectMemoryPanel";
 import { usePreferences } from "./preferences";
+import { RemotePanel } from "./RemotePanel";
 import { Row } from "./SettingsRow";
 import {
   PAGE_GROUPS,
@@ -76,6 +79,7 @@ const ICONS: Readonly<Record<Page, LucideIcon>> = {
   plugins: Puzzle,
   instructions: FileText,
   memory: BookOpen,
+  remote: MonitorSmartphone,
   account: CircleUser,
   privacy: ShieldCheck,
   about: Info,
@@ -138,6 +142,7 @@ export function SettingsScreen({
   general = generalApi,
   updates = updatesApi,
   dictation = dictationApi,
+  remote = remoteApi,
   reveal = revealDataDir,
   initialPage = "general",
   navigationId = "settings",
@@ -166,6 +171,7 @@ export function SettingsScreen({
   readonly general?: GeneralApi;
   readonly updates?: UpdatesApi;
   readonly dictation?: DictationApi;
+  readonly remote?: RemoteApi;
   readonly reveal?: () => Promise<void>;
   readonly initialPage?: Page;
   readonly navigationId?: string;
@@ -569,6 +575,7 @@ export function SettingsScreen({
               </section>
             </>,
           )}
+          {pane("remote", <RemotePanel api={remote} />)}
           {pane(
             "privacy",
             <div className="settings-group">

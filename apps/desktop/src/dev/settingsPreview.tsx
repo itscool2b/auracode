@@ -25,6 +25,7 @@ import { profileApi } from "../lib/profiles";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
 import { createCustomizeFixture } from "./customizePreview";
+import { remoteFixture } from "./remoteFixture";
 
 const info: AppInfo = {
   app_version: "0.1.0",
@@ -331,6 +332,8 @@ Object.assign(window, {
   },
 });
 
+const remote = remoteFixture();
+
 function Preview() {
   const params = new URLSearchParams(location.search);
   const legacy = params.has("legacy-instructions");
@@ -369,6 +372,7 @@ function Preview() {
       general={general}
       updates={updates}
       dictation={dictation}
+      remote={remote}
       workspace={customize.workspace}
       projectId={target.type === "global" ? null : "fixture-project"}
       activeChatId={target.type === "chat" ? target.chat_id : undefined}

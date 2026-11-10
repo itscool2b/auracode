@@ -1,0 +1,1203 @@
+//! The desktop's end of remote sessions against a relay on this machine: the real connection
+//! task, a relay that is just a WebSocket server the test drives, and a made-up app behind it.
+
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::result_large_err)]
+
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
+
+use aura_protocol::{
+    AuraEvent, EventBatch, SessionStatus, UiAnswer,
+    remote::RemoteLink,
+    session::{ChatAttach, ChatStatusUpdate, HistoryItem, HistoryPage, PromptAck},
+    workspace::WorkspaceChat,
+};
+use aura_remote::{
+    Backend, BackendError, BoxFuture, Config, Frames, Overview, RemoteAgent, Service, Statuses,
+    crypto::{self, Channel, Side},
+};
+use futures::{SinkExt, StreamExt};
+use serde_json::{Value, json};
+use tokio::net::TcpListener;
+use tokio_tungstenite::{
+    WebSocketStream,
+    tungstenite::{
+        Message,
+        handshake::server::{Request, Response},
+    },
+};
+
+#[derive(Default)]
+struct App {
+    frames: Mutex<HashMap<String, Frames>>,
+    statuses: Mutex<HashMap<String, Statuses>>,
+    sent: Mutex<Vec<(String, String)>>,
+    answered: Mutex<Vec<String>>,
+    released: Mutex<Vec<String>>,
+    status: Mutex<Option<SessionStatus>>,
+}
+
+fn chat(id: &str, status: SessionStatus) -> WorkspaceChat {
+    serde_json::from_value(json!({
+        "chat": {
+            "id": id, "title": "Fix the login form", "agent_id": "claude-code",
+            "agent_host": { "type": "native" }, "agent_name": "Claude Code", "folder": "/work/app",
+            "folder_state": "ok", "status": status, "needs_attention": false,
+            "created_at": 1, "updated_at": 2,
+        },
+        "project_id": "p1", "folder_id": "f1", "pinned": false, "archived": false,
+    }))
+    .expect("chat")
+}
+
+fn page(chat_id: &str, items: Vec<HistoryItem>) -> HistoryPage {
+    HistoryPage {
+        chat_id: chat_id.into(),
+        items,
+        has_more: false,
+        before_seq: None,
+        cut_turn_id: None,
+        unsaved_from: None,
+        skipped: 0,
+        turn_agents: vec![],
+    }
+}
+
+fn said(seq: u32, text: &str) -> HistoryItem {
+    HistoryItem {
+        seq,
+        turn_id: Some("t1".into()),
+        at: 0,
+        event: AuraEvent::MessageDelta {
+            message_id: format!("m{seq}"),
+            text: text.into(),
+        },
+    }
+}
+
+fn missing() -> BackendError {
+    BackendError::new("not_found", "That chat is no longer here.")
+}
+
+impl Backend for App {
+    fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
+        Box::pin(async move {
+            let status = self
+                .status
+                .lock()
+                .expect("status")
+                .unwrap_or(SessionStatus::Ready);
+            Ok(Overview {
+                host_name: "Studio".into(),
+                projects: vec![
+                    serde_json::from_value(json!({
+                        "id": "p1", "name": "app", "color": null, "default_agent": "claude-code",
+                        "default_model": null, "created_at": 1, "updated_at": 2,
+                        "folders": [{
+                            "id": "f1", "project_id": "p1", "display_name": "app", "path": "/work/app",
+                            "folder_state": "ok", "unavailable_reason": null, "kind": "git",
+                            "git_remote_url": null, "git_default_branch": "main",
+                        }],
+                    }))
+                    .expect("project"),
+                ],
+                chats: vec![chat("c1", status)],
+                agents: vec![RemoteAgent {
+                    id: "claude-code".into(),
+                    name: "Claude Code".into(),
+                    available: true,
+                }],
+                default_agent: Some("claude-code".into()),
+            })
+        })
+    }
+
+    fn watch(&self, owner: &str, statuses: Statuses) -> Result<(), BackendError> {
+        self.statuses
+            .lock()
+            .expect("statuses")
+            .insert(owner.into(), statuses);
+        Ok(())
+    }
+
+    fn attach<'a>(
+        &'a self,
+        chat_id: &'a str,
+        owner: &'a str,
+        frames: Frames,
+    ) -> BoxFuture<'a, Result<ChatAttach, BackendError>> {
+        Box::pin(async move {
+            if chat_id != "c1" && chat_id != "big" {
+                return Err(missing());
+            }
+            self.frames
+                .lock()
+                .expect("frames")
+                .insert(owner.into(), frames);
+            let items = if chat_id == "big" {
+                (0..400).map(|seq| said(seq, &"x".repeat(4096))).collect()
+            } else {
+                vec![said(4, "Earlier answer")]
+            };
+            Ok(serde_json::from_value(json!({
+                "subscription_id": "s1",
+                "next_seq": 5,
+                "snapshot": {
+                    "chat": chat(chat_id, SessionStatus::Ready).chat,
+                    "session": aura_protocol::SessionInfo::default(),
+                    "queue": [], "open_turn_id": null, "usage": null, "limits": null,
+                    "last_error": null, "auth": null,
+                    "storage": aura_protocol::session::StorageStatus::default(),
+                },
+                "history": page(chat_id, items),
+            }))
+            .expect("attach"))
+        })
+    }
+
+    fn release(&self, owner: &str) {
+        self.frames.lock().expect("frames").remove(owner);
+        self.statuses.lock().expect("statuses").remove(owner);
+        self.released.lock().expect("released").push(owner.into());
+    }
+
+    fn history<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _before_seq: u32,
+    ) -> BoxFuture<'a, Result<HistoryPage, BackendError>> {
+        Box::pin(async move {
+            if chat_id != "c1" {
+                return Err(missing());
+            }
+            Ok(page(
+                chat_id,
+                vec![
+                    HistoryItem {
+                        seq: 1,
+                        turn_id: Some("t1".into()),
+                        at: 0,
+                        event: AuraEvent::UserMessageDelta {
+                            message_id: "u1".into(),
+                            text: "Run the tests".into(),
+                        },
+                    },
+                    said(2, "All 12 passed."),
+                ],
+            ))
+        })
+    }
+
+    fn send<'a>(
+        &'a self,
+        chat_id: &'a str,
+        text: String,
+    ) -> BoxFuture<'a, Result<PromptAck, BackendError>> {
+        Box::pin(async move {
+            self.sent.lock().expect("sent").push((chat_id.into(), text));
+            Ok(PromptAck {
+                prompt_id: "prompt-1".into(),
+                queued: false,
+            })
+        })
+    }
+
+    fn interrupt<'a>(&'a self, chat_id: &'a str) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            self.answered
+                .lock()
+                .expect("answered")
+                .push(format!("stop {chat_id}"));
+            Ok(())
+        })
+    }
+
+    fn permission<'a>(
+        &'a self,
+        chat_id: &'a str,
+        request_id: &'a str,
+        option_id: Option<String>,
+    ) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            if request_id == "question" {
+                return Err(BackendError::new(
+                    "request_not_pending",
+                    "That request is not waiting.",
+                ));
+            }
+            self.answered
+                .lock()
+                .expect("answered")
+                .push(format!("permission {chat_id} {request_id} {option_id:?}"));
+            Ok(())
+        })
+    }
+
+    fn answer<'a>(
+        &'a self,
+        chat_id: &'a str,
+        request_id: &'a str,
+        answer: Option<UiAnswer>,
+    ) -> BoxFuture<'a, Result<(), BackendError>> {
+        Box::pin(async move {
+            self.answered
+                .lock()
+                .expect("answered")
+                .push(format!("answer {chat_id} {request_id} {answer:?}"));
+            Ok(())
+        })
+    }
+
+    fn create<'a>(
+        &'a self,
+        folder_id: &'a str,
+        agent_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<WorkspaceChat, BackendError>> {
+        Box::pin(async move {
+            if folder_id != "f1" {
+                return Err(BackendError::new(
+                    "not_found",
+                    "That folder is no longer here.",
+                ));
+            }
+            self.answered
+                .lock()
+                .expect("answered")
+                .push(format!("create {folder_id} {agent_id:?}"));
+            Ok(chat("c2", SessionStatus::Starting))
+        })
+    }
+}
+
+type Server = WebSocketStream<tokio::net::TcpStream>;
+
+/// The relay's side of the desktop's socket, and what the desktop asked for when it connected.
+struct Relay {
+    socket: Server,
+    path: String,
+    authorization: String,
+}
+
+impl Relay {
+    async fn accept(listener: &TcpListener) -> Self {
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(10), listener.accept())
+            .await
+            .expect("the desktop connects")
+            .expect("accept");
+        let seen = Arc::new(Mutex::new((String::new(), String::new())));
+        let saw = seen.clone();
+        let socket = tokio_tungstenite::accept_hdr_async(
+            stream,
+            move |request: &Request, response: Response| {
+                *saw.lock().expect("seen") = (
+                    request.uri().path().to_owned(),
+                    request
+                        .headers()
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or_default()
+                        .to_owned(),
+                );
+                Ok(response)
+            },
+        )
+        .await
+        .expect("handshake");
+        let (path, authorization) = seen.lock().expect("seen").clone();
+        Self {
+            socket,
+            path,
+            authorization,
+        }
+    }
+
+    async fn send(&mut self, frame: impl Into<String>) {
+        self.socket
+            .send(Message::text(frame.into()))
+            .await
+            .expect("send");
+    }
+
+    /// The desktop's next frame, keep-alives aside.
+    async fn next(&mut self) -> String {
+        loop {
+            let message = tokio::time::timeout(Duration::from_secs(5), self.socket.next())
+                .await
+                .expect("a frame within 5s")
+                .expect("socket open")
+                .expect("frame");
+            match message {
+                Message::Text(text) if text.as_str() == "ping" => self.send("pong").await,
+                Message::Text(text) => return text.as_str().to_owned(),
+                _ => {}
+            }
+        }
+    }
+
+    async fn silent(&mut self) {
+        let quiet = tokio::time::timeout(Duration::from_millis(250), self.socket.next()).await;
+        assert!(quiet.is_err(), "unexpected frame: {quiet:?}");
+    }
+}
+
+/// A browser, as the relay sees it: a connection id, and the session it runs through it.
+struct Browser {
+    cid: String,
+    channel: Channel,
+    next: u32,
+    events: Vec<Value>,
+}
+
+impl Browser {
+    /// Says hello with a credential and checks the desktop's first sealed message.
+    async fn hello(
+        relay: &mut Relay,
+        cid: &str,
+        kind: &str,
+        id: &str,
+        key: &[u8; 32],
+    ) -> (Self, Value) {
+        let nonce: [u8; 16] = crypto::random().expect("nonce");
+        relay.send(format!("o{cid}")).await;
+        relay
+            .send(format!(
+                "m{cid} H{}",
+                json!({ "v": 1, "kind": kind, "id": id, "nonce": crypto::encode(&nonce) })
+            ))
+            .await;
+        let welcome = relay.next().await;
+        let welcome: Value =
+            serde_json::from_str(welcome.strip_prefix(&format!("m{cid} W")).expect("welcome"))
+                .expect("json");
+        assert_eq!(welcome["v"], 1);
+        let host_nonce =
+            crypto::decode::<16>(welcome["nonce"].as_str().expect("nonce")).expect("16 bytes");
+        let mut channel = Channel::new(
+            Side::Client,
+            key,
+            &nonce,
+            &host_nonce,
+            &format!("{kind}|{id}"),
+        )
+        .expect("channel");
+        let ready = relay.next().await;
+        let ready = channel
+            .open(ready.strip_prefix(&format!("m{cid} E")).expect("sealed"))
+            .expect("the desktop holds the key");
+        let browser = Self {
+            cid: cid.into(),
+            channel,
+            next: 1,
+            events: Vec::new(),
+        };
+        (browser, serde_json::from_slice(&ready).expect("ready"))
+    }
+
+    fn open(&mut self, frame: &str) -> Value {
+        let sealed = frame
+            .strip_prefix(&format!("m{} E", self.cid))
+            .unwrap_or_else(|| panic!("not a sealed message for this browser: {frame}"));
+        serde_json::from_slice(&self.channel.open(sealed).expect("opens in order")).expect("json")
+    }
+
+    /// Sends a request and returns its reply, setting aside events that arrive first.
+    async fn request(&mut self, relay: &mut Relay, mut body: Value) -> Value {
+        let id = self.next;
+        self.next += 1;
+        body["id"] = json!(id);
+        let sealed = self
+            .channel
+            .seal(body.to_string().as_bytes())
+            .expect("seal");
+        relay.send(format!("m{} E{sealed}", self.cid)).await;
+        loop {
+            let frame = relay.next().await;
+            if frame == format!("a{}", self.cid) {
+                self.events.push(json!({ "accepted": true }));
+                continue;
+            }
+            let message = self.open(&frame);
+            if message["re"] == json!(id) {
+                return message;
+            }
+            self.events.push(message);
+        }
+    }
+
+    async fn event(&mut self, relay: &mut Relay) -> Value {
+        if !self.events.is_empty() {
+            return self.events.remove(0);
+        }
+        let frame = relay.next().await;
+        self.open(&frame)
+    }
+}
+
+struct Rig {
+    _folder: tempfile::TempDir,
+    listener: TcpListener,
+    service: Service,
+    app: Arc<App>,
+    changes: Arc<AtomicUsize>,
+    path: std::path::PathBuf,
+}
+
+async fn rig() -> Rig {
+    let folder = tempfile::tempdir().expect("folder");
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listen");
+    let app = Arc::new(App::default());
+    let changes = Arc::new(AtomicUsize::new(0));
+    let counted = changes.clone();
+    let path = folder.path().join("remote.json");
+    let service = Service::start(
+        Config {
+            path: path.clone(),
+            relay: format!(
+                "ws://127.0.0.1:{}",
+                listener.local_addr().expect("address").port()
+            ),
+            site: "https://auracode.test".into(),
+            host_name: "Studio".into(),
+            backend: app.clone(),
+            changed: Arc::new(move || {
+                counted.fetch_add(1, Ordering::Relaxed);
+            }),
+        },
+        &tokio::runtime::Handle::current(),
+    )
+    .expect("service");
+    Rig {
+        _folder: folder,
+        listener,
+        service,
+        app,
+        changes,
+        path,
+    }
+}
+
+/// A pairing link's parts: the desktop's id, the pairing id and its key.
+fn link(url: &str) -> (String, String, [u8; 32]) {
+    let fragment = url
+        .strip_prefix("https://auracode.test/remote#")
+        .expect("link");
+    let parts: Vec<&str> = fragment.split('.').collect();
+    assert_eq!(parts.len(), 3);
+    (
+        parts[0].to_owned(),
+        parts[1].to_owned(),
+        crypto::decode(parts[2]).expect("key"),
+    )
+}
+
+async fn online(rig: &Rig) -> Relay {
+    rig.service.set_enabled(true).expect("enable");
+    let mut relay = Relay::accept(&rig.listener).await;
+    assert_eq!(relay.next().await, "l[]");
+    relay
+}
+
+/// Pairs a browser through a fresh link and returns it with its device's id and key.
+async fn pair(rig: &Rig, relay: &mut Relay, cid: &str) -> (Browser, String, [u8; 32]) {
+    let (_, pairing, key) = link(&rig.service.pair().expect("pairing").url);
+    let (mut browser, _) = Browser::hello(relay, cid, "pair", &pairing, &key).await;
+    let paired = browser
+        .request(relay, json!({ "op": "pair", "name": "Phone" }))
+        .await;
+    assert_eq!(paired["ok"], true, "{paired}");
+    browser.events.clear();
+    let device = paired["data"]["device_id"].as_str().expect("id").to_owned();
+    let key =
+        crypto::decode(paired["data"]["device_key"].as_str().expect("key")).expect("32 bytes");
+    (browser, device, key)
+}
+
+#[tokio::test]
+async fn connects_only_while_remote_access_is_on_and_as_this_desktop() {
+    let rig = rig().await;
+    assert_eq!(rig.service.status().link, RemoteLink::Off);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), rig.listener.accept())
+            .await
+            .is_err(),
+        "connected while remote access was off"
+    );
+    let relay = online(&rig).await;
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(&rig.path).expect("saved")).expect("json");
+    assert_eq!(
+        relay.path,
+        format!(
+            "/api/remote/v1/host/{}",
+            saved["host_id"].as_str().expect("id")
+        )
+    );
+    assert_eq!(
+        relay.authorization,
+        format!("Bearer {}", saved["host_key"].as_str().expect("key"))
+    );
+    let status = rig.service.status();
+    assert!(status.enabled);
+    assert_eq!(status.link, RemoteLink::Online);
+    assert_eq!(status.host_name, "Studio");
+
+    // Turning it off closes the socket, and nothing connects again.
+    let mut relay = relay;
+    rig.service.set_enabled(false).expect("disable");
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), relay.socket.next())
+            .await
+            .expect("closes")
+        {
+            None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
+            Some(Ok(_)) => {}
+        }
+    }
+    assert_eq!(rig.service.status().link, RemoteLink::Off);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), rig.listener.accept())
+            .await
+            .is_err()
+    );
+    assert!(rig.changes.load(Ordering::Relaxed) >= 3);
+}
+
+#[tokio::test]
+async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let pairing = rig.service.pair().expect("pairing");
+    let (host, id, key) = link(&pairing.url);
+    assert!(relay.path.ends_with(&host));
+    assert_eq!(
+        rig.service.status().pairing_expires_at,
+        Some(pairing.expires_at)
+    );
+
+    let (mut phone, ready) =
+        Browser::hello(&mut relay, "aaaaaaaaaaaaaaaa", "pair", &id, &key).await;
+    assert_eq!(
+        ready,
+        json!({ "ev": "ready", "host_name": "Studio", "paired": false })
+    );
+    // A pairing link opens nothing but pairing.
+    let early = phone.request(&mut relay, json!({ "op": "overview" })).await;
+    assert_eq!(early["error"]["code"], "pair_first");
+    assert_eq!(
+        phone.event(&mut relay).await,
+        json!({ "accepted": true }),
+        "the relay is told once the key is proven"
+    );
+    let paired = phone
+        .request(
+            &mut relay,
+            json!({ "op": "pair", "name": "  Phone\n(Safari) " }),
+        )
+        .await;
+    assert_eq!(paired["ok"], true, "{paired}");
+    let status = rig.service.status();
+    assert_eq!(status.pairing_expires_at, None, "the link is spent");
+    assert_eq!(status.devices.len(), 1);
+    assert_eq!(status.devices[0].name, "Phone (Safari)");
+    assert!(status.devices[0].connected);
+    assert_eq!(status.devices[0].id, paired["data"]["device_id"]);
+    let saved = std::fs::read_to_string(&rig.path).expect("saved");
+    assert!(
+        !saved.contains(&crypto::encode(&key)),
+        "the pairing key is never saved"
+    );
+
+    // The same session is the device's now.
+    let overview = phone.request(&mut relay, json!({ "op": "overview" })).await;
+    assert_eq!(overview["data"]["host_name"], "Studio");
+    assert_eq!(overview["data"]["chats"][0]["chat"]["id"], "c1");
+    assert_eq!(overview["data"]["agents"][0]["id"], "claude-code");
+
+    let opened = phone
+        .request(&mut relay, json!({ "op": "open", "chat_id": "c1" }))
+        .await;
+    assert_eq!(opened["data"]["next_seq"], 5);
+    assert_eq!(
+        opened["data"]["history"]["items"][0]["event"]["text"],
+        "Earlier answer"
+    );
+    // Live events and status changes reach the browser sealed.
+    let owner = "auracode-remote:aaaaaaaaaaaaaaaa";
+    let frames = rig
+        .app
+        .frames
+        .lock()
+        .expect("frames")
+        .get(owner)
+        .cloned()
+        .expect("following");
+    assert!(frames(&EventBatch {
+        chat_id: "c1".into(),
+        seq_start: 5,
+        events: vec![AuraEvent::MessageDelta {
+            message_id: "m9".into(),
+            text: "Live".into()
+        }],
+    }));
+    let live = phone.event(&mut relay).await;
+    assert_eq!(live["ev"], "frame");
+    assert_eq!(live["batch"]["seq_start"], 5);
+    assert_eq!(live["batch"]["events"][0]["text"], "Live");
+    let statuses = rig
+        .app
+        .statuses
+        .lock()
+        .expect("statuses")
+        .get("auracode-remote")
+        .cloned()
+        .expect("watching");
+    assert!(statuses(&ChatStatusUpdate {
+        chat_id: "c1".into(),
+        status: SessionStatus::Running,
+        needs_attention: true,
+        title: None,
+        updated_at: 9,
+    }));
+    let update = phone.event(&mut relay).await;
+    assert_eq!(update["ev"], "chat");
+    assert_eq!(update["update"]["needs_attention"], true);
+
+    let sent = phone
+        .request(
+            &mut relay,
+            json!({ "op": "send", "chat_id": "c1", "text": "Run the tests" }),
+        )
+        .await;
+    assert_eq!(
+        sent["data"],
+        json!({ "prompt_id": "prompt-1", "queued": false })
+    );
+    assert_eq!(
+        *rig.app.sent.lock().expect("sent"),
+        [("c1".to_owned(), "Run the tests".to_owned())]
+    );
+    for empty in ["", "  \n"] {
+        let refused = phone
+            .request(
+                &mut relay,
+                json!({ "op": "send", "chat_id": "c1", "text": empty }),
+            )
+            .await;
+        assert_eq!(refused["error"]["code"], "empty");
+    }
+    let allowed = phone
+        .request(&mut relay, json!({ "op": "permission", "chat_id": "c1", "request_id": "r1", "option_id": "allow" }))
+        .await;
+    assert_eq!(
+        allowed,
+        json!({ "re": phone.next - 1, "ok": true, "data": {} })
+    );
+    phone.request(&mut relay, json!({ "op": "answer", "chat_id": "c1", "request_id": "q1", "answer": { "type": "confirm", "yes": true } })).await;
+    phone
+        .request(&mut relay, json!({ "op": "interrupt", "chat_id": "c1" }))
+        .await;
+    let created = phone
+        .request(
+            &mut relay,
+            json!({ "op": "create", "folder_id": "f1", "agent_id": null, "text": "Start here" }),
+        )
+        .await;
+    assert_eq!(created["data"]["chat"]["chat"]["id"], "c2");
+    assert_eq!(
+        *rig.app.answered.lock().expect("answered"),
+        [
+            "permission c1 r1 Some(\"allow\")",
+            "answer c1 q1 Some(Confirm { yes: true })",
+            "stop c1",
+            "create f1 None",
+        ]
+    );
+    assert_eq!(
+        rig.app.sent.lock().expect("sent")[1],
+        ("c2".to_owned(), "Start here".to_owned())
+    );
+    let gone = phone
+        .request(&mut relay, json!({ "op": "open", "chat_id": "nope" }))
+        .await;
+    assert_eq!(
+        gone["error"],
+        json!({ "code": "not_found", "message": "That chat is no longer here." })
+    );
+    let history = phone
+        .request(
+            &mut relay,
+            json!({ "op": "history", "chat_id": "c1", "before_seq": 4 }),
+        )
+        .await;
+    assert_eq!(history["data"]["items"].as_array().expect("items").len(), 2);
+
+    // A page too large for one message arrives as its newest part, with the rest still to fetch.
+    let big = phone
+        .request(&mut relay, json!({ "op": "open", "chat_id": "big" }))
+        .await;
+    let items = big["data"]["history"]["items"].as_array().expect("items");
+    assert!(items.len() < 400 && !items.is_empty());
+    assert_eq!(items.last().expect("newest")["seq"], 399);
+    assert_eq!(big["data"]["history"]["has_more"], true);
+    assert_eq!(big["data"]["history"]["before_seq"], items[0]["seq"]);
+
+    // Another profile opens: the browser is told to start over, and nothing is followed.
+    rig.service.profile_changed();
+    assert_eq!(phone.event(&mut relay).await, json!({ "ev": "reset" }));
+    assert!(rig.app.frames.lock().expect("frames").is_empty());
+
+    // The browser leaves: its device shows as away.
+    relay.send("caaaaaaaaaaaaaaaa").await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!rig.service.status().devices[0].connected);
+    assert!(
+        rig.app
+            .released
+            .lock()
+            .expect("released")
+            .contains(&owner.to_owned())
+    );
+}
+
+#[tokio::test]
+async fn only_the_holder_of_a_current_key_gets_a_session() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (_, device, key) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+
+    // A paired device connects again with its own key.
+    let (mut again, ready) =
+        Browser::hello(&mut relay, "bbbbbbbbbbbbbbbb", "device", &device, &key).await;
+    assert_eq!(ready["paired"], true);
+    assert_eq!(
+        again.request(&mut relay, json!({ "op": "overview" })).await["ok"],
+        true
+    );
+    assert_eq!(again.events, [json!({ "accepted": true })]);
+
+    // An unknown device, a spent pairing link and another protocol version are refused in words.
+    for (cid, hello, reason) in [
+        (
+            "cccccccccccccccc",
+            json!({ "v": 1, "kind": "device", "id": "nobodyhere1", "nonce": crypto::encode(&[0u8; 16]) }),
+            "unknown",
+        ),
+        (
+            "dddddddddddddddd",
+            json!({ "v": 1, "kind": "pair", "id": "spentlink11", "nonce": crypto::encode(&[0u8; 16]) }),
+            "unknown",
+        ),
+        (
+            "eeeeeeeeeeeeeeee",
+            json!({ "v": 2, "kind": "device", "id": device, "nonce": crypto::encode(&[0u8; 16]) }),
+            "version",
+        ),
+    ] {
+        relay.send(format!("o{cid}")).await;
+        relay.send(format!("m{cid} H{hello}")).await;
+        assert_eq!(
+            relay.next().await,
+            format!("m{cid} R{}", json!({ "reason": reason }))
+        );
+        assert_eq!(relay.next().await, format!("c{cid}"));
+    }
+
+    // The right device id with the wrong key: the hello is answered (it proves nothing), and the
+    // first message that key seals ends the session without an answer.
+    let (mut thief, _) = {
+        let nonce: [u8; 16] = crypto::random().expect("nonce");
+        relay.send("offffffffffffffff").await;
+        relay
+            .send(format!(
+                "mffffffffffffffff H{}",
+                json!({ "v": 1, "kind": "device", "id": device, "nonce": crypto::encode(&nonce) })
+            ))
+            .await;
+        let welcome = relay.next().await;
+        let welcome: Value = serde_json::from_str(
+            welcome
+                .strip_prefix("mffffffffffffffff W")
+                .expect("welcome"),
+        )
+        .expect("json");
+        let host_nonce =
+            crypto::decode::<16>(welcome["nonce"].as_str().expect("nonce")).expect("nonce");
+        let ready = relay.next().await;
+        let mut wrong = Channel::new(
+            Side::Client,
+            &[9u8; 32],
+            &nonce,
+            &host_nonce,
+            &format!("device|{device}"),
+        )
+        .expect("channel");
+        assert!(
+            wrong
+                .open(ready.strip_prefix("mffffffffffffffff E").expect("sealed"))
+                .is_err(),
+            "a wrong key opened the desktop's message"
+        );
+        (
+            Browser {
+                cid: "ffffffffffffffff".into(),
+                channel: wrong,
+                next: 1,
+                events: vec![],
+            },
+            (),
+        )
+    };
+    let sealed = thief
+        .channel
+        .seal(br#"{"id":1,"op":"overview"}"#)
+        .expect("seal");
+    relay.send(format!("mffffffffffffffff E{sealed}")).await;
+    assert_eq!(relay.next().await, "cffffffffffffffff");
+
+    // Anything out of place ends a session: a second hello, a replayed message, words in the clear.
+    let (mut odd, _) =
+        Browser::hello(&mut relay, "gggggggggggggggg", "device", &device, &key).await;
+    let first = odd
+        .channel
+        .seal(br#"{"id":1,"op":"overview"}"#)
+        .expect("seal");
+    relay.send(format!("mgggggggggggggggg E{first}")).await;
+    assert_eq!(relay.next().await, "agggggggggggggggg");
+    odd.open(&relay.next().await);
+    relay.send(format!("mgggggggggggggggg E{first}")).await;
+    assert_eq!(
+        relay.next().await,
+        "cgggggggggggggggg",
+        "a replayed message was accepted"
+    );
+    for (cid, payload) in [
+        ("hhhhhhhhhhhhhhhh", "E"),
+        ("iiiiiiiiiiiiiiii", "Xhello"),
+        ("jjjjjjjjjjjjjjjj", "H{not json"),
+    ] {
+        relay.send(format!("o{cid}")).await;
+        relay.send(format!("m{cid} {payload}")).await;
+        assert_eq!(relay.next().await, format!("c{cid}"));
+    }
+    // A message for a connection the desktop never heard of is answered as closed.
+    relay.send("mzzzzzzzzzzzzzzzz Ewhatever").await;
+    assert_eq!(relay.next().await, "czzzzzzzzzzzzzzzz");
+
+    // A request that is not one of the operations ends the session too.
+    let (mut curious, _) =
+        Browser::hello(&mut relay, "kkkkkkkkkkkkkkkk", "device", &device, &key).await;
+    let sealed = curious
+        .channel
+        .seal(br#"{"id":1,"op":"shell","command":"whoami"}"#)
+        .expect("seal");
+    relay.send(format!("mkkkkkkkkkkkkkkkk E{sealed}")).await;
+    assert_eq!(relay.next().await, "ckkkkkkkkkkkkkkkk");
+
+    // Removing the device ends its open session and refuses its key from then on.
+    rig.service.remove_device(&device).expect("remove");
+    // Both of the device's sessions end: the one that paired it and the later one.
+    let mut ended = vec![relay.next().await, relay.next().await];
+    ended.sort();
+    assert_eq!(ended, ["caaaaaaaaaaaaaaaa", "cbbbbbbbbbbbbbbbb"]);
+    relay.send("ollllllllllllllll").await;
+    relay
+        .send(format!(
+            "mllllllllllllllll H{}",
+            json!({ "v": 1, "kind": "device", "id": device, "nonce": crypto::encode(&[1u8; 16]) })
+        ))
+        .await;
+    assert_eq!(
+        relay.next().await,
+        format!("mllllllllllllllll R{}", json!({ "reason": "unknown" }))
+    );
+    assert_eq!(relay.next().await, "cllllllllllllllll");
+    assert!(rig.service.status().devices.is_empty());
+    relay.silent().await;
+}
+
+#[tokio::test]
+async fn a_browser_can_forget_the_desktop() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (mut phone, device, key) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    // The same device, open in a second tab.
+    let (mut tab, _) =
+        Browser::hello(&mut relay, "cccccccccccccccc", "device", &device, &key).await;
+    assert_eq!(
+        tab.request(&mut relay, json!({ "op": "overview" })).await["ok"],
+        true
+    );
+    let forgot = phone.request(&mut relay, json!({ "op": "forget" })).await;
+    assert_eq!(forgot["ok"], true);
+    // Every session of the device ends, not only the one that asked.
+    let mut ended = vec![relay.next().await, relay.next().await];
+    ended.sort();
+    assert_eq!(ended, ["caaaaaaaaaaaaaaaa", "ccccccccccccccccc"]);
+    assert!(rig.service.status().devices.is_empty());
+    relay.send("obbbbbbbbbbbbbbbb").await;
+    relay
+        .send(format!(
+            "mbbbbbbbbbbbbbbbb H{}",
+            json!({ "v": 1, "kind": "device", "id": device, "nonce": crypto::encode(&key[..16]) })
+        ))
+        .await;
+    assert!(relay.next().await.contains("unknown"));
+}
+
+#[tokio::test]
+async fn a_linked_bot_calls_tools_with_its_token() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let link = rig.service.create_bot("Grok").expect("bot");
+    assert_eq!(link.name, "Grok");
+    let reference = link
+        .url
+        .strip_prefix(&format!(
+            "https://auracode.test{}",
+            relay.path.replace("/host/", "/mcp/")
+        ))
+        .and_then(|rest| rest.strip_prefix('/'))
+        .expect("the bot's address names this desktop");
+    let (bot, token) = reference.split_once('.').expect("id.token");
+    // The relay is told the link's id and the hash of its token, never the token.
+    let listed = relay.next().await;
+    assert_eq!(
+        listed,
+        format!("l{}", json!([{ "id": bot, "hash": crypto::hash(token) }]))
+    );
+    assert!(
+        !std::fs::read_to_string(&rig.path)
+            .expect("saved")
+            .contains(token)
+    );
+
+    let call =
+        async |relay: &mut Relay, rid: &str, token: &str, tool: &str, args: Value| -> Value {
+            relay
+                .send(format!(
+                    "b{}",
+                    json!({ "rid": rid, "bot": bot, "token": token, "tool": tool, "args": args })
+                ))
+                .await;
+            let answer = relay.next().await;
+            let answer: Value =
+                serde_json::from_str(answer.strip_prefix('b').expect("bot answer")).expect("json");
+            assert_eq!(answer["rid"], rid);
+            answer
+        };
+    let chats = call(&mut relay, "r1", token, "list_chats", json!({})).await;
+    assert_eq!(chats["error"], false);
+    assert_eq!(
+        chats["text"],
+        "Chats on Studio, most recently active first:\n- c1 \"Fix the login form\" in app with Claude Code: idle\n"
+    );
+    let projects = call(&mut relay, "r2", token, "list_projects", Value::Null).await;
+    assert_eq!(
+        projects["text"],
+        "Project \"app\" (usual agent: claude-code)\n- folder f1: app\n\nAgents:\n- claude-code: Claude Code\nNew chats use claude-code unless the project names another.\n"
+    );
+    let read = call(
+        &mut relay,
+        "r3",
+        token,
+        "read_chat",
+        json!({ "chat_id": "c1" }),
+    )
+    .await;
+    assert_eq!(
+        read["text"],
+        "Chat c1 \"Fix the login form\" with Claude Code: idle.\n\nUser: Run the tests\nAgent: All 12 passed.\nThe turn is still running.\n"
+    );
+    let sent = call(
+        &mut relay,
+        "r4",
+        token,
+        "send_message",
+        json!({ "chat_id": "c1", "text": "Again" }),
+    )
+    .await;
+    assert!(sent["text"].as_str().expect("text").starts_with("Sent:"));
+    assert_eq!(
+        rig.app.sent.lock().expect("sent")[0],
+        ("c1".to_owned(), "Again".to_owned())
+    );
+    let started = call(
+        &mut relay,
+        "r5",
+        token,
+        "start_chat",
+        json!({ "folder_id": "f1", "text": "Begin" }),
+    )
+    .await;
+    assert!(
+        started["text"]
+            .as_str()
+            .expect("text")
+            .starts_with("Started chat c2 with Claude Code.")
+    );
+    call(
+        &mut relay,
+        "r6",
+        token,
+        "respond_to_request",
+        json!({ "chat_id": "c1", "request_id": "r1", "option_id": "allow" }),
+    )
+    .await;
+    // Declining without knowing the kind: a question is dismissed when it is not a permission.
+    call(
+        &mut relay,
+        "r7",
+        token,
+        "respond_to_request",
+        json!({ "chat_id": "c1", "request_id": "question" }),
+    )
+    .await;
+    call(
+        &mut relay,
+        "r8",
+        token,
+        "stop_chat",
+        json!({ "chat_id": "c1" }),
+    )
+    .await;
+    assert_eq!(
+        *rig.app.answered.lock().expect("answered"),
+        [
+            "create f1 None",
+            "permission c1 r1 Some(\"allow\")",
+            "answer c1 question None",
+            "stop c1"
+        ]
+    );
+
+    // Failures are answers a bot can read.
+    for (tool, args, wanted) in [
+        (
+            "read_chat",
+            json!({ "chat_id": "nope" }),
+            "There is no chat with that id.",
+        ),
+        (
+            "read_chat",
+            json!({ "chat": "c1" }),
+            "arguments are not valid",
+        ),
+        (
+            "send_message",
+            json!({ "chat_id": "c1", "text": " " }),
+            "The message is empty.",
+        ),
+        (
+            "start_chat",
+            json!({ "folder_id": "elsewhere", "text": "Hi" }),
+            "That folder is no longer here.",
+        ),
+        (
+            "run_shell",
+            json!({ "command": "whoami" }),
+            "There is no such tool.",
+        ),
+    ] {
+        let answer = call(&mut relay, "rx", token, tool, args).await;
+        assert_eq!(answer["error"], true, "{tool}");
+        assert!(
+            answer["text"].as_str().expect("text").contains(wanted),
+            "{tool}: {answer}"
+        );
+    }
+    // A wrong token is refused here, whatever the relay let through.
+    let wrong = call(
+        &mut relay,
+        "r9",
+        &crypto::encode(&[3u8; 32]),
+        "list_chats",
+        json!({}),
+    )
+    .await;
+    assert_eq!(wrong["error"], true);
+    assert!(wrong["text"].as_str().expect("text").contains("removed"));
+
+    // Waiting returns when the chat stops working.
+    *rig.app.status.lock().expect("status") = Some(SessionStatus::Running);
+    relay.send(format!("b{}", json!({ "rid": "w1", "bot": bot, "token": token, "tool": "wait_for_chat", "args": { "chat_id": "c1", "timeout_seconds": 20 } }))).await;
+    relay.silent().await;
+    *rig.app.status.lock().expect("status") = Some(SessionStatus::Ready);
+    let watching: Vec<Statuses> = rig
+        .app
+        .statuses
+        .lock()
+        .expect("statuses")
+        .values()
+        .cloned()
+        .collect();
+    for statuses in watching {
+        statuses(&ChatStatusUpdate {
+            chat_id: "c1".into(),
+            status: SessionStatus::Ready,
+            needs_attention: false,
+            title: None,
+            updated_at: 3,
+        });
+    }
+    let waited = relay.next().await;
+    let waited: Value =
+        serde_json::from_str(waited.strip_prefix('b').expect("bot answer")).expect("json");
+    assert_eq!(waited["rid"], "w1");
+    assert!(
+        waited["text"]
+            .as_str()
+            .expect("text")
+            .starts_with("Chat c1 \"Fix the login form\" with Claude Code: idle.")
+    );
+    assert!(
+        rig.app
+            .released
+            .lock()
+            .expect("released")
+            .contains(&"auracode-remote-bot:w1".to_owned())
+    );
+    // And reports, without failing, when the time runs out first.
+    *rig.app.status.lock().expect("status") = Some(SessionStatus::Running);
+    let late = call(
+        &mut relay,
+        "w2",
+        token,
+        "wait_for_chat",
+        json!({ "chat_id": "c1", "timeout_seconds": 1 }),
+    )
+    .await;
+    assert_eq!(late["error"], false);
+    assert!(
+        late["text"]
+            .as_str()
+            .expect("text")
+            .starts_with("Still working after 1 seconds.")
+    );
+
+    // Removing the link tells the relay and ends the token.
+    rig.service.remove_bot(bot).expect("remove");
+    assert_eq!(relay.next().await, "l[]");
+    let removed = call(&mut relay, "r10", token, "list_chats", json!({})).await;
+    assert!(removed["text"].as_str().expect("text").contains("removed"));
+}
+
+#[tokio::test]
+async fn reconnects_after_the_relay_drops_it() {
+    let rig = rig().await;
+    let relay = online(&rig).await;
+    drop(relay);
+    let mut again = Relay::accept(&rig.listener).await;
+    assert_eq!(again.next().await, "l[]");
+    assert_eq!(rig.service.status().link, RemoteLink::Online);
+    // Told it was replaced, it also comes back, as the newest socket.
+    again.send("x").await;
+    let mut third = Relay::accept(&rig.listener).await;
+    assert_eq!(third.next().await, "l[]");
+    rig.service.shutdown();
+}

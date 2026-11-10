@@ -20,7 +20,10 @@ export function Layout({ children }: { children: ReactNode }) {
   // The site follows the system appearance (dark unless the system asks for light), with no
   // switch and nothing stored. Only the device verification frame, which the desktop shows inside
   // its own dialog, is pinned light.
-  const pinned = useLocation().pathname.startsWith("/verify-device");
+  const path = useLocation().pathname;
+  const pinned = path.startsWith("/verify-device");
+  // The remote page is a tool that fills the screen: it has no site header or footer.
+  const tool = path === "/remote" || path.startsWith("/remote/");
   return (
     <html lang="en" data-theme={pinned ? "light" : undefined} className="g-root">
       <head>
@@ -50,9 +53,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <a href="#main" className="skip">
           Skip to content
         </a>
-        <SiteHeader />
+        {tool ? null : <SiteHeader />}
         {children}
-        <SiteFooter />
+        {tool ? null : <SiteFooter />}
         <Enhancements />
         <ScrollRestoration />
         <Scripts />

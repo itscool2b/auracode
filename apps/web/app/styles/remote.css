@@ -1,0 +1,588 @@
+/*
+ * The remote page: a computer's chats on a phone. One column that fills the screen, the bar at
+ * the top and the message box at the bottom staying put while the conversation scrolls between.
+ * It is the only page without the site's header and footer: it is a tool, not a page to read.
+ */
+.remote {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background-color: var(--s-bg);
+  color: var(--s-ink);
+}
+
+/* The page's own buttons (rows and icons) start from nothing: no bevel, the page's face. */
+.remote :is(.remote-icon, .remote-chat-row) {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+
+.remote-centered {
+  display: grid;
+  gap: 20px;
+  justify-items: start;
+  align-content: center;
+  box-sizing: border-box;
+  width: min(100%, 520px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.remote-centered h1 {
+  font-size: clamp(30px, 8vw, 44px);
+  line-height: 1.06;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.remote-centered p {
+  max-width: 44ch;
+  color: var(--s-soft);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.remote-mark {
+  display: inline-flex;
+  color: var(--s-ink);
+}
+
+.remote-screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(100%, 760px);
+  min-height: 0;
+  margin: 0 auto;
+}
+
+.remote-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid var(--s-line);
+}
+
+.remote-bar-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.remote-bar h1 {
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-link {
+  overflow: hidden;
+  color: var(--s-soft);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -4px;
+  border-radius: 50%;
+  color: var(--s-ink);
+  cursor: pointer;
+}
+
+.remote-icon:active {
+  background-color: var(--s-quiet);
+}
+
+@media (hover: hover) {
+  .remote-icon:hover {
+    background-color: var(--s-quiet);
+  }
+}
+
+.remote-menu {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--s-line);
+  background-color: var(--s-card);
+}
+
+.remote-menu p,
+.remote-hint,
+.remote-notice {
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.remote-error {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--g-red);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.remote-list,
+.remote-transcript {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.remote-list {
+  gap: 24px;
+}
+
+.remote-new {
+  align-self: flex-start;
+}
+
+.remote-list h2 {
+  margin-bottom: 8px;
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.remote-chats {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-radius: 20px;
+  background-color: var(--s-card);
+  list-style: none;
+}
+
+.remote-chats > li + li {
+  border-top: 1px solid var(--s-line);
+}
+
+.remote-chat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 16px;
+  color: var(--s-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.remote-chats > li:first-child > .remote-chat-row {
+  border-radius: 20px 20px 0 0;
+}
+
+.remote-chats > li:last-child > .remote-chat-row {
+  border-radius: 0 0 20px 20px;
+}
+
+.remote-chats > li:only-child > .remote-chat-row {
+  border-radius: 20px;
+}
+
+.remote-chat-row:active {
+  background-color: var(--s-quiet);
+}
+
+@media (hover: hover) {
+  .remote-chat-row:hover {
+    background-color: var(--s-quiet);
+  }
+}
+
+.remote-chat-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.remote-chat-text > strong {
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-chat-text > span,
+.remote-chat-row > time {
+  color: var(--s-soft);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.remote-chat-row > time {
+  flex: none;
+}
+
+/* A chat's state at a glance: grey at rest, the ink working, the accent when it needs you. */
+.remote-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--s-line-strong);
+}
+
+.remote-dot[data-tone="working"] {
+  background-color: var(--s-ink);
+  animation: remote-pulse 1.4s ease-in-out infinite;
+}
+
+/* The site has one ink and no accent, so "needs you" is the ink with a ring around it. */
+.remote-dot[data-tone="attention"] {
+  background-color: var(--s-ink);
+  box-shadow: 0 0 0 3px rgb(var(--s-k) / 0.22);
+}
+
+.remote-dot[data-tone="failed"] {
+  background-color: var(--g-red);
+}
+
+@keyframes remote-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remote-dot[data-tone="working"] {
+    animation: none;
+  }
+}
+
+.remote-transcript {
+  gap: 20px;
+}
+
+.remote-earlier {
+  align-self: center;
+}
+
+.remote-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remote-user {
+  align-self: flex-end;
+  max-width: 86%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 20px 20px 6px 20px;
+  background-color: var(--s-quiet);
+  font-size: 16px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.remote-markdown {
+  display: grid;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 25px;
+  overflow-wrap: anywhere;
+}
+
+.remote-markdown :is(h2, h3, h4, h5, h6) {
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.remote-markdown :is(ul, ol) {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.remote-markdown code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background-color: var(--s-quiet);
+  font-family: var(--g-mono);
+  font-size: 0.88em;
+}
+
+.remote-markdown pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 14px;
+  background-color: var(--s-card);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.remote-markdown pre > code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.remote-markdown blockquote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 14px;
+  border-left: 2px solid var(--s-line-strong);
+  color: var(--s-soft);
+}
+
+.remote-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.remote-markdown hr {
+  width: 100%;
+  height: 1px;
+  border: 0;
+  background-color: var(--s-line);
+}
+
+/* The steps between two pieces of the agent's words, folded to a line. */
+.remote-steps {
+  border-radius: 14px;
+  background-color: var(--s-card);
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.remote-steps > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.remote-steps > summary::-webkit-details-marker {
+  display: none;
+}
+
+.remote-steps > summary > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-steps-state {
+  flex: none;
+}
+
+.remote-steps > ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 14px 12px;
+  border-top: 1px solid var(--s-line);
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.remote-steps li[data-state="failed"] {
+  color: var(--g-red);
+}
+
+.remote-steps li[data-state="completed"] {
+  color: var(--s-ink);
+}
+
+/* Something the agent waits on: it stands out, and its buttons are a thumb wide. */
+.remote-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background-color: var(--s-card);
+  box-shadow: inset 0 0 0 1px var(--s-line-strong);
+}
+
+.remote-card-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 23px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.remote-card-actions,
+.remote-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.remote-card-form {
+  display: grid;
+  gap: 12px;
+}
+
+.remote-card fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.remote-card legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 21px;
+  font-weight: 500;
+}
+
+.remote-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.remote-choice > input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--s-ink);
+}
+
+.remote-choice > span {
+  display: grid;
+}
+
+.remote-choice strong {
+  font-weight: 500;
+}
+
+.remote-choice span > span {
+  color: var(--s-soft);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.remote-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.remote-composer {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--s-line);
+}
+
+.remote-composer > textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  resize: none;
+  padding: 10px 16px;
+  border-radius: 22px;
+  /* Sixteen pixels, or iOS zooms the page when the box is tapped. */
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.remote-composer > .g-button,
+.remote-card .g-button,
+.remote-dialog .g-button {
+  flex: none;
+}
+
+.remote-dialog {
+  box-sizing: border-box;
+  width: min(100% - 24px, 480px);
+  padding: 20px;
+  border: 0;
+  border-radius: 24px;
+  background-color: var(--s-bg);
+  color: var(--s-ink);
+  box-shadow:
+    inset 0 0 0 1px var(--s-line-strong),
+    0 24px 60px -20px rgb(0 0 0 / 0.5);
+}
+
+.remote-dialog::backdrop {
+  background-color: rgb(0 0 0 / 0.5);
+}
+
+.remote-dialog > form {
+  display: grid;
+  gap: 8px;
+}
+
+.remote-dialog h2 {
+  margin-bottom: 8px;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.remote-dialog label {
+  margin-top: 6px;
+  color: var(--s-soft);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.remote-dialog :is(select, textarea),
+.remote-card input.g-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.remote-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}

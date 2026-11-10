@@ -34,6 +34,7 @@ aura-core = { workspace = true, features = ["account-sync"] }
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true
+aura-remote.workspace = true
 aura-sync.workspace = true
 zeroize = "1.9.1"
 serde.workspace = true

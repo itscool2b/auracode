@@ -9,4 +9,5 @@ export default [
   route("privacy", "pages/privacy.tsx"),
   route("terms", "pages/terms.tsx"),
   route("changelog", "pages/changelog.tsx"),
+  route("remote", "pages/remote.tsx"),
 ] satisfies RouteConfig;

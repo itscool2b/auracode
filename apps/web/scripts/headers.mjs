@@ -21,7 +21,7 @@ async function visit(path) {
 }
 await visit(fileURLToPath(root));
 const content =
-  `/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com ${[...hashes].join(" ")}; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'\n\n/account*\n  Cache-Control: no-store\n/signin*\n  Cache-Control: no-store\n/signup*\n  Cache-Control: no-store\n` +
+  `/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com ${[...hashes].join(" ")}; connect-src 'self' wss://auracode.si wss://preview.auracode.si https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'\n\n/account*\n  Cache-Control: no-store\n/signin*\n  Cache-Control: no-store\n/signup*\n  Cache-Control: no-store\n/remote*\n  Cache-Control: no-store\n  X-Robots-Tag: noindex, nofollow\n` +
   [
     "/",
     "/download*",
@@ -31,6 +31,7 @@ const content =
     "/privacy*",
     "/terms*",
     "/changelog*",
+    "/remote*",
     "/third-party-notices*",
   ]
     .map((path) => `\n${path}\n  Content-Security-Policy: frame-ancestors 'none'\n`)

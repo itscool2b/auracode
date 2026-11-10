@@ -146,3 +146,26 @@ test("third-party notices are emitted and linked from every page footer", async 
     /\/third-party-notices\*\n {2}Content-Security-Policy: frame-ancestors 'none'/,
   );
 });
+
+test("the remote page is a tool of its own, never cached, framed or indexed", async () => {
+  const html = await readFile(new URL("remote/index.html", root), "utf8");
+  // It fills the screen: no site header or footer around it.
+  assert.doesNotMatch(html, /class="site-nav"|<footer/);
+  assert.match(html, /<main id="main" class="remote">/);
+  // Without JavaScript nothing can be opened or sealed, and the page says so.
+  assert.match(html, /<noscript><p>This page needs JavaScript/);
+  assert.match(html, /<meta name="robots" content="noindex"\/>/);
+  assert.match(html, /<meta name="referrer" content="no-referrer"\/>/);
+  const headers = await readFile(new URL("_headers", root), "utf8");
+  assert.match(
+    headers,
+    /\n\/remote\*\n {2}Cache-Control: no-store\n {2}X-Robots-Tag: noindex, nofollow\n/,
+  );
+  assert.match(headers, /\n\/remote\*\n {2}Content-Security-Policy: frame-ancestors 'none'\n/);
+  // The page talks to the relay on this site and nowhere else.
+  const connect = /connect-src ([^;]*);/.exec(headers)?.[1];
+  assert.equal(
+    connect,
+    "'self' wss://auracode.si wss://preview.auracode.si https://challenges.cloudflare.com",
+  );
+});

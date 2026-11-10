@@ -383,6 +383,20 @@ export const commands = {
 	/**  Reviews a fast-forward push of the chat folder's branch. */
 	gitPushPreview: (chatId: string) => typedError<PushPreview, AppError>(__TAURI_INVOKE("git_push_preview", { chatId })),
 	gitPushApply: (chatId: string, token: string) => typedError<PushResult, AppError>(__TAURI_INVOKE("git_push_apply", { chatId, token })),
+	remoteStatus: () => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_status")),
+	/**
+	 *  Turns remote access on or off. Off closes the connection at once; paired devices and bot
+	 *  links stay saved, and work again when it is back on.
+	 */
+	remoteSetEnabled: (enabled: boolean) => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_set_enabled", { enabled })),
+	/**  Opens a pairing link, good once and for ten minutes. It replaces the link before it. */
+	remotePair: () => typedError<RemotePairing, AppError>(__TAURI_INVOKE("remote_pair")),
+	remoteCancelPairing: () => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_cancel_pairing")),
+	/**  Removes a paired device. Its open sessions end and its key stops working. */
+	remoteRemoveDevice: (id: string) => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_remove_device", { id })),
+	/**  Creates a bot link. Its address carries the bot's token and is returned only here. */
+	remoteCreateBot: (name: string) => typedError<RemoteBotLink, AppError>(__TAURI_INVOKE("remote_create_bot", { name })),
+	remoteRemoveBot: (id: string) => typedError<RemoteStatus, AppError>(__TAURI_INVOKE("remote_remove_bot", { id })),
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
 	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
@@ -3173,6 +3187,52 @@ export type QueuedPrompt = {
 export type RecoverySetup = {
 	id: string,
 	recovery_key: string,
+};
+
+export type RemoteBot = {
+	id: string,
+	name: string,
+	created_at: number,
+	last_used_at: number | null,
+};
+
+/**  A new bot link, shown once: the MCP address a bot connects to. It carries the bot's token. */
+export type RemoteBotLink = {
+	id: string,
+	name: string,
+	url: string,
+};
+
+export type RemoteDevice = {
+	id: string,
+	name: string,
+	created_at: number,
+	last_seen_at: number,
+	/**  It has a session open right now. */
+	connected: boolean,
+};
+
+/**  This computer's connection to the relay. */
+export type RemoteLink = { state: "off" } | { state: "connecting" } | { state: "online" } | 
+/**  Not reachable right now; it keeps trying. `reason` says why in a sentence. */
+{ state: "offline"; reason: string };
+
+/**  A pairing link, shown once: whoever opens it first within its time becomes a device. */
+export type RemotePairing = {
+	url: string,
+	expires_at: number,
+};
+
+export type RemoteStatus = {
+	/**  The person turned remote access on. Nothing connects anywhere while it is off. */
+	enabled: boolean,
+	link: RemoteLink,
+	/**  The name paired browsers show for this computer. */
+	host_name: string,
+	devices: RemoteDevice[],
+	bots: RemoteBot[],
+	/**  A pairing link is open: its address is not repeated here, only when it stops opening. */
+	pairing_expires_at: number | null,
 };
 
 export type RemovedWorkspace = {

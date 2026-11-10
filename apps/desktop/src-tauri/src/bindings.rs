@@ -51,6 +51,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::PullRequestPreview>()
         // The payload of `auracode-project-memory-changed` (memory_commands::MEMORY_CHANGED).
         .typ::<aura_protocol::memory::ProjectMemoryChanged>()
+        // The payload of `auracode-remote-changed` (remote::REMOTE_CHANGED).
+        .typ::<aura_protocol::remote::RemoteStatus>()
         // The payload of `auracode-browser` (browser::EVENT).
         .typ::<crate::browser::BrowserEvent>()
         .commands(tauri_specta::collect_commands![
@@ -266,6 +268,13 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::git_commands::git_commit_apply,
             crate::git_commands::git_push_preview,
             crate::git_commands::git_push_apply,
+            crate::remote::remote_status,
+            crate::remote::remote_set_enabled,
+            crate::remote::remote_pair,
+            crate::remote::remote_cancel_pairing,
+            crate::remote::remote_remove_device,
+            crate::remote::remote_create_bot,
+            crate::remote::remote_remove_bot,
             crate::project_tools::git_initialize_preview,
             crate::project_tools::git_initialize_apply,
             crate::project_tools::project_tools_review,
