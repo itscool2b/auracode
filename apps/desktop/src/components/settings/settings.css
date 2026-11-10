@@ -163,11 +163,9 @@
   overflow: hidden;
   list-style: none;
   border: 0;
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
 }
 
 .settings-group:empty {

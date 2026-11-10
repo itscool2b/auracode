@@ -83,9 +83,9 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow: var(--g-shadow-control);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
   list-style: none;
 }
 
@@ -334,9 +334,9 @@
   gap: var(--g-space-12);
   padding: var(--g-space-64) var(--g-space-24);
   border: 1px solid var(--g-glass-rim-strong);
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow: var(--g-shadow-control);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);

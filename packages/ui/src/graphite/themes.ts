@@ -132,18 +132,20 @@ export const THEMES: readonly ThemeDefinition[] = [
     id: "grok",
     name: "Grok Build",
     agent: "grok",
-    // True black and white: nothing between you and the work.
+    // The Grok Bot app's own colours in dark, read from the live app on its page (owner, 10
+    // November 2026; docs/design/reference-audit.md): a graphite window, a lighter chat over it,
+    // off-white text and paper for what you act on. Light stays black on white.
     dark: {
-      bg: "#000000",
-      surfaces: ["#0a0a0a", "#121212", "#181818", "#222222"],
-      lines: ["#1e1e1e", "#2a2a2a", "#707070"],
-      fg: ["#ffffff", "#b8b8b8", "#a3a3a3", "#6b6b6b"],
-      primary: ["#ffffff", "#e6e6e6", "#cccccc"],
-      onPrimary: "#000000",
-      accent: "#f2f2f2",
-      selection: "#2a2a2a",
-      window: "#000000",
-      glass: { layer: [14, 14, 14], bar: [8, 8, 8], pop: [24, 24, 24] },
+      bg: "#1f1f1e",
+      surfaces: ["#202020", "#242424", "#282828", "#2c2c2c"],
+      lines: ["#2e2e2e", "#383838", "#7a7a7a"],
+      fg: ["#f2f2f2", "#bdbdbd", "#b0b0b0", "#757575"],
+      primary: ["#ecece8", "#f5f5f2", "#d9d9d4"],
+      onPrimary: "#141414",
+      accent: "#ecece8",
+      selection: "#3a3a3a",
+      window: "#151514",
+      glass: { layer: [38, 38, 38], bar: [30, 30, 30], pop: [46, 46, 46] },
       code: { keyword: "#ff9b9b", string: "#9cc8ff", number: "#d0b3ff" },
     },
     light: {

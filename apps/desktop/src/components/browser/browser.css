@@ -604,9 +604,9 @@
   gap: var(--g-space-12);
   padding: var(--g-space-12) var(--g-space-16);
   border: 0;
-  border-radius: var(--g-radius-14);
-  background-color: var(--g-glass-card);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  box-shadow: none;
   color: var(--g-fg-1);
   font: inherit;
   text-align: left;
