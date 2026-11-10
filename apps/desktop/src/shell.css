@@ -586,6 +586,17 @@ details.setup-install-review[open] > summary::before {
     box-shadow var(--g-dur-fast) var(--g-ease);
 }
 
+/*
+ * Search is the Grok Bot app's field: a faint fill and a hairline rim at rest, its word in the
+ * placeholder's tone. It is still a button that opens search, so the rail keeps its icon.
+ */
+.chat-nav-action[data-field] {
+  margin-bottom: var(--g-space-4);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-3);
+}
+
 .chat-nav-action > svg {
   flex: none;
   color: var(--g-fg-3);
@@ -1187,6 +1198,13 @@ details.setup-install-review[open] > summary::before {
   justify-content: center;
 }
 
+/* In the rail Search is an icon among icons, not a field. */
+.chat-app[data-sidebar-collapsed="true"] .chat-nav-action[data-field] {
+  margin-bottom: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
 .chat-app[data-sidebar-collapsed="true"]
   :is(
     .chat-nav-action > span,
@@ -1304,6 +1322,40 @@ details.setup-install-review[open] > summary::before {
 .chat-status[data-activity="waiting"] {
   color: var(--g-volt);
   font-weight: 500;
+}
+
+/*
+ * A state that asks for the person is a badge, as the Grok Bot app's "You're in control" is: a
+ * pill in a faint tint of its own colour. Its mark stands where that app's dot does.
+ */
+.chat-status:is(
+  [data-activity="waiting"],
+  [data-status="failed"],
+  [data-status="auth_required"]
+):not([data-quiet]) {
+  flex: none;
+  height: 20px;
+  margin-left: var(--g-space-8);
+  padding: 0 var(--g-space-8) 0 var(--g-space-6);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-volt-tint);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+}
+
+.chat-status:is([data-status="failed"], [data-status="auth_required"]):not(
+  [data-quiet],
+  [data-activity="waiting"]
+) {
+  background-color: color-mix(in srgb, var(--g-red) 14%, transparent);
+}
+
+.chat-status:is(
+  [data-activity="waiting"],
+  [data-status="failed"],
+  [data-status="auth_required"]
+):not([data-quiet])::before {
+  content: none;
 }
 
 .chat-header-error {

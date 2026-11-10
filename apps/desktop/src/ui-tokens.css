@@ -52,6 +52,14 @@
     var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight),
     inset 0 0 0 1px var(--g-glass-rim-strong);
 
+  /*
+   * Paper and the ink on it, for the sent message (the Grok Bot app's light block on a dark
+   * window): the theme's ink a step toward its page, with the page's colour for the words. Set
+   * here, on the root, because the block redefines the text tokens for what sits inside it.
+   */
+  --ui-paper: color-mix(in srgb, var(--g-fg-1) 92%, var(--g-bg));
+  --ui-paper-ink: var(--g-bg);
+
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
 

@@ -132,6 +132,9 @@
   /* App scale: size / line height, tracking only where it is negative */
   --g-text-ui: 13px;
   --g-leading-ui: 20px;
+  /* Interface and chat text sit a hair tighter than the face's own spacing. */
+  --g-tracking-ui: -0.08px;
+  --g-tracking-chat: -0.15px;
   --g-text-prose: 15px;
   --g-leading-prose: 24px;
   /*

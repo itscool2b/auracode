@@ -90,15 +90,28 @@
   margin-left: auto;
 }
 
-/* Grok's block: right-aligned, one even radius, a fill one step above the pane and no ring. */
+/*
+ * The Grok Bot app's sent message: right-aligned paper with ink on it, one even 16px radius and no
+ * ring. Paper is the theme's own ink a step toward its page, and the words take the page's colour,
+ * so every theme and both appearances invert by themselves. What sits inside the block (Show all,
+ * a mention, a file's name) reads from the same ink through the tokens redefined here.
+ */
 .chat-user {
-  padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-18) var(--g-radius-18) var(--g-radius-6) var(--g-radius-18);
-  background-color: var(--g-glass-control-hover);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
-  color: var(--g-fg-1);
+  --g-fg-1: var(--ui-paper-ink);
+  --g-fg-2: color-mix(in srgb, var(--ui-paper-ink) 80%, var(--ui-paper));
+  --g-fg-3: color-mix(in srgb, var(--ui-paper-ink) 66%, var(--ui-paper));
+  --g-fg-4: color-mix(in srgb, var(--ui-paper-ink) 44%, var(--ui-paper));
+  --g-glass-control: color-mix(in srgb, var(--ui-paper-ink) 7%, transparent);
+  --g-glass-control-hover: color-mix(in srgb, var(--ui-paper-ink) 11%, transparent);
+  --g-glass-rim: color-mix(in srgb, var(--ui-paper-ink) 14%, transparent);
+  --g-glass-rim-strong: color-mix(in srgb, var(--ui-paper-ink) 22%, transparent);
+  padding: var(--g-space-8) var(--g-space-12);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-paper);
+  color: var(--ui-paper-ink);
   font-size: var(--g-text-chat);
   line-height: var(--g-leading-chat);
+  letter-spacing: var(--g-tracking-chat);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2160,6 +2173,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-chat);
   line-height: var(--g-leading-chat);
+  letter-spacing: var(--g-tracking-chat);
   user-select: text;
   overflow-wrap: anywhere;
 }
@@ -2422,6 +2436,7 @@
   box-shadow: none;
   font-size: var(--g-text-chat);
   line-height: var(--g-leading-chat);
+  letter-spacing: var(--g-tracking-chat);
   resize: none;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
@@ -2454,6 +2469,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--g-radius-pill);
+  /* A disc of its own at rest, as the Grok Bot app's "+" is. */
+  background-color: var(--g-glass-control);
   color: var(--g-fg-2);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
