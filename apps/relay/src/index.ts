@@ -37,6 +37,8 @@ const MAX_PROVEN = 16;
  */
 const MAX_WAITING = 8;
 const MAX_WAITING_PER_ADDRESS = 3;
+/** How long an accepted browser keeps its place after the desktop reconnects, to prove itself again. */
+const REPROVE_MS = 30_000;
 const MAX_BOTS = 32;
 /** A browser's largest message: a prompt of a few thousand words, sealed. */
 const CLIENT_MESSAGE_BYTES = 96 * 1024;
@@ -111,6 +113,8 @@ type Attachment =
       readonly from: string;
       /** The desktop accepted its session. */
       readonly proven: boolean;
+      /** Set when the desktop reconnected: accepted only until then unless it accepts again. */
+      readonly until?: number;
       /** This side ended the socket and the desktop already knows. */
       readonly told?: boolean;
     };
@@ -142,6 +146,11 @@ async function sha256(text: string): Promise<string> {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
+}
+
+/** Whether the desktop's current socket accepted a browser, or still may within its grace time. */
+function accepted(is: ClientAttachment): boolean {
+  return is.proven && (is.until === undefined || is.until > Date.now());
 }
 
 /** Compares two hashes without stopping at the first difference. */
@@ -203,8 +212,13 @@ export class Room extends DurableObject<Env> {
     for (const client of this.#clients()) {
       const attachment = client.deserializeAttachment() as Attachment;
       if (attachment.role !== "client") continue;
-      // A browser accepted before stays protected while it starts again: a newcomer never
-      // takes its place. The desktop still drops it if its key no longer opens anything.
+      // A browser accepted before keeps its place while it starts again, for a short time:
+      // the new socket has to accept it too.
+      if (attachment.proven)
+        client.serializeAttachment({
+          ...attachment,
+          until: Date.now() + REPROVE_MS,
+        } satisfies Attachment);
       if (earlier.length > 0) client.send("h0");
       client.send("h1");
       pair[1].send(`o${attachment.cid}`);
@@ -218,7 +232,7 @@ export class Room extends DurableObject<Env> {
     const from = request.headers.get("CF-Connecting-IP") ?? "";
     const waiting = this.#clients()
       .map((socket) => ({ socket, is: socket.deserializeAttachment() as ClientAttachment }))
-      .filter((entry) => !entry.is.proven)
+      .filter((entry) => !accepted(entry.is))
       .sort((a, b) => a.is.since - b.is.since);
     const fromHere = waiting.filter((entry) => entry.is.from === from);
     const leaving =
@@ -281,15 +295,20 @@ export class Room extends DurableObject<Env> {
       } else if (kind === "a") {
         // The desktop opened a sealed message from this browser: it holds a key.
         const is = client.deserializeAttachment() as ClientAttachment;
-        if (is.proven) return;
+        if (is.proven && is.until === undefined) return;
         const proven = this.#clients().filter(
-          (other) => (other.deserializeAttachment() as ClientAttachment).proven,
+          (other) =>
+            other !== client && accepted(other.deserializeAttachment() as ClientAttachment),
         ).length;
         if (proven >= MAX_PROVEN) {
           end(client, 4003, "too many");
           socket.send(`c${cid}`);
         } else {
-          client.serializeAttachment({ ...is, proven: true } satisfies Attachment);
+          client.serializeAttachment({
+            ...is,
+            proven: true,
+            until: undefined,
+          } satisfies Attachment);
         }
       } else if (kind === "m") {
         client.send(`m${message.slice(2 + CID_LENGTH)}`);
