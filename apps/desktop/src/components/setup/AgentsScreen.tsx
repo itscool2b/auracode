@@ -19,7 +19,7 @@ export function AgentRoster({
 }: {
   readonly agents: readonly AgentEntry[];
   readonly transport: Transport;
-  readonly onRefresh: () => void;
+  readonly onRefresh: () => void | Promise<void>;
 }) {
   const [everyAgent, setEveryAgent] = useState(false);
   const absent = (agent: AgentEntry) =>
@@ -88,7 +88,7 @@ export function AgentsScreen({
   const counted = agents === null ? null : realAgents(agents);
   const installed = counted?.filter((agent) => agent.availability.state === "ready").length ?? 0;
   const looking = counted?.filter((agent) => agent.availability.state === "checking").length ?? 0;
-  const refresh = () => void app.refreshAgents();
+  const refresh = () => app.refreshAgents();
   const summary = (
     <p aria-live="polite">
       {agents === null
@@ -103,7 +103,7 @@ export function AgentsScreen({
       type="button"
       className="g-button g-button-outline"
       disabled={state.agentsRefreshing}
-      onClick={refresh}
+      onClick={() => void refresh()}
     >
       {state.agentsRefreshing ? (
         <span className="agents-refreshing" aria-hidden="true">

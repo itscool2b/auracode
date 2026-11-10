@@ -11,7 +11,9 @@ use tokio::sync::Mutex;
 
 const REFRESH_MS: i64 = 6 * 60 * 60 * 1000;
 const FAILURE_RETRY_MS: i64 = 15 * 60 * 1000;
-const MAX_RESPONSE: usize = 256 * 1024;
+/// GitHub's answer for one release lists every asset: Codex's passed 256 KiB in November 2026,
+/// and from then on auracode never learned its latest version. Still bounded.
+const MAX_RESPONSE: usize = 2 * 1024 * 1024;
 const MAX_CACHE: usize = 128 * 1024;
 
 enum FetchReply {
@@ -90,7 +92,6 @@ impl ReleaseSource {
         let registry_id = match installation.agent_id.as_str() {
             "antigravity" => Some("antigravity-acp"),
             "cursor" => Some("cursor"),
-            "grok" | "grok-stream" => Some("grok-build"),
             "opencode" => Some("opencode"),
             "opencode-v2" => Some("opencode-v2"),
             _ => None,
@@ -116,6 +117,11 @@ impl ReleaseSource {
             _ => match provider {
                 "claude" => Some(Self { url: "https://registry.npmjs.org/-/package/@anthropic-ai%2fclaude-code/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 "codex" => Some(Self { url: "https://api.github.com/repos/openai/codex/releases/latest".into(), label: "GitHub stable release".into(), selector: Selector::Github }),
+                // The release a source names must be one this installation's updater installs.
+                // Grok's own updater and npm's `latest` both follow the stable channel; the ACP
+                // Registry lists the alpha, which neither installs, so Update could never clear
+                // "available" (owner, 10 November 2026).
+                "grok" => Some(Self { url: "https://registry.npmjs.org/-/package/@xai-official%2fgrok/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 "pi" => Some(Self { url: "https://registry.npmjs.org/-/package/@earendil-works%2fpi-coding-agent/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 "omp" => Some(Self { url: "https://registry.npmjs.org/-/package/@oh-my-pi%2fpi-coding-agent/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 _ => None,
@@ -506,6 +512,49 @@ mod tests {
             source(Selector::NpmTag)
                 .parse(&vec![b' '; MAX_RESPONSE + 1])
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn a_release_source_names_a_version_the_installations_updater_installs() {
+        use aura_protocol::agents::{AgentHost, VersionVerification};
+        let installation = |agent: &str, channel: InstallChannel| AgentInstallation {
+            agent_id: agent.into(),
+            provider: crate::installation::provider_namespace(agent).into(),
+            host: AgentHost::Native,
+            launch_path: "/opt/bin/agent".into(),
+            resolved_path: Some("/opt/bin/agent".into()),
+            version: "1.0.77".into(),
+            channel,
+            verification: VersionVerification::Unknown,
+        };
+        // Grok's own updater and npm both install the stable release. The ACP Registry lists the
+        // alpha, which neither does: compared with it, Update never cleared "available".
+        for agent in ["grok", "grok-stream"] {
+            let source = ReleaseSource::for_installation(&installation(
+                agent,
+                InstallChannel::VendorStandalone,
+            ))
+            .expect("a source");
+            assert_eq!(source.selector, Selector::NpmTag, "{agent}");
+            assert!(
+                source.url.contains("@xai-official%2fgrok/dist-tags"),
+                "{agent}"
+            );
+            assert_eq!(
+                source.parse(br#"{"latest":"1.0.77","alpha":"1.0.80"}"#),
+                Some("1.0.77".into()),
+                "{agent}"
+            );
+        }
+        // GitHub's answer for one Codex release is larger than the old 256 KiB bound.
+        let mut answer =
+            br#"{"tag_name":"rust-v0.167.0","prerelease":false,"draft":false,"body":""#.to_vec();
+        answer.extend(std::iter::repeat_n(b'a', 400 * 1024));
+        answer.extend_from_slice(br#""}"#);
+        assert_eq!(
+            source(Selector::Github).parse(&answer),
+            Some("0.167.0".into())
         );
     }
 

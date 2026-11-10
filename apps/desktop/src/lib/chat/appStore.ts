@@ -117,6 +117,7 @@ export class AppStore {
   /** Every chat list reload gets a number; `#reloading` is the newest one while it is on its way. */
   #reloads = 0;
   #reloading: number | null = null;
+  #refreshing: Promise<void> | null = null;
   /** Status updates that arrived while `#reloading` was on its way, newest last. */
   #missed: ChatStatusUpdate[] = [];
 
@@ -291,15 +292,21 @@ export class AppStore {
   }
 
   /** "Refresh agents": the env again and every probe (15 s at most). */
-  async refreshAgents(): Promise<void> {
-    if (this.#state.agentsRefreshing) return;
-    this.#set({ ...this.#state, agentsRefreshing: true });
-    try {
-      const agents = await this.#transport.agentsRefresh();
-      this.#set({ ...this.#state, agents, agentsRefreshing: false });
-    } catch {
-      this.#set({ ...this.#state, agentsRefreshing: false });
-    }
+  refreshAgents(): Promise<void> {
+    // A second caller waits for the refresh under way: an update that just finished needs its
+    // result, and returning at once left its row on the old version.
+    this.#refreshing ??= (async () => {
+      this.#set({ ...this.#state, agentsRefreshing: true });
+      try {
+        const agents = await this.#transport.agentsRefresh();
+        this.#set({ ...this.#state, agents, agentsRefreshing: false });
+      } catch {
+        this.#set({ ...this.#state, agentsRefreshing: false });
+      } finally {
+        this.#refreshing = null;
+      }
+    })();
+    return this.#refreshing;
   }
 
   /**

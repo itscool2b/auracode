@@ -63,6 +63,23 @@ pub fn harness_status(facts: &HarnessFacts<'_>) -> HarnessStatus {
             ),
         };
     };
+    // OpenCode 2 is a separate line with a connection of its own. The registry's entry for the
+    // 1.x connection has moved on to it, and nothing updates a 1.x installation across the lines,
+    // so it is not this installation's update.
+    let other_line = facts
+        .installation
+        .is_some_and(|installation| installation.agent_id == "opencode")
+        && major(&installed).is_some()
+        && major(&installed) != major(&newest);
+    if other_line {
+        return HarnessStatus::Unknown {
+            version,
+            reason: format!(
+                "{} lists OpenCode {newest}, a separate version line. auracode does not check for newer 1.x releases.",
+                latest.source
+            ),
+        };
+    }
     if crate::version_at_least(&installed, &newest) {
         HarnessStatus::UpToDate {
             version: installed,
@@ -76,6 +93,14 @@ pub fn harness_status(facts: &HarnessFacts<'_>) -> HarnessStatus {
             checked_at: latest.checked_at,
         }
     }
+}
+
+fn major(version: &str) -> Option<u64> {
+    crate::parse_version(version)?
+        .split('.')
+        .next()?
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -108,6 +133,47 @@ mod tests {
             checked_at: version.map(|_| 1_000),
             stale: version.is_none(),
         }
+    }
+
+    #[test]
+    fn another_version_line_is_not_this_installations_update() {
+        let ready = ready();
+        let two = LatestRelease {
+            version: Some("2.2.7".into()),
+            source: "ACP Registry".into(),
+            checked_at: Some(1_000),
+            stale: false,
+        };
+        let status = |agent: &str, version: &str| {
+            let mut installation = installed(version);
+            installation.agent_id = agent.into();
+            harness_status(&HarnessFacts {
+                availability: &ready,
+                installation: Some(&installation),
+                latest: Some(&two),
+                has_source: true,
+                checks_enabled: true,
+            })
+        };
+        // OpenCode 1.x is never told that OpenCode 2 is its update: nothing can install it.
+        let HarnessStatus::Unknown { version, reason } = status("opencode", "1.19.4") else {
+            panic!("the 2.x line is not an update of 1.x");
+        };
+        assert_eq!(version.as_deref(), Some("1.19.4"));
+        assert!(reason.contains("separate version line"), "{reason}");
+        // Within a line, and for every other agent, a newer release is an update as before.
+        assert!(matches!(
+            status("opencode-v2", "2.2.0"),
+            HarnessStatus::UpdateAvailable { .. }
+        ));
+        assert!(matches!(
+            status("opencode", "2.2.0"),
+            HarnessStatus::UpdateAvailable { .. }
+        ));
+        assert!(matches!(
+            status("claude", "1.9.0"),
+            HarnessStatus::UpdateAvailable { .. }
+        ));
     }
 
     #[test]
