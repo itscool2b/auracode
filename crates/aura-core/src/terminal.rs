@@ -16,8 +16,12 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
-/// Sign-in, installation, setup and vendor terminals: one per window, at most four in the app.
+/// Sign-in, installation and setup terminals: one per window, at most four in the app.
 const MAX_TERMINALS: usize = 4;
+/// Chats open in their agent's own interface: several per window, as chats are, each running its
+/// agent until closed. Eight keeps the app's agent processes bounded (owner, 10 November 2026: a
+/// second terminal chat was refused while the first ran).
+pub const MAX_CHAT_TERMINALS: usize = 8;
 /// Project shells in the docked panel are a separate pool, so a sign-in never waits on them.
 /// Each one is an owned shell process; eight keeps the app's process count bounded.
 pub const MAX_PROJECT_TERMINALS: usize = 8;
@@ -34,8 +38,12 @@ pub enum TerminalError {
     Full,
     #[error("Eight project terminals are open. Close one before opening another.")]
     ProjectFull,
+    #[error("Eight chats are open in the terminal. Close one before opening another.")]
+    ChatFull,
     #[error("This terminal was not reserved for a project shell.")]
     NotProject,
+    #[error("This terminal was not reserved for a terminal chat.")]
+    NotChat,
     #[error("A terminal read is already pending.")]
     ReadPending,
     #[error("Terminal input is limited to 16 KiB per write.")]
@@ -74,6 +82,17 @@ struct Running {
     output: AsyncMutex<PtyOutput>,
     control: PtyControl,
 }
+/// The pool a terminal counts against, fixed when it is reserved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pool {
+    /// Sign-in, installation and setup: one per window, at most [`MAX_TERMINALS`].
+    Vendor,
+    /// A chat in its agent's own interface: several per window, at most [`MAX_CHAT_TERMINALS`].
+    Chat,
+    /// A project shell in the docked panel: several per window, at most [`MAX_PROJECT_TERMINALS`].
+    Project,
+}
+
 struct Slot {
     pending_setup: Mutex<Option<PendingSetup>>,
     owner: String,
@@ -84,7 +103,7 @@ struct Slot {
     cleanup_unconfirmed: AtomicBool,
     cleanup: watch::Sender<Option<bool>>,
     setup_timed_out: AtomicBool,
-    project: AtomicBool,
+    pool: Pool,
 }
 impl Slot {
     fn closed_error(&self) -> TerminalError {
@@ -138,8 +157,9 @@ impl Drop for Inner {
     }
 }
 
-/// Clones share ownership. Vendor terminals: one per window, at most four in this app instance.
-/// Project shells: any number per window, at most [`MAX_PROJECT_TERMINALS`] in the app.
+/// Clones share ownership. Sign-in, installation and setup terminals: one per window, at most
+/// four in this app instance. Terminal chats and project shells: any number per window, at most
+/// [`MAX_CHAT_TERMINALS`] and [`MAX_PROJECT_TERMINALS`] in the app.
 #[derive(Clone, Default)]
 pub struct Terminals(Arc<Inner>);
 
@@ -232,7 +252,7 @@ impl TerminalTicket {
         size: PtySize,
         guard: Box<dyn Send + Sync>,
     ) -> Result<String, TerminalError> {
-        if !self.slot.project.load(Ordering::Acquire) {
+        if self.slot.pool != Pool::Project {
             return Err(TerminalError::NotProject);
         }
         tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None, None))
@@ -396,39 +416,43 @@ impl Terminals {
         Some(IdleTerminalGuard(&self.0))
     }
 
-    /// A vendor, sign-in, installation or setup terminal: one per window.
+    /// A sign-in, installation or setup terminal: one per window.
     pub fn reserve(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
-        self.reserve_kind(owner, false)
+        self.reserve_in(owner, Pool::Vendor)
+    }
+
+    /// A chat in its agent's own interface: several per window, bounded across the app. Each
+    /// keeps running while another chat is open, so one per window would refuse the second.
+    pub fn reserve_chat(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
+        self.reserve_in(owner, Pool::Chat)
     }
 
     /// A project shell for the docked panel: several per window, bounded across the app. Quit
     /// preflight keeps these until the user confirms, like every project shell.
     pub fn reserve_project(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
-        self.reserve_kind(owner, true)
+        self.reserve_in(owner, Pool::Project)
     }
 
-    fn reserve_kind(&self, owner: &str, project: bool) -> Result<TerminalTicket, TerminalError> {
+    fn reserve_in(&self, owner: &str, pool: Pool) -> Result<TerminalTicket, TerminalError> {
         let mut slots = lock(&self.0.slots);
         if self.0.stopped.load(Ordering::Acquire) || self.0.quiescing.load(Ordering::Acquire) {
             return Err(TerminalError::Closed);
         }
-        let pool: Vec<&Arc<Slot>> = slots
-            .values()
-            .filter(|slot| slot.project.load(Ordering::Acquire) == project)
-            .collect();
-        if project {
-            if pool.len() >= MAX_PROJECT_TERMINALS {
-                return Err(TerminalError::ProjectFull);
-            }
-        } else {
-            if pool.iter().any(|slot| slot.owner == owner) {
+        let members: Vec<&Arc<Slot>> = slots.values().filter(|slot| slot.pool == pool).collect();
+        match pool {
+            Pool::Vendor if members.iter().any(|slot| slot.owner == owner) => {
                 return Err(TerminalError::AlreadyOpen);
             }
-            if pool.len() >= MAX_TERMINALS {
-                return Err(TerminalError::Full);
+            Pool::Vendor if members.len() >= MAX_TERMINALS => return Err(TerminalError::Full),
+            Pool::Chat if members.len() >= MAX_CHAT_TERMINALS => {
+                return Err(TerminalError::ChatFull);
             }
+            Pool::Project if members.len() >= MAX_PROJECT_TERMINALS => {
+                return Err(TerminalError::ProjectFull);
+            }
+            _ => {}
         }
-        drop(pool);
+        drop(members);
         let id = uuid::Uuid::now_v7().to_string();
         let (canceled, _) = watch::channel(false);
         let (cleanup, _) = watch::channel(Some(true));
@@ -442,7 +466,7 @@ impl Terminals {
             cleanup_unconfirmed: AtomicBool::new(false),
             cleanup,
             setup_timed_out: AtomicBool::new(false),
-            project: AtomicBool::new(project),
+            pool,
         });
         slots.insert(id.clone(), Arc::clone(&slot));
         Ok(TerminalTicket {
@@ -451,6 +475,15 @@ impl Terminals {
             slot,
             committed: false,
         })
+    }
+
+    /// Claims a terminal reserved with [`Terminals::reserve_chat`] for its chat's agent, so the
+    /// chat pool, not the one-per-window sign-in pool, bounds terminal chats.
+    pub fn claim_chat(&self, owner: &str, id: &str) -> Result<TerminalTicket, TerminalError> {
+        if self.slot(owner, id)?.pool != Pool::Chat {
+            return Err(TerminalError::NotChat);
+        }
+        self.claim(owner, id)
     }
 
     pub fn claim(&self, owner: &str, id: &str) -> Result<TerminalTicket, TerminalError> {
@@ -606,14 +639,14 @@ impl Terminals {
     /// Preserve general shells until quit is confirmed. Existing bounded setup/vendor shutdown
     /// can finish before that question without leaving file mutations behind.
     pub fn close_non_project(&self) {
-        self.close_kind(false);
+        self.close_where(|pool| pool != Pool::Project);
     }
     pub fn close_projects(&self) {
-        self.close_kind(true);
+        self.close_where(|pool| pool == Pool::Project);
     }
-    fn close_kind(&self, project: bool) {
+    fn close_where(&self, close: impl Fn(Pool) -> bool) {
         lock(&self.0.slots).retain(|_, slot| {
-            if slot.project.load(Ordering::Acquire) == project {
+            if close(slot.pool) {
                 slot.cancel();
                 false
             } else {
@@ -1118,6 +1151,58 @@ mod tests {
         assert!(*replacement.slot.canceled.borrow());
         assert!(*sign_in.slot.canceled.borrow());
         assert!(terminals.try_quiesce_when_idle().is_some());
+    }
+
+    #[test]
+    fn terminal_chats_open_several_per_window_in_their_own_bounded_pool() {
+        let terminals = Terminals::default();
+        // A chat left running in the terminal no longer refuses the next one in its window.
+        let mut chats: Vec<_> = (0..MAX_CHAT_TERMINALS - 1)
+            .map(|_| terminals.reserve_chat("main").unwrap())
+            .collect();
+        chats.push(terminals.reserve_chat("library").unwrap());
+        assert!(matches!(
+            terminals.reserve_chat("main"),
+            Err(TerminalError::ChatFull)
+        ));
+        // Sign-in keeps its own place, one per window, and project shells theirs.
+        let sign_in = terminals.reserve("main").unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        let shell = terminals.reserve_project("main").unwrap();
+        // Quit preflight closes terminal chats with the sign-ins and keeps project shells.
+        terminals.close_non_project();
+        assert!(chats.iter().all(|ticket| *ticket.slot.canceled.borrow()));
+        assert!(*sign_in.slot.canceled.borrow());
+        assert!(!*shell.slot.canceled.borrow());
+    }
+
+    #[test]
+    fn only_a_chat_reservation_starts_a_terminal_chat() {
+        let terminals = Terminals::default();
+        let sign_in = terminals.reserve("main").unwrap().pending();
+        assert!(matches!(
+            terminals.claim_chat("main", &sign_in),
+            Err(TerminalError::NotChat)
+        ));
+        let chat = terminals.reserve_chat("main").unwrap().pending();
+        assert!(matches!(
+            terminals.claim_chat("library", &chat),
+            Err(TerminalError::Closed)
+        ));
+        let claimed = terminals.claim_chat("main", &chat).unwrap();
+        assert!(matches!(
+            terminals.claim_chat("main", &chat),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        // A claim that never starts gives the chat's place back.
+        drop(claimed);
+        assert!(matches!(
+            terminals.claim_chat("main", &chat),
+            Err(TerminalError::Closed)
+        ));
     }
 
     #[tokio::test]

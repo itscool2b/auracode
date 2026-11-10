@@ -270,7 +270,12 @@ export const commands = {
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
 	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
 	/**
-	 *  Opens a chat in its agent's own interface in a reserved terminal (`terminal_reserve`): the
+	 *  Reserves a terminal for a chat in its agent's own interface (`chat_terminal_start`). Terminal
+	 *  chats keep running while another chat is open, so a window holds several, unlike sign-in.
+	 */
+	chatTerminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("chat_terminal_reserve")),
+	/**
+	 *  Opens a chat in its agent's own interface in a reserved terminal (`chat_terminal_reserve`): the
 	 *  chat is prepared as a start would be (folder, account, shared MCP, project memory, its
 	 *  session), then its agent's interactive interface starts there. While it runs, the chat's
 	 *  session is the terminal's; `chat_terminal_ended` hands it back.
