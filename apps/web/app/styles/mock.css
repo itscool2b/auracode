@@ -1,20 +1,9 @@
 /*
- * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Capabilities.tsx): the desktop in
+ * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Scenes.tsx): the desktop in
  * miniature. A sidebar on the window's glass, a floating content layer, a glass toolbar, the
- * transcript's gutter, the floating composer, frosted popovers. Light, like the app on paper.
+ * transcript's gutter, the floating composer and its popovers. Its palette (--m-*) is set with the
+ * site's in base.css, so the windows are light on a light page and dark on a dark one.
  */
-
-/* The handoff scene's composer floats outside its window, so the stage carries the palette too. */
-.m-window,
-.hw,
-.handoff-stage {
-  --m-ink: #18181b;
-  --m-line: rgb(10 10 11 / 0.07);
-  --m-fill: rgb(10 10 11 / 0.045);
-  --m-fill-hover: rgb(10 10 11 / 0.07);
-  --m-green: #15803d;
-  --m-red: #b91c1c;
-}
 
 .m-window,
 .hw {
@@ -38,11 +27,11 @@
   height: 100%;
   overflow: hidden;
   border-radius: 12px;
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.08),
-    0 1px 2px rgb(10 10 11 / 0.04),
-    0 24px 48px -28px rgb(10 10 11 / 0.26);
+    0 0 0 1px rgb(var(--m-k) / 0.08),
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 24px 48px -28px rgb(0 0 0 / 0.26);
 }
 
 .m-icon {
@@ -118,7 +107,7 @@
   height: 42px;
   padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--m-line);
-  background-color: rgb(255 255 255 / 0.55);
+  background-color: transparent;
   white-space: nowrap;
 }
 
@@ -164,8 +153,8 @@
   max-width: 78%;
   padding: 9px 14px;
   border-radius: 16px 16px 5px 16px;
-  background-color: rgb(10 10 11 / 0.055);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.03);
+  background-color: rgb(var(--m-k) / 0.055);
+  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.03);
   color: var(--g-fg-1);
   font-size: 13px;
   line-height: 19px;
@@ -263,11 +252,11 @@
 .m-shimmer {
   background-image: linear-gradient(
     100deg,
-    #8b8d94 0%,
-    #8b8d94 38%,
-    #18181b 50%,
-    #8b8d94 62%,
-    #8b8d94 100%
+    var(--g-fg-3) 0%,
+    var(--g-fg-3) 38%,
+    var(--g-fg-1) 50%,
+    var(--g-fg-3) 62%,
+    var(--g-fg-3) 100%
   );
   background-size: 250% 100%;
   -webkit-background-clip: text;
@@ -291,12 +280,12 @@
   position: relative;
   padding: 11px 10px 9px 15px;
   border-radius: 20px;
-  background-color: rgb(255 255 255 / 0.94);
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 1px 2px rgb(10 10 11 / 0.05),
-    0 16px 36px -18px rgb(10 10 11 / 0.32),
-    inset 0 1px 0 #ffffff;
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 16px 36px -18px rgb(0 0 0 / 0.32),
+    inset 0 1px 0 var(--m-sheen);
 }
 
 .m-input {
@@ -367,7 +356,7 @@
   padding: 0 10px 0 8px;
   border-radius: 999px;
   background-color: var(--m-fill);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.05);
   color: var(--g-fg-2);
   font-size: 12px;
   font-weight: 500;
@@ -397,7 +386,7 @@
   width: 30px;
   height: 30px;
   border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.07);
+  background-color: rgb(var(--m-k) / 0.07);
   color: var(--g-fg-3);
 }
 
@@ -405,16 +394,16 @@
 .m-stop {
   background-color: var(--m-ink);
   box-shadow:
-    0 1px 2px rgb(10 10 11 / 0.2),
+    0 1px 2px rgb(0 0 0 / 0.2),
     inset 0 1px 0 rgb(255 255 255 / 0.16);
-  color: #ffffff;
+  color: var(--m-on-ink);
 }
 
 .m-stop-square {
   width: 9px;
   height: 9px;
   border-radius: 2px;
-  background-color: #ffffff;
+  background-color: var(--m-surface);
 }
 
 .m-steer {
@@ -434,12 +423,12 @@
   gap: 8px;
   padding: 8px 8px 8px 11px;
   border-radius: 14px;
-  background-color: rgb(255 255 255 / 0.86);
+  background-color: var(--m-surface);
   -webkit-backdrop-filter: blur(16px) saturate(170%);
   backdrop-filter: blur(16px) saturate(170%);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 10px 24px -14px rgb(10 10 11 / 0.3);
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 10px 24px -14px rgb(0 0 0 / 0.3);
   color: var(--g-fg-2);
   font-size: 12px;
   white-space: nowrap;
@@ -514,11 +503,11 @@
 
 /* The open chat is a lit glass capsule. */
 .m-chat.is-open {
-  background-color: rgb(255 255 255 / 0.92);
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.05),
-    0 1px 2px rgb(10 10 11 / 0.06),
-    inset 0 1px 0 #ffffff;
+    0 0 0 1px rgb(var(--m-k) / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 var(--m-sheen);
   color: var(--g-fg-1);
 }
 
@@ -540,7 +529,7 @@
 }
 
 .m-dot.is-volt {
-  background-color: #d97706;
+  background-color: var(--m-amber);
 }
 
 .m-dot.is-done {
@@ -554,8 +543,8 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background-color: #d97706;
-  color: #ffffff;
+  background-color: var(--m-amber);
+  color: var(--m-on-ink);
   font-size: 11px;
   font-weight: 600;
 }
@@ -568,13 +557,13 @@
 }
 
 .m-needs {
-  color: #9c4307;
+  color: var(--m-amber-text);
   font-size: 11.5px;
   font-weight: 500;
 }
 
 .m-attention {
-  background-color: rgb(217 119 6 / 0.08);
+  background-color: var(--m-amber-bg);
   color: var(--g-fg-1);
 }
 
@@ -587,12 +576,12 @@
   height: 620px;
   overflow: hidden;
   border-radius: 14px;
-  background-color: #f1f1f3;
+  background-color: var(--m-window);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.09),
-    0 1px 2px rgb(10 10 11 / 0.04),
-    0 40px 80px -40px rgb(10 10 11 / 0.28),
-    0 16px 32px -20px rgb(10 10 11 / 0.14);
+    0 0 0 1px rgb(var(--m-k) / 0.09),
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 40px 80px -40px rgb(0 0 0 / 0.28),
+    0 16px 32px -20px rgb(0 0 0 / 0.14);
 }
 
 .hw-bar {
@@ -612,8 +601,8 @@
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background-color: rgb(10 10 11 / 0.1);
-  box-shadow: inset 0 0 0 0.5px rgb(10 10 11 / 0.08);
+  background-color: rgb(var(--m-k) / 0.1);
+  box-shadow: inset 0 0 0 0.5px rgb(var(--m-k) / 0.08);
 }
 
 .hw-body {
@@ -646,10 +635,10 @@
   margin: 0 8px 8px 0;
   overflow: hidden;
   border-radius: 10px;
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 1px 2px rgb(10 10 11 / 0.04);
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 1px 2px rgb(0 0 0 / 0.04);
 }
 
 .hw-main .m-head {
@@ -802,7 +791,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background-color: rgb(250 250 251 / 0.7);
+  background-color: var(--m-sunk);
 }
 
 .m-tabs {
@@ -826,10 +815,10 @@
 }
 
 .m-tab.is-on {
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.06),
-    0 1px 2px rgb(10 10 11 / 0.06);
+    0 0 0 1px rgb(var(--m-k) / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.06);
   color: var(--g-fg-1);
 }
 
@@ -855,8 +844,8 @@
   padding: 0 10px 0 12px;
   margin-bottom: 4px;
   border-radius: 10px;
-  background-color: #ffffff;
-  box-shadow: 0 0 0 1px rgb(10 10 11 / 0.1);
+  background-color: var(--m-surface);
+  box-shadow: 0 0 0 1px rgb(var(--m-k) / 0.1);
   color: var(--g-fg-1);
 }
 
@@ -877,7 +866,7 @@
 }
 
 .m-file.is-on {
-  background-color: rgb(10 10 11 / 0.045);
+  background-color: rgb(var(--m-k) / 0.045);
 }
 
 .m-letter {
@@ -893,8 +882,8 @@
   width: 15px;
   height: 15px;
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1.5px rgb(10 10 11 / 0.25);
-  color: #ffffff;
+  box-shadow: inset 0 0 0 1.5px rgb(var(--m-k) / 0.25);
+  color: var(--m-on-ink);
 }
 
 .m-box.is-on {
@@ -906,8 +895,8 @@
   margin-top: 6px;
   overflow: hidden;
   border-radius: 12px;
-  background-color: #ffffff;
-  box-shadow: 0 0 0 1px rgb(10 10 11 / 0.07);
+  background-color: var(--m-surface);
+  box-shadow: 0 0 0 1px rgb(var(--m-k) / 0.07);
   font-family: var(--g-mono);
   font-size: 11px;
   line-height: 20px;
@@ -945,7 +934,7 @@
 }
 
 .m-diff-line.is-add {
-  background-color: #ecf7ef;
+  background-color: var(--m-add-bg);
 }
 
 .m-diff-line.is-add .m-sign {
@@ -953,7 +942,7 @@
 }
 
 .m-diff-line.is-del {
-  background-color: #fdf0f0;
+  background-color: var(--m-del-bg);
 }
 
 .m-diff-line.is-del .m-sign {
@@ -976,8 +965,8 @@
   height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.05);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.06);
+  background-color: rgb(var(--m-k) / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.06);
   color: var(--g-fg-1);
   font-weight: 500;
 }
@@ -985,9 +974,9 @@
 .m-button-primary {
   background-color: var(--m-ink);
   box-shadow:
-    0 1px 2px rgb(10 10 11 / 0.2),
+    0 1px 2px rgb(0 0 0 / 0.2),
     inset 0 1px 0 rgb(255 255 255 / 0.16);
-  color: #ffffff;
+  color: var(--m-on-ink);
 }
 
 /* New chat. */
@@ -1021,10 +1010,10 @@
   width: 100%;
   overflow: hidden;
   border-radius: 18px;
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 18px 40px -24px rgb(10 10 11 / 0.3);
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 18px 40px -24px rgb(0 0 0 / 0.3);
 }
 
 .m-card-row {
@@ -1052,8 +1041,8 @@
   height: 32px;
   padding: 0 12px 0 6px;
   border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.04);
-  box-shadow: inset 0 0 0 1px rgb(10 10 11 / 0.05);
+  background-color: rgb(var(--m-k) / 0.04);
+  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.05);
   color: var(--g-fg-2);
   font-weight: 500;
   transition:
@@ -1063,10 +1052,10 @@
 }
 
 .m-pill.is-on {
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
     0 0 0 1.5px var(--m-ink),
-    0 6px 14px -8px rgb(10 10 11 / 0.4);
+    0 6px 14px -8px rgb(0 0 0 / 0.4);
   color: var(--g-fg-1);
 }
 
@@ -1101,7 +1090,7 @@
 }
 
 .m-other.is-on {
-  background-color: rgb(10 10 11 / 0.06);
+  background-color: rgb(var(--m-k) / 0.06);
   color: var(--g-fg-1);
 }
 
@@ -1123,12 +1112,12 @@
   width: min(100%, 330px);
   padding: 6px;
   border-radius: 18px;
-  background-color: rgb(255 255 255 / 0.92);
+  background-color: var(--m-surface);
   -webkit-backdrop-filter: blur(20px) saturate(170%);
   backdrop-filter: blur(20px) saturate(170%);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 24px 50px -24px rgb(10 10 11 / 0.38);
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 24px 50px -24px rgb(0 0 0 / 0.38);
 }
 
 .m-picker-agent,
@@ -1143,7 +1132,7 @@
 }
 
 .m-picker-agent {
-  background-color: rgb(10 10 11 / 0.045);
+  background-color: rgb(var(--m-k) / 0.045);
 }
 
 .m-picker-model > span:first-child {
@@ -1175,7 +1164,7 @@
   margin-left: auto;
   padding: 2px;
   border-radius: 999px;
-  background-color: rgb(10 10 11 / 0.05);
+  background-color: rgb(var(--m-k) / 0.05);
 }
 
 .m-segments > span {
@@ -1190,20 +1179,20 @@
 }
 
 .m-segments > .is-on {
-  background-color: #ffffff;
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.05),
-    0 1px 2px rgb(10 10 11 / 0.08);
+    0 0 0 1px rgb(var(--m-k) / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.08);
   color: var(--g-fg-1);
 }
 
 .m-queue {
   padding: 8px;
   border-radius: 18px;
-  background-color: rgb(255 255 255 / 0.9);
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.07),
-    0 18px 36px -22px rgb(10 10 11 / 0.32);
+    0 0 0 1px rgb(var(--m-k) / 0.07),
+    0 18px 36px -22px rgb(0 0 0 / 0.32);
 }
 
 .m-queue-head {
@@ -1220,7 +1209,7 @@
   height: 32px;
   padding: 0 8px 0 10px;
   border-radius: 10px;
-  background-color: rgb(10 10 11 / 0.04);
+  background-color: rgb(var(--m-k) / 0.04);
   color: var(--g-fg-1);
 }
 
@@ -1232,7 +1221,7 @@
 .m-shell {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
-  background-color: #f1f1f3;
+  background-color: var(--m-window);
 }
 
 .m-sidebar {
@@ -1250,33 +1239,10 @@
   margin: 8px 8px 8px 0;
   overflow: hidden;
   border-radius: 14px;
-  background-color: rgb(255 255 255 / 0.95);
+  background-color: var(--m-surface);
   box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.06),
-    0 16px 36px -24px rgb(10 10 11 / 0.3);
-}
-
-/* The handoff scene: the chat card and the composer floating under it, offset like two planes. */
-.caps .handoff-stage {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.caps .handoff-prior {
-  flex: 1;
-  height: auto;
-  margin-right: 12%;
-}
-
-.caps .handoff-next {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 8px;
-  width: 78%;
-  margin: -72px 0 0 auto;
+    0 0 0 1px rgb(var(--m-k) / 0.06),
+    0 16px 36px -24px rgb(0 0 0 / 0.3);
 }
 
 /* Reduced motion: loaders, carets and shimmers hold still; the live window never starts. */

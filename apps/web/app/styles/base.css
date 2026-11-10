@@ -1,53 +1,168 @@
 /*
- * auracode.si: paper, ink and hairlines. One sans face at calm sizes, a plain bar across the top,
- * a framed content column, and the product itself as the picture (owner, 10 November 2026: clean
- * like SpaceXAI, Vercel, Aside, Linear and Harvey). No glow anywhere and no dark bands: "aura" is
- * the product's name, not a colour scheme. Shared Graphite tokens (--g-*) carry colour and type;
- * the site adds its layout and motion here (--s-*). docs/design/visual-language.md is the spec.
- * The page is light in every system appearance.
+ * auracode.si, after dot.com (owner, 10 November 2026: "pretty much just copy dot.com"): a plain
+ * page that follows the system appearance, black in dark and white in light, with rounded cards a
+ * step off the page, centred statements at calm sizes, pills for actions and the product as the
+ * picture. No glow anywhere: "aura" is the product's name, not a colour scheme. Shared Graphite
+ * tokens (--g-*) carry type and the inner pages' controls; the site's own palette and layout are
+ * here (--s-*), with the illustrated app's (--m-*). docs/design/visual-language.md is the spec.
+ *
+ * Appearance: dark is the default and light applies under a light system preference, exactly as
+ * Graphite's tokens do, so the page needs no script to match the system. A page can pin light with
+ * data-theme="light" on the root (the device verification frame does).
  */
 
 :root {
-  --s-ink: #0a0a0b;
-  /* The grey a title's second clause and a statement's later sentences step back to (large type). */
-  --s-soft: #85858f;
-  --s-line: rgb(10 10 11 / 0.08);
-  --s-line-strong: rgb(10 10 11 / 0.14);
-  /* The tone product pictures stand on. */
-  --s-stage: #f2f2f4;
-  /* The terminal's own surface, the one dark thing on the page. */
-  --s-night: #0a0b0d;
+  --s-bg: #0a0a0a;
+  --s-ink: #ffffff;
+  /* Secondary text: the grey leads and captions step back to. */
+  --s-soft: #8d9199;
+  /* A card: one step off the page, with no rim and no shadow. */
+  --s-card: #1a1a1a;
+  /* What sits on a card: a tile, a field. */
+  --s-tile: #242425;
+  /* The quiet pill beside the primary one, and its hover. */
+  --s-quiet: #232324;
+  --s-quiet-hover: #2e2e30;
+  --s-line: #1f2228;
+  --s-line-strong: #33363d;
+  /* The primary pill is the page's ink. */
+  --s-primary: #ffffff;
+  --s-primary-hover: #e8e8ea;
+  --s-on-primary: #0a0a0a;
+  --s-nav: rgb(10 10 10 / 0.85);
+  /* Ink as channels, for hairlines and fills at an alpha. */
+  --s-k: 255 255 255;
+  --s-surface: var(--s-card);
+  --s-sheen: transparent;
+  --s-on-ink: #0a0a0a;
+  /* The terminal's own surface, dark in both appearances. */
+  --s-night: #0d0d0e;
   --s-night-fg-1: #f5f5f6;
   --s-night-fg-2: #a9a9b3;
   --s-night-fg-3: #93939e;
-  /* Rail to rail, and the room content keeps inside the rails. */
-  --s-max: 1200px;
-  --s-pad: 40px;
+  /* The illustrated app. */
+  --m-k: 255 255 255;
+  --m-ink: #f4f4f5;
+  --m-on-ink: #0a0a0a;
+  --m-surface: #1f1f20;
+  --m-window: #141415;
+  --m-sunk: #1a1a1b;
+  --m-sheen: rgb(255 255 255 / 0.05);
+  --m-line: rgb(255 255 255 / 0.08);
+  --m-fill: rgb(255 255 255 / 0.06);
+  --m-fill-hover: rgb(255 255 255 / 0.09);
+  --m-green: #4ade80;
+  --m-red: #f87171;
+  --m-add-bg: rgb(34 197 94 / 0.14);
+  --m-del-bg: rgb(239 68 68 / 0.14);
+  --m-amber: #f0a04b;
+  --m-amber-text: #f0a04b;
+  --m-amber-bg: rgb(240 160 75 / 0.12);
+  /* Layout. */
+  --s-max: 1280px;
+  --s-inner: 1080px;
   --s-gutter: 24px;
-  --s-section: 128px;
-  --s-nav: 64px;
+  --s-section: 176px;
+  --s-nav-h: 64px;
+  --s-radius: 24px;
   /* Arrive fast, land softly. */
   --s-expo: cubic-bezier(0.16, 1, 0.3, 1);
   /* Travel and settle without a bounce. */
   --s-glide: cubic-bezier(0.32, 0.72, 0, 1);
   /* Symmetric, for things that leave as they arrived. */
   --s-swift: cubic-bezier(0.65, 0, 0.35, 1);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --s-bg: #ffffff;
+  --s-ink: #0a0a0a;
+  --s-soft: #63666d;
+  --s-card: #f4f4f5;
+  --s-tile: #ffffff;
+  --s-quiet: #ececee;
+  --s-quiet-hover: #e2e2e5;
+  --s-line: #e7e8eb;
+  --s-line-strong: #d2d4d9;
+  --s-primary: #0a0a0a;
+  --s-primary-hover: #2a2a2e;
+  --s-on-primary: #ffffff;
+  --s-nav: rgb(255 255 255 / 0.85);
+  --s-k: 10 10 11;
+  --s-sheen: #ffffff;
+  --s-on-ink: #ffffff;
+  --m-k: 10 10 11;
+  --m-ink: #18181b;
+  --m-on-ink: #ffffff;
+  --m-surface: #ffffff;
+  --m-window: #ececee;
+  --m-sunk: #f7f7f8;
+  --m-sheen: #ffffff;
+  --m-line: rgb(10 10 11 / 0.07);
+  --m-fill: rgb(10 10 11 / 0.045);
+  --m-fill-hover: rgb(10 10 11 / 0.07);
+  --m-green: #15803d;
+  --m-red: #b91c1c;
+  --m-add-bg: #ecf7ef;
+  --m-del-bg: #fdf0f0;
+  --m-amber: #d97706;
+  --m-amber-text: #9c4307;
+  --m-amber-bg: rgb(217 119 6 / 0.08);
+  color-scheme: light;
+}
+
+/* The same light palette, when the system asks for light and the page has not pinned dark. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --s-bg: #ffffff;
+    --s-ink: #0a0a0a;
+    --s-soft: #63666d;
+    --s-card: #f4f4f5;
+    --s-tile: #ffffff;
+    --s-quiet: #ececee;
+    --s-quiet-hover: #e2e2e5;
+    --s-line: #e7e8eb;
+    --s-line-strong: #d2d4d9;
+    --s-primary: #0a0a0a;
+    --s-primary-hover: #2a2a2e;
+    --s-on-primary: #ffffff;
+    --s-nav: rgb(255 255 255 / 0.85);
+    --s-k: 10 10 11;
+    --s-sheen: #ffffff;
+    --s-on-ink: #ffffff;
+    --m-k: 10 10 11;
+    --m-ink: #18181b;
+    --m-on-ink: #ffffff;
+    --m-surface: #ffffff;
+    --m-window: #ececee;
+    --m-sunk: #f7f7f8;
+    --m-sheen: #ffffff;
+    --m-line: rgb(10 10 11 / 0.07);
+    --m-fill: rgb(10 10 11 / 0.045);
+    --m-fill-hover: rgb(10 10 11 / 0.07);
+    --m-green: #15803d;
+    --m-red: #b91c1c;
+    --m-add-bg: #ecf7ef;
+    --m-del-bg: #fdf0f0;
+    --m-amber: #d97706;
+    --m-amber-text: #9c4307;
+    --m-amber-bg: rgb(217 119 6 / 0.08);
+    color-scheme: light;
+  }
 }
 
 @media (max-width: 1023px) {
   :root {
-    --s-pad: 28px;
-    --s-section: 104px;
+    --s-section: 128px;
   }
 }
 
-/* Phones drop the rails: content keeps one 20px margin. */
 @media (max-width: 767px) {
   :root {
-    --s-pad: 20px;
-    --s-gutter: 0px;
-    --s-section: 80px;
-    --s-nav: 56px;
+    --s-gutter: 16px;
+    --s-section: 96px;
+    --s-nav-h: 56px;
+    --s-radius: 20px;
   }
 }
 
@@ -72,7 +187,7 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--s-nav) + 24px);
+  scroll-padding-top: calc(var(--s-nav-h) + 24px);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -86,8 +201,8 @@ body {
   margin: 0;
   min-height: 100vh;
   overflow-x: clip;
-  background-color: var(--g-bg);
-  color: var(--g-fg-1);
+  background-color: var(--s-bg);
+  color: var(--s-ink);
   font-family: var(--g-sans);
   font-size: 16px;
   line-height: 26px;
@@ -129,14 +244,14 @@ svg {
 }
 
 .skip {
-  position: absolute;
+  position: fixed;
   top: 12px;
   left: 12px;
   z-index: 100;
   padding: 8px 14px;
   border-radius: 999px;
-  background: var(--s-ink);
-  color: #ffffff;
+  background: var(--s-primary);
+  color: var(--s-on-primary);
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
@@ -154,12 +269,23 @@ svg {
   outline-offset: 3px;
 }
 
-/* The content column: as wide as the rails allow, padded inside them. */
+/* The page's column, and the narrower one statements and two-column sections keep to. */
 .wrap {
   box-sizing: border-box;
   width: min(100% - 2 * var(--s-gutter), var(--s-max));
   margin: 0 auto;
-  padding: 0 var(--s-pad);
+}
+
+.inner {
+  box-sizing: border-box;
+  width: min(100% - 2 * var(--s-gutter) - 48px, var(--s-inner));
+  margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+  .inner {
+    width: calc(100% - 2 * var(--s-gutter) - 8px);
+  }
 }
 
 .mono {
@@ -169,66 +295,54 @@ svg {
 
 /* --------------------------------------------------------------------------- typography */
 
-/* A section's title: two clauses, the first in ink and the second stepping back to grey. */
+/* A section's title, as dot.com sets its own: 36px, medium, barely tracked. */
 .title {
-  max-width: 720px;
   color: var(--s-ink);
-  font-size: clamp(30px, 3.7vw, 48px);
-  line-height: 1.08;
+  font-size: clamp(28px, 3.2vw, 36px);
+  line-height: 1.12;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 
-.title-soft {
-  display: block;
-  color: var(--s-soft);
-}
-
 .lead {
-  max-width: 460px;
-  color: var(--g-fg-2);
-  font-size: 17px;
-  line-height: 28px;
+  color: var(--s-soft);
+  font-size: 18px;
+  line-height: 29px;
   text-wrap: pretty;
 }
 
 .section {
   position: relative;
-  padding: var(--s-section) 0;
+  padding: calc(var(--s-section) / 2) 0;
 }
 
-/* A title at left and what it means at right, on one baseline. */
-.split-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 24px 64px;
-  align-items: end;
-}
-
-.split-side {
+/* A title and one line under it, centred over what they introduce. */
+.center-head {
   display: grid;
   gap: 16px;
-  justify-items: start;
-  justify-self: end;
-  max-width: 460px;
+  justify-items: center;
+  max-width: 672px;
+  margin: 0 auto;
+  text-align: center;
 }
 
-@media (max-width: 1023px) {
-  .split-head {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.center-head .lead {
+  color: var(--s-ink);
+}
 
-  .split-side {
-    justify-self: start;
-  }
+/* A card: the page's one surface. */
+.card {
+  box-sizing: border-box;
+  border-radius: var(--s-radius);
+  background-color: var(--s-card);
 }
 
 .text-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--g-fg-1);
+  color: var(--s-ink);
   font-size: 15px;
   line-height: 24px;
   font-weight: 500;
@@ -254,7 +368,7 @@ svg {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--g-fg-1);
+  color: var(--s-ink);
   font: inherit;
   font-weight: 500;
   text-decoration: underline;
@@ -274,7 +388,7 @@ svg {
 }
 
 .note {
-  color: var(--g-fg-3);
+  color: var(--s-soft);
   font-size: 14px;
   line-height: 22px;
 }
@@ -285,10 +399,9 @@ svg {
   align-items: baseline;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
-  background: rgb(10 10 11 / 0.035);
-  box-shadow: inset 0 0 0 1px var(--s-line);
-  color: var(--g-fg-1);
+  border-radius: 12px;
+  background: var(--s-card);
+  color: var(--s-ink);
   font-size: 14px;
   line-height: 22px;
 }
@@ -298,13 +411,12 @@ svg {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--g-fg-3);
+  background: var(--s-soft);
   transform: translateY(-1px);
 }
 
 .notice-error {
   background: var(--g-red-tint);
-  box-shadow: inset 0 0 0 1px rgb(185 28 28 / 0.16);
 }
 
 .notice-error .notice-mark {
@@ -313,19 +425,22 @@ svg {
 
 /* -------------------------------------------------------------------------- calls to act */
 
-/* The site's pills: ink is the one action, the outlined one sits beside it. */
+/*
+ * Pills, as dot.com's: the primary one is the page's ink with the page's colour on it, the quiet
+ * one a grey a step off the page. 44px in a statement, 40px elsewhere, 36px in the header.
+ */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   box-sizing: border-box;
-  height: 42px;
+  height: 40px;
   padding: 0 18px;
   border: 0;
   border-radius: 999px;
   font-family: var(--g-sans);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 20px;
   font-weight: 500;
   white-space: nowrap;
@@ -333,7 +448,6 @@ svg {
   cursor: pointer;
   transition:
     background-color 200ms var(--s-swift),
-    box-shadow 200ms var(--s-swift),
     scale 120ms var(--s-swift);
 }
 
@@ -341,29 +455,35 @@ svg {
   scale: 0.97;
 }
 
+.btn-lg {
+  height: 44px;
+  padding: 0 24px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
 .btn-sm {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 14px;
+  height: 36px;
+  padding: 0 16px;
 }
 
-.btn-ink {
-  background-color: var(--s-ink);
-  color: #ffffff;
+.btn-primary {
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
 }
 
-.btn-ink:hover {
-  background-color: #2a2a2e;
+.btn-primary:hover {
+  background-color: var(--s-primary-hover);
 }
 
-.btn-line {
-  background-color: #ffffff;
-  box-shadow: inset 0 0 0 1px var(--s-line-strong);
+.btn-quiet {
+  background-color: var(--s-quiet);
   color: var(--s-ink);
 }
 
-.btn-line:hover {
-  background-color: #f4f4f5;
+.btn-quiet:hover {
+  background-color: var(--s-quiet-hover);
 }
 
 .btn:hover .arrow {
@@ -375,7 +495,7 @@ svg {
 /*
  * Blocks arrive once as they enter (enhance.tsx marks them). The start state applies only once
  * scripts are in (html.js, set by the hashed boot script), so the page is whole without them.
- * data-reveal="" rises; "words" rises word by word; "trigger" only marks the moment.
+ * data-reveal="" rises; "trigger" only marks the moment.
  */
 html.js [data-reveal=""]:not([data-revealed]) {
   opacity: 0;
@@ -386,38 +506,15 @@ html.js [data-reveal=""] {
   transition:
     opacity 900ms var(--s-expo),
     transform 1000ms var(--s-expo);
-  transition-delay: calc(var(--i, 0) * 70ms);
-}
-
-.words .w {
-  display: inline-block;
-  overflow: hidden;
-  padding: 0.08em 0.1em 0.16em;
-  margin: -0.08em -0.1em -0.16em;
-  vertical-align: top;
-}
-
-.words .w-in {
-  display: inline-block;
-}
-
-html.js .words .w-in {
-  transition: transform 900ms var(--s-expo);
-  transition-delay: calc(var(--w, 0) * 40ms);
-}
-
-html.js .words:not([data-revealed]) .w-in {
-  transform: translateY(110%);
+  transition-delay: calc(var(--i, 0) * 80ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.js [data-reveal=""],
-  html.js .words .w-in {
+  html.js [data-reveal=""] {
     transition: none;
   }
 
-  html.js [data-reveal=""]:not([data-revealed]),
-  html.js .words:not([data-revealed]) .w-in {
+  html.js [data-reveal=""]:not([data-revealed]) {
     opacity: 1;
     transform: none;
   }

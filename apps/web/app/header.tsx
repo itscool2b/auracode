@@ -4,38 +4,18 @@ import { useEffect, useRef } from "react";
 const SECTIONS = [
   { href: "/#features", text: "Features" },
   { href: "/#agents", text: "Agents" },
+  { href: "/#download", text: "Download" },
   { href: "/#faq", text: "FAQ" },
   { href: "/changelog", text: "Changelog" },
 ] as const;
 
 /**
- * A plain bar: the wordmark at left, the page's sections in the middle, Sign in and the one
- * Download at right. Clear at the top of a page; scrolling gives it the paper's tone and a
- * hairline. Under 768px the links fold into a menu built on <details>, so it opens without
- * JavaScript too; Download stays in the bar.
+ * The bar dot.com has: the wordmark, the page's sections beside it, and the quiet Sign in and the
+ * primary Download at right. Under 768px the links fold into a menu built on <details>, so it
+ * opens without JavaScript too; Download stays in the bar.
  */
 export function SiteHeader() {
-  const header = useRef<HTMLElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
-
-  useEffect(() => {
-    const node = header.current;
-    if (!node) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      node.toggleAttribute("data-scrolled", window.scrollY > 8);
-    };
-    const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", schedule);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
 
   useEffect(() => {
     const details = menu.current;
@@ -66,7 +46,7 @@ export function SiteHeader() {
   }, []);
 
   return (
-    <header className="site-nav" ref={header}>
+    <header className="site-nav">
       <div className="wrap nav-bar">
         <a className="nav-home" href="/" aria-label="auracode home">
           <Wordmark size={17} />
@@ -79,10 +59,10 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="nav-end">
-          <a className="nav-signin" href="/signin">
+          <a className="btn btn-quiet btn-sm nav-signin" href="/signin">
             Sign in
           </a>
-          <a className="btn btn-ink btn-sm" href="/download">
+          <a className="btn btn-primary btn-sm" href="/download">
             Download
           </a>
           <details className="nav-menu" ref={menu}>

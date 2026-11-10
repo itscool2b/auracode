@@ -1,34 +1,28 @@
-import { Words } from "../reveal";
-import { AppTile, Arrow } from "../ui";
+import { Logo } from "@auracode/ui/graphite";
 
 /**
- * The page's last word before the footer: the app as an object, one line, and the one action.
+ * The page's last call, as dot.com closes: one line, one sentence, the two pills, and the mark
+ * drawn very large in a hairline under them, running off the section's foot.
  */
 export function Finale() {
   return (
-    <section className="section finale" aria-labelledby="finale-title">
-      <div className="wrap finale-inner">
-        <div className="finale-tile" aria-hidden="true" data-reveal="">
-          <AppTile small />
-        </div>
-        <h2 id="finale-title" className="title finale-title">
-          <Words text="Your agents." />{" "}
-          <span className="title-soft">
-            <Words text="Your machine." offset={2} />
-          </span>
+    <section className="finale" aria-labelledby="finale-title">
+      <div className="inner center-head" data-reveal="">
+        <h2 id="finale-title" className="title">
+          Your agents. Your machine.
         </h2>
-        <p className="finale-note" data-reveal="">
-          Free for Windows, macOS and Linux. No account needed.
-        </p>
-        <div className="finale-actions" data-reveal="">
-          <a className="btn btn-ink" href="/download">
-            Download
-            <Arrow direction="down" />
+        <p className="lead">Free for Windows, macOS and Linux. No account needed.</p>
+        <div className="finale-actions">
+          <a className="btn btn-primary btn-lg" href="/download">
+            Download for free
           </a>
-          <a className="btn btn-line" href="/changelog">
+          <a className="btn btn-quiet btn-lg" href="/changelog">
             Read the changelog
           </a>
         </div>
+      </div>
+      <div className="finale-art" aria-hidden="true">
+        <Logo size={960} />
       </div>
     </section>
   );

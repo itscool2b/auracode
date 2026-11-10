@@ -1,0 +1,91 @@
+import type { ReactNode } from "react";
+
+const PLATFORMS: readonly { name: string; detail: string; glyph: ReactNode }[] = [
+  {
+    name: "Windows",
+    detail: "Windows 10 or newer, x64 and ARM64",
+    glyph: <path d="M3.5 4.5h7v7h-7zM13.5 4.5h7v7h-7zM3.5 13.5h7v6h-7zM13.5 13.5h7v6h-7z" />,
+  },
+  {
+    name: "macOS",
+    detail: "macOS 13.3 or newer, Apple silicon and Intel",
+    glyph: (
+      <>
+        <rect x="4.5" y="5" width="15" height="10.5" rx="1.5" />
+        <path d="M2.5 19h19" />
+      </>
+    ),
+  },
+  {
+    name: "Linux",
+    detail: "x64: deb, rpm and AppImage",
+    glyph: (
+      <>
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+        <path d="m7.5 9.5 3 2.5-3 2.5M12.5 14.5h4" />
+      </>
+    ),
+  },
+];
+
+/**
+ * Where to get it, as dot.com sets its downloads: the title and one grey line at left, a row for
+ * each system at right. Each row leads to the download page, which carries the installers, their
+ * checksums and their status.
+ */
+export function GetIt() {
+  return (
+    <section className="section getit" id="download" aria-labelledby="getit-title">
+      <div className="inner two-col">
+        <div className="two-col-head" data-reveal="">
+          <h2 id="getit-title" className="title">
+            Download auracode
+          </h2>
+          <p className="lead">Free for Windows, macOS and Linux. No account needed.</p>
+        </div>
+        <ul className="getit-rows" data-reveal="">
+          {PLATFORMS.map((platform) => (
+            <li key={platform.name}>
+              <a className="card getit-row" href="/download">
+                <svg
+                  className="getit-glyph"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  {platform.glyph}
+                </svg>
+                <span className="getit-name">
+                  <strong>{platform.name}</strong>
+                  <span>{platform.detail}</span>
+                </span>
+                <svg
+                  className="getit-arrow"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M9 3v8.5M5.5 8 9 11.5 12.5 8M3.5 14.5h11" />
+                </svg>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}

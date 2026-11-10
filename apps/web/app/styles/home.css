@@ -1,79 +1,75 @@
-/* --------------------------------------------------------------------------------- frame */
-
 /*
- * The home page is drawn on a frame, as Vercel's and Aside's are: two hairline rails down the
- * content column and a hairline across the page between sections. Content keeps --s-pad of room
- * inside the rails, and grids of cells run rail to rail. Phones drop the rails.
+ * The home page, section for section after dot.com: a centred opening over the app, one wide card,
+ * a centred statement over a grid of cards, chips beside a product view, one large frame, download
+ * rows, a centred pointer, FAQs, and a closing call over the mark drawn large. Nothing divides the
+ * sections but space.
  */
+
 .home {
-  --rail-x: max(var(--s-gutter), calc(50% - var(--s-max) / 2));
   overflow-x: clip;
-  background-image:
-    linear-gradient(var(--s-line), var(--s-line)), linear-gradient(var(--s-line), var(--s-line));
-  background-position:
-    left var(--rail-x) top 0,
-    right var(--rail-x) top 0;
-  background-size: 1px 100%;
-  background-repeat: no-repeat;
-}
-
-.home > section + section {
-  border-top: 1px solid var(--s-line);
-}
-
-/* A grid of cells that runs rail to rail, out of the column's padding. */
-.pillars,
-.more-grid {
-  margin-right: calc(-1 * var(--s-pad));
-  margin-left: calc(-1 * var(--s-pad));
-  padding: 0;
-  list-style: none;
 }
 
 /* ---------------------------------------------------------------------------------- hero */
 
 .hero {
-  position: relative;
-  padding: 104px 0 88px;
+  padding: 104px 0 calc(var(--s-section) / 2);
 }
 
-.hero-title {
-  max-width: 960px;
-  color: var(--s-ink);
-  font-size: clamp(40px, 5.7vw, 76px);
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: -0.052em;
+.hero-copy {
+  display: grid;
+  gap: 24px;
+  justify-items: center;
+  box-sizing: border-box;
+  width: min(100% - 2 * var(--s-gutter), 720px);
+  margin: 0 auto;
+  text-align: center;
   animation: hero-in 1000ms var(--s-expo) both;
 }
 
-.hero-soft {
-  display: block;
-  color: var(--s-soft);
-}
-
-.hero-row {
+/* The name with its mark set into the line, as dot.com sets its own. */
+.hero-title {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 28px 48px;
-  margin-top: 32px;
-  animation: hero-in 1000ms var(--s-expo) 90ms both;
+  align-items: center;
+  justify-content: center;
+  gap: 0 0.24em;
+  color: var(--s-ink);
+  font-size: clamp(40px, 5.6vw, 60px);
+  line-height: 1.12;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.hero-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.06em;
+  height: 1.06em;
+  border-radius: 50%;
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
+}
+
+.hero-mark svg {
+  width: 0.64em;
+  height: 0.64em;
 }
 
 .hero-lead {
-  max-width: 470px;
-  color: var(--g-fg-2);
+  max-width: 672px;
+  color: var(--s-soft);
   font-size: 18px;
-  line-height: 28px;
+  line-height: 29px;
   text-wrap: pretty;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 8px;
 }
 
 @keyframes hero-in {
@@ -83,13 +79,12 @@
   }
 }
 
-/* The window stands on the paper, flat and at the column's full width. */
 .hero-stage {
   margin-top: 72px;
 }
 
 .hero-detail {
-  animation: window-in 1300ms var(--s-expo) 200ms both;
+  animation: window-in 1300ms var(--s-expo) 160ms both;
 }
 
 @keyframes window-in {
@@ -99,264 +94,139 @@
   }
 }
 
-/* -------------------------------------------------------------------------------- agents */
+/* --------------------------------------------------------------------------------- intro */
 
-.agents {
-  padding: 44px 0 40px;
-}
-
-.agent-wall {
+/* One wide card: the statement at left, the mark very large at right, off the card's edge. */
+.intro-card {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(9, auto);
-  justify-content: space-between;
-  gap: 20px 16px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.agent-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  color: var(--s-ink);
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-
-.agents-note {
-  margin-top: 28px;
-  color: var(--g-fg-3);
-  font-size: 14px;
-  line-height: 22px;
-  text-align: center;
-}
-
-/* ----------------------------------------------------------------------------- statement */
-
-.statement {
-  padding-bottom: 0;
-}
-
-/*
- * What auracode is, said once: the first sentence in ink, the rest stepping back to grey
- * (Linear's statement, Aside's introduction, Harvey's opening paragraph).
- */
-.statement-text {
-  max-width: 940px;
-  color: var(--s-ink);
-  font-size: clamp(24px, 2.75vw, 36px);
-  line-height: 1.22;
-  font-weight: 500;
-  letter-spacing: -0.034em;
-  text-wrap: pretty;
-}
-
-.statement-soft {
-  color: var(--s-soft);
-}
-
-/* Three things it holds to, in cells between the rails, each drawn in line art. */
-.pillars {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: var(--s-section);
-  border-top: 1px solid var(--s-line);
-}
-
-.pillar {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  padding: 44px var(--s-pad) 52px;
-}
-
-.pillar + .pillar {
-  border-left: 1px solid var(--s-line);
-}
-
-.pillar-art {
-  display: block;
-  width: 100%;
-  max-width: 300px;
-  height: auto;
-  overflow: visible;
-  color: var(--s-ink);
-}
-
-.art-line {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  stroke-opacity: 0.72;
-}
-
-/* Faces are paper, so a nearer slab or cube covers the lines behind it. */
-.art-face {
-  fill: var(--g-bg);
-}
-
-.art-dot {
-  fill: currentColor;
-}
-
-.pillar-text,
-.feature-text,
-.more-text {
-  color: var(--g-fg-3);
-  font-size: 15px;
-  line-height: 24px;
-  text-wrap: pretty;
-}
-
-.pillar-text {
-  max-width: 320px;
-}
-
-:is(.pillar-text, .feature-text, .more-text) strong {
-  color: var(--s-ink);
-  font-weight: 500;
-}
-
-/*
- * Drawing in: each line traces itself once its picture enters, then the faces fill (scripts and
- * motion only; otherwise the pictures are simply drawn).
- */
-html.js .pillar-art .art-line {
-  stroke-dasharray: 1 1;
-  transition: stroke-dashoffset 1800ms var(--s-expo);
-}
-
-html.js .pillar-art:not([data-revealed]) .art-line {
-  stroke-dashoffset: 1;
-}
-
-html.js .pillar-art .art-face {
-  transition: fill-opacity 900ms var(--s-swift) 600ms;
-}
-
-html.js .pillar-art:not([data-revealed]) .art-face {
-  fill-opacity: 0;
-}
-
-html.js .pillar:nth-child(2) .pillar-art .art-line {
-  transition-delay: 140ms;
-}
-
-html.js .pillar:nth-child(3) .pillar-art .art-line {
-  transition-delay: 280ms;
-}
-
-/* ------------------------------------------------------------------------------- product */
-
-/* The real app in a plain bezel: a tinted mat, a hairline, and the screenshot. */
-.product-frame {
-  margin-top: 64px;
-  padding: 8px;
-  border-radius: 20px;
-  background-color: var(--s-stage);
-  box-shadow: inset 0 0 0 1px var(--s-line);
-}
-
-.product-frame picture {
-  display: block;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 368px;
   overflow: hidden;
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 1px var(--s-line),
-    0 16px 40px -24px rgb(10 10 11 / 0.2);
 }
 
-.product-frame img {
-  display: block;
-  width: 100%;
-  height: auto;
+.intro-text {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+  max-width: 500px;
+  padding: 64px 48px;
 }
 
-/* ------------------------------------------------------------------------------ features */
-
-.features {
-  padding-bottom: 0;
+.intro-art {
+  position: relative;
+  min-height: 240px;
 }
 
-.feature-grid {
+.intro-disc {
+  position: absolute;
+  top: -44px;
+  left: 16%;
+  display: grid;
+  place-items: center;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
+}
+
+.intro-disc svg {
+  width: 56%;
+  height: 56%;
+  translate: -4% -6%;
+}
+
+/* ---------------------------------------------------------------------------------- work */
+
+.work-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  margin-top: 64px;
+  gap: 20px;
+  margin-top: 72px;
 }
 
-/* A card: the feature on a tinted stage, then a caption that starts in ink. */
-.feature-card {
+/* A card: its title and two lines, then a picture of the product. */
+.work-card {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
+  min-width: 0;
+  padding: 32px;
+}
+
+.work-text {
+  min-height: 78px;
+}
+
+.work-text h3,
+.more-card h3 {
+  color: var(--s-ink);
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 500;
+}
+
+.work-text p {
+  max-width: 500px;
+  color: var(--s-ink);
+  font-size: 16px;
+  line-height: 26px;
+  text-wrap: pretty;
+}
+
+.work-view {
+  position: relative;
+  height: 384px;
   min-width: 0;
 }
 
-/* The picture starts at the stage's top and runs off its foot, so its first lines always show. */
-.feature-stage {
+.work-view > .m-window,
+.work-view > .handoff-stage,
+.work-view > .tm {
+  height: 100%;
+}
+
+.work-view .m-window {
+  border-radius: 16px;
+}
+
+.m-changes-window .m-changes {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The handoff: the chat's card with the composer floating over its foot, offset like two planes. */
+.work-view .handoff-stage {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  aspect-ratio: 16 / 11;
-  overflow: hidden;
-  padding: 36px 36px 0;
-  border-radius: 16px;
-  background-color: var(--s-stage);
-  box-shadow: inset 0 0 0 1px var(--s-line);
+  flex-direction: column;
 }
 
-/*
- * The canvas, as the app draws it, set large enough to read: it starts at the stage's top left and
- * runs off its right edge and its foot.
- */
-.feature-stage-shot {
-  justify-content: flex-start;
-}
-
-.feature-stage-shot picture {
-  display: block;
-  flex: none;
-  width: 136%;
-  overflow: hidden;
-  border-radius: 10px 0 0;
-  box-shadow:
-    0 0 0 1px var(--s-line),
-    0 20px 44px -28px rgb(10 10 11 / 0.3);
-}
-
-.feature-stage-shot img {
-  display: block;
-  width: 100%;
+.work-view .handoff-prior {
+  flex: 1;
   height: auto;
+  min-height: 0;
+  margin-right: 10%;
 }
 
-.feature-text {
-  max-width: 480px;
+.work-view .handoff-next {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  width: 80%;
+  margin: -72px 0 0 auto;
 }
 
-/* The terminal fills its stage down to the foot, whatever shape the stage takes. */
-.feature-stage-terminal {
-  align-items: stretch;
-}
-
-/* The terminal card: a chat in its agent's own interface, the one dark surface on the page. */
+/* The terminal: a chat in its agent's own interface, dark in both appearances. */
 .tm {
+  box-sizing: border-box;
   width: 100%;
   overflow: hidden;
-  border-radius: 10px 10px 0 0;
+  border-radius: 16px;
   background-color: var(--s-night);
-  box-shadow:
-    0 0 0 1px rgb(10 10 11 / 0.2),
-    0 20px 44px -28px rgb(10 10 11 / 0.45);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
   color: var(--s-night-fg-1);
 }
 
@@ -413,7 +283,7 @@ html.js .pillar:nth-child(3) .pillar-art .art-line {
 .tm-screen {
   display: flex;
   flex-direction: column;
-  padding: 16px 18px 24px;
+  padding: 14px 18px 20px;
   font-family: var(--g-mono);
   font-size: 13px;
   line-height: 21px;
@@ -427,12 +297,12 @@ html.js .pillar:nth-child(3) .pillar-art .art-line {
 }
 
 /* The session prints line by line once its card arrives (scripts and motion only). */
-html.js .feature-card .tm-line {
+html.js .work-card .tm-line {
   transition: opacity 240ms var(--s-swift);
   transition-delay: calc(var(--l, 0) * 130ms + 500ms);
 }
 
-html.js .feature-card:not([data-revealed]) .tm-line {
+html.js .work-card:not([data-revealed]) .tm-line {
   opacity: 0;
 }
 
@@ -468,8 +338,8 @@ html.js .feature-card:not([data-revealed]) .tm-line {
 }
 
 .tm-input {
-  margin-top: 14px;
-  padding: 8px 12px;
+  margin-top: 10px;
+  padding: 7px 12px;
   border-radius: 8px;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
 }
@@ -489,63 +359,213 @@ html.js .feature-card:not([data-revealed]) .tm-line {
   }
 }
 
-/* The rest of the workspace: six cells between the rails, three to a row. */
+/* The rest of the workspace: six smaller cards, three to a row. */
 .more-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: var(--s-section);
+  gap: 20px;
+  margin-top: 20px;
+  padding: 0;
+  list-style: none;
 }
 
-.more-cell {
+.more-card {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 36px var(--s-pad) 44px;
-  border-top: 1px solid var(--s-line);
-}
-
-.more-cell:not(:nth-child(3n + 1)) {
-  border-left: 1px solid var(--s-line);
+  min-width: 0;
+  padding: 28px 32px 32px;
 }
 
 .more-glyph {
   display: block;
+  margin-bottom: 20px;
   color: var(--s-ink);
 }
 
-.more-text {
-  max-width: 320px;
+.more-card p {
+  margin-top: 4px;
+  color: var(--s-soft);
+  font-size: 15px;
+  line-height: 24px;
+  text-wrap: pretty;
+}
+
+/* -------------------------------------------------------------------------------- agents */
+
+.agents-grid,
+.two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 64px;
+}
+
+.agents-grid {
+  align-items: center;
+}
+
+.two-col {
+  align-items: start;
+}
+
+.two-col-head {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.agents-text {
+  display: grid;
+  gap: 28px;
+  justify-items: start;
+}
+
+.agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A chip: the agent's mark and name in an outlined pill; the chosen one takes the page's ink. */
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 40px;
+  padding: 0 16px 0 10px;
+  border: 1px solid var(--s-line-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--s-ink);
+  font-family: var(--g-sans);
+  font-size: 15px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--s-swift),
+    border-color 160ms var(--s-swift),
+    color 160ms var(--s-swift);
+}
+
+.agent-chip:hover {
+  background-color: var(--s-quiet);
+}
+
+.agent-chip[aria-pressed="true"] {
+  border-color: var(--s-primary);
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
+}
+
+.agents-note {
+  max-width: 460px;
+  min-height: 78px;
+  color: var(--s-soft);
+  font-size: 16px;
+  line-height: 26px;
+  text-wrap: pretty;
+}
+
+.agents-note strong {
+  color: var(--s-ink);
+  font-weight: 500;
+}
+
+.agents-view {
+  height: 420px;
+  min-width: 0;
+}
+
+.agents-view .m-window {
+  height: 100%;
+  border-radius: 20px;
+}
+
+/* ------------------------------------------------------------------------------ showcase */
+
+/* The real app in one large rounded frame. */
+.showcase-frame {
+  margin-top: 56px;
+  overflow: hidden;
+  border-radius: var(--s-radius);
+  background-color: var(--s-card);
+}
+
+.showcase-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ------------------------------------------------------------------------------ download */
+
+.getit-rows {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.getit-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 80px;
+  padding: 16px 24px;
+  border-radius: 16px;
+  color: var(--s-ink);
+  text-decoration: none;
+  transition: background-color 160ms var(--s-swift);
+}
+
+.getit-row:hover {
+  background-color: var(--s-quiet);
+}
+
+.getit-glyph {
+  flex: none;
+}
+
+.getit-name {
+  display: grid;
+  min-width: 0;
+}
+
+.getit-name strong {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+}
+
+.getit-name span {
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.getit-arrow {
+  flex: none;
+  margin-left: auto;
+  color: var(--s-soft);
+}
+
+.news-action {
+  margin-top: 12px;
 }
 
 /* ----------------------------------------------------------------------------------- faq */
 
-.faq-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
-  gap: 64px;
-  align-items: start;
-}
-
-.faq-head {
-  position: sticky;
-  top: calc(var(--s-nav) + 40px);
-  display: grid;
-  gap: 24px;
-  justify-items: start;
-}
-
-.faq-head .title {
-  font-size: clamp(28px, 3.1vw, 40px);
-}
-
-/* The questions are rows between hairlines; nothing boxes them. */
+/* The questions are rows divided by hairlines; nothing boxes them. */
 .faq-list {
   display: grid;
-  border-top: 1px solid var(--s-line);
 }
 
-.faq-item {
-  border-bottom: 1px solid var(--s-line);
+.faq-item + .faq-item {
+  border-top: 1px solid var(--s-line);
 }
 
 .faq-item > summary {
@@ -555,51 +575,46 @@ html.js .feature-card:not([data-revealed]) .tm-line {
   gap: 16px;
   padding: 20px 0;
   color: var(--s-ink);
-  font-size: 17px;
-  line-height: 26px;
-  font-weight: 500;
-  letter-spacing: -0.012em;
+  font-size: 16px;
+  line-height: 24px;
   list-style: none;
   cursor: pointer;
+}
+
+.faq-item:first-child > summary {
+  padding-top: 8px;
 }
 
 .faq-item > summary::-webkit-details-marker {
   display: none;
 }
 
-/* A plus that closes into a minus as its answer opens. */
+/* A plus that turns into a cross as its answer opens. */
 .faq-icon {
   position: relative;
   flex: none;
-  width: 14px;
-  height: 14px;
-  margin-right: 2px;
-  color: var(--g-fg-3);
-  transition: color 200ms var(--s-swift);
-}
-
-.faq-item > summary:hover .faq-icon,
-.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon {
+  width: 16px;
+  height: 16px;
   color: var(--s-ink);
+  transition: rotate 500ms var(--s-glide);
 }
 
 .faq-icon > span {
   position: absolute;
-  top: 6.25px;
+  top: 7.25px;
   left: 0;
-  width: 14px;
+  width: 16px;
   height: 1.5px;
   border-radius: 2px;
   background-color: currentColor;
-  transition: rotate 500ms var(--s-glide);
 }
 
 .faq-icon > span + span {
   rotate: 90deg;
 }
 
-.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon > span + span {
-  rotate: 0deg;
+.faq-item:is([data-state="open"], [open]:not([data-state])) .faq-icon {
+  rotate: 45deg;
 }
 
 .faq-body {
@@ -618,11 +633,11 @@ html.js .feature-card:not([data-revealed]) .tm-line {
 }
 
 .faq-answer > p {
-  max-width: 580px;
-  padding: 0 0 22px;
-  color: var(--g-fg-2);
-  font-size: 15px;
-  line-height: 25px;
+  max-width: 500px;
+  padding: 4px 0 24px;
+  color: var(--s-ink);
+  font-size: 16px;
+  line-height: 26px;
   text-wrap: pretty;
 }
 
@@ -636,70 +651,60 @@ html.js .feature-card:not([data-revealed]) .tm-line {
 /* -------------------------------------------------------------------------------- finale */
 
 .finale {
-  text-align: center;
-}
-
-.finale-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.finale-tile {
-  margin-bottom: 32px;
-}
-
-.finale-title {
-  max-width: none;
-}
-
-.finale-note {
-  margin-top: 20px;
-  color: var(--g-fg-2);
-  font-size: 17px;
-  line-height: 28px;
-  text-wrap: balance;
+  padding-top: calc(var(--s-section) / 2);
+  overflow: hidden;
 }
 
 .finale-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  margin-top: 32px;
-  --i: 1;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+/* The mark, very large, drawn in one hairline and running off the section's foot. */
+.finale-art {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: clamp(220px, 40vw, 520px);
+  margin-top: 72px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
+  mask-image: linear-gradient(#000 55%, transparent);
+}
+
+.finale-art svg {
+  flex: none;
+  width: min(1040px, 96vw);
+  height: auto;
+  fill: none;
+  stroke: var(--s-line-strong);
+  stroke-width: 1px;
+}
+
+.finale-art path {
+  vector-effect: non-scaling-stroke;
 }
 
 /* --------------------------------------------------------------- reduced motion, mobile */
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-title,
-  .hero-row,
+  .hero-copy,
   .hero-detail,
   .tm-cursor {
     animation: none;
   }
 
   .faq-body,
-  .faq-icon > span,
-  html.js .feature-card .tm-line {
+  .faq-icon,
+  html.js .work-card .tm-line {
     transition: none;
   }
 
-  html.js .feature-card:not([data-revealed]) .tm-line {
+  html.js .work-card:not([data-revealed]) .tm-line {
     opacity: 1;
-  }
-}
-
-/* Nine names no longer fit one row: three rows of three. */
-@media (max-width: 1139px) {
-  .agent-wall {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 22px 16px;
-  }
-
-  .agents-note {
-    text-align: left;
   }
 }
 
@@ -716,79 +721,42 @@ html.js .feature-card:not([data-revealed]) .tm-line {
     margin-left: 8px;
   }
 
-  .faq-grid {
+  .intro-card,
+  .work-grid,
+  .agents-grid,
+  .two-col {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agents-grid,
+  .two-col {
     gap: 40px;
   }
 
-  .faq-head {
-    position: static;
+  .intro-text {
+    padding: 48px 40px 8px;
   }
 
-  .feature-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
+  .intro-art {
+    height: 260px;
   }
 
-  .feature-stage {
-    padding: 28px 24px 0;
-  }
-
-  .pillars {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pillar {
-    padding: 40px var(--s-pad);
-  }
-
-  .pillar + .pillar {
-    border-top: 1px solid var(--s-line);
-    border-left: 0;
+  .intro-disc {
+    top: 32px;
+    right: -80px;
+    left: auto;
+    width: 440px;
+    height: 440px;
   }
 
   .more-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .more-cell:not(:nth-child(3n + 1)) {
-    border-left: 0;
-  }
-
-  .more-cell:nth-child(2n) {
-    border-left: 1px solid var(--s-line);
-  }
-}
-
-/* On a tablet each drawing sits beside its caption. */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .pillar {
-    flex-direction: row;
-    align-items: center;
-    gap: 48px;
-  }
-
-  .pillar-art {
-    flex: none;
-    width: 38%;
-  }
-
-  .feature-stage {
-    aspect-ratio: 16 / 9;
-  }
 }
 
 @media (max-width: 767px) {
-  .home {
-    background-image: none;
-  }
-
   .hero {
-    padding: 56px 0 56px;
-  }
-
-  .hero-row {
-    margin-top: 24px;
+    padding-top: 56px;
   }
 
   .hero-lead {
@@ -800,19 +768,6 @@ html.js .feature-card:not([data-revealed]) .tm-line {
     margin-top: 48px;
   }
 
-  /* Each name under its mark, three to a row, so every agent fits the narrowest phone. */
-  .agent-cell {
-    flex-direction: column;
-    gap: 8px;
-    font-size: 13px;
-    line-height: 18px;
-    text-align: center;
-  }
-
-  .agents-note {
-    text-align: center;
-  }
-
   .hw {
     height: 520px;
   }
@@ -822,14 +777,66 @@ html.js .feature-card:not([data-revealed]) .tm-line {
   }
 
   .hw .m-access,
+  .work-view .m-access,
   .m-handoff .m-strong {
     display: none;
   }
 
-  .product-frame {
+  .intro-text {
+    padding: 36px 24px 0;
+  }
+
+  .intro-art {
+    height: 220px;
+  }
+
+  .intro-disc {
+    right: -60px;
+    width: 340px;
+    height: 340px;
+  }
+
+  .work-grid {
+    margin-top: 48px;
+  }
+
+  .work-card {
+    gap: 24px;
+    padding: 24px 20px 20px;
+  }
+
+  .work-text {
+    min-height: 0;
+  }
+
+  .work-view {
+    height: 420px;
+  }
+
+  .work-view .handoff-prior {
+    margin-right: 0;
+  }
+
+  .work-view .handoff-next {
+    width: 94%;
+  }
+
+  .more-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .more-card {
+    padding: 24px 20px;
+  }
+
+  .agents-view {
+    height: 380px;
+  }
+
+  .showcase-frame {
     margin-top: 40px;
-    padding: 6px;
-    border-radius: 16px;
   }
 
   /*
@@ -837,44 +844,18 @@ html.js .feature-card:not([data-revealed]) .tm-line {
    * to 71.7% of its width): the transcript, the code block and the composer read as the app rather
    * than as a thumbnail of it.
    */
-  .product-frame picture {
-    border-radius: 10px;
-  }
-
-  .product-frame img {
+  .showcase-frame img {
     width: 186%;
     max-width: none;
     translate: -17.9% 0;
   }
 
-  .feature-grid {
-    margin-top: 40px;
+  .getit-row {
+    padding: 14px 18px;
   }
 
-  .feature-stage {
-    padding: 20px 16px 0;
-  }
-
-  .more-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .more-cell,
-  .more-cell:nth-child(2n) {
-    border-left: 0;
-  }
-
-  .more-cell {
-    padding: 28px var(--s-pad) 32px;
-  }
-
-  .faq-item > summary {
-    padding: 18px 0;
-    font-size: 16px;
-    line-height: 24px;
-  }
-
-  .finale-actions {
+  .finale-actions,
+  .hero-actions {
     flex-direction: column;
     align-items: stretch;
     width: min(100%, 300px);
