@@ -297,7 +297,11 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
                 return (
                   <li key={chat.id}>
                     <button type="button" className="remote-chat-row" onClick={() => open(chat.id)}>
-                      <span className="remote-dot" data-tone={status.tone} aria-hidden="true" />
+                      {/* The agent's initial on a disc, its state as the dot on its shoulder. */}
+                      <span className="remote-avatar" aria-hidden="true">
+                        {(chat.agent_name.trim()[0] ?? "A").toUpperCase()}
+                        <span className="remote-dot" data-tone={status.tone} />
+                      </span>
                       <span className="remote-chat-text">
                         <strong>{chat.title || "Untitled chat"}</strong>
                         <span>
