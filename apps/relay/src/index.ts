@@ -203,12 +203,8 @@ export class Room extends DurableObject<Env> {
     for (const client of this.#clients()) {
       const attachment = client.deserializeAttachment() as Attachment;
       if (attachment.role !== "client") continue;
-      // What a browser proved to the last socket, it proves again to this one.
-      client.serializeAttachment({
-        ...attachment,
-        since: Date.now(),
-        proven: false,
-      } satisfies Attachment);
+      // A browser accepted before stays protected while it starts again: a newcomer never
+      // takes its place. The desktop still drops it if its key no longer opens anything.
       if (earlier.length > 0) client.send("h0");
       client.send("h1");
       pair[1].send(`o${attachment.cid}`);

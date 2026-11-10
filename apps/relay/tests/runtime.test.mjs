@@ -465,7 +465,8 @@ test("a removed bot link stops working", async () => {
 
 test("sockets that prove nothing cannot keep a paired browser out", async () => {
   const hostId = id(16);
-  const desk = await host(hostId, id(32));
+  const key = id(32);
+  const desk = await host(hostId, key);
   const open = async (from) => {
     const response = await upgrade(`client/${hostId}`, {
       Origin: ORIGIN,
@@ -517,6 +518,26 @@ test("sockets that prove nothing cannot keep a paired browser out", async () => 
 
   // Accepting a browser that already left is answered as closed.
   desk.send(`a${same[0].cid}`);
-  assert.equal(await desk.message(), `c${same[0].cid}`);
-  desk.close();
+  let closed = "";
+  while (closed !== `c${same[0].cid}`) closed = await desk.message();
+
+  // The desktop reconnecting does not make an accepted browser replaceable.
+  const again = await upgrade(`host/${hostId}`, { Authorization: `Bearer ${key}` });
+  assert.equal(again.status, 101);
+  const back = reader(again.webSocket);
+  assert.equal(await paired.socket.message(), "h0");
+  assert.equal(await paired.socket.message(), "h1");
+  for (let count = 0; count < 12; count += 1) {
+    const flood = await upgrade(`client/${hostId}`, {
+      Origin: ORIGIN,
+      "CF-Connecting-IP": `203.0.113.${count}`,
+    });
+    assert.equal(flood.status, 101);
+  }
+  await paired.socket.quiet(100);
+  paired.socket.send("mEafter the flood");
+  let seen = "";
+  while (!seen.startsWith(`m${paired.cid}`)) seen = await back.message();
+  assert.equal(seen, `m${paired.cid} Eafter the flood`);
+  back.close();
 });
