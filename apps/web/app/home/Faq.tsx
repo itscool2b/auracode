@@ -36,7 +36,7 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
   {
     question: "Which systems are supported?",
     answer:
-      "Windows 10 or newer on x64 and ARM64, and macOS 13.3 or newer on Apple silicon and Intel.",
+      "Windows 10 or newer on x64 and ARM64, macOS 13.3 or newer on Apple silicon and Intel, and Linux on x64: Ubuntu 22.04, Debian 12, Fedora 36 or newer.",
   },
 ];
 
@@ -44,9 +44,10 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
 const CLOSE = 300;
 
 /**
- * Questions as glass rows: the heading and a quiet link at left, six questions at right, one open
- * at a time; the plus turns into a minus as its answer slides open. Built on <details>, so every answer opens without JavaScript; the
- * script adds the eased open and close and keeps one row open.
+ * Questions as rows between hairlines: the heading and a quiet link at left, six questions at
+ * right, one open at a time; the plus closes into a minus as its answer slides open. Built on
+ * <details>, so every answer opens without JavaScript; the script adds the eased open and close
+ * and keeps one row open.
  */
 export function Faq() {
   const list = useRef<HTMLDivElement>(null);

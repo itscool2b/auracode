@@ -1,8 +1,28 @@
 # Reference audit
 
-Status: these reference observations support Halo, the 1 November 2026 styling pass, which awaits the owner's visual lock. The website is permanently light; the desktop keeps light and dark appearances. The observations do not establish visual approval or complete product parity.
+Status: these reference observations support Halo, the 1 November 2026 styling pass, and the website rebuild of 10 November 2026. Both await the owner's visual lock. The website is permanently light; the desktop keeps light and dark appearances. The observations do not establish visual approval or complete product parity.
 
-## Halo website references
+## Website rebuild references, 10 November 2026
+
+The owner asked for the website to look like SpaceXAI, Vercel, Aside, Linear and Harvey: "pretty much just copy them, but for our thing". Each was studied again on Mobbin, and the live linear.app, vercel.com, aside.com and harvey.ai home pages were captured at 1440px with Playwright, with their computed type read from the page. x.ai refused automated browsers, so SpaceXAI rests on Mobbin alone. The rebuild takes their type scale, structure and restraint. It ships none of their logos, artwork, copy or assets, and the labels and badges several of them set above headings are still not adopted (see the no-eyebrow rule in [visual-language.md](visual-language.md)).
+
+Measured on the live pages: Linear sets its headline at 64px, weight 510; Vercel at 64px, weight 400, with -0.06em tracking, on `#fafafa` in Geist; Aside at 48px, weight 400, in a Geist-like face; Harvey at 72px in a serif, with 14px sans text. The site before the rebuild set its headline at 104px, weight 560, beside a serif italic.
+
+| Reference | Observed | Adaptation |
+| --- | --- | --- |
+| [Linear hero](https://mobbin.com/sites/sections/40a46191-a57a-4bab-9a61-94fc14cad817) and linear.app | A left-set two-line headline at a calm size, one grey line of lead under it, the app window at the column's full width | The hero: headline, lead and actions on one row, then the live window flat and full width |
+| linear.app, three figures | Three line drawings in cells divided by hairlines, each over a short caption | The statement's three cells and their drawings. Its "FIG" labels are not adopted |
+| [Vercel grid](https://mobbin.com/sites/sections/ea59dfe9-3cc5-4536-972a-82cb838897f3) and [feature cells](https://mobbin.com/sites/sections/01de94b2-ba4b-4b69-9a08-49a96aef9fca) | Content on a frame of vertical rails, cells of a small glyph over an ink sentence and grey text | The page's rails and the six cells that name the rest of the workspace |
+| vercel.com, feature list | A title above a short list of features at left and one framed product view at right; a quiet row of customer logos under the hero | The capability rows beside their stage, and the agents' still row |
+| [Vercel cards](https://mobbin.com/sites/sections/78c2180a-54ba-4e20-91af-a5f5a8d55eab) | Two cards side by side, each a small product visual over a title and text | The terminal and canvas cards |
+| [Aside hero](https://mobbin.com/sites/sections/bdad14df-7d77-4d9d-8c30-dfd826d134d1) | A plain bar (logo, sections, one Download), a statement, the real app window as the stage | The header and the window as the hero's proof |
+| [Aside introduction](https://mobbin.com/sites/sections/ccd08031-9f3a-43f3-96df-5ab5e053f70e) | Paragraphs that open in ink and step back to grey | The statement, and every caption that starts in ink |
+| [Aside scene cards](https://mobbin.com/sites/sections/4e1b4bd7-267e-4718-a76e-fd69b2a75603) and [footer](https://mobbin.com/sites/sections/e0e0e6b0-4b96-4403-94f9-f8daa23364f1) | Product scenes on tinted stages over ink-then-grey captions; a footer of small link columns | The tinted stages and the footer |
+| [SpaceXAI hero](https://mobbin.com/sites/sections/00ed6985-4338-4daa-9061-607f173448cc) | A two-tone headline (ink, then grey), small pill actions, a live chat panel as proof | Two-tone titles and the ink and outlined pills |
+| [SpaceXAI media](https://mobbin.com/sites/sections/dfea7d6f-670a-4d55-8289-ff0267c89efb) | One plain statement above one large rounded media frame | The real screenshot in a plain bezel |
+| [Harvey hero](https://mobbin.com/sites/sections/2e23b7a5-3438-48b3-ae2c-0b8e468e15a5) and [statement](https://mobbin.com/sites/sections/599949fd-6c3a-4f84-84cf-e74a9082141d) | A headline at left with the lead and one action at right; a statement that opens in ink and continues in grey over a product frame | The split section headers (title left, lead right) |
+
+## Halo website references (1 November, superseded for the website)
 
 The owner named SpaceXAI, Harvey, Vercel and Aside for cleanliness and organization, and typesafe.ai as the bar for uniqueness. Each was studied on Mobbin. Halo adapts patterns; it copies no layout, copy, artwork or asset. The eyebrow-like labels and badges several of these pages use are deliberately not adopted (see the no-eyebrow rule in [visual-language.md](visual-language.md)).
 

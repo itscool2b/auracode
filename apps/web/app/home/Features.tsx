@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Words } from "../reveal";
 
 /** The terminal card's session, as the agent's own interface draws it: an authored illustration. */
@@ -15,7 +15,10 @@ const SESSION: readonly { kind: string; text: string }[] = [
   { kind: "reply", text: "The header's controls now share one gap and sit centred." },
 ];
 
-/** A chat open in its agent's own interface, in auracode's terminal, with Chat one click away. */
+/**
+ * A chat open in its agent's own interface, in auracode's terminal, with Chat one click away. Its
+ * lines print one after another when the card scrolls into view.
+ */
 function TerminalCard() {
   return (
     <div className="tm" aria-hidden="true">
@@ -30,15 +33,20 @@ function TerminalCard() {
       </div>
       <div className="tm-screen">
         {SESSION.map((line, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed transcript; the position is identity.
-          <span key={i} className="tm-line" data-kind={line.kind}>
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed transcript; the position is identity.
+            key={i}
+            className="tm-line"
+            data-kind={line.kind}
+            style={{ "--l": i } as CSSProperties}
+          >
             {line.kind === "tool" || line.kind === "reply" ? (
               <span className="tm-dot">●</span>
             ) : null}
             {line.text || " "}
           </span>
         ))}
-        <span className="tm-line tm-input">
+        <span className="tm-line tm-input" style={{ "--l": SESSION.length } as CSSProperties}>
           {"> "}
           <span className="tm-cursor" />
         </span>

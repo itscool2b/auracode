@@ -12,7 +12,7 @@
     "apps/desktop/src-tauri/Cargo.toml": "282efaad27b8c3f6c894bc42a64238f5f36037abd23a8d5d1d785f3d201a09f7",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
-    "apps/web/package.json": "da8b90bdbbaac48eaee5314720ecb0fe235972affbabb6ff87291eb13ba66e00",
+    "apps/web/package.json": "c5fdd28a728541a829c399d0a78cf6044970a5a15aebcf6f42460ca9cfebaf7a",
     "crates/aura-agents/Cargo.toml": "ac7691f5a61b30e2ccf587aba4e9f9eed9b7690afc70c5980f7c1cef4eff5ad5",
     "crates/aura-cli/Cargo.toml": "5f7f902ba9dd355a90a73c371099ad9d0fcd4ba769e1bbd6f2eefd05a2e0f646",
     "crates/aura-config/Cargo.toml": "6933baa2560a1fed11dac92001b0bb3b76b8badd19ad236a4c865c68924ad6fd",
@@ -23,7 +23,7 @@
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
     "crates/aura-sync/Cargo.toml": "b7d587591b42ffb7f5b6eaf2dad6396ac82aceb8855e7fd3bfd9a64792c6e08c",
     "packages/ui/package.json": "aa571a30eac1836db5311e26622541afce99b0c0fb8db4269ae5b647a2260970",
-    "pnpm-lock.yaml": "8bb51794484bbdb6bacf19f6cfd4b07b568f5609624e4432e968a6afe42c53e4",
+    "pnpm-lock.yaml": "50b976a8dbedb358bb2c9b5c214de8ea0c9951da8fa3446b9bf6c4645c3584a2",
     "third-party/models.json": "6c702b42c6052f5e9da76f4c4fd770fe1133326d960df4323a13835a73e856da",
     "third-party/overrides.json": "afbc29886b3d5703468c5c869c5c0b77ce5fef1aee2bac8be889a88fc36387b2"
   },
@@ -11413,21 +11413,6 @@
         {
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
           "source": "https://registry.npmjs.org/@chevrotain/utils/-/utils-13.2.0.tgz#LICENSE.txt"
-        }
-      ]
-    },
-    {
-      "ecosystem": "npm",
-      "name": "@fontsource-variable/fraunces",
-      "version": "5.3.0",
-      "license": "OFL-1.1",
-      "source": "https://registry.npmjs.org/@fontsource-variable/fraunces/-/fraunces-5.3.0.tgz",
-      "distributions": ["web"],
-      "targets": [],
-      "files": [
-        {
-          "sha256": "cd3384cafac6f2bddc3955273958a2e029f97027c8037ac539ef5744a77b579e",
-          "source": "https://registry.npmjs.org/@fontsource-variable/fraunces/-/fraunces-5.3.0.tgz#LICENSE"
         }
       ]
     },

@@ -426,6 +426,16 @@ html.js .pillar:nth-child(3) .pillar-art .art-line {
   text-overflow: ellipsis;
 }
 
+/* The session prints line by line once its card arrives (scripts and motion only). */
+html.js .feature-card .tm-line {
+  transition: opacity 240ms var(--s-swift);
+  transition-delay: calc(var(--l, 0) * 130ms + 500ms);
+}
+
+html.js .feature-card:not([data-revealed]) .tm-line {
+  opacity: 0;
+}
+
 .tm-line[data-kind="prompt"],
 .tm-input {
   color: var(--s-night-fg-1);
@@ -671,8 +681,13 @@ html.js .pillar:nth-child(3) .pillar-art .art-line {
   }
 
   .faq-body,
-  .faq-icon > span {
+  .faq-icon > span,
+  html.js .feature-card .tm-line {
     transition: none;
+  }
+
+  html.js .feature-card:not([data-revealed]) .tm-line {
+    opacity: 1;
   }
 }
 
