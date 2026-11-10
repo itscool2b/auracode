@@ -2023,9 +2023,9 @@ export type GeneralPreferences = {
 	 */
 	copy_instructions_to_worktrees: boolean,
 	/**
-	 *  Agents edit project memory directly; every edit is a revision the person can restore. Off:
-	 *  agents propose updates for review. On unless the person turns it off in Project memory
-	 *  (the owner reversed the earlier review-only decision on 1 November 2026).
+	 *  Agents edit project memory; each edit shows a notice with Undo. Off: agents read it and
+	 *  cannot change it. On unless the person turns it off in Project memory (the owner reversed
+	 *  the earlier review-only decision on 1 November 2026, and dropped proposals on 10 November).
 	 */
 	agent_memory_writes: boolean,
 	/**
@@ -3478,7 +3478,7 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 { type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
 { type: "copy_instructions_to_worktrees"; enabled: boolean } | 
-/**  Turns on or off agents' direct edits to project memory. Off keeps review-only proposals. */
+/**  Turns on or off agents' edits to project memory. Off leaves it read-only for them. */
 { type: "agent_memory_writes"; enabled: boolean } | 
 /**  Turns on or off showing a finished turn's work instead of folding it. */
 { type: "keep_steps_open"; enabled: boolean } | 
