@@ -11,6 +11,7 @@ export type Page =
   | "shortcuts"
   | "agents"
   | "plugins"
+  | "browser"
   | "instructions"
   | "memory"
   | "remote"
@@ -20,7 +21,7 @@ export type Page =
 
 export const PAGE_GROUPS: readonly (readonly Page[])[] = [
   ["general", "appearance", "chats", "voice", "shortcuts"],
-  ["agents", "plugins", "instructions", "memory"],
+  ["agents", "plugins", "browser", "instructions", "memory"],
   ["remote", "account", "privacy", "about"],
 ];
 
@@ -32,6 +33,7 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
   shortcuts: "Shortcuts",
   agents: "Agents",
   plugins: "Plugins & MCP",
+  browser: "Browser",
   instructions: "Instructions",
   memory: "Project memory",
   remote: "Remote access",
@@ -41,14 +43,12 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
 };
 
 /**
- * A setting the search can find: its page, the row's own title, and other words for it. `section`
- * names the part of a page that has to open first (Plugins & MCP's Universal plugins).
+ * A setting the search can find: its page, the row's own title, and other words for it.
  */
 export interface SettingEntry {
   readonly page: Page;
   readonly title: string;
   readonly words?: string;
-  readonly section?: "universal";
 }
 
 export const SETTINGS_INDEX: readonly SettingEntry[] = [
@@ -100,27 +100,20 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     words: "mcp servers marketplaces skills extensions tools",
   },
   {
-    page: "plugins",
+    page: "browser",
     title: "Browser use",
-    section: "universal",
-    words: "browser universal plugins web pages annotate agents tools",
+    words: "browser universal plugin built-in web pages annotate agents tools turn off",
   },
   {
-    page: "plugins",
-    title: "Save passwords",
-    section: "universal",
-    words: "browser sign-ins sign in autofill",
+    page: "browser",
+    title: "Tools for agents",
+    words: "browser tools exposed agents navigate click screenshot",
   },
+  { page: "browser", title: "Save passwords", words: "browser sign-ins sign in autofill" },
+  { page: "browser", title: "Browsing history", words: "browser pages visited" },
   {
-    page: "plugins",
-    title: "Browsing history",
-    section: "universal",
-    words: "browser pages visited",
-  },
-  {
-    page: "plugins",
+    page: "browser",
     title: "Clear browsing data",
-    section: "universal",
     words: "browser cookies cache history passwords sign out",
   },
   { page: "instructions", title: "Instructions", words: "agents.md claude.md rules prompt" },

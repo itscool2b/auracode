@@ -190,8 +190,12 @@ pub fn remote_remove_device(app: tauri::AppHandle, id: String) -> Result<RemoteS
 /// Creates a bot link. Its address carries the bot's token and is returned only here.
 #[tauri::command]
 #[specta::specta]
-pub fn remote_create_bot(app: tauri::AppHandle, name: String) -> Result<RemoteBotLink, AppError> {
-    service(&app)?.create_bot(&name).map_err(refused)
+pub fn remote_create_bot(
+    app: tauri::AppHandle,
+    name: String,
+    full: bool,
+) -> Result<RemoteBotLink, AppError> {
+    service(&app)?.create_bot(&name, full).map_err(refused)
 }
 
 #[tauri::command]
@@ -325,11 +329,391 @@ fn default_agent(state: &AppState) -> Option<String> {
         .and_then(|preferences| preferences.general.default_agent)
 }
 
+/// Whether `path` names a folder by a full path on this computer's own drives. A network share
+/// in any spelling (`\\server\share`, `//server/share`, mixed slashes, the `\\?\UNC\` and device
+/// forms) is not: opening one makes Windows sign in to that machine. The path is parsed as the
+/// system parses it, after its separators are made one kind, so no spelling slips past.
+///
+/// A drive letter mapped to a network share is the person's own setup and passes: it reaches
+/// nothing they have not already connected.
+fn on_this_computer(path: &str) -> bool {
+    use std::path::{Component, Path, Prefix};
+    if cfg!(windows) {
+        let unified = path.replace('/', "\\");
+        if unified.starts_with("\\\\") {
+            return false;
+        }
+        let mut parts = Path::new(&unified).components();
+        matches!(
+            (parts.next(), parts.next()),
+            (Some(Component::Prefix(prefix)), Some(Component::RootDir))
+                if matches!(prefix.kind(), Prefix::Disk(_))
+        )
+    } else {
+        !path.starts_with("//") && Path::new(path).is_absolute()
+    }
+}
+
+/// The words a bot uses for the three access levels.
+fn access_word(autonomy: aura_protocol::Autonomy) -> &'static str {
+    match autonomy {
+        aura_protocol::Autonomy::Ask => "ask",
+        aura_protocol::Autonomy::AutoEdit => "auto_edit",
+        aura_protocol::Autonomy::FullAuto => "full_auto",
+    }
+}
+
+/// A chat's model and thinking choices as its pickers show them, and its access levels.
+fn chat_options(lists: &aura_protocol::session::SessionLists) -> aura_remote::ChatOptions {
+    use aura_protocol::session::{ConfigCategory, ConfigKind};
+    use aura_remote::Choice;
+    let select = |category: ConfigCategory| {
+        lists
+            .options
+            .iter()
+            .filter(|option| !matches!(option.id.as_str(), "aura.access" | "aura.workflow"))
+            .find(|option| option.category == category)
+            .and_then(|option| match &option.kind {
+                ConfigKind::Select { current, choices } => Some((
+                    choices
+                        .iter()
+                        .map(|choice| Choice {
+                            value: choice.value.clone(),
+                            name: choice.name.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                    Some(current.clone()),
+                )),
+                ConfigKind::Toggle { .. } => None,
+            })
+            .unwrap_or_default()
+    };
+    let (models, model) = select(ConfigCategory::Model);
+    let (thinking, thinking_level) = select(ConfigCategory::Effort);
+    let native = &lists.controls.access.choices;
+    let access = if native.is_empty() {
+        [
+            aura_protocol::Autonomy::Ask,
+            aura_protocol::Autonomy::AutoEdit,
+            aura_protocol::Autonomy::FullAuto,
+        ]
+        .into_iter()
+        .map(|level| Choice {
+            value: access_word(level).into(),
+            name: access_word(level).replace('_', " "),
+        })
+        .collect()
+    } else {
+        native
+            .iter()
+            .filter_map(|choice| {
+                choice.legacy_autonomy.map(|level| Choice {
+                    value: access_word(level).into(),
+                    name: choice.name.clone(),
+                })
+            })
+            .collect()
+    };
+    aura_remote::ChatOptions {
+        models,
+        model,
+        thinking,
+        thinking_level,
+        access,
+        access_mode: Some(access_word(lists.autonomy.requested).into()),
+    }
+}
+
 impl Backend for AppBackend {
     fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend> {
         Arc::new(Self {
             app: self.app.clone(),
             profile: profile.to_owned(),
+        })
+    }
+
+    /// A full-control link's actions, each the call the window itself makes, under the same
+    /// lease and only while this backend's profile is the open one.
+    fn act(
+        &self,
+        action: aura_remote::Action,
+    ) -> BoxFuture<'_, Result<aura_remote::Outcome, BackendError>> {
+        use aura_protocol::session::{ConfigCategory, ConfigValue, SessionControlChange};
+        use aura_remote::{Action, Outcome};
+        Box::pin(async move {
+            let sessions = self.sessions().map_err(failed)?;
+            // A model or a thinking level, by the value its picker would send.
+            let choose = |chat_id: String,
+                          category: ConfigCategory,
+                          what: &'static str,
+                          value: String| {
+                let sessions = &sessions;
+                async move {
+                    let lists = sessions
+                        .lists(&chat_id)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    let offered = chat_options(&lists);
+                    let choices = if category == ConfigCategory::Model {
+                        &offered.models
+                    } else {
+                        &offered.thinking
+                    };
+                    if !choices.iter().any(|choice| choice.value == value) {
+                        return Err(BackendError::new(
+                            "invalid",
+                            format!(
+                                "This chat offers no such {what}. Call chat_options for the list."
+                            ),
+                        ));
+                    }
+                    let option = lists
+                        .options
+                        .iter()
+                        .filter(|option| {
+                            !matches!(option.id.as_str(), "aura.access" | "aura.workflow")
+                        })
+                        .find(|option| option.category == category)
+                        .map(|option| option.id.clone())
+                        .ok_or_else(|| {
+                            BackendError::new(
+                                "invalid",
+                                format!("This agent has no {what} to choose."),
+                            )
+                        })?;
+                    sessions
+                        .set_option(
+                            &chat_id,
+                            &option,
+                            ConfigValue::Choice {
+                                value: value.clone(),
+                            },
+                        )
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Done(format!("The {what} is now {value}.")))
+                }
+            };
+            match action {
+                Action::CreateProject { path, name } => {
+                    // A folder on this computer, by its full path: not a network share, whose
+                    // name alone makes Windows reach out to another machine.
+                    if !on_this_computer(&path) {
+                        return Err(BackendError::new(
+                            "invalid",
+                            "Give a folder on the computer itself, not a network path.",
+                        ));
+                    }
+                    let name = name.unwrap_or_else(|| {
+                        std::path::Path::new(&path)
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .filter(|name| !name.is_empty())
+                            .unwrap_or_else(|| "Project".into())
+                    });
+                    let project = sessions
+                        .project_create(aura_protocol::workspace::ProjectCreate {
+                            project: aura_protocol::workspace::ProjectInput {
+                                name,
+                                color: None,
+                                default_agent: None,
+                                default_model: None,
+                            },
+                            folder: path,
+                        })
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Project {
+                        folder_id: project.folders.first().map(|folder| folder.id.clone()),
+                        id: project.id,
+                        name: project.name,
+                    })
+                }
+                Action::Options { chat_id } => Ok(Outcome::Options(chat_options(
+                    &sessions
+                        .lists(&chat_id)
+                        .await
+                        .map_err(|error| failed(error.into()))?,
+                ))),
+                Action::SetModel { chat_id, model } => {
+                    choose(chat_id, ConfigCategory::Model, "model", model).await
+                }
+                Action::SetThinking { chat_id, level } => {
+                    choose(chat_id, ConfigCategory::Effort, "thinking level", level).await
+                }
+                Action::SetAccess { chat_id, access } => {
+                    let wanted = match access.as_str() {
+                        "ask" => aura_protocol::Autonomy::Ask,
+                        "auto_edit" => aura_protocol::Autonomy::AutoEdit,
+                        "full_auto" => aura_protocol::Autonomy::FullAuto,
+                        _ => return Err(BackendError::new("invalid", "No such access level.")),
+                    };
+                    let lists = sessions
+                        .lists(&chat_id)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    let native = &lists.controls.access.choices;
+                    // As the window's picker does: the agent's own level where it has them.
+                    if native.is_empty() {
+                        sessions
+                            .set_autonomy(&chat_id, wanted)
+                            .await
+                            .map_err(|error| failed(error.into()))?;
+                    } else {
+                        let choice = native
+                            .iter()
+                            .find(|choice| choice.legacy_autonomy == Some(wanted))
+                            .ok_or_else(|| {
+                                BackendError::new(
+                                    "invalid",
+                                    "This agent does not offer that access level. Call chat_options.",
+                                )
+                            })?;
+                        sessions
+                            .set_control(
+                                &chat_id,
+                                SessionControlChange::Access {
+                                    value: choice.value.clone(),
+                                },
+                            )
+                            .await
+                            .map_err(|error| failed(error.into()))?;
+                    }
+                    Ok(Outcome::Done(format!("Access is now {access}.")))
+                }
+                Action::SwitchAgent { chat_id, agent_id } => {
+                    // As the window does: the agent stops, then the app's own handoff is prepared
+                    // and applied. A chat that is already stopped answers the stop with an error
+                    // that does not matter here; the handoff itself refuses a chat still working.
+                    let _ = sessions.stop(&chat_id).await;
+                    let preview = sessions
+                        .continuation_preview(
+                            &chat_id,
+                            aura_protocol::conversation::ContinuationAction::SwitchAgent {
+                                agent_id,
+                            },
+                        )
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    let result = sessions
+                        .continuation_apply(&chat_id, &preview.token)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Chat { id: result.chat_id })
+                }
+                Action::Rename { chat_id, title } => {
+                    sessions
+                        .chat_rename(&chat_id, &title)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Done("Renamed.".into()))
+                }
+                Action::Archive { chat_id, archived } => {
+                    sessions
+                        .chat_archive(&chat_id, archived)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Done(
+                        if archived {
+                            "Archived."
+                        } else {
+                            "Restored from the archive."
+                        }
+                        .into(),
+                    ))
+                }
+                Action::StartAgent { chat_id } => {
+                    sessions
+                        .start(&chat_id, false)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Done(
+                        "The agent is starting. Call wait_for_chat or send_message.".into(),
+                    ))
+                }
+                Action::Changes { chat_id } => {
+                    let changes = sessions
+                        .chat_changes(&chat_id, None)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Changes {
+                        files: changes
+                            .files
+                            .iter()
+                            .map(|file| {
+                                let kind = match file.kind {
+                                    aura_protocol::changes::ChangeKind::Added => "added",
+                                    aura_protocol::changes::ChangeKind::Modified => "modified",
+                                    aura_protocol::changes::ChangeKind::Deleted => "deleted",
+                                };
+                                (file.path.clone(), kind.to_owned())
+                            })
+                            .collect(),
+                        unavailable: changes.unavailable_reason,
+                    })
+                }
+                Action::Diff { chat_id, path } => {
+                    let changes = sessions
+                        .chat_changes(&chat_id, None)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    let checkpoint = changes.checkpoint.ok_or_else(|| {
+                        BackendError::new("not_found", "This chat has no saved changes to read.")
+                    })?;
+                    // Only a file the last turn changed: the path is looked up among them, never
+                    // opened from the disk by name.
+                    if !changes.files.iter().any(|file| file.path == path) {
+                        return Err(BackendError::new(
+                            "not_found",
+                            "The last turn did not change that file. Call list_changes.",
+                        ));
+                    }
+                    let diff = sessions
+                        .chat_change_diff(&chat_id, &checkpoint.id, &path)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Diff {
+                        before: diff.before,
+                        after: diff.after,
+                        binary: diff.binary,
+                        truncated: diff.truncated,
+                    })
+                }
+                Action::ReadMemory { project_id } => Ok(Outcome::Memory {
+                    markdown: sessions
+                        .read_project_memory(&project_id)
+                        .await
+                        .map_err(|error| failed(error.into()))?
+                        .markdown,
+                }),
+                Action::WriteMemory {
+                    project_id,
+                    markdown,
+                } => {
+                    // Memory reaches every later chat of the project: the person's own switch
+                    // for agents' edits covers a bot's as well.
+                    if !sessions.agent_memory_writes() {
+                        return Err(BackendError::new(
+                            "refused",
+                            "The owner has turned off edits to project memory. Tell them what you would have saved.",
+                        ));
+                    }
+                    let current = sessions
+                        .read_project_memory(&project_id)
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    sessions
+                        .save_project_memory(aura_protocol::memory::SaveProjectMemory {
+                            project_id,
+                            expected_revision: current.revision,
+                            markdown,
+                            reason: "Edited by a linked bot".into(),
+                        })
+                        .await
+                        .map_err(|error| failed(error.into()))?;
+                    Ok(Outcome::Done("Saved the project's memory.".into()))
+                }
+            }
         })
     }
 
@@ -493,5 +877,49 @@ impl Backend for AppBackend {
                 .await
                 .map_err(|error| failed(error.into()))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::on_this_computer;
+
+    #[test]
+    fn a_project_folder_is_a_full_path_on_this_computers_own_drives() {
+        #[cfg(windows)]
+        {
+            for local in [
+                r"C:\work\site",
+                "C:/work/site",
+                r"d:\",
+                r"C:\work/mixed\path",
+            ] {
+                assert!(on_this_computer(local), "{local}");
+            }
+            // A network share, however it is spelled, and the forms that reach one.
+            for remote in [
+                r"\server\share",
+                "//server/share",
+                r"\/server\share",
+                r"/\server/share",
+                r"\?\UNC\server\share",
+                r"\.\pipe\name",
+                r"\?\C:\work",
+                "//?/UNC/server/share",
+            ] {
+                assert!(!on_this_computer(remote), "{remote}");
+            }
+            // Not a full path: relative, drive-relative, or rooted with no drive.
+            for partial in ["work", r"C:work", r"\work", "/work", "", "C:"] {
+                assert!(!on_this_computer(partial), "{partial}");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(on_this_computer("/home/someone/site"));
+            for other in ["//server/share", "site", ""] {
+                assert!(!on_this_computer(other), "{other}");
+            }
+        }
     }
 }

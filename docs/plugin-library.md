@@ -1,7 +1,7 @@
 # Plugins & MCP
 
 Customize, below Search and New chat, opens Settings on Plugins & MCP, which Settings also lists
-beside its other pages. Universal plugins come first, then Shared MCP, then one section per agent. Each agent section shows
+beside its other pages. MCP servers come first and are what the page opens on (owner, 10 November 2026), then one section per agent, each led by that agent's own MCP servers. Browser use, the universal plugin, has its own page: Settings > Browser. Each agent section shows
 what that agent supports, read from the agent's own CLI where the CLI has a reviewed,
 machine-readable listing, and from the agent's files where it does not. It also shows the
 harness's update status and the device's sync switch for that agent. Every change runs the

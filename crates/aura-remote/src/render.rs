@@ -320,6 +320,11 @@ fn one_line(text: &str, chars: usize) -> String {
     )
 }
 
+/// The start of a long text, marked where it was cut.
+pub fn cut(text: &str, chars: usize) -> String {
+    head(text, chars)
+}
+
 fn head(text: &str, chars: usize) -> String {
     match text.char_indices().nth(chars) {
         Some((at, _)) => format!("{}…", &text[..at]),

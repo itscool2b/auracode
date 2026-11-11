@@ -119,7 +119,7 @@ export function AgentUpdateBanner({
     run.state === "unchanged"
       ? `The update finished, but auracode still finds ${update.version}${
           update.path ? ` at ${update.path}` : ""
-        }. Another copy may come first on your PATH.`
+        }. The newer release may not be out for this installation yet, or another copy was updated.`
       : (blocked ?? waiting);
   const canRun = updatable && working === 0 && run.state !== "unchanged";
   const inTerminal = canRun && run.state === "failed" && actions.terminal !== undefined;

@@ -36,6 +36,14 @@ export async function checkRemote(browser, url, out, engine) {
     await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
 
+    // Reading what a bot link allows turns nothing on: closing the dialog leaves it off.
+    await page.getByRole("button", { name: "Create link" }).click();
+    await page.getByRole("dialog", { name: "Link a bot" }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Link a bot" }).waitFor({ state: "detached" });
+    assert.deepEqual(await calls(), []);
+    assert.equal(await toggle.isChecked(), false);
+
     // Pairing turns remote access on by itself and shows the link once, as a code and as text.
     await page.getByRole("button", { name: "Pair", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Pair a device" });
@@ -109,6 +117,13 @@ export async function checkRemote(browser, url, out, engine) {
     await name.fill("fail");
     await bot.getByRole("button", { name: "Create link" }).click();
     await bot.getByRole("alert").getByText("already has 16 bot links").waitFor();
+    // The link's level is chosen here: the chat tools unless full control is asked for.
+    const levels = bot.getByRole("group", { name: "What it can do" });
+    assert.equal(await levels.getByRole("radio", { name: /^Chats/ }).isChecked(), true);
+    await levels.getByText("It has no tool for Settings", { exact: false }).waitFor();
+    // Neither level is a wall: an agent the bot directs can still run commands.
+    await bot.getByText("the level limits the bot's own tools", { exact: false }).waitFor();
+    await levels.getByRole("radio", { name: /^Full control/ }).check();
     await name.fill("Research bot");
     await name.press("Enter");
     const address = bot.getByRole("textbox", { name: "Bot address" });
@@ -123,7 +138,8 @@ export async function checkRemote(browser, url, out, engine) {
     await page.screenshot({ path: resolve(out, `${engine}-${colorScheme}-remote-bot.png`) });
     await bot.getByRole("button", { name: "Done" }).click();
     await page.getByText("Research bot", { exact: true }).waitFor();
-    await page.getByText("Not used yet", { exact: true }).waitFor();
+    assert.equal((await calls()).at(-1), "create-bot:Research bot:full");
+    await page.getByText("Full control · Not used yet", { exact: true }).waitFor();
     assert.equal(await page.getByText(/t{43}/).count(), 0, "the address stayed on the page");
     await page.getByRole("button", { name: "Remove Research bot" }).click();
     assert.equal((await calls()).at(-1), "remove-bot:bot-1");
@@ -152,6 +168,14 @@ export async function checkRemote(browser, url, out, engine) {
       .getByRole("button", { name: /Link a bot/ })
       .click();
     await page.getByRole("heading", { level: 1, name: "Remote access" }).waitFor();
+
+    // From off, creating a bot link is what turns remote access on.
+    await page.goto(`${url}/?preview=settings&page=remote`);
+    await page.getByRole("button", { name: "Create link" }).click();
+    await bot.getByRole("button", { name: "Create link" }).click();
+    await bot.getByRole("textbox", { name: "Bot address" }).waitFor();
+    assert.deepEqual(await calls(), ["enabled:true", "create-bot:Grok Bot"]);
+    assert.equal(await toggle.isChecked(), true);
     assert.deepEqual(errors, []);
     await context.close();
   }

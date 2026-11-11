@@ -12,8 +12,10 @@ including in the tray.
 
 1. **Settings > Remote access > Pair.** A dialog shows a code to scan and the same link as text.
    The link opens once, within ten minutes. Asking for it turns remote access on.
-2. **Open the link on the other device.** `auracode.si/remote` pairs, takes the key out of the
-   address bar, and lists the computer's chats by project. From then on that browser opens the
+2. **Open the link on the other device and tap Pair this browser.** `auracode.si/remote` takes
+   the key out of the address bar and asks first: opening the link pairs nothing by itself, so a
+   program that only opens links (a mail or chat scanner) cannot spend it. After the tap it pairs
+   and lists the computer's chats by project. From then on that browser opens the
    page without a link.
 3. **Use it.** Open a chat to follow it live, send a message (it queues behind a running turn, as
    in the app), stop a turn, answer a permission request or a question, start a chat in a
@@ -21,10 +23,24 @@ including in the tray.
 4. **Remove a device** in Settings, or "Forget this computer" on the page. Either ends every
    session of that device at once.
 
-For a bot: **Settings > Remote access > Create link** names the bot and shows one MCP address,
-once. In Grok that address goes in grok.com/connectors > New Connector > Custom. The bot then has
-eight tools: `list_chats`, `list_projects`, `read_chat`, `send_message`, `wait_for_chat`,
-`respond_to_request`, `stop_chat`, `start_chat` (`apps/relay/src/tools.json`).
+For a bot: **Settings > Remote access > Create link** names the bot, asks what it can do, and
+shows one MCP address, once. In Grok that address goes in grok.com/connectors > New Connector >
+Custom. A link has one of two levels, chosen when it is made and never changed after (a wider
+link is a new link):
+
+- **Chats** (eight tools): `list_chats`, `list_projects`, `read_chat`, `send_message`,
+  `wait_for_chat`, `respond_to_request`, `stop_chat`, `start_chat`.
+- **Full control** (those, and thirteen more): `create_project`, `chat_options`, `set_model`,
+  `set_thinking`, `set_access`, `switch_agent`, `rename_chat`, `archive_chat`, `start_agent`,
+  `list_changes`, `read_change`, `read_memory`, `write_memory`. This is what a person does with
+  chats and projects in the app's window.
+
+No link has a tool for Settings, accounts or sign-in, installing or updating software, remote
+access itself, deleting data, a raw terminal, or reading a file by its path. The tools are
+described to bots in `apps/relay/src/tools.json` and run in `crates/aura-remote/src/bot.rs`.
+
+The level limits the bot's own tools. It is not a wall around the computer: at either level a
+bot sends messages to agents and answers their permission requests, and agents run commands.
 
 ## The parts
 
@@ -52,8 +68,15 @@ decision about who may do what is made in Rust on the computer.
   change, reorder or replay. A relay that turned hostile could drop messages or refuse service,
   and nothing more.
 - **A bot's calls are not sealed.** A bot speaks MCP over HTTPS to the relay, so the relay reads
-  each call and answer in passing, as does the bot's own service. The Settings page says so. The
-  computer still checks the bot's token on every call, so a relay cannot invent a bot.
+  each call and answer in passing, as does the bot's own service, and each call carries the
+  link's token. So a relay that turned hostile, or the bot's service, could act as any bot link
+  it has seen used, at that link's level. The Settings page says so. The computer checks the
+  token, the link's workspace and its level on every call, so nobody can invent a link, widen
+  one, or use one in another workspace.
+- **A bot link's level is the computer's to enforce.** The relay lists the full-control tools
+  only to a link made with full control and treats a wider tool as unknown for the others, but
+  the computer checks the level itself on every call, whatever the relay listed or let through
+  (`host.rs`, and again in `bot::call`).
 - **A device or a bot link reaches one workspace**: the profile that was open when it was made
   (Local, or an account's). `remote.json` is the installation's, but each record names its
   profile, and the computer accepts a key or a token only while that profile is the open one.
@@ -111,14 +134,23 @@ it.
 
 ### What the relay stores and limits
 
-Per computer: the hash of the key that first claimed its id, and the hashes of its bot tokens.
-No D1, R2, KV or secrets.
+Per computer: a mark that it has an owner, the hashes of its bot tokens, and which of those
+links have full control. No D1, R2, KV or secrets. A room no computer has connected to for
+thirty days forgets all of it; the computer sends its bot links again whenever it connects.
 
-- A host socket needs the key whose hash claimed the id, and may not come from a browser.
+- A computer's id is the first sixteen bytes of a SHA-256 over a fixed label and its key
+  (`crypto::host_id`), so only the key can claim the id. The Worker checks that before a request
+  reaches a room: nobody can take an id first, or take one over, and a wrong claim stores
+  nothing. A host socket may not come from a browser.
 - A browser socket must come from the site's origin. Until the computer accepts it, it is one of
-  at most eight unproven sockets (three per address), and a newcomer replaces the oldest: knowing
-  a computer's id cannot keep a paired browser out. Accepted browsers are never replaced; after
-  the computer reconnects they have thirty seconds to be accepted again.
+  at most eight unproven sockets (three per address, where an IPv6 address counts as its /64),
+  a newcomer replaces the oldest, and it may send four messages of at most 2 KiB: the handshake
+  and nothing more. Accepted browsers are never replaced; after the computer reconnects they
+  have thirty seconds to be accepted again.
+- That does not stop someone who knows a computer's id from opening sockets fast enough to keep
+  a new browser from finishing its handshake. It costs the computer almost nothing and reaches
+  no chat, but it can delay pairing or a reconnect. The id is in every pairing link and bot
+  address, so treat those as private. See "Not done".
 - A browser sends at most 96 KiB per message and 240 messages per ten seconds.
 - A wrong or removed bot address is a plain 404. At most eight bot calls wait at once, each for
   at most 55 seconds.
@@ -161,7 +193,28 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
 
 ## Not done
 
+Security, from the review of 10 November 2026 (each is a known limit, not a surprise):
+
+- **A knock the relay can check.** The computer would register a one-way value made from each
+  device key and from the open pairing key, and the relay would admit only sockets that present
+  one. That closes the handshake flood above. Today the relay cannot tell a paired browser from
+  a stranger until the computer accepts it.
+- **Forward secrecy.** Session keys come from the pairing or device key and two nonces sent in
+  the clear. Someone who recorded a pairing session at the relay and later got the spent link
+  could work out the device key. An ephemeral key exchange in the hello and welcome would end
+  that; better still, a key pair per device, with only its public half on the computer.
+- **Device keys at rest.** They are in `remote.json` as they are, readable by the same user.
+- **A code both sides confirm.** Pairing needs a tap on the phone now, but the computer does not
+  confirm which browser it paired. Whoever opens the link first within its ten minutes is the
+  device; Settings shows the new device at once and Remove ends it.
+- **A bot link that is sealed end to end**, and one that expires when idle: the first would need
+  the bot to run a program of ours.
+- **The relay on an origin of its own.** It answers under `auracode.si`, the page's origin.
+- **Per-room rate limits** at Cloudflare's edge for new sockets and host claims.
+
+Features:
+
 - Notifications on the phone when a chat needs an answer.
-- Narrower permissions for a device or a bot (read only, no new chats).
-- New chats in a worktree, attachments, images and the queue's own controls from the page.
-- A bot link that is sealed end to end: it would need the bot to run a program of ours.
+- A read-only level for a device or a bot.
+- New chats in a worktree, attachments, images, the queue's controls and the model picker from
+  the page (a full-control bot link has the model, thinking and access tools).

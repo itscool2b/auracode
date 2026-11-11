@@ -9,6 +9,14 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 const ORIGIN = "https://auracode.test";
 const BASE = `${ORIGIN}/api/remote/v1`;
 const id = (bytes) => randomBytes(bytes).toString("base64url");
+/** A computer's id is the start of a hash of its key. */
+const idOf = (key) =>
+  createHash("sha256")
+    .update("auracode remote v1 host id")
+    .update(Buffer.from(key, "base64url"))
+    .digest()
+    .subarray(0, 16)
+    .toString("base64url");
 const hash = (text) => createHash("sha256").update(text).digest("base64url");
 let runtime;
 
@@ -122,7 +130,7 @@ const mcp = (hostId, reference, body, init = {}) =>
 test("reports health and hides everything else", async () => {
   const health = await runtime.dispatchFetch(`${BASE}/health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true, protocol: 1, tools: 8 });
+  assert.deepEqual(await health.json(), { ok: true, protocol: 1, tools: 8, full_tools: 21 });
   assert.equal(health.headers.get("cache-control"), "no-store");
   for (const path of ["", "nothing", "host", "host/short", `other/${id(16)}`])
     assert.equal((await runtime.dispatchFetch(`${BASE}/${path}`)).status, 404, path);
@@ -130,8 +138,8 @@ test("reports health and hides everything else", async () => {
 });
 
 test("only the desktop that claimed an id can hold its host socket", async () => {
-  const hostId = id(16);
   const key = id(32);
+  const hostId = idOf(key);
   // Nothing is behind an id no desktop has claimed.
   assert.equal((await upgrade(`client/${hostId}`, { Origin: ORIGIN })).status, 404);
   assert.equal((await upgrade(`host/${hostId}`)).status, 401);
@@ -154,9 +162,66 @@ test("only the desktop that claimed an id can hold its host socket", async () =>
   (await host(hostId, key)).close();
 });
 
+test("a computer's id is made from its key, so nobody can take it", async () => {
+  // Someone who knows a computer's id, but not its key, gets there first with a key of their own.
+  const key = id(32);
+  const hostId = idOf(key);
+  const theirs = id(32);
+  assert.equal(
+    (await upgrade(`host/${hostId}`, { Authorization: `Bearer ${theirs}` })).status,
+    401,
+    "an id was claimed with a key it is not made from",
+  );
+  // Nothing was claimed, and nothing stored: the id still has nothing behind it.
+  assert.equal((await upgrade(`client/${hostId}`, { Origin: ORIGIN })).status, 404);
+  // An id of their own choosing is no better, whatever key goes with it.
+  assert.equal(
+    (await upgrade(`host/${id(16)}`, { Authorization: `Bearer ${theirs}` })).status,
+    401,
+  );
+  // The computer itself connects as always.
+  (await host(hostId, key)).close();
+});
+
+test("a socket that has shown no key gets the handshake's few small messages", async () => {
+  const key = id(32);
+  const hostId = idOf(key);
+  const desk = await host(hostId, key);
+  // One large message: closed, and it never reaches the computer.
+  const loud = await client(hostId);
+  assert.equal(await loud.message(), "h1");
+  const opened = await desk.message();
+  assert.equal(opened[0], "o");
+  loud.send(`m${"x".repeat(3000)}`);
+  assert.equal(await loud.closing(), 1008);
+  assert.equal(await desk.message(), `c${opened.slice(1)}`);
+  // Many small ones: the first four pass, the fifth ends it.
+  const chatty = await client(hostId);
+  assert.equal(await chatty.message(), "h1");
+  const cid = (await desk.message()).slice(1);
+  for (let sent = 0; sent < 4; sent += 1) {
+    chatty.send("mH{}");
+    assert.equal(await desk.message(), `m${cid} H{}`);
+  }
+  chatty.send("mH{}");
+  assert.equal(await chatty.closing(), 1008);
+  assert.equal(await desk.message(), `c${cid}`);
+  // Once the computer accepts a browser, it is held to the ordinary limits instead.
+  const paired = await client(hostId);
+  assert.equal(await paired.message(), "h1");
+  const accepted = (await desk.message()).slice(1);
+  desk.send(`a${accepted}`);
+  await desk.quiet(100);
+  for (let sent = 0; sent < 8; sent += 1) paired.send(`m${"y".repeat(4000)}`);
+  for (let sent = 0; sent < 8; sent += 1)
+    assert.equal((await desk.message()).length, `m${accepted} `.length + 4000);
+  desk.close();
+});
+
 test("a browser socket needs the website's origin", async () => {
-  const hostId = id(16);
-  (await host(hostId, id(32))).close();
+  const hostKey = id(32);
+  const hostId = idOf(hostKey);
+  (await host(hostId, hostKey)).close();
   assert.equal((await upgrade(`client/${hostId}`)).status, 403);
   assert.equal((await upgrade(`client/${hostId}`, { Origin: "https://evil.test" })).status, 403);
   assert.equal(
@@ -167,8 +232,8 @@ test("a browser socket needs the website's origin", async () => {
 });
 
 test("forwards a browser's messages to its desktop and back, and says who is there", async () => {
-  const hostId = id(16);
   const key = id(32);
+  const hostId = idOf(key);
   const desk = await host(hostId, key);
   const phone = await client(hostId);
   assert.equal(await phone.message(), "h1");
@@ -212,8 +277,8 @@ test("forwards a browser's messages to its desktop and back, and says who is the
 });
 
 test("tells browsers when the desktop goes and comes back", async () => {
-  const hostId = id(16);
   const key = id(32);
+  const hostId = idOf(key);
   const desk = await host(hostId, key);
   const phone = await client(hostId);
   assert.equal(await phone.message(), "h1");
@@ -249,8 +314,9 @@ test("tells browsers when the desktop goes and comes back", async () => {
 });
 
 test("refuses what a browser should not send", async () => {
-  const hostId = id(16);
-  const desk = await host(hostId, id(32));
+  const hostKey = id(32);
+  const hostId = idOf(hostKey);
+  const desk = await host(hostId, hostKey);
   const noisy = await client(hostId);
   await noisy.message();
   await desk.message();
@@ -274,7 +340,8 @@ test("refuses what a browser should not send", async () => {
 });
 
 test("serves a bot's MCP calls through the desktop", async () => {
-  const hostId = id(16);
+  const hostKey = id(32);
+  const hostId = idOf(hostKey);
   const bot = id(8);
   const token = id(32);
   const reference = `${bot}.${token}`;
@@ -286,12 +353,16 @@ test("serves a bot's MCP calls through the desktop", async () => {
   };
 
   // No such link until the desktop lists it.
-  const desk = await host(hostId, id(32));
+  const desk = await host(hostId, hostKey);
   assert.equal((await mcp(hostId, reference, initialize)).status, 404);
+  // A second link, made with full control. Anything but `true` is not full control.
+  const wide = id(8);
+  const wideToken = id(32);
   desk.send(
     `l${JSON.stringify([
-      { id: bot, hash: hash(token) },
-      { id: "bad", hash: "bad" },
+      { id: bot, hash: hash(token), full: "yes" },
+      { id: wide, hash: hash(wideToken), full: true },
+      { id: "bad", hash: "bad", full: true },
     ])}`,
   );
   await desk.quiet(100);
@@ -344,6 +415,68 @@ test("serves a bot's MCP calls through the desktop", async () => {
     assert.equal(tool.inputSchema.type, "object");
     assert.ok(tool.description.length > 40);
   }
+  // A link without full control is not shown the wider tools, and they do not exist for it:
+  // nothing reaches the desktop.
+  const refused = await (
+    await mcp(hostId, reference, {
+      jsonrpc: "2.0",
+      id: "w",
+      method: "tools/call",
+      params: { name: "set_access", arguments: { chat_id: "c1", access: "full_auto" } },
+    })
+  ).json();
+  assert.equal(refused.error.code, -32602);
+  await desk.quiet(100);
+  // The full-control link is shown all of them, each a plain MCP tool with no mark of ours.
+  const everything = await (
+    await mcp(hostId, `${wide}.${wideToken}`, { jsonrpc: "2.0", id: "b", method: "tools/list" })
+  ).json();
+  const names = everything.result.tools.map((tool) => tool.name);
+  assert.equal(names.length, 21);
+  assert.deepEqual(
+    names.slice(0, 8),
+    listed.result.tools.map((tool) => tool.name),
+  );
+  for (const name of [
+    "create_project",
+    "chat_options",
+    "set_model",
+    "set_thinking",
+    "set_access",
+    "switch_agent",
+    "rename_chat",
+    "archive_chat",
+    "start_agent",
+    "list_changes",
+    "read_change",
+    "read_memory",
+    "write_memory",
+  ])
+    assert.ok(names.includes(name), name);
+  for (const tool of everything.result.tools) {
+    assert.equal("full" in tool, false, tool.name);
+    assert.equal(tool.inputSchema.additionalProperties, false, tool.name);
+    assert.ok(tool.description.length > 20, tool.name);
+  }
+  const widened = mcp(hostId, `${wide}.${wideToken}`, {
+    jsonrpc: "2.0",
+    id: "c",
+    method: "tools/call",
+    params: { name: "set_access", arguments: { chat_id: "c1", access: "ask" } },
+  });
+  const passed = JSON.parse((await desk.message()).slice(1));
+  assert.deepEqual(
+    { ...passed, rid: "" },
+    {
+      rid: "",
+      bot: wide,
+      token: wideToken,
+      tool: "set_access",
+      args: { chat_id: "c1", access: "ask" },
+    },
+  );
+  desk.send(`b${JSON.stringify({ rid: passed.rid, text: "Access is now ask.", error: false })}`);
+  assert.equal((await (await widened).json()).result.isError, false);
 
   // Notifications get no body.
   const noted = await mcp(hostId, reference, {
@@ -448,8 +581,8 @@ test("serves a bot's MCP calls through the desktop", async () => {
 });
 
 test("a removed bot link stops working", async () => {
-  const hostId = id(16);
   const key = id(32);
+  const hostId = idOf(key);
   const bot = id(8);
   const token = id(32);
   const desk = await host(hostId, key);
@@ -464,8 +597,8 @@ test("a removed bot link stops working", async () => {
 });
 
 test("sockets that prove nothing cannot keep a paired browser out", async () => {
-  const hostId = id(16);
   const key = id(32);
+  const hostId = idOf(key);
   const desk = await host(hostId, key);
   const open = async (from) => {
     const response = await upgrade(`client/${hostId}`, {

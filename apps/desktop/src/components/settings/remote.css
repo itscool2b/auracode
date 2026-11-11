@@ -22,6 +22,54 @@
   color: var(--g-fg-1);
 }
 
+/* The two levels of a bot link: each a row with its words beside the radio. */
+.remote-levels {
+  display: grid;
+  gap: var(--g-space-8);
+  margin: 0 0 var(--g-space-16);
+  padding: 0;
+  border: 0;
+}
+
+.remote-levels > legend {
+  margin-bottom: var(--g-space-8);
+  padding: 0;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.remote-level {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--g-space-12);
+  align-items: start;
+  padding: var(--g-space-12);
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-card-flat);
+  cursor: pointer;
+}
+
+.remote-level > input {
+  margin-top: var(--g-space-2);
+  accent-color: var(--g-volt);
+}
+
+.remote-level > span {
+  display: grid;
+  gap: var(--g-space-2);
+}
+
+.remote-level strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.remote-level span > span {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
 /* A secret shown once: one line, selected whole on focus, with Copy beside it. */
 .remote-copy {
   display: flex;

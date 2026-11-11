@@ -1,4 +1,3 @@
-import { Logo } from "@auracode/ui/graphite";
 import { Globe } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { type BrowserStore, browserStore as nativeBrowserStore } from "../../lib/browser";
@@ -17,11 +16,29 @@ export interface UniversalSettings {
   readonly browser?: BrowserStore;
 }
 
+/** What an agent can do in the browser, in a person's words. The tool names are auracode's. */
+const AGENT_TOOLS: readonly (readonly [string, string])[] = [
+  ["browser_navigate", "Open a page"],
+  ["browser_snapshot", "Read a page"],
+  ["browser_click", "Click"],
+  ["browser_type", "Type"],
+  ["browser_press_key", "Press keys"],
+  ["browser_hover", "Hover"],
+  ["browser_select", "Choose in a list"],
+  ["browser_scroll", "Scroll"],
+  ["browser_screenshot", "Take a screenshot"],
+  ["browser_console", "Read the console"],
+  ["browser_network", "See network requests"],
+  ["browser_evaluate", "Run JavaScript"],
+  ["browser_wait_for", "Wait for something"],
+  ["browser_tabs", "Use tabs"],
+];
+
 /**
- * Universal plugins: auracode's own, for every agent (owner, 9 November 2026). They come with
- * auracode and cannot be added or removed, only turned off, which turns them off for every agent
- * and takes them out of the app. Browser use is the first: the browser beside the chat, Annotate,
- * and the browser tools agents get.
+ * Browser use, the universal plugin: auracode's own, for every agent (owner, 9 November 2026). It
+ * comes with auracode and cannot be added or removed, only turned off, which turns it off for
+ * every agent and takes it out of the app. It is Settings > Browser (owner, 10 November 2026),
+ * which says outright that its tools are exposed to every agent, and which ones.
  */
 export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: UniversalSettings) {
   useSyncExternalStore(browser.subscribe, browser.getVersion, browser.getVersion);
@@ -35,19 +52,6 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
   const windows = os === "windows";
   return (
     <div className="plugins-agent plugins-universal" data-testid="plugins-universal">
-      <header className="plugins-agent-head">
-        <span className="plugins-agent-head-mark plugins-universal-logo" aria-hidden="true">
-          <Logo size={24} />
-        </span>
-        <div className="plugins-agent-title">
-          <h2>Universal plugins</h2>
-          <p>Part of auracode, for every agent</p>
-        </div>
-      </header>
-      <p className="plugins-summary">
-        Every agent gets these in Chat. They come with auracode and cannot be removed: turning one
-        off turns it off for every agent and takes it out of the app.
-      </p>
       {prefs.error ? (
         <p className="library-feedback" role="alert">
           {prefs.error}
@@ -59,7 +63,7 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
             <Globe size={18} />
           </span>
           <div className="plugins-universal-text">
-            <h3 id="plugins-universal-browser">Browser use</h3>
+            <h2 id="plugins-universal-browser">Browser use</h2>
             <p>
               {on
                 ? "A browser beside each chat, Annotate to point at what you mean on a page, and tools agents use to open, read, click through and test pages."
@@ -81,6 +85,23 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
         ) : null}
         {on ? (
           <>
+            <div className="plugins-universal-tools" data-setting="Tools for agents">
+              <div>
+                <strong>Exposed to every AI agent</strong>
+                <span>
+                  Every agent you chat with gets these tools from auracode, including agents you add
+                  later. Nothing to install. Terminal chats and agents on another computer do not
+                  get them. Turn Browser use off and they are gone for every agent.
+                </span>
+              </div>
+              <ul aria-label="Browser tools agents get">
+                {AGENT_TOOLS.map(([tool, does]) => (
+                  <li key={tool} title={tool}>
+                    {does}
+                  </li>
+                ))}
+              </ul>
+            </div>
             {windows ? (
               <div className="plugins-universal-setting" data-setting="Save passwords">
                 <div>

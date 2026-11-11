@@ -206,6 +206,12 @@ export function verifiedSummary(note: string): string {
   return versions ? `Tested on ${versions[versions.length - 1]}` : "";
 }
 
+/** The version detection read from the installed agent, when it is ready and reports one. */
+function installedVersion(agent: AgentEntry): string | null {
+  if (agent.availability.state !== "ready") return null;
+  return agent.installation?.version ?? agent.availability.version ?? null;
+}
+
 /** A newer release is known and the installed version does not mention it. */
 function newerRelease(agent: AgentEntry): string | null {
   // Rust compares versions when detection supplied a harness status.
@@ -375,7 +381,8 @@ export function AgentRow({
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
-  readonly onRefresh: () => void;
+  /** Detects the agents again. A promise lets an update say what it changed once it settles. */
+  readonly onRefresh: () => void | Promise<void>;
   /** The Agents page: the details offer the Connection setting of an agent with several. */
   readonly onConnection?: (agentId: string, connection: string | null) => Promise<void>;
   /** Setup's roster: no date or menu on the row; the actions sit in the details. */
@@ -395,12 +402,20 @@ export function AgentRow({
   const [updateFailed, setUpdateFailed] = useState(false);
   const [updateTerminal, setUpdateTerminal] = useState(false);
   const updateExit = useRef<number | null>(null);
+  // The newest entry, for reading what an update changed after detection ran again.
+  const latest = useRef(agent);
+  latest.current = agent;
+  // What an update said stays until the next action. Detection drops and finds the agent again
+  // while an update runs, and that must not wipe a failure and its Run in terminal with it.
+  const outcome = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A different installation needs its own lookup.
   useEffect(() => {
     setMaintenance(null);
     setAuth(null);
-    setMessage(null);
-    setError(null);
+    if (!outcome.current) {
+      setMessage(null);
+      setError(null);
+    }
     if (!ready) return;
     let live = true;
     void transport.agentMaintenance(agent.id).then(
@@ -416,6 +431,7 @@ export function AgentRow({
     };
   }, [transport, agent.id, ready, installKey]);
   const run = async (kind: "auth" | "update", action: () => Promise<void>) => {
+    outcome.current = false;
     setBusy(kind);
     setError(null);
     setMessage(null);
@@ -436,14 +452,26 @@ export function AgentRow({
   const update = () =>
     void run("update", async () => {
       setUpdateFailed(false);
+      const before = installedVersion(agent);
+      outcome.current = true;
       try {
         await transport.agentUpdate(agent.id);
       } catch (reason) {
         setUpdateFailed(true);
         throw reason;
       }
-      setMessage("Update finished.");
-      onRefresh();
+      // The updater exiting cleanly proves nothing: say what the version did.
+      await onRefresh();
+      await new Promise((settled) => setTimeout(settled, 0));
+      const now = latest.current;
+      const after = installedVersion(now);
+      if (before !== null && after === before && now.harness?.state === "update_available") {
+        setUpdateFailed(true);
+        throw new Error(
+          `${agent.name}'s updater ran and it is still ${after}. ${now.harness.latest} may not be out for this installation yet, or another copy of ${agent.name} was updated.`,
+        );
+      }
+      setMessage(after !== null && after !== before ? `Updated to ${after}.` : "Update finished.");
     });
   const phase = agentPhase(agent, auth);
   const guide = INSTALL_GUIDES[agent.id];
@@ -608,7 +636,13 @@ export function AgentRow({
       {updateLine && agent.harness ? (
         <p className="agent-row-update" role="status">
           <StatusDot tone="volt" />
-          <span>{harnessText(agent.name, agent.harness)}</span>
+          <span>
+            {harnessText(agent.name, agent.harness)}
+            {/* No Update button is no explanation: say why auracode cannot install it. */}
+            {maintenance && maintenance.update_unavailable !== null
+              ? ` ${maintenance.update_unavailable}`
+              : null}
+          </span>
         </p>
       ) : null}
       {message || error || busy ? (

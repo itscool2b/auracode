@@ -30,6 +30,7 @@ pub(super) fn bot_links(shared: &Shared) -> String {
         .map(|bot| BotLink {
             id: &bot.id,
             hash: &bot.token_hash,
+            full: bot.full,
         })
         .collect();
     format!(

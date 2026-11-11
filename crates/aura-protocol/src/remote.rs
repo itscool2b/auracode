@@ -48,6 +48,8 @@ pub struct RemoteBot {
     pub name: String,
     pub created_at: Millis,
     pub last_used_at: Option<Millis>,
+    /// Made with full control: every tool, where a link without it has the chat tools only.
+    pub full: bool,
 }
 
 /// A pairing link, shown once: whoever opens it first within its time becomes a device.

@@ -14,7 +14,9 @@ pub mod relay;
 pub mod render;
 pub mod wire;
 
-pub use backend::{Backend, BackendError, BoxFuture, Frames, Statuses};
+pub use backend::{
+    Action, Backend, BackendError, BoxFuture, ChatOptions, Choice, Frames, Outcome, Statuses,
+};
 pub use host::{Config, Service};
 pub use registry::RegistryError;
 pub use wire::{Overview, RemoteAgent};

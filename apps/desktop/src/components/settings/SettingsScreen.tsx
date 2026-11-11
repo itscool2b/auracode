@@ -5,6 +5,7 @@ import {
   Bot,
   CircleUser,
   FileText,
+  Globe,
   Info,
   Keyboard,
   type LucideIcon,
@@ -41,6 +42,7 @@ import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { PluginLibraryScreen } from "../library/PluginLibraryScreen";
+import { UniversalPlugins } from "../library/UniversalPlugins";
 import { AgentsScreen } from "../setup/AgentsScreen";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
@@ -76,6 +78,7 @@ const ICONS: Readonly<Record<Page, LucideIcon>> = {
   shortcuts: Keyboard,
   agents: Bot,
   plugins: Puzzle,
+  browser: Globe,
   instructions: FileText,
   memory: BookOpen,
   remote: MonitorSmartphone,
@@ -313,14 +316,6 @@ export function SettingsScreen({
     };
   }, [found]);
   const results = useMemo(() => searchSettings(query), [query]);
-  // A search result in a part of Plugins & MCP opens that part first.
-  const pluginsSection = useMemo(
-    () =>
-      found?.entry.page === "plugins" && found.entry.section
-        ? { id: found.id, agent: found.entry.section }
-        : null,
-    [found],
-  );
   const offered = (value: Page) => value !== "agents" || agents !== undefined;
   const mac = info.os === "macos";
   const key = mac ? "⌘" : "Ctrl";
@@ -499,11 +494,19 @@ export function SettingsScreen({
               initialProjectId={projectId}
               projects={projects ?? []}
               activeChatId={activeChatId}
-              universal={{ prefs, os: info.os, browser: services?.browser }}
-              select={pluginsSection}
               onBack={onBack}
               onAgents={() => open("agents")}
             />,
+          )}
+          {pane(
+            "browser",
+            <>
+              <p className="settings-lead">
+                The browser beside your chats is part of auracode, and so are the tools agents get
+                to use it. It is on unless you turn it off here.
+              </p>
+              <UniversalPlugins prefs={prefs} os={info.os} browser={services?.browser} />
+            </>,
           )}
           {pane(
             "instructions",

@@ -79,8 +79,8 @@
   overflow: hidden;
   font-size: 17px;
   line-height: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -92,6 +92,27 @@
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The connection, as the Grok Bot app's badge: a dot and a word. Ink when it is up. */
+.remote-link[data-tone] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.remote-link[data-tone]::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--s-line-strong);
+}
+
+.remote-link[data-tone="ok"]::before {
+  background-color: var(--s-ink);
 }
 
 .remote-icon {
@@ -180,14 +201,39 @@
   border-top: 1px solid var(--s-line);
 }
 
+/* An agent on a disc, as the Grok Bot app lists its bots, with its state on the disc's shoulder. */
+.remote-avatar {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--s-quiet);
+  color: var(--s-ink);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.remote-avatar > .remote-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  box-shadow: 0 0 0 2px var(--s-card);
+}
+
 .remote-chat-row {
   display: flex;
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 64px;
-  padding: 10px 16px;
+  min-height: 68px;
+  padding: 12px 16px;
   color: var(--s-ink);
   text-align: left;
   cursor: pointer;
@@ -296,10 +342,13 @@
   max-width: 86%;
   margin: 0;
   padding: 10px 14px;
-  border-radius: 20px 20px 6px 20px;
-  background-color: var(--s-quiet);
+  /* The Grok Bot app's sent message: paper with ink on it, one even radius. */
+  border-radius: 18px;
+  background-color: color-mix(in srgb, var(--s-ink) 92%, var(--s-bg));
+  color: var(--s-bg);
   font-size: 16px;
   line-height: 24px;
+  letter-spacing: -0.01em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -429,7 +478,6 @@
   padding: 16px;
   border-radius: 20px;
   background-color: var(--s-card);
-  box-shadow: inset 0 0 0 1px var(--s-line-strong);
 }
 
 .remote-card-title {
@@ -516,8 +564,7 @@
   flex: none;
   align-items: flex-end;
   gap: 8px;
-  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--s-line);
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
 }
 
 .remote-composer > textarea {
@@ -525,8 +572,13 @@
   min-width: 0;
   min-height: 44px;
   resize: none;
-  padding: 10px 16px;
+  padding: 10px 18px;
+  /* The Grok Bot app's capsule: one filled pill with a hairline, no box around it. */
+  border: 0;
   border-radius: 22px;
+  background-color: var(--s-card);
+  box-shadow: inset 0 0 0 1px var(--s-line);
+  color: var(--s-ink);
   /* Sixteen pixels, or iOS zooms the page when the box is tapped. */
   font-size: 16px;
   line-height: 22px;
@@ -585,4 +637,69 @@
 .remote-dialog-actions {
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+/*
+ * The site's pills, on the app's button classes this page uses: ink on the page's colour for the
+ * one that acts, a quiet fill for the rest, no rim and no lit edge, pressed a hair smaller.
+ */
+.remote .g-button {
+  border-radius: 999px;
+  box-shadow: none;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition:
+    background-color 160ms var(--s-swift, ease),
+    transform 120ms var(--s-swift, ease),
+    opacity 160ms var(--s-swift, ease);
+}
+
+.remote .g-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.remote .g-button-primary {
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
+}
+
+.remote .g-button-outline {
+  background-color: var(--s-quiet);
+  color: var(--s-ink);
+}
+
+@media (hover: hover) {
+  .remote .g-button-primary:hover:not(:disabled) {
+    background-color: var(--s-primary-hover);
+  }
+
+  .remote .g-button-outline:hover:not(:disabled) {
+    background-color: var(--s-quiet-hover);
+  }
+}
+
+.remote .g-button:disabled {
+  opacity: 0.45;
+}
+
+.remote :is(.g-input, .g-select, .g-textarea):not(.remote-composer > textarea) {
+  border: 0;
+  border-radius: 14px;
+  background-color: var(--s-quiet);
+  color: var(--s-ink);
+}
+
+.remote :is(.g-input, .g-select, .g-textarea):focus-visible {
+  outline: 2px solid var(--s-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remote .g-button {
+    transition: none;
+  }
+
+  .remote .g-button:active:not(:disabled) {
+    transform: none;
+  }
 }

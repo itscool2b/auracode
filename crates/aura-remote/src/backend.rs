@@ -40,7 +40,128 @@ pub type Frames = Arc<dyn Fn(&EventBatch) -> bool + Send + Sync>;
 /// Receives every chat's status changes, with the same meaning of `false`.
 pub type Statuses = Arc<dyn Fn(&ChatStatusUpdate) -> bool + Send + Sync>;
 
+/// What a full-control bot link may ask beyond following and sending in chats: the rest of what
+/// a person does with chats and projects in the app's window. Each is one call the app answers or
+/// refuses. Settings, accounts and sign-in, installing or updating software, remote access itself,
+/// deleting data, a raw terminal and reading files by path are not here, and no link reaches them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Action {
+    /// A new project from a folder on the computer.
+    CreateProject {
+        path: String,
+        name: Option<String>,
+    },
+    /// The models, thinking levels and access modes a chat offers, and its current choices.
+    Options {
+        chat_id: String,
+    },
+    SetModel {
+        chat_id: String,
+        model: String,
+    },
+    SetThinking {
+        chat_id: String,
+        level: String,
+    },
+    /// `ask`, `auto_edit` or `full_auto`.
+    SetAccess {
+        chat_id: String,
+        access: String,
+    },
+    /// Hands the chat to another agent: its history goes along as the app's own handoff does.
+    SwitchAgent {
+        chat_id: String,
+        agent_id: String,
+    },
+    Rename {
+        chat_id: String,
+        title: String,
+    },
+    Archive {
+        chat_id: String,
+        archived: bool,
+    },
+    /// Starts a stopped chat's agent without sending anything.
+    StartAgent {
+        chat_id: String,
+    },
+    /// The files a chat's last turn changed.
+    Changes {
+        chat_id: String,
+    },
+    /// One changed file, before and after.
+    Diff {
+        chat_id: String,
+        path: String,
+    },
+    ReadMemory {
+        project_id: String,
+    },
+    WriteMemory {
+        project_id: String,
+        markdown: String,
+    },
+}
+
+/// One thing a chat lets a person choose, as the app names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Choice {
+    pub value: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChatOptions {
+    pub models: Vec<Choice>,
+    pub model: Option<String>,
+    pub thinking: Vec<Choice>,
+    pub thinking_level: Option<String>,
+    /// Access modes by the value `set_access` takes.
+    pub access: Vec<Choice>,
+    pub access_mode: Option<String>,
+}
+
+/// The app's answer to an [`Action`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outcome {
+    /// Done, in a sentence for the bot.
+    Done(String),
+    Project {
+        id: String,
+        name: String,
+        folder_id: Option<String>,
+    },
+    /// The chat an action left the bot with (a handoff makes a new one).
+    Chat {
+        id: String,
+    },
+    Options(ChatOptions),
+    Changes {
+        /// Path and `added`, `modified` or `deleted`.
+        files: Vec<(String, String)>,
+        unavailable: Option<String>,
+    },
+    Diff {
+        before: Option<String>,
+        after: Option<String>,
+        binary: bool,
+        truncated: bool,
+    },
+    Memory {
+        markdown: String,
+    },
+}
+
 pub trait Backend: Send + Sync + 'static {
+    /// One [`Action`] of a full-control link. A backend that offers none refuses them all.
+    fn act(&self, _action: Action) -> BoxFuture<'_, Result<Outcome, BackendError>> {
+        Box::pin(async {
+            Err(BackendError::new(
+                "unavailable",
+                "This computer's auracode does not offer that yet.",
+            ))
+        })
+    }
     /// This backend for one workspace only: every call but `release` fails unless `profile` is
     /// the open workspace at the moment the call reaches its chats, checked together with taking
     /// them. The service calls nothing but a bound backend, with the workspace a session's key or

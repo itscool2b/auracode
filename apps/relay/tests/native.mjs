@@ -188,6 +188,7 @@ try {
   const errors = [];
   tab.on("pageerror", (error) => errors.push(error.message));
   await tab.goto(pairing.url.replace("/remote#", `/remote?relay=ws://127.0.0.1:${RELAY_PORT}#`));
+  await tab.getByRole("button", { name: "Pair this browser", exact: true }).click();
   await tab.getByRole("heading", { level: 1, name: status.host_name }).waitFor();
   await tab.getByText("Connected", { exact: true }).waitFor();
   const paired = await invoke("remote_status");
@@ -204,11 +205,12 @@ try {
   await tab.getByText("Nothing here yet. Send a message.").waitFor();
 
   // A bot link, over MCP.
-  const link = await invoke("remote_create_bot", { name: "Check bot" });
-  const mcp = link.url.replace(SITE, `http://127.0.0.1:${RELAY_PORT}`);
-  const call = async (name, args = {}) => {
+  const link = await invoke("remote_create_bot", { name: "Check bot", full: false });
+  const local = (url) => url.replace(SITE, `http://127.0.0.1:${RELAY_PORT}`);
+  const mcp = local(link.url);
+  const ask = async (address, name, args = {}) => {
     for (let tries = 0; ; tries += 1) {
-      const response = await fetch(mcp, {
+      const response = await fetch(address, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -223,9 +225,10 @@ try {
         continue;
       }
       assert.equal(response.status, 200);
-      return (await response.json()).result.content[0].text;
+      return response.json();
     }
   };
+  const call = async (name, args = {}) => (await ask(mcp, name, args)).result.content[0].text;
   const listed = await call("list_chats");
   console.log(listed.trim());
   assert.match(listed, new RegExp(`- ${created.id} "`));
@@ -233,6 +236,20 @@ try {
   console.log(projects.trim());
   assert.match(projects, /- folder \S+: /);
   assert.match(await call("read_chat", { chat_id: created.id }), /No turns yet\./);
+
+  // A chat link has no tool for the rest of the app; a full control link does.
+  const refused = await ask(mcp, "chat_options", { chat_id: created.id });
+  const refusal = JSON.stringify(refused);
+  assert.ok(
+    refused.error || refused.result?.isError,
+    `a chat link reached a full control tool: ${refusal.slice(0, 200)}`,
+  );
+  console.log(`a chat link asking for chat_options: ${refusal.slice(0, 160)}`);
+  const wide = await invoke("remote_create_bot", { name: "Full bot", full: true });
+  const options = await ask(local(wide.url), "chat_options", { chat_id: created.id });
+  const shown = options.result.content[0].text;
+  assert.ok(!options.result.isError, shown);
+  console.log(`a full control link asking for chat_options: ${shown.trim().slice(0, 300)}`);
 
   if (prompt) {
     // One short message to the real agent, sent from the phone.

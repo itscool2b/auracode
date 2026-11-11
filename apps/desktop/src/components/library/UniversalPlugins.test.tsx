@@ -60,8 +60,13 @@ const render = (props: Parameters<typeof UniversalPlugins>[0]) =>
 describe("Universal plugins", () => {
   it("offers Browser use on, with its settings, and no way to add or remove it", () => {
     const html = render({ prefs: prefs(), os: "windows", browser: store() });
-    expect(html).toContain("<h2>Universal plugins</h2>");
     expect(html).toContain("Browser use");
+    // It says outright that agents get its tools, and which.
+    expect(html).toContain("Exposed to every AI agent");
+    expect(html).toContain("including agents you");
+    for (const tool of ["Open a page", "Click", "Take a screenshot", "Run JavaScript"])
+      expect(html).toContain(tool);
+    expect(html).toContain('title="browser_navigate"');
     expect(html).toMatch(/aria-label="Browser use"[^>]*checked=""/);
     expect(html).toContain("Save passwords");
     expect(html).toContain("Browsing history");

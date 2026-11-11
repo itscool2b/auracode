@@ -73,6 +73,10 @@ pub struct Bot {
     /// The workspace it was made in, and the only one it reaches.
     #[serde(default)]
     pub profile: String,
+    /// Full control: every tool, where a link without it has the chat tools only. Chosen when the
+    /// link is made and never changed after: a wider link is a new link.
+    #[serde(default)]
+    pub full: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -118,22 +122,31 @@ impl Registry {
             Ok(bytes) => {
                 let stored: Stored = serde_json::from_slice(&bytes)
                     .map_err(|error| RegistryError::Read(error.to_string()))?;
-                if stored.version != 1
-                    || crypto::decode::<16>(&stored.host_id).is_none()
-                    || crypto::decode::<KEY_BYTES>(&stored.host_key).is_none()
-                {
+                let mut stored = stored;
+                let key = crypto::decode::<KEY_BYTES>(&stored.host_key);
+                if stored.version != 1 || crypto::decode::<16>(&stored.host_id).is_none() {
                     return Err(RegistryError::Read("unsupported contents".into()));
                 }
+                let Some(key) = key else {
+                    return Err(RegistryError::Read("unsupported contents".into()));
+                };
+                // An id from before ids were made from the key (development builds only): the
+                // relay no longer takes it, so the computer gets the id its key makes. Browsers
+                // paired under the old id look for it there and are paired again.
+                stored.host_id = crypto::encode(&crypto::host_id(&key));
                 stored
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Stored {
-                version: 1,
-                enabled: false,
-                host_id: crypto::encode(&crypto::random::<16>()?),
-                host_key: crypto::encode(&crypto::random::<KEY_BYTES>()?),
-                devices: Vec::new(),
-                bots: Vec::new(),
-            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let key = crypto::random::<KEY_BYTES>()?;
+                Stored {
+                    version: 1,
+                    enabled: false,
+                    host_id: crypto::encode(&crypto::host_id(&key)),
+                    host_key: crypto::encode(&key),
+                    devices: Vec::new(),
+                    bots: Vec::new(),
+                }
+            }
             Err(error) => return Err(RegistryError::Read(error.to_string())),
         };
         Ok(Self {
@@ -351,7 +364,7 @@ impl Registry {
         Ok(true)
     }
 
-    pub fn add_bot(&mut self, name: &str, now: i64) -> Result<NewBot, RegistryError> {
+    pub fn add_bot(&mut self, name: &str, full: bool, now: i64) -> Result<NewBot, RegistryError> {
         if self.scope.is_empty() {
             return Err(RegistryError::NoWorkspace);
         }
@@ -369,6 +382,7 @@ impl Registry {
             created_at: now,
             last_used_at: None,
             profile: self.scope.clone(),
+            full,
         });
         if let Err(error) = self.save() {
             self.stored.bots.pop();
@@ -398,6 +412,13 @@ impl Registry {
             let _ = self.save();
         }
         true
+    }
+
+    /// Whether the open workspace's bot link `id` was made with full control.
+    pub fn bot_full(&self, id: &str) -> bool {
+        self.bots()
+            .iter()
+            .any(|bot| crypto::same(&bot.id, id) && bot.full)
     }
 
     pub fn remove_bot(&mut self, id: &str) -> Result<bool, RegistryError> {
@@ -451,7 +472,7 @@ mod tests {
             Err(RegistryError::NoWorkspace)
         ));
         assert!(matches!(
-            registry.add_bot("Grok", 0),
+            registry.add_bot("Grok", false, 0),
             Err(RegistryError::NoWorkspace)
         ));
 
@@ -461,7 +482,7 @@ mod tests {
             .pair(&pairing.id, "Phone", 1)
             .expect("pair")
             .expect("device");
-        let bot = registry.add_bot("Grok", 1).expect("bot");
+        let bot = registry.add_bot("Grok", false, 1).expect("bot");
         let open = registry.start_pairing(2).expect("pairing");
 
         // The account's workspace opens: Local's phone, bot and open link are not its own.
@@ -531,6 +552,9 @@ mod tests {
         assert!(!path.exists(), "nothing is written until something changes");
         assert_eq!(registry.host_id().len(), 22);
         assert_eq!(registry.host_key().len(), 43);
+        // The id is made from the key: nobody else can claim it at the relay.
+        let key = crypto::decode::<KEY_BYTES>(registry.host_key()).expect("key");
+        assert_eq!(registry.host_id(), crypto::encode(&crypto::host_id(&key)));
         registry.set_enabled(true).expect("enable");
         let (id, key) = (
             registry.host_id().to_owned(),
@@ -643,7 +667,7 @@ mod tests {
         assert!(!registry.remove_device(&first).expect("remove again"));
         assert_eq!(registry.device_key(&first), None);
 
-        let bot = registry.add_bot("", 7).expect("bot");
+        let bot = registry.add_bot("", false, 7).expect("bot");
         assert_eq!((bot.id.len(), bot.token.len()), (11, 43));
         assert_eq!(registry.bots()[0].name, "Bot");
         assert_ne!(
@@ -657,10 +681,10 @@ mod tests {
         assert!(registry.verify_bot(&bot.id, &bot.token, 9));
         assert_eq!(registry.bots()[0].last_used_at, Some(9));
         for _ in 1..MAX_BOTS {
-            registry.add_bot("Grok", 7).expect("bot");
+            registry.add_bot("Grok", true, 7).expect("bot");
         }
         assert!(matches!(
-            registry.add_bot("Grok", 7),
+            registry.add_bot("Grok", false, 7),
             Err(RegistryError::TooManyBots)
         ));
 
@@ -670,6 +694,11 @@ mod tests {
         assert_eq!(again.devices().len(), MAX_DEVICES - 1);
         assert_eq!(again.bots().len(), MAX_BOTS);
         assert!(again.verify_bot(&bot.id, &bot.token, 10));
+        // The level a link was made with is kept, and is each link's own.
+        assert!(!again.bot_full(&bot.id));
+        let full = again.bots()[1].id.clone();
+        assert!(again.bot_full(&full));
+        assert!(!again.bot_full("no-such-bot"));
         assert!(again.remove_bot(&bot.id).expect("remove"));
         assert!(!again.verify_bot(&bot.id, &bot.token, 11));
         assert!(

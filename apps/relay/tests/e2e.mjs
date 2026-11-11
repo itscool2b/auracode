@@ -139,6 +139,9 @@ async function browserFlow(engine, launcher, host, first, shots) {
 
     // Pairing: the link opens the computer's chats, and its key leaves the address bar at once.
     await tab.goto(page(first));
+    // Opening the link pairs nothing: the page asks first, and the computer has heard nothing.
+    await tab.getByRole("heading", { name: "Pair this browser?" }).waitFor();
+    await tab.getByRole("button", { name: "Pair this browser", exact: true }).click();
     await tab.getByRole("heading", { level: 1, name: "Demo computer" }).waitFor();
     assert.equal(new URL(tab.url()).hash, "", "the pairing key stayed in the address");
     await tab.getByText("Connected", { exact: true }).waitFor();
@@ -151,6 +154,7 @@ async function browserFlow(engine, launcher, host, first, shots) {
     const other = await browser.newContext();
     const stranger = await other.newPage();
     await stranger.goto(page(first));
+    await stranger.getByRole("button", { name: "Pair this browser", exact: true }).click();
     await stranger.getByRole("heading", { name: "This pairing is over." }).waitFor();
     await stranger.getByText(/already used or has expired/).waitFor();
     await other.close();
@@ -242,6 +246,7 @@ async function browserFlow(engine, launcher, host, first, shots) {
     const laptop = await second.newPage();
     laptop.on("pageerror", (error) => errors.push(error.message));
     await laptop.goto(page(await host.pair()));
+    await laptop.getByRole("button", { name: "Pair this browser", exact: true }).click();
     await laptop.getByRole("button", { name: /New chat.*Needs you/s }).click();
     await laptop.getByRole("region", { name: "The agent asks for permission" }).waitFor();
     await tab.getByRole("button", { name: /New chat.*Needs you/s }).click();
@@ -265,6 +270,7 @@ async function browserFlow(engine, launcher, host, first, shots) {
     const broken = await browser.newContext();
     const wrong = await broken.newPage();
     await wrong.goto(`${SITE}/remote?relay=ws://127.0.0.1:${RELAY_PORT}#not.a.link`);
+    await wrong.getByRole("button", { name: "Pair this browser", exact: true }).click();
     await wrong.getByText("This pairing link is not complete.").waitFor();
     await broken.close();
     assert.deepEqual(errors, []);
@@ -313,6 +319,7 @@ async function botFlow(address) {
     clientInfo: { name: "e2e", version: "1" },
   });
   assert.equal(hello.serverInfo.name, "auracode");
+  // The demo's link has the chat tools: the wider ones are not shown to it.
   assert.equal((await rpc("tools/list")).tools.length, 8);
 
   const chats = await tool("list_chats");

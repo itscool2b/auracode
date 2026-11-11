@@ -32,6 +32,7 @@ export function remoteFixture(): RemoteApi {
             name: "Grok Bot",
             created_at: Date.now() - 3_600_000,
             last_used_at: null,
+            full: false,
           },
         ]
       : [],
@@ -98,8 +99,8 @@ export function remoteFixture(): RemoteApi {
       calls.push(`remove-device:${id}`);
       return publish({ ...status, devices: status.devices.filter((device) => device.id !== id) });
     },
-    createBot: async (name) => {
-      calls.push(`create-bot:${name}`);
+    createBot: async (name, full) => {
+      calls.push(`create-bot:${name}${full ? ":full" : ""}`);
       if (name.trim() === "fail")
         throw new Error("This computer already has 16 bot links. Remove one first.");
       const id = `bot-${status.bots.length + 1}`;
@@ -107,7 +108,7 @@ export function remoteFixture(): RemoteApi {
         ...status,
         bots: [
           ...status.bots,
-          { id, name: name.trim() || "Bot", created_at: Date.now(), last_used_at: null },
+          { id, name: name.trim() || "Bot", created_at: Date.now(), last_used_at: null, full },
         ],
       });
       return {

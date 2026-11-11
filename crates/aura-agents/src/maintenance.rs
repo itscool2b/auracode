@@ -14,7 +14,9 @@ use crate::installation::provider_namespace;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum MaintenanceError {
-    #[error("An update for this provider is already running.")]
+    // One update or detection runs at a time, for every agent: the message must not claim it is
+    // this agent's own.
+    #[error("auracode is updating or checking an agent right now. Try again in a moment.")]
     AlreadyRunning,
     #[error(
         "The vendor update exited successfully, but the installed binary did not pass its version check."

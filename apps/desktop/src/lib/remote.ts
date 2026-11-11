@@ -14,7 +14,8 @@ export interface RemoteApi {
   readonly cancelPairing: () => Promise<RemoteStatus>;
   readonly removeDevice: (id: string) => Promise<RemoteStatus>;
   /** A new bot link. Its address carries the bot's token and is returned only here. */
-  readonly createBot: (name: string) => Promise<RemoteBotLink>;
+  /** `full`: every tool, where a link without it has the chat tools only. */
+  readonly createBot: (name: string, full: boolean) => Promise<RemoteBotLink>;
   readonly removeBot: (id: string) => Promise<RemoteStatus>;
   /** Calls back whenever the status changed (a device paired, connected or left). */
   readonly subscribe: (changed: (status: RemoteStatus) => void) => () => void;
@@ -26,7 +27,7 @@ export const remoteApi: RemoteApi = {
   pair: () => settle(commands.remotePair()),
   cancelPairing: () => settle(commands.remoteCancelPairing()),
   removeDevice: (id) => settle(commands.remoteRemoveDevice(id)),
-  createBot: (name) => settle(commands.remoteCreateBot(name)),
+  createBot: (name, full) => settle(commands.remoteCreateBot(name, full)),
   removeBot: (id) => settle(commands.remoteRemoveBot(id)),
   subscribe: (changed) => {
     if (!inTauri()) return () => {};

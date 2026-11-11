@@ -263,6 +263,9 @@ pub struct BotAnswer<'a> {
 pub struct BotLink<'a> {
     pub id: &'a str,
     pub hash: &'a str,
+    /// Whether the relay may offer this link the full-control tools. The computer checks each
+    /// call itself; this only keeps the list a bot is shown honest.
+    pub full: bool,
 }
 
 #[cfg(test)]

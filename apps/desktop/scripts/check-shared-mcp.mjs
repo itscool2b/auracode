@@ -9,6 +9,16 @@ const server = process.argv[process.argv.indexOf("--server") + 1] || "http://127
 const output = resolve("../../target/shared-mcp-browser");
 await mkdir(output, { recursive: true });
 const results = [];
+/** Import, Export and Refresh sit in the menu beside Add server. */
+async function more(page, item) {
+  await page.getByRole("button", { name: "MCP servers actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: item, exact: true }).click();
+}
+/** A server's less common actions sit in its row's menu. */
+async function rowAction(page, server, item) {
+  await page.getByRole("button", { name: `${server} actions`, exact: true }).click();
+  await page.getByRole("menuitem", { name: item, exact: true }).click();
+}
 async function checkDelayedScope(page) {
   const delayed = `${server}/?preview=plugins-mcp&delayedProjects=1`;
   const projectId = "7cc769fb-ae40-44c1-8baa-fc2210f3bebe";
@@ -50,7 +60,7 @@ async function checkDelayedScope(page) {
   assert.equal(await scope.inputValue(), "", "starting an editor pins the displayed scope");
 
   await page.goto(delayed);
-  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await more(page, "Import");
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("Import format", { exact: true }).selectOption("native");
   await dialog
@@ -96,9 +106,9 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .fill("synthetic-private-local-value");
       await dialog.getByRole("button", { name: "Save local authentication" }).click();
       await page.getByText("Configured, session connection unverified", { exact: false }).waitFor();
-      await page.getByRole("button", { name: "Session status", exact: true }).click();
+      await rowAction(page, "project_docs", "Session status");
       await page.getByText("project_docs: connected, oauth, 2 tools", { exact: true }).waitFor();
-      await page.getByRole("button", { name: "Test connection", exact: true }).click();
+      await rowAction(page, "project_docs", "Test connection");
       await page.getByText("Synthetic MCP initialization succeeded.", { exact: false }).waitFor();
       await page.getByRole("button", { name: "Add server", exact: true }).click();
       dialog = page.getByRole("dialog");
@@ -150,14 +160,14 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       await dialog.getByRole("button", { name: "Save definition" }).click();
       await dialog.waitFor({ state: "hidden" });
       assert.equal(await localRow.getByTestId("shared-mcp-agents").textContent(), "Every agent");
-      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await more(page, "Export");
       dialog = page.getByRole("dialog");
       const document = await dialog.getByLabel("Definition JSON", { exact: true }).inputValue();
       assert.equal(document.includes("synthetic-private-local-value"), false);
       assert.equal(JSON.parse(document).definitions.length, 2);
       await page.keyboard.press("Escape");
       await dialog.waitFor({ state: "hidden" });
-      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await more(page, "Import");
       dialog = page.getByRole("dialog");
       await dialog.getByLabel("Import format", { exact: true }).selectOption("native");
       await dialog

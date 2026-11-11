@@ -157,6 +157,7 @@ impl Service {
                     name: bot.name.clone(),
                     created_at: bot.created_at,
                     last_used_at: bot.last_used_at,
+                    full: bot.full,
                 })
                 .collect(),
             pairing_expires_at: registry.pairing(now()).map(|pairing| pairing.expires_at),
@@ -207,9 +208,10 @@ impl Service {
         Ok(())
     }
 
-    pub fn create_bot(&self, name: &str) -> Result<RemoteBotLink, RegistryError> {
+    /// `full`: every tool, where a link without it has the chat tools only.
+    pub fn create_bot(&self, name: &str, full: bool) -> Result<RemoteBotLink, RegistryError> {
         let mut registry = lock(&self.shared.registry);
-        let new = registry.add_bot(name, now())?;
+        let new = registry.add_bot(name, full, now())?;
         let link = RemoteBotLink {
             name: registry
                 .bots()
@@ -541,17 +543,21 @@ impl Serving {
             return;
         };
         // The token and the workspace it is good for, read together.
-        let (verified, scope) = {
+        let (verified, scope, full) = {
             let mut registry = lock(&self.shared.registry);
             (
                 registry.verify_bot(&call.bot, &call.token, now()),
                 registry.scope().to_owned(),
+                registry.bot_full(&call.bot),
             )
         };
         let refused = if !verified {
             Some("This bot link was removed. Its owner can create a new one in auracode.")
-        } else if !bot::TOOLS.contains(&call.tool.as_str()) {
+        } else if !bot::known(&call.tool) {
             Some("There is no such tool.")
+        } else if !bot::allowed(&call.tool, full) {
+            // Whatever the relay listed or let through: the link's own level decides, here.
+            Some(bot::NOT_ALLOWED)
         } else if self.bot_calls.load(Ordering::Relaxed) >= MAX_BOT_CALLS {
             Some("Too many calls are running. Wait for one to finish.")
         } else {
@@ -569,7 +575,7 @@ impl Serving {
         );
         tokio::spawn(async move {
             let owner = format!("{WATCHER}-bot:{}", call.rid);
-            let answer = bot::call(&backend, &owner, &call.tool, &call.args).await;
+            let answer = bot::call(&backend, &owner, &call.tool, &call.args, full).await;
             running.fetch_sub(1, Ordering::Relaxed);
             let _ = out.send(Out::Bot {
                 rid: call.rid,

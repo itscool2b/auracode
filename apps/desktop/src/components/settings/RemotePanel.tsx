@@ -56,7 +56,11 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     }
   }, []);
 
-  /** Pairing and linking need remote access on: asking for either turns it on. */
+  /**
+   * Pairing and linking need remote access on. A pairing link exists from the moment its dialog
+   * opens, so asking for one turns it on; a bot link turns it on only when the link is created,
+   * so reading what a link allows and closing the dialog connects this computer to nothing.
+   */
   const ensureOn = useCallback(async () => {
     if (status?.enabled) return;
     setStatus(await api.setEnabled(true));
@@ -73,14 +77,9 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     }
   };
 
-  const link = async () => {
+  const link = () => {
     setError(null);
-    try {
-      await ensureOn();
-      setLinking(true);
-    } catch (failure) {
-      setError(message(failure));
-    }
+    setLinking(true);
   };
 
   const enabled = status?.enabled ?? false;
@@ -158,11 +157,11 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
               key={bot.id}
               title={bot.name}
               setting="Bots"
-              detail={
+              detail={`${bot.full ? "Full control" : "Chats"} · ${
                 bot.last_used_at === null
                   ? "Not used yet"
                   : `Last used ${ago(bot.last_used_at, now)}`
-              }
+              }`}
             >
               <button
                 className="g-button g-button-outline g-button-28"
@@ -183,7 +182,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
               type="button"
               data-testid="remote-link-bot"
               disabled={status === null}
-              onClick={() => void link()}
+              onClick={link}
             >
               Create link
             </button>
@@ -192,8 +191,8 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       </section>
       <p className="settings-footnote">
         A paired browser's session is encrypted end to end: the relay passes it along and cannot
-        read it. A bot's calls are readable by the relay and by the bot's own service. Remote access
-        works while auracode is open, including in the tray.
+        read it. A bot's calls are not: the relay and the bot's own service read them, and either
+        could act as that bot. Remote access works while auracode is open, including in the tray.
       </p>
 
       {pairing ? (
@@ -209,7 +208,10 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       ) : null}
       {linking ? (
         <BotDialog
-          create={(name) => api.createBot(name)}
+          create={async (name, full) => {
+            await ensureOn();
+            return api.createBot(name, full);
+          }}
           onClose={() => {
             setLinking(false);
             void run(() => api.status());
@@ -355,10 +357,12 @@ function BotDialog({
   create,
   onClose,
 }: {
-  readonly create: (name: string) => Promise<RemoteBotLink>;
+  readonly create: (name: string, full: boolean) => Promise<RemoteBotLink>;
   readonly onClose: () => void;
 }) {
   const [name, setName] = useState("Grok Bot");
+  // What the link may do is chosen here and is the link's for good: a wider one is a new link.
+  const [full, setFull] = useState(false);
   const [link, setLink] = useState<RemoteBotLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -367,7 +371,7 @@ function BotDialog({
     setBusy(true);
     setError(null);
     try {
-      setLink(await create(name));
+      setLink(await create(name, full));
     } catch (failure) {
       setError(message(failure));
     } finally {
@@ -380,7 +384,7 @@ function BotDialog({
         <>
           <p className="remote-note">
             This is {link.name}'s address. It is shown once and works like a password: anyone who
-            has it can read your chats and direct your agents until you remove the link.
+            has it can read your chats and direct your agents. Removing the link here stops it.
           </p>
           <CopyField value={link.url} label="Bot address" />
           <ol className="remote-steps">
@@ -407,10 +411,47 @@ function BotDialog({
           }}
         >
           <p className="remote-note">
-            A linked bot gets tools to list and read your chats, send messages to your agents, start
-            chats, stop turns and answer permission requests. Agents can edit files and run
-            commands, so link only a bot you trust with this computer.
+            A linked bot gets tools to direct your agents, and agents can edit files and run
+            commands. So either level below is as much trust as handing someone this computer: the
+            level limits the bot's own tools, not what an agent it directs can do.
           </p>
+          <fieldset className="remote-levels">
+            <legend>What it can do</legend>
+            <label className="remote-level">
+              <input
+                type="radio"
+                name="remote-bot-level"
+                checked={!full}
+                onChange={() => setFull(false)}
+              />
+              <span>
+                <strong>Chats</strong>
+                <span>
+                  List and read your chats, send messages, start chats, stop turns and answer
+                  permission requests.
+                </span>
+              </span>
+            </label>
+            <label className="remote-level">
+              <input
+                type="radio"
+                name="remote-bot-level"
+                checked={full}
+                onChange={() => setFull(true)}
+              />
+              <span>
+                <strong>Full control</strong>
+                <span>
+                  Everything in Chats, and what you do in this window: make a project from any
+                  folder on this computer, choose a chat's model and thinking, set its access level
+                  (full auto included), start a stopped agent, hand a chat to another agent, rename
+                  and archive chats, read a turn's file changes, and read and write project memory,
+                  which every later chat in that project starts with. It has no tool for Settings,
+                  sign-in, installing software or deleting data.
+                </span>
+              </span>
+            </label>
+          </fieldset>
           <label className="settings-field" htmlFor={field}>
             <span>Name</span>
             <input

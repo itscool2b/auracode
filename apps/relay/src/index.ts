@@ -11,7 +11,14 @@
  * desktop's key and the hashes of its bot tokens.
  */
 import { DurableObject } from "cloudflare:workers";
-import TOOLS from "./tools.json";
+import ALL_TOOLS from "./tools.json";
+
+type Tool = (typeof ALL_TOOLS)[number] & { full?: boolean };
+/** The tools as MCP lists them: `full` is this relay's own mark, not part of a tool. */
+const listed = (tools: readonly Tool[]) => tools.map(({ full: _full, ...tool }) => tool);
+/** What every bot link has, and what a full-control link has. */
+const CHAT_TOOLS = listed((ALL_TOOLS as readonly Tool[]).filter((tool) => !tool.full));
+const FULL_TOOLS = listed(ALL_TOOLS as readonly Tool[]);
 
 export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
@@ -47,6 +54,15 @@ const HOST_MESSAGE_BYTES = 2 * 1024 * 1024;
 const CLIENT_MESSAGES_PER_WINDOW = 240;
 const WINDOW_MS = 10_000;
 const MCP_BODY_BYTES = 256 * 1024;
+/**
+ * Until the desktop accepts it, a browser's socket has shown no key: it gets the handshake's few
+ * small messages and nothing more, so knowing a computer's id sends that computer next to nothing.
+ */
+const UNPROVEN_MESSAGE_BYTES = 2048;
+const UNPROVEN_MESSAGES = 4;
+/** A room no desktop has connected to for this long forgets what it stored. */
+const IDLE_ROOM_MS = 30 * 24 * 60 * 60 * 1000;
+const HOST_ID_LABEL = "auracode remote v1 host id";
 const MAX_BOT_CALLS = 8;
 const BOT_CALL_MS = 55_000;
 
@@ -75,6 +91,43 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 const notFound = (headers: Record<string, string> = {}) =>
   json(404, { error: "not_found" }, headers);
 
+/**
+ * A computer's id is the start of a hash of its key, so the key is the only thing that can claim
+ * the id: nobody can take an id first, or take it over if the room's storage is ever lost, and a
+ * request that fails here never reaches a room.
+ */
+async function hostIdOf(key: string): Promise<string | null> {
+  if (!SECRET.test(key)) return null;
+  let raw: Uint8Array;
+  try {
+    raw = Uint8Array.from(atob(key.replaceAll("-", "+").replaceAll("_", "/")), (char) =>
+      char.charCodeAt(0),
+    );
+  } catch {
+    return null;
+  }
+  if (raw.length !== 32) return null;
+  const label = new TextEncoder().encode(HOST_ID_LABEL);
+  const input = new Uint8Array(label.length + raw.length);
+  input.set(label);
+  input.set(raw, label.length);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", input)).slice(0, 16);
+  return btoa(String.fromCharCode(...digest))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+/** The address a limit counts by: an IPv6 network, since one subscriber holds a whole /64. */
+function network(address: string): string {
+  if (!address.includes(":")) return address;
+  const [head = "", tail] = address.toLowerCase().split("::");
+  const groups = head.split(":").filter(Boolean);
+  // "::" stands for the zero groups left out; only the first four groups matter here.
+  while (groups.length < 4 && tail !== undefined) groups.push("0");
+  return groups.slice(0, 4).join(":");
+}
+
 function isUpgrade(request: Request): boolean {
   return request.method === "GET" && request.headers.get("Upgrade")?.toLowerCase() === "websocket";
 }
@@ -85,12 +138,20 @@ export default {
     if (!url.pathname.startsWith(PREFIX)) return notFound();
     const [kind, hostId] = url.pathname.slice(PREFIX.length).split("/");
     if (kind === "health" && hostId === undefined)
-      return json(200, { ok: true, protocol: 1, tools: TOOLS.length });
+      return json(200, {
+        ok: true,
+        protocol: 1,
+        tools: CHAT_TOOLS.length,
+        full_tools: FULL_TOOLS.length,
+      });
     if (!hostId || !HOST_ID.test(hostId)) return notFound();
     const origin = request.headers.get("Origin");
     if (kind === "host") {
       // Only the desktop app holds a host key, and it is not a browser.
       if (!isUpgrade(request) || origin !== null) return json(400, { error: "invalid_request" });
+      const key = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1] ?? "";
+      const own = await hostIdOf(key);
+      if (own === null || !same(own, hostId)) return json(401, { error: "unauthorized" });
     } else if (kind === "client") {
       if (!isUpgrade(request)) return json(400, { error: "invalid_request" });
       if (origin !== env.APP_ORIGIN) return json(403, { error: "forbidden" });
@@ -113,6 +174,8 @@ type Attachment =
       readonly from: string;
       /** The desktop accepted its session. */
       readonly proven: boolean;
+      /** Messages sent before the desktop accepted it. Kept here, so it outlives hibernation. */
+      readonly sent?: number;
       /** Set when the desktop reconnected: accepted only until then unless it accepts again. */
       readonly until?: number;
       /** This side ended the socket and the desktop already knows. */
@@ -194,14 +257,14 @@ export class Room extends DurableObject<Env> {
       .filter((socket) => socket.readyState === WebSocket.OPEN);
   }
 
-  /** The desktop proves it is the one that first claimed this id by presenting the same key. */
-  async #acceptHost(request: Request): Promise<Response> {
-    const key = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1] ?? "";
-    if (!SECRET.test(key)) return json(401, { error: "unauthorized" });
-    const hash = await sha256(key);
-    const known = await this.ctx.storage.get<string>("host");
-    if (known === undefined) await this.ctx.storage.put("host", hash);
-    else if (!same(known, hash)) return json(401, { error: "unauthorized" });
+  /**
+   * The desktop's socket. The Worker already checked that its key is the one this room's id is
+   * made from; here the room only notes that it has an owner.
+   */
+  async #acceptHost(_request: Request): Promise<Response> {
+    if ((await this.ctx.storage.get("host")) === undefined)
+      await this.ctx.storage.put("host", true);
+    await this.ctx.storage.deleteAlarm();
 
     const earlier = this.ctx.getWebSockets("host");
     const pair = new WebSocketPair();
@@ -228,8 +291,8 @@ export class Room extends DurableObject<Env> {
 
   async #acceptClient(request: Request): Promise<Response> {
     // An id no desktop ever claimed has nothing behind it.
-    if ((await this.ctx.storage.get<string>("host")) === undefined) return notFound();
-    const from = request.headers.get("CF-Connecting-IP") ?? "";
+    if ((await this.ctx.storage.get("host")) === undefined) return notFound();
+    const from = network(request.headers.get("CF-Connecting-IP") ?? "");
     const waiting = this.#clients()
       .map((socket) => ({ socket, is: socket.deserializeAttachment() as ClientAttachment }))
       .filter((entry) => !accepted(entry.is))
@@ -267,10 +330,21 @@ export class Room extends DurableObject<Env> {
     if (attachment.role === "host") return this.#fromHost(socket, message);
     if (message.length > CLIENT_MESSAGE_BYTES) return socket.close(1009, "too large");
     if (!message.startsWith("m")) return socket.close(1008, "unexpected");
+    if (!accepted(attachment)) {
+      const sent = (attachment.sent ?? 0) + 1;
+      socket.serializeAttachment({ ...attachment, sent } satisfies Attachment);
+      if (message.length > UNPROVEN_MESSAGE_BYTES || sent > UNPROVEN_MESSAGES)
+        return socket.close(1008, "prove a key first");
+    }
     if (!this.#allowed(attachment.cid)) return socket.close(1008, "too many messages");
     const host = this.#host();
     if (host) host.send(`m${attachment.cid} ${message.slice(1)}`);
     else socket.send("h0");
+  }
+
+  /** Nobody has used this room for a long time: forget its bot links and its owner's mark. */
+  override async alarm() {
+    if (this.#host() === null) await this.ctx.storage.deleteAll();
   }
 
   #allowed(cid: string): boolean {
@@ -336,21 +410,36 @@ export class Room extends DurableObject<Env> {
     socket.close(1008, "unexpected");
   }
 
-  /** The desktop's current bot links, as `[{ id, hash }]`: what a bot's URL is checked against. */
+  /**
+   * The desktop's current bot links, as `[{ id, hash, full }]`: what a bot's URL is checked
+   * against, and whether it is shown the full-control tools. The desktop checks each call's level
+   * itself; the mark here only keeps the list a bot is shown honest.
+   */
   async #saveBots(body: unknown) {
     const bots: Record<string, string> = {};
+    const full: string[] = [];
     if (Array.isArray(body))
       for (const entry of body.slice(0, MAX_BOTS)) {
-        const { id, hash } = (entry ?? {}) as { id?: unknown; hash?: unknown };
+        const {
+          id,
+          hash,
+          full: wide,
+        } = (entry ?? {}) as {
+          id?: unknown;
+          hash?: unknown;
+          full?: unknown;
+        };
         if (
           typeof id === "string" &&
           BOT_ID.test(id) &&
           typeof hash === "string" &&
           SECRET.test(hash)
-        )
+        ) {
           bots[id] = hash;
+          if (wide === true) full.push(id);
+        }
       }
-    await this.ctx.storage.put("bots", bots);
+    await this.ctx.storage.put({ bots, full });
   }
 
   override async webSocketClose(socket: WebSocket, code: number, reason: string) {
@@ -378,6 +467,8 @@ export class Room extends DurableObject<Env> {
       .getWebSockets("host")
       .some((other) => other !== socket && other.readyState === WebSocket.OPEN);
     if (successor) return;
+    // The desktop is gone: if it stays gone, what the room stored for it goes too.
+    void this.ctx.storage.setAlarm(Date.now() + IDLE_ROOM_MS);
     for (const client of this.#clients()) client.send("h0");
     for (const finish of [...this.#calls.values()]) finish({ text: OFFLINE, error: true });
   }
@@ -387,7 +478,7 @@ export class Room extends DurableObject<Env> {
     const token =
       inPath || (/^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")?.[1] ?? "");
     const bots = (await this.ctx.storage.get<Record<string, string>>("bots")) ?? {};
-    const known = BOT_ID.test(id) ? bots[id] : undefined;
+    const known = BOT_ID.test(id) && Object.hasOwn(bots, id) ? bots[id] : undefined;
     // A wrong or removed link does not exist; nothing here invites a sign-in flow.
     if (!known || !SECRET.test(token) || !same(known, await sha256(token))) return notFound(CORS);
     if (request.method !== "POST")
@@ -404,9 +495,10 @@ export class Room extends DurableObject<Env> {
     const messages = (batch ? body : [body]) as RpcMessage[];
     if (messages.length === 0 || messages.length > 16)
       return json(400, rpcError(null, -32600, "Invalid request"), CORS);
+    const wide = ((await this.ctx.storage.get<string[]>("full")) ?? []).includes(id);
     const replies: unknown[] = [];
     for (const message of messages) {
-      const reply = await this.#rpc(message, id, token);
+      const reply = await this.#rpc(message, id, token, wide ? FULL_TOOLS : CHAT_TOOLS);
       if (reply !== null) replies.push(reply);
     }
     // Notifications and responses get no body.
@@ -414,7 +506,12 @@ export class Room extends DurableObject<Env> {
     return json(200, batch ? replies : replies[0], CORS);
   }
 
-  async #rpc(message: RpcMessage, bot: string, token: string): Promise<unknown> {
+  async #rpc(
+    message: RpcMessage,
+    bot: string,
+    token: string,
+    tools: readonly { readonly name: string }[],
+  ): Promise<unknown> {
     if (message === null || typeof message !== "object" || message.jsonrpc !== "2.0")
       return rpcError(null, -32600, "Invalid request");
     const id = message.id;
@@ -436,11 +533,12 @@ export class Room extends DurableObject<Env> {
       case "ping":
         return rpcResult(id, {});
       case "tools/list":
-        return rpcResult(id, { tools: TOOLS });
+        return rpcResult(id, { tools });
       case "tools/call": {
         const name = params.name;
         const args = params.arguments ?? {};
-        if (typeof name !== "string" || !TOOLS.some((tool) => tool.name === name))
+        // A tool outside this link's level does not exist for it.
+        if (typeof name !== "string" || !tools.some((tool) => tool.name === name))
           return rpcError(id, -32602, "Unknown tool");
         if (args === null || typeof args !== "object" || Array.isArray(args))
           return rpcError(id, -32602, "Tool arguments must be an object");
