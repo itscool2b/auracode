@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-11
+
+- Updating an agent tells you what happened, MCP servers come first, and a linked bot can run the app: Update on an agent now reports the version it reached or that nothing changed, and no longer offers Grok Build a release its own updater never installs. Plugins & MCP opens on your MCP servers, with Add server at the top and a way to paste the config a server's README gives you. The browser has its own Settings page with one switch and the list of tools every agent gets. A bot link is made for chats only or for full control, which adds creating projects, starting agents and choosing the model, access and agent. The relay checks a computer's identity before it reaches a room, auracode.si/remote asks before it pairs and wears the app's look, and the sign-in email is a designed message instead of a line of text. ([#133](https://github.com/itscool2b/auracode/pull/133))
+
 ## 2026-11-10
 
 - Cards are flat, and the Grok Build theme wears the Grok Bot app's colours: settings groups, the dashboard's cards and the transcript's cards lose their rims and shadows for one faint fill, and the Grok Build theme's dark side is now a graphite window with off-white text and paper for what you act on. ([#132](https://github.com/itscool2b/auracode/pull/132))
