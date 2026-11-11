@@ -7,6 +7,7 @@ checks the format.
 
 ## 2026-11-11
 
+- The Mac app builds on Apple silicon again: since dictation arrived, its speech engine needed a system library the app never linked, so the Mac installer could not be made. The build now links it. ([#134](https://github.com/itscool2b/auracode/pull/134))
 - Updating an agent tells you what happened, MCP servers come first, and a linked bot can run the app: Update on an agent now reports the version it reached or that nothing changed, and no longer offers Grok Build a release its own updater never installs. Plugins & MCP opens on your MCP servers, with Add server at the top and a way to paste the config a server's README gives you. The browser has its own Settings page with one switch and the list of tools every agent gets. A bot link is made for chats only or for full control, which adds creating projects, starting agents and choosing the model, access and agent. The relay checks a computer's identity before it reaches a room, auracode.si/remote asks before it pairs and wears the app's look, and the sign-in email is a designed message instead of a line of text. ([#133](https://github.com/itscool2b/auracode/pull/133))
 
 ## 2026-11-10
