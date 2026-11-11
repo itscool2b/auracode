@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// The Windows application manifest, next to this file.
 const WINDOWS_MANIFEST: &str = "windows-app-manifest.xml";
@@ -21,9 +22,53 @@ fn main() {
     if let Err(error) = tauri_build::try_build(attributes) {
         panic!("tauri-build failed: {error:#}");
     }
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        embed_windows_manifest();
+    match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("windows") => embed_windows_manifest(),
+        Ok("macos") => link_clang_runtime(),
+        _ => {}
     }
+}
+
+/// Links clang's own runtime library on macOS. The speech engine's Metal code is Objective-C that
+/// asks which macOS it runs on (`@available`), which the compiler turns into a call to
+/// `__isPlatformVersionAtLeast`. That function lives in clang's runtime (`libclang_rt.osx.a`,
+/// one archive for both architectures), which clang adds when it links a program itself. Rust
+/// links with `-nodefaultlibs`, so nothing added it and the Apple silicon app failed to link with
+/// the symbol undefined.
+fn link_clang_runtime() {
+    match clang_runtime_dir() {
+        Some(dir) => {
+            println!("cargo:rustc-link-search=native={}", dir.display());
+            // Named for the linker to find, not `static=`: rustc would read the archive itself to
+            // bundle it, and it does not read archives that hold two architectures.
+            println!("cargo:rustc-link-lib=clang_rt.osx");
+        }
+        // Without it the link fails on its own, naming the symbol; this says where to look.
+        None => println!(
+            "cargo:warning=clang's runtime library (libclang_rt.osx.a) was not found: \
+             the app may fail to link with __isPlatformVersionAtLeast undefined"
+        ),
+    }
+}
+
+/// The folder holding `libclang_rt.osx.a`: `lib/darwin` under the resource folder clang reports.
+fn clang_runtime_dir() -> Option<PathBuf> {
+    let output = Command::new("clang")
+        .arg("--print-search-dirs")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let listing = String::from_utf8_lossy(&output.stdout);
+    let libraries = listing
+        .lines()
+        .find_map(|line| line.strip_prefix("libraries: ="))?;
+    // The line may list several folders; the first that has the archive is the one.
+    libraries
+        .split(':')
+        .map(|root| Path::new(root).join("lib").join("darwin"))
+        .find(|dir| dir.join("libclang_rt.osx.a").is_file())
 }
 
 fn embed_windows_manifest() {
