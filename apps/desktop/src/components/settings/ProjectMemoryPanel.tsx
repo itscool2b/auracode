@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { BookOpen } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ProjectMemory, SetupSnapshot } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import {
@@ -222,6 +223,7 @@ export function ProjectMemoryPanel({
       <div className="settings-group">
         <Row
           title="Let agents edit memory"
+          mark={<BookOpen size={18} />}
           detail={
             agentsEdit
               ? "Agents keep it up to date as they work. A notice with Undo follows each edit."
@@ -286,53 +288,64 @@ export function ProjectMemoryPanel({
               </button>
             </div>
           ) : null}
-          <textarea
-            className="g-textarea project-memory-text"
-            aria-label="Markdown"
-            aria-describedby={size}
-            spellCheck={false}
-            value={markdown}
-            disabled={busy}
-            rows={16}
-            placeholder="What should every chat in this project know?"
-            onChange={(event) => {
-              setMarkdown(event.currentTarget.value);
-              setNotice(null);
-            }}
-          />
-          <div className="project-memory-foot">
-            <span
-              id={size}
-              className="project-memory-meta"
-              data-over={bytes > MAX_MEMORY_BYTES ? "" : undefined}
-            >
-              {bytes > MAX_MEMORY_BYTES
-                ? `${(bytes - MAX_MEMORY_BYTES).toLocaleString()} bytes over the 16 KB limit`
-                : `${bytes.toLocaleString()} of ${MAX_MEMORY_BYTES.toLocaleString()} bytes`}
-            </span>
-            <span className="project-memory-status" role="status">
-              {notice}
-            </span>
-            <button
-              type="button"
-              className="g-button"
-              disabled={busy || !dirty}
-              onClick={() => {
-                setMarkdown((saved ?? memory).markdown);
-                setMemory(saved ?? memory);
-                setError(null);
+          <div className="settings-sheet">
+            <div className="settings-sheet-head">
+              <strong>Notes</strong>
+              <span
+                id={size}
+                className="settings-meter"
+                data-over={bytes > MAX_MEMORY_BYTES ? "" : undefined}
+                style={
+                  {
+                    "--settings-fill": `${Math.min(100, Math.round((bytes / MAX_MEMORY_BYTES) * 100))}%`,
+                  } as CSSProperties
+                }
+              >
+                {bytes > MAX_MEMORY_BYTES
+                  ? `${(bytes - MAX_MEMORY_BYTES).toLocaleString()} bytes over the 16 KB limit`
+                  : `${bytes.toLocaleString()} of ${MAX_MEMORY_BYTES.toLocaleString()} bytes`}
+                <i aria-hidden="true" />
+              </span>
+            </div>
+            <textarea
+              className="g-textarea project-memory-text settings-sheet-text"
+              aria-label="Markdown"
+              aria-describedby={size}
+              spellCheck={false}
+              value={markdown}
+              disabled={busy}
+              rows={16}
+              placeholder="What should every chat in this project know?"
+              onChange={(event) => {
+                setMarkdown(event.currentTarget.value);
+                setNotice(null);
               }}
-            >
-              Discard
-            </button>
-            <button
-              type="button"
-              className="g-button g-button-primary"
-              disabled={busy || !dirty || bytes > MAX_MEMORY_BYTES}
-              onClick={() => void save()}
-            >
-              Save
-            </button>
+            />
+            <div className="settings-sheet-foot">
+              <span className="project-memory-status" role="status">
+                {notice ?? (dirty ? "Not saved yet." : "")}
+              </span>
+              <button
+                type="button"
+                className="g-button g-button-ghost g-button-28"
+                disabled={busy || !dirty}
+                onClick={() => {
+                  setMarkdown((saved ?? memory).markdown);
+                  setMemory(saved ?? memory);
+                  setError(null);
+                }}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="g-button g-button-primary g-button-28"
+                disabled={busy || !dirty || bytes > MAX_MEMORY_BYTES}
+                onClick={() => void save()}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

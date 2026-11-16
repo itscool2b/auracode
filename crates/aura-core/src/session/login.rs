@@ -29,6 +29,8 @@ impl SessionManager {
     /// person watches: when the background update fails, its output and any prompt it asks show
     /// here instead of being lost. The same channel rules apply; nothing runs that Update would not.
     pub async fn prepare_agent_update(&self, agent_id: &str) -> Result<SpawnSpec, SessionError> {
+        // The same command replaces the same files: it waits for working chats as Update does.
+        self.refuse_update_while_working(agent_id).await?;
         let env = self.deps().env.get().await;
         let mut spec = self
             .prepare_vendor_terminal(agent_id, "update", |installation| {

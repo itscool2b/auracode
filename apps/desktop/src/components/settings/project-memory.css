@@ -27,48 +27,36 @@
   margin-top: var(--g-space-4);
 }
 
-/* The notes themselves: one tall box, with its size and its two actions on the line under it. */
+/* The notes themselves, on a sheet (settings.css): how full they are in its head, what happened and
+   the two actions in its foot. */
 .project-memory-editor {
   display: grid;
   gap: var(--g-space-8);
   min-width: 0;
 }
 
+.project-memory-editor > .settings-sheet {
+  margin-top: 0;
+}
+
 .project-memory-text {
   box-sizing: border-box;
   width: 100%;
-  min-height: 240px;
+  min-height: 280px;
   font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-ui);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
   resize: vertical;
 }
 
-.project-memory-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--g-space-8);
-}
-
-.project-memory-meta {
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
-.project-memory-meta[data-over] {
-  color: var(--g-red);
-}
-
-/* What just happened sits between the size and the buttons, and pushes the buttons right. */
+/* What just happened sits at the foot's left and pushes the buttons right. */
 .project-memory-status {
   flex: 1;
   min-width: 0;
-  color: var(--g-fg-2);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  text-align: right;
 }
 
 /* A version saved elsewhere while a draft is open: said once, above the draft it would replace. */

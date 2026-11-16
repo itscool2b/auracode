@@ -1,4 +1,5 @@
 import { AgentMark } from "@auracode/ui/graphite";
+import { FolderOpen } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   InstructionsAgent,
@@ -349,6 +350,7 @@ export function InstructionsPanel({
         <div className="settings-group">
           <Row
             title="Applies to"
+            mark={<FolderOpen size={18} />}
             detail={
               snapshot?.folder ? (
                 <span className="settings-mono">{snapshot.folder}</span>
@@ -826,7 +828,7 @@ function FileEditor({
         </ul>
       ) : null}
       <textarea
-        className="g-textarea instructions-textarea"
+        className="g-textarea instructions-textarea settings-sheet-text"
         aria-label={`Text of ${file.path}`}
         spellCheck={false}
         readOnly={!editable}

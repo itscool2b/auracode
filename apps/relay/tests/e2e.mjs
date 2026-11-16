@@ -262,6 +262,43 @@ async function browserFlow(engine, launcher, host, first, shots) {
     await laptop.reload();
     await laptop.getByRole("heading", { name: "Reach your computer from here." }).waitFor();
     await second.close();
+
+    // The pickers, in the chat the first device has open: a model and a thinking level apply as
+    // they are chosen, and another agent is a handoff into a chat that starts from this one.
+    await tab.getByText("Demo agent · Idle").waitFor();
+    await tab.getByRole("button", { name: "Model and agent" }).click();
+    const pickers = tab.getByRole("dialog", { name: "Model and agent" });
+    const model = pickers.getByRole("combobox", { name: "Model" });
+    await model.waitFor();
+    assert.equal(await model.inputValue(), "fast");
+    await model.selectOption("smart");
+    await pickers.getByRole("status").getByText("Model set to Smart.").waitFor();
+    assert.equal(await model.inputValue(), "smart", "the computer did not keep the model");
+    await pickers.getByRole("combobox", { name: "Thinking" }).selectOption("high");
+    await pickers.getByRole("status").getByText("Thinking set to High.").waitFor();
+    // Only agents that can run here are offered, and nothing switches until asked.
+    const agent = pickers.getByRole("combobox", { name: "Agent" });
+    assert.deepEqual(await agent.locator("option").allTextContents(), [
+      "Demo agent (now)",
+      "Other agent",
+    ]);
+    assert.equal(await pickers.getByRole("button", { name: /^Switch to/ }).count(), 0);
+    await agent.selectOption("other");
+    await pickers
+      .getByText("carries on with Other agent in a new chat", { exact: false })
+      .waitFor();
+    if (shots) await tab.screenshot({ path: join(shots, `${engine}-pickers.png`) });
+    await pickers.getByRole("button", { name: "Switch to Other agent" }).click();
+    await pickers.waitFor({ state: "detached" });
+    await tab.locator(".remote-link", { hasText: /^Other agent/ }).waitFor();
+    await tab.locator(".remote-user", { hasText: "Write a README" }).waitFor();
+    // The choice was the first chat's: the new one starts from the agent's own defaults.
+    await tab.getByRole("button", { name: "Model and agent" }).click();
+    assert.equal(await model.inputValue(), "fast");
+    assert.equal(await agent.inputValue(), "other");
+    await pickers.getByRole("button", { name: "Done" }).click();
+    await pickers.waitFor({ state: "detached" });
+
     // The first device is untouched by the second one leaving.
     await tab.getByRole("button", { name: "All chats" }).click();
     await tab.getByText("Connected", { exact: true }).waitFor();

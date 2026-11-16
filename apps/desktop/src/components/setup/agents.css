@@ -748,3 +748,50 @@
     width: auto;
   }
 }
+
+/* What the updater printed, folded under what the update said: the vendor's own words, in mono on
+   a sunken well that scrolls inside itself. */
+.agent-row-output {
+  margin: 0;
+  padding: 0 var(--g-space-16) var(--g-space-12) var(--g-space-64);
+}
+
+.agent-row-output > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .agent-row-output > summary:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.agent-row-output > summary:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+  border-radius: var(--g-radius-6);
+}
+
+.agent-row-output > pre {
+  max-height: 240px;
+  margin: var(--g-space-8) 0 0;
+  padding: var(--g-space-12);
+  overflow: auto;
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

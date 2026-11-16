@@ -752,7 +752,7 @@ async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
         Browser::hello(&mut relay, "aaaaaaaaaaaaaaaa", "pair", &id, &key).await;
     assert_eq!(
         ready,
-        json!({ "ev": "ready", "host_name": "Studio", "paired": false })
+        json!({ "ev": "ready", "host_name": "Studio", "paired": false, "features": ["pickers"] })
     );
     // A pairing link opens nothing but pairing.
     let early = phone.request(&mut relay, json!({ "op": "overview" })).await;
@@ -890,6 +890,77 @@ async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
         rig.app.sent.lock().expect("sent")[1],
         ("c2".to_owned(), "Start here".to_owned())
     );
+
+    // The pickers: what a chat offers, without its access levels; a choice; a handoff, which
+    // answers with the chat to open next.
+    let options = phone
+        .request(&mut relay, json!({ "op": "options", "chat_id": "c1" }))
+        .await;
+    assert_eq!(
+        options["data"],
+        json!({
+            "models": [
+                { "value": "opus", "name": "Opus 5.5" },
+                { "value": "sonnet", "name": "Sonnet 5.5" },
+            ],
+            "model": "sonnet",
+            "thinking": [],
+            "thinking_level": null,
+        })
+    );
+    let chosen = phone
+        .request(
+            &mut relay,
+            json!({ "op": "set_model", "chat_id": "c1", "model": "opus" }),
+        )
+        .await;
+    assert_eq!(chosen["ok"], true);
+    phone
+        .request(
+            &mut relay,
+            json!({ "op": "set_thinking", "chat_id": "c1", "level": "high" }),
+        )
+        .await;
+    let switched = phone
+        .request(
+            &mut relay,
+            json!({ "op": "switch_agent", "chat_id": "c1", "agent_id": "codex" }),
+        )
+        .await;
+    assert_eq!(switched["data"], json!({ "chat_id": "c9" }));
+    assert_eq!(
+        *rig.app.acted.lock().expect("acted"),
+        [
+            Action::Options {
+                chat_id: "c1".into()
+            },
+            Action::SetModel {
+                chat_id: "c1".into(),
+                model: "opus".into()
+            },
+            Action::SetThinking {
+                chat_id: "c1".into(),
+                level: "high".into()
+            },
+            Action::SwitchAgent {
+                chat_id: "c1".into(),
+                agent_id: "codex".into()
+            },
+        ]
+    );
+    // A choice is a short name from the list: anything else is refused before the app sees it,
+    // and a browser has no request for a chat's access level or the rest of full control.
+    for bad in [
+        json!({ "op": "set_model", "chat_id": "c1", "model": "" }),
+        json!({ "op": "set_model", "chat_id": "c1", "model": "x".repeat(257) }),
+        json!({ "op": "set_thinking", "chat_id": "c1", "level": "hi\ngh" }),
+        json!({ "op": "switch_agent", "chat_id": "c1", "agent_id": "co\u{0}dex" }),
+    ] {
+        let refused = phone.request(&mut relay, bad).await;
+        assert_eq!(refused["error"]["code"], "invalid", "{refused}");
+    }
+    assert_eq!(rig.app.acted.lock().expect("acted").len(), 4);
+
     let gone = phone
         .request(&mut relay, json!({ "op": "open", "chat_id": "nope" }))
         .await;

@@ -249,6 +249,11 @@ export const commands = {
 	/**  Explicit update action. No updates run as part of detection or release checks. */
 	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
 	/**
+	 *  What the agent's last update printed in this run of auracode: its last lines as plain text,
+	 *  for the person who asked for the update. Kept in memory only, never stored, logged or sent on.
+	 */
+	agentUpdateOutput: (agentId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("agent_update_output", { agentId })),
+	/**
 	 *  An agent's Connection setting on this device: one of its connection ids, or `null` for
 	 *  Automatic. New sessions use it; a chat's saved session keeps its own connection. Answers every
 	 *  agent as `agents_list` reports them, without probing again.

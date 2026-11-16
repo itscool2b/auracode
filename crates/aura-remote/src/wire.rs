@@ -164,9 +164,33 @@ pub enum Op {
         agent_id: Option<String>,
         text: String,
     },
+    /// The models and thinking levels a chat offers, and what it is set to.
+    Options {
+        chat_id: String,
+    },
+    SetModel {
+        chat_id: String,
+        model: String,
+    },
+    SetThinking {
+        chat_id: String,
+        level: String,
+    },
+    /// Hands the chat to another agent, as the app's own handoff does. Answers with the chat to
+    /// open next.
+    SwitchAgent {
+        chat_id: String,
+        agent_id: String,
+    },
     /// This browser forgets the desktop: its device is removed.
     Forget,
 }
+
+/// What this build offers a paired browser beyond the first version's requests, named in
+/// [`Event::Ready`] so a page shows only the controls this desktop answers: a request this build
+/// does not know ends the session, as anything outside the protocol does. `pickers`: a chat's
+/// model, thinking level and agent ([`Op::Options`] and the three requests after it).
+pub const FEATURES: &[&str] = &["pickers"];
 
 /// What an [`Op`] returns.
 #[derive(Debug, Serialize)]
@@ -182,6 +206,27 @@ pub enum Data {
         chat: Box<WorkspaceChat>,
         sent: PromptAck,
     },
+    Options(Choices),
+    /// The chat a handoff to another agent left the person with.
+    Switched {
+        chat_id: String,
+    },
+}
+
+/// What a chat lets a person choose from a paired browser: its model and its thinking level. A
+/// chat's access level is not offered there.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct Choices {
+    pub models: Vec<Choice>,
+    pub model: Option<String>,
+    pub thinking: Vec<Choice>,
+    pub thinking_level: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Choice {
+    pub value: String,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -230,7 +275,12 @@ pub struct ErrorBody {
 #[serde(tag = "ev", rename_all = "snake_case")]
 pub enum Event<'a> {
     /// The first sealed message of a session: opening it proves the desktop holds the key.
-    Ready { host_name: &'a str, paired: bool },
+    /// `features` is [`FEATURES`]; a desktop older than the list sends none.
+    Ready {
+        host_name: &'a str,
+        paired: bool,
+        features: &'a [&'a str],
+    },
     /// A chat's status, title or attention changed.
     Chat { update: &'a ChatStatusUpdate },
     /// Live events of the chat this connection follows.
@@ -334,6 +384,9 @@ mod tests {
             r#"{"op":"overview"}"#,
             r#"{"id":1}"#,
             r#"{"id":1,"op":"shell","command":"rm"}"#,
+            // A paired browser has no request for a chat's access level or for project memory.
+            r#"{"id":1,"op":"set_access","chat_id":"c1","access":"full_auto"}"#,
+            r#"{"id":1,"op":"write_memory","project_id":"p1","markdown":"x"}"#,
             r#"{"id":1,"op":"send","chat_id":"c1"}"#,
             r#"{"id":-1,"op":"overview"}"#,
         ] {
@@ -370,10 +423,11 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Event::Ready {
                 host_name: "Studio",
-                paired: true
+                paired: true,
+                features: FEATURES,
             })
             .expect("event"),
-            r#"{"ev":"ready","host_name":"Studio","paired":true}"#
+            r#"{"ev":"ready","host_name":"Studio","paired":true,"features":["pickers"]}"#
         );
         assert_eq!(
             serde_json::to_string(&Event::Reset).expect("event"),

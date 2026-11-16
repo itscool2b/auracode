@@ -82,9 +82,15 @@ export const MODES = [
   "settings&page=voice",
   "settings&page=agents",
   "settings&page=plugins",
-  // Universal plugins: Browser use on, with its settings.
-  "settings&page=plugins#universal",
+  // Browser: Browser use on, with what agents get and its settings.
+  "settings&page=browser",
+  // The pages that share its look: the instructions sheet, the notes' sheet, and Remote access
+  // off and empty, then on with a device and a bot.
+  "settings&page=instructions",
+  "settings&page=memory",
   "settings&page=memory&scope=folder",
+  "settings&page=remote",
+  "settings&page=remote&remote=on",
   "settings&page=privacy",
   "setup",
   "agents",
@@ -321,10 +327,6 @@ const OPENERS = {
   defaults: async (page) => {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
-  },
-  universal: async (page) => {
-    await page.getByTestId("plugins-universal-nav").click();
-    await page.getByTestId("plugins-universal").waitFor();
   },
   "plugin-menu": (page) => openRowMenu(page, "tools actions"),
   "plugin-item": async (page) => {

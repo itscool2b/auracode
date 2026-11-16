@@ -26,6 +26,7 @@ import {
 } from "../../../desktop/src/lib/chat/transcript";
 import { type OpenChat, type Overview, RemoteClient, type State } from "../remote/client";
 import { Markdown } from "../remote/markdown";
+import { ChatPickers } from "../remote/pickers";
 import { keepsPairings } from "../remote/storage";
 
 export const meta = () => [
@@ -535,7 +536,10 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
   const running = summary ? ["running", "starting", "cancelling"].includes(summary.status) : false;
   const working = running && !summary?.needs_attention;
   const [error, setError] = useState("");
+  const [picking, setPicking] = useState(false);
   const link = linkWords(state);
+  // Offered only by an auracode that answers it: an older one ends the session on the request.
+  const pickers = state.features.includes("pickers") && state.phase.name === "ready";
   return (
     <div className="remote-screen">
       <header className="remote-bar">
@@ -559,7 +563,29 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
               : link.text}
           </p>
         </div>
+        {chat && summary && pickers ? (
+          <button
+            type="button"
+            className="remote-icon"
+            aria-label="Model and agent"
+            aria-haspopup="dialog"
+            onClick={() => setPicking(true)}
+          >
+            <Sliders />
+          </button>
+        ) : null}
       </header>
+      {picking && chat && summary ? (
+        <ChatPickers
+          client={client}
+          chatId={chat.id}
+          agentId={summary.agent_id}
+          agentName={summary.agent_name}
+          agents={state.overview?.agents ?? []}
+          running={running}
+          onClose={() => setPicking(false)}
+        />
+      ) : null}
       {error ? (
         <p className="remote-error" role="alert">
           {error}
@@ -1095,6 +1121,23 @@ function Dots() {
       <circle cx="4" cy="10" r="1.6" fill="currentColor" />
       <circle cx="10" cy="10" r="1.6" fill="currentColor" />
       <circle cx="16" cy="10" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Two sliders: what a chat runs on can be changed here. */
+function Sliders() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+      <path
+        d="M3 6.5h6.5M13.5 6.5H17M3 13.5h3.5M10.5 13.5H17"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="11.5" cy="6.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="8.5" cy="13.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

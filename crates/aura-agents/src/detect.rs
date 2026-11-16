@@ -94,6 +94,9 @@ struct LiveState {
     listing_jobs: HashMap<String, ListingJob>,
     listing_generation: u64,
     maintenance: HashSet<String>,
+    /// What each provider's last update printed, cleaned for reading. Memory only: it is shown to
+    /// the person who ran the update and is gone when auracode quits.
+    update_output: HashMap<String, String>,
     minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
     results: HashMap<String, (u64, Detection)>,
@@ -1086,6 +1089,19 @@ impl Detector {
         result
     }
 
+    /// What the last update of `id`'s provider printed in this run of auracode, when it printed
+    /// anything. For the person who asked for the update; never stored or sent on.
+    pub fn update_output(&self, id: &str) -> Option<String> {
+        let Mode::Live(live) = &self.mode else {
+            return None;
+        };
+        lock(&live.state)
+            .update_output
+            .get(crate::installation::provider_namespace(id))
+            .filter(|text| !text.is_empty())
+            .cloned()
+    }
+
     async fn update_once(&self, id: &str) -> Result<(), crate::maintenance::MaintenanceError> {
         use crate::maintenance::{self, MaintenanceError};
         let Mode::Live(live) = &self.mode else {
@@ -1107,6 +1123,8 @@ impl Detector {
             provider: provider.clone(),
             active: true,
         };
+        // An earlier update's output says nothing about this one.
+        lock(&live.state).update_output.remove(&provider);
         let installation = live
             .probe(&spec, true)
             .wait()
@@ -1130,6 +1148,11 @@ impl Detector {
                 .retain(|id, _| crate::installation::provider_namespace(id) != provider);
         }
         let output = maintenance::run(command, env, &live.registry, crate::INSTALL_TIMEOUT).await?;
+        // Kept whatever the result: a failure's reason, and a "success" that changed nothing, are
+        // both in what the command said.
+        lock(&live.state)
+            .update_output
+            .insert(provider.clone(), maintenance::readable_output(&output));
         if output.timed_out {
             return Err(MaintenanceError::TimedOut);
         }

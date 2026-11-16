@@ -24,7 +24,8 @@ use aura_protocol::{
     workspace::WorkspaceChat,
 };
 use aura_remote::{
-    Backend, BackendError, BoxFuture, Config, Frames, Overview, RemoteAgent, Service, Statuses,
+    Action, Backend, BackendError, BoxFuture, ChatOptions, Choice, Config, Frames, Outcome,
+    Overview, RemoteAgent, Service, Statuses,
 };
 use serde_json::json;
 
@@ -38,6 +39,28 @@ struct Chat {
     waiting: Option<(String, Arc<tokio::sync::Notify>)>,
     stop: Arc<tokio::sync::Notify>,
     turns: u32,
+    /// The agent the chat runs on, and what the pickers set.
+    agent: &'static str,
+    model: String,
+    thinking: String,
+}
+
+/// The demo computer's agents: two that can run and one that is not installed.
+const AGENTS: [(&str, &str, bool); 3] = [
+    ("demo", "Demo agent", true),
+    ("other", "Other agent", true),
+    ("absent", "Absent agent", false),
+];
+const MODELS: [(&str, &str); 2] = [("fast", "Fast"), ("smart", "Smart")];
+const LEVELS: [(&str, &str); 2] = [("low", "Low"), ("high", "High")];
+
+fn choices(list: &[(&str, &str)]) -> Vec<Choice> {
+    list.iter()
+        .map(|(value, name)| Choice {
+            value: (*value).into(),
+            name: (*name).into(),
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -57,8 +80,9 @@ impl Demo {
     fn summary(id: &str, chat: &Chat) -> WorkspaceChat {
         serde_json::from_value(json!({
             "chat": {
-                "id": id, "title": chat.title, "agent_id": "demo", "agent_host": { "type": "native" },
-                "agent_name": "Demo agent", "folder": "/demo", "folder_state": "ok",
+                "id": id, "title": chat.title, "agent_id": chat.agent, "agent_host": { "type": "native" },
+                "agent_name": AGENTS.iter().find(|(id, ..)| *id == chat.agent).map_or("Demo agent", |agent| agent.1),
+                "folder": "/demo", "folder_state": "ok",
                 "status": chat.status, "needs_attention": chat.needs_attention,
                 "created_at": 0, "updated_at": chat.updated_at,
             },
@@ -277,13 +301,91 @@ impl Backend for Shared {
                     .expect("project"),
                 ],
                 chats,
-                agents: vec![RemoteAgent {
-                    id: "demo".into(),
-                    name: "Demo agent".into(),
-                    available: true,
-                }],
+                agents: AGENTS
+                    .iter()
+                    .map(|(id, name, available)| RemoteAgent {
+                        id: (*id).into(),
+                        name: (*name).into(),
+                        available: *available,
+                    })
+                    .collect(),
                 default_agent: Some("demo".into()),
             })
+        })
+    }
+
+    /// The pickers: what a chat offers, a model, a thinking level, and a handoff to another agent.
+    fn act(&self, action: Action) -> BoxFuture<'_, Result<Outcome, BackendError>> {
+        Box::pin(async move {
+            let mut chats = self.0.chats.lock().unwrap();
+            let invalid = |what: &str| {
+                BackendError::new("invalid", format!("This agent has no such {what}."))
+            };
+            match action {
+                Action::Options { chat_id } => {
+                    let (_, chat) = chats
+                        .iter()
+                        .find(|(id, _)| *id == chat_id)
+                        .ok_or_else(missing)?;
+                    Ok(Outcome::Options(ChatOptions {
+                        models: choices(&MODELS),
+                        model: Some(chat.model.clone()),
+                        thinking: choices(&LEVELS),
+                        thinking_level: Some(chat.thinking.clone()),
+                        ..ChatOptions::default()
+                    }))
+                }
+                Action::SetModel { chat_id, model } => {
+                    let (_, chat) = chats
+                        .iter_mut()
+                        .find(|(id, _)| *id == chat_id)
+                        .ok_or_else(missing)?;
+                    if !MODELS.iter().any(|(value, _)| *value == model) {
+                        return Err(invalid("model"));
+                    }
+                    chat.model = model;
+                    Ok(Outcome::Done("Done.".into()))
+                }
+                Action::SetThinking { chat_id, level } => {
+                    let (_, chat) = chats
+                        .iter_mut()
+                        .find(|(id, _)| *id == chat_id)
+                        .ok_or_else(missing)?;
+                    if !LEVELS.iter().any(|(value, _)| *value == level) {
+                        return Err(invalid("thinking level"));
+                    }
+                    chat.thinking = level;
+                    Ok(Outcome::Done("Done.".into()))
+                }
+                Action::SwitchAgent { chat_id, agent_id } => {
+                    let agent = AGENTS
+                        .iter()
+                        .find(|(id, _, available)| *id == agent_id && *available)
+                        .ok_or_else(|| BackendError::new("invalid", "That agent cannot run here."))?
+                        .0;
+                    let (_, from) = chats
+                        .iter()
+                        .find(|(id, _)| *id == chat_id)
+                        .ok_or_else(missing)?;
+                    if from.status == SessionStatus::Running {
+                        return Err(BackendError::new(
+                            "busy",
+                            "Stop the turn before handing the chat to another agent.",
+                        ));
+                    }
+                    // The app's handoff: a new chat that starts from this one's history.
+                    let mut next = chat(&from.title);
+                    next.agent = agent;
+                    next.events = from.events.clone();
+                    let id = format!("c{}", chats.len() + 1);
+                    chats.push((id.clone(), next));
+                    Ok(Outcome::Chat { id })
+                }
+                _ => Err(BackendError::new(
+                    "unavailable",
+                    "The demo computer does not offer that.",
+                )),
+            }
         })
     }
 
@@ -513,6 +615,9 @@ fn chat(title: &str) -> Chat {
         waiting: None,
         stop: Arc::new(tokio::sync::Notify::new()),
         turns: 0,
+        agent: "demo",
+        model: "fast".into(),
+        thinking: "low".into(),
     }
 }
 

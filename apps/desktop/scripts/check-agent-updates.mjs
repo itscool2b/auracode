@@ -154,6 +154,65 @@ export async function checkAgentUpdates(browser, url, out, engine) {
   }
 }
 
+/**
+ * The same update from the Agents page's row (`?preview=agents`): it waits for the agent's working
+ * chats, says what the version did, and keeps what the updater printed one line away.
+ */
+export async function checkAgentRows(browser, url, out, engine) {
+  for (const theme of ["light", "dark"]) {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      colorScheme: theme,
+      reducedMotion: "reduce",
+    });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      const row = page.locator(".agent-row", { hasText: "Claude Code" });
+      const update = row.getByRole("button", { name: "Update Claude Code" });
+      const printed = row.locator("details.agent-row-output");
+
+      // Two of its chats have a turn under way: Update is there, off, and the line says why.
+      await page.goto(`${url}/?preview=agents&working=2&theme=${theme}`);
+      await row.getByText("Update once its 2 working chats finish.", { exact: false }).waitFor();
+      assert.equal(await update.isDisabled(), true);
+      await row.getByRole("button", { name: "Claude Code actions" }).click();
+      assert.equal(await page.getByRole("menuitem", { name: "Update", exact: true }).count(), 0);
+      await page.keyboard.press("Escape");
+
+      // A failed update: the reason in red, and the command's own words folded under it.
+      await page.goto(`${url}/?preview=agents&update=fail&theme=${theme}`);
+      await update.click();
+      await row
+        .getByRole("alert")
+        .getByText("The vendor's command failed with exit code 1.")
+        .waitFor();
+      assert.equal(await printed.evaluate((node) => node.open), false);
+      await printed.getByText("What the updater printed").click();
+      const text = await printed.locator("pre").textContent();
+      assert.match(text, /^npm error code EBUSY\n/);
+      assert.match(text, /resource busy or locked$/);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).include(".agent-list").analyze()).violations,
+        [],
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-${theme}-row-failed.png`) });
+
+      // An update that worked says the version it reached, with its output as available.
+      await page.goto(`${url}/?preview=agents&theme=${theme}`);
+      await update.click();
+      await row.getByRole("status").getByText("Updated to 2.1.314.").waitFor();
+      await printed.getByText("What the updater printed").click();
+      assert.equal(await printed.locator("pre").textContent(), "changed 1 package in 4s");
+      assert.equal(await update.count(), 0, "an updated agent still offered Update");
+      assert.deepEqual(errors, []);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const { chromium, webkit } = await import("playwright");
   const out = fileURLToPath(new URL("../../../target/agent-updates-browser/", import.meta.url));
@@ -169,6 +228,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       );
       console.log(
         `${engine}: agent update notices, their edge cases and dismissal passed in both appearances`,
+      );
+      await checkAgentRows(browser, process.env.CHECK_URL ?? "http://localhost:1448", out, engine);
+      console.log(
+        `${engine}: the Agents row waits for working chats and shows the updater's output`,
       );
     } finally {
       await browser.close();

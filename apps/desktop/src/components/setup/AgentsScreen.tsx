@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronDown, RefreshCw } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AgentEntry } from "../../bindings";
+import { workingChats } from "../../lib/agentUpdates";
 import { realAgents } from "../../lib/chat/agentLineup";
 import type { AppStore } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
@@ -128,6 +129,7 @@ export function AgentsScreen({
             key={agent.id}
             agent={agent}
             transport={transport}
+            working={workingChats(state.chats, agent.id)}
             onRefresh={refresh}
             onConnection={(agentId, connection) => app.setAgentConnection(agentId, connection)}
             index={index}

@@ -1,9 +1,10 @@
+import { Bot, Monitor, MonitorSmartphone, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { encode } from "uqr";
 import type { RemoteBotLink, RemoteDevice, RemotePairing, RemoteStatus } from "../../bindings";
-import { ago, linkLabel, type RemoteApi, remaining, remoteApi } from "../../lib/remote";
+import { ago, linkLabel, linkTone, type RemoteApi, remaining, remoteApi } from "../../lib/remote";
 import { Modal } from "../chat/Modal";
-import { Row, Switch } from "./SettingsRow";
+import { Row, State, Switch } from "./SettingsRow";
 import "./remote.css";
 
 const message = (error: unknown): string =>
@@ -83,6 +84,8 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
   };
 
   const enabled = status?.enabled ?? false;
+  const devices = status?.devices ?? [];
+  const bots = status?.bots ?? [];
   const paired = pairing
     ? (status?.devices.find((device) => !before.includes(device.id)) ?? null)
     : null;
@@ -99,7 +102,11 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
         </p>
       ) : null}
       <div className="settings-group">
-        <Row title="Remote access" detail={status ? linkLabel(status) : "Checking…"}>
+        <Row
+          title="Remote access"
+          mark={<MonitorSmartphone size={18} />}
+          detail={status ? <State tone={linkTone(status)}>{linkLabel(status)}</State> : "Checking…"}
+        >
           <Switch
             label="Remote access"
             checked={enabled}
@@ -111,89 +118,117 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       </div>
 
       <section className="settings-section" aria-labelledby="settings-remote-devices">
-        <h2 id="settings-remote-devices">Devices</h2>
-        <div className="settings-group">
-          {(status?.devices ?? []).map((device) => (
-            <Row
-              key={device.id}
-              title={device.name}
-              setting="Devices"
-              detail={
-                device.connected ? "Connected now" : `Last seen ${ago(device.last_seen_at, now)}`
-              }
-            >
-              <button
-                className="g-button g-button-outline g-button-28"
-                type="button"
-                aria-label={`Remove ${device.name}`}
-                onClick={() => void run(() => api.removeDevice(device.id))}
-              >
-                Remove
-              </button>
-            </Row>
-          ))}
-          <Row
-            title="Pair a device"
-            detail="Shows a link and a code to scan with your phone. It opens once, within ten minutes."
+        <div className="settings-heading" data-setting="Pair a device">
+          <h2 id="settings-remote-devices">Devices</h2>
+          <button
+            className="g-button g-button-outline g-button-28"
+            type="button"
+            data-testid="remote-pair"
+            disabled={status === null}
+            onClick={() => void pair()}
           >
-            <button
-              className="g-button g-button-outline g-button-28"
-              type="button"
-              data-testid="remote-pair"
-              disabled={status === null}
-              onClick={() => void pair()}
-            >
-              Pair
-            </button>
-          </Row>
+            Pair a device
+          </button>
         </div>
+        <p className="settings-lead">
+          Your phone, or any browser you open the link in. A pairing link opens once, within ten
+          minutes.
+        </p>
+        {devices.length ? (
+          <div className="settings-group">
+            {devices.map((device) => (
+              <Row
+                key={device.id}
+                title={device.name}
+                setting="Devices"
+                mark={handheld(device.name) ? <Smartphone size={18} /> : <Monitor size={18} />}
+                detail={
+                  device.connected ? (
+                    <State tone="green">Connected now</State>
+                  ) : (
+                    <State tone="off">Last seen {ago(device.last_seen_at, now)}</State>
+                  )
+                }
+              >
+                <button
+                  className="g-button g-button-ghost g-button-28"
+                  type="button"
+                  aria-label={`Remove ${device.name}`}
+                  onClick={() => void run(() => api.removeDevice(device.id))}
+                >
+                  Remove
+                </button>
+              </Row>
+            ))}
+          </div>
+        ) : (
+          <p className="settings-empty" data-setting="Devices">
+            <strong>No devices yet</strong>
+            Pair your phone to read your chats, send messages and answer requests from it.
+          </p>
+        )}
       </section>
 
       <section className="settings-section" aria-labelledby="settings-remote-bots">
-        <h2 id="settings-remote-bots">Bots</h2>
-        <div className="settings-group">
-          {(status?.bots ?? []).map((bot) => (
-            <Row
-              key={bot.id}
-              title={bot.name}
-              setting="Bots"
-              detail={`${bot.full ? "Full control" : "Chats"} · ${
-                bot.last_used_at === null
-                  ? "Not used yet"
-                  : `Last used ${ago(bot.last_used_at, now)}`
-              }`}
-            >
-              <button
-                className="g-button g-button-outline g-button-28"
-                type="button"
-                aria-label={`Remove ${bot.name}`}
-                onClick={() => void run(() => api.removeBot(bot.id))}
-              >
-                Remove
-              </button>
-            </Row>
-          ))}
-          <Row
-            title="Link a bot"
-            detail="Gives Grok Bot, or any assistant that connects to MCP servers, tools to read your chats, message your agents and answer their requests."
+        <div className="settings-heading" data-setting="Link a bot">
+          <h2 id="settings-remote-bots">Bots</h2>
+          <button
+            className="g-button g-button-outline g-button-28"
+            type="button"
+            data-testid="remote-link-bot"
+            disabled={status === null}
+            onClick={link}
           >
-            <button
-              className="g-button g-button-outline g-button-28"
-              type="button"
-              data-testid="remote-link-bot"
-              disabled={status === null}
-              onClick={link}
-            >
-              Create link
-            </button>
-          </Row>
+            Link a bot
+          </button>
         </div>
+        <p className="settings-lead">
+          Grok Bot, or any assistant that connects to MCP servers, gets tools for your chats through
+          an address you paste into it.
+        </p>
+        {bots.length ? (
+          <div className="settings-group">
+            {bots.map((bot) => (
+              <Row
+                key={bot.id}
+                title={bot.name}
+                setting="Bots"
+                mark={<Bot size={18} />}
+                badge={<span className="g-chip">{bot.full ? "Full control" : "Chats"}</span>}
+                detail={
+                  bot.last_used_at === null ? (
+                    <State tone="off">Not used yet</State>
+                  ) : (
+                    <State tone="green">Last used {ago(bot.last_used_at, now)}</State>
+                  )
+                }
+              >
+                <button
+                  className="g-button g-button-ghost g-button-28"
+                  type="button"
+                  aria-label={`Remove ${bot.name}`}
+                  onClick={() => void run(() => api.removeBot(bot.id))}
+                >
+                  Remove
+                </button>
+              </Row>
+            ))}
+          </div>
+        ) : (
+          <p className="settings-empty" data-setting="Bots">
+            <strong>No bots linked</strong>A link lets a bot read your chats and message your
+            agents, or do everything you do in this window. You choose which when you make it.
+          </p>
+        )}
       </section>
-      <p className="settings-footnote">
-        A paired browser's session is encrypted end to end: the relay passes it along and cannot
-        read it. A bot's calls are not: the relay and the bot's own service read them, and either
-        could act as that bot. Remote access works while auracode is open, including in the tray.
-      </p>
+      <details className="settings-more">
+        <summary>What the relay can see</summary>
+        <p>
+          A paired browser's session is encrypted end to end: the relay passes it along and cannot
+          read it. A bot's calls are not: the relay and the bot's own service read them, and either
+          could act as that bot. Remote access works while auracode is open, including in the tray.
+        </p>
+      </details>
 
       {pairing ? (
         <PairingDialog
@@ -221,6 +256,10 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     </>
   );
 }
+
+/** Whether a paired browser's name reads as a phone or tablet: its row wears that glyph. */
+const handheld = (name: string): boolean =>
+  /iphone|ipad|android|pixel|galaxy|phone|mobile/i.test(name);
 
 /** A QR code as one SVG path: dark modules on white, whatever the app's appearance. */
 export function QrCode({ text, label }: { readonly text: string; readonly label: string }) {

@@ -660,6 +660,7 @@ impl SessionManager {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
+        self.refuse_update_while_working(agent_id).await?;
         let manager = self.clone();
         let agent_id = agent_id.to_owned();
         // Closing an IPC caller must not release update admission while its vendor installer runs.
@@ -683,6 +684,57 @@ impl SessionManager {
             })
             .await
             .map_err(|_| SessionError::Internal("The vendor update task failed.".into()))?
+    }
+
+    /// What the agent's last update printed, for the person who ran it (memory only).
+    pub fn agent_update_output(&self, agent_id: &str) -> Option<String> {
+        self.deps().detector.update_output(agent_id)
+    }
+
+    /// An update replaces the agent's program files. Under a turn that can fail (Windows holds a
+    /// running program's files) or break the turn, so an update waits for the agent's chats to
+    /// finish. Every connection of the agent counts: they share one installation.
+    pub(crate) async fn refuse_update_while_working(
+        &self,
+        agent_id: &str,
+    ) -> Result<(), SessionError> {
+        let provider = aura_agents::installation::provider_namespace(agent_id);
+        let records = self
+            .deps()
+            .store
+            .chats()
+            .await
+            .map_err(|error| storage_error(&error))?;
+        let working = records
+            .iter()
+            .filter(|record| {
+                aura_agents::installation::provider_namespace(&record.agent_id) == provider
+            })
+            .filter(|record| {
+                self.shared().state(&record.id).is_some_and(|state| {
+                    matches!(
+                        state.status,
+                        SessionStatus::Starting
+                            | SessionStatus::Running
+                            | SessionStatus::Cancelling
+                            | SessionStatus::Stopping
+                    )
+                })
+            })
+            .count();
+        if working == 0 {
+            return Ok(());
+        }
+        let name = self
+            .deps()
+            .detector
+            .agent(provider)
+            .map_or_else(|| provider.to_owned(), |spec| spec.name.to_owned());
+        Err(SessionError::AgentUnavailable(if working == 1 {
+            format!("{name} has a chat working. Update it once that chat finishes.")
+        } else {
+            format!("{name} has {working} chats working. Update it once they finish.")
+        }))
     }
 
     /// The env agents start with: how it was resolved, and the names the scrub removes.
