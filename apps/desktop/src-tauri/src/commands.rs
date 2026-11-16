@@ -318,6 +318,17 @@ pub async fn agent_update(state: State<'_, AppState>, agent_id: String) -> Resul
     Ok(state.sessions()?.update_agent(&agent_id).await?)
 }
 
+/// What the agent's last update printed in this run of auracode: its last lines as plain text,
+/// for the person who asked for the update. Kept in memory only, never stored, logged or sent on.
+#[tauri::command]
+#[specta::specta]
+pub fn agent_update_output(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<Option<String>, AppError> {
+    Ok(state.sessions()?.agent_update_output(&agent_id))
+}
+
 /// An agent's Connection setting on this device: one of its connection ids, or `null` for
 /// Automatic. New sessions use it; a chat's saved session keeps its own connection. Answers every
 /// agent as `agents_list` reports them, without probing again.

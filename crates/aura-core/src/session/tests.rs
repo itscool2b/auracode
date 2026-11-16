@@ -575,6 +575,57 @@ async fn quit_while_paused() {
     assert!(store.shutdown(Duration::from_secs(5)).await);
 }
 
+/// An update replaces the agent's program files, so neither Update nor its terminal run starts
+/// while one of the agent's chats has a turn under way. With every chat idle the request goes on
+/// to the detector, which answers for itself.
+#[tokio::test]
+async fn an_agent_is_not_updated_under_a_working_chat() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        // The turn stays open.
+        delta("working"),
+    ]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let refusal = |result: Result<(), SessionError>| match result {
+        Err(SessionError::AgentUnavailable(reason)) => reason,
+        other => panic!("expected a refusal, got {other:?}"),
+    };
+
+    // Idle: nothing of the session's stands in the way. (This rig's detector updates nothing.)
+    let idle = refusal(rig.manager.update_agent("mock").await);
+    assert!(!idle.contains("working"), "{idle}");
+
+    rig.manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .expect("attach");
+    rig.manager
+        .send(&chat.id, "first".into())
+        .await
+        .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
+    status(&rig, &chat.id, SessionStatus::Running).await;
+
+    let working = refusal(rig.manager.update_agent("mock").await);
+    assert!(
+        working.ends_with("has a chat working. Update it once that chat finishes."),
+        "{working}"
+    );
+    let terminal = refusal(rig.manager.prepare_agent_update("mock").await.map(drop));
+    assert_eq!(terminal, working);
+    // Nothing ran, so there is nothing an updater printed, and the chat is still at work.
+    assert_eq!(rig.manager.agent_update_output("mock"), None);
+    assert_eq!(rig.statuses.status(&chat.id), Some(SessionStatus::Running));
+}
+
 /// A quit drains every actor before the store closes. Writes queued while a turn runs (two
 /// prompts, the hold the quit puts on them, the interrupted turn's end) are all saved; work that
 /// reaches an actor after it answered its quit is refused instead of being queued for a closed

@@ -278,6 +278,103 @@ pub fn auth_status(provider: &str, output: &HelperOutput) -> AgentAuthStatus {
     }
 }
 
+/// The most of an updater's output that is kept to show: its last lines, not a log.
+const OUTPUT_LINES: usize = 40;
+const OUTPUT_BYTES: usize = 4 * 1024;
+
+/// What a vendor's command printed, as plain text a person can read: standard output then standard
+/// error, without terminal escapes or control characters, a redrawn progress line reduced to what
+/// it last showed, and only the last lines. It is shown to the person who ran the update and
+/// nowhere else: it is not written to disk, logged or sent anywhere.
+pub fn readable_output(output: &HelperOutput) -> String {
+    let mut raw = String::from_utf8_lossy(&output.stdout).into_owned();
+    if !raw.is_empty() && !raw.ends_with('\n') {
+        raw.push('\n');
+    }
+    raw.push_str(&output.stderr_tail);
+    let mut lines: Vec<String> = Vec::new();
+    for line in raw.lines() {
+        // A carriage return redraws the line: what follows the last one is what stayed on screen.
+        let shown = line
+            .trim_end_matches('\r')
+            .rsplit('\r')
+            .next()
+            .unwrap_or_default();
+        let clean = without_escapes(shown);
+        let clean = clean.trim_end();
+        // One blank line between paragraphs is kept; runs of them are not.
+        if clean.is_empty() && lines.last().is_none_or(|last| last.is_empty()) {
+            continue;
+        }
+        lines.push(clean.to_owned());
+    }
+    while lines.last().is_some_and(|last| last.is_empty()) {
+        lines.pop();
+    }
+    let mut kept: Vec<&str> = Vec::new();
+    let mut bytes = 0;
+    for line in lines.iter().rev().take(OUTPUT_LINES) {
+        bytes += line.len() + 1;
+        if bytes > OUTPUT_BYTES && !kept.is_empty() {
+            break;
+        }
+        kept.push(line);
+    }
+    kept.reverse();
+    let mut text = kept.join("\n");
+    if text.len() > OUTPUT_BYTES {
+        // One very long line: keep its end, cut on a character boundary.
+        let mut start = text.len() - OUTPUT_BYTES;
+        while !text.is_char_boundary(start) {
+            start += 1;
+        }
+        text = text[start..].to_owned();
+    }
+    text
+}
+
+/// `line` without ANSI escape sequences (colours, cursor moves, window titles) and without any
+/// other control character but a tab.
+fn without_escapes(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            if c == '\t' || !c.is_control() {
+                out.push(c);
+            }
+            continue;
+        }
+        match chars.next() {
+            // CSI: parameters and intermediates, ended by a byte from @ to ~.
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // OSC (a window title, a hyperlink): ended by BEL or by ESC \.
+            Some(']') => {
+                while let Some(c) = chars.next() {
+                    if c == '\u{7}' {
+                        break;
+                    }
+                    if c == '\u{1b}' {
+                        if chars.peek() == Some(&'\\') {
+                            chars.next();
+                        }
+                        break;
+                    }
+                }
+            }
+            // A two-character escape, or the end of the line.
+            _ => {}
+        }
+    }
+    out
+}
+
 pub(crate) async fn run(
     command: MaintenanceCommand,
     env: Arc<ResolvedEnv>,
@@ -521,6 +618,50 @@ mod tests {
             ),
             AgentAuthStatus::Unknown { .. }
         ));
+    }
+
+    fn printed(stdout: &str, stderr: &str) -> HelperOutput {
+        HelperOutput {
+            stdout: stdout.as_bytes().to_vec(),
+            stderr_tail: stderr.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_updaters_output_reads_as_plain_text() {
+        // Colours, a window title, a hyperlink and a redrawn progress line: what stays is what a
+        // terminal would have left on screen, with standard error after standard output.
+        let output = printed(
+            "\u{1b}[32mDownloading\u{1b}[0m 1.0.80\r\n10%\r50%\r100% done\n\n\n\u{1b}]0;updater\u{7}Installed\n",
+            "\u{1b}]8;;https://example.test\u{1b}\\warning\u{1b}]8;;\u{1b}\\: restart to finish \u{7}\n",
+        );
+        assert_eq!(
+            readable_output(&output),
+            "Downloading 1.0.80\n100% done\n\nInstalled\nwarning: restart to finish"
+        );
+        assert_eq!(readable_output(&printed("", "")), "");
+        assert_eq!(readable_output(&printed("\n \n", "\r\n")), "");
+    }
+
+    #[test]
+    fn only_the_end_of_a_long_output_is_kept() {
+        let many: String = (1..=500).map(|line| format!("line {line}\n")).collect();
+        let kept = readable_output(&printed(&many, "the error\n"));
+        assert_eq!(kept.lines().count(), OUTPUT_LINES);
+        assert!(kept.ends_with("line 500\nthe error"), "{kept}");
+        assert!(!kept.contains("line 1\n"));
+        // One enormous line is cut to the limit on a character boundary, keeping its end.
+        let wide = format!("{}é end", "é".repeat(OUTPUT_BYTES));
+        let kept = readable_output(&printed(&wide, ""));
+        assert!(kept.len() <= OUTPUT_BYTES);
+        assert!(kept.ends_with("é end"));
+        // Bytes that are not text do not break it.
+        let binary = HelperOutput {
+            stdout: vec![0xff, 0xfe, b'o', b'k', b'\n'],
+            ..Default::default()
+        };
+        assert!(readable_output(&binary).ends_with("ok"));
     }
 
     #[test]

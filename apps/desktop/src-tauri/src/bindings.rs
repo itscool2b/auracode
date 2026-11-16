@@ -187,6 +187,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::agent_maintenance,
             commands::agent_auth_status,
             commands::agent_update,
+            commands::agent_update_output,
             commands::agent_set_connection,
             terminal::terminal_reserve,
             terminal::agent_login_start,
