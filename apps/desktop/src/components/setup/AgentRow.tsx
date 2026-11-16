@@ -378,9 +378,12 @@ export function AgentRow({
   onConnection,
   compact = false,
   index = 0,
+  working = 0,
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
+  /** How many of this agent's chats have a turn under way: an update waits for them. */
+  readonly working?: number;
   /** Detects the agents again. A promise lets an update say what it changed once it settles. */
   readonly onRefresh: () => void | Promise<void>;
   /** The Agents page: the details offer the Connection setting of an agent with several. */
@@ -402,6 +405,10 @@ export function AgentRow({
   const [updateFailed, setUpdateFailed] = useState(false);
   const [updateTerminal, setUpdateTerminal] = useState(false);
   const updateExit = useRef<number | null>(null);
+  // What the updater printed, shown under what the update said until the next action.
+  const [printed, setPrinted] = useState<string | null>(null);
+  // One action at a time, even from a menu that was opened before the last one started.
+  const running = useRef(false);
   // The newest entry, for reading what an update changed after detection ran again.
   const latest = useRef(agent);
   latest.current = agent;
@@ -415,6 +422,7 @@ export function AgentRow({
     if (!outcome.current) {
       setMessage(null);
       setError(null);
+      setPrinted(null);
     }
     if (!ready) return;
     let live = true;
@@ -431,17 +439,26 @@ export function AgentRow({
     };
   }, [transport, agent.id, ready, installKey]);
   const run = async (kind: "auth" | "update", action: () => Promise<void>) => {
+    if (running.current) return;
+    running.current = true;
     outcome.current = false;
     setBusy(kind);
     setError(null);
     setMessage(null);
+    setPrinted(null);
     try {
       await action();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
+      running.current = false;
       setBusy(null);
     }
+  };
+  /** Reads what the updater printed. A failure to read it is not worth a second error. */
+  const readPrinted = async () => {
+    const text = await transport.agentUpdateOutput?.(agent.id).catch(() => null);
+    setPrinted(text?.trim() ? text : null);
   };
   const checkSignIn = () =>
     void run("auth", async () => {
@@ -458,8 +475,10 @@ export function AgentRow({
         await transport.agentUpdate(agent.id);
       } catch (reason) {
         setUpdateFailed(true);
+        await readPrinted();
         throw reason;
       }
+      await readPrinted();
       // The updater exiting cleanly proves nothing: say what the version did.
       await onRefresh();
       await new Promise((settled) => setTimeout(settled, 0));
@@ -477,6 +496,11 @@ export function AgentRow({
   const guide = INSTALL_GUIDES[agent.id];
   const newer = newerRelease(agent);
   const canUpdate = maintenance?.update_unavailable === null;
+  // Replacing an agent's files under a running turn can fail or break the turn: Update waits.
+  const waits =
+    working > 0
+      ? `Update once its ${working === 1 ? "working chat finishes" : `${working} working chats finish`}.`
+      : null;
   const canSignIn = maintenance?.login_available === true;
   const installable = agent.availability.state === "missing" && ONE_CLICK.includes(agent.id);
   // One action at most, and only Install, Update or Sign in: a guide link is not an action here.
@@ -508,7 +532,8 @@ export function AgentRow({
       <button
         type="button"
         className="g-button g-button-outline g-button-28"
-        disabled={disabled}
+        disabled={disabled || waits !== null}
+        title={waits ?? undefined}
         aria-label={`Update ${agent.name}`}
         onClick={update}
       >
@@ -534,7 +559,8 @@ export function AgentRow({
       label: busy === "auth" ? "Checking sign-in…" : "Check sign-in",
       onSelect: checkSignIn,
     });
-  if (canUpdate && primary !== "update") actions.push({ label: "Update", onSelect: update });
+  if (canUpdate && primary !== "update" && waits === null)
+    actions.push({ label: "Update", onSelect: update });
   const links: MenuItem[] = [];
   if (guide) links.push({ label: "Installation guide", href: guide });
   if (agent.installation) {
@@ -641,7 +667,9 @@ export function AgentRow({
             {/* No Update button is no explanation: say why auracode cannot install it. */}
             {maintenance && maintenance.update_unavailable !== null
               ? ` ${maintenance.update_unavailable}`
-              : null}
+              : canUpdate && waits
+                ? ` ${waits}`
+                : null}
           </span>
         </p>
       ) : null}
@@ -669,6 +697,13 @@ export function AgentRow({
             </>
           ) : null}
         </p>
+      ) : null}
+      {printed ? (
+        <details className="agent-row-output">
+          <summary>What the updater printed</summary>
+          {/* Text from the vendor's command, shown as text: never markup, never run. */}
+          <pre>{printed}</pre>
+        </details>
       ) : null}
       {open ? (
         <AgentDetail

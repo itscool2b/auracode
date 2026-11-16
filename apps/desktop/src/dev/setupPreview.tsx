@@ -11,7 +11,7 @@ import {
   getThemePreference,
 } from "../lib/appearance";
 import { AppStore } from "../lib/chat/appStore";
-import { FakeTransport } from "../lib/chat/testing";
+import { chatSummary, FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 import { InstallApiContext } from "../lib/setup-actions/api";
 import { WorkspaceStore } from "../lib/workspace";
@@ -155,6 +155,8 @@ const detected = (): AgentEntry[] =>
   agents.map((agent, index) =>
     index < resolved ? agent : { ...agent, availability: { state: "checking" } },
   );
+/** What the fixture's updater "printed" last. */
+let printed: string | null = null;
 const transport = new FakeTransport({
   // Claude Code's details list one added account; nothing here stores or reads a token.
   accounts: createAccountsFixture(["Work"]),
@@ -179,9 +181,43 @@ const transport = new FakeTransport({
     update_unavailable:
       agentId === "claude" ? null : "Synthetic fixture: no vendor command can run here.",
   }),
+  // `?update=fail`: the vendor's command fails and leaves output behind. Otherwise Update finds
+  // the newer release installed. Nothing here runs a command.
+  agentUpdate: async (agentId) => {
+    await new Promise((done) => setTimeout(done, 300));
+    if (params.get("update") === "fail") {
+      printed = [
+        "npm error code EBUSY",
+        "npm error syscall rename",
+        "npm error path C:/fixture/claude.exe",
+        "npm error errno -4082",
+        "npm error EBUSY: resource busy or locked",
+      ].join("\n");
+      throw new Error("The vendor's command failed with exit code 1.");
+    }
+    printed = "changed 1 package in 4s";
+    const claude = agents.find((agent) => agent.id === agentId);
+    if (claude?.availability.state === "ready") {
+      claude.availability = { ...claude.availability, version: "2.1.314" };
+      if (claude.installation) claude.installation = { ...claude.installation, version: "2.1.314" };
+      claude.harness = { state: "up_to_date", version: "2.1.314", checked_at: Date.now() };
+    }
+  },
+  agentUpdateOutput: async () => printed,
+  // `?working=2`: two of Claude Code's chats have a turn under way, so its Update waits.
+  chatsList: async () =>
+    Array.from({ length: Number(params.get("working") ?? 0) }, (_, index) =>
+      chatSummary(`working-${index}`, {
+        title: `Working chat ${index + 1}`,
+        agent_id: "claude",
+        agent_name: "Claude Code",
+        status: "running",
+      }),
+    ),
   pickFolder: async () => "C:/fixture/Orbit",
 });
 const app = new AppStore(transport);
+if (params.has("working")) void app.reloadChats();
 // `?preview=clone`, `clone-running` and `clone-error` open the first-project step on the clone,
 // filled in, and started for the last two; `setup` clones to completion when asked.
 const mode = params.get("preview") ?? "setup";

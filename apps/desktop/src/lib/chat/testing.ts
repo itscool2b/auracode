@@ -688,6 +688,11 @@ export class FakeTransport implements Transport {
     return this.handlers.agentUpdate?.(agentId) ?? Promise.resolve();
   }
 
+  agentUpdateOutput(agentId: string): Promise<string | null> {
+    this.#record("agentUpdateOutput", [agentId]);
+    return this.handlers.agentUpdateOutput?.(agentId) ?? Promise.resolve(null);
+  }
+
   agentSetConnection(agentId: string, connection: string | null): Promise<AgentEntry[]> {
     this.#record("agentSetConnection", [agentId, connection]);
     return this.handlers.agentSetConnection?.(agentId, connection) ?? Promise.resolve([]);

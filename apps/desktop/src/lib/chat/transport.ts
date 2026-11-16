@@ -32,6 +32,7 @@ import {
   agentsList,
   agentsRefresh,
   agentUpdate,
+  agentUpdateOutput,
   chatAttach,
   chatBlob,
   chatCancelQueued,
@@ -95,6 +96,8 @@ export interface Transport {
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
+  /** What the agent's last update printed, when it printed anything. Read after an update ends. */
+  agentUpdateOutput?(agentId: string): Promise<string | null>;
   /** An agent's update command in the terminal sheet, after Update failed in the background. */
   readonly updateTerminal?: TerminalTransport;
   /**
@@ -162,6 +165,7 @@ export const tauriTransport: Transport = {
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,
+  agentUpdateOutput,
   updateTerminal: updateTerminalTransport,
   agentSetConnection,
   agentsList,

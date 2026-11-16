@@ -262,6 +262,11 @@ export async function agentUpdate(agentId: string): Promise<void> {
   await settle(commands.agentUpdate(agentId));
 }
 
+/** The last lines the agent's updater printed in this run of auracode, as plain text. */
+export function agentUpdateOutput(agentId: string): Promise<string | null> {
+  return settle(commands.agentUpdateOutput(agentId));
+}
+
 export function envStatus(): Promise<EnvStatus> {
   return infallible(commands.envStatus());
 }
