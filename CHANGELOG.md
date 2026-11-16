@@ -5,6 +5,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-16
+
+- Choose a chat's model and agent from your phone, and three Settings pages get one look: on auracode.si/remote a chat's header now has "Model and agent", where a model or thinking level applies as you pick it and another agent takes the chat over with its history. Instructions, Project memory and Remote access match the Browser page, with a status dot on each device and bot, a meter for how full your notes are, and an empty list that says what goes there. Updating an agent waits while one of its chats is working, and afterwards shows what the updater printed. ([#135](https://github.com/itscool2b/auracode/pull/135))
+
 ## 2026-11-11
 
 - The Mac app builds on Apple silicon again: since dictation arrived, its speech engine needed a system library the app never linked, so the Mac installer could not be made. The build now links it. ([#134](https://github.com/itscool2b/auracode/pull/134))
