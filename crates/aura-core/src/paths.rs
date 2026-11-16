@@ -190,6 +190,31 @@ fn is_lower_alnum(byte: u8) -> bool {
     byte.is_ascii_lowercase() || byte.is_ascii_digit()
 }
 
+/// The program an agent starts to run auracode's own helpers (`--aura-memory-helper`,
+/// `--aura-browser-helper`): this executable, or inside a Linux AppImage the image's `AppRun`.
+/// Agents get an env without the AppImage's library path (`aura_process::strip_launch_context`),
+/// and the bundled binary needs it on a system lacking WebKitGTK; `AppRun` sets it again and
+/// executes the binary with the same arguments. `None` when the executable is unknown.
+pub fn helper_program() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let program = appimage_launcher(&exe, std::env::var_os("APPDIR").as_deref()).unwrap_or(exe);
+    program.is_file().then_some(program)
+}
+
+/// `APPDIR/AppRun` when `exe` lies inside `appdir` and that launcher exists. An `APPDIR` naming
+/// another image (one that merely started auracode) does not contain `exe`, and is ignored.
+fn appimage_launcher(exe: &Path, appdir: Option<&OsStr>) -> Option<PathBuf> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let appdir = Path::new(appdir?);
+    if !appdir.is_absolute() || appdir.parent().is_none() || !exe.starts_with(appdir) {
+        return None;
+    }
+    let launcher = appdir.join("AppRun");
+    launcher.is_file().then_some(launcher)
+}
+
 /// The override path if the variable holds anything but whitespace. Valid UTF-8 is trimmed (a stray
 /// space or newline from a shell profile is far likelier than a folder really named " data"); other
 /// bytes are used as is, since they can't be blank.
@@ -215,6 +240,31 @@ mod tests {
     /// Absolute on every OS (`/custom` is drive-relative on Windows).
     fn custom_root() -> PathBuf {
         std::env::temp_dir().join("aura custom root")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn helpers_start_through_the_appimage_launcher_only_from_inside_its_mount() {
+        let mount = tempfile::tempdir().expect("mount");
+        let exe = mount.path().join("usr/bin/auracode");
+        std::fs::create_dir_all(exe.parent().unwrap()).expect("bin dir");
+        std::fs::write(&exe, b"").expect("exe");
+        let appdir = Some(mount.path().as_os_str());
+        // No AppRun in the mount: the executable itself.
+        assert_eq!(appimage_launcher(&exe, appdir), None);
+        let launcher = mount.path().join("AppRun");
+        std::fs::write(&launcher, b"").expect("AppRun");
+        assert_eq!(appimage_launcher(&exe, appdir), Some(launcher));
+        // An APPDIR that does not hold the executable belongs to some other image.
+        let elsewhere = tempfile::tempdir().expect("elsewhere");
+        assert_eq!(
+            appimage_launcher(&exe, Some(elsewhere.path().as_os_str())),
+            None
+        );
+        for appdir in ["", "/", "relative"] {
+            assert_eq!(appimage_launcher(&exe, Some(OsStr::new(appdir))), None);
+        }
+        assert_eq!(appimage_launcher(&exe, None), None);
     }
 
     #[test]

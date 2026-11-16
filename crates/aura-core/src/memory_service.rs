@@ -120,11 +120,7 @@ impl MemoryGrant {
         })
     }
     pub(crate) fn mcp(&self, project: Option<String>) -> Option<ResolvedMcpServer> {
-        let exe = std::env::current_exe().ok()?;
-        let path = exe;
-        if !path.is_file() {
-            return None;
-        }
+        let path = crate::paths::helper_program()?;
         Some(ResolvedMcpServer {
             definition: McpDefinition {
                 id: "aura-project-memory".into(),

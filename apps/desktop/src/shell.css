@@ -53,6 +53,7 @@
   border-radius: var(--ui-pane-radius);
   background-color: var(--ui-pane-fill);
   box-shadow: var(--ui-pane-shadow);
+  outline: var(--ui-pane-outline);
 }
 
 /* The light: painted under the pane's content, never over a word. */
@@ -146,6 +147,7 @@
     border-radius: var(--ui-pane-radius);
     background-color: var(--ui-pane-fill);
     box-shadow: var(--ui-pane-shadow);
+    outline: var(--ui-pane-outline);
   }
 
   /* The panel's drag handle fills the gutter between the two panes. */
@@ -212,6 +214,7 @@
     border-radius: var(--ui-pane-radius);
     background-color: var(--ui-pane-fill);
     box-shadow: var(--ui-pane-shadow);
+    outline: var(--ui-pane-outline);
   }
 }
 
@@ -238,6 +241,7 @@
   border-radius: var(--ui-pane-radius);
   background-color: var(--ui-pane-fill);
   box-shadow: var(--ui-pane-shadow);
+  outline: var(--ui-pane-outline);
 }
 
 /* The pane's light, as the chat's: under the content, never over a word. */

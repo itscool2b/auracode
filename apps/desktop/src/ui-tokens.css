@@ -35,6 +35,8 @@
   --ui-pane-rim: var(--g-glass-rim);
   --ui-pane-rim-top: var(--g-glass-highlight);
   --ui-pane-shadow: var(--g-shadow-layer), inset 0 1px 0 var(--g-glass-highlight);
+  /* Drawn only where the shadow is not (Linux, below). */
+  --ui-pane-outline: none;
 
   /*
    * The composer is a glass capsule: the popover glass, a lit top edge and a sheen fading down
@@ -113,4 +115,16 @@
     --g-glass-bar: var(--g-surface-1);
     --g-glass-pop: var(--g-overlay);
   }
+}
+
+/*
+ * Linux: WebKitGTK paints a pane's box-shadow again with every repaint inside the pane, on the main
+ * thread, and a pane is most of the window. On a 4K screen at 2x (16 November 2026, WebKitGTK 2.50
+ * and 2.54) the stress view drew 6 frames a second with the shadow, 30 to 40 with the hairline as
+ * an outline and no shadow; keeping only the hairline and lit edge as a box-shadow still drew 10.
+ * So the panes keep their hairline, as an outline, and lose the soft depth and the lit top edge.
+ */
+:root[data-os="linux"] {
+  --ui-pane-shadow: none;
+  --ui-pane-outline: 1px solid var(--g-ring-layer);
 }

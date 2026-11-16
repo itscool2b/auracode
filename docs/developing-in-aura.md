@@ -2,8 +2,9 @@
 
 Chats in auracode often change auracode itself. The installed app runs those chats, its data folder
 holds them and the worktrees being edited, and every agent process runs inside the app's Windows
-job object. So anything that stops, replaces, migrates or uninstalls the installed app ends the
-session doing the work. This page covers what the code guarantees, how to build and test a change
+job object, or on Linux and macOS is stopped with the agent's process tree when the app quits. So
+anything that stops, replaces, migrates or uninstalls the installed app ends the session doing
+the work. This page covers what the code guarantees, how to build and test a change
 next to the running app, how to get the change into the installed app, and how to recover when
 the new build is broken.
 
@@ -155,14 +156,79 @@ The snapshots and the log (`%LOCALAPPDATA%\auracode-upgrades\upgrade.log`) are o
 install and the data folder. Neither an upgrade nor an uninstall removes them, and a later session
 can read the log to see what happened.
 
+## Linux
+
+The installed app is an AppImage: `~/Applications/auracode.AppImage`, a link to a versioned file
+beside it (`auracode_0.1.0_amd64.AppImage`), which the desktop entry starts. The development
+build's folder is `~/.local/share/si.auracode.desktop.dev`, by the same rule as elsewhere.
+
+**Toolchain.** Rust through rustup (`rust-toolchain.toml` picks stable with rustfmt and clippy),
+pnpm 12 (`mise use -g pnpm@12`, or corepack), Node from the supported range, CMake (dictation's
+`transcribe-cpp-sys` builds with it; `mise use -g cmake` without root) and Tauri's system
+packages; on Arch: `webkit2gtk-4.1 base-devel curl wget file openssl librsvg`.
+
+**What an agent's shell sees.** The AppImage's launcher points `LD_LIBRARY_PATH`, `PATH`,
+`PYTHONHOME`, `PERLLIB`, `XDG_DATA_DIRS`, `GIO_MODULE_DIR` and others into its mount
+(`/tmp/.mount_auraco…`). auracode strips them before it resolves the agents' environment
+(`strip_launch_context` in `crates/aura-process/src/env/mod.rs`), so an agent's `node`, `git`,
+`python` and `cargo` load the system's libraries, not the image's. auracode's own helpers that
+agents start (project memory, browser) run through the image's `AppRun`, which sets the image's
+library path again for them alone (`helper_program` in `crates/aura-core/src/paths.rs`). An
+installed build from before that fix leaks the launcher's variables: there, `node` fails with
+"version `LIBFFI_CALL_PLAN_8.4' not found", `python3` with "No module named 'encodings'" and `git`
+warns about `libpcre2-8.so.0`. Until such a build is replaced, start each command line with
+`env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH -u PERLLIB` and put the system's folders
+first on `PATH`.
+
+**Testing next to the running app.** `pnpm tauri build --debug --no-bundle` from `apps/desktop`,
+then `target/debug/auracode`. It opens the development folder, is titled `auracode dev` and runs
+beside the installed app. Never stop `auracode` by name (`pkill auracode`): the installed app's
+process has the same name. Stop the PID you started.
+
+On NVIDIA's driver under Wayland, WebKitGTK's DMA-BUF renderer ends a build that links the
+system's WebKitGTK as soon as its window opens ("Error 71 (Protocol error) dispatching to Wayland
+display"). The installed AppImage carries its own WebKitGTK, so it was not affected. The app now
+runs itself again with `WEBKIT_DISABLE_DMABUF_RENDERER=1` there, unless that variable is already
+set (`avoid_dmabuf_on_nvidia_wayland` in `apps/desktop/src-tauri/src/main.rs`).
+
+**Getting a change into the installed app.** `pnpm --filter @auracode/desktop host-upgrade`
+hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
+
+1. Build the AppImage: `pnpm bundle --bundles appimage`. It lands in
+   `target/release/bundle/appimage/`.
+2. Commit and push the branch.
+3. Arm the install from the chat: `host-upgrade install --after-exit` (the newest AppImage under
+   `target`, or `--appimage <file>`). It copies the AppImage beside the installed one at once,
+   so the worktree may go away, and returns. Its waiter runs under the user's systemd
+   (`systemd-run --user`, unit `auracode-upgrade-<millis>`), which shares no process with the
+   app, so it outlives the agent that armed it. Without user systemd it starts in a new session
+   that is reparented to init.
+4. Quit auracode. The waiter moves the link to the new build in one rename and starts it as its
+   own systemd unit, with the environment the desktop launcher gives. If no process runs the new
+   file 20 seconds later (`--health-seconds`), it moves the link back and starts the previous
+   build. The previous build stays on disk either way; the three newest older builds are kept
+   (`--keep`), and never the one running or the one a rollback would use.
+
+`host-upgrade status` shows the link, what runs, any armed install, the kept builds and the last
+log lines; `host-upgrade cancel` disarms. The log and the install history are in
+`~/.local/state/auracode-upgrades` (`$XDG_STATE_HOME`), outside the data folder. Without an
+agent, quit auracode and run `host-upgrade install` from a terminal: it installs and starts at
+once.
+
+**When the new build is broken.** Quit it and run `host-upgrade rollback` from a terminal: the
+link goes back to the build the last install replaced (or `--to <file>`), and that build starts.
+`--restore-database` also puts back each database the newer build migrated, from aura-core's
+pre-migration backups, as on Windows. With no working auracode at all, run Claude Code or Codex
+in a terminal in the main checkout, fix forward, build an AppImage and run `host-upgrade install`.
+
 ## macOS
 
 A development build's folder is `~/Library/Application Support/si.auracode.desktop.dev`, by the
 same rule. WebKit keeps one website-data store per bundle identifier, so a development build shares
 it with the installed app (`LaunchOptions::webview_data_dir` has no effect there). The app keeps
 nothing in web storage except the stress view's frame log, so this is harmless today. Anything
-that starts keeping state in web storage changes that. `host-upgrade` is Windows-only. On macOS,
-copy `/Applications/auracode.app` aside before replacing it.
+that starts keeping state in web storage changes that. `host-upgrade` covers Windows and Linux.
+On macOS, copy `/Applications/auracode.app` aside before replacing it.
 
 ## Verification
 
@@ -188,3 +254,15 @@ by the machine's signing policy. The previous installed binary remained in place
 was still armed when checked. The helper now records a process-start error before the exit code
 and rollback message, so a blocked installer is distinguishable from an installer that ran and
 failed. This observation does not establish whether a different future build will be accepted.
+
+Linux, run on 16 November 2026 on Omarchy (Hyprland, Wayland, NVIDIA RTX 5080, WebKitGTK 2.54)
+from a chat inside the installed AppImage:
+
+| Check | Result |
+|---|---|
+| An agent's shell in the installed build (before the fix) | fail, as described above: `node`, `python3` and `pacman` do not start, `git` warns |
+| `strip_launch_context` against the variables that AppImage's launcher set | pass (unit tests), including entries outside the mount kept in order and an `APPDIR` that is not a mount |
+| The memory helper started through the mount's `AppRun` from an env without the image's variables | pass: MCP `initialize` answered in 39 ms |
+| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass with the DMA-BUF switch: titled `auracode dev`, its own data folder, same PID after the restart, the installed app untouched; without it the window closes with Wayland error 71 |
+| `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
+| `host-upgrade install`, `--after-exit` and its waiter, health rollback, `rollback --restore-database`, `cancel`, prune | pass against a stand-in install (`appimage-upgrade.test.mjs`); not yet run against the real install |

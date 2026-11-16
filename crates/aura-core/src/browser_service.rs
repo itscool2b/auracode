@@ -142,12 +142,10 @@ impl BrowserGrant {
         })
     }
 
-    /// The MCP server the session's agent starts: the app's own executable as the helper.
+    /// The MCP server the session's agent starts: the app's own executable as the helper
+    /// ([`crate::paths::helper_program`]).
     pub(crate) fn mcp(&self) -> Option<ResolvedMcpServer> {
-        let exe = std::env::current_exe().ok()?;
-        if !exe.is_file() {
-            return None;
-        }
+        let exe = crate::paths::helper_program()?;
         Some(ResolvedMcpServer {
             definition: McpDefinition {
                 id: SERVER_ID.into(),
