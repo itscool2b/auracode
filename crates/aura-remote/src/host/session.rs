@@ -1,6 +1,7 @@
 //! One browser's session: its hello, its sealed requests and what each starts.
 
 use super::*;
+use crate::backend::{Action, Outcome};
 
 /// What a browser's message leads to.
 pub(super) enum Received {
@@ -157,6 +158,7 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
         &Event::Ready {
             host_name: &shared.config.host_name,
             paired,
+            features: wire::FEATURES,
         },
     ) else {
         return Received::Refuse(None);
@@ -238,6 +240,35 @@ fn text_ok(text: &str) -> Result<(), BackendError> {
     } else {
         Ok(())
     }
+}
+
+/// The most a model, thinking level or agent id may be: they are short names, never text.
+const MAX_NAME: usize = 256;
+
+/// A value picked from a list the desktop sent: short, and free of control characters.
+fn name_ok(name: &str) -> Result<(), BackendError> {
+    if name.is_empty() || name.len() > MAX_NAME || name.chars().any(char::is_control) {
+        Err(BackendError::new(
+            "invalid",
+            "That is not one of the choices.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn choices(list: Vec<crate::backend::Choice>) -> Vec<wire::Choice> {
+    list.into_iter()
+        .map(|choice| wire::Choice {
+            value: choice.value,
+            name: choice.name,
+        })
+        .collect()
+}
+
+/// The app answered an action with something other than what that action returns.
+fn unexpected() -> BackendError {
+    BackendError::new("failed", "This computer's auracode answered unexpectedly.")
 }
 
 /// Starts a request. `Err` ends the session: the request broke the protocol.
@@ -449,6 +480,39 @@ async fn perform(
                 chat: Box::new(chat),
                 sent,
             })
+        }
+        // A paired browser reaches four of the app's actions and no others: what a chat offers,
+        // its model, its thinking level, and handing it to another agent. The rest of
+        // `Action` (projects from any folder, access levels, project memory) stays with a
+        // full-control bot link.
+        Op::Options { chat_id } => match backend.act(Action::Options { chat_id }).await? {
+            Outcome::Options(options) => done(Data::Options(wire::Choices {
+                models: choices(options.models),
+                model: options.model,
+                thinking: choices(options.thinking),
+                thinking_level: options.thinking_level,
+            })),
+            _ => Err(unexpected()),
+        },
+        Op::SetModel { chat_id, model } => {
+            name_ok(&model)?;
+            backend.act(Action::SetModel { chat_id, model }).await?;
+            done(Data::None {})
+        }
+        Op::SetThinking { chat_id, level } => {
+            name_ok(&level)?;
+            backend.act(Action::SetThinking { chat_id, level }).await?;
+            done(Data::None {})
+        }
+        Op::SwitchAgent { chat_id, agent_id } => {
+            name_ok(&agent_id)?;
+            match backend
+                .act(Action::SwitchAgent { chat_id, agent_id })
+                .await?
+            {
+                Outcome::Chat { id } => done(Data::Switched { chat_id: id }),
+                _ => Err(unexpected()),
+            }
         }
         Op::Forget => {
             lock(&shared.registry)

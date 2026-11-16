@@ -32,6 +32,20 @@ export interface RemoteAgent {
   readonly available: boolean;
 }
 
+/** One thing a chat lets a person choose, as the app names it. */
+export interface Choice {
+  readonly value: string;
+  readonly name: string;
+}
+
+/** A chat's models and thinking levels, and what it is set to. */
+export interface Choices {
+  readonly models: readonly Choice[];
+  readonly model: string | null;
+  readonly thinking: readonly Choice[];
+  readonly thinking_level: string | null;
+}
+
 export interface Overview {
   readonly host_name: string;
   readonly projects: readonly ProjectSummary[];
@@ -71,6 +85,12 @@ export interface State {
   /** The chat being opened, before its history has arrived. */
   readonly opening: string | null;
   readonly chat: OpenChat | null;
+  /**
+   * What this computer's auracode offers beyond the first version's requests, as it said when
+   * the session opened. A control is shown only when its feature is named here: a request an
+   * older auracode does not know ends the session.
+   */
+  readonly features: readonly string[];
 }
 
 /** A request the computer refused, in its own words. */
@@ -142,6 +162,7 @@ export class RemoteClient {
     overview: null,
     opening: null,
     chat: null,
+    features: [],
   };
   readonly #listeners = new Set<() => void>();
   readonly #origin: string;
@@ -427,6 +448,11 @@ export class RemoteClient {
       case "ready":
         // Opening this proved the computer holds the key. Now this side proves the same.
         this.#ready = true;
+        this.#set({
+          features: Array.isArray(message.features)
+            ? message.features.filter((name): name is string => typeof name === "string")
+            : [],
+        });
         void this.#begin(String(message.host_name ?? "")).catch(() => this.#socket?.close());
         break;
       case "chat":
@@ -720,6 +746,33 @@ export class RemoteClient {
     })) as { chat: WorkspaceChat };
     await this.refresh().catch(() => {});
     await this.open(created.chat.chat.id);
+  }
+
+  /** The models and thinking levels a chat offers, and what it is set to. */
+  options(chatId: string): Promise<Choices> {
+    return this.#request({ op: "options", chat_id: chatId }) as Promise<Choices>;
+  }
+
+  async setModel(chatId: string, model: string): Promise<void> {
+    await this.#request({ op: "set_model", chat_id: chatId, model });
+  }
+
+  async setThinking(chatId: string, level: string): Promise<void> {
+    await this.#request({ op: "set_thinking", chat_id: chatId, level });
+  }
+
+  /**
+   * Hands a chat to another agent, as the app's own handoff does, and opens the chat it
+   * continues in.
+   */
+  async switchAgent(chatId: string, agentId: string): Promise<void> {
+    const switched = (await this.#request({
+      op: "switch_agent",
+      chat_id: chatId,
+      agent_id: agentId,
+    })) as { chat_id: string };
+    await this.refresh().catch(() => {});
+    await this.open(switched.chat_id);
   }
 
   /** Deletes a computer's key from this browser, without asking the computer anything. */
