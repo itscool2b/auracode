@@ -33,11 +33,19 @@ export async function checkRemote(browser, url, out, engine) {
     assert.equal(await toggle.isChecked(), false);
     await page.getByText("Off. Nothing on this computer can be reached from outside.").waitFor();
     assert.equal(await page.getByRole("button", { name: /^Remove / }).count(), 0);
+    // With nothing paired or linked, each list says so where its rows will be.
+    await page.getByText("No devices yet", { exact: true }).waitFor();
+    await page.getByText("No bots linked", { exact: true }).waitFor();
+    // What the relay can read is one line away, folded.
+    const fine = page.locator("details.settings-more");
+    assert.equal(await fine.evaluate((node) => node.open), false);
+    await fine.getByText("What the relay can see").click();
+    await fine.getByText("encrypted end to end", { exact: false }).waitFor();
     await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
 
     // Reading what a bot link allows turns nothing on: closing the dialog leaves it off.
-    await page.getByRole("button", { name: "Create link" }).click();
+    await page.getByRole("button", { name: "Link a bot", exact: true }).click();
     await page.getByRole("dialog", { name: "Link a bot" }).waitFor();
     await page.keyboard.press("Escape");
     await page.getByRole("dialog", { name: "Link a bot" }).waitFor({ state: "detached" });
@@ -45,7 +53,7 @@ export async function checkRemote(browser, url, out, engine) {
     assert.equal(await toggle.isChecked(), false);
 
     // Pairing turns remote access on by itself and shows the link once, as a code and as text.
-    await page.getByRole("button", { name: "Pair", exact: true }).click();
+    await page.getByRole("button", { name: "Pair a device", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Pair a device" });
     await dialog.waitFor();
     assert.deepEqual(await calls(), ["enabled:true", "pair"]);
@@ -89,13 +97,13 @@ export async function checkRemote(browser, url, out, engine) {
     await page.getByText("Connected now", { exact: true }).waitFor();
 
     // Closing an unused link cancels it; an expired one offers a new link instead of a dead code.
-    await page.getByRole("button", { name: "Pair", exact: true }).click();
+    await page.getByRole("button", { name: "Pair a device", exact: true }).click();
     await dialog.waitFor();
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "detached" });
     assert.equal((await calls()).at(-1), "cancel-pairing");
     await page.evaluate(() => window.remoteFixture.pairingLasts(900));
-    await page.getByRole("button", { name: "Pair", exact: true }).click();
+    await page.getByRole("button", { name: "Pair a device", exact: true }).click();
     await dialog.getByText("This link expired before a device opened it.").waitFor();
     assert.equal(await dialog.getByRole("img").count(), 0);
     await page.evaluate(() => window.remoteFixture.pairingLasts(600_000));
@@ -109,7 +117,7 @@ export async function checkRemote(browser, url, out, engine) {
     assert.equal((await calls()).at(-1), "remove-device:device-1");
 
     // A bot link: named, created, and its address shown once with where to put it.
-    await page.getByRole("button", { name: "Create link" }).click();
+    await page.getByRole("button", { name: "Link a bot", exact: true }).click();
     const bot = page.getByRole("dialog", { name: "Link a bot" });
     await bot.waitFor();
     const name = bot.getByRole("textbox", { name: "Name" });
@@ -139,7 +147,10 @@ export async function checkRemote(browser, url, out, engine) {
     await bot.getByRole("button", { name: "Done" }).click();
     await page.getByText("Research bot", { exact: true }).waitFor();
     assert.equal((await calls()).at(-1), "create-bot:Research bot:full");
-    await page.getByText("Full control · Not used yet", { exact: true }).waitFor();
+    // The link's level is a chip beside its name; whether it was used is the line under it.
+    const linked = page.locator(".settings-row", { hasText: "Research bot" });
+    assert.equal(await linked.locator(".g-chip").textContent(), "Full control");
+    await linked.getByText("Not used yet", { exact: true }).waitFor();
     assert.equal(await page.getByText(/t{43}/).count(), 0, "the address stayed on the page");
     await page.getByRole("button", { name: "Remove Research bot" }).click();
     assert.equal((await calls()).at(-1), "remove-bot:bot-1");
@@ -171,7 +182,7 @@ export async function checkRemote(browser, url, out, engine) {
 
     // From off, creating a bot link is what turns remote access on.
     await page.goto(`${url}/?preview=settings&page=remote`);
-    await page.getByRole("button", { name: "Create link" }).click();
+    await page.getByRole("button", { name: "Link a bot", exact: true }).click();
     await bot.getByRole("button", { name: "Create link" }).click();
     await bot.getByRole("textbox", { name: "Bot address" }).waitFor();
     assert.deepEqual(await calls(), ["enabled:true", "create-bot:Grok Bot"]);

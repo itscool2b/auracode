@@ -61,6 +61,12 @@ export function linkLabel(status: RemoteStatus): string {
   }
 }
 
+/** The connection as a dot's colour: green when reachable, amber while it tries, off when off. */
+export function linkTone(status: RemoteStatus): "green" | "amber" | "off" {
+  if (!status.enabled) return "off";
+  return status.link.state === "online" ? "green" : "amber";
+}
+
 /** When something last happened, as a short phrase. */
 export function ago(at: number, now: number): string {
   const minutes = Math.floor((now - at) / 60_000);

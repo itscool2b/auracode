@@ -80,8 +80,13 @@
 
 /* ----------------------------------------------------------------------- editor */
 
+/* The text is on a sheet (settings.css): the card is the page, and focus lights its rim. */
 .instructions-editor {
-  overflow: visible;
+  transition: box-shadow var(--g-dur-fast) var(--g-ease);
+}
+
+.instructions-editor:has(.settings-sheet-text:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
 .instructions-files {
@@ -90,7 +95,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--g-space-12);
-  padding: var(--g-space-12) var(--g-space-16) 0;
+  padding: var(--g-space-8) var(--g-space-16);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .instructions-tabs {
@@ -145,16 +151,17 @@
 
 .instructions-file {
   display: grid;
-  gap: var(--g-space-12);
-  padding: var(--g-space-16);
 }
 
 .instructions-file-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--g-space-12);
   min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--g-space-16);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .instructions-path {
@@ -180,7 +187,6 @@
   width: 100%;
   min-height: 320px;
   max-height: 60vh;
-  background-color: var(--g-bg);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
   line-height: var(--g-leading-code);
@@ -201,7 +207,7 @@
   display: grid;
   gap: var(--g-space-4);
   margin: 0;
-  padding: 0;
+  padding: var(--g-space-12) var(--g-space-16) 0;
   list-style: none;
 }
 
@@ -239,7 +245,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--g-space-12);
-  margin: 0 calc(-1 * var(--g-space-16)) calc(-1 * var(--g-space-16));
   padding: var(--g-space-12) var(--g-space-16);
   /* The hairline is an inset shadow, so the footer stays on the 4px grid. */
   box-shadow: inset 0 1px 0 var(--g-line);

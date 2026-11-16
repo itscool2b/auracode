@@ -362,6 +362,217 @@ h1 + .settings-group {
   overflow-wrap: anywhere;
 }
 
+/* ------------------------------------------------------- marks, states and sheets */
+
+/* A row's mark: a 36px tile holding the glyph of what the row is about, as the Browser card's. */
+.settings-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--g-radius-10);
+  background-color: var(--g-glass-control);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  color: var(--g-fg-1);
+}
+
+/* A row led by a tile is 68px (36 inside 16px), and what opens under it lines up with the label. */
+.settings-row:has(> .settings-row-text > .settings-tile) {
+  --settings-indent: calc(36px + var(--g-space-12));
+  min-height: 68px;
+}
+
+/* A label with a chip beside it: a bot link's level. */
+.settings-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-2) var(--g-space-8);
+}
+
+/* How something stands: a flat dot and a few words. Green works, amber waits, red failed. */
+.settings-state {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--g-space-6);
+}
+
+.settings-state > .g-status-dot {
+  width: 6px;
+  height: 6px;
+  transform: translateY(-1px);
+}
+
+.settings-state > .g-status-dot[data-tone="amber"] {
+  background-color: var(--g-warning);
+}
+
+.settings-state > .g-status-dot[data-tone="off"] {
+  background-color: var(--g-fg-4);
+}
+
+/* A heading with its section's one action beside it. */
+.settings-heading > .g-button {
+  flex: none;
+}
+
+/* A list with nothing in it yet says so in a hairline well, where its rows will be. */
+.settings-empty {
+  margin: var(--g-space-12) 0 0;
+  padding: var(--g-space-16);
+  border-radius: var(--g-radius-16);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.settings-empty > strong {
+  display: block;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+/* Fine print, folded under one line until it is wanted. */
+.settings-more {
+  margin-top: var(--g-space-12);
+}
+
+.settings-more > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .settings-more > summary:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.settings-more > summary:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+  border-radius: var(--g-radius-6);
+}
+
+.settings-more > p {
+  max-width: 600px;
+  margin: var(--g-space-4) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/*
+ * A sheet: text edited inside a card. The card is the page being written on, so the box has no
+ * frame of its own; its head names what is edited, its foot holds what happened and the actions.
+ * Focus lights the card's rim, as the composer's does, in place of a ring around the text.
+ */
+.settings-sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: var(--g-space-12);
+  overflow: hidden;
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+  transition: box-shadow var(--g-dur-fast) var(--g-ease);
+}
+
+.settings-sheet:has(.settings-sheet-text:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+}
+
+.settings-sheet-head,
+.settings-sheet-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-8) var(--g-space-12);
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--g-space-8) var(--g-space-16);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.settings-sheet-head {
+  justify-content: space-between;
+  box-shadow: inset 0 -1px 0 var(--g-line);
+}
+
+.settings-sheet-head > strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.settings-sheet-foot {
+  min-height: 52px;
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.settings-sheet-text,
+.settings-sheet-text:focus,
+.settings-sheet-text:focus-visible {
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.settings-sheet-text {
+  display: block;
+  padding: var(--g-space-16);
+}
+
+/* How full a sheet is: a 4px track that fills toward its limit, red once over it. */
+.settings-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-meter > i {
+  position: relative;
+  width: 64px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control-active);
+}
+
+.settings-meter > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--settings-fill, 0%);
+  border-radius: inherit;
+  background-color: var(--g-fg-2);
+}
+
+.settings-meter[data-over] {
+  color: var(--g-red);
+}
+
+.settings-meter[data-over] > i::after {
+  background-color: var(--g-red);
+}
+
 /*
  * A strong segmented control on native radios: one white pill marks the choice (4.3). The track is
  * an input's 36px with the 28px choices 4px in, so the pill and the row's buttons share a height.
@@ -1238,4 +1449,9 @@ h1 + .settings-group {
   color: var(--g-red);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+}
+
+/* A page's one line of lead sits a step above the page's first card. */
+.settings-lead + :is(.instructions, .plugins-universal) {
+  margin-top: var(--g-space-16);
 }
