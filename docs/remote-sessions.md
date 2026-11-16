@@ -10,7 +10,7 @@ including in the tray.
 
 ## What a person does
 
-1. **Settings > Remote access > Pair.** A dialog shows a code to scan and the same link as text.
+1. **Settings > Remote access > Pair a device.** A dialog shows a code to scan and the same link as text.
    The link opens once, within ten minutes. Asking for it turns remote access on.
 2. **Open the link on the other device and tap Pair this browser.** `auracode.si/remote` takes
    the key out of the address bar and asks first: opening the link pairs nothing by itself, so a
@@ -19,11 +19,13 @@ including in the tray.
    page without a link.
 3. **Use it.** Open a chat to follow it live, send a message (it queues behind a running turn, as
    in the app), stop a turn, answer a permission request or a question, start a chat in a
-   project's folder.
+   project's folder. "Model and agent" in a chat's header chooses its model and thinking level,
+   which apply as they are chosen, and hands the chat to another agent, which opens the chat it
+   continues in.
 4. **Remove a device** in Settings, or "Forget this computer" on the page. Either ends every
    session of that device at once.
 
-For a bot: **Settings > Remote access > Create link** names the bot, asks what it can do, and
+For a bot: **Settings > Remote access > Link a bot** names the bot, asks what it can do, and
 shows one MCP address, once. In Grok that address goes in grok.com/connectors > New Connector >
 Custom. A link has one of two levels, chosen when it is made and never changed after (a wider
 link is a new link):
@@ -162,9 +164,21 @@ events to a browser that falls 4 MiB behind (the page then opens the chat again)
 ## Operations a browser can ask for
 
 `pair`, `overview`, `open`, `close`, `history`, `send`, `interrupt`, `permission`, `answer`,
-`create`, `forget` (`crates/aura-remote/src/wire.rs`). Each maps to the session manager call the
-app's own window makes; there is no file, terminal, settings or account access. A new chat starts
-in the project folder itself with the project's usual agent.
+`create`, `forget`, and for the pickers `options`, `set_model`, `set_thinking` and `switch_agent`
+(`crates/aura-remote/src/wire.rs`). Each maps to the session manager call the app's own window
+makes; there is no file, terminal, settings or account access. A new chat starts in the project
+folder itself with the project's usual agent.
+
+The four picker requests are the only ones of a full-control link's actions a browser reaches.
+What they name (a model, a level, an agent) is a short value from a list the computer sent,
+checked for length and control characters before the app sees it, and the app refuses one its
+chat does not offer. A browser has no request for a chat's access level, for a project from an
+arbitrary folder or for project memory.
+
+A request the computer does not know ends the session, as anything outside the protocol does. So
+a computer says what it offers beyond the first version's requests when a session opens
+(`features` in its `ready` message, `pickers` so far), and the page shows a control only to a
+computer that names it: the page is always the newest, and an installed auracode can be older.
 
 The computer pushes `chat` (a status changed), `frame` (live events of the followed chat), `lost`
 (open the chat again) and `reset` (another profile was opened: start over).

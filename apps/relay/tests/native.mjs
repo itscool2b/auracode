@@ -301,6 +301,44 @@ try {
     assert.match(read, /Agent: /);
   }
 
+  // The phone's pickers against the real app: the chat's own models, one chosen, and what the
+  // app then reports as current, read back through a full control link.
+  await tab.getByRole("button", { name: "Model and agent" }).click();
+  const pickers = tab.getByRole("dialog", { name: "Model and agent" });
+  const model = pickers.getByRole("combobox", { name: "Model" });
+  await model.waitFor();
+  const offered = await model
+    .locator("option")
+    .evaluateAll((options) =>
+      options.map((option) => ({ value: option.value, name: option.textContent })),
+    );
+  const current = await model.inputValue();
+  console.log(
+    `the phone's model picker: ${offered.map((entry) => `${entry.name}${entry.value === current ? " [current]" : ""}`).join(" | ")}`,
+  );
+  const wanted = offered.find((entry) => entry.value && entry.value !== current);
+  assert.ok(wanted, "the demo agent offers more than one model");
+  await model.selectOption(wanted.value);
+  await pickers.getByRole("status").getByText(`Model set to ${wanted.name}.`).waitFor();
+  assert.equal(await model.inputValue(), wanted.value, "the app did not keep the model");
+  const agentChoices = await pickers
+    .getByRole("combobox", { name: "Agent" })
+    .locator("option")
+    .allTextContents();
+  console.log(`the phone's agent picker: ${agentChoices.join(" | ")}`);
+  await tab.screenshot({ path: join(shots, "phone-pickers.png") });
+  await pickers.getByRole("button", { name: "Done" }).click();
+  await pickers.waitFor({ state: "detached" });
+  const after = (await ask(local(wide.url), "chat_options", { chat_id: created.id })).result
+    .content[0].text;
+  assert.match(
+    after,
+    new RegExp(`\\(${wanted.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\) \\[current\\]`),
+  );
+  console.log(
+    `the app now reports: ${after.split("\n").find((line) => line.includes("[current]"))}`,
+  );
+
   // Removing the device ends the phone's session at once.
   await invoke("remote_remove_device", { id: paired.devices[0].id });
   await tab.getByRole("heading", { name: "This pairing is over." }).waitFor();
