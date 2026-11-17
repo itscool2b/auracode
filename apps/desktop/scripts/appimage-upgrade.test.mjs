@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -355,7 +356,8 @@ test("old builds beyond --keep are pruned, never the previous one", async () => 
 });
 
 test("a build runs as its runtime or as the app inside its mount", () => {
-  const dir = temp();
+  // As /proc names it: resolved, which macOS's temporary folder (/var, a link to /private/var) is not.
+  const dir = realpathSync(temp());
   const file = appImage(join(dir, "auracode_0.1.0_amd64.AppImage"));
   const env = (image) => Buffer.from(`HOME=/home/me\0APPIMAGE=${image}\0APPDIR=/tmp/.mount_x\0`);
   assert.equal(buildOf(file, undefined, dir), file);
