@@ -14,6 +14,7 @@ function store(status: Partial<BrowserStatus> = {}): BrowserStore {
     enabled: true,
     unavailable: null,
     passwords: true,
+    media_notice: null,
     ...status,
   };
   const api = {

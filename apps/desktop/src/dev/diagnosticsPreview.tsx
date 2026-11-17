@@ -29,6 +29,8 @@ const info: AppInfo = {
   recovery_notice:
     "Your database was damaged, so auracode rebuilt it. Nothing was lost; the damaged copy was kept at C:/fixture/backups/aura.db.corrupt-1.",
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 // A store that never streams: the fixture shows the idle panels only.
 const store = new StreamStore({

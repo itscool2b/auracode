@@ -11,6 +11,7 @@ import type {
 } from "../../lib/library/bindings";
 import { Modal } from "../chat/Modal";
 import "./library.css";
+import { Select } from "../Select";
 
 const LABELS = { claude: "Claude Code", codex: "Codex", pi: "Pi", shared: "Shared" };
 const KINDS = [
@@ -228,7 +229,7 @@ export function ItemDetail({
           <>
             <label>
               Copy to
-              <select
+              <Select
                 className="g-select"
                 aria-label="Copy destination"
                 value={target}
@@ -241,7 +242,7 @@ export function ItemDetail({
                     {sourceLabel(source)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <button
               type="button"

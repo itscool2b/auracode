@@ -15,6 +15,7 @@ import { agentLineup } from "../../lib/chat/agentLineup";
 import { levelName, levelShortName, orderedOptions, pendingLabel } from "../../lib/chat/present";
 import { agentVersion } from "../../lib/format";
 import { useMediaQuery } from "../../lib/hooks";
+import { Select } from "../Select";
 import { AccessPicker } from "./AccessPicker";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
@@ -307,8 +308,11 @@ export function Pickers({
                 event.ctrlKey ||
                 event.metaKey ||
                 event.altKey ||
+                event.defaultPrevented ||
                 event.target instanceof HTMLSelectElement ||
-                event.target instanceof HTMLInputElement
+                event.target instanceof HTMLInputElement ||
+                (event.target instanceof HTMLElement &&
+                  event.target.getAttribute("role") === "combobox")
               )
                 return;
               const parts = [
@@ -670,7 +674,7 @@ function OptionPicker({
       >
         {label}
       </label>
-      <select
+      <Select
         id={id}
         className="g-select"
         data-testid="picker-option"
@@ -691,7 +695,7 @@ function OptionPicker({
                 </optgroup>
               ),
             )}
-      </select>
+      </Select>
     </div>
   );
 }

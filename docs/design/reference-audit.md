@@ -131,7 +131,20 @@ The owner asked for the landing page to look like linear.app, SpaceXAI and aside
 
 ## Desktop references
 
-### The Grok Bot app, 10 November 2026
+### The Grok Bot app itself, 17 November 2026 (current)
+
+The owner asked for the real app, not its page: "you need to open up Grokbot on my computer ... Go through everything ... and essentially just copy it and adapt it to each of the styles that we offer". Grok Bot 1.2.0 is installed on the owner's machine as an Electron AppImage. Its values were read from its own bundled stylesheet and scripts, read-only, without signing in; nothing of it ships (no code, font, icon or image). The monitor was asleep that night, so the app was not compared on screen; that comparison waits for the owner's screen.
+
+- **Layers.** Flat and solid. Light: raised `#ffffff`, pane `#ffffff`, window `#fcfcfc`, sidebar `#f5f5f5`, ink `#1c1c1c`. Dark: raised `#1f1f1f`, pane `#161616`, window `#121212`, sidebar `#0e0e0e`, ink `#f5f5f5`. Accent and focus blue (`#1680f3`, `#1e86fc` light; `#116dd2`, `#1884fc` dark).
+- **One ink at set strengths** (light / dark). Text 100, 68, 56, 40 / 100, 66, 54, 38; icons 92, 66, 52, 32 / 90, 64, 50, 30; borders 24, 12, 8, 6 / 22, 10, 6, 4; hover 6, active 8; secondary fills 6 to 18 (dark 4 to 20); a disabled primary 15 / 13; the agent's bubble 6 / 4, the person's solid ink in light and ink at 18 in dark; status tints 9 / 7; scrim 50 / 70.
+- **Depth.** Light: a control `0 1px 3px` at 12%, an inline surface `0 4px 12px -1px` at 8% with `0 2px 4px -2px` at 6%, a popover `0 10px 20px -3px` and `0 4px 6px -4px` at 10%, a modal `0 20px 32px -5px` and `0 8px 12px -6px` at 10%. Dark: no shadows; a lit top edge and the border ladder.
+- **Type.** X VF by Basement.studio, Geist's makers, with Geist's proportions (x-height 0.526em, cap 0.72em; weights 200 to 800). Roles: caption 11/16, label 12/16, body 13/18 and 14/20, chat 15/22, headings 17/24, 22/28 and 26/32 (tracking -0.008em to -0.015em); body tracking 0. Weights 400, 500 and 600, graded at runtime per platform (regular 420 to 425 on macOS). Features "case" and "calt".
+- **Shape and motion.** Radii 6, 8, 10, 14, 16, 18 and pill. Menus 16 with 32px rows at 10, 6px apart; bubbles 18; tooltips 6 with a 0.5px edge. Durations 50 to 300ms, drawers 500; easing `cubic-bezier(.2, 0, 0, 1)`, arrivals `cubic-bezier(.22, 1, .36, 1)`, drawers `cubic-bezier(.32, .72, 0, 1)`.
+- **Composer.** Send is solid ink with the page's colour on it; attach is the secondary fill with a 0.5px inset edge; the toolbar is the window's colour fading out over content. New chat is a full stage around the message box.
+
+Taken, in every theme and both appearances (each theme keeps its own colours and cuts its layers from these seeds): the four solid layers and the one-ink ladders; no shadows in dark and the reference's soft ones in light; the type roles and graded weights (Geist stays, being the same studio's face with the same proportions; Linux takes heavier grades, since it draws text at twice its size and lets the compositor scale it); the radii; the flat open row; the message box at 18 with the faint disabled Send; the header with no line over a fade; the sent message as a bubble at 18. Not taken: the accent blue (each theme keeps its own mark), its typeface (not licensed to us), bubbles around agents' replies (answers run the column), avatars in the chat list.
+
+### The Grok Bot app's page, 10 November 2026 (superseded by the app itself)
 
 The owner asked for the Grok Bot app's styling across the desktop. Its page (x.ai/bot, which dot.com redirects to) draws the app live in HTML, so these are its computed styles, read in Aura's browser under a dark system, at the page's scale:
 
@@ -146,7 +159,7 @@ The owner asked for the Grok Bot app's styling across the desktop. Its page (x.a
 
 Taken: the paper message, both trackings, the search field, the attach disc, the badge, flat cards, and its dark colours as the Grok Build theme's dark palette (adjusted where the desktop's contrast rules asked: raised surfaces a step darker, secondary text a step lighter). Already the desktop's own before this pass: the darker sidebar beside a lighter chat, 10px rows, the capsule composer with its white Send disc, pill buttons and solid menus. Not taken: bubbles around agents' replies (answers run the column), avatars in the chat list, and its palette as the default (each theme keeps its own, Claude Code's stays the default, and the paper derives from the theme). Only the dark appearance was seen, so the Grok Build theme's light palette is unchanged.
 
-The desktop keeps the audited Devin organization: compact work surfaces, navigation and settings structure in light and dark. Halo adds glass layers over the native window material: Acrylic or Mica on Windows, vibrancy or Liquid Glass on macOS. Accent, focus and selection stay neutral. No fresh live Devin inspection is claimed for Halo.
+The desktop keeps the audited Devin organization: compact work surfaces, navigation and settings structure in light and dark. Since 17 November 2026 its layers are the Grok Bot app's flat ones; the native material (Acrylic or Mica on Windows, vibrancy or Liquid Glass on macOS) shows only behind the sidebar. Accent, focus and selection stay neutral. No fresh live Devin inspection is claimed for Halo.
 
 The earlier inspection covered Devin Preferences in light and dark, a short greeting conversation with its side panel in light mode, and all six Customize sections in light mode: Plugins, Skills, MCPs, Hooks, Rules and Memory. The prior inspection covered 18 organization settings sections plus overview, five personal sections, six Customize sections, three Security sections, the main interface and nested screens in both themes. A terminal and a tool-heavy task were not inspected. These observations do not prove how those missing states look or behave.
 

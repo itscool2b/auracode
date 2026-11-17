@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose, chosen, labels, offered } from "./choose.mjs";
 
 // Sheets fade in and controls settle their colours; audit only once every finite animation ends.
 const settled = (page) =>
@@ -243,21 +244,17 @@ try {
         .click();
       const connection = page.getByRole("combobox", { name: "Claude Code connection" });
       await connection.waitFor();
-      assert.equal(await connection.inputValue(), "", `${engine}: Automatic by default`);
-      assert.deepEqual(await connection.locator("option").allTextContents(), [
-        "Automatic (Direct)",
-        "Direct",
-        "ACP adapter",
-      ]);
-      await connection.selectOption("claude-acp");
+      assert.equal(await chosen(connection), "", `${engine}: Automatic by default`);
+      assert.deepEqual(await labels(connection), ["Automatic (Direct)", "Direct", "ACP adapter"]);
+      await choose(connection, "claude-acp");
       await page.waitForFunction(() =>
         window.setupFixture.methods().includes("agentSetConnection"),
       );
-      await page
-        .getByRole("combobox", { name: "Claude Code connection" })
-        .locator("option", { hasText: "Automatic (ACP adapter)" })
-        .waitFor({ state: "attached" });
-      assert.equal(await connection.inputValue(), "claude-acp");
+      await offered(
+        page.getByRole("combobox", { name: "Claude Code connection" }),
+        "Automatic (ACP adapter)",
+      ).waitFor({ state: "attached" });
+      assert.equal(await chosen(connection), "claude-acp");
       await page.screenshot({ path: resolve(out, `${engine}-agents-connection.png`) });
       await settled(page);
       assert.deepEqual(
@@ -265,12 +262,12 @@ try {
         [],
         `${engine} Agents connection accessibility`,
       );
-      await connection.selectOption("");
-      await page
-        .getByRole("combobox", { name: "Claude Code connection" })
-        .locator("option", { hasText: "Automatic (Direct)" })
-        .waitFor({ state: "attached" });
-      assert.equal(await connection.inputValue(), "");
+      await choose(connection, "");
+      await offered(
+        page.getByRole("combobox", { name: "Claude Code connection" }),
+        "Automatic (Direct)",
+      ).waitFor({ state: "attached" });
+      assert.equal(await chosen(connection), "");
       await assertNoVendorCalls();
       await page.getByRole("button", { name: "Run setup again" }).click();
       await page.getByRole("button", { name: "Get started" }).waitFor();

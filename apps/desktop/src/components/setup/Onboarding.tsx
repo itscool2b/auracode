@@ -24,6 +24,7 @@ import { AgentRoster } from "./AgentsScreen";
 import { CloneBody, cloneHeading, useClone } from "./CloneProject";
 import { type IntroMode, SetupIntro } from "./SetupIntro";
 import "./setup.css";
+import { Select } from "../Select";
 
 /**
  * Three steps, each skippable: Continue never requires anything. Motion is not one of them: Full
@@ -481,7 +482,7 @@ export function Onboarding({
                     Clone a repository
                   </button>
                   {existing.length > 0 ? (
-                    <select
+                    <Select
                       className="g-select setup-existing"
                       aria-label="Or choose a project"
                       disabled={busy}
@@ -503,7 +504,7 @@ export function Onboarding({
                           {item.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   ) : null}
                 </div>
               </>

@@ -319,6 +319,11 @@
   transform: none;
 }
 
+/* A primary that cannot act yet keeps its shape as a firmer step of ink on any layer. */
+.g-button-primary:where(:disabled, [aria-disabled="true"]) {
+  background-color: var(--g-fill-primary-disabled);
+}
+
 /* A ghost has no fill to grey out, so disabled only dims its label. */
 .g-button-ghost:where(:disabled, [aria-disabled="true"]) {
   background-color: transparent;
@@ -556,6 +561,7 @@
 }
 
 .g-keycap {
+  position: relative;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -573,6 +579,26 @@
   line-height: var(--g-leading-key);
   font-weight: var(--g-weight-medium);
   font-variant-ligatures: none;
+}
+
+/* A drawn key symbol (Keycap.tsx) sits in the cap's ink, centred, with no text box around it. */
+.g-keycap-glyph {
+  display: block;
+  flex: none;
+}
+
+.g-keycap-shown {
+  display: contents;
+}
+
+/* A key's spoken name: read by screen readers, never drawn. */
+.g-keycap-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .g-button-primary .g-keycap {
@@ -761,161 +787,6 @@
   line-height: 1;
   letter-spacing: -0.035em;
   white-space: nowrap;
-}
-
-/* -------------------------------------------------------- Shallows and Swimmers (4.16) */
-
-/*
- * The lit water: one rounded panel, a single vertical falloff from the surface's grey to the deep
- * grey over --g-shallows-depth, a soft light at the top centre and a faint rim. No texture.
- * Children sit above the light and the swimmers; :where() keeps that overridable.
- */
-.g-shallows {
-  --g-shallows-depth: 100%;
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border-radius: var(--g-shallows-radius);
-  background-color: var(--g-water-deep);
-  background-image: linear-gradient(
-    180deg,
-    var(--g-water-surface) 0,
-    var(--g-water-shallow) calc(var(--g-shallows-depth) * 0.24),
-    var(--g-water-mid) calc(var(--g-shallows-depth) * 0.5),
-    var(--g-water-low) calc(var(--g-shallows-depth) * 0.76),
-    var(--g-water-deep) var(--g-shallows-depth)
-  );
-  box-shadow: inset 0 0 0 1px var(--g-water-rim);
-}
-
-:where(.g-shallows) > :where(:not(.g-shallows-light, .g-swimmers)) {
-  position: relative;
-  z-index: 1;
-}
-
-.g-shallows-light {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: -1;
-  height: min(100%, var(--g-shallows-depth));
-  background-image: radial-gradient(64% 46% at 50% 0, var(--g-water-light), transparent);
-  pointer-events: none;
-}
-
-/*
- * The shimmer: soft caustic light drifting near the surface, one layer moved by transform alone,
- * so the compositor animates it without repainting. It drifts a few pixels a second, so it moves in
- * steps of about 1/30 s (98 a segment) along the ease-in-out curve, sampled at eighths: between
- * steps the compositor has nothing to redraw, whatever the display's refresh rate.
- */
-.g-shallows:where([data-shimmer]) > .g-shallows-light::before {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  will-change: transform;
-  top: -8%;
-  left: -20%;
-  width: 140%;
-  height: 46%;
-  background-image:
-    radial-gradient(14% 22% at 22% 40%, var(--g-water-caustic), transparent),
-    radial-gradient(18% 18% at 46% 22%, var(--g-water-caustic), transparent),
-    radial-gradient(12% 26% at 63% 52%, var(--g-water-caustic), transparent),
-    radial-gradient(16% 20% at 82% 30%, var(--g-water-caustic), transparent);
-  animation: g-caustic 26s linear infinite alternate;
-}
-
-@keyframes g-caustic {
-  0% {
-    transform: translate3d(-3%, 0, 0) scale(1);
-    animation-timing-function: steps(98, jump-none);
-  }
-  12.5% {
-    transform: translate3d(-2.92%, 0.05%, 0) scale(1.0008);
-    animation-timing-function: steps(98, jump-none);
-  }
-  25% {
-    transform: translate3d(-2.63%, 0.25%, 0) scale(1.0037);
-    animation-timing-function: steps(98, jump-none);
-  }
-  37.5% {
-    transform: translate3d(-1.88%, 0.75%, 0) scale(1.0112);
-    animation-timing-function: steps(98, jump-none);
-  }
-  50% {
-    transform: translate3d(0, 2%, 0) scale(1.03);
-    animation-timing-function: steps(98, jump-none);
-  }
-  62.5% {
-    transform: translate3d(1.88%, 3.25%, 0) scale(1.0488);
-    animation-timing-function: steps(98, jump-none);
-  }
-  75% {
-    transform: translate3d(2.63%, 3.75%, 0) scale(1.0563);
-    animation-timing-function: steps(98, jump-none);
-  }
-  87.5% {
-    transform: translate3d(2.92%, 3.95%, 0) scale(1.0592);
-    animation-timing-function: steps(98, jump-none);
-  }
-  100% {
-    transform: translate3d(3%, 4%, 0) scale(1.06);
-  }
-}
-
-/* A creature (Creature): flat, in currentColor, mirrored when it faces left. */
-.g-creature {
-  flex: none;
-}
-
-.g-creature:where([data-facing="left"]) {
-  transform: scaleX(-1);
-}
-
-/* The creatures' layer fills the panel under its content and never takes the pointer. */
-.g-swimmers {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* Centred on its anchor by margins, so the transform carries only the swim. */
-.g-swimmer {
-  position: absolute;
-  top: var(--g-swimmer-y);
-  left: var(--g-swimmer-x);
-  width: var(--g-swimmer-w);
-  margin-top: calc(var(--g-swimmer-w) * var(--g-swimmer-aspect) / -2);
-  margin-left: calc(var(--g-swimmer-w) / -2);
-  color: color-mix(
-    in srgb,
-    var(--g-shade-far) calc(var(--g-swimmer-depth) * 100%),
-    var(--g-shade-near)
-  );
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-.g-swimmer > .g-creature {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* Depth softens the far ones once, at raster time; the swim never re-runs the filter. */
-.g-swimmer:where([data-far]) > .g-creature {
-  filter: blur(calc(var(--g-swimmer-depth) * 2.4px));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .g-shallows > .g-shallows-light::before {
-    animation: none;
-  }
-}
-
-:root:is([data-motion="reduced"], [data-motion="off"]) .g-shallows > .g-shallows-light::before {
-  animation: none;
 }
 
 /* ------------------------------------------------------------------- copy button */
@@ -1218,8 +1089,6 @@
   border: 0;
   border-radius: var(--g-radius-16);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1283,8 +1152,6 @@
   border: 0;
   border-radius: var(--g-radius-6);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1302,8 +1169,6 @@
   border: 0;
   border-radius: var(--g-radius-18);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1347,18 +1212,14 @@
 
 .g-dialog::backdrop {
   background-color: var(--g-scrim);
-  -webkit-backdrop-filter: var(--g-blur-scrim);
-  backdrop-filter: var(--g-blur-scrim);
 }
 
-/* Reduce transparency: glass becomes the solid overlay surface. */
+/* Reduce transparency: overlays take the solid overlay surface. */
 @media (prefers-reduced-transparency: reduce) {
   .g-menu,
   .g-tooltip,
   .g-dialog {
     background-color: var(--g-overlay);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
 }
 

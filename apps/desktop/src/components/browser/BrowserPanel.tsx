@@ -64,6 +64,25 @@ export interface AnnotationTarget {
 
 const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
+/** The last media notice the browser showed: each one is said once on this device. */
+const MEDIA_NOTICE_KEY = "auracode.browser.media-notice";
+
+function mediaNoticeSeen(notice: string): boolean {
+  try {
+    return localStorage.getItem(MEDIA_NOTICE_KEY) === notice;
+  } catch {
+    return false;
+  }
+}
+
+function rememberMediaNotice(notice: string): void {
+  try {
+    localStorage.setItem(MEDIA_NOTICE_KEY, notice);
+  } catch {
+    // A blocked storage says it again next time.
+  }
+}
+
 /** A colour from the theme as `rgb()`, for the page's highlight and the annotation's outline. */
 function themeColor(token: string, fallback: string): string {
   if (typeof document === "undefined") return fallback;
@@ -145,6 +164,16 @@ export function BrowserPanel({
     const clear = window.setTimeout(() => setFailure(null), 8000);
     return () => window.clearTimeout(clear);
   }, [failure]);
+
+  // Pages play no sound or video on this system (Linux without GStreamer's plugins): the panel
+  // says so once, until it is dismissed or closes, and not again on this device.
+  const mediaNotice = status?.media_notice ?? null;
+  const [mediaShown, setMediaShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mediaNotice || mediaNoticeSeen(mediaNotice)) return;
+    rememberMediaNotice(mediaNotice);
+    setMediaShown(mediaNotice);
+  }, [mediaNotice]);
 
   // A chat whose browser has no tab yet opens one: its start page.
   const opening = useRef(false);
@@ -799,6 +828,19 @@ export function BrowserPanel({
           </span>
         </output>
       ) : null}
+      {mediaShown ? (
+        <p className="browser-hint" role="status" data-testid="browser-media-notice">
+          <span>{mediaShown}</span>
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon g-button-24"
+            aria-label="Dismiss"
+            onClick={() => setMediaShown(null)}
+          >
+            <X size={14} />
+          </button>
+        </p>
+      ) : null}
       {/* The hint stays while a note is open, so the page never moves under it. */}
       {annotating || note ? (
         <p
@@ -875,6 +917,9 @@ export function BrowserPanel({
           <div className="browser-empty" role="alert">
             <TriangleAlert size={22} aria-hidden="true" />
             <p>This page stopped working.</p>
+            {!tab.media && !status?.media_notice ? (
+              <p>It stopped twice in a short time, so it reloads with audio and video off.</p>
+            ) : null}
             <button
               type="button"
               className="g-button g-button-primary g-button-28"

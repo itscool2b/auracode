@@ -21,6 +21,7 @@ import { checkSetupRecovery } from "./check-setup-recovery.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkThemes } from "./check-themes.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
+import { choose, chosen, labels } from "./choose.mjs";
 
 // Sheets fade in and controls settle their colours; audit only once every finite animation ends.
 const settled = (page) =>
@@ -102,11 +103,11 @@ try {
       // Files open in the first editor detected until another is chosen; the choice saves.
       const editor = page.getByLabel("Open files in");
       await editor.waitFor();
-      assert.equal(await editor.inputValue(), "cursor");
-      assert.deepEqual(await editor.locator("option").allTextContents(), ["Cursor", "Zed"]);
-      await editor.selectOption("zed");
+      assert.equal(await chosen(editor), "cursor");
+      assert.deepEqual(await labels(editor), ["Cursor", "Zed"]);
+      await choose(editor, "zed");
       await page.waitForFunction(() => window.settingsFixture.general().editor === "zed");
-      assert.equal(await editor.inputValue(), "zed");
+      assert.equal(await chosen(editor), "zed");
       await checkSettingsNavigation(page, url);
       // Appearance, motion and text size apply as they are chosen and save in turn.
       await page.goto(`${url}/?preview=settings&page=appearance`);
@@ -177,11 +178,11 @@ try {
         .click();
       const general = () => page.evaluate(() => window.settingsFixture.general());
       assert.equal(await page.getByLabel("Default model").count(), 0);
-      await page.getByLabel("Default agent").selectOption("codex");
+      await choose(page.getByLabel("Default agent"), "codex");
       // A thinking level for the agent's own default model; another model clears it.
-      await page.getByLabel("Default thinking level").selectOption("high");
+      await choose(page.getByLabel("Default thinking level"), "high");
       await page.waitForFunction(() => window.settingsFixture.general().default_effort === "high");
-      await page.getByLabel("Default model").selectOption("gpt-5.5-codex");
+      await choose(page.getByLabel("Default model"), "gpt-5.5-codex");
       await page
         .getByText("Codex lists this model's thinking levels once it has run it.")
         .waitFor();
@@ -226,7 +227,7 @@ try {
       await page.getByRole("switch", { name: "Sounds" }).check();
       await page.waitForFunction(() => window.settingsFixture.general().sounds);
       // Another agent clears the model, which belonged to Codex; it has not listed its own.
-      await page.getByLabel("Default agent").selectOption("claude");
+      await choose(page.getByLabel("Default agent"), "claude");
       await page.getByText("Claude Code lists its models once one of its chats starts.").waitFor();
       assert.equal(await page.getByLabel("Default model").count(), 0);
       assert.equal((await general()).default_model, null);
@@ -299,6 +300,19 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-update.png`) });
       await page.keyboard.press("Escape");
       await page.getByRole("heading", { name: "Back to workspace" }).waitFor();
+      // Linux without GStreamer's plugins: Sounds says why, once, and its switch waits.
+      await page.goto(`${url}/?preview=settings&media=off`);
+      const sounds = page.getByRole("switch", { name: "Sounds" });
+      await sounds.waitFor();
+      assert.equal(await sounds.isDisabled(), true, `${engine}: Sounds waits where none can play`);
+      const why =
+        "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode.";
+      await page.getByText(why, { exact: true }).waitFor();
+      assert.equal(await page.getByText(why, { exact: true }).count(), 1, `${engine}: said once`);
+      assert.equal(await page.getByRole("switch", { name: "Notifications" }).isDisabled(), false);
+      await settled(page);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${engine}-sounds-off.png`) });
       await page.goto(`${url}/?preview=settings&unsigned`);
       await page.getByRole("button", { name: "About", exact: true }).click();
       await page.getByText("Manual installation", { exact: true }).waitFor();

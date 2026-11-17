@@ -1,6 +1,6 @@
 /**
- * One requestAnimationFrame loop shared by every moving thing in the design system: agent marks,
- * pixel loaders and swimmers all subscribe here, so a screen full of live indicators costs one
+ * One requestAnimationFrame loop shared by every moving thing in the design system: agent marks
+ * and pixel loaders subscribe here, so a screen full of live indicators costs one
  * browser frame callback, and an empty clock schedules no browser work at all.
  */
 export interface FrameHost {

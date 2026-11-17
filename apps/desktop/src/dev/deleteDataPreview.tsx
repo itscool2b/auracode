@@ -132,6 +132,8 @@ const info = (mode: Mode): AppInfo => ({
   notices: [],
   recovery_notice: null,
   fatal: null,
+  media: true,
+  media_notice: null,
 });
 
 const snapshot: SetupSnapshot = {

@@ -14,10 +14,10 @@
 
 /*
  * The window's own colour or material shows around setup's card. More specific than Graphite's
- * .g-root, which would paint the page colour over it; the Agents page is a pane (shell.css). A
- * fixture page without the window's root keeps the page colour.
+ * .g-root, which would paint the page colour over it; the Agents page and the Dashboard are panes
+ * (shell.css) and keep their fill. A fixture page without the window's root keeps the page colour.
  */
-:root.g-root .setup-shell:not(.agents-screen) {
+:root.g-root .setup-shell:not(.agents-screen, .dashboard-screen) {
   background-color: transparent;
 }
 
@@ -526,8 +526,6 @@
   z-index: 31;
   gap: var(--g-space-8);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
     var(--g-shadow-pop);

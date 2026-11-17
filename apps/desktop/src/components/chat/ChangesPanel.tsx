@@ -21,6 +21,7 @@ import {
 import { hasProcess, type Transcript } from "../../lib/chat/transcript";
 import type { ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
+import { Select } from "../Select";
 import { ContextContents, type ContextTab } from "./ContextContents";
 import { DiffBlock, type HunkChange } from "./DiffBlock";
 import { Modal } from "./Modal";
@@ -497,7 +498,7 @@ export function ChangesPanel({
             <label className="changes-scope">
               {/* The choice reads on its own ("Before the latest turn"); its name is for screen readers. */}
               <span className="sr-only">Compare current files with</span>
-              <select
+              <Select
                 className="g-select"
                 value={scope}
                 onChange={(event) => {
@@ -516,7 +517,7 @@ export function ChangesPanel({
                     Before: {turn.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <div className="changes-panel-scroll">
               {busy ? (

@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose, chosen, offered } from "./choose.mjs";
 
 const server = process.argv[process.argv.indexOf("--server") + 1] || "http://127.0.0.1:1474";
 const output = resolve("../../target/shared-mcp-browser");
@@ -25,25 +26,23 @@ async function checkDelayedScope(page) {
   await page.goto(delayed);
   const scope = page.getByLabel("MCP scope", { exact: true });
   await page.getByRole("button", { name: "Add server", exact: true }).waitFor();
-  assert.equal(await scope.inputValue(), "");
+  assert.equal(await chosen(scope), "");
   await page.evaluate(() => window.pluginsFixture.supplyProjects());
   await page.getByText("project_docs", { exact: true }).waitFor();
-  assert.equal(await scope.inputValue(), projectId, "late project discovery supplies the default");
+  assert.equal(await chosen(scope), projectId, "late project discovery supplies the default");
   await page.getByRole("button", { name: "Add server", exact: true }).click();
   assert.equal(
-    await page.getByRole("dialog").getByLabel("Scope", { exact: true }).inputValue(),
+    await chosen(page.getByRole("dialog").getByLabel("Scope", { exact: true })),
     projectId,
   );
   await page.keyboard.press("Escape");
 
   await page.goto(delayed);
   await scope.waitFor();
-  await scope.selectOption("");
+  await choose(scope, "");
   await page.evaluate(() => window.pluginsFixture.supplyProjects());
-  await scope
-    .getByRole("option", { name: "Aura project", exact: true })
-    .waitFor({ state: "attached" });
-  assert.equal(await scope.inputValue(), "", "a deliberate all-projects choice survives discovery");
+  await offered(scope, /^Aura project$/).waitFor({ state: "attached" });
+  assert.equal(await chosen(scope), "", "a deliberate all-projects choice survives discovery");
 
   await page.goto(delayed);
   await page.getByRole("button", { name: "Add server", exact: true }).click();
@@ -51,18 +50,18 @@ async function checkDelayedScope(page) {
   await dialog.getByLabel("Name", { exact: true }).fill("unsaved_tools");
   await page.evaluate(() => window.pluginsFixture.supplyProjects());
   assert.equal(
-    await dialog.getByLabel("Scope", { exact: true }).inputValue(),
+    await chosen(dialog.getByLabel("Scope", { exact: true })),
     "",
     "an open editor keeps its initial scope",
   );
   assert.equal(await dialog.getByLabel("Name", { exact: true }).inputValue(), "unsaved_tools");
   await page.keyboard.press("Escape");
-  assert.equal(await scope.inputValue(), "", "starting an editor pins the displayed scope");
+  assert.equal(await chosen(scope), "", "starting an editor pins the displayed scope");
 
   await page.goto(delayed);
   await more(page, "Import");
   dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Import format", { exact: true }).selectOption("native");
+  await choose(dialog.getByLabel("Import format", { exact: true }), "native");
   await dialog
     .getByLabel("Definition JSON", { exact: true })
     .fill('{"mcpServers":{"docs":{"command":"node"}}}');
@@ -70,7 +69,7 @@ async function checkDelayedScope(page) {
   await dialog.getByRole("button", { name: "Import definitions", exact: true }).click();
   await page.waitForFunction(() => window.pluginsFixture.calls.includes("mcp:import-native:all"));
   await page.keyboard.press("Escape");
-  assert.equal(await scope.inputValue(), "", "an open import keeps its chosen scope");
+  assert.equal(await chosen(scope), "", "an open import keeps its chosen scope");
 }
 for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
   const browser = await launcher.launch({ headless: true });
@@ -118,7 +117,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .getByLabel("Arguments, one per line", { exact: true })
         .fill("fixture.js\n--stdio");
       assert.equal(
-        await dialog.getByLabel("Scope", { exact: true }).inputValue(),
+        await chosen(dialog.getByLabel("Scope", { exact: true })),
         "7cc769fb-ae40-44c1-8baa-fc2210f3bebe",
       );
       await dialog.getByRole("button", { name: "Save definition" }).click();
@@ -169,7 +168,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       await dialog.waitFor({ state: "hidden" });
       await more(page, "Import");
       dialog = page.getByRole("dialog");
-      await dialog.getByLabel("Import format", { exact: true }).selectOption("native");
+      await choose(dialog.getByLabel("Import format", { exact: true }), "native");
       await dialog
         .getByLabel("Definition JSON", { exact: true })
         .fill('{"mcpServers":{"docs":{"command":"node"}}}');

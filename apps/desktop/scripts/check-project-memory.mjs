@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
+import { choose, labels } from "./choose.mjs";
 
 /**
  * Project memory is the notes and one switch (owner, 10 November 2026): type and Save, with no
@@ -161,12 +162,9 @@ export async function checkProjectMemory(browser, url, out, engine) {
     await page.goto(`${url}/?preview=project-memory&projects=2`);
     const project = page.getByRole("combobox", { name: "Project" });
     await project.waitFor();
-    assert.deepEqual(await project.locator("option").allTextContents(), [
-      "auracode fixture",
-      "website fixture",
-    ]);
+    assert.deepEqual(await labels(project), ["auracode fixture", "website fixture"]);
     await editor.waitFor();
-    await project.selectOption({ label: "website fixture" });
+    await choose(project, { label: "website fixture" });
     await page.waitForFunction(
       () => document.querySelector('textarea[aria-label="Markdown"]')?.value === "",
     );
@@ -181,7 +179,7 @@ export async function checkProjectMemory(browser, url, out, engine) {
     await save.click();
     await page.getByText("Saved. Agents get it with their next message.").waitFor();
     assert.equal(await project.isDisabled(), false);
-    await project.selectOption({ label: "auracode fixture" });
+    await choose(project, { label: "auracode fixture" });
     await page.waitForFunction(() =>
       document
         .querySelector('textarea[aria-label="Markdown"]')

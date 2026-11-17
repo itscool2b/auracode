@@ -28,8 +28,6 @@
     max-width: 100%;
     border-radius: var(--ui-pane-radius);
     background-color: var(--g-glass-pop);
-    -webkit-backdrop-filter: var(--g-blur-pop);
-    backdrop-filter: var(--g-blur-pop);
     box-shadow:
       inset 0 0 0 1px var(--g-glass-rim),
       var(--g-shadow-pop);

@@ -23,6 +23,8 @@ const info: AppInfo = {
   notices: [],
   recovery_notice: null,
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 
 const SCENARIOS: Readonly<Record<string, InstructionsScenario>> = {

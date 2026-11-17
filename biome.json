@@ -31,7 +31,13 @@
       "preset": "recommended",
       "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" },
       "suspicious": { "noExplicitAny": "error" },
-      "a11y": { "preset": "recommended" }
+      "a11y": {
+        "preset": "recommended",
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["Select"] }
+        }
+      }
     }
   },
   "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } }

@@ -68,7 +68,11 @@
         "depends": [
           "libasound2t64 | libasound2",
           "libayatana-appindicator3-1 | libappindicator3-1",
-          "libssl3t64 | libssl3"
+          "libssl3t64 | libssl3",
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-gl",
+          "gstreamer1.0-pulseaudio | gstreamer1.0-alsa"
         ],
         "section": "devel"
       },
@@ -77,10 +81,12 @@
           "libasound.so.2()(64bit)",
           "libayatana-appindicator3.so.1()(64bit)",
           "libssl.so.3()(64bit)",
-          "libcrypto.so.3()(64bit)"
+          "libcrypto.so.3()(64bit)",
+          "gstreamer1-plugins-base",
+          "gstreamer1-plugins-good"
         ]
       },
-      "appimage": { "bundleMediaFramework": false }
+      "appimage": { "bundleMediaFramework": true }
     },
     "category": "DeveloperTool",
     "shortDescription": "One home for all your coding agents.",

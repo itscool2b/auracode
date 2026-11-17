@@ -556,12 +556,33 @@ async function choose(select: HTMLElement | null, what: string, value: string): 
     click(row, what);
     return;
   }
+  // The app's own dropdown (components/Select.tsx): open it and press the choice's row.
+  if (select instanceof HTMLButtonElement && select.getAttribute("role") === "combobox") {
+    const field = select;
+    await waitFor(`${what} to be enabled`, () => !field.disabled);
+    if (field.dataset.value === value) return;
+    click(field, what);
+    const option = await waitFor(`${what} to offer "${value}"`, () =>
+      document
+        .getElementById(field.getAttribute("aria-controls") ?? "")
+        ?.querySelector<HTMLElement>(`[role="option"][data-value="${CSS.escape(value)}"]`),
+    );
+    click(option, `${what}'s "${value}"`);
+    await waitFor(`${what} to take "${value}"`, () => field.dataset.value === value);
+    return;
+  }
   if (!(select instanceof HTMLSelectElement)) throw new StepError(`${what} is not on the page`);
   await waitFor(`${what} to be enabled`, () => !select.disabled);
   if (![...select.options].some((option) => option.value === value)) {
     throw new StepError(`${what} offers no "${value}"`);
   }
   setValue(select, value);
+}
+
+/** What a field labelled `label` holds: a native select's value, or the app's own dropdown's. */
+function fieldValue(root: ParentNode, label: string): string | undefined {
+  const field = root.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`);
+  return field instanceof HTMLSelectElement ? field.value : field?.dataset.value;
 }
 
 function pickerOption(id: string): HTMLElement | null {
@@ -793,9 +814,7 @@ async function settingsCustomize(chatId: string, appearance: "light" | "dark"): 
         if (label === "Instructions") {
           await waitFor(
             "global Instructions scope",
-            () =>
-              destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')
-                ?.value === "global",
+            () => fieldValue(destination, "Applies to") === "global",
           );
         }
         if (document.documentElement.dataset.theme !== appearance) {
@@ -835,9 +854,7 @@ async function customizeScopes(chatId: string): Promise<string> {
     let destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact chat Instructions scope",
-      () =>
-        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
-        `chat:${chatId}`,
+      () => fieldValue(destination, "Applies to") === `chat:${chatId}`,
     );
     await returnToRetainedChat(chatId, input, draft);
 
@@ -859,9 +876,7 @@ async function customizeScopes(chatId: string): Promise<string> {
     destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact project folder Instructions scope",
-      () =>
-        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
-        `folder:${folder.id}`,
+      () => fieldValue(destination, "Applies to") === `folder:${folder.id}`,
     );
     await returnToRetainedChat(chatId, input, draft);
     return "chat command and project folder action opened Settings' Instructions on their exact scope, with destination focus and the unsent chat draft retained";

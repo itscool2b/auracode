@@ -25,6 +25,7 @@ import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
 import "../settings/settings.css";
 import { type AgentAccountsApi, takesAccounts } from "../../lib/agentAccounts";
+import { Select } from "../Select";
 import { AgentAccounts, AgentUsage } from "./AgentAccounts";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
@@ -88,7 +89,7 @@ export function ConnectionSetting({
   return (
     <div className="agent-connection" data-testid="agent-connection">
       <Row title="Connection" detail={connectionDetail(connections)}>
-        <select
+        <Select
           className="g-select settings-control settings-select"
           aria-label={`${agent.name} connection`}
           data-test-agent={agent.id}
@@ -113,7 +114,7 @@ export function ConnectionSetting({
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
     </div>
   );

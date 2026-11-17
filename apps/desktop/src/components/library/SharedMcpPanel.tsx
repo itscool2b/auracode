@@ -7,6 +7,7 @@ import { Modal } from "../chat/Modal";
 import { Switch } from "../settings/SettingsRow";
 import { RowMenu } from "./RowMenu";
 import "./shared-mcp.css";
+import { Select } from "../Select";
 
 export interface McpProject {
   readonly id: string;
@@ -168,10 +169,12 @@ export function SharedMcpPanel({
       <div className="shared-mcp-toolbar">
         <label>
           Scope{" "}
-          <select
+          <Select
             className="g-input"
             value={scope}
             aria-label="MCP scope"
+            // All projects shows by default until projects are found; picking it pins it.
+            repick
             onChange={(e) => setExplicitScope(e.currentTarget.value)}
           >
             {projects.map((p) => (
@@ -180,7 +183,7 @@ export function SharedMcpPanel({
               </option>
             ))}
             <option value="">All projects</option>
-          </select>
+          </Select>
         </label>
       </div>
       {error ? (
@@ -407,7 +410,7 @@ export function SharedMcpPanel({
           {document.mode === "import" ? (
             <label className="shared-mcp-field">
               Import format
-              <select
+              <Select
                 className="g-input"
                 value={nativeImport ? "native" : "aura"}
                 aria-label="Import format"
@@ -415,7 +418,7 @@ export function SharedMcpPanel({
               >
                 <option value="aura">Aura portable definitions</option>
                 <option value="native">Native mcpServers JSON</option>
-              </select>
+              </Select>
             </label>
           ) : null}
           <label className="shared-mcp-field">
@@ -592,7 +595,7 @@ function McpEditor({
         </label>
         <label className="shared-mcp-field">
           Scope
-          <select
+          <Select
             className="g-input"
             value={value.project_id ?? ""}
             aria-label="Scope"
@@ -604,7 +607,7 @@ function McpEditor({
               </option>
             ))}
             <option value="">All projects</option>
-          </select>
+          </Select>
         </label>
         <AgentScope
           agents={agents}
@@ -621,7 +624,7 @@ function McpEditor({
         />
         <label className="shared-mcp-field">
           Transport
-          <select
+          <Select
             className="g-input"
             value={value.transport.type}
             aria-label="Transport"
@@ -640,7 +643,7 @@ function McpEditor({
             <option value="stdio">Stdio</option>
             <option value="http">Streamable HTTP</option>
             <option value="sse">Legacy SSE</option>
-          </select>
+          </Select>
         </label>
         {value.transport.type === "stdio" ? (
           <>
