@@ -206,8 +206,15 @@ describe("Settings' General defaults", () => {
       editors: async () => ({ editors: [], opens_in: null }),
     };
     const page = (info: AppInfo) =>
-      renderToStaticMarkup(<GeneralPage info={info} prefs={prefs} lists={lists} onSetup={() => {}} />);
-    const silent = page({ os: "linux", data_dir: "/data", media: false, media_notice: notice } as AppInfo);
+      renderToStaticMarkup(
+        <GeneralPage info={info} prefs={prefs} lists={lists} onSetup={() => {}} />,
+      );
+    const silent = page({
+      os: "linux",
+      data_dir: "/data",
+      media: false,
+      media_notice: notice,
+    } as AppInfo);
     const shown = notice.replaceAll("'", "&#x27;");
     expect(silent).toContain(shown);
     expect(silent.split(shown)).toHaveLength(2);
@@ -215,7 +222,12 @@ describe("Settings' General defaults", () => {
     expect(silent).toMatch(/aria-label="Sounds"[^>]*disabled=""/);
     // Every other switch stays usable.
     expect(silent.match(/disabled=""/g)).toHaveLength(1);
-    const playing = page({ os: "linux", data_dir: "/data", media: true, media_notice: null } as AppInfo);
+    const playing = page({
+      os: "linux",
+      data_dir: "/data",
+      media: true,
+      media_notice: null,
+    } as AppInfo);
     expect(playing).toContain("A short sound when a chat finishes, fails or needs you.");
     expect(playing).not.toContain('disabled=""');
   });
