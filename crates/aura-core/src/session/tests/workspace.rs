@@ -638,6 +638,9 @@ async fn a_folder_that_does_not_answer_never_holds_up_the_picker() {
     let here = project(&rig, "Here").await;
     let share = rig._dir.path().join("share");
     std::fs::create_dir(&share).unwrap();
+    // One spelling throughout, as the app stores and picks it (macOS's /private/var, Windows' long
+    // names without the \\?\ prefix): the slow-folder hook compares paths exactly.
+    let share = crate::fsutil::plain_path(&share.canonicalize().unwrap());
     rig.manager
         .project_create(ProjectCreate {
             project: input("On the share"),
@@ -645,9 +648,7 @@ async fn a_folder_that_does_not_answer_never_holds_up_the_picker() {
         })
         .await
         .expect("share project");
-    let slow = rig
-        .manager
-        .slow_folder(&share.canonicalize().unwrap(), Duration::from_secs(3));
+    let slow = rig.manager.slow_folder(&share, Duration::from_secs(3));
     let started = std::time::Instant::now();
     let found = rig
         .manager
