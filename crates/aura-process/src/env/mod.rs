@@ -33,7 +33,9 @@ use crate::log::Redactor;
 use crate::registry::LeftoverRegistry;
 
 pub use scrub::{DenyReason, ScrubReport, deny_reason, node_options_has_debugger_hook, scrub};
-pub use shell::parse_env0;
+#[cfg(unix)]
+pub use shell::user_shell;
+pub use shell::{parse_env0, terminal_args};
 #[cfg(unix)]
 pub(crate) use which::is_program;
 #[cfg(windows)]
@@ -680,11 +682,28 @@ pub enum ResolverStatus {
 /// inherit: a dev launch from Apple Terminal would replay its session restore against the user's
 /// tab history, and a `pnpm dev` launch would leak `npm_config_*` into every agent. Whatever the
 /// user's own rc files export comes back through the shell's output.
+///
+/// The terminal app auracode was started from names itself too, and none of it is true for an
+/// agent: auracode's own terminal is not kitty, so a child that read `KITTY_WINDOW_ID` or
+/// `KITTY_LISTEN_ON` would send kitty remote-control commands to the person's other window, and
+/// `GHOSTTY_SHELL_FEATURES` or `VTE_VERSION` would load shell integration that writes another
+/// terminal's escape codes. A terminal inside auracode says what it is itself (`pty::spawn`).
 const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",
     "TERM_SESSION_ID",
     "INIT_CWD",
+    // The launching terminal and multiplexer.
+    "VTE_VERSION",
+    "WINDOWID",
+    "WT_SESSION",
+    "WT_PROFILE_ID",
+    "LC_TERMINAL",
+    "LC_TERMINAL_VERSION",
+    "COLORFGBG",
+    "TMUX",
+    "TMUX_PANE",
+    "STY",
 ];
 
 /// Names, separated by `:`, of variables auracode set for itself when it started (the NVIDIA
@@ -692,8 +711,23 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
 /// them, an agent's shell must not inherit them.
 pub const LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
 
-/// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]).
-const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "pnpm_", "TAURI_"];
+/// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]), the terminal apps'
+/// own families among them.
+const LAUNCH_CONTEXT_PREFIXES: &[&str] = &[
+    "SHELL_SESSION_",
+    "npm_",
+    "PNPM_",
+    "pnpm_",
+    "TAURI_",
+    "KITTY_",
+    "GHOSTTY_",
+    "ALACRITTY_",
+    "WEZTERM_",
+    "KONSOLE_",
+    "ITERM_",
+    "TERMINATOR_",
+    "ZELLIJ",
+];
 
 /// Removes the variables that describe how auracode itself was launched; returns their names,
 /// sorted. Applies to the resolver shell's input and to the fallback.
@@ -945,6 +979,53 @@ mod tests {
             ]
         );
         assert_eq!(names(&vars), ["HOME", "PATH", "SHELL", "TERM"]);
+    }
+
+    /// A launch from kitty, Ghostty, Windows Terminal or tmux: none of their names reach an agent,
+    /// while the person's own settings that only look alike stay.
+    #[test]
+    fn the_launching_terminal_is_launch_context() {
+        let mut vars = map(&[
+            ("PATH", "/usr/bin"),
+            ("KITTY_WINDOW_ID", "1"),
+            ("KITTY_LISTEN_ON", "unix:/tmp/kitty-1234"),
+            ("KITTY_PUBLIC_KEY", "1:abc"),
+            ("GHOSTTY_RESOURCES_DIR", "/usr/share/ghostty"),
+            ("GHOSTTY_SHELL_FEATURES", "cursor,title"),
+            ("ALACRITTY_SOCKET", "/run/user/1000/Alacritty.sock"),
+            ("WEZTERM_PANE", "0"),
+            ("VTE_VERSION", "7600"),
+            ("WINDOWID", "4194316"),
+            ("WT_SESSION", "f3a1"),
+            ("LC_TERMINAL", "iTerm2"),
+            ("TMUX", "/tmp/tmux-1000/default,1,0"),
+            ("TMUX_PANE", "%0"),
+            ("ZELLIJ_SESSION_NAME", "dev"),
+            ("EDITOR", "nvim"),
+            ("TERMINAL", "kitty"),
+            ("LC_ALL", "en_US.UTF-8"),
+        ]);
+        let removed = strip_launch_context(&mut vars);
+        assert_eq!(
+            removed,
+            [
+                "ALACRITTY_SOCKET",
+                "GHOSTTY_RESOURCES_DIR",
+                "GHOSTTY_SHELL_FEATURES",
+                "KITTY_LISTEN_ON",
+                "KITTY_PUBLIC_KEY",
+                "KITTY_WINDOW_ID",
+                "LC_TERMINAL",
+                "TMUX",
+                "TMUX_PANE",
+                "VTE_VERSION",
+                "WEZTERM_PANE",
+                "WINDOWID",
+                "WT_SESSION",
+                "ZELLIJ_SESSION_NAME",
+            ]
+        );
+        assert_eq!(names(&vars), ["EDITOR", "LC_ALL", "PATH", "TERMINAL"]);
     }
 
     /// What linuxdeploy's AppRun and its GTK and Python hooks set, as a real AppImage of auracode

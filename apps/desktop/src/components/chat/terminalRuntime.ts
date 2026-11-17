@@ -68,6 +68,7 @@ export const createXtermRuntime: RuntimeFactory = ({ transport, label, onStatus 
     const opened = createXterm(modules, host, {
       inputLabel: `${label} input`,
       keys: (event) => shellKeys(event, () => opened.term.hasSelection()),
+      variant: "shell",
     });
     view = opened;
     const term = opened.term;

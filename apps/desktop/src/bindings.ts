@@ -263,6 +263,8 @@ export const commands = {
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
 	terminalClose: (terminalId: string) => typedError<null, AppError>(__TAURI_INVOKE("terminal_close", { terminalId })),
+	/**  The person's terminal font, or `None` when nothing could be read. */
+	terminalSystemFont: () => typedError<SystemTerminalFont | null, AppError>(__TAURI_INVOKE("terminal_system_font")),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -2683,7 +2685,12 @@ export type ProjectSearchHit = {
 	name: string,
 };
 
-export type ProjectShell = "power_shell" | "command_prompt" | "zsh" | "bash";
+export type ProjectShell = 
+/**
+ *  The person's own login shell (`$SHELL`, else the passwd entry) with their startup files,
+ *  as their terminal app starts it. macOS and Linux.
+ */
+"login" | "power_shell" | "command_prompt" | "zsh" | "bash";
 
 export type ProjectShellChoice = {
 	id: ProjectShell,
@@ -3281,6 +3288,18 @@ export type StressConfig = {
 	rate: number,
 	aura: boolean,
 	seconds: number,
+};
+
+/**  What the page shows and uses. */
+export type SystemTerminalFont = {
+	/**  The font family as CSS takes it, or `None` when only the size is known. */
+	family: string | null,
+	/**  The size in CSS pixels, or `None` when only the family is known. */
+	size_px: number | null,
+	/**  The same size in points, as the terminal's own settings say it. */
+	size_points: number | null,
+	/**  Where it came from, as Settings names it: "kitty", "GNOME" and the like. */
+	source: string,
 };
 
 /**  What a task runs. */

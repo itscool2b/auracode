@@ -1,5 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import { subscribeAppearance, subscribeTheme } from "../lib/appearance";
+import { type TerminalVariant, terminalFonts } from "../lib/terminalFont";
 import {
   actsOutsideText,
   copiesSelection,
@@ -22,10 +23,11 @@ export interface XtermOptions {
   readonly onLink?: (url: string) => void;
   readonly keys?: (event: KeyboardEvent) => boolean;
   /**
-   * A terminal chat runs an agent's whole interface: larger type, deep scrollback and the
-   * blinking cursor its prompt expects. Tool terminals keep the compact defaults.
+   * A terminal chat runs an agent's whole interface: deep scrollback and the blinking cursor its
+   * prompt expects. A shell in the docked panel and a tool's sheet keep the compact defaults. All
+   * draw with the person's terminal font unless they chose auracode's (lib/terminalFont.ts).
    */
-  readonly variant?: "tool" | "chat";
+  readonly variant?: TerminalVariant;
 }
 
 type XtermModules = {
@@ -70,14 +72,17 @@ export function createXterm(
   const styles = getComputedStyle(document.documentElement);
   const color = (name: string, fallback: string) =>
     styles.getPropertyValue(name).trim() || fallback;
+  const variant = options.variant ?? "tool";
+  const ownStack = color("--g-mono", '"Geist Mono Variable", monospace');
+  const font = terminalFonts.resolve(variant, ownStack);
   const term = new Terminal({
     cols: 80,
     rows: 24,
-    scrollback: options.variant === "chat" ? 10000 : 1000,
-    fontSize: options.variant === "chat" ? 13.5 : 12.5,
-    lineHeight: options.variant === "chat" ? 1.35 : 1.44,
-    fontFamily: color("--g-mono", '"Geist Mono Variable", monospace'),
-    cursorBlink: options.variant === "chat",
+    scrollback: variant === "chat" ? 10000 : 1000,
+    fontSize: font.fontSize,
+    lineHeight: font.lineHeight,
+    fontFamily: font.fontFamily,
+    cursorBlink: variant === "chat",
     screenReaderMode: true,
     disableStdin: true,
     logLevel: "off",
@@ -144,17 +149,35 @@ export function createXterm(
   };
   const unsubscribeAppearance = subscribeAppearance(repaint);
   const unsubscribeTheme = subscribeTheme(repaint);
-  const fit = () => {
+  // A new font choice, or the system's font arriving after the first paint, reflows every
+  // terminal in place: its buffer and running process stay.
+  const refont = () => {
+    const next = terminalFonts.resolve(variant, ownStack);
+    if (
+      term.options.fontFamily === next.fontFamily &&
+      term.options.fontSize === next.fontSize &&
+      term.options.lineHeight === next.lineHeight
+    )
+      return;
+    term.options.fontFamily = next.fontFamily;
+    term.options.fontSize = next.fontSize;
+    term.options.lineHeight = next.lineHeight;
+    fitView();
+  };
+  const unsubscribeFont = terminalFonts.subscribe(refont);
+  void terminalFonts.load();
+  const fitView = () => {
     const dimensions = fitAddon.proposeDimensions();
     if (!dimensions || dimensions.cols < 2 || dimensions.rows < 1) return;
     term.resize(Math.min(1000, dimensions.cols), Math.min(1000, dimensions.rows));
   };
   return {
     term,
-    fit,
+    fit: fitView,
     dispose: () => {
       unsubscribeAppearance();
       unsubscribeTheme();
+      unsubscribeFont();
       clipboard.dispose();
       held.dispose();
       term.dispose();

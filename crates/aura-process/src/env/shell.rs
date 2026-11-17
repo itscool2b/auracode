@@ -256,6 +256,57 @@ fn seconds(duration: std::time::Duration) -> String {
     }
 }
 
+/// The person's own shell, for a terminal: `SHELL` from the resolved environment when it is an
+/// absolute path to a program, else the passwd entry's shell when it is. Unlike the environment's
+/// capture this takes any shell (nu, xonsh, elvish): a terminal only starts it. `None` when
+/// neither names a program, so the caller offers the shells it knows instead. The path comes from
+/// the person's login environment and passwd entry only, never from a project or a chat.
+#[cfg(unix)]
+pub fn user_shell(vars: &EnvMap) -> Option<PathBuf> {
+    user_shell_from(vars, passwd_shell, super::is_program)
+}
+
+#[cfg(unix)]
+fn user_shell_from(
+    vars: &EnvMap,
+    passwd_shell: impl FnOnce() -> Option<PathBuf>,
+    executable: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let usable = |shell: &Path| shell.is_absolute() && executable(shell);
+    vars.get(&EnvKey::from("SHELL"))
+        .map(PathBuf::from)
+        .filter(|shell| usable(shell))
+        .or_else(|| passwd_shell().filter(|shell| usable(shell)))
+}
+
+/// How a terminal starts the person's shell, as their own terminal app would: interactive, so it
+/// reads its startup files (prompt, aliases, completions, tool activation). macOS terminals start
+/// a login shell (Terminal and iTerm run `login`); Linux terminals (kitty, GNOME Terminal,
+/// Konsole) start an interactive non-login one, since the session already ran the login files and
+/// the environment the shell inherits came from a login shell. csh and tcsh take `-l` only as
+/// their sole argument, and a shell auracode does not know gets no arguments: the terminal makes
+/// it interactive.
+pub fn terminal_args(shell: &std::path::Path, macos: bool) -> Vec<&'static str> {
+    let name = shell.file_name().and_then(std::ffi::OsStr::to_str);
+    match (name, macos) {
+        (Some("tcsh" | "csh"), true) => vec!["-l"],
+        (Some("tcsh" | "csh"), false) => vec!["-i"],
+        (
+            Some(
+                "bash" | "zsh" | "sh" | "dash" | "ksh" | "mksh" | "yash" | "fish" | "nu" | "xonsh",
+            ),
+            true,
+        ) => vec!["-l", "-i"],
+        (
+            Some(
+                "bash" | "zsh" | "sh" | "dash" | "ksh" | "mksh" | "yash" | "fish" | "nu" | "xonsh",
+            ),
+            false,
+        ) => vec!["-i"],
+        _ => Vec::new(),
+    }
+}
+
 /// The passwd entry's shell.
 #[cfg(unix)]
 fn passwd_shell() -> Option<PathBuf> {
@@ -446,6 +497,62 @@ mod tests {
             runs,
         );
         assert!(!asked);
+    }
+
+    /// A terminal takes any shell the person set, nu included, and nothing when neither `SHELL`
+    /// nor the passwd entry names a program: then the terminal offers the shells it knows.
+    #[cfg(unix)]
+    #[test]
+    fn a_terminal_starts_the_persons_own_shell() {
+        let runs = |path: &Path| path != Path::new("/bin/not-executable");
+        let env = |shell: Option<&str>| {
+            let mut vars = EnvMap::new();
+            if let Some(shell) = shell {
+                vars.insert(EnvKey::from("SHELL"), OsString::from(shell));
+            }
+            vars
+        };
+        let passwd = || Some(PathBuf::from("/usr/bin/fish"));
+        assert_eq!(
+            user_shell_from(&env(Some("/usr/bin/nu")), passwd, runs),
+            Some(PathBuf::from("/usr/bin/nu"))
+        );
+        for unusable in [None, Some("zsh"), Some("/bin/not-executable")] {
+            assert_eq!(
+                user_shell_from(&env(unusable), passwd, runs),
+                Some(PathBuf::from("/usr/bin/fish")),
+                "{unusable:?}"
+            );
+        }
+        assert_eq!(user_shell_from(&env(None), || None, runs), None);
+        assert_eq!(
+            user_shell_from(
+                &env(None),
+                || Some(PathBuf::from("/bin/not-executable")),
+                runs
+            ),
+            None
+        );
+    }
+
+    /// Interactive everywhere, a login shell on macOS only, and csh's `-l` alone.
+    #[test]
+    fn terminal_args_follow_the_platforms_terminals() {
+        let args = |shell: &str, macos: bool| terminal_args(Path::new(shell), macos);
+        for shell in [
+            "/usr/bin/bash",
+            "/bin/zsh",
+            "/usr/bin/fish",
+            "/usr/bin/nu",
+            "/bin/sh",
+        ] {
+            assert_eq!(args(shell, false), ["-i"], "{shell} on Linux");
+            assert_eq!(args(shell, true), ["-l", "-i"], "{shell} on macOS");
+        }
+        assert_eq!(args("/bin/tcsh", false), ["-i"]);
+        assert_eq!(args("/bin/tcsh", true), ["-l"]);
+        assert!(args("/usr/bin/elvish", false).is_empty());
+        assert!(args("/usr/bin/elvish", true).is_empty());
     }
 
     /// A fake login shell in `sh` (the test child is only built for integration tests): it
