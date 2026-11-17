@@ -81,6 +81,67 @@ async fn removal_is_one_use_preserves_disk_and_blocks_cached_actor_until_restore
     assert!(rig.store.workspace_available(&chat));
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
+/// Removing a project stops the agents there before it holds every folder: while it waits for an
+/// agent slow to go, a change to another folder goes at once.
+#[tokio::test]
+async fn removal_waits_for_its_agents_without_holding_up_other_folders() {
+    let (slow, _) = ScriptedDriver::new(vec![
+        ready_step("slow"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_secs(2)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let rig = rig(vec![slow], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let elsewhere = rig._dir.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    let other = rig
+        .store
+        .create_chat(NewChat {
+            agent_host: Default::default(),
+            agent_id: "mock".into(),
+            folder: elsewhere,
+            device_id: "device".into(),
+            now: now_millis(),
+        })
+        .await
+        .unwrap()
+        .id;
+    let review = rig
+        .manager
+        .workspace_removal_preview(target(&rig, &chat.id).await, Action::Remove)
+        .await
+        .unwrap();
+    let removing = tokio::spawn({
+        let manager = rig.manager.clone();
+        async move {
+            manager
+                .workspace_removal_apply(&review.token, Box::new(()))
+                .await
+        }
+    });
+    // The removal now waits for the agent to stop.
+    eventually("the agent is asked to stop", || {
+        rig.statuses.status(&chat.id) == Some(SessionStatus::Stopping)
+    })
+    .await;
+    let held = tokio::time::timeout(
+        Duration::from_millis(800),
+        rig.manager.hold_chat_folder(&other, &[]),
+    )
+    .await
+    .expect("another folder's change does not wait for the removal's stops")
+    .expect("held");
+    drop(held);
+    tokio::time::timeout(Duration::from_secs(20), removing)
+        .await
+        .expect("the removal finishes")
+        .unwrap()
+        .expect("removed");
+    assert!(!rig.manager.shared().live.contains(&chat.id));
+}
+
 #[tokio::test]
 async fn project_terminal_and_stale_membership_refuse_removal() {
     let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);

@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose } from "./choose.mjs";
 
 // Sheets fade in and controls settle their colours; audit only once every finite animation ends.
 const settled = (page) =>
@@ -137,7 +138,7 @@ async function inspect(engine, launcher) {
       "none",
       "reduced motion stills the popover",
     );
-    await page.getByLabel("Start from", { exact: true }).selectOption("release/1.4");
+    await choose(page.getByLabel("Start from", { exact: true }), "release/1.4");
     await page
       .locator('[data-testid="new-chat-worktree"][data-test-start="release/1.4"]')
       .waitFor();

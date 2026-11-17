@@ -75,6 +75,12 @@ export function Popover({
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || !root.current) return;
       if (root.current.closest("[hidden]")) return;
+      // An open dropdown inside the popover takes this Escape for its own list.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="combobox"][aria-expanded="true"]')
+      )
+        return;
       if (event.target instanceof Element && event.target.closest("dialog[open]")) return;
       event.preventDefault();
       closeDetails(root.current);

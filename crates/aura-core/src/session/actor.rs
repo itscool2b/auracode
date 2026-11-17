@@ -1761,6 +1761,8 @@ impl ChatActor {
             || self.turn.is_some()
             || !self.queue.is_empty()
             || self.pending_start.is_some()
+            // A start waiting for room is a start: it would go on over the continuation.
+            || self.room.is_some()
             || self.native_identity_pending.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
@@ -1862,6 +1864,8 @@ impl ChatActor {
             self.last_error = None;
             self.auth = None;
             self.conflict = false;
+            // The continuation replaces any start still waiting for room.
+            self.end_room_wait();
             self.set_status(SessionStatus::Stopped, Some("Continuation saved. The next prompt includes its visible handoff.".into()));
             self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.agent_label()) }, None);
             self.flush();
@@ -1886,6 +1890,7 @@ impl ChatActor {
             || self.turn.is_some()
             // A held prompt waits for the person; one about to go would run on changed files.
             || self.queue.iter().any(|row| !row.held)
+            || self.room.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
         {
@@ -1943,7 +1948,8 @@ impl ChatActor {
                 || self.turn.is_some()
                 || !self.queue.is_empty()
                 || self.native_identity_pending.is_some()
-                || self.pending_start.is_some())
+                || self.pending_start.is_some()
+                || self.room.is_some())
         {
             let _ = reply.send(Err(SessionError::Organization(
                 "Stop the chat and clear queued prompts before moving it.".into(),
@@ -2118,6 +2124,11 @@ impl ChatActor {
             self.status,
             SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
         ) {
+            // Behind a quiet change the queue starts the agent once the change ends (release_quiet
+            // advances it), so a message discarded meanwhile starts nothing.
+            if !self.quiet_holds.is_empty() {
+                return;
+            }
             let _ = self.start(false, false);
         }
     }
@@ -2898,6 +2909,14 @@ impl ChatActor {
         }
         self.hold_queue(HoldCause::Stop);
         self.pending_start = None;
+        // A start waiting for room gives up its wait, and a terminal waiting on that start (or on
+        // the restart just cancelled) hears so.
+        self.end_room_wait();
+        if let Some(reply) = self.terminal_request.take() {
+            drop(reply.send(Err(SessionError::OptionInvalid(
+                "Opening the terminal was stopped.".into(),
+            ))));
+        }
         if let Some(preparing) = self.preparing.take() {
             // Dropping the preparation kills a running install or probe.
             preparing.abort.abort();
@@ -2942,6 +2961,7 @@ impl ChatActor {
         self.browser_grant = None;
         self.force_wait = None;
         self.stop_deadline = None;
+        self.end_room_wait();
         if let Some(mut driver) = self.driver.take() {
             // No late event of this driver is ever applied.
             driver.events = None;
@@ -3031,6 +3051,10 @@ impl ChatActor {
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
         self.hold_queue(HoldCause::Stop);
+        // A start waiting for room ends here, whatever the status says (a continuation may have
+        // set it Stopped meanwhile), and so does one held back by a quiet change.
+        self.end_room_wait();
+        self.start_after_hold = None;
         match self.status {
             SessionStatus::Stopped
             | SessionStatus::Failed
@@ -3041,7 +3065,6 @@ impl ChatActor {
             _ => {}
         }
         if self.driver.is_none() {
-            self.end_room_wait();
             if let Some(preparing) = self.preparing.take() {
                 preparing.abort.abort();
                 self.progress = None;
@@ -3238,6 +3261,12 @@ impl ChatActor {
                 return Ok(());
             }
             SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired => {}
+        }
+        // Never a second process over a live one: a driver, a preparation or a turn still here
+        // means the agent runs, whatever the status says.
+        if self.driver.is_some() || self.preparing.is_some() || self.turn.is_some() {
+            tracing::warn!(chat_id = %self.chat_id, status = ?self.status, "a start found its agent still running; nothing more starts");
+            return Ok(());
         }
         // A saved session resumes through the connection that made it; a new one (a first start,
         // Start fresh, a switch that cannot resume) takes the agent's Connection setting.
@@ -6506,15 +6535,19 @@ The person continues this conversation here, in your terminal. Reply only that y
             idle.then(|| self.last_activity + self.shared.deps.limits.idle_eviction);
         let now = if idle {
             Reported::Idle(self.last_activity)
-        } else if self.terminal.is_some() {
+        } else if self.terminal.is_some() && self.terminal_import.is_some() {
             Reported::Terminal
-        } else if matches!(
-            self.status,
-            SessionStatus::Stopping
-                | SessionStatus::Stopped
-                | SessionStatus::Failed
-                | SessionStatus::AuthRequired
-        ) {
+        } else if self.terminal.is_some()
+            || matches!(
+                self.status,
+                SessionStatus::Stopping
+                    | SessionStatus::Stopped
+                    | SessionStatus::Failed
+                    | SessionStatus::AuthRequired
+            )
+        {
+            // A terminal that ended reads its conversation back, then gives the session back by
+            // itself: it is on its way out, as a stopping agent is.
             Reported::Stopping
         } else if self.normalizer.has_open_requests() {
             Reported::Waiting
@@ -6611,7 +6644,19 @@ The person continues this conversation here, in your terminal. Reply only that y
         let Some(room) = self.room.take_if(|room| room.id == id) else {
             return;
         };
-        // The start begins again from where it waited.
+        // Only a start still waiting goes on. Every path that ends or replaces a start ends its
+        // wait (end_room_wait); this guards the rest, so no second process ever starts.
+        if self.status != SessionStatus::Starting
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || self.turn.is_some()
+        {
+            self.shared.live.cancel_wait(&self.chat_id);
+            self.release_if_idle();
+            return;
+        }
+        // The start begins again from where it waited. The status is set without telling anyone:
+        // what happens next says where the chat stands.
         self.status = SessionStatus::Stopped;
         if !admitted {
             self.shared.live.cancel_wait(&self.chat_id);
@@ -6620,11 +6665,34 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.start_failed(ErrorKind::SpawnFailed, message.into(), None, false);
             return;
         }
-        if let Err(error) = self.start(room.fresh, false) {
-            self.release_if_idle();
-            self.set_status(SessionStatus::Stopped, None);
-            self.refuse_terminal(error);
+        match self.start(room.fresh, false) {
+            // Held back (behind a quiet change, say), it stays stopped: the chat list hears so,
+            // not the Starting it heard last.
+            Ok(()) if self.status == SessionStatus::Stopped => self.publish_status(),
+            Ok(()) => {}
+            // Quitting, or held by its worktree's setup (which starts it once it succeeds): it
+            // stops, saying so.
+            Err(error)
+                if matches!(error, SessionError::ShuttingDown)
+                    || self
+                        .worktree_setup
+                        .as_ref()
+                        .is_some_and(|attempt| attempt.blocks_agent()) =>
+            {
+                self.release_if_idle();
+                self.refuse_terminal(error);
+                self.publish_status();
+            }
+            // Anything else fails as a start fails: a card the person can act on.
+            Err(error) => self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false),
         }
+    }
+
+    /// Publishes the status as it is now, for a status set without telling anyone.
+    fn publish_status(&mut self) {
+        self.info_dirty = true;
+        self.next_flush = Some(Instant::now());
+        self.publish();
     }
 
     /// A quiet change to the folder begins: refused only while a turn, a start or a stop is
@@ -6670,7 +6738,8 @@ The person continues this conversation here, in your terminal. Reply only that y
         {
             self.refuse_terminal(error);
         }
-        self.dispatch_next();
+        // What is queued goes now, starting the agent if it is stopped.
+        self.advance();
     }
 
     /// Ends a wait for room (a Stop, a quit).

@@ -1,4 +1,8 @@
-/* Compact session setup uses the production desktop controls and shared semantic surfaces. */
+/*
+ * New chat, type first (owner, 17 November 2026): a centred stage around the message box, as the
+ * Grok Bot app opens a new chat. The words lead; the agent, the folder and Chat or Terminal are
+ * chips under them, and Send is the solid disc once there is something to send.
+ */
 
 /*
  * The page fills the pane below the drag band, so the worktree popover has the window's room
@@ -11,7 +15,7 @@
   flex-direction: column;
   box-sizing: border-box;
   width: 100%;
-  max-width: 640px;
+  max-width: 720px;
   min-height: 0;
   margin: 0 auto;
   /*
@@ -28,18 +32,13 @@
 .new-chat-hero {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: var(--g-space-24);
-  text-align: left;
-}
-
-.new-chat-heading {
-  display: flex;
   align-items: center;
-  gap: var(--g-space-12);
+  margin-bottom: var(--g-space-24);
+  text-align: center;
 }
 
 .new-chat-logo {
+  margin-bottom: var(--g-space-12);
   color: var(--g-fg-1);
 }
 
@@ -68,40 +67,153 @@
 
 /* ---------------------------------------------------------------------------- card */
 
-/*
- * The composer's glass and focus treatment. No blur of its own: only the pane sits behind the
- * card, and the agent picker inside it keeps its own frost.
- */
+/* The chat's own message box: the raised layer at its radius, one edge, focus a firmer edge. */
 .new-chat-card {
   display: flex;
   flex-direction: column;
-  border-radius: var(--ui-card-radius);
+  border-radius: var(--ui-composer-radius);
   background-color: var(--ui-composer-fill);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
 
-.new-chat-card:has(:focus-visible) {
+.new-chat-card:focus-within {
   box-shadow: var(--ui-composer-shadow-focus);
 }
 
-.new-chat-row {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: var(--g-space-12);
-  padding: var(--g-space-16);
+/* The words: the chat's text size, growing with them up to a scroll, never resized by hand. */
+.new-chat-message {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  max-height: 240px;
+  margin: 0;
+  padding: var(--g-space-16) var(--g-space-16) var(--g-space-8);
+  border: 0;
+  border-radius: var(--ui-composer-radius) var(--ui-composer-radius) 0 0;
+  background: transparent;
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
+  letter-spacing: var(--g-tracking-chat);
+  field-sizing: content;
+  resize: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.new-chat-field-label {
+.new-chat-message::placeholder {
+  color: var(--g-fg-3);
+  opacity: 1;
+}
+
+.new-chat-message:focus-visible {
+  outline: none;
+}
+
+/* A terminal chat takes its words in the agent's own terminal. */
+.new-chat-terminal-note {
+  margin: 0;
+  padding: var(--g-space-16) var(--g-space-16) var(--g-space-8);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
-  font-weight: var(--g-weight-medium);
+  line-height: var(--g-leading-ui);
+}
+
+/* Under the words: the chips at the left, Send at the right, as the chat's controls row. */
+.new-chat-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--g-space-8);
+  padding: 0 var(--g-space-8) var(--g-space-8);
+}
+
+.new-chat-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-6);
+  min-width: 0;
+}
+
+.new-chat-send {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-4);
 }
 
 .new-chat-agents {
-  flex: 1;
+  flex: none;
   min-width: 0;
+}
+
+/* Chips: 28px pills on a faint step of ink, like the chat's pickers; the folder list is one. */
+.new-chat-agent-picker > summary,
+.new-chat-chips > .new-chat-projects {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  box-shadow: none;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.new-chat-chips > .new-chat-projects {
+  width: auto;
+  max-width: 240px;
+}
+
+.new-chat-pick {
+  color: var(--g-fg-3);
+}
+
+.new-chat-interface > .g-segmented {
+  height: 28px;
+  padding: var(--g-space-2);
+}
+
+.new-chat-interface .g-segment {
+  height: 24px;
+}
+
+/* Start: a pill with its words, or the solid 32px disc once there are words to send. */
+.new-chat-start {
+  --g-button-h: 32px;
+  border-radius: var(--g-radius-pill);
+}
+
+.new-chat-start[data-with-message] {
+  width: 32px;
+  padding: 0;
+}
+
+/* Where the chat will work, under the box: the folder in mono, then how it starts. */
+.new-chat-where {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-width: 0;
+  margin: var(--g-space-8) 0 0;
+  padding: 0 var(--g-space-16);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.new-chat-where > .new-chat-path {
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.new-chat-where-mode {
+  flex: none;
 }
 
 .new-chat-choices {
@@ -226,75 +338,24 @@
 }
 
 .new-chat-refresh {
-  margin-top: var(--g-space-2);
   color: var(--g-fg-3);
 }
 
-/* The hairline is an inset shadow, so the row stays 56px and its buttons 12px in. */
-.new-chat-folder {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--g-space-8) var(--g-space-12);
-  padding: var(--g-space-16);
-  box-shadow: inset 0 1px var(--g-glass-rim);
-}
-
-/* The folder icon takes an agent mark's 24px slot, 4px in, so names and the path share a column. */
 .new-chat-folder-icon {
-  display: none;
-}
-
-.new-chat-folder > .new-chat-field-label {
-  grid-column: 1;
-  grid-row: 1;
-}
-.new-chat-folder > .new-chat-path {
-  grid-column: 2;
-  grid-row: 1;
-}
-.new-chat-folder > .new-chat-projects {
-  grid-column: 2;
-  grid-row: 2;
-  width: 100%;
-}
-.new-chat-folder > button {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-}
-
-.new-chat-submit {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--g-space-16);
-  padding: var(--g-space-16);
-  border-top: 1px solid var(--g-glass-rim);
-}
-
-.new-chat-submit > span {
+  flex: none;
   color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
 }
 
-.new-chat-agent-picker {
-  width: 100%;
-}
-/* A select on glass: the composer chips' fill and rim, at a field's radius. */
 .new-chat-agent-picker > summary {
-  width: 100%;
   justify-content: flex-start;
-  padding: var(--g-space-8) var(--g-space-12);
-  border: 0;
-  border-radius: var(--g-radius-10);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  gap: var(--g-space-6);
 }
 .new-chat-agent-picker .new-chat-selected-name {
-  flex: 1;
   min-width: 0;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /*
  * Opens down like a select: above the trigger only the hero sits, so an upward list ran under
@@ -347,13 +408,6 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-}
-
-.new-chat-projects {
-  flex: none;
-  width: auto;
-  max-width: 180px;
-  height: 32px;
 }
 
 /* ----------------------------------------------------------------- under the card */
@@ -988,7 +1042,7 @@
  * backwards only: a held final frame would keep a layer that stops the popovers inside from frosting
  * what is behind them.
  */
-.new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below) {
+.new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-where, .new-chat-below) {
   animation: g-enter var(--g-dur-row) var(--g-ease-reveal) backwards;
 }
 
@@ -996,12 +1050,12 @@
   animation-delay: var(--g-stagger-row);
 }
 
-.new-chat > .new-chat-below {
+.new-chat > :is(.new-chat-where, .new-chat-below) {
   animation-delay: calc(var(--g-stagger-row) * 2);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below),
+  .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-where, .new-chat-below),
   .new-chat-agent[data-found] .g-agent-mark {
     animation: none;
   }
@@ -1018,7 +1072,7 @@
 
 :root:is([data-motion="reduced"], [data-motion="off"])
   :is(
-    .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below),
+    .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-where, .new-chat-below),
     .new-chat-agent[data-found] .g-agent-mark
   ) {
   animation: none;
@@ -1031,13 +1085,10 @@
   animation: none;
 }
 
+/* A narrow pane lets the folder line wrap under its path. */
 @media (max-width: 720px) {
-  .new-chat-folder {
+  .new-chat-where {
     flex-wrap: wrap;
-  }
-
-  .new-chat-path {
-    flex-basis: calc(100% - 48px);
   }
 }
 
@@ -1054,9 +1105,6 @@
 }
 
 /* Open in: Chat or Terminal, for agents with a terminal; the shared segmented control. */
-.new-chat-interface {
-  border-top: 1px solid var(--g-line-faint);
-}
 
 .new-chat-interface-choice {
   justify-self: start;

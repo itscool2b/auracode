@@ -12,6 +12,7 @@ import { inTauri } from "../../lib/ipc";
 import type { CloneApi } from "../../lib/setup-actions/api";
 import type { WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
+import { Select } from "../Select";
 import { CloneProject } from "../setup/CloneProject";
 import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
@@ -263,7 +264,7 @@ export function ProjectDialog({
         </section>
         <label className="ui-field">
           Default agent
-          <select
+          <Select
             className="g-select"
             value={agent}
             onChange={(event) => {
@@ -277,7 +278,7 @@ export function ProjectDialog({
                 {item.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="ui-field">
           Default model ID

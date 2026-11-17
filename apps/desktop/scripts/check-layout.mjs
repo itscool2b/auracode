@@ -314,8 +314,8 @@ const OPENERS = {
   },
   quit: (page) => page.getByTestId("quit-keep").waitFor(),
   "busy-folder": async (page) => {
-    await page.getByLabel("Move to project").selectOption({ label: "Website" });
-    await page.getByTestId("move-folder").selectOption("folder-site");
+    await choose(page.getByLabel("Move to project"), { label: "Website" });
+    await choose(page.getByTestId("move-folder"), "folder-site");
     await page.getByTestId("move-busy").waitFor();
   },
   defaults: async (page) => {

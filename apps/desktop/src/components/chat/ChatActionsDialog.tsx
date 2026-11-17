@@ -6,6 +6,7 @@ import { busyElsewhere, moveChat } from "../../lib/chatMove";
 import { errorMessage } from "../../lib/errors";
 import { blockersFromChats, type FolderBusyApi } from "../../lib/folderBusy";
 import type { WorkspaceStore } from "../../lib/workspace";
+import { Select } from "../Select";
 import { FolderBusy } from "./FolderBusy";
 import { Modal } from "./Modal";
 
@@ -197,7 +198,7 @@ export function ChatActionsDialog({
         <div className="dialog-section">
           <label className="ui-field">
             Move to project
-            <select
+            <Select
               className="g-select"
               value={projectId}
               onChange={(event) => {
@@ -210,12 +211,12 @@ export function ChatActionsDialog({
                   {project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {folders.length > 0 ? (
             <label className="ui-field">
               Folder
-              <select
+              <Select
                 className="g-select"
                 data-testid="move-folder"
                 value={folderId}
@@ -227,7 +228,7 @@ export function ChatActionsDialog({
                     {folder.display_name} ({folder.path})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           ) : null}
           <p>

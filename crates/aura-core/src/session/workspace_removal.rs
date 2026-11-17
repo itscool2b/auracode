@@ -113,13 +113,6 @@ impl SessionManager {
             .rt
             .spawn(async move {
                 let _lifetime = lifetime;
-                // Removal can touch any folder, so it waits for every change in flight.
-                let _organization = manager.shared().organization.exclusive().await;
-                let _maintenance = manager
-                    .shared()
-                    .live
-                    .try_maintenance()
-                    .ok_or(SessionError::ShuttingDown)?;
                 let paths = review
                     .before
                     .folders
@@ -144,17 +137,35 @@ impl SessionManager {
                 .await
                 .map_err(|_| invalid("Folder ownership could not be checked."))?;
                 // The removed chats' agents, and any agent in these folders, stop first unless
-                // they are working; each resumes its session if the workspace is restored.
-                let mut holders = manager
-                    .shared()
-                    .live
-                    .holders(&manager.spellings(folders.clone()).await);
-                holders.extend(review.before.chats.iter().map(|(chat, _)| chat.clone()));
-                holders.sort();
-                holders.dedup();
+                // they are working; each resumes its session if the workspace is restored. Both
+                // this wait and resolving the folders above read the disk or wait for processes,
+                // so they happen before every other change is held up.
+                let removed: Vec<String> = review
+                    .before
+                    .chats
+                    .iter()
+                    .map(|(chat, _)| chat.clone())
+                    .collect();
+                // What would still be in the way is named before anything stops; the review
+                // stays usable for the retry.
+                let holders = match manager.exclusive_can_go(&folders, None, &removed).await {
+                    Ok(holders) => holders,
+                    Err(error) => {
+                        lock(&manager.shared().removals).insert(token, review);
+                        return Err(error);
+                    }
+                };
                 manager
                     .stop_unless_working(super::stopping::StopScope::Chats(holders))
                     .await;
+                // Removal can touch any folder: the change itself waits for every change in
+                // flight, and holds the ones after it only while it is made.
+                let _organization = manager.shared().organization.exclusive().await;
+                let _maintenance = manager
+                    .shared()
+                    .live
+                    .try_maintenance()
+                    .ok_or(SessionError::ShuttingDown)?;
                 let mut reservations = Reservations::new(Arc::clone(manager.shared()));
                 let mut refused = Vec::new();
                 for (chat, _) in &review.before.chats {

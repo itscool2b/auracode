@@ -23,8 +23,8 @@ pub enum StopScope {
 pub struct StopReport {
     /// Stopped: their agents' processes are gone and their slots are free.
     pub stopped: Vec<String>,
-    /// Left running because they were not idle: working, waiting for an answer, or open in a
-    /// terminal (`stop_idle` only).
+    /// Left running: not idle (`stop_idle`), or open in their terminal, whose session only closing
+    /// that terminal ends (`stop_all`).
     pub kept: Vec<String>,
     /// Asked to stop, but still stopping when the time ran out.
     pub stopping: Vec<String>,
@@ -32,6 +32,24 @@ pub struct StopReport {
 
 /// `stop_idle` waits this long for the idle agents it stopped; a stop is forced well before.
 const IDLE_STOP_WAIT: Duration = Duration::from_secs(30);
+
+/// The sentence for chats still stopping when something waited on them, by `names`
+/// ([`SessionManager::chat_names`]), then `then` (what to do).
+pub fn still_stopping(names: &[String], then: &str) -> String {
+    let who = match names {
+        [] => return format!("A chat is still stopping. {then}"),
+        [one] => format!("{one} is still stopping."),
+        [first, second] => format!("{first} and {second} are still stopping."),
+        [first, second, third] => format!("{first}, {second} and {third} are still stopping."),
+        [first, second, rest @ ..] => {
+            format!(
+                "{first}, {second} and {} more chats are still stopping.",
+                rest.len()
+            )
+        }
+    };
+    format!("{who} {then}")
+}
 
 impl SessionManager {
     /// The chats `scope` names that have a live agent or a start waiting for one.
@@ -105,18 +123,28 @@ impl SessionManager {
     }
 
     /// Stops every chat in `scope`, a turn in progress included (as Stop does), and answers once
-    /// their slots are free or `deadline` passed. Admission stays open.
+    /// their slots are free or `deadline` passed. Admission stays open. A chat open in its terminal
+    /// is kept, not waited for: its session is the terminal's until that terminal closes (the
+    /// desktop closes it first where the person asked to stop the chat). One whose terminal
+    /// already ended gives its session back by itself and is waited for.
     pub async fn stop_all(&self, scope: StopScope, deadline: Duration) -> StopReport {
         let mut asked = Vec::new();
+        let mut kept = Vec::new();
         for chat in self.stop_targets(scope).await {
             if self.stop(&chat).await.is_ok() {
-                asked.push(chat);
+                // Asked after anything sent before (a terminal's end): its report is current.
+                if self.shared().live.doing(&chat) == Some(live::Doing::Terminal) {
+                    kept.push(chat);
+                } else {
+                    asked.push(chat);
+                }
             }
         }
+        kept.sort();
         let (stopped, stopping) = self.wait_released(asked, deadline).await;
         StopReport {
             stopped,
-            kept: Vec::new(),
+            kept,
             stopping,
         }
     }

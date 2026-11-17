@@ -347,10 +347,13 @@ export function Select({
   };
 
   const chosen = choices[selected];
-  // Inside a modal dialog the list must be the dialog's own: everything outside it is inert, even
-  // what shows above it in the top layer.
+  // The list belongs to what holds the field: inside a modal dialog everything outside it is
+  // inert, even what shows above it in the top layer, and a popover (a <details>) closes on a
+  // press outside itself. It still shows in the top layer, whatever clips its holder.
   const portalTarget =
-    typeof document === "undefined" ? null : (field.current?.closest("dialog") ?? document.body);
+    typeof document === "undefined"
+      ? null
+      : (field.current?.closest("dialog, details") ?? document.body);
 
   const rows: ReactNode[] = [];
   let group: string | undefined;

@@ -54,6 +54,8 @@ pub async fn chats_stop(
         ));
     }
     let sessions = state.sessions()?;
+    // A chat open in its terminal stops by that terminal closing: the person asked to stop it.
+    crate::terminal::end_terminal_chats(&state, Some(&chat_ids));
     Ok(stopped(
         sessions
             .stop_all(StopScope::Chats(chat_ids), STOP_WAIT)
