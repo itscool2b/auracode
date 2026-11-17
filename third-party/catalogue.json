@@ -5,7 +5,7 @@
     "Cargo.lock": "0d34f15de81816e04bea316a469d7e34260cd5de97d047d4478f9de8f16abda4",
     "Cargo.toml": "29d13e68ee0443feb203d272c15b6699c6978efad6fc1776c69a415a2ce4362b",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "a631ea5d34628779fccf33b75ff35d1154235999957823fd2ac034ae55b8bea6",
+    "apps/desktop/package.json": "fa05fe17819447361944d43167826eaf58bd417ca687d0024cf27d0e595e59bb",
     "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
     "apps/desktop/src-tauri/Cargo.toml": "e44f3de4f932409c0cdeb3d90352043a74ed1706652b6075e8b576e665caabca",
     "apps/relay/package.json": "ad5bd430db785a39d2e6d688bee031126c59cc58fb2bf50100d59d6d0b7578ca",
