@@ -1407,7 +1407,8 @@ async function reopenScenario(
     }
     chatId = attr(listed, "chat-id");
     const title = text(one("chat-row-title", listed));
-    if (title !== PROMPTS.echo) throw new StepError(`the chat is titled "${title}"`);
+    // Titled by its first prompt: the one typed on New chat.
+    if (title !== PROMPTS.fromNewChat) throw new StepError(`the chat is titled "${title}"`);
     if (attr(listed, "status") !== "stopped" || attr(listed, "attention") !== "false") {
       throw new StepError(
         `the chat reads ${attr(listed, "status")}, attention ${attr(listed, "attention")}`,

@@ -99,8 +99,15 @@ async fn read_only_memory_service_reads_refuses_changes_and_drop_revokes_credent
     .await;
     assert!(cross.get("error").is_some());
     drop(grant);
-    tokio::task::yield_now().await;
-    assert!(tokio::net::TcpStream::connect(&endpoint).await.is_err());
+    // The endpoint closes once its task sees the grant gone, which takes more than one turn of the
+    // runtime while other tests keep it busy.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while tokio::net::TcpStream::connect(&endpoint).await.is_ok() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the dropped grant's endpoint closes");
     store.shutdown(std::time::Duration::from_secs(5)).await;
 }
 #[tokio::test]
