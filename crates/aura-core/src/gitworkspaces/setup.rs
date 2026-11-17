@@ -81,7 +81,6 @@ impl GitWorkspaces {
         if input.files.is_empty() && input.command.is_none() {
             return Err(invalid("Save at least one setup file or command first."));
         }
-        let _gate = self.gate.lock().await;
         let record = self.owned_record(chat_id, worktree_id)?;
         let git = self.git().await?;
         let view = inspect::inspect(&git, Path::new(&record.path)).await?;
@@ -297,10 +296,12 @@ impl GitWorkspaces {
         chat_id: &str,
         token: &str,
     ) -> Result<WorktreeSetupResult> {
-        let _gate = self.gate.lock().await;
         let mut plan = self.take_setup(chat_id, token, false)?;
-        self.check_setup(&plan).await?;
         let git = self.git().await?;
+        let _repository = self
+            .hold_repository(&git, Path::new(&plan.record.source))
+            .await;
+        self.check_setup(&plan).await?;
         let protected = git
             .protected
             .iter()
@@ -359,7 +360,6 @@ impl GitWorkspaces {
         chat_id: &str,
         token: &str,
     ) -> Result<aura_process::SpawnSpec> {
-        let _gate = self.gate.lock().await;
         let plan = self.take_setup(chat_id, token, true)?;
         self.check_setup(&plan).await?;
         let command = plan

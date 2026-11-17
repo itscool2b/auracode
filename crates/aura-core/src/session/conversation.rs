@@ -430,7 +430,7 @@ impl SessionManager {
         chat_id: &str,
         token: &str,
     ) -> Result<ContinuationResult, SessionError> {
-        let _organization = self.shared().organization.lock().await;
+        let (_organization, _) = self.hold_chat_folder(chat_id, &[]).await?;
         let prepared = lock(&self.shared().continuations)
             .remove(token)
             .ok_or_else(|| {

@@ -183,7 +183,6 @@ impl GitWorkspaces {
         cli: &dyn Publisher,
     ) -> Result<PullRequestPreview> {
         validate_input(&input)?;
-        let _guard = self.gate.lock().await;
         let record = self.owned_record(chat, worktree)?;
         let git = self.git().await?;
         let source = inspect(&git, Path::new(&record.path)).await?;
@@ -324,7 +323,6 @@ impl GitWorkspaces {
         token: &str,
         cli: &dyn Publisher,
     ) -> Result<PullRequestResult> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .pull_requests
             .lock()
@@ -334,6 +332,7 @@ impl GitWorkspaces {
         if prepared.record.chat_id != chat || prepared.expires <= Instant::now() {
             return Err(invalid("Review a new pull request preview for this chat."));
         }
+        let _repository = self.hold_common(&prepared.source.common).await;
         let record = self.owned_record(chat, &prepared.record.id)?;
         let git = self.git().await?;
         let current = inspect(&git, &prepared.source.root).await?;
@@ -345,7 +344,7 @@ impl GitWorkspaces {
             "push",
         )
         .await?;
-        if record != prepared.record
+        if !super::records::unchanged_since_review(&record, &prepared.record)
             || current.fingerprint != prepared.source.fingerprint
             || current.common != prepared.source.common
         {

@@ -69,7 +69,6 @@ impl GitWorkspaces {
 
     /// The manager reserves both possible paths before any recovery mutation, even if one is absent.
     pub async fn recovery_folders(&self, chat_id: &str, id: &str) -> Result<Vec<PathBuf>> {
-        let _guard = self.gate.lock().await;
         let record = self.recovery_record(chat_id, id)?;
         let (active, retired) = self.recovery_paths(&record)?;
         Ok(vec![PathBuf::from(record.source), active, retired])
@@ -81,7 +80,6 @@ impl GitWorkspaces {
         id: &str,
         action: WorktreeRecoveryAction,
     ) -> Result<WorktreeRecoveryPreview> {
-        let _guard = self.gate.lock().await;
         let record = self.recovery_record(chat_id, id)?;
         match action {
             WorktreeRecoveryAction::Restore if record.state == WorktreeState::Retired => {}
@@ -227,7 +225,6 @@ impl GitWorkspaces {
         id: &str,
         token: &str,
     ) -> Result<WorktreeActionResult> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .recoveries
             .lock()
@@ -242,8 +239,9 @@ impl GitWorkspaces {
                 "This recovery preview no longer belongs to the selected chat.",
             ));
         }
+        let _repository = self.hold_common(&prepared.source.common).await;
         let mut record = self.recovery_record(chat_id, &prepared.record.id)?;
-        if record != prepared.record {
+        if !records::unchanged_since_review(&record, &prepared.record) {
             return Err(invalid("The worktree record changed after preview."));
         }
         let (active, retired) = self.recovery_paths(&record)?;

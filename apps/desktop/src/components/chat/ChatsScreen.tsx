@@ -1,9 +1,14 @@
 import { PanelLeft } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
 import { availableUpdates, updateNotices, workingChats } from "../../lib/agentUpdates";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
-import { newChatAgent, projectChatContext } from "../../lib/chat/newChatContext";
+import {
+  type ChatsView,
+  createdChatOpens,
+  newChatAgent,
+  projectChatContext,
+} from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
 import { restoreFocusSoon } from "../../lib/focusReturn";
 import { navigationTarget } from "../../lib/nativeNavigation";
@@ -150,6 +155,11 @@ export function ChatsScreen({
   // composer, which then stays whenever no chat is open.
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
+  // What shows now, for a create that finishes later: its chat opens only while its draft shows.
+  const showing = useRef<ChatsView<NewChatDraft>>({ selected, composing, draft });
+  useLayoutEffect(() => {
+    showing.current = { selected, composing, draft };
+  });
   // Settings' default agent, read again whenever the chats come back into view (from Settings).
   const [defaultAgent, setDefaultAgent] = useState<string | null | undefined>(undefined);
   useEffect(() => {
@@ -408,7 +418,7 @@ export function ChatsScreen({
             onRefreshAgents={() => void app.refreshAgents()}
             onCreated={(chat) => {
               app.addChat(chat);
-              setSelected(chat.id);
+              if (createdChatOpens(showing.current, draft)) setSelected(chat.id);
               void workspace?.refresh();
             }}
           />

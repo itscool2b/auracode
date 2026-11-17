@@ -185,7 +185,13 @@ async fn session_clone_start_rejects_external_overlapping_owners_and_releases_fa
         })
         .await
         .unwrap();
-        assert!(record.detail.contains("Stop all chats"));
+        // The refusal names what is in the way.
+        let named = match owner {
+            "terminal" => "A project terminal is open in this folder",
+            "chat" => "is working in this folder",
+            _ => "Another change to this folder is in progress",
+        };
+        assert!(record.detail.contains(named), "{}", record.detail);
         assert!(!rig.folder.join(owner).exists());
         match owner {
             "terminal" => rig.manager.shared().live.end_folder_use(&held),

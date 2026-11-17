@@ -8,7 +8,8 @@ use aura_core::terminal::TerminalError;
 use aura_process::{Spawner, pty::PtySize};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
 use aura_protocol::project_tools::{
-    DetectedEditors, ProjectEditor, ProjectShell, ProjectToolsReview,
+    DetectedEditors, ProjectEditor, ProjectShell, ProjectTerminalOpened, ProjectTerminalReview,
+    ProjectToolsReview,
 };
 use tauri::{AppHandle, State, Url, Webview};
 use tauri_plugin_opener::OpenerExt;
@@ -34,8 +35,21 @@ pub async fn project_tools_review(
     Ok(state.sessions()?.project_tools_review(&chat_id).await?)
 }
 
+/// The chat's folder and the shells this device offers, for a new terminal tab. It holds nothing,
+/// so a tab never carries anything that expires; `project_terminal_open` checks both again.
+#[tauri::command]
+#[specta::specta]
+pub async fn project_terminal_review(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<ProjectTerminalReview, AppError> {
+    current(&webview, &state)?;
+    Ok(state.sessions()?.project_terminal_review(&chat_id).await?)
+}
+
 /// Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
-/// the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+/// the app holds at most eight. The shell itself starts only through `project_terminal_open`.
 #[tauri::command]
 #[specta::specta]
 pub fn project_terminal_reserve(
@@ -46,37 +60,39 @@ pub fn project_terminal_reserve(
     Ok(state.terminals.reserve_project(webview.label())?.pending())
 }
 
+/// Opens a project shell in a reserved terminal (`project_terminal_reserve`) in one step: Rust
+/// checks the chat's folder and the shell, prepares it and starts it, with no review token in
+/// between, so a tab first shown long after it was made still opens. `shell: null` takes the
+/// first shell this device offers.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
-pub async fn project_terminal_start(
+pub async fn project_terminal_open(
     webview: Webview,
     state: State<'_, AppState>,
     chat_id: String,
-    token: String,
-    shell: ProjectShell,
+    shell: Option<ProjectShell>,
     terminal_id: String,
     rows: u16,
     cols: u16,
-) -> Result<String, AppError> {
+) -> Result<ProjectTerminalOpened, AppError> {
     current(&webview, &state)?;
     let size = PtySize { rows, cols }
         .validate()
         .map_err(|_| TerminalError::Resize)?;
     let ticket = state.terminals.claim(webview.label(), &terminal_id)?;
     let admission = state.sessions()?;
-    let plan = admission
-        .prepare_project_terminal(&chat_id, &token, shell)
-        .await?;
+    let (plan, shell) = admission.open_project_terminal(&chat_id, shell).await?;
     current(&webview, &state)?;
     let chats = state.chats().ok_or(TerminalError::Closed)?;
     let spawner = Spawner::new(
         chats.registry.clone(),
         tauri::async_runtime::handle().inner().clone(),
     );
-    Ok(ticket
+    let terminal_id = ticket
         .start_project(spawner, plan.spec, size, Box::new((plan.guard, admission)))
-        .await?)
+        .await?;
+    Ok(ProjectTerminalOpened { terminal_id, shell })
 }
 
 /// The URL that opens `path` in `editor`: a folder as `scheme://file/<folder>/`, a file as

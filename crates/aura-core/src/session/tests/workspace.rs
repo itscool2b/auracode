@@ -568,3 +568,152 @@ async fn failed_codex_startup_recovery_keeps_project_model_and_queued_text() {
     );
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
+
+#[tokio::test]
+async fn an_idle_agent_does_not_make_its_folder_busy() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("idle-here"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let knobs = Knobs {
+        busy_settle: Duration::from_millis(400),
+        ..Knobs::STANDARD
+    };
+    let rig = rig(vec![driver], WriterConfig::STANDARD, knobs);
+    let project = project(&rig, "Idle").await;
+    let folder_id = project.folders[0].id.clone();
+    let chat = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: folder_id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .expect("chat");
+    status(&rig, &chat.chat.id, SessionStatus::Ready).await;
+    // Just started, it is likely to get the next message, so the folder counts as busy...
+    assert_eq!(
+        rig.manager
+            .chat_create_preview(&folder_id)
+            .await
+            .expect("preview")
+            .busy_chats
+            .len(),
+        1
+    );
+    // ...and once it has idled a moment, it does not: it edits nothing until it is given work.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let preview = rig
+        .manager
+        .chat_create_preview(&folder_id)
+        .await
+        .expect("preview");
+    assert!(preview.busy_chats.is_empty(), "{:?}", preview.busy_chats);
+    assert!(rig.manager.shared().live.contains(&chat.chat.id));
+    // A turn makes it busy again.
+    rig.manager
+        .send(&chat.chat.id, "work".into())
+        .await
+        .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
+    let busy = rig
+        .manager
+        .chat_create_preview(&folder_id)
+        .await
+        .expect("preview")
+        .busy_chats;
+    assert_eq!(busy.len(), 1);
+    assert_eq!(busy[0].id, chat.chat.id);
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+#[tokio::test]
+async fn a_differently_spelled_pick_resolves_to_its_project() {
+    let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    let first = project(&rig, "First").await;
+    // The same folder in a second project, added there on purpose.
+    let second = rig
+        .manager
+        .project_create(ProjectCreate {
+            project: input("Second"),
+            folder: rig.folder.to_string_lossy().into_owned(),
+        })
+        .await
+        .expect("second project");
+    let stored = first.folders[0].path.clone().expect("path");
+    std::fs::create_dir(rig.folder.join("sub")).unwrap();
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut spellings = vec![rig.folder.join("."), rig.folder.join("sub").join("..")];
+    #[cfg(unix)]
+    {
+        let link = rig._dir.path().join("linked project");
+        std::os::unix::fs::symlink(&rig.folder, &link).unwrap();
+        spellings.push(link);
+    }
+    for spelling in &spellings {
+        let found = rig
+            .manager
+            .workspace_folder_matches(&spelling.to_string_lossy())
+            .await
+            .expect("matches");
+        assert_eq!(found.path, stored, "{spelling:?}");
+        assert_eq!(found.worktree, None);
+        // No chats yet: the workspace's order.
+        assert_eq!(
+            found
+                .matches
+                .iter()
+                .map(|found| (found.project_name.as_str(), found.folder_id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("First", first.folders[0].id.as_str()),
+                ("Second", second.folders[0].id.as_str())
+            ],
+            "{spelling:?}"
+        );
+    }
+    // The project whose chat in that folder was active last comes first.
+    rig.manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: second.folders[0].id.clone(),
+            allow_busy_folder: true,
+        })
+        .await
+        .expect("chat");
+    let found = rig
+        .manager
+        .workspace_folder_matches(&spellings[0].to_string_lossy())
+        .await
+        .expect("matches");
+    assert_eq!(found.matches[0].project_id, second.id);
+    assert!(found.matches[0].last_chat_at.is_some());
+    assert_eq!(found.matches[1].last_chat_at, None);
+    // Another folder is in no project, and a file or a relative path is no folder at all.
+    let elsewhere = rig._dir.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    let none = rig
+        .manager
+        .workspace_folder_matches(&elsewhere.to_string_lossy())
+        .await
+        .expect("matches");
+    assert!(none.matches.is_empty());
+    let file = rig._dir.path().join("notes.txt");
+    std::fs::write(&file, "notes").unwrap();
+    assert!(
+        rig.manager
+            .workspace_folder_matches(&file.to_string_lossy())
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.manager
+            .workspace_folder_matches("relative/folder")
+            .await
+            .is_err()
+    );
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}

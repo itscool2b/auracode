@@ -3,7 +3,9 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { GitWorkspace, ManagedWorktree, WorktreeActionPreview } from "../bindings";
 import { GitDialog } from "../components/chat/GitDialog";
+import type { FolderBusyApi } from "../lib/folderBusy";
 import type { GitWorkspaceApi } from "../lib/gitWorkspace";
+import { CommandError } from "../lib/ipc";
 import type { ProjectToolsApi } from "../lib/projectTools";
 
 const params = new URLSearchParams(location.search);
@@ -139,6 +141,24 @@ const api: GitWorkspaceApi = {
   },
   commitApply: async (_chat, token) => {
     calls.push(`apply-commit:${token}`);
+    // `&blocked`: another chat works in the folder until it is stopped, as Rust names it.
+    if (params.has("blocked") && !otherStopped)
+      throw new CommandError(
+        "folder_busy",
+        "\u201cFix the tests\u201d in orbit is working in this folder. Stop it, then try again.",
+        {
+          chats: [
+            {
+              chat_id: "other",
+              title: "Fix the tests",
+              agent_name: "Codex",
+              project: "orbit",
+              state: "working",
+            },
+          ],
+          terminals: 0,
+        },
+      );
     if (sessionStorage.getItem("git-stale"))
       throw new Error("The files changed since the review. Review the commit again.");
     const commit = "7e1f0c9a3b5d2e8f4a6c1b9d0e3f5a7c2b4d6e8f";
@@ -372,6 +392,14 @@ const projectTools: Pick<ProjectToolsApi, "review" | "openEditor"> = {
     calls.push(`editor:${editor}:${token}`);
   },
 };
+let otherStopped = false;
+const folderBusy: Pick<FolderBusyApi, "stop"> = {
+  stop: async (chatIds) => {
+    calls.push(`stop-chats:${chatIds.join(",")}`);
+    otherStopped = true;
+    return { stopped: chatIds, kept: [], stopping: [] };
+  },
+};
 Object.assign(window, { gitFixture: { calls: () => [...calls], sent: () => sent } });
 function Preview() {
   const [live, setLive] = useState(params.has("live"));
@@ -396,6 +424,7 @@ function Preview() {
           agentName="Claude Code"
           onAskAgent={ask}
           projectTools={projectTools}
+          folderBusy={folderBusy}
           allowIsolation
           onStop={async () => {
             calls.push("stop");

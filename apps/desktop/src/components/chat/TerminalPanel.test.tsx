@@ -18,9 +18,10 @@ const key = (init: Partial<KeyboardEvent>) =>
     ...init,
   }) as KeyboardEvent;
 
-function panels(review: ProjectToolsApi["review"]) {
+function panels(terminalReview: ProjectToolsApi["terminalReview"]) {
   const api: ProjectToolsApi = {
-    review,
+    review: vi.fn(),
+    terminalReview,
     openEditor: vi.fn(async () => {}),
     terminal: () => ({}) as TerminalTransport,
   };
@@ -40,14 +41,11 @@ describe("the terminal panel", () => {
 
   it("shows quiet tabs, the reviewed folder and its controls once a terminal opens", async () => {
     const store = panels(async () => ({
-      token: "t",
       folder: "C:/auracode/worktrees/sidebar-scan",
       shells: [
         { id: "power_shell", label: "PowerShell", program: "powershell.exe", args: [] },
         { id: "command_prompt", label: "Command Prompt", program: "cmd.exe", args: [] },
       ],
-      editors: [],
-      expires_at: 1,
     }));
     await store.newTab("chat");
     const html = renderToStaticMarkup(<TerminalPanel chatId="chat" panels={store} />);

@@ -109,7 +109,7 @@ impl SessionManager {
         column: Option<u32>,
         preferred: Option<ProjectEditor>,
     ) -> Result<(ProjectEditor, EditorOpen), SessionError> {
-        let _organization = self.shared().organization.lock().await;
+        // Opening a file changes nothing, so it waits for no other change.
         let folder = self.file_folder(chat_id).await?;
         let env = self.deps().env.get().await;
         let position = position(line, column);

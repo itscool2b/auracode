@@ -136,7 +136,7 @@ export function ProjectToolsDialog({
                       setTerminal({
                         shell,
                         folder: review.folder,
-                        transport: api.terminal(chatId, review.token, shell.id),
+                        transport: api.terminal(chatId, shell.id),
                       });
                       setReview(null);
                     }}

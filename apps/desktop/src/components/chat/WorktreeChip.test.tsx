@@ -134,15 +134,38 @@ describe("the worktree chip", () => {
     expect(html).not.toContain("Named for you.");
   });
 
-  it("offers bringing changes only from the current branch, and says when chats must stop", () => {
+  it("offers bringing changes only from the current branch, and offers to stop the chats in the way", () => {
     const other = view({ options: { ...DEFAULT_WORKTREE_OPTIONS, startBranch: "release/1.4" } });
     const html = chip(other);
     expect(html).toContain("Only when starting from main.");
     expect(html).toMatch(
       /<input type="checkbox" role="switch" aria-checked="false" class="g-switch" disabled=""/,
     );
-    const busy = chip(view({ options: { ...DEFAULT_WORKTREE_OPTIONS, bringChanges: true } }), 2);
-    expect(busy).toContain("Copies your working files once the chats in this folder stop.");
+    const bringing = view({ options: { ...DEFAULT_WORKTREE_OPTIONS, bringChanges: true } });
+    const busy = renderToStaticMarkup(
+      <WorktreeChip
+        view={bringing}
+        onPropose={noop}
+        onClearError={noop}
+        busyChats={2}
+        onStopBusy={noop}
+      />,
+    );
+    // Nothing waits on its own any more: the chip says why, and offers the two ways on.
+    expect(busy).not.toContain("once the chats in this folder stop");
+    expect(busy).toContain(
+      "2 chats are working in this folder, so its files can still change. Stop them to copy them, or create without your changes.",
+    );
+    expect(busy).toMatch(/<button[^>]*>Stop these chats<\/button>/);
+    expect(busy).toMatch(/<button[^>]*>Create without my changes<\/button>/);
+    const one = chip(bringing, 1);
+    expect(one).toContain("A chat is working in this folder");
+    expect(one).toMatch(/<button[^>]*>Create without my changes<\/button>/);
+    // Without busy chats the copy simply goes.
+    expect(chip(bringing)).toContain(
+      "Copies your working files. The project folder keeps them too.",
+    );
+    expect(chip(bringing)).not.toContain("Create without my changes");
   });
 
   it("disables every control while Create applies the review", () => {

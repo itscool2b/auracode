@@ -261,3 +261,39 @@ async fn native_and_acp_chats_cannot_own_the_same_claude_session() {
     h.status(&native.id, SessionStatus::Failed).await;
     assert_eq!(h.factory.setups().len(), count);
 }
+
+/// Work an agent runs on its own (background tasks it reports, with no prompt of auracode's
+/// open) keeps it from being stopped to make room, even once it counts as idle for the queue.
+#[tokio::test(start_paused = true)]
+async fn background_work_is_not_stopped_to_make_room() {
+    let (background, background_handle) =
+        ScriptedDriver::new(vec![idle(true), ready_step("background")]);
+    let (quiet, quiet_handle) = ScriptedDriver::new(vec![idle(true), ready_step("quiet")]);
+    let (third, _) = ScriptedDriver::new(vec![idle(true), ready_step("third")]);
+    let options = Options {
+        limits: aura_core::session::ManagerLimits {
+            max_live_agents: 2,
+            ..aura_core::session::ManagerLimits::STANDARD
+        },
+        ..Options::default()
+    };
+    let h = Harness::with(vec![background, quiet, third], options);
+    let busy = h.chat().await;
+    h.status(&busy.id, SessionStatus::Ready).await;
+    background_handle.emit(DriverEvent::RunState { idle: false });
+    h.status(&busy.id, SessionStatus::Running).await;
+    // Past the idle grace the queue treats it as idle, yet its work still runs.
+    tokio::time::advance(Duration::from_secs(20)).await;
+    let quiet = h.chat().await;
+    h.status(&quiet.id, SessionStatus::Ready).await;
+    let third = h.chat().await;
+    h.status(&third.id, SessionStatus::Ready).await;
+    h.status(&quiet.id, SessionStatus::Stopped).await;
+    assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
+    assert!(
+        !background_handle
+            .commands()
+            .contains(&LoggedCommand::Shutdown),
+        "an agent working in the background is never stopped for room"
+    );
+}

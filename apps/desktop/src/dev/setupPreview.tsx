@@ -17,6 +17,7 @@ import { InstallApiContext } from "../lib/setup-actions/api";
 import { WorkspaceStore } from "../lib/workspace";
 import { createAccountsFixture } from "./accountsFixture";
 import { cloneFixture } from "./cloneFixture";
+import { fixtureFolderMatches } from "./folderMatches";
 import { installFixture } from "./installFixture";
 
 const install = installFixture();
@@ -292,6 +293,7 @@ const unsupported = async (): Promise<never> => {
 };
 const workspace = new WorkspaceStore({
   snapshot: async () => ({ projects: [...projects], chats: [] }),
+  folderMatches: fixtureFolderMatches(() => ({ projects, chats: [] })),
   createProject: async ({ project, folder }) => {
     const value: ProjectSummary = {
       ...project,

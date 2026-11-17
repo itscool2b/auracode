@@ -15,6 +15,7 @@ impl From<TerminalError> for AppError {
             TerminalError::AlreadyOpen
             | TerminalError::Full
             | TerminalError::ChatFull
+            | TerminalError::SetupFull
             | TerminalError::ProjectFull => AppErrorCode::TooManyStreams,
             TerminalError::Start(_) | TerminalError::TimedOut => AppErrorCode::AgentUnavailable,
             _ => AppErrorCode::InvalidArgument,
@@ -367,7 +368,12 @@ pub async fn chat_terminal_start(
     // Reserve before the preparation, so a reload can cancel this pending launch.
     let ticket = state.terminals.claim_chat(&owner, &terminal_id)?;
     let sessions = state.sessions()?;
-    let opened = sessions.open_terminal(&chat_id).await?;
+    // A chat in a new worktree waits for its setup first. Closing the terminal meanwhile (or a
+    // reload) ends the wait, and the chat stays in Chat.
+    let opened = tokio::select! {
+        opened = sessions.open_terminal(&chat_id) => opened?,
+        () = ticket.closed() => return Err(TerminalError::Closed.into()),
+    };
     let generation = opened.generation;
     let first_input = opened.first_input.clone();
     let exit_input = opened.exit_input.clone();

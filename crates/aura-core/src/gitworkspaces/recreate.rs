@@ -28,7 +28,6 @@ fn invalid(message: &str) -> GitError {
 impl GitWorkspaces {
     /// Both owned paths are reserved, even though neither folder exists.
     pub async fn recreate_folders(&self, chat_id: &str, id: &str) -> Result<Vec<PathBuf>> {
-        let _guard = self.gate.lock().await;
         let record = self.recovery_record(chat_id, id)?;
         let (active, retired) = self.recovery_paths(&record)?;
         Ok(vec![active, retired])
@@ -39,7 +38,6 @@ impl GitWorkspaces {
         chat_id: &str,
         id: &str,
     ) -> Result<WorktreeRecreatePreview> {
-        let _guard = self.gate.lock().await;
         let record = self.recovery_record(chat_id, id)?;
         let git = self.git().await?;
         let (active, source, commit) = self.recreate_check(&git, &record).await?;
@@ -91,7 +89,6 @@ impl GitWorkspaces {
         id: &str,
         token: &str,
     ) -> Result<WorktreeActionResult> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .recreations
             .lock()
@@ -106,8 +103,9 @@ impl GitWorkspaces {
                 "This recreate preview no longer belongs to the selected chat.",
             ));
         }
+        let _repository = self.hold_common(&prepared.common).await;
         let mut record = self.recovery_record(chat_id, id)?;
-        if record != prepared.record {
+        if !records::unchanged_since_review(&record, &prepared.record) {
             return Err(invalid("The worktree record changed after preview."));
         }
         let git = self.git().await?;

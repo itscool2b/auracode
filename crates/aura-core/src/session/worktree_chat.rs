@@ -185,7 +185,6 @@ impl SessionManager {
     }
 
     async fn apply_worktree_chat(&self, token: &str) -> Result<WorktreeChatResult, SessionError> {
-        let _organization = self.shared().organization.lock().await;
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -203,6 +202,16 @@ impl SessionManager {
         if self.deps().detector.agent(&prepared.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(prepared.agent_id));
         }
+        // Making the worktree and saving its chat go behind other changes to the source folder
+        // only: another project's chats, terminals and Git actions never wait for this one.
+        let source_order = self
+            .shared()
+            .organization
+            .scoped(vec![prepared.source.clone()])
+            .await;
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
         let folder = self.chat_create_preview(&prepared.folder_id).await?;
         if checked_folder(usable(&folder.folder)?).await? != prepared.source {
             return Err(invalid(
@@ -213,10 +222,15 @@ impl SessionManager {
         // Copying working files reads the source, so its chats and terminals must be idle. Without a
         // copy, Git only adds a branch and a worktree registration; the source is not touched.
         let source = if prepared.bring_changes {
-            Some(
-                self.reserve_git_folders(vec![prepared.source.clone()])
-                    .await?,
-            )
+            match self.hold_quiet(vec![prepared.source.clone()]).await {
+                Ok(held) => Some(held),
+                Err(error @ SessionError::FolderBusy { .. }) => {
+                    // The review stays usable: stop what works there, then create it again.
+                    lock(&self.shared().worktree_chats).insert(token.to_owned(), prepared);
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
+            }
         } else {
             None
         };
@@ -242,6 +256,13 @@ impl SessionManager {
             }
         };
         drop(source);
+        drop(source_order);
+        // Setup and instruction copies go behind other changes to the new worktree.
+        let worktree_order = self
+            .shared()
+            .organization
+            .scoped(vec![PathBuf::from(&worktree.path)])
+            .await;
         let mut warnings = Vec::new();
         let mut setup = None;
         if let Some(input) = prepared.setup.clone() {
@@ -291,6 +312,8 @@ impl SessionManager {
         // Instruction files Git ignores (a local AGENTS.md or CLAUDE.md) reach the worktree before
         // its agent starts, and after setup, so a setup copy of the same file is kept.
         warnings.extend(self.copy_worktree_instructions(&worktree).await);
+        // The agent starts outside the folders' order: starting never waits on Git.
+        drop(worktree_order);
         // A pending setup command runs first in its owned terminal; the agent then starts explicitly.
         let started = prepared.setup.is_none()
             || setup
@@ -356,9 +379,7 @@ impl SessionManager {
         input: WorktreeSetupInput,
     ) -> Result<WorktreeSetupResult, SessionError> {
         let service = self.worktrees()?;
-        let _reservations = self
-            .reserve_git_folders(vec![PathBuf::from(&worktree.path)])
-            .await?;
+        let _reservations = self.hold_quiet(vec![PathBuf::from(&worktree.path)]).await?;
         let preview = service
             .setup_preview(chat_id, &worktree.id, input)
             .await

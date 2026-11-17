@@ -82,14 +82,22 @@ impl SessionManager {
         folder_id: &str,
         token: &str,
     ) -> Result<RepositoryPublicationResult, SessionError> {
-        let _organization = self.shared().organization.lock().await;
-        let folder = self.publication_folder(folder_id).await?;
+        let read = (self.clone(), folder_id.to_owned());
+        let (_organization, folder) = self
+            .hold_folders(move || {
+                let (manager, folder_id) = read.clone();
+                Box::pin(async move {
+                    let folder = manager.publication_folder(&folder_id).await?;
+                    Ok((folder.path.iter().map(PathBuf::from).collect(), folder))
+                })
+            })
+            .await?;
         let path = PathBuf::from(
             folder
                 .path
                 .ok_or_else(|| invalid("Locate this folder before publishing."))?,
         );
-        let _reservations = self.reserve_git_folders(vec![path.clone()]).await?;
+        let _reservations = self.hold_quiet(vec![path.clone()]).await?;
         let service = self
             .deps()
             .worktrees

@@ -443,14 +443,34 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         );
         return Ok(updates.snapshot());
     }
+    // The person chose to install and restart: the chats' agents stop and the terminals close
+    // here (each chat resumes its session after the restart), then admission closes as before.
+    let report = chats
+        .manager
+        .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
+        .await;
+    state.terminals.close_all();
+    let _ = chats
+        .manager
+        .wait_project_terminals(Duration::from_secs(10))
+        .await;
     let Some(_sessions) = chats.manager.try_quiesce_when_idle() else {
-        updates.phase(UpdatePhase::WaitingForIdle, Some("Stop all agents and wait for folder operations and agent updates to finish, then retry installation.".into()));
+        let reason = if report.stopping.is_empty() {
+            "Wait for Git changes and agent updates to finish, then retry installation.".to_owned()
+        } else {
+            let count = report.stopping.len();
+            format!(
+                "{count} {} still stopping. Retry installation in a moment.",
+                if count == 1 { "chat is" } else { "chats are" }
+            )
+        };
+        updates.phase(UpdatePhase::WaitingForIdle, Some(reason));
         return Ok(updates.snapshot());
     };
     let Some(_terminals) = state.terminals.try_quiesce_when_idle() else {
         updates.phase(
             UpdatePhase::WaitingForIdle,
-            Some("Close all terminals, then retry installation.".into()),
+            Some("Terminals are still closing. Retry installation in a moment.".into()),
         );
         return Ok(updates.snapshot());
     };

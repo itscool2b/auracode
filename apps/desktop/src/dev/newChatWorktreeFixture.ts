@@ -16,6 +16,7 @@ import type {
 import type { TerminalTransport } from "../lib/terminal";
 import { WorkspaceStore } from "../lib/workspace";
 import type { WorktreeChatApi } from "../lib/worktreeChat";
+import { fixtureFolderMatches } from "./folderMatches";
 
 export type NewChatScenario = "worktree" | "setup" | "unavailable" | "plain";
 
@@ -106,6 +107,7 @@ export function newChatFixture(scenario: NewChatScenario): {
     archive: unsupported,
     move: unsupported,
     preview: async () => ({ folder: structuredClone(folder), busy_chats: [] }),
+    folderMatches: fixtureFolderMatches(() => ({ projects, chats: [] })),
     createChat: async (request) => {
       calls.push(`create-local:${request.folder_id}`);
       return {

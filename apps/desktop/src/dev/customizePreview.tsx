@@ -56,6 +56,7 @@ export function createCustomizeFixture() {
     archive: unsupported,
     move: unsupported,
     preview: unsupported,
+    folderMatches: unsupported,
     createChat: unsupported,
   });
   const services: CustomizeServices & { readonly setup: SetupApi } = {
