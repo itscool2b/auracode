@@ -667,8 +667,7 @@ async fn a_folder_that_does_not_answer_never_holds_up_the_picker() {
         .manager
         .workspace_folder_matches(&share.to_string_lossy())
         .await
-        .err()
-        .expect("refused");
+        .expect_err("refused");
     assert!(refused.to_string().contains("did not answer"), "{refused}");
 }
 
