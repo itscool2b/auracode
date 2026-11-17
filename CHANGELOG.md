@@ -7,6 +7,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
 checks the format.
 
+## 2026-11-17
+
+- Linux is smooth on NVIDIA graphics, and the browser works on Wayland. Scrolling and streaming now hold 60 frames a second where they dropped to about 20. The browser beside the chat opens on Wayland instead of asking for X11, and agents' terminals work when auracode runs as an AppImage. ([#136](https://github.com/itscool2b/auracode/pull/136))
+
 ## 2026-11-16
 
 - Choose a chat's model and agent from your phone. On auracode.si/remote, a chat's header now has "Model and agent". The Instructions, Project memory and Remote access pages in Settings share one cleaner look. Updating an agent now waits until its chats stop working, then shows the result. ([#135](https://github.com/itscool2b/auracode/pull/135))
