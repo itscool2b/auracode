@@ -121,25 +121,21 @@
   margin-top: var(--g-space-32);
 }
 
+/*
+ * A section's title stands alone over its card, as the Grok Bot app sets its settings: the page's
+ * chrome size in medium, a step quieter than the page title, no rule after it.
+ */
 .settings-section > h2,
 .settings-heading {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
   min-height: 28px;
-  margin: 0;
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
+  margin: 0 0 0 var(--g-space-4);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: var(--g-weight-medium);
-}
-
-.settings-section > h2::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  margin-left: var(--g-space-8);
-  background-color: var(--g-line);
 }
 
 .settings-heading > :is(h2, h3) {
@@ -246,7 +242,7 @@ h1 + .settings-group {
   line-height: var(--g-leading-ui);
 }
 
-/* Hairlines between rows, inset 16px on both sides (X Money). */
+/* Hairlines between rows, inset 16px on both sides, a faint step of ink. */
 .settings-group > * + *::before {
   content: "";
   position: absolute;
@@ -254,7 +250,7 @@ h1 + .settings-group {
   right: 16px;
   left: 16px;
   height: 1px;
-  background-color: var(--g-line);
+  background-color: var(--g-glass-rim);
 }
 
 .settings-group > * {
