@@ -934,3 +934,187 @@ async fn missing_git_and_detached_head_have_explicit_reasons() {
             .any(|reason| reason.contains("detached"))
     );
 }
+
+/// Another repository beside the rig's, with one commit.
+async fn second_repository(rig: &Rig, name: &str) -> PathBuf {
+    let folder = rig._dir.path().join(name);
+    std::fs::create_dir(&folder).expect("second repository");
+    for command in [
+        vec!["init", "-b", "main"],
+        vec!["config", "core.autocrlf", "false"],
+        vec!["config", "user.name", "Fixture"],
+        vec!["config", "user.email", "fixture@localhost"],
+    ] {
+        rig.git
+            .run(&folder, git::args(&command), 8192)
+            .await
+            .expect("second repository setup");
+    }
+    std::fs::write(folder.join("file.txt"), "initial\n").expect("file");
+    rig.git
+        .run(&folder, git::args(&["add", "--", "file.txt"]), 8192)
+        .await
+        .expect("add");
+    rig.git
+        .run(
+            &folder,
+            git::args(&["-c", "commit.gpgSign=false", "commit", "-m", "initial"]),
+            8192,
+        )
+        .await
+        .expect("commit");
+    folder
+}
+
+#[tokio::test]
+async fn registry_reads_do_not_wait_for_a_running_command() {
+    let rig = rig().await;
+    let record = isolated(&rig).await;
+    // A long Git change holds the repository, as a push or a worktree creation does.
+    let held = rig.service.hold_repository(&rig.git, &rig.work).await;
+    let quick = std::time::Duration::from_secs(2);
+    let listed = tokio::time::timeout(quick, rig.service.profile_records())
+        .await
+        .expect("the profile's worktrees answer at once")
+        .expect("records");
+    assert_eq!(listed.len(), 1);
+    tokio::time::timeout(quick, rig.service.list("chat"))
+        .await
+        .expect("a chat's worktrees answer at once")
+        .expect("list");
+    tokio::time::timeout(quick, rig.service.profile_record(&record.id))
+        .await
+        .expect("one record answers at once")
+        .expect("record");
+    let (_, port) = tokio::time::timeout(quick, rig.service.worktree_port("chat"))
+        .await
+        .expect("a terminal's port answers at once")
+        .expect("port");
+    // A review of a change to the same repository does not wait either: only applies do.
+    tokio::time::timeout(
+        quick,
+        rig.service.commit_preview(
+            Path::new(&record.path),
+            aura_protocol::git::CommitInput {
+                message: "Nothing".into(),
+                paths: vec![],
+            },
+        ),
+    )
+    .await
+    .expect("a review does not wait")
+    .expect_err("nothing to commit");
+    // Another repository's change goes at once.
+    let other = second_repository(&rig, "other").await;
+    drop(
+        tokio::time::timeout(quick, rig.service.hold_repository(&rig.git, &other))
+            .await
+            .expect("another repository is free"),
+    );
+    // A worktree belongs to its source's repository, so its changes wait behind the source's.
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            rig.service
+                .hold_repository(&rig.git, Path::new(&record.path)),
+        )
+        .await
+        .is_err(),
+        "a worktree's change waits for its repository"
+    );
+    drop(held);
+    assert_eq!(
+        rig.service.worktree_port("chat").await.expect("port").1,
+        port,
+        "the port is kept"
+    );
+}
+
+#[tokio::test]
+async fn concurrent_registry_updates_keep_every_record() {
+    let rig = rig().await;
+    let existing = isolated(&rig).await;
+    let other = second_repository(&rig, "other").await;
+    let third = second_repository(&rig, "third").await;
+    let mut tokens = Vec::new();
+    for (chat, folder) in [("two", &other), ("three", &third)] {
+        tokens.push(
+            rig.service
+                .isolation_preview(
+                    chat,
+                    folder,
+                    IsolationInput {
+                        slug: chat.into(),
+                        bring_changes: false,
+                    },
+                )
+                .await
+                .expect("preview")
+                .token,
+        );
+    }
+    // Two repositories' worktrees are made at once while a terminal takes the first chat's
+    // ports: each creation records itself before Git runs and saves its outcome after.
+    let (two, three, port) = tokio::join!(
+        rig.service.isolation_apply("two", &tokens[0]),
+        rig.service.isolation_apply("three", &tokens[1]),
+        async {
+            tokio::task::yield_now().await;
+            rig.service.worktree_port("chat").await
+        },
+    );
+    let (two, three) = (two.expect("two"), three.expect("three"));
+    let (_, port) = port.expect("port");
+    let records = rig.service.profile_records().await.expect("records");
+    assert_eq!(records.len(), 3, "{records:?}");
+    for id in [&existing.id, &two.worktree.id, &three.worktree.id] {
+        assert!(
+            records.iter().any(|record| &record.id == id),
+            "{id} was kept"
+        );
+    }
+    assert!(
+        records
+            .iter()
+            .all(|record| record.state == WorktreeState::Ready)
+    );
+    assert_eq!(
+        records
+            .iter()
+            .find(|record| record.id == existing.id)
+            .and_then(|record| record.port),
+        Some(port),
+        "the port given meanwhile was kept"
+    );
+    // A change saved from a copy read before the port was given keeps the port.
+    let mut stale = existing.clone();
+    stale.detail = Some("Reviewed.".into());
+    rig.service.save_record(&stale).expect("save");
+    let saved = rig
+        .service
+        .profile_record(&existing.id)
+        .await
+        .expect("saved");
+    assert_eq!(saved.detail.as_deref(), Some("Reviewed."));
+    assert_eq!(saved.port, Some(port));
+    // Threads updating the registry at once lose nothing either.
+    std::thread::scope(|scope| {
+        for chat in ["chat", "two", "three"] {
+            let service = &rig.service;
+            scope.spawn(move || {
+                for _ in 0..20 {
+                    service.port_under_gate(chat).expect("port");
+                }
+            });
+        }
+    });
+    let records = rig.service.profile_records().await.expect("records");
+    let ports: std::collections::HashSet<_> =
+        records.iter().filter_map(|record| record.port).collect();
+    assert_eq!(records.len(), 3);
+    assert_eq!(
+        ports.len(),
+        3,
+        "each worktree has its own block: {records:?}"
+    );
+}

@@ -1,12 +1,91 @@
 //! Typed UI bindings for Rust-owned project organization and folder preflight.
 
-use aura_protocol::workspace::{
-    ChatCreatePreview, ChatMove, ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput,
-    ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
-};
-use tauri::State;
+use std::time::Duration;
 
-use crate::{error::AppError, state::AppState};
+use aura_core::session::{StopReport, StopScope};
+use aura_protocol::workspace::{
+    ChatCreatePreview, ChatMove, ChatsStopped, FolderBlockers, FolderMatches, FolderScope,
+    ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat,
+    WorkspaceFilter, WorkspaceSnapshot,
+};
+use tauri::{State, Webview};
+
+use crate::{
+    error::{AppError, AppErrorCode},
+    state::AppState,
+};
+
+/// `chats_stop` waits this long for the agents to be gone; a stop is forced well before.
+const STOP_WAIT: Duration = Duration::from_secs(30);
+
+/// Stopping and listing other chats is for this window's current page only, never for a page
+/// that is closing or replaced (and never for remote access, which has no such command).
+fn current(webview: &Webview, state: &AppState) -> Result<(), AppError> {
+    if state.quit.is_quitting() || !state.pages.for_view(webview.label()).is_current() {
+        return Err(AppError::new(
+            AppErrorCode::SessionNotReady,
+            "This page is no longer active.",
+        ));
+    }
+    Ok(())
+}
+
+fn stopped(report: StopReport) -> ChatsStopped {
+    ChatsStopped {
+        stopped: report.stopped,
+        kept: report.kept,
+        stopping: report.stopping,
+    }
+}
+
+/// Stops these chats, a turn in progress included, and answers once their agents' processes
+/// are gone: an action that waited for them can then go at once.
+#[tauri::command]
+#[specta::specta]
+pub async fn chats_stop(
+    webview: Webview,
+    state: State<'_, AppState>,
+    chat_ids: Vec<String>,
+) -> Result<ChatsStopped, AppError> {
+    current(&webview, &state)?;
+    if chat_ids.len() > 256 || chat_ids.iter().any(|id| id.is_empty() || id.len() > 128) {
+        return Err(AppError::invalid_argument(
+            "Choose up to 256 chats to stop.",
+        ));
+    }
+    let sessions = state.sessions()?;
+    Ok(stopped(
+        sessions
+            .stop_all(StopScope::Chats(chat_ids), STOP_WAIT)
+            .await,
+    ))
+}
+
+/// Stops every idle agent (ready, unwatched, nothing open, queued or running in the background)
+/// and answers once they are gone. Working, waiting and terminal chats are left as they are.
+#[tauri::command]
+#[specta::specta]
+pub async fn agents_stop_idle(
+    webview: Webview,
+    state: State<'_, AppState>,
+) -> Result<ChatsStopped, AppError> {
+    current(&webview, &state)?;
+    let sessions = state.sessions()?;
+    Ok(stopped(sessions.stop_idle(StopScope::All).await))
+}
+
+/// The chats with a live agent in the folders `scope` names, with what each does, and the
+/// project terminals open there.
+#[tauri::command]
+#[specta::specta]
+pub async fn folder_blockers(
+    webview: Webview,
+    state: State<'_, AppState>,
+    scope: FolderScope,
+) -> Result<FolderBlockers, AppError> {
+    current(&webview, &state)?;
+    Ok(state.sessions()?.folder_blockers(scope).await?)
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -87,6 +166,17 @@ pub async fn chat_move(
     request: ChatMove,
 ) -> Result<WorkspaceChat, AppError> {
     Ok(state.sessions()?.chat_move(&chat_id, request).await?)
+}
+
+/// What a folder the person picked already is: its projects (compared canonical, so a link or
+/// another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_folder_matches(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<FolderMatches, AppError> {
+    Ok(state.sessions()?.workspace_folder_matches(&path).await?)
 }
 
 #[tauri::command]

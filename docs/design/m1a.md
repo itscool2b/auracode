@@ -2088,7 +2088,7 @@ pub struct ManagerDeps {
 }
 pub struct ManagerLimits { pub max_live_agents: usize, pub max_queue: usize, pub max_prompt_bytes: usize,
                            pub idle_eviction: Duration, pub subscribers_per_chat: usize, pub subscribers_per_owner: usize }
-impl ManagerLimits { pub const STANDARD: ManagerLimits; }      // 12, 20, 1 MiB, 10 min, 4, 16
+impl ManagerLimits { pub const STANDARD: ManagerLimits; }      // 16, 20, 1 MiB, 10 min, 4, 16
 pub struct SessionTimings { pub flush_live: Duration, pub flush_idle: Duration, pub force_cancel_wait: Duration,
                             pub daemon_cancel_wait: Duration, pub stop_cancel_grace: Duration,
                             pub quit_cancel_grace: Duration, pub stop_kill_after: Duration, pub attach_timeout: Duration }
@@ -2372,14 +2372,33 @@ left; anything not handed over is lost and logged (counts), and recovery ends th
 
 #### 6.5.6 Concurrency and limits
 
-Several chats run turns at once, one actor, one process and one native session each. At most 12 live agents: a 13th
-start fails with `TooManyAgents` ("12 agents are already running. Stop one, then try again."); nothing is evicted to
-make room. Idle eviction: `Ready`, no subscribers, no open card or question, no non-held queued row, and 10 minutes
-since the last driver event or command -> `stop()`; the next use restarts it with native resume. Two live processes
+Several chats run turns at once, one actor, one process and one native session each. At most 16 live agents. A 17th
+start makes room: the agent idle longest by the idle-eviction test below (each actor reports to `LiveAgents` whenever
+that changes, with its last activity) is asked to `stop()`, and the start waits (`Starting`, "Waiting for an idle chat
+to stop and make room", 60 s at most) for that agent's slot, which passes to it once the agent's processes are gone. An
+agent asked after it stopped idling declines and the next idle one is asked; when none is, the stop is owed and the
+next agent to turn idle pays it. Only when no agent idles does the start fail with `TooManyAgents`, saying what the
+running agents do ("16 agents are running and none is idle: 13 working, 2 waiting for your answer and 1 open in a
+terminal. Stop one, then try again."). A stopped agent keeps its held queue and resumes its native session on its next
+message. A start registers its chat's recorded folder with its slot at once, so a start still preparing blocks folder
+mutations of that folder only; the folders the preparation resolves replace it, checked again before anything spawns.
+`SessionManager::stop_idle(scope)` and `stop_all(scope, deadline)` stop several chats (idle ones only, or all) and
+answer once their slots are really free, without closing admission. Idle eviction: `Ready`, no subscribers (remote
+views included), no open card or question, no non-held queued row, no background work, not open in a terminal, and 10
+minutes since the last driver event or command -> `stop()`; the next use restarts it with native resume. Two live processes
 never share one `(agent_id, native_session_id)` across chats (the Claude spike: two processes on one session id
 interleave one transcript): checked for the resume id before spawning and again for the id the agent returns at
 `Ready`, for every driver, the mock included; the second fails with `Internal("this session is already open in
 another chat")`. Two chats in one folder are allowed (the busy-folder warning is M2b).
+
+Terminals count in pools of their own, so one kind never refuses another: project shells (the docked panel, Run)
+several per window and 8 in the app; terminal chats several per window and 8 in the app; worktree setup commands
+several per window and 4 in the app, so two projects' new worktrees set up at once; sign-in and installation one per
+window and 4 in the app. A project shell opens in one step (`project_terminal_open`: the chat's folder and the shell
+are checked and the shell prepared together), so a panel tab carries nothing that expires and one first shown long
+after it was made still opens; the panel counts a tab toward its limit only once its shell was asked to start. A
+terminal chat in a new worktree waits for the worktree's setup to succeed, then opens; a failed setup answers it with
+the setup's reason.
 
 #### 6.5.7 Flush and persistence
 
@@ -2770,7 +2789,7 @@ draft keep their numbers; new cases are appended to each table.
 | S17 | prompt while stopped or failed | starts the agent; dispatched at `Ready`, not held | `send_starts_agent` (C) |
 | S18 | option change during a turn | sent at once, except deferred Hermes mode changes | `option_change_during_turn` (C) |
 | S19 | autonomy change mid-turn | next decision uses it at once | `autonomy_change_is_immediate` (C) |
-| S20 | 13th live agent | `too_many_agents`; nothing evicted | `live_agent_limit` (C) |
+| S20 | 17th live agent | the agent idle longest stops and its slot passes to the start; `too_many_agents`, saying what the others do, only when none idles; a stopped chat resumes its session | `a_start_at_the_limit_stops_the_longest_idle_agent`, `a_start_is_refused_only_when_every_agent_is_busy`, `an_evicted_chat_resumes_its_session_on_the_next_message`, `background_work_is_not_stopped_to_make_room` (C) |
 | S21 | idle 10 minutes without a viewer | graceful stop, except with an open card or question or a non-held queued row; restart with resume on next use | `idle_eviction` (C, paused time) |
 | S22 | chat actor panics | processes killed, turn interrupted, subscribers end, next call recreates it | `actor_panic_is_contained` (C) |
 | S23 | driver task panics | `Panicked`, processes force-stopped (P47), error card, `Stopped` | `driver_panic_is_contained` (C) |
@@ -3060,7 +3079,7 @@ Timers and deadlines use tokio's clock, which does not advance while macOS or Li
 | env resolution | 10 s interactive, 5 s retry, failed attempts retried after 60 s | aura-process |
 | probes | 10 s, 64 KiB output | aura-agents |
 | registry | heartbeat 60 s; sweep window from the entry's start to the heartbeat plus 60 s; SIGTERM, 2 s, SIGKILL | aura-process |
-| live agents | 12, no eviction; idle stop after 10 min | session manager |
+| live agents | 16; a start at the limit stops the agent idle longest, refused only when none idles; idle stop after 10 min | session manager |
 | queue | 20 prompts; 1 MiB per prompt; preview 256 chars | session manager |
 | subscribers | 4 per chat (one per webview), 16 per webview | session manager |
 | attach | 5 s | session manager |

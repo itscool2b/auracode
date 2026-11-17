@@ -1,4 +1,9 @@
-/** Focus and delayed project-source selection in real NewChat components with synthetic services. */
+/**
+ * Focus and project-source selection in real NewChat components with synthetic services: a recent
+ * chat in a worktree prefills its source at once (the worktree is never offered, and nothing waits
+ * for the retained list), a differently spelled pick finds its folder, and a pick from another
+ * project names that project.
+ */
 import assert from "node:assert/strict";
 import { chromium, webkit } from "playwright";
 
@@ -31,8 +36,8 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       );
       await page.keyboard.press("Escape");
       assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
-      for (const choice of ["automatic", "dropdown", "clear", "picked"]) {
-        await page.evaluate(async () => {
+      for (const choice of ["automatic", "dropdown", "clear", "picked", "elsewhere"]) {
+        await page.evaluate(async (choice) => {
           window.newChatSelectionFixture?.unmount();
           document.getElementById("root").hidden = true;
           document.getElementById("new-chat-selection-test")?.remove();
@@ -43,36 +48,57 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
           const { mountNewChatSelectionFixture } = await import(
             "/src/dev/newChatSelectionFixture.tsx"
           );
-          window.newChatSelectionFixture = await mountNewChatSelectionFixture(host);
-        });
+          window.newChatSelectionFixture = await mountNewChatSelectionFixture(
+            host,
+            choice === "elsewhere" ? "/workspace/site" : undefined,
+          );
+        }, choice);
         const form = page.locator("#new-chat-selection-test");
         const folder = form.getByLabel("Project folder", { exact: true });
-        await page.waitForFunction(
-          () =>
-            document.querySelector("#new-chat-selection-test select")?.value === "folder-managed",
-        );
+        const selected = (value) =>
+          page.waitForFunction(
+            (value) => document.querySelector("#new-chat-selection-test select")?.value === value,
+            value,
+          );
+        // The recent chat ran in a worktree: its source is prefilled at once, before the retained
+        // list arrives, and the worktree itself is never offered.
+        await selected("folder-auracode");
+        assert.equal(await form.locator('option[value="folder-managed"]').count(), 0);
+        if (choice === "automatic")
+          assert.equal(
+            await form.getByTestId("new-chat-create").isEnabled(),
+            true,
+            `${engine}/${theme}: Create must not wait for the retained list`,
+          );
         if (choice === "dropdown") await folder.selectOption("folder-alternate");
         else if (choice === "clear") await folder.selectOption("");
-        else if (choice === "picked") await form.getByTestId("new-chat-pick-folder").click();
-        if (choice === "picked")
-          await page.waitForFunction(
-            () =>
-              document.querySelector("#new-chat-selection-test select")?.value ===
-              "folder-alternate",
-          );
+        else if (choice === "picked" || choice === "elsewhere")
+          await form.getByTestId("new-chat-pick-folder").click();
+        // A pick spelled differently from the stored folder finds that folder.
+        if (choice === "picked") await selected("folder-alternate");
+        // A pick of another project's folder starts there, and says so.
+        if (choice === "elsewhere") {
+          await selected("folder-site");
+          await form
+            .getByTestId("new-chat-folder-project")
+            .getByText("This folder is in Website, so the chat starts there.", { exact: true })
+            .waitFor();
+        }
         await page.evaluate(async () => {
           window.newChatSelectionFixture.releaseRetained();
           await window.newChatSelectionFixture.refresh();
         });
-        await page.waitForFunction(
-          () => !document.querySelector('#new-chat-selection-test option[value="folder-managed"]'),
-        );
+        assert.equal(await form.locator('option[value="folder-managed"]').count(), 0);
         const expected =
-          choice === "automatic" ? "folder-auracode" : choice === "clear" ? "" : "folder-alternate";
+          {
+            automatic: "folder-auracode",
+            clear: "",
+            elsewhere: "folder-site",
+          }[choice] ?? "folder-alternate";
         assert.equal(
           await folder.inputValue(),
           expected,
-          `${engine}/${theme}: retained loading must resolve automatic context and preserve ${choice} selection`,
+          `${engine}/${theme}: the ${choice} selection must hold once the retained list arrives`,
         );
         assert.equal(await form.getByTestId("new-chat-create").isEnabled(), choice !== "clear");
         await page.evaluate(async () => {
@@ -88,7 +114,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       await page.close();
     }
     console.log(
-      `${engine}: NewChat keyboard and delayed retained-source selection pass in both appearances`,
+      `${engine}: NewChat keyboard, worktree-source prefill and folder picks pass in both appearances`,
     );
   } finally {
     await browser.close();

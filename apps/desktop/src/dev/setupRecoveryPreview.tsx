@@ -201,6 +201,9 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
     review: async () => {
       throw new Error("No shell is needed for this fixture.");
     },
+    terminalReview: async () => {
+      throw new Error("No shell is needed for this fixture.");
+    },
     openEditor: async () => {},
     terminal: () => {
       throw new Error("No shell is needed for this fixture.");

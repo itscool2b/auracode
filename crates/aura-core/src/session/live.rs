@@ -2,18 +2,73 @@
 //! chats.
 //!
 //! A chat holds a slot from the moment its start begins (preparation included) until its driver
-//! ended and the processes a force stop or a crash kills are gone, so a 13th start fails at once
-//! instead of evicting anything. A native session is claimed for the resume id before spawning and
-//! again for the id the agent returns at `Ready`, and stays claimed as long as the slot: two
-//! processes on one session interleave one transcript (the Claude spike), so the second chat is
-//! refused.
+//! ended and the processes a force stop or a crash kills are gone. A start beyond the cap makes
+//! room: the agent idle longest (by the ten-minute idle rule's own test, which its actor reports
+//! here) is asked to stop, and the start waits for its slot, which passes to it straight away. An
+//! agent asked while it no longer idles declines, and the next idle one stops instead (an owed
+//! stop, paid by the next agent to turn idle when none is). A start is refused only when no agent
+//! is idle. A native session is claimed for the resume id before spawning and again for the id the
+//! agent returns at `Ready`, and stays claimed as long as the slot: two processes on one session
+//! interleave one transcript (the Claude spike), so the second chat is refused.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use aura_process::{EnvKey, LaunchSpec, ProcessCwd, ResolvedEnv};
+use tokio::sync::{Notify, watch};
+use tokio::time::Instant;
+
+/// What a live agent is doing, as its actor last reported it.
+#[derive(Debug, Clone)]
+pub(crate) enum Activity {
+    /// Idle by the idle rule (ready, unwatched, nothing open, queued or running in the
+    /// background) since `since`: it may be stopped to make room. `notify` asks it.
+    Idle { since: Instant, notify: Arc<Notify> },
+    /// Starting, stopping, running a turn or background work, or about to send a message.
+    Working,
+    /// Waiting for the person to answer a request or question.
+    Waiting,
+    /// Open in the agent's own terminal.
+    Terminal,
+    /// Ready, with a view of the chat open, since its last activity at `since`.
+    Shown { since: Instant },
+    /// Stopping, or stopped while its processes still exit.
+    Stopping,
+}
+
+/// What a live agent does, for a person deciding whether to stop it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Doing {
+    Working,
+    Waiting,
+    Terminal,
+    Idle,
+}
+
+/// The live agents by what they are doing, for a start that found no room.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Occupancy {
+    pub(crate) working: usize,
+    pub(crate) waiting: usize,
+    pub(crate) terminals: usize,
+    pub(crate) shown: usize,
+    pub(crate) stopping: usize,
+}
+
+/// Whether a start may go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Admission {
+    /// It holds a slot.
+    Admitted,
+    /// Every slot is taken and an idle agent was asked to stop: its slot comes to this chat.
+    Waiting,
+    /// Every slot is taken and no agent is idle.
+    Full(Occupancy),
+    /// An update or a quit closed admission.
+    Closed,
+}
 
 /// Native and ACP transports use the same provider's transcript store. The namespace also
 /// includes its host and configuration directory, because another realm can reuse the same id.
@@ -182,6 +237,8 @@ fn fold_windows_path(path: PathBuf) -> PathBuf {
 pub(crate) struct LiveAgents {
     max: usize,
     inner: Mutex<Inner>,
+    /// Counts the times a slot was given back, for starts and stops that wait for one.
+    released: watch::Sender<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -195,6 +252,79 @@ struct Inner {
     folder_uses: HashMap<PathBuf, usize>,
     /// `(provider realm, native_session_id)` -> the chat holding it.
     sessions: HashMap<(NativeSessionScope, String), String>,
+    /// What each live agent does, as its actor last reported (none yet: starting, so working).
+    activity: HashMap<String, Activity>,
+    /// Idle agents asked to stop so that a waiting start gets their slot.
+    evicting: HashSet<String>,
+    /// Starts waiting for a slot, first come first served, each with the folder it registers.
+    /// Each has an agent stopping for it in `evicting`, or is owed one: the next agent to turn idle.
+    waiting: VecDeque<(String, PathBuf)>,
+    /// Folders a quiet change holds (a commit, a setup copy): agents and terminals stay, new
+    /// turns wait, and only an exclusive change is kept out. Counted per folder.
+    quiet: HashMap<PathBuf, usize>,
+}
+
+/// Whether two paths overlap: one is the other or inside it.
+fn overlap(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
+}
+
+impl Inner {
+    /// The idle agent with the oldest activity that is not already stopping for someone.
+    fn longest_idle(&self) -> Option<(String, Arc<Notify>)> {
+        self.activity
+            .iter()
+            .filter_map(|(chat, activity)| match activity {
+                Activity::Idle { since, notify }
+                    if self.slots.contains(chat) && !self.evicting.contains(chat) =>
+                {
+                    Some((*since, chat, notify))
+                }
+                _ => None,
+            })
+            .min_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)))
+            .map(|(_, chat, notify)| (chat.clone(), Arc::clone(notify)))
+    }
+
+    /// Asks idle agents to stop until every waiting start has one stopping for it.
+    fn ask_idle_to_stop(&mut self) {
+        while self.waiting.len() > self.evicting.len() {
+            let Some((chat, notify)) = self.longest_idle() else {
+                return;
+            };
+            self.evicting.insert(chat);
+            notify.notify_one();
+        }
+    }
+
+    fn occupancy(&self) -> Occupancy {
+        let mut occupancy = Occupancy::default();
+        for chat in &self.slots {
+            match self.activity.get(chat) {
+                _ if self.evicting.contains(chat) => occupancy.stopping += 1,
+                Some(Activity::Waiting) => occupancy.waiting += 1,
+                Some(Activity::Terminal) => occupancy.terminals += 1,
+                Some(Activity::Shown { .. }) => occupancy.shown += 1,
+                Some(Activity::Stopping) => occupancy.stopping += 1,
+                Some(Activity::Idle { .. } | Activity::Working) | None => occupancy.working += 1,
+            }
+        }
+        occupancy
+    }
+
+    /// Room goes to the waiting starts first, in the order they came.
+    fn admit_waiting(&mut self, max: usize) -> bool {
+        let mut admitted = false;
+        while self.slots.len() < max {
+            let Some((chat, folder)) = self.waiting.pop_front() else {
+                break;
+            };
+            self.folders.insert(chat.clone(), vec![folder]);
+            self.slots.insert(chat);
+            admitted = true;
+        }
+        admitted
+    }
 }
 
 pub(crate) struct MaintenanceGuard<'a>(&'a LiveAgents);
@@ -209,6 +339,7 @@ impl LiveAgents {
         LiveAgents {
             max,
             inner: Mutex::new(Inner::default()),
+            released: watch::Sender::new(0),
         }
     }
 
@@ -218,7 +349,9 @@ impl LiveAgents {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Takes a slot for `chat` (idempotent); false when every slot is taken.
+    /// Takes a slot for `chat` (idempotent) without making room; false when none is free. A slot
+    /// taken this way has no folder until `set_folders`, so it overlaps every folder.
+    #[cfg(test)]
     pub(crate) fn acquire(&self, chat: &str) -> bool {
         let mut inner = self.lock();
         if inner.quiescing || inner.owned_draining {
@@ -227,16 +360,142 @@ impl LiveAgents {
         if inner.slots.contains(chat) {
             return true;
         }
-        if inner.slots.len() >= self.max {
+        if inner.slots.len() + inner.waiting.len() >= self.max {
             return false;
         }
         inner.slots.insert(chat.to_owned());
         true
     }
 
-    pub(crate) fn quiescing(&self) -> bool {
+    /// A slot for `chat`, starting in `folder` (registered at once, so a start still preparing
+    /// overlaps only its own folder; `set_folders` checks it again before anything spawns). At the
+    /// cap, the agent idle longest is asked to stop and `chat` waits for its slot.
+    pub(crate) fn admit(&self, chat: &str, folder: &Path) -> Admission {
+        let mut inner = self.lock();
+        if inner.quiescing || inner.owned_draining {
+            return Admission::Closed;
+        }
+        if inner.slots.contains(chat) {
+            return Admission::Admitted;
+        }
+        if inner.waiting.iter().any(|(waiting, _)| waiting == chat) {
+            return Admission::Waiting;
+        }
+        // Each waiting start will take a slot, so they count as taken.
+        if inner.slots.len() + inner.waiting.len() < self.max {
+            inner.slots.insert(chat.to_owned());
+            inner
+                .folders
+                .insert(chat.to_owned(), vec![folder.to_path_buf()]);
+            return Admission::Admitted;
+        }
+        // An agent already stopping for a start that gave up can serve this one.
+        if inner.evicting.len() > inner.waiting.len() || inner.longest_idle().is_some() {
+            inner
+                .waiting
+                .push_back((chat.to_owned(), folder.to_path_buf()));
+            inner.ask_idle_to_stop();
+            return Admission::Waiting;
+        }
+        Admission::Full(inner.occupancy())
+    }
+
+    /// Whether `chat` waits for a slot.
+    pub(crate) fn is_waiting(&self, chat: &str) -> bool {
+        self.lock()
+            .waiting
+            .iter()
+            .any(|(waiting, _)| waiting == chat)
+    }
+
+    /// `chat` no longer waits for a slot (its start was stopped or gave up).
+    pub(crate) fn cancel_wait(&self, chat: &str) {
+        let mut inner = self.lock();
+        let before = inner.waiting.len();
+        inner.waiting.retain(|(waiting, _)| waiting != chat);
+        let changed = inner.waiting.len() != before;
+        drop(inner);
+        if changed {
+            self.released
+                .send_modify(|count| *count = count.wrapping_add(1));
+        }
+    }
+
+    /// Records what `chat`'s agent does now. True when it is idle and owed: a start waits with
+    /// no agent stopping for it, so this one stops now.
+    pub(crate) fn report(&self, chat: &str, activity: Activity) -> bool {
+        let mut inner = self.lock();
+        if !inner.slots.contains(chat) {
+            inner.activity.remove(chat);
+            return false;
+        }
+        let idle = matches!(activity, Activity::Idle { .. });
+        inner.activity.insert(chat.to_owned(), activity);
+        if idle && !inner.evicting.contains(chat) && inner.waiting.len() > inner.evicting.len() {
+            inner.evicting.insert(chat.to_owned());
+            return true;
+        }
+        false
+    }
+
+    /// `chat` was asked to stop for a waiting start but no longer idles: another idle agent is
+    /// asked instead, or the next one to turn idle.
+    pub(crate) fn decline_stop(&self, chat: &str) {
+        let mut inner = self.lock();
+        if inner.evicting.remove(chat) {
+            inner.ask_idle_to_stop();
+        }
+    }
+
+    /// Every chat that holds a slot or waits for one.
+    pub(crate) fn live_chats(&self) -> Vec<String> {
         let inner = self.lock();
-        inner.quiescing || inner.owned_draining
+        let mut chats: Vec<String> = inner
+            .slots
+            .iter()
+            .cloned()
+            .chain(inner.waiting.iter().map(|(chat, _)| chat.clone()))
+            .collect();
+        chats.sort();
+        chats.dedup();
+        chats
+    }
+
+    /// The chats whose agent works in one of `folders` or inside one (or holds a slot with no
+    /// folder known yet), and the starts waiting to work there.
+    pub(crate) fn holders(&self, folders: &[PathBuf]) -> Vec<String> {
+        let inner = self.lock();
+        let overlaps = |held: &PathBuf| {
+            folders
+                .iter()
+                .any(|folder| folder.starts_with(held) || held.starts_with(folder))
+        };
+        let mut chats: Vec<String> = inner
+            .slots
+            .iter()
+            .filter(|chat| {
+                inner
+                    .folders
+                    .get(*chat)
+                    .is_none_or(|held| held.iter().any(overlaps))
+            })
+            .cloned()
+            .chain(
+                inner
+                    .waiting
+                    .iter()
+                    .filter(|(_, folder)| overlaps(folder))
+                    .map(|(chat, _)| chat.clone()),
+            )
+            .collect();
+        chats.sort();
+        chats.dedup();
+        chats
+    }
+
+    /// Counts slot releases, for a wait that must see a slot really free.
+    pub(crate) fn released(&self) -> watch::Receiver<u64> {
+        self.released.subscribe()
     }
 
     /// Atomically excludes new starts and folder mutations while the caller prepares an update.
@@ -246,13 +505,21 @@ impl LiveAgents {
             || inner.owned_draining
             || inner.maintenance > 0
             || !inner.slots.is_empty()
+            || !inner.waiting.is_empty()
             || !inner.mutations.is_empty()
+            || !inner.quiet.is_empty()
             || !inner.folder_uses.is_empty()
         {
             return false;
         }
         inner.quiescing = true;
         true
+    }
+
+    /// Whether an update or a quit closed admission.
+    pub(crate) fn quiescing_now(&self) -> bool {
+        let inner = self.lock();
+        inner.quiescing || inner.owned_draining
     }
 
     pub(crate) fn resume_admission(&self) {
@@ -294,19 +561,36 @@ impl LiveAgents {
 
     pub(crate) fn owned_work_count(&self) -> usize {
         let inner = self.lock();
-        inner.maintenance.saturating_add(inner.mutations.len())
+        inner
+            .maintenance
+            .saturating_add(inner.mutations.len())
+            .saturating_add(inner.quiet.values().sum::<usize>())
     }
 
     pub(crate) fn project_terminal_count(&self) -> usize {
         self.lock().folder_uses.values().sum()
     }
 
-    /// Gives `chat`'s slot back, and every native session it held.
+    /// Gives `chat`'s slot back, and every native session it held, once nothing of it runs; ends
+    /// its wait for a slot. A start waiting for room gets the slot at once.
     pub(crate) fn release(&self, chat: &str) {
         let mut inner = self.lock();
-        inner.slots.remove(chat);
+        let held = inner.slots.remove(chat);
         inner.folders.remove(chat);
         inner.sessions.retain(|_, holder| holder != chat);
+        inner.activity.remove(chat);
+        inner.evicting.remove(chat);
+        let before = inner.waiting.len();
+        inner.waiting.retain(|(waiting, _)| waiting != chat);
+        let waited = inner.waiting.len() != before;
+        let admitted = inner.admit_waiting(self.max);
+        // A start that still waits has an agent stopping for it, or the next idle one.
+        inner.ask_idle_to_stop();
+        drop(inner);
+        if held || waited || admitted {
+            self.released
+                .send_modify(|count| *count = count.wrapping_add(1));
+        }
     }
 
     /// Claims a native session for `chat`; false when another chat holds it.
@@ -380,6 +664,7 @@ impl LiveAgents {
                         .mutations
                         .iter()
                         .any(|held| folder.starts_with(held) || held.starts_with(folder))
+                    || inner.quiet.keys().any(|held| overlap(folder, held))
                     || inner.slots.iter().any(|chat| {
                         inner.folders.get(chat).is_none_or(|held| {
                             held.iter()
@@ -396,6 +681,94 @@ impl LiveAgents {
 
     pub(crate) fn release_folder(&self, folder: &Path) {
         self.lock().mutations.remove(folder);
+    }
+
+    /// A quiet hold of `folders`: agents and terminals there stay; only an exclusive change
+    /// (and an update or a quit) is kept out. False when one holds an overlapping folder.
+    pub(crate) fn hold_quietly(&self, folders: &[PathBuf]) -> bool {
+        let mut inner = self.lock();
+        if inner.quiescing
+            || inner.owned_draining
+            || folders
+                .iter()
+                .any(|folder| inner.mutations.iter().any(|held| overlap(folder, held)))
+        {
+            return false;
+        }
+        for folder in folders {
+            *inner.quiet.entry(folder.clone()).or_default() += 1;
+        }
+        true
+    }
+
+    pub(crate) fn release_quiet(&self, folders: &[PathBuf]) {
+        let mut inner = self.lock();
+        for folder in folders {
+            if let Some(count) = inner.quiet.get_mut(folder) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    inner.quiet.remove(folder);
+                }
+            }
+        }
+    }
+
+    /// Whether `chat` makes its folder busy for a new chat: working, waiting for an answer, open
+    /// in a terminal, waiting for a slot, or active within `settle` (just started or just
+    /// finished a turn, so likely to be given the next message). An agent idle longer, or
+    /// stopping, edits nothing.
+    pub(crate) fn busy(&self, chat: &str, settle: std::time::Duration) -> bool {
+        let inner = self.lock();
+        if inner.waiting.iter().any(|(waiting, _)| waiting == chat) {
+            return true;
+        }
+        if !inner.slots.contains(chat) || inner.evicting.contains(chat) {
+            return false;
+        }
+        match inner.activity.get(chat) {
+            Some(Activity::Idle { since, .. } | Activity::Shown { since }) => {
+                since.elapsed() < settle
+            }
+            Some(Activity::Stopping) => false,
+            Some(Activity::Working | Activity::Waiting | Activity::Terminal) | None => true,
+        }
+    }
+
+    /// What `chat`'s agent does, if it holds a slot or waits for one.
+    pub(crate) fn doing(&self, chat: &str) -> Option<Doing> {
+        let inner = self.lock();
+        if inner.waiting.iter().any(|(waiting, _)| waiting == chat) {
+            return Some(Doing::Working);
+        }
+        if !inner.slots.contains(chat) {
+            return None;
+        }
+        Some(match inner.activity.get(chat) {
+            Some(Activity::Idle { .. } | Activity::Shown { .. }) => Doing::Idle,
+            Some(Activity::Waiting) => Doing::Waiting,
+            Some(Activity::Terminal) => Doing::Terminal,
+            Some(Activity::Working | Activity::Stopping) | None => Doing::Working,
+        })
+    }
+
+    /// How many project terminals (and Runs) are open in `folders` or inside one.
+    pub(crate) fn terminals_in(&self, folders: &[PathBuf]) -> usize {
+        let inner = self.lock();
+        inner
+            .folder_uses
+            .iter()
+            .filter(|(held, _)| folders.iter().any(|folder| overlap(folder, held)))
+            .map(|(_, count)| *count)
+            .sum()
+    }
+
+    /// Whether a change to an overlapping folder is in progress.
+    pub(crate) fn mutation_in(&self, folders: &[PathBuf]) -> bool {
+        let inner = self.lock();
+        folders.iter().any(|folder| {
+            inner.mutations.iter().any(|held| overlap(folder, held))
+                || inner.quiet.keys().any(|held| overlap(folder, held))
+        })
     }
 
     /// A terminal can share a folder with agents, but cannot race destructive folder operations.
@@ -640,6 +1013,170 @@ mod tests {
             daemons: Vec::new(),
             startup_timeout: Duration::from_secs(60),
         }
+    }
+
+    fn idle(notify: &Arc<Notify>, age: Duration) -> Activity {
+        Activity::Idle {
+            since: Instant::now() - age,
+            notify: Arc::clone(notify),
+        }
+    }
+
+    fn asked(notify: &Arc<Notify>) -> bool {
+        futures::FutureExt::now_or_never(notify.notified()).is_some()
+    }
+
+    #[test]
+    fn a_start_at_the_cap_asks_the_longest_idle_agent_and_takes_its_slot() {
+        let live = LiveAgents::new(2);
+        let (old, new) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+        let folder = PathBuf::from("/fixture/old");
+        assert_eq!(live.admit("old", &folder), Admission::Admitted);
+        assert_eq!(
+            live.admit("new", Path::new("/fixture/new")),
+            Admission::Admitted
+        );
+        // A start still preparing holds only its own folder, not every folder.
+        assert!(live.reserve_folder(Path::new("/fixture/elsewhere")));
+        live.release_folder(Path::new("/fixture/elsewhere"));
+        assert!(!live.report("old", idle(&old, Duration::from_secs(60))));
+        assert!(!live.report("new", idle(&new, Duration::from_secs(1))));
+        let released = live.released();
+        assert_eq!(
+            live.admit("third", Path::new("/fixture/third")),
+            Admission::Waiting
+        );
+        assert!(asked(&old), "the agent idle longest is asked");
+        assert!(!asked(&new));
+        assert!(live.is_waiting("third") && !live.contains("third"));
+        assert_eq!(
+            live.admit("third", Path::new("/fixture/third")),
+            Admission::Waiting,
+            "asking again changes nothing"
+        );
+        // Its slot passes to the waiting start once its processes are gone.
+        live.release("old");
+        assert!(live.contains("third") && !live.is_waiting("third"));
+        assert!(released.has_changed().unwrap());
+        assert_eq!(live.holders(&[PathBuf::from("/fixture/third")]), ["third"]);
+        assert_eq!(live.count(), 2);
+    }
+
+    #[test]
+    fn a_declined_stop_passes_on_and_an_owed_one_is_paid_by_the_next_idle_agent() {
+        let live = LiveAgents::new(2);
+        let (one, two) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+        for chat in ["one", "two"] {
+            assert_eq!(live.admit(chat, Path::new("/fixture")), Admission::Admitted);
+        }
+        assert!(!live.report("one", idle(&one, Duration::from_secs(60))));
+        assert!(!live.report("two", idle(&two, Duration::from_secs(1))));
+        assert_eq!(
+            live.admit("start", Path::new("/fixture")),
+            Admission::Waiting
+        );
+        assert!(asked(&one));
+        // It began a turn meanwhile: the other idle agent is asked instead.
+        assert!(!live.report("one", Activity::Working));
+        live.decline_stop("one");
+        assert!(asked(&two));
+        // That one too: nobody idles, so the stop is owed...
+        assert!(!live.report("two", Activity::Waiting));
+        live.decline_stop("two");
+        assert!(live.is_waiting("start"));
+        // ...and paid by the next agent to turn idle.
+        assert!(
+            live.report("one", idle(&one, Duration::ZERO)),
+            "it stops at once"
+        );
+        assert!(
+            !live.report("two", idle(&two, Duration::ZERO)),
+            "one stop per waiting start"
+        );
+        live.release("one");
+        assert!(live.contains("start"));
+    }
+
+    #[test]
+    fn a_full_table_says_what_its_agents_do_and_a_cancelled_wait_gives_its_place_up() {
+        let live = LiveAgents::new(3);
+        let notify = Arc::new(Notify::new());
+        for chat in ["work", "ask", "term"] {
+            assert_eq!(live.admit(chat, Path::new("/fixture")), Admission::Admitted);
+        }
+        live.report("work", Activity::Working);
+        live.report("ask", Activity::Waiting);
+        live.report("term", Activity::Terminal);
+        assert_eq!(
+            live.admit("new", Path::new("/fixture")),
+            Admission::Full(Occupancy {
+                working: 1,
+                waiting: 1,
+                terminals: 1,
+                shown: 0,
+                stopping: 0,
+            })
+        );
+        assert!(!live.is_waiting("new"), "a refused start does not wait");
+        live.report("work", idle(&notify, Duration::ZERO));
+        assert_eq!(
+            live.admit("first", Path::new("/fixture")),
+            Admission::Waiting
+        );
+        // A start that gives up leaves the agent stopping for it to the next start.
+        live.cancel_wait("first");
+        assert_eq!(
+            live.admit("second", Path::new("/fixture")),
+            Admission::Waiting
+        );
+        live.release("work");
+        assert!(live.contains("second") && !live.contains("first"));
+        // Waiting starts keep an update out until they have their slots.
+        let live = LiveAgents::new(1);
+        let notify = Arc::new(Notify::new());
+        assert_eq!(live.admit("a", Path::new("/fixture")), Admission::Admitted);
+        live.report("a", idle(&notify, Duration::ZERO));
+        assert_eq!(live.admit("b", Path::new("/fixture")), Admission::Waiting);
+        assert!(!live.try_quiesce());
+    }
+
+    #[test]
+    fn a_quiet_hold_keeps_agents_and_terminals_and_keeps_out_only_exclusive_changes() {
+        let live = LiveAgents::new(4);
+        let folder = PathBuf::from("/fixture/project");
+        let notify = Arc::new(Notify::new());
+        assert_eq!(live.admit("agent", &folder), Admission::Admitted);
+        live.report("agent", idle(&notify, Duration::ZERO));
+        assert!(live.begin_folder_use(folder.clone()));
+        // An agent and a terminal in the folder do not stand in a quiet change's way.
+        assert!(live.hold_quietly(std::slice::from_ref(&folder)));
+        assert!(
+            live.hold_quietly(&[folder.join("child")]),
+            "quiet changes share folders"
+        );
+        assert!(live.contains("agent"), "nothing was stopped");
+        assert_eq!(live.owned_work_count(), 2, "a quit waits for them");
+        assert!(!live.try_quiesce());
+        assert!(live.mutation_in(std::slice::from_ref(&folder)));
+        live.release_quiet(&[folder.join("child")]);
+        live.release_quiet(std::slice::from_ref(&folder));
+        assert_eq!(live.owned_work_count(), 0);
+        // A quiet change and an exclusive one keep each other out, nested folders included.
+        let other = PathBuf::from("/fixture/other");
+        assert!(live.hold_quietly(&[other.join("inner")]));
+        assert!(!live.reserve_folder(&other));
+        live.release_quiet(&[other.join("inner")]);
+        assert!(live.reserve_folder(&other));
+        assert!(!live.hold_quietly(&[other.join("inner")]));
+        live.release_folder(&other);
+        // Busy for a new chat: working or recently active only.
+        assert!(!live.busy("agent", Duration::ZERO));
+        assert!(live.busy("agent", Duration::from_secs(60)));
+        live.report("agent", Activity::Working);
+        assert!(live.busy("agent", Duration::ZERO));
+        assert_eq!(live.doing("agent"), Some(Doing::Working));
+        assert_eq!(live.terminals_in(&[PathBuf::from("/fixture")]), 1);
+        live.end_folder_use(&folder);
     }
 
     #[test]

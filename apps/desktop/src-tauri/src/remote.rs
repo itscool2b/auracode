@@ -226,7 +226,9 @@ fn failed(error: AppError) -> BackendError {
         AppErrorCode::QueueFull => "queue_full",
         AppErrorCode::UnknownAgent | AppErrorCode::AgentUnavailable => "agent_unavailable",
         AppErrorCode::InvalidFolder | AppErrorCode::InvalidArgument => "invalid",
-        AppErrorCode::TooManyAgents | AppErrorCode::TooManySubscriptions => "busy",
+        AppErrorCode::TooManyAgents
+        | AppErrorCode::TooManySubscriptions
+        | AppErrorCode::FolderBusy => "busy",
         AppErrorCode::StorageUnavailable | AppErrorCode::ShuttingDown => "unavailable",
         _ => "failed",
     };

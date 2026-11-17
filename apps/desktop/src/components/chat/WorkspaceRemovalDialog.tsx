@@ -1,12 +1,15 @@
 import "./workspace-removal.css";
 import { useEffect, useRef, useState } from "react";
 import type {
+  FolderBlockers,
   RemovedWorkspace,
   WorkspaceRemovalPreview,
   WorkspaceRemovalTarget,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
+import { busyFolder, type FolderBusyApi } from "../../lib/folderBusy";
 import { type WorkspaceRemovalApi, workspaceRemovalApi } from "../../lib/workspaceRemoval";
+import { FolderBusy } from "./FolderBusy";
 import { Modal } from "./Modal";
 
 export function WorkspaceRemovalDialog({
@@ -14,16 +17,20 @@ export function WorkspaceRemovalDialog({
   onClose,
   onChanged,
   api = workspaceRemovalApi,
+  folderBusy,
 }: {
   readonly target: WorkspaceRemovalTarget | null;
   readonly onClose: () => void;
   readonly onChanged: () => Promise<void>;
   readonly api?: WorkspaceRemovalApi;
+  readonly folderBusy?: Pick<FolderBusyApi, "stop">;
 }) {
   const [items, setItems] = useState<RemovedWorkspace[]>([]);
   const [review, setReview] = useState<WorkspaceRemovalPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Chats still working in the folders: the review stays, and stopping them applies it again.
+  const [blocked, setBlocked] = useState<FolderBlockers | null>(null);
   const [loaded, setLoaded] = useState(false);
   const generation = useRef(0);
   useEffect(() => {
@@ -63,16 +70,21 @@ export function WorkspaceRemovalDialog({
   };
   const apply = async () => {
     if (!review || busy) return;
-    const token = review.token;
+    const chosen = review;
     setReview(null);
     setBusy(true);
     setError(null);
+    setBlocked(null);
     try {
-      await api.apply(token);
+      await api.apply(chosen.token);
       await onChanged();
       onClose();
     } catch (reason) {
-      setError(errorMessage(reason));
+      const blockers = busyFolder(reason);
+      if (blockers) {
+        setReview(chosen);
+        setBlocked(blockers);
+      } else setError(errorMessage(reason));
     } finally {
       setBusy(false);
     }
@@ -106,6 +118,16 @@ export function WorkspaceRemovalDialog({
                   ))}
                 </ul>
               </details>
+            ) : null}
+            {blocked ? (
+              <FolderBusy
+                blockers={blocked}
+                api={folderBusy}
+                onStopped={() => {
+                  setBlocked(null);
+                  void apply();
+                }}
+              />
             ) : null}
             <button
               type="button"

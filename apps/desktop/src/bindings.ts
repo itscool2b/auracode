@@ -348,10 +348,21 @@ export const commands = {
 	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
 	/**
 	 *  Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
-	 *  the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+	 *  the app holds at most eight. The shell itself starts only through `project_terminal_open`.
 	 */
 	projectTerminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_reserve")),
-	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
+	/**
+	 *  The chat's folder and the shells this device offers, for a new terminal tab. It holds nothing,
+	 *  so a tab never carries anything that expires; `project_terminal_open` checks both again.
+	 */
+	projectTerminalReview: (chatId: string) => typedError<ProjectTerminalReview, AppError>(__TAURI_INVOKE("project_terminal_review", { chatId })),
+	/**
+	 *  Opens a project shell in a reserved terminal (`project_terminal_reserve`) in one step: Rust
+	 *  checks the chat's folder and the shell, prepares it and starts it, with no review token in
+	 *  between, so a tab first shown long after it was made still opens. `shell: null` takes the
+	 *  first shell this device offers.
+	 */
+	projectTerminalOpen: (chatId: string, shell: ProjectShell | null, terminalId: string, rows: number, cols: number) => typedError<ProjectTerminalOpened, AppError>(__TAURI_INVOKE("project_terminal_open", { chatId, shell, terminalId, rows, cols })),
 	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
 	/**
 	 *  The editors installed in their standard locations, for Settings' Editor, and the one a chat's
@@ -415,7 +426,27 @@ export const commands = {
 	chatArchive: (chatId: string, archived: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_archive", { chatId, archived })),
 	chatMove: (chatId: string, request: ChatMove) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_move", { chatId, request })),
 	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
+	/**
+	 *  What a folder the person picked already is: its projects (compared canonical, so a link or
+	 *  another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+	 */
+	workspaceFolderMatches: (path: string) => typedError<FolderMatches, AppError>(__TAURI_INVOKE("workspace_folder_matches", { path })),
 	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
+	/**
+	 *  Stops these chats, a turn in progress included, and answers once their agents' processes
+	 *  are gone: an action that waited for them can then go at once.
+	 */
+	chatsStop: (chatIds: string[]) => typedError<ChatsStopped, AppError>(__TAURI_INVOKE("chats_stop", { chatIds })),
+	/**
+	 *  Stops every idle agent (ready, unwatched, nothing open, queued or running in the background)
+	 *  and answers once they are gone. Working, waiting and terminal chats are left as they are.
+	 */
+	agentsStopIdle: () => typedError<ChatsStopped, AppError>(__TAURI_INVOKE("agents_stop_idle")),
+	/**
+	 *  The chats with a live agent in the folders `scope` names, with what each does, and the
+	 *  project terminals open there.
+	 */
+	folderBlockers: (scope: FolderScope) => typedError<FolderBlockers, AppError>(__TAURI_INVOKE("folder_blockers", { scope })),
 	/**
 	 *  Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
 	 *  chat whose agent `needs_download` is the consent to download its adapter.
@@ -735,10 +766,12 @@ export type AgentUsage = {
 	accounts: AccountUsage[],
 };
 
-/**  A command failure, serialized as `{ code, message }`. */
+/**  A command failure, serialized as `{ code, message }`, and `blockers` for `folder_busy`. */
 export type AppError = {
 	code: AppErrorCode,
 	message: string,
+	/**  What stands in the way of a folder change (`folder_busy` only). */
+	blockers?: FolderBlockers | null,
 };
 
 /**  What went wrong, as a stable code the UI can switch on. */
@@ -780,8 +813,16 @@ export type AppErrorCode =
 "option_invalid" | 
 /**  The agent isn't running in the chat. */
 "session_not_ready" | 
-/**  The most agents that may run at once already run. */
+/**
+ *  The most agents that may run at once already run and none is idle to make room; the
+ *  message says what they are doing.
+ */
 "too_many_agents" | 
+/**
+ *  Chats or project terminals are in the way of a change to a folder: `blockers` names them,
+ *  so the page can offer to stop them and try again.
+ */
+"folder_busy" | 
 /**  Too many views are open for the chat, or the webview. */
 "too_many_subscriptions" | 
 /**  The profile database can't be reached right now. */
@@ -975,6 +1016,17 @@ export type BlobText = {
 	eof: boolean,
 };
 
+/**  What a chat in the way of a change to a folder is doing. */
+export type BlockerState = 
+/**  Starting, running a turn or background work, or stopping. */
+"working" | 
+/**  Waiting for the person to answer a request or a question. */
+"waiting" | 
+/**  Open in its agent's own terminal. */
+"terminal" | 
+/**  Ready, with nothing running: stopping it loses nothing. */
+"idle";
+
 /**  Everything the browser tells the window. */
 export type BrowserEvent = 
 /**  A chat's tabs changed (opened, closed, moved front, loading, titled, crashed). */
@@ -1143,7 +1195,11 @@ export type ChatBrowser = {
 
 export type ChatCreatePreview = {
 	folder: ProjectFolder,
-	/**  Sessions holding this canonical folder, including preparation and shutdown. */
+	/**
+	 *  Sessions working in this canonical folder (starting, running a turn or background work,
+	 *  open in a terminal, or just started or finished) or waiting for the person's answer. An
+	 *  agent idle there does not count: it edits nothing until it is given a message.
+	 */
 	busy_chats: ChatSummary[],
 };
 
@@ -1271,6 +1327,16 @@ export type ChatTerminalStarted = {
 	 *  (Ctrl+C twice for most agents).
 	 */
 	exit_input: string,
+};
+
+/**  What stopping several chats did, by chat id. */
+export type ChatsStopped = {
+	/**  Stopped: their agents' processes are gone. */
+	stopped: string[],
+	/**  Left running because they were not idle (stopping idle agents only). */
+	kept: string[],
+	/**  Still stopping when the wait ended. */
+	stopping: string[],
 };
 
 export type CheckpointSummary = {
@@ -1698,6 +1764,23 @@ export type FileMention = {
 	directory: boolean,
 };
 
+/**  A chat in the way of a change to a folder, for the person to see and stop. */
+export type FolderBlocker = {
+	chat_id: string,
+	title: string | null,
+	agent_name: string,
+	/**  The name of the chat's project. */
+	project: string | null,
+	state: BlockerState,
+};
+
+/**  What stands in the way of a change to a folder. */
+export type FolderBlockers = {
+	chats: FolderBlocker[],
+	/**  Project terminals (and Run) open in the folder: close them to continue. */
+	terminals: number,
+};
+
 export type FolderKind = "local" | "git";
 
 export type FolderLocationReview = {
@@ -1707,6 +1790,31 @@ export type FolderLocationReview = {
 	notices: string[],
 };
 
+/**  A project folder that is the picked folder. */
+export type FolderMatch = {
+	folder_id: string,
+	project_id: string,
+	project_name: string,
+	/**  When the folder's most recent chat was last active; none without chats. */
+	last_chat_at: number | null,
+};
+
+/**
+ *  What a picked folder already is on this device, however the pick spelled it (a link, `..`,
+ *  letter case where the file system ignores it): Rust compares canonical folders.
+ */
+export type FolderMatches = {
+	/**  The folder as auracode stores it: canonical, in its plain spelling. */
+	path: string,
+	/**
+	 *  The project folders it already is: the one whose chat was active most recently first, then
+	 *  the oldest. A folder is in several projects only when it was added to each on purpose.
+	 */
+	matches: FolderMatch[],
+	/**  When it is a worktree auracode manages: a new chat starts from its source instead. */
+	worktree: WorktreeOrigin | null,
+};
+
 export type FolderResolution = {
 	folder: ProjectFolder,
 	roots: string[],
@@ -1714,6 +1822,15 @@ export type FolderResolution = {
 	truncated: boolean,
 	notices: string[],
 };
+
+/**  Which folders `folder_blockers` looks at. */
+export type FolderScope = 
+/**  The chat's folder. */
+{ type: "chat"; chat_id: string } | 
+/**  One project folder. */
+{ type: "folder"; folder_id: string } | 
+/**  Every folder of a project. */
+{ type: "project"; project_id: string };
 
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 
@@ -2664,6 +2781,11 @@ export type ProjectFolder = {
 	kind: FolderKind,
 	git_remote_url: string | null,
 	git_default_branch: string | null,
+	/**
+	 *  When this folder is a worktree auracode made: the folder it was made from (this device's
+	 *  path). A new chat never starts in one by itself; it starts from that source.
+	 */
+	worktree_of?: string | null,
 };
 
 /**  Complete editable project values. `None` clears an optional field on update. */
@@ -2725,6 +2847,21 @@ export type ProjectSummary = {
 	folders: ProjectFolder[],
 	created_at: number,
 	updated_at: number,
+};
+
+/**  A project shell opened in one step: its terminal, and the shell it runs. */
+export type ProjectTerminalOpened = {
+	terminal_id: string,
+	shell: ProjectShellChoice,
+};
+
+/**
+ *  What a new terminal tab shows before its shell starts: the chat's folder and the shells this
+ *  device offers. It holds nothing: the folder and the shell are checked again as the shell opens.
+ */
+export type ProjectTerminalReview = {
+	folder: string,
+	shells: ProjectShellChoice[],
 };
 
 export type ProjectToolsReview = {
@@ -3738,6 +3875,12 @@ export type WorktreeChatResult = {
 };
 
 export type WorktreeDestination = "isolated" | "direct";
+
+/**  The branch and source folder of a worktree auracode manages. */
+export type WorktreeOrigin = {
+	branch: string,
+	source: string,
+};
 
 export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
 

@@ -9,11 +9,23 @@ struct Records {
     entries: Vec<ManagedWorktree>,
 }
 
+/// Whether `current` is still the record a review saw. Its ports do not count: the registry gives
+/// them out beside other work (a project terminal opening), which changes nothing reviewed.
+pub(crate) fn unchanged_since_review(
+    current: &ManagedWorktree,
+    reviewed: &ManagedWorktree,
+) -> bool {
+    let without_port = |record: &ManagedWorktree| ManagedWorktree {
+        port: None,
+        ..record.clone()
+    };
+    without_port(current) == without_port(reviewed)
+}
+
 impl GitWorkspaces {
     /// The registry is scoped to this profile, including entries whose chat save rolled back.
     /// Listing does not require a live repository, so missing sources remain discoverable.
     pub async fn profile_records(&self) -> Result<Vec<ManagedWorktree>> {
-        let _guard = self.gate.lock().await;
         let mut records = self.read_records()?;
         for record in &mut records {
             if record.state == WorktreeState::Ready {
@@ -34,7 +46,6 @@ impl GitWorkspaces {
         Ok(records)
     }
     pub async fn profile_record(&self, id: &str) -> Result<ManagedWorktree> {
-        let _guard = self.gate.lock().await;
         self.read_records()?
             .into_iter()
             .find(|record| record.id == id)
@@ -83,6 +94,8 @@ impl GitWorkspaces {
         Ok(records.entries)
     }
 
+    /// Replaces the registry. Only [`Self::update_records`] and tests call it, so no write is
+    /// lost to another made meanwhile.
     pub(super) fn write_records(&self, entries: Vec<ManagedWorktree>) -> Result<()> {
         let record = Records {
             version: 2,
@@ -92,8 +105,24 @@ impl GitWorkspaces {
         Ok(())
     }
 
+    /// One read-modify-write of the registry under its short lock: `change` sees the records as
+    /// they are now, and they are saved when it changed them. Never hold anything across an
+    /// await here; a change worked out from an earlier read must be applied to this one.
+    pub(super) fn update_records<T>(
+        &self,
+        change: impl FnOnce(&mut Vec<ManagedWorktree>) -> Result<T>,
+    ) -> Result<T> {
+        let _records = self.records_lock();
+        let mut records = self.read_records()?;
+        let before = records.clone();
+        let value = change(&mut records)?;
+        if records != before {
+            self.write_records(records)?;
+        }
+        Ok(value)
+    }
+
     pub async fn list(&self, chat_id: &str) -> Result<Vec<ManagedWorktree>> {
-        let _guard = self.gate.lock().await;
         let mut records = self.read_records()?;
         records.retain(|record| record.chat_id == chat_id);
         for record in &mut records {

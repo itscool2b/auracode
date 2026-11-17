@@ -33,7 +33,7 @@ impl Drop for Admission {
 }
 
 #[tokio::test]
-async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
+async fn a_project_terminal_opens_in_one_step_and_holds_its_folder_beside_live_agents() {
     let (driver, _) = ScriptedDriver::new(vec![
         ready_step("native-terminal"),
         Step::Expect(CommandMatch::Shutdown),
@@ -51,14 +51,18 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
     });
     let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     status(&rig, &chat.id, SessionStatus::Ready).await;
-    let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    let review = rig.manager.project_terminal_review(&chat.id).await.unwrap();
     assert!(!review.shells.is_empty());
     let shell = review.shells[0].id;
-    let plan = rig
+    let (plan, opened) = rig
         .manager
-        .prepare_project_terminal(&chat.id, &review.token, shell)
+        .open_project_terminal(&chat.id, Some(shell))
         .await
         .unwrap();
+    assert_eq!(
+        (opened.id, &opened.program),
+        (shell, &review.shells[0].program)
+    );
     assert_eq!(plan.spec.folder, rig.folder.canonicalize().unwrap());
     // Shells start from plain paths: Windows PowerShell fails to start from a verbatim
     // (`\\?\C:\...`) program path, and cmd.exe falls back to the Windows folder from a verbatim
@@ -76,36 +80,48 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
     assert!(rig.manager.shared().live.contains(&chat.id));
     assert_eq!(rig.manager.project_terminal_count(), 1);
     assert_eq!(rig.manager.shared().live.owned_work_count(), 0);
-    assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &review.token, shell)
-            .await
-            .is_err()
-    );
+    // The review held nothing: another shell opens without one, and no choice takes the first.
+    let (second, first) = rig
+        .manager
+        .open_project_terminal(&chat.id, None)
+        .await
+        .unwrap();
+    assert_eq!(first.id, shell);
+    assert_eq!(rig.manager.project_terminal_count(), 2);
+    drop(second);
     rig.manager.stop(&chat.id).await.unwrap();
     eventually("retired", || !rig.manager.shared().live.contains(&chat.id)).await;
     let key = live::normalize_path(rig.folder.clone());
     assert!(!rig.manager.shared().live.reserve_folder(&key));
     drop(plan);
     assert!(rig.manager.shared().live.reserve_folder(&key));
-    let second = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    // While a change rewrites the folder, a terminal is refused, and the refusal says why.
+    let refused = rig
+        .manager
+        .open_project_terminal(&chat.id, Some(shell))
+        .await
+        .err()
+        .expect("refused while the folder changes");
     assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &second.token, shell)
-            .await
-            .is_err()
+        refused.to_string().contains("This folder is being changed"),
+        "{refused}"
     );
+    assert_eq!(rig.manager.project_terminal_count(), 0);
     rig.manager.shared().live.release_folder(&key);
-    let stale = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    // A folder that is gone is named, not opened.
     let moved = rig.folder.with_extension("moved");
     std::fs::rename(&rig.folder, &moved).unwrap();
-    std::fs::create_dir(&rig.folder).unwrap();
+    let gone = rig
+        .manager
+        .open_project_terminal(&chat.id, Some(shell))
+        .await
+        .err()
+        .expect("refused without its folder");
     assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &stale.token, shell)
-            .await
-            .is_err()
+        gone.to_string().contains("Locate this chat's folder"),
+        "{gone}"
     );
+    std::fs::create_dir(&rig.folder).unwrap();
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }
@@ -151,11 +167,12 @@ async fn the_persons_own_shell_comes_first() {
         "{:?}",
         review.shells
     );
-    let plan = rig
+    let (plan, choice) = rig
         .manager
-        .prepare_project_terminal(&chat.id, &review.token, first.id)
+        .open_project_terminal(&chat.id, Some(first.id))
         .await
         .unwrap();
+    assert_eq!(choice.id, first.id);
     assert_eq!(
         plan.spec.launch.args,
         expected
@@ -191,14 +208,12 @@ async fn several_project_terminals_in_one_folder_each_count_until_they_end() {
     status(&rig, &chat.id, SessionStatus::Ready).await;
     let mut plans = Vec::new();
     for _ in 0..3 {
-        let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
-        let shell = review.shells[0].id;
-        plans.push(
-            rig.manager
-                .prepare_project_terminal(&chat.id, &review.token, shell)
-                .await
-                .unwrap(),
-        );
+        let (plan, _) = rig
+            .manager
+            .open_project_terminal(&chat.id, None)
+            .await
+            .unwrap();
+        plans.push(plan);
     }
     assert_eq!(rig.manager.project_terminal_count(), 3);
     let key = live::normalize_path(rig.folder.clone());
@@ -313,9 +328,10 @@ async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_repl
 }
 
 #[tokio::test]
-async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_through_completion() {
-    let (driver, _) = ScriptedDriver::new(vec![
+async fn initialization_waits_for_a_working_agent_and_keeps_admission_through_completion() {
+    let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("native-init"),
+        Step::Expect(CommandMatch::Prompt),
         Step::Expect(CommandMatch::Shutdown),
         Step::Exit(DriverExit::Closed),
     ]);
@@ -332,6 +348,11 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
         .git_initialize_preview(&chat.id, "main")
         .await
         .expect("read-only review");
+    rig.manager
+        .send(&chat.id, "working".into())
+        .await
+        .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
     let released = Arc::new(AtomicBool::new(false));
     let error = rig
         .manager
@@ -341,8 +362,11 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
             Box::new(Admission(released.clone())),
         )
         .await
-        .expect_err("live folder stays protected");
-    assert!(error.to_string().contains("Stop all chats"));
+        .expect_err("a working agent's folder stays protected");
+    assert!(
+        error.to_string().contains("is working in this folder"),
+        "{error}"
+    );
     assert!(released.load(Ordering::Acquire));
     assert!(!rig.folder.join(".git").exists());
     rig.manager.stop(&chat.id).await.expect("stop");
@@ -360,6 +384,141 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
     assert!(result.head.is_none());
     assert!(released.load(Ordering::Acquire));
     assert!(!rig.folder.join(".git/index").exists());
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert!(rig.store.shutdown(Duration::from_secs(5)).await);
+}
+
+/// Runs Git in `cwd` for a fixture.
+pub(super) async fn fixture_git(cwd: &Path, args: &[&str]) {
+    use aura_process::{HelperEnv, HelperSpec, LeftoverRegistry, find_exe, run_helper};
+    let vars = aura_process::process_env();
+    let git = find_exe("git", &vars).expect("Git is required for this fixture");
+    let output = run_helper(
+        &LeftoverRegistry::disabled(),
+        HelperSpec {
+            program: git,
+            args: args.iter().map(Into::into).collect(),
+            cwd: cwd.to_path_buf(),
+            env: HelperEnv::Resolved(Arc::new(ResolvedEnv {
+                vars,
+                source: EnvSource::Fallback {
+                    reason: "push fixture".into(),
+                },
+                warnings: vec![],
+                resolved_at_ms: 0,
+            })),
+            set: vec![],
+            new_session: true,
+            timeout: Duration::from_secs(15),
+            max_stdout: 8192,
+        },
+    )
+    .await
+    .expect("fixture Git");
+    assert_eq!(
+        output.exit.and_then(|exit| exit.code),
+        Some(0),
+        "{}",
+        output.stderr_tail
+    );
+}
+
+#[tokio::test]
+async fn a_terminal_opens_while_another_folder_pushes() {
+    let driver = |native: &str| {
+        ScriptedDriver::new(vec![
+            ready_step(native),
+            Step::Expect(CommandMatch::Shutdown),
+            Step::Exit(DriverExit::Closed),
+        ])
+        .0
+    };
+    let mut rig = rig(
+        vec![driver("pushing"), driver("elsewhere")],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    super::worktree_guards::enable_worktree_fixture(&mut rig).await;
+    let inner = Arc::get_mut(&mut rig.manager.inner).unwrap();
+    Arc::get_mut(&mut inner.shared).unwrap().deps.env = EnvResolver::fixed(ResolvedEnv {
+        vars: aura_process::process_env(),
+        source: EnvSource::Fallback {
+            reason: "metadata-only terminal fixture".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let remote = rig._dir.path().join("remote.git");
+    fixture_git(
+        rig._dir.path(),
+        &["init", "--bare", "-b", "main", remote.to_str().unwrap()],
+    )
+    .await;
+    fixture_git(
+        &rig.folder,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    )
+    .await;
+    let other_folder = rig._dir.path().join("other");
+    std::fs::create_dir(&other_folder).unwrap();
+    let pushing = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    let elsewhere = rig
+        .manager
+        .create_chat("mock", &other_folder)
+        .await
+        .unwrap();
+    status(&rig, &pushing.id, SessionStatus::Ready).await;
+    status(&rig, &elsewhere.id, SessionStatus::Ready).await;
+    rig.manager.stop(&pushing.id).await.unwrap();
+    eventually("stopped", || {
+        !rig.manager.shared().live.contains(&pushing.id)
+    })
+    .await;
+    let preview = rig
+        .manager
+        .git_push_preview(&pushing.id)
+        .await
+        .expect("push review");
+    // The push is slow (a large upload, a slow network): it holds its repository meanwhile.
+    let slow = rig
+        .manager
+        .worktrees()
+        .unwrap()
+        .hold_repository_for_test(&rig.folder)
+        .await;
+    let push = tokio::spawn({
+        let manager = rig.manager.clone();
+        let (chat, token) = (pushing.id.clone(), preview.token.clone());
+        async move { manager.git_push_apply(&chat, &token).await }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!push.is_finished(), "the push is under way");
+    let quick = Duration::from_secs(5);
+    tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.id))
+        .await
+        .expect("project tools answer at once")
+        .expect("review");
+    let review = tokio::time::timeout(quick, rig.manager.project_terminal_review(&elsewhere.id))
+        .await
+        .expect("a new terminal tab's folder check answers at once")
+        .expect("terminal review");
+    let shell = review.shells[0].id;
+    let (plan, _) = tokio::time::timeout(
+        quick,
+        rig.manager
+            .open_project_terminal(&elsewhere.id, Some(shell)),
+    )
+    .await
+    .expect("a terminal in another folder opens at once")
+    .expect("terminal");
+    assert_eq!(plan.spec.folder, other_folder.canonicalize().unwrap());
+    drop(plan);
+    drop(slow);
+    tokio::time::timeout(quick, push)
+        .await
+        .expect("the push finishes")
+        .unwrap()
+        .expect("pushed");
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }

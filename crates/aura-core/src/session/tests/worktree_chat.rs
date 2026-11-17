@@ -61,8 +61,14 @@ fn canonical(path: impl AsRef<Path>) -> PathBuf {
 
 #[tokio::test]
 async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy() {
+    let (working, working_handle) = ScriptedDriver::new(vec![
+        ready_step("direct"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
     let mut rig = rig(
-        vec![idle_driver("direct"), idle_driver("isolated")],
+        vec![working, idle_driver("isolated")],
         WriterConfig::STANDARD,
         Knobs::STANDARD,
     );
@@ -78,6 +84,11 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
         .await
         .expect("direct chat");
     status(&rig, &direct.chat.id, SessionStatus::Ready).await;
+    rig.manager
+        .send(&direct.chat.id, "work in the source".into())
+        .await
+        .expect("send");
+    working_handle.wait_for(CommandMatch::Prompt).await;
     let preview = plan(
         &rig,
         WorktreeChatInput {
@@ -95,7 +106,8 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
     );
     assert!(preview.setup.is_none());
     assert!(!Path::new(&preview.path).exists());
-    // Bringing changes reads the source, so a busy source is refused for that variant only.
+    // Bringing changes reads the source, so a source whose agent works is refused for that
+    // variant only, naming the chat.
     let copying = plan(
         &rig,
         WorktreeChatInput {
@@ -104,12 +116,15 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
         },
     )
     .await;
-    assert!(
-        rig.manager
-            .worktree_chat_apply(&copying.token)
-            .await
-            .is_err()
-    );
+    match rig.manager.worktree_chat_apply(&copying.token).await {
+        Err(SessionError::FolderBusy { message, blockers }) => {
+            assert_eq!(blockers.chats.len(), 1, "{message}");
+            assert_eq!(blockers.chats[0].chat_id, direct.chat.id);
+            assert!(message.contains("is working in this folder"), "{message}");
+        }
+        Err(other) => panic!("expected the working chat to be named, got {other}"),
+        Ok(_) => panic!("copying from a working source must wait"),
+    }
     assert!(!Path::new(&copying.path).exists());
     let result = rig
         .manager
@@ -163,6 +178,53 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
     );
     // The source chat kept running in the original folder.
     assert!(rig.manager.shared().live.contains(&direct.chat.id));
+    // The worktree is known as the worktree it is: its project folder names its source, so a
+    // new chat never starts in it by itself, and a pick of it says where it came from.
+    let snapshot = rig
+        .manager
+        .workspace_snapshot(aura_protocol::workspace::WorkspaceFilter {
+            include_archived: true,
+            project_id: None,
+        })
+        .await
+        .expect("snapshot");
+    let folders: Vec<_> = snapshot
+        .projects
+        .iter()
+        .flat_map(|project| &project.folders)
+        .collect();
+    let at = |path: &Path| {
+        folders
+            .iter()
+            .find(|folder| {
+                folder
+                    .path
+                    .as_deref()
+                    .is_some_and(|stored| canonical(stored) == canonical(path))
+            })
+            .copied()
+    };
+    let tree = at(Path::new(&preview.path)).expect("the worktree is a project folder");
+    assert_eq!(
+        tree.worktree_of.as_deref().map(canonical),
+        Some(canonical(&rig.folder))
+    );
+    assert_eq!(at(&rig.folder).expect("source").worktree_of, None);
+    let picked = rig
+        .manager
+        .workspace_folder_matches(&preview.path)
+        .await
+        .expect("matches");
+    let origin = picked.worktree.expect("a managed worktree");
+    assert_eq!(origin.branch, "aura/parallel-fix");
+    assert_eq!(canonical(&origin.source), canonical(&rig.folder));
+    let source = rig
+        .manager
+        .workspace_folder_matches(&rig.folder.to_string_lossy())
+        .await
+        .expect("matches");
+    assert_eq!(source.worktree, None);
+    assert_eq!(source.matches[0].folder_id, project.folders[0].id);
 }
 
 #[tokio::test]
@@ -565,26 +627,14 @@ async fn a_deleted_worktree_folder_is_recreated_for_its_stopped_chat() {
         .worktree_recreate_preview(&chat_id, &result.worktree.id)
         .await
         .expect("recreate preview");
-    // A live chat still holds the folder; Git actions wait for it to stop.
-    assert!(
-        rig.manager
-            .worktree_recreate_apply(&chat_id, &result.worktree.id, &recreate.token)
-            .await
-            .is_err()
-    );
-    rig.manager.stop(&chat_id).await.expect("stop");
-    eventually("stopped", || !rig.manager.shared().live.contains(&chat_id)).await;
-    let recreate = rig
-        .manager
-        .worktree_recreate_preview(&chat_id, &result.worktree.id)
-        .await
-        .expect("recreate preview again");
+    // Its idle agent stops first (it resumes on the next message); then the folder is recreated.
     let recreated = rig
         .manager
         .worktree_recreate_apply(&chat_id, &result.worktree.id, &recreate.token)
         .await
         .expect("recreate");
     assert!(recreated.error.is_none(), "{:?}", recreated.error);
+    assert!(!rig.manager.shared().live.contains(&chat_id));
     assert_eq!(recreated.worktree.state, WorktreeState::Ready);
     assert!(Path::new(&result.worktree.path).join(".git").is_file());
     assert_eq!(
@@ -672,7 +722,10 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         .await
         .unwrap();
     let terminals = crate::terminal::Terminals::default();
-    let busy = terminals.reserve("window").unwrap().pending();
+    // Every setup terminal the app allows is taken (a sign-in no longer counts against them).
+    let busy: Vec<String> = (0..crate::terminal::MAX_SETUP_TERMINALS)
+        .map(|_| terminals.reserve_setup("window").unwrap().pending())
+        .collect();
     assert!(
         rig.manager
             .reserve_worktree_setup_terminal(&terminals, "window", chat, &token)
@@ -696,7 +749,9 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         .await
         .unwrap();
     assert!(held.snapshot.queue.iter().all(|row| row.held));
-    terminals.close("window", &busy).unwrap();
+    for id in &busy {
+        terminals.close("window", id).unwrap();
+    }
     let retry = rig
         .manager
         .worktree_setup_command_preview(chat, &created.worktree.id)
@@ -816,6 +871,71 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         held.snapshot.queue.iter().all(|row| row.held),
         "successfully retrying does not auto-send failed messages"
     );
+}
+
+#[tokio::test]
+async fn two_projects_setup_terminals_run_at_once() {
+    let mut rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut rig).await;
+    // A second repository, a project of its own.
+    let second = rig._dir.path().join("second project");
+    std::fs::create_dir(&second).unwrap();
+    for args in [
+        vec!["init", "-b", "main"],
+        vec![
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@localhost",
+            "-c",
+            "commit.gpgSign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    ] {
+        super::project_tools::fixture_git(&second, &args).await;
+    }
+    let first_project = project(&rig, &rig.folder).await;
+    let second_project = project(&rig, &second).await;
+    let terminals = crate::terminal::Terminals::default();
+    let mut opened = Vec::new();
+    for project in [&first_project, &second_project] {
+        setup_source(&rig, project).await;
+        let reviewed = plan(&rig, input(project)).await;
+        let created = rig
+            .manager
+            .worktree_chat_apply(&reviewed.token)
+            .await
+            .expect("worktree chat");
+        let token = created.setup.unwrap().command_token.unwrap();
+        // The same window starts the second project's setup while the first one's is open.
+        let id = rig
+            .manager
+            .reserve_worktree_setup_terminal(&terminals, "window", &created.chat.chat.id, &token)
+            .await
+            .expect("each project's setup gets its own terminal");
+        opened.push((created.chat.chat.id, token, id));
+    }
+    assert_ne!(opened[0].2, opened[1].2);
+    for (chat, token, id) in &opened {
+        let (ticket, launch) = terminals
+            .claim_setup("window", id, chat, token)
+            .expect("claim");
+        drop(launch);
+        drop(ticket);
+        assert_eq!(
+            rig.store
+                .read_setup_attempt(chat)
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            aura_protocol::worktree_setup::WorktreeSetupState::Running,
+            "neither attempt was marked failed"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1077,5 +1197,114 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
             .unwrap()
             .command,
         None
+    );
+}
+
+#[tokio::test]
+async fn a_slow_worktree_creation_does_not_delay_another_folder() {
+    let mut rig = rig(
+        vec![
+            idle_driver("elsewhere"),
+            idle_driver("worktree"),
+            idle_driver("same-folder"),
+        ],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    enable_worktree_fixture(&mut rig).await;
+    let source = project(&rig, &rig.folder).await;
+    let other_folder = rig._dir.path().join("other project");
+    std::fs::create_dir(&other_folder).unwrap();
+    let other = project(&rig, &other_folder).await;
+    let preview = plan(&rig, input(&source)).await;
+    // `git worktree add` is slow (a large repository, a slow disk): it holds the repository.
+    let service = rig.manager.worktrees().unwrap();
+    let slow = service.hold_repository_for_test(&rig.folder).await;
+    let creating = tokio::spawn({
+        let manager = rig.manager.clone();
+        let token = preview.token.clone();
+        async move { manager.worktree_chat_apply(&token).await }
+    });
+    // A chat in the same folder waits its turn: busy-folder checks stay in arrival order.
+    let same_folder = tokio::spawn({
+        let manager = rig.manager.clone();
+        let folder_id = source.folders[0].id.clone();
+        async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            manager
+                .chat_project_create(ProjectChatCreate {
+                    agent_id: "mock".into(),
+                    folder_id,
+                    allow_busy_folder: false,
+                })
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!creating.is_finished(), "the creation waits on Git");
+    // Everything about another folder goes on meanwhile.
+    let quick = Duration::from_secs(5);
+    let elsewhere = tokio::time::timeout(
+        quick,
+        rig.manager.chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: other.folders[0].id.clone(),
+            allow_busy_folder: false,
+        }),
+    )
+    .await
+    .expect("a chat in another project starts at once")
+    .expect("created");
+    status(&rig, &elsewhere.chat.id, SessionStatus::Ready).await;
+    tokio::time::timeout(quick, rig.manager.workspace_snapshot(Default::default()))
+        .await
+        .expect("the sidebar answers at once")
+        .expect("snapshot");
+    tokio::time::timeout(quick, rig.manager.chat_create_preview(&other.folders[0].id))
+        .await
+        .expect("New chat's folder check answers at once")
+        .expect("preview");
+    tokio::time::timeout(quick, rig.manager.profile_worktrees(None))
+        .await
+        .expect("retained worktrees answer at once")
+        .expect("worktrees");
+    let review = tokio::time::timeout(
+        quick,
+        rig.manager.project_terminal_review(&elsewhere.chat.id),
+    )
+    .await
+    .expect("a new terminal tab's folder check answers at once");
+    if let Ok(review) = review
+        && let Some(shell) = review.shells.first()
+    {
+        drop(
+            tokio::time::timeout(
+                quick,
+                rig.manager
+                    .open_project_terminal(&elsewhere.chat.id, Some(shell.id)),
+            )
+            .await
+            .expect("a terminal in another project opens at once"),
+        );
+    }
+    assert!(
+        !same_folder.is_finished(),
+        "the same folder's chat waits its turn"
+    );
+    drop(slow);
+    let made = tokio::time::timeout(quick, creating)
+        .await
+        .expect("the creation finishes once Git does")
+        .unwrap()
+        .expect("worktree chat");
+    assert_eq!(made.worktree.state, WorktreeState::Ready);
+    let direct = tokio::time::timeout(quick, same_folder)
+        .await
+        .expect("the waiting chat follows")
+        .unwrap()
+        .expect("direct chat");
+    assert_ne!(
+        canonical(&direct.chat.folder),
+        canonical(&made.chat.chat.folder)
     );
 }

@@ -16,7 +16,8 @@ const mode = new URLSearchParams(location.search).get("agents");
 
 /**
  * `&retained=<n>`: worktrees kept from n chats that are gone, as the profile's registry lists
- * them (no saved chat holds them); `&retained=broken` adds one whose creation stopped half way.
+ * them (no saved chat holds them); `&retained=broken` adds one whose creation stopped half way;
+ * `&retained=never`: the list never arrives, and nothing may wait for it.
  */
 function retainedRecords(): ManagedWorktree[] {
   const asked = new URLSearchParams(location.search).get("retained");
@@ -160,7 +161,13 @@ export function NewChatPreview({
   );
   const fixture = useMemo(() => (scenario ? newChatFixture(scenario) : null), [scenario]);
   const recoveryApi = useMemo(
-    () => ({ ...worktreeRecoveryApi, list: async () => retainedRecords() }),
+    () => ({
+      ...worktreeRecoveryApi,
+      list:
+        new URLSearchParams(location.search).get("retained") === "never"
+          ? () => new Promise<ManagedWorktree[]>(() => {})
+          : async () => retainedRecords(),
+    }),
     [],
   );
   useEffect(() => {

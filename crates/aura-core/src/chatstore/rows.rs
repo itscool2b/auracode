@@ -106,7 +106,7 @@ pub(crate) fn create_chat(conn: &Connection, new: &NewChat) -> rusqlite::Result<
              JOIN project_folders pf ON pf.id = fl.folder_id \
              JOIN projects p ON p.id = pf.project_id \
              WHERE fl.device_id = ?1 AND fl.path = ?2 AND pf.deleted = 0 AND p.deleted = 0 \
-             ORDER BY pf.created_at LIMIT 1",
+             ORDER BY pf.created_at, p.created_at, pf.id LIMIT 1",
         )?
         .query_row(params![new.device_id, path], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -747,6 +747,54 @@ pub(crate) mod tests {
         );
         assert_eq!(parse_session_host("native"), AgentHost::Native);
         assert_eq!(parse_session_host("future"), AgentHost::Unsupported);
+    }
+
+    #[test]
+    fn a_chat_in_a_folder_of_several_projects_always_joins_the_same_one() {
+        let db = TestDb::new();
+        let conn = db.conn();
+        // One path in two projects, added at the same moment: the oldest project's folder, then
+        // the lowest ID, every time.
+        for (project, folder, created) in
+            [("b-project", "b-folder", 2), ("a-project", "a-folder", 1)]
+        {
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at, updated_at, device_id) VALUES (?1, ?1, ?2, ?2, 'dev')",
+                params![project, created],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO project_folders (id, project_id, display_name, kind, origin_device_id, created_at, updated_at, device_id) VALUES (?1, ?2, 'work', 'local', 'dev', 5, 5, 'dev')",
+                params![folder, project],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO folder_locations (folder_id, device_id, path, last_seen_at) VALUES (?1, 'dev', '/work', 5)",
+                params![folder],
+            )
+            .unwrap();
+        }
+        for _ in 0..3 {
+            let chat = create_chat(
+                conn,
+                &NewChat {
+                    agent_host: Default::default(),
+                    agent_id: "mock".into(),
+                    folder: "/work".into(),
+                    device_id: "dev".into(),
+                    now: 9,
+                },
+            )
+            .unwrap();
+            let joined: (String, String) = conn
+                .query_row(
+                    "SELECT project_id, folder_id FROM chats WHERE id = ?1",
+                    params![chat.id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(joined, ("a-project".into(), "a-folder".into()));
+        }
     }
 
     #[test]

@@ -4,6 +4,7 @@ import type { AgentEntry, ConfigChoice, ConfigOption, QueueWait } from "../../bi
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, NewChatDraft } from "../../lib/chat/appStore";
 import { type ChatState, ChatStore } from "../../lib/chat/chatStore";
+import { createdChatOpens } from "../../lib/chat/newChatContext";
 import { queueWaitView } from "../../lib/chat/queueWait";
 import {
   attachResult,
@@ -179,6 +180,22 @@ describe("New chat", () => {
     expect(html).toContain("WSL Ubuntu");
     expect(html).toContain("Untested version");
     expect(html).toContain("Last verified: 0.162.1");
+  });
+
+  it("a chat created after the person moved on does not take the view", () => {
+    const transport = new FakeTransport();
+    const creator = new NewChatDraft(transport);
+    const composing = { selected: null, composing: true, draft: creator };
+    // Still on the New chat that made it: the new chat opens.
+    expect(createdChatOpens(composing, creator)).toBe(true);
+    // The person opened another chat while it was being made: it stays where they are.
+    expect(createdChatOpens({ ...composing, selected: "other" }, creator)).toBe(false);
+    // Or began another New chat: that draft keeps the screen.
+    expect(createdChatOpens({ ...composing, draft: new NewChatDraft(transport) }, creator)).toBe(
+      false,
+    );
+    // Or left for the start screen.
+    expect(createdChatOpens({ ...composing, composing: false }, creator)).toBe(false);
   });
 });
 

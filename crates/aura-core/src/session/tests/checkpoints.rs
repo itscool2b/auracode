@@ -183,7 +183,7 @@ fn script() -> (ScriptedDriver, aura_drivers::testing::ScriptHandle) {
 }
 
 #[tokio::test]
-async fn capture_precedes_prompt_and_revert_requires_all_folder_agents_stopped() {
+async fn capture_precedes_prompt_and_revert_stops_the_idle_agent_first() {
     let (driver, handle) = script();
     let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
     enable(&mut rig, true);
@@ -216,25 +216,20 @@ async fn capture_precedes_prompt_and_revert_requires_all_folder_agents_stopped()
         .checkpoint_revert_preview(&chat.id, &checkpoint.id, vec!["work.txt".into()])
         .await
         .expect("preview");
-    assert!(
-        rig.manager
-            .checkpoint_revert(&chat.id, &preview.token)
-            .await
-            .expect_err("live agent refused")
-            .to_string()
-            .contains("Stop chats")
-    );
-    rig.manager.stop(&chat.id).await.expect("stop");
-    eventually("live ownership released", || {
-        !rig.manager.shared().live.contains(&chat.id)
-    })
-    .await;
+    // The agent finished its turn: reverting stops it first (it resumes on the next message),
+    // and only once its process is gone are the files rewritten.
     let result = rig
         .manager
         .checkpoint_revert(&chat.id, &preview.token)
         .await
         .expect("revert");
     assert!(result.error.is_none());
+    assert!(!rig.manager.shared().live.contains(&chat.id));
+    assert!(
+        handle
+            .commands()
+            .contains(&aura_drivers::driver::LoggedCommand::Shutdown)
+    );
     assert_eq!(
         std::fs::read(rig.folder.join("work.txt")).expect("restored"),
         b"original\r\n"

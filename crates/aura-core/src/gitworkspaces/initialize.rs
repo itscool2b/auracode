@@ -144,7 +144,6 @@ impl GitWorkspaces {
         path: &Path,
         token: &str,
     ) -> Result<GitWorkspace> {
-        let _gate = self.gate.lock().await;
         let prepared = self
             .initializations
             .lock()
@@ -161,6 +160,7 @@ impl GitWorkspaces {
             ));
         }
         let git = self.git().await?;
+        let _repository = self.hold_repository(&git, path).await;
         let mut protected = git.protected.clone();
         protected.extend(self.root.parent().map(Path::to_path_buf));
         let (current, identity) = folder(path, &protected)?;

@@ -16,8 +16,11 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
-/// Sign-in, installation and setup terminals: one per window, at most four in the app.
+/// Sign-in and installation terminals: one per window, at most four in the app.
 const MAX_TERMINALS: usize = 4;
+/// Worktree setup commands: several per window, so two projects' new worktrees set up at once,
+/// and at most four in the app, each a bounded, owned process.
+pub const MAX_SETUP_TERMINALS: usize = 4;
 /// Chats open in their agent's own interface: several per window, as chats are, each running its
 /// agent until closed. Eight keeps the app's agent processes bounded (owner, 10 November 2026: a
 /// second terminal chat was refused while the first ran).
@@ -40,6 +43,8 @@ pub enum TerminalError {
     ProjectFull,
     #[error("Eight chats are open in the terminal. Close one before opening another.")]
     ChatFull,
+    #[error("Four setup commands are running. Wait for one to finish, then retry setup.")]
+    SetupFull,
     #[error("This terminal was not reserved for a project shell.")]
     NotProject,
     #[error("This terminal was not reserved for a terminal chat.")]
@@ -85,8 +90,10 @@ struct Running {
 /// The pool a terminal counts against, fixed when it is reserved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Pool {
-    /// Sign-in, installation and setup: one per window, at most [`MAX_TERMINALS`].
+    /// Sign-in and installation: one per window, at most [`MAX_TERMINALS`].
     Vendor,
+    /// A worktree's setup command: several per window, at most [`MAX_SETUP_TERMINALS`].
+    Setup,
     /// A chat in its agent's own interface: several per window, at most [`MAX_CHAT_TERMINALS`].
     Chat,
     /// A project shell in the docked panel: several per window, at most [`MAX_PROJECT_TERMINALS`].
@@ -157,9 +164,10 @@ impl Drop for Inner {
     }
 }
 
-/// Clones share ownership. Sign-in, installation and setup terminals: one per window, at most
-/// four in this app instance. Terminal chats and project shells: any number per window, at most
-/// [`MAX_CHAT_TERMINALS`] and [`MAX_PROJECT_TERMINALS`] in the app.
+/// Clones share ownership. Sign-in and installation terminals: one per window, at most four in
+/// this app instance. Worktree setup commands, terminal chats and project shells: any number per
+/// window, at most [`MAX_SETUP_TERMINALS`], [`MAX_CHAT_TERMINALS`] and [`MAX_PROJECT_TERMINALS`]
+/// in the app.
 #[derive(Clone, Default)]
 pub struct Terminals(Arc<Inner>);
 
@@ -330,6 +338,14 @@ impl TerminalTicket {
         Ok(self.id.clone())
     }
 
+    /// Resolves once this terminal is closed (by its page, a reload or quit) before it started, so
+    /// a launch still being prepared, a terminal chat waiting for its worktree's setup say, stops
+    /// waiting then.
+    pub async fn closed(&self) {
+        let mut canceled = self.slot.canceled.subscribe();
+        let _ = canceled.wait_for(|value| *value).await;
+    }
+
     /// Return the reservation before beginning any vendor work. A close can now name and cancel
     /// it even if a later start handler has not begun yet.
     pub fn pending(mut self) -> String {
@@ -416,9 +432,15 @@ impl Terminals {
         Some(IdleTerminalGuard(&self.0))
     }
 
-    /// A sign-in, installation or setup terminal: one per window.
+    /// A sign-in or installation terminal: one per window.
     pub fn reserve(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
         self.reserve_in(owner, Pool::Vendor)
+    }
+
+    /// A worktree's setup command: several per window, bounded across the app, so one project's
+    /// setup never refuses another's, and a sign-in never waits on either.
+    pub fn reserve_setup(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
+        self.reserve_in(owner, Pool::Setup)
     }
 
     /// A chat in its agent's own interface: several per window, bounded across the app. Each
@@ -446,6 +468,9 @@ impl Terminals {
             Pool::Vendor if members.len() >= MAX_TERMINALS => return Err(TerminalError::Full),
             Pool::Chat if members.len() >= MAX_CHAT_TERMINALS => {
                 return Err(TerminalError::ChatFull);
+            }
+            Pool::Setup if members.len() >= MAX_SETUP_TERMINALS => {
+                return Err(TerminalError::SetupFull);
             }
             Pool::Project if members.len() >= MAX_PROJECT_TERMINALS => {
                 return Err(TerminalError::ProjectFull);
@@ -1150,6 +1175,38 @@ mod tests {
         assert!(shells.iter().all(|ticket| *ticket.slot.canceled.borrow()));
         assert!(*replacement.slot.canceled.borrow());
         assert!(*sign_in.slot.canceled.borrow());
+        assert!(terminals.try_quiesce_when_idle().is_some());
+    }
+
+    #[test]
+    fn setup_terminals_have_their_own_pool() {
+        let terminals = Terminals::default();
+        // Two projects' worktree setups in one window run at once...
+        let first = terminals.reserve_setup("main").unwrap();
+        let second = terminals.reserve_setup("main").unwrap();
+        // ...while a sign-in in that window still opens, one per window as before.
+        let sign_in = terminals.reserve("main").unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        // The setup pool is bounded across the app and says so.
+        let third = terminals.reserve_setup("library").unwrap();
+        let fourth = terminals.reserve_setup("library").unwrap();
+        assert!(matches!(
+            terminals.reserve_setup("main"),
+            Err(TerminalError::SetupFull)
+        ));
+        // Project shells never count against it.
+        let shell = terminals.reserve_project("main").unwrap();
+        let freed = fourth.pending();
+        terminals.close("library", &freed).unwrap();
+        let again = terminals.reserve_setup("main").unwrap();
+        for ticket in [&first, &second, &third, &again, &sign_in, &shell] {
+            assert!(!*ticket.slot.canceled.borrow());
+        }
+        terminals.drop_owner("main");
+        terminals.drop_owner("library");
         assert!(terminals.try_quiesce_when_idle().is_some());
     }
 

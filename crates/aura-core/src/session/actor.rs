@@ -121,6 +121,15 @@ pub(crate) enum ChatMsg {
     ReleaseGit {
         id: String,
     },
+    /// A quiet change to the chat's folder (a commit, a setup copy): refused while a turn, a
+    /// start or a stop is under way; otherwise new turns and starts wait until `ReleaseQuiet`.
+    HoldQuiet {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReleaseQuiet {
+        id: String,
+    },
     FolderLocated {
         reservation: String,
         record: ChatRecord,
@@ -241,6 +250,12 @@ pub(crate) enum ChatMsg {
     Stop {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// Stops the agent only while it idles (see `idles`), or with `even_shown` while it is not
+    /// working though a view is open; answers whether it began stopping.
+    StopIfIdle {
+        even_shown: bool,
+        reply: oneshot::Sender<Result<bool, SessionError>>,
+    },
     /// The account switch: the agent of `agent` starts again on the account it starts on now,
     /// resuming the same session, and the held prompts go once it is ready.
     RestartOnAccount {
@@ -293,7 +308,8 @@ impl ChatMsg {
             ChatMsg::ReserveWorkspace { reply, .. } | ChatMsg::ReserveGit { reply, .. } => {
                 drop(reply.send(Err(error)))
             }
-            ChatMsg::ReleaseGit { .. } => {}
+            ChatMsg::ReleaseGit { .. } | ChatMsg::ReleaseQuiet { .. } => {}
+            ChatMsg::HoldQuiet { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::FolderLocated { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
@@ -334,6 +350,7 @@ impl ChatMsg {
                 let _ = reply.send(());
             }
             ChatMsg::OpenTerminal { reply } => drop(reply.send(Err(error))),
+            ChatMsg::StopIfIdle { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Detach { .. }
             | ChatMsg::DropOwner { .. }
             | ChatMsg::SetupChanged(_)
@@ -374,6 +391,32 @@ pub(crate) fn storage_error(error: &StoreError) -> SessionError {
         StoreError::BlobMissing(message) => SessionError::BlobMissing(message.clone()),
         other => SessionError::StorageUnavailable(other.to_string()),
     }
+}
+
+/// Why a start found no room: every slot is taken and no agent idles, so it says what they do.
+fn too_many_agents(limit: usize, occupancy: super::live::Occupancy) -> SessionError {
+    let parts: Vec<String> = [
+        (occupancy.working, "working"),
+        (occupancy.waiting, "waiting for your answer"),
+        (occupancy.terminals, "open in a terminal"),
+        (occupancy.shown, "open on screen"),
+        (occupancy.stopping, "stopping"),
+    ]
+    .into_iter()
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, what)| format!("{count} {what}"))
+    .collect();
+    let list = match parts.as_slice() {
+        [] => String::new(),
+        [one] => format!(": {one}"),
+        [rest @ .., last] => format!(": {} and {last}", rest.join(", ")),
+    };
+    let message = if limit == 1 {
+        format!("1 agent is running and it is not idle{list}. Stop it, then try again.")
+    } else {
+        format!("{limit} agents are running and none is idle{list}. Stop one, then try again.")
+    };
+    SessionError::TooManyAgents { limit, message }
 }
 
 /// `SessionError` is not `Clone` (it is a public frozen type); the variants a refusal uses are.
@@ -658,6 +701,11 @@ enum Done {
     /// A FORCE chain on a process of a retired generation ended.
     Retired(u64),
     Abort(AbortHandle),
+    /// A start waiting for room got a slot (`admitted`), or gave up waiting.
+    Room {
+        id: u64,
+        admitted: bool,
+    },
     Nothing,
 }
 
@@ -855,7 +903,42 @@ pub(crate) struct ChatActor {
     /// The native session the agent returned at `Ready` is open in another chat: the start fails
     /// once the driver stopped.
     conflict: bool,
+    /// A start waiting for another chat's idle agent to stop and give it its slot.
+    room: Option<RoomWait>,
+    /// Counts this chat's waits for room, so a finished one is told from the current one.
+    rooms: u64,
+    /// How a start at the limit asks this chat's agent to stop when it is the idle one.
+    make_room: Arc<tokio::sync::Notify>,
+    /// Quiet changes to the chat's folder under way (a commit, a setup copy): new turns and
+    /// starts wait for the last one to end.
+    quiet_holds: std::collections::HashSet<String>,
+    /// A start asked for while a quiet change held the folder, Start fresh if `true`.
+    start_after_hold: Option<bool>,
+    /// What this chat last reported to the live-agent table, so it reports only changes.
+    reported: Option<Reported>,
 }
+
+/// A start waiting for room.
+struct RoomWait {
+    id: u64,
+    fresh: bool,
+    abort: AbortHandle,
+}
+
+/// What an actor last told the live-agent table it was doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reported {
+    Idle(Instant),
+    Working,
+    Waiting,
+    Terminal,
+    Shown(Instant),
+    Stopping,
+}
+
+/// A start waits this long for an idle agent to stop: a stop that has not ended by then is forced
+/// well before.
+const ROOM_WAIT: Duration = Duration::from_secs(60);
 
 impl ChatActor {
     fn new(
@@ -995,6 +1078,12 @@ impl ChatActor {
             terminal_import: None,
             starting_fresh: false,
             conflict: false,
+            room: None,
+            rooms: 0,
+            make_room: Arc::new(tokio::sync::Notify::new()),
+            reported: None,
+            quiet_holds: std::collections::HashSet::new(),
+            start_after_hold: None,
             shared,
             chat,
         }
@@ -1015,6 +1104,7 @@ impl ChatActor {
             let timer_at = self.next_timer();
             let reading = self.reading_events();
             let head = self.outbox.front().map(op_bytes);
+            let make_room = Arc::clone(&self.make_room);
             tokio::select! {
                 biased;
                 changed = workspace_changes.changed() => {
@@ -1029,6 +1119,7 @@ impl ChatActor {
                     Some(msg) => self.on_msg(msg),
                     None => break,
                 },
+                () = make_room.notified() => self.make_room(),
                 Some(done) = self.in_flight.next(), if !self.in_flight.is_empty() => self.on_done(done),
                 () = sleep_until(flush_at), if flush_at.is_some() => self.flush(),
                 () = sleep_until(timer_at), if timer_at.is_some() => self.on_timer(),
@@ -1091,13 +1182,20 @@ impl ChatActor {
             || !self.retiring.is_empty()
             || self.checkpointing.is_some()
             || self.turn.is_some()
-            || (!restoring && !self.queue.is_empty())
+            // A held prompt waits for the person, so it stays; one about to go does not.
+            || (!restoring && self.queue.iter().any(|row| !row.held))
             || self.pending_start.is_some()
             || self.native_identity_pending.is_some()
+            || !self.quiet_holds.is_empty()
+            || self.room.is_some()
+            || self.terminal.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
         {
-            Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing this workspace.".into()))
+            Err(SessionError::Organization(format!(
+                "{} is working in this folder.",
+                self.agent_label()
+            )))
         } else if self.store.is_paused() {
             Err(SessionError::StorageUnavailable(
                 "Wait for saving to resume before changing this workspace.".into(),
@@ -1141,6 +1239,7 @@ impl ChatActor {
                 ChatMsg::Detach { .. }
                 | ChatMsg::DropOwner { .. }
                 | ChatMsg::ReleaseGit { .. }
+                | ChatMsg::ReleaseQuiet { .. }
                 | ChatMsg::Lists { .. }
                 | ChatMsg::FolderContext { .. } => {}
                 // A second quit is answered at once by `refuse`; anything else would queue work
@@ -1167,14 +1266,32 @@ impl ChatActor {
                     aura_protocol::worktree_setup::WorktreeSetupState::Failed
                         | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
                 );
+                let failure = failed.then(|| {
+                    attempt.detail.clone().unwrap_or_else(|| {
+                        "Setup did not finish, so the terminal did not open. Retry setup.".into()
+                    })
+                });
                 self.worktree_setup = Some(attempt);
-                if failed {
+                if let Some(detail) = failure {
                     self.hold_queue(HoldCause::Error);
+                    // A terminal waiting for setup gets its answer.
+                    self.refuse_terminal(SessionError::AgentUnavailable(detail));
                 }
                 self.info_dirty = true;
                 self.schedule_flush();
                 if succeeded {
-                    let _ = self.start(false, false);
+                    // A terminal waiting for setup opens now (the start becomes its launch). One
+                    // closed while it waited is forgotten, and the chat starts in Chat as before.
+                    if self
+                        .terminal_request
+                        .as_ref()
+                        .is_some_and(|waiting| waiting.is_closed())
+                    {
+                        self.terminal_request = None;
+                    }
+                    if let Err(error) = self.start(false, false) {
+                        self.refuse_terminal(error);
+                    }
                 }
             }
             ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
@@ -1206,6 +1323,13 @@ impl ChatActor {
                     }
                 }
             }
+            ChatMsg::HoldQuiet { id, reply } => {
+                let result = self.hold_quiet(id.clone());
+                if reply.send(result).is_err() {
+                    self.release_quiet(&id);
+                }
+            }
+            ChatMsg::ReleaseQuiet { id } => self.release_quiet(&id),
             ChatMsg::FolderLocated {
                 reservation,
                 record,
@@ -1399,6 +1523,14 @@ impl ChatActor {
                 self.pending_start = None;
                 self.stop();
                 drop(reply.send(Ok(())));
+            }
+            ChatMsg::StopIfIdle { even_shown, reply } => {
+                let idle = self.idles() || (even_shown && self.idles_but_shown());
+                if idle {
+                    self.pending_start = None;
+                    self.stop();
+                }
+                drop(reply.send(Ok(idle)));
             }
             ChatMsg::RespondPermission {
                 request_id,
@@ -1752,13 +1884,15 @@ impl ChatActor {
             || !self.retiring.is_empty()
             || self.checkpointing.is_some()
             || self.turn.is_some()
-            || !self.queue.is_empty()
+            // A held prompt waits for the person; one about to go would run on changed files.
+            || self.queue.iter().any(|row| !row.held)
             || self.quitting
             || self.shared.is_shutting_down()
         {
-            let _ = reply.send(Err(SessionError::Organization(
-                "Stop the chat and clear queued prompts before reverting files.".into(),
-            )));
+            let _ = reply.send(Err(SessionError::Organization(format!(
+                "{} is working in this chat. Wait for it to finish, or stop it, then revert again.",
+                self.agent_label()
+            ))));
             return;
         }
         let Some(service) = self.shared.deps.checkpoints.clone() else {
@@ -1995,6 +2129,7 @@ impl ChatActor {
             .as_ref()
             .is_some_and(|attempt| attempt.blocks_agent())
             && !self.organizing
+            && self.quiet_holds.is_empty()
             && !self.steering_pending
             && self.control_pending.is_none()
             && self.controls_valid()
@@ -2906,6 +3041,7 @@ impl ChatActor {
             _ => {}
         }
         if self.driver.is_none() {
+            self.end_room_wait();
             if let Some(preparing) = self.preparing.take() {
                 preparing.abort.abort();
                 self.progress = None;
@@ -3058,7 +3194,22 @@ impl ChatActor {
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
+        if !self.quiet_holds.is_empty()
+            && matches!(
+                self.status,
+                SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
+            )
+        {
+            // A commit or a setup copy holds the folder: the start follows once it ends.
+            self.start_after_hold = Some(fresh || self.start_after_hold.unwrap_or(false));
+            return Ok(());
+        }
         match self.status {
+            SessionStatus::Starting if self.room.is_some() => {
+                // Still waiting for room: it starts fresh once it has some, if asked now.
+                self.wait_for_room(fresh);
+                return Ok(());
+            }
             SessionStatus::Starting => {
                 if fresh && !self.starting_fresh {
                     // Start fresh instead: drop this start and begin again.
@@ -3137,16 +3288,23 @@ impl ChatActor {
             self.start_failed(ErrorKind::AgentUnavailable, "The saved session belongs to a different execution host. Start a fresh session to use this host.".into(), None, false);
             return Ok(());
         }
-        if !self.shared.live.acquire(&self.chat_id) {
-            if self.shared.live.quiescing() {
-                return Err(SessionError::ShuttingDown);
+        // At the limit, the agent idle longest stops to make room and this start waits for its
+        // slot; only when none idles is the start refused, saying what the others are doing.
+        match self.shared.live.admit(&self.chat_id, &self.chat.folder) {
+            super::live::Admission::Admitted => {}
+            super::live::Admission::Closed => return Err(SessionError::ShuttingDown),
+            super::live::Admission::Waiting => {
+                self.wait_for_room(fresh);
+                return Ok(());
             }
-            let error = SessionError::TooManyAgents(self.shared.live.max());
-            if explicit {
-                return Err(error);
+            super::live::Admission::Full(occupancy) => {
+                let error = too_many_agents(self.shared.live.max(), occupancy);
+                if explicit {
+                    return Err(error);
+                }
+                self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
+                return Ok(());
             }
-            self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
-            return Ok(());
         }
         if self.workspace_turn.is_none() {
             self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
@@ -3275,6 +3433,14 @@ impl ChatActor {
         let refuse = |reply: oneshot::Sender<Result<TerminalOpened, SessionError>>, why: &str| {
             drop(reply.send(Err(SessionError::OptionInvalid(why.into()))));
         };
+        // A request whose terminal closed while it waited (for setup, say) no longer counts.
+        if self
+            .terminal_request
+            .as_ref()
+            .is_some_and(|waiting| waiting.is_closed())
+        {
+            self.terminal_request = None;
+        }
         if self.terminal.is_some() || self.terminal_request.is_some() {
             return refuse(reply, "This chat is already open in the terminal.");
         }
@@ -3299,6 +3465,27 @@ impl ChatActor {
                 reply,
                 "Wait for the turn to finish, or stop it, before opening the terminal.",
             );
+        }
+        // A new worktree's setup command runs first: the terminal waits for it and opens once it
+        // succeeds, instead of failing (a failed setup answers it with its reason).
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            if matches!(
+                attempt.state,
+                aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                    | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+            ) {
+                let detail = attempt.detail.clone().unwrap_or_else(|| {
+                    "Setup did not finish. Retry setup before opening the terminal.".into()
+                });
+                drop(reply.send(Err(SessionError::AgentUnavailable(detail))));
+                return;
+            }
+            self.terminal_request = Some(reply);
+            return;
         }
         // A new chat starts its agent as it is made. A start still preparing becomes the
         // terminal's (on_prepared); one whose agent is already starting is stopped first, and the
@@ -4435,6 +4622,11 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
+        if self.room.is_some() {
+            self.end_room_wait();
+            self.release_if_idle();
+            self.set_status(SessionStatus::Stopped, None);
+        }
         if let Some(preparing) = self.preparing.take() {
             preparing.abort.abort();
             self.progress = None;
@@ -4893,6 +5085,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             Done::DriverJoined { generation, result } => self.on_driver_joined(generation, result),
             Done::Retired(generation) => self.retired_one(generation),
             Done::Abort(abort) => abort.abort(),
+            Done::Room { id, admitted } => self.room_done(id, admitted),
             Done::Nothing => {}
             Done::TerminalRead { generation, read } => self.finish_terminal(generation, Some(read)),
         }
@@ -6273,21 +6466,219 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.refresh_run_status();
     }
 
-    /// Idle eviction: `Ready`, nobody viewing, nothing open or waiting, idle long enough. An agent
-    /// that only counts as idle after the idle grace still works, so it is not evicted.
-    fn update_idle(&mut self) {
-        let idle = self.status == SessionStatus::Ready
+    /// Whether the agent idles: `Ready`, nobody viewing (a remote view counts), nothing open or
+    /// waiting to go, no work in the background. Such an agent stops after the idle time, or
+    /// sooner to make room for another chat's start. An agent that only counts as idle after the
+    /// idle grace still works, so it is never stopped.
+    fn idles(&self) -> bool {
+        self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.subscribers.is_empty()
             && !self.normalizer.has_open_requests()
             && !self.queue.first().is_some_and(|row| !row.held)
             && !self.quitting
+            && self.terminal.is_none()
             && self
                 .driver
                 .as_ref()
-                .is_none_or(|driver| driver.run_idle != Some(false));
+                .is_none_or(|driver| driver.run_idle != Some(false))
+    }
+
+    /// Idle but for an open view: a change that rewrites the folder may stop it, losing nothing.
+    fn idles_but_shown(&self) -> bool {
+        self.status == SessionStatus::Ready
+            && self.turn.is_none()
+            && !self.normalizer.has_open_requests()
+            && !self.queue.first().is_some_and(|row| !row.held)
+            && !self.quitting
+            && self.terminal.is_none()
+            && self
+                .driver
+                .as_ref()
+                .is_none_or(|driver| driver.run_idle != Some(false))
+    }
+
+    /// Idle eviction: idle long enough, by [`Self::idles`]. The live-agent table learns what the
+    /// agent does whenever that changes, so a start at the limit can stop the one idle longest.
+    fn update_idle(&mut self) {
+        let idle = self.idles();
         self.idle_deadline =
             idle.then(|| self.last_activity + self.shared.deps.limits.idle_eviction);
+        let now = if idle {
+            Reported::Idle(self.last_activity)
+        } else if self.terminal.is_some() {
+            Reported::Terminal
+        } else if matches!(
+            self.status,
+            SessionStatus::Stopping
+                | SessionStatus::Stopped
+                | SessionStatus::Failed
+                | SessionStatus::AuthRequired
+        ) {
+            Reported::Stopping
+        } else if self.normalizer.has_open_requests() {
+            Reported::Waiting
+        } else if self.status == SessionStatus::Ready && !self.subscribers.is_empty() {
+            Reported::Shown(self.last_activity)
+        } else {
+            Reported::Working
+        };
+        if self.reported == Some(now) {
+            return;
+        }
+        self.reported = Some(now);
+        let activity = match now {
+            Reported::Idle(since) => super::live::Activity::Idle {
+                since,
+                notify: Arc::clone(&self.make_room),
+            },
+            Reported::Working => super::live::Activity::Working,
+            Reported::Waiting => super::live::Activity::Waiting,
+            Reported::Terminal => super::live::Activity::Terminal,
+            Reported::Shown(since) => super::live::Activity::Shown { since },
+            Reported::Stopping => super::live::Activity::Stopping,
+        };
+        if self.shared.live.report(&self.chat_id, activity) {
+            // A start waits for room and no agent was idle to give it: this one is now.
+            tracing::info!(chat_id = %self.chat_id, "stopping an idle agent to make room for a chat waiting to start");
+            self.stop();
+        }
+    }
+
+    /// A start at the limit chose this agent, idle longest, to make room. It stops if it still
+    /// idles; one already on its way out keeps its turn; otherwise another idle agent is asked.
+    fn make_room(&mut self) {
+        if self.idles() {
+            tracing::info!(chat_id = %self.chat_id, "stopping an idle agent to make room for another chat");
+            self.stop();
+            return;
+        }
+        let leaving = self.terminal.is_none()
+            && self.preparing.is_none()
+            && self.pending_start.is_none()
+            && matches!(
+                self.status,
+                SessionStatus::Stopping
+                    | SessionStatus::Stopped
+                    | SessionStatus::Failed
+                    | SessionStatus::AuthRequired
+            );
+        if !leaving {
+            self.shared.live.decline_stop(&self.chat_id);
+        }
+    }
+
+    /// Every slot is taken and an idle agent is stopping for this chat: its slot passes here,
+    /// then the start goes on.
+    fn wait_for_room(&mut self, fresh: bool) {
+        if let Some(room) = &mut self.room {
+            room.fresh |= fresh;
+            return;
+        }
+        self.rooms = self.rooms.wrapping_add(1);
+        let id = self.rooms;
+        let shared = Arc::clone(&self.shared);
+        let chat_id = self.chat_id.clone();
+        let task = self.shared.deps.rt.spawn(async move {
+            let mut released = shared.live.released();
+            tokio::time::timeout(ROOM_WAIT, async {
+                while !shared.live.contains(&chat_id) {
+                    let _ = released.changed().await;
+                }
+            })
+            .await
+            .is_ok()
+        });
+        let abort = task.abort_handle();
+        self.in_flight.push(
+            async move {
+                Done::Room {
+                    id,
+                    admitted: task.await.unwrap_or(false),
+                }
+            }
+            .boxed(),
+        );
+        self.room = Some(RoomWait { id, fresh, abort });
+        self.set_status(
+            SessionStatus::Starting,
+            Some("Waiting for an idle chat to stop and make room".into()),
+        );
+    }
+
+    /// The wait for room ended: the start goes on in the slot it was given, or fails.
+    fn room_done(&mut self, id: u64, admitted: bool) {
+        let Some(room) = self.room.take_if(|room| room.id == id) else {
+            return;
+        };
+        // The start begins again from where it waited.
+        self.status = SessionStatus::Stopped;
+        if !admitted {
+            self.shared.live.cancel_wait(&self.chat_id);
+            self.release_if_idle();
+            let message = "No idle agent stopped in time to make room. Stop a chat you are not using, then try again.";
+            self.start_failed(ErrorKind::SpawnFailed, message.into(), None, false);
+            return;
+        }
+        if let Err(error) = self.start(room.fresh, false) {
+            self.release_if_idle();
+            self.set_status(SessionStatus::Stopped, None);
+            self.refuse_terminal(error);
+        }
+    }
+
+    /// A quiet change to the folder begins: refused only while a turn, a start or a stop is
+    /// under way (or the agent works in its terminal), so an idle agent may stay.
+    fn hold_quiet(&mut self, id: String) -> Result<(), SessionError> {
+        let busy = self.turn.is_some()
+            || self.preparing.is_some()
+            || self.room.is_some()
+            || self.checkpointing.is_some()
+            || self.steering_pending
+            || self.pending_start.is_some()
+            || self.terminal.is_some()
+            || !self.retiring.is_empty()
+            || self.normalizer.has_open_requests()
+            || matches!(
+                self.status,
+                SessionStatus::Starting
+                    | SessionStatus::Running
+                    | SessionStatus::Cancelling
+                    | SessionStatus::Stopping
+            );
+        if busy {
+            return Err(SessionError::Organization(format!(
+                "{} is working in this folder.",
+                self.agent_label()
+            )));
+        }
+        self.quiet_holds.insert(id);
+        self.info_dirty = true;
+        self.schedule_flush();
+        Ok(())
+    }
+
+    /// A quiet change ended: what waited for the last one goes on.
+    fn release_quiet(&mut self, id: &str) {
+        if !self.quiet_holds.remove(id) || !self.quiet_holds.is_empty() {
+            return;
+        }
+        self.info_dirty = true;
+        self.schedule_flush();
+        if let Some(fresh) = self.start_after_hold.take()
+            && let Err(error) = self.start(fresh, false)
+        {
+            self.refuse_terminal(error);
+        }
+        self.dispatch_next();
+    }
+
+    /// Ends a wait for room (a Stop, a quit).
+    fn end_room_wait(&mut self) {
+        if let Some(room) = self.room.take() {
+            room.abort.abort();
+            self.shared.live.cancel_wait(&self.chat_id);
+        }
     }
 
     // ---- Frames, flushing and persistence -----------------------------------------------------
@@ -6593,7 +6984,7 @@ The person continues this conversation here, in your terminal. Reply only that y
                 after: self.hold_cause,
             });
         }
-        if self.organizing {
+        if self.organizing || !self.quiet_holds.is_empty() {
             return Some(QueueWait::ChatChanging);
         }
         match self.status {

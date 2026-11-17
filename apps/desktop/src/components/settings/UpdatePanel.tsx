@@ -159,8 +159,8 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
         <div className="settings-confirm settings-span">
           <strong>Install and restart auracode?</strong>
           <p>
-            Finish active chats and close project terminals first. Drafts are saved before the
-            update installs, and it waits if anything needs attention.
+            Installing stops every chat's agent and closes terminals, then restarts. Chats pick up
+            where they were, and drafts are saved first. It waits if a Git change is still running.
           </p>
           <div>
             <button

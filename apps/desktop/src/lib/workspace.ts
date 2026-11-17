@@ -20,15 +20,25 @@ export const workspaceApi = {
   archive: (id: string, archived: boolean) => settle(commands.chatArchive(id, archived)),
   move: (id: string, request: ChatMove) => settle(commands.chatMove(id, request)),
   preview: (folderId: string) => settle(commands.chatCreatePreview(folderId)),
+  /** What a picked folder already is: its projects (Rust compares canonical folders) and
+   * whether it is a managed worktree. */
+  folderMatches: (path: string) => settle(commands.workspaceFolderMatches(path)),
   createChat: (request: ProjectChatCreate) => settle(commands.chatProjectCreate(request)),
 };
 export type WorkspaceApi = typeof workspaceApi;
 export interface WorkspaceView {
   readonly data: WorkspaceSnapshot | null;
+  /** Why the last read of the workspace failed. An operation's own error goes to its caller. */
   readonly error: string | null;
-  readonly busy: boolean;
+  /** Operations running now, from every screen. None waits for another here. */
+  readonly pending: number;
 }
-export const EMPTY_WORKSPACE: WorkspaceView = { data: null, error: null, busy: false };
+export const EMPTY_WORKSPACE: WorkspaceView = { data: null, error: null, pending: 0 };
+
+/** How one operation ended, for the caller that started it only. */
+export type WorkspaceOutcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 /** The waits before reading the workspace again after a failed read; the last repeats. */
 export const WORKSPACE_RETRY_MS = [500, 1000, 2000, 4000, 8000] as const;
@@ -41,6 +51,9 @@ export class WorkspaceStore {
   /** Failed reads in a row, and the read waiting to try again. */
   #failures = 0;
   #retry: ReturnType<typeof setTimeout> | null = null;
+  #pending = 0;
+  /** The newest read, which a superseded one waits for. */
+  #latest: Promise<void> = Promise.resolve();
   readonly #waits: readonly number[];
   constructor(api: WorkspaceApi, waits: readonly number[] = WORKSPACE_RETRY_MS) {
     this.api = api;
@@ -57,19 +70,26 @@ export class WorkspaceStore {
     this.#state = state;
     for (const listener of this.#listeners) listener();
   }
-  async refresh(): Promise<void> {
+  /** Reads the workspace. A read started later answers for this one, so it never lands stale. */
+  refresh(): Promise<void> {
     const revision = ++this.#revision;
     if (this.#retry !== null) {
       clearTimeout(this.#retry);
       this.#retry = null;
     }
+    const read = this.#read(revision);
+    this.#latest = read;
+    return read;
+  }
+
+  async #read(revision: number): Promise<void> {
     try {
       const data = await this.api.snapshot();
-      if (revision !== this.#revision) return;
+      if (revision !== this.#revision) return this.#latest;
       this.#failures = 0;
       this.#publish({ ...this.#state, data, error: null });
     } catch (error) {
-      if (revision !== this.#revision) return;
+      if (revision !== this.#revision) return this.#latest;
       this.#publish({ ...this.#state, error: errorMessage(error) });
       // Read again until it answers: the database may still be opening after a restart.
       const wait = this.#waits[Math.min(this.#failures, this.#waits.length - 1)] ?? 8000;
@@ -86,19 +106,26 @@ export class WorkspaceStore {
     if (this.#retry !== null) clearTimeout(this.#retry);
     this.#retry = null;
     this.#revision += 1;
+    this.#latest = Promise.resolve();
   }
-  async perform<T>(operation: () => Promise<T>): Promise<T | null> {
-    if (this.#state.busy) return null;
-    this.#publish({ ...this.#state, busy: true, error: null });
+  /**
+   * Runs `operation` at once, beside any other: nothing is dropped or made to wait here, because
+   * Rust orders the changes that must not overlap. The caller gets its own value or error. The
+   * workspace is read again either way, so a change made before a failure still shows.
+   */
+  async perform<T>(operation: () => Promise<T>): Promise<WorkspaceOutcome<T>> {
+    this.#pending += 1;
+    this.#publish({ ...this.#state, pending: this.#pending });
     try {
-      const result = await operation();
+      const value = await operation();
       await this.refresh();
-      return result;
+      return { ok: true, value };
     } catch (error) {
-      this.#publish({ ...this.#state, error: errorMessage(error) });
-      return null;
+      void this.refresh();
+      return { ok: false, error: errorMessage(error) };
     } finally {
-      this.#publish({ ...this.#state, busy: false });
+      this.#pending -= 1;
+      this.#publish({ ...this.#state, pending: this.#pending });
     }
   }
 }

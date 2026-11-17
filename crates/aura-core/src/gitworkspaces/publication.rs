@@ -77,7 +77,6 @@ impl GitWorkspaces {
         &self,
         folder_id: &str,
     ) -> Result<Option<aura_protocol::repository_publication::RepositoryPublicationDraft>> {
-        let _guard = self.gate.lock().await;
         self.read_publications()?
             .into_iter()
             .find(|entry| entry.folder_id == folder_id)
@@ -152,7 +151,6 @@ impl GitWorkspaces {
         if folder_id.is_empty() || folder_id.len() > 128 {
             return Err(invalid("The project folder ID is invalid."));
         }
-        let _guard = self.gate.lock().await;
         let git = self.git().await?;
         let source = publication_source(&git, path).await?;
         let viewer: User = decode(
@@ -298,7 +296,6 @@ impl GitWorkspaces {
         token: &str,
         remote: &dyn Remote,
     ) -> Result<Outcome> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .publications
             .lock()
@@ -310,6 +307,7 @@ impl GitWorkspaces {
                 "This publication review expired or belongs to another folder.",
             ));
         }
+        let _repository = self.hold_common(&prepared.source.common).await;
         let git = self.git().await?;
         let source = publication_source(&git, &prepared.source.root).await?;
         if source.fingerprint != prepared.source.fingerprint {

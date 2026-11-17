@@ -11,11 +11,14 @@ export function TerminalChat({
   chatId,
   agentName,
   runtimes = terminalChats,
+  setupPending = false,
   onChat,
 }: {
   readonly chatId: string;
   readonly agentName: string;
   readonly runtimes?: TerminalChats;
+  /** The chat's new worktree is still setting up: the agent starts once setup succeeds. */
+  readonly setupPending?: boolean;
   /** Back to auracode's chat for this chat. */
   readonly onChat: () => void;
 }) {
@@ -62,7 +65,9 @@ export function TerminalChat({
         {state.state === "idle" || state.state === "starting" ? (
           <p className="terminal-chat-starting" role="status">
             <span className="ui-pulse" aria-hidden="true" />
-            Starting {agentName} in the terminal…
+            {setupPending
+              ? `Waiting for this worktree's setup to finish, then starting ${agentName} in the terminal…`
+              : `Starting ${agentName} in the terminal…`}
           </p>
         ) : null}
       </div>

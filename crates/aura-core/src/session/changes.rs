@@ -142,21 +142,21 @@ impl SessionManager {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
-        let _organization = self.shared().organization.lock().await;
-        let (chat, _) = self
-            .deps()
-            .store
-            .checkpoint_context(chat_id, None)
-            .await
-            .map_err(|error| storage_error(&error))?;
+        let (_organization, chat) = self.hold_chat_folder(chat_id, &[]).await?;
         folder_id(&chat)?;
         self.checkpoint_service()?;
         let path = chat.folder.clone();
         let folder = tokio::task::spawn_blocking(move || live::normalize_path(path))
             .await
             .map_err(|_| SessionError::Organization("Resolving the folder failed.".into()))?;
+        // Reverting rewrites files: agents there that are not working stop first (this chat's
+        // included), and what still works is named.
+        self.stop_unless_working(super::stopping::StopScope::Folders(vec![folder.clone()]))
+            .await;
         if !self.shared().live.reserve_folder(&folder) {
-            return Err(SessionError::Organization("Stop chats using this folder and wait for agent startup or shutdown to finish before reverting files.".into()));
+            return Err(self
+                .folder_busy(std::slice::from_ref(&folder), Vec::new(), None)
+                .await);
         }
         let guard = Arc::new(FolderMutation {
             shared: Arc::clone(self.shared()),
