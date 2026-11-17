@@ -498,7 +498,8 @@ function probe({ strictGrid = false } = {}) {
   // no box over 40% of the window casts a soft shadow (WebKitGTK repaints it on every change inside
   // it when it paints on the CPU), and nothing positioned with a fill lies over the whole window
   // but a dialog's own scrim. A modal dialog keeps the reference's modal shadow: what is behind it
-  // is still under the scrim, and nothing streams inside it.
+  // is still under the scrim, and nothing streams inside it. A content pane (a landmark, such as
+  // the browser covering a narrow chat, which hides the chat under it) is not a decorative layer.
   const windowArea = view.width * view.height;
   const filled = (color) => {
     const parts = color
@@ -534,6 +535,7 @@ function probe({ strictGrid = false } = {}) {
       (style.position === "fixed" || style.position === "absolute") &&
       area >= windowArea * 0.9 &&
       !element.closest("dialog") &&
+      !element.matches("main, aside, section, nav, form, [role]") &&
       (filled(style.backgroundColor) || style.backgroundImage !== "none")
     )
       findings.push({
