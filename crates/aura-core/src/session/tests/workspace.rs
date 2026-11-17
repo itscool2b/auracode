@@ -630,6 +630,48 @@ async fn an_idle_agent_does_not_make_its_folder_busy() {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
+/// A project folder that does not answer (a disconnected network share) matches nothing, and the
+/// picker hears back within the folder check's wait instead of hanging with it.
+#[tokio::test]
+async fn a_folder_that_does_not_answer_never_holds_up_the_picker() {
+    let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    let here = project(&rig, "Here").await;
+    let share = rig._dir.path().join("share");
+    std::fs::create_dir(&share).unwrap();
+    rig.manager
+        .project_create(ProjectCreate {
+            project: input("On the share"),
+            folder: share.to_string_lossy().into_owned(),
+        })
+        .await
+        .expect("share project");
+    let slow = rig
+        .manager
+        .slow_folder(&share.canonicalize().unwrap(), Duration::from_secs(3));
+    let started = std::time::Instant::now();
+    let found = rig
+        .manager
+        .workspace_folder_matches(&rig.folder.to_string_lossy())
+        .await
+        .expect("matches");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "answered in {:?}",
+        started.elapsed()
+    );
+    assert_eq!(found.matches.len(), 1);
+    assert_eq!(found.matches[0].project_id, here.id);
+    assert!(slow.load(Ordering::SeqCst) >= 1, "the share was asked");
+    // Picking the share itself while it does not answer says so, in time.
+    let refused = rig
+        .manager
+        .workspace_folder_matches(&share.to_string_lossy())
+        .await
+        .err()
+        .expect("refused");
+    assert!(refused.to_string().contains("did not answer"), "{refused}");
+}
+
 #[tokio::test]
 async fn a_differently_spelled_pick_resolves_to_its_project() {
     let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);

@@ -229,25 +229,52 @@ impl SessionManager {
         if !picked.is_absolute() {
             return Err(invalid("Choose an absolute folder path."));
         }
+        // The saved projects as they are, without the chat list's folder checks: the folders
+        // are read below, within one short wait.
         let workspace = self
-            .workspace_snapshot(WorkspaceFilter {
+            .organization(OrganizationCommand::Snapshot(WorkspaceFilter {
                 include_archived: true,
                 project_id: None,
-            })
+            }))
             .await?;
         let worktrees = match self.worktrees() {
             Ok(service) => service.profile_records().await.unwrap_or_default(),
             Err(_) => Vec::new(),
         };
-        tokio::task::spawn_blocking(move || {
-            let canonical = std::fs::canonicalize(&picked)
-                .map_err(|error| invalid(&format!("Cannot resolve this folder: {error}")))?;
-            if !canonical.is_dir() {
-                return Err(invalid("Choose a folder, not a file."));
-            }
-            let stored = crate::fsutil::plain_path(&canonical);
-            let key = live::normalize_path(stored.clone());
-            let same = |other: &str| live::normalize_path(PathBuf::from(other)) == key;
+        // The picked folder, and every stored one, each read on its own thread and all within the
+        // folder check's short wait: a folder that does not answer (a disconnected network share)
+        // is in no project, and never holds up the picker.
+        let shared = Arc::clone(self.shared());
+        let wait = shared.knobs.folder_check_wait;
+        let pick = tokio::time::timeout(
+            wait,
+            tokio::task::spawn_blocking(move || {
+                shared.slow_disk(&picked);
+                let canonical = std::fs::canonicalize(&picked)
+                    .map_err(|error| invalid(&format!("Cannot resolve this folder: {error}")))?;
+                if !canonical.is_dir() {
+                    return Err(invalid("Choose a folder, not a file."));
+                }
+                let stored = crate::fsutil::plain_path(&canonical);
+                let key = live::normalize_path(stored.clone());
+                Ok((stored, key))
+            }),
+        );
+        let candidates: Vec<PathBuf> = workspace
+            .projects
+            .iter()
+            .flat_map(|project| &project.folders)
+            .filter_map(|folder| folder.path.as_ref().map(PathBuf::from))
+            .chain(worktrees.iter().map(|record| PathBuf::from(&record.path)))
+            .collect();
+        let (pick, keys) = tokio::join!(pick, self.resolve_folders(candidates));
+        let (stored, key) = pick
+            .map_err(|_| {
+                invalid("This folder did not answer. Check that its drive or share is connected, then choose it again.")
+            })?
+            .map_err(|_| SessionError::Internal("Checking the folder failed.".into()))??;
+        {
+            let same = |other: &str| keys.get(Path::new(other)) == Some(&key);
             let worktree = worktrees
                 .iter()
                 .find(|record| same(&record.path))
@@ -287,9 +314,42 @@ impl SessionManager {
                 matches,
                 worktree,
             })
-        })
-        .await
-        .map_err(|_| SessionError::Internal("Checking the folder failed.".into()))?
+        }
+    }
+
+    /// Each of `paths` resolved as folder keys are, each on its own blocking thread, all within
+    /// the folder check's short wait. One that does not answer in time is left out, and is not
+    /// asked again while its thread still waits on the disk.
+    async fn resolve_folders(&self, mut paths: Vec<PathBuf>) -> HashMap<PathBuf, PathBuf> {
+        paths.sort();
+        paths.dedup();
+        let shared = Arc::clone(self.shared());
+        let found = Arc::new(Mutex::new(HashMap::new()));
+        let started: Vec<PathBuf> = {
+            let mut resolving = lock(&shared.resolving);
+            paths
+                .into_iter()
+                .filter(|path| resolving.insert(path.clone()))
+                .collect()
+        };
+        let tasks: futures::stream::FuturesUnordered<_> = started
+            .into_iter()
+            .map(|path| {
+                let (shared, found) = (Arc::clone(&shared), Arc::clone(&found));
+                self.deps().rt.spawn_blocking(move || {
+                    shared.slow_disk(&path);
+                    let key = live::normalize_path(path.clone());
+                    lock(&shared.resolving).remove(&path);
+                    lock(&found).insert(path, key);
+                })
+            })
+            .collect();
+        let _ = tokio::time::timeout(
+            shared.knobs.folder_check_wait,
+            futures::StreamExt::collect::<Vec<_>>(tasks),
+        )
+        .await;
+        std::mem::take(&mut *lock(&found))
     }
 
     pub async fn chat_create_preview(

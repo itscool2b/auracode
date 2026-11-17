@@ -60,7 +60,7 @@ pub use project_tools::{EditorLaunch, EditorOpen, UrlTarget};
 pub use stopping::{StopReport, StopScope};
 pub use worktree_setup::WorktreeSetupLaunch;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -339,6 +339,9 @@ pub(crate) struct Shared {
     pub(crate) lost_writes: AtomicU64,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
+    /// Folders a picked folder is being compared with, still resolving on a blocking thread: one
+    /// that hangs (a dead network share) is not asked again until it answers.
+    resolving: Mutex<HashSet<PathBuf>>,
     /// Orders busy-folder preflight, chat creation and moves, and Git and folder changes: per
     /// folder, so one folder's slow change never holds up another's (`folder_locks.rs`).
     organization: folder_locks::FolderLocks,
@@ -412,9 +415,8 @@ impl Shared {
         lock(&self.chat_states).get(chat_id).cloned()
     }
 
-    /// Checks one folder for the chat list (`metadata` only), on a blocking thread, and records the
-    /// result.
-    fn check_folder(&self, folder: PathBuf) {
+    /// Tests: a folder set slow (a hung network mount) takes its delay here, counted.
+    fn slow_disk(&self, folder: &Path) {
         #[cfg(test)]
         {
             // Release the hook lock before delaying one folder, so unrelated probes stay free.
@@ -424,6 +426,14 @@ impl Shared {
                 std::thread::sleep(delay);
             }
         }
+        #[cfg(not(test))]
+        let _ = folder;
+    }
+
+    /// Checks one folder for the chat list (`metadata` only), on a blocking thread, and records the
+    /// result.
+    fn check_folder(&self, folder: PathBuf) {
+        self.slow_disk(&folder);
         let state = folder_state(&folder, false);
         let mut checks = lock(&self.folders);
         let check = checks.entry(folder).or_default();
@@ -506,6 +516,7 @@ impl SessionManager {
                     plugin_refresh: tokio::sync::watch::channel(Default::default()).0,
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
+                    resolving: Mutex::new(HashSet::new()),
                     organization: folder_locks::FolderLocks::new(),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
