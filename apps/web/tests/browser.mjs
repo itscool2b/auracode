@@ -280,6 +280,14 @@ try {
         "rgb(10, 10, 10)",
         "the phone menu is solid",
       );
+      // And it covers the page from under the bar to the screen's foot, as dot.com's does.
+      const cover = await page.locator(".nav-sheet").evaluate((sheet) => {
+        const box = sheet.getBoundingClientRect();
+        const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 140);
+        return { bottom: box.bottom, height: window.innerHeight, covers: sheet.contains(hit) };
+      });
+      assert.ok(cover.bottom >= cover.height - 1, "the phone menu reaches the screen's foot");
+      assert.ok(cover.covers, "the phone menu covers the page");
       await page.keyboard.press("Escape");
       await page.getByRole("navigation", { name: "Menu" }).waitFor({ state: "hidden" });
       // A link to a section of this page closes the menu and goes there.

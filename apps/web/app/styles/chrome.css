@@ -12,10 +12,22 @@
   z-index: 60;
   box-sizing: border-box;
   height: var(--s-nav-h);
+  view-transition-name: site-nav;
+}
+
+/*
+ * The bar's colour and blur sit on a layer of their own behind it, as dot.com's do: a blur on the
+ * bar itself would hold the phone menu's fixed sheet inside the bar's own box.
+ */
+.site-nav::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background-color: var(--s-nav);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  view-transition-name: site-nav;
+  pointer-events: none;
 }
 
 .nav-bar {
@@ -212,7 +224,7 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .site-nav {
+  .site-nav::before {
     background-color: var(--s-bg);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
