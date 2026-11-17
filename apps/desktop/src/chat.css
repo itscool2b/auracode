@@ -31,6 +31,23 @@
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
+/*
+ * The header draws no line; words scrolling up fade out beneath it into the pane, as the Grok Bot
+ * app's toolbar does. A 16px band held at the scroller's top that takes no room, so at rest it
+ * covers only the column's top padding.
+ */
+.chat-transcript::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  height: var(--g-space-16);
+  margin-bottom: calc(var(--g-space-16) * -1);
+  background-image: linear-gradient(var(--ui-pane-fill), transparent);
+  pointer-events: none;
+}
+
 .chat-transcript-inner {
   display: flex;
   flex-direction: column;

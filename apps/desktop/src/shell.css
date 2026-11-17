@@ -1,9 +1,10 @@
 /*
- * The chat shell's frame (docs/design/visual-language.md): the window and its glass layers, the
- * sidebar, the chat header, the shared controls, popovers, banners, dialogs and the command
- * palette. The conversation itself is in chat.css and the right panel in context-panel.css. The
- * sidebar sits on the window's material; the work sits on translucent layers floating over it.
- * Colours are tokens, and only colour, opacity and transform ever transition.
+ * The chat shell's frame (docs/design/visual-language.md): the window and its layers, the sidebar,
+ * the chat header, the shared controls, popovers, banners, dialogs and the command palette. The
+ * conversation itself is in chat.css and the right panel in context-panel.css. The sidebar sits on
+ * the window's colour (over the native material on macOS and Windows); the work sits on solid
+ * panes a step apart from it, as in the Grok Bot app. Colours are tokens, and only colour, opacity
+ * and transform ever transition.
  *
  * The shell's stylesheets are unlayered, like Graphite's, and load after it: at equal specificity a
  * rule here wins over a Graphite primitive (the global focus ring, a keycap), while the reset and
@@ -37,9 +38,9 @@
 }
 
 /*
- * The main pane is a glass layer floating beside the sidebar, 8px in from the window's edges, with
- * a hairline rim and a lit top edge. Chat and New chat share it; Settings and Diagnostics use the
- * same layer tokens and native title-control clearance.
+ * The main pane is a solid layer beside the sidebar, 8px in from the window's edges, with one faint
+ * edge. Chat and New chat share it; Settings and Diagnostics use the same layer tokens and native
+ * title-control clearance.
  */
 .chat-main {
   position: relative;
@@ -219,9 +220,9 @@
 }
 
 /*
- * Pages that stand alone, Agents, the Plugin library and the Dashboard, sit in the same inset glass
- * pane: the window's material around it, the pane 8px in from every edge with no sidebar beside
- * it, its rim and lit top edge. The page scrolls inside the pane. Their content keeps its place in
+ * Pages that stand alone, Agents, the Plugin library and the Dashboard, sit in the same inset pane:
+ * the window around it, the pane 8px in from every edge with no sidebar beside it, and its faint
+ * edge. The page scrolls inside the pane. Their content keeps its place in
  * the window: the pane's inset comes off the top padding that clears the titlebar.
  */
 .pane-shell {
@@ -501,10 +502,10 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * One row style for every sidebar action: fg-2 at rest, a translucent fill and fg-1 under the
- * hand. The fill is a layer under the words that fades in, so the hand lands softly and moving
- * down the list ripples nothing; pressed, it deepens at once. The open chat is a lit glass capsule
- * raised off the window.
+ * One row style for every sidebar action, as the Grok Bot app's: fg-2 at rest, ink at 6% and fg-1
+ * under the hand. The fill is a layer under the words that fades in, so the hand lands softly and
+ * moving down the list ripples nothing; pressed, it deepens a step at once. The open chat keeps
+ * the deeper step, flat: no rim, no shadow.
  */
 .chat-nav-action,
 .chat-attention-row,
@@ -531,7 +532,7 @@ details.setup-install-review[open] > summary::before {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background-color: var(--g-glass-control-hover);
+  background-color: var(--g-glass-control);
   opacity: 0;
   transform: none;
   pointer-events: none;
@@ -587,7 +588,7 @@ details.setup-install-review[open] > summary::before {
 }
 
 :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active::before {
-  background-color: var(--g-glass-control-active);
+  background-color: var(--g-glass-control-hover);
   opacity: 1;
   transform: none;
   transition-duration: 0ms;
@@ -886,18 +887,15 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * The open chat is a lit glass capsule raised off the window: a near-opaque fill, a soft shadow
- * and a hairline. It settles in under the row it moves to and eases out of the one it leaves.
+ * The open chat: the pressed step of ink, flat, as the Grok Bot app marks its open conversation.
+ * It settles in under the row it moves to and eases out of the one it leaves.
  */
 .chat-row[aria-current="true"] {
   color: var(--g-fg-1);
 }
 
 .chat-row[aria-current="true"]::before {
-  background-color: var(--g-glass-selected);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim);
+  background-color: var(--g-glass-control-hover);
   opacity: 1;
   transform: none;
 }
@@ -955,8 +953,8 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * The fills are glass, so the menu cannot hide the words under it; while it shows, the title
- * ends before it instead.
+ * The fills are see-through steps of ink, so the menu cannot hide the words under it; while it
+ * shows, the title ends before it instead.
  */
 .chat-row-container:is(:hover, :focus-within):has(> .chat-row-menu) > .chat-row {
   padding-right: var(--g-space-40);
@@ -1079,7 +1077,7 @@ details.setup-install-review[open] > summary::before {
   padding: var(--g-space-4) var(--g-space-8);
   overflow: hidden;
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-6);
   background-color: var(--ui-menu-fill);
   box-shadow:
     var(--g-shadow-pop),
@@ -1175,6 +1173,7 @@ details.setup-install-review[open] > summary::before {
 /*
  * Grok's header: what this chat is at the left, two controls at the right (the Changes panel and
  * the chat menu). Everything else is one click into the menu or one search away in the palette.
+ * No line under it: the transcript fades out beneath it instead (chat.css), as in the Grok Bot app.
  */
 .chat-header {
   position: relative;
@@ -1185,7 +1184,6 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-8);
   height: var(--g-app-header);
   padding: 0 var(--g-space-8) 0 var(--g-space-16);
-  border-bottom: 1px solid var(--g-glass-rim);
 }
 
 .chat-header-who {
@@ -1497,16 +1495,13 @@ details.setup-install-review[open] > summary::before {
   transition-duration: 0ms;
 }
 
-/* Open: the pill lights up, raised with a hairline rim. */
+/* Open: the pill holds the pressed step of ink, flat, while its panel shows. */
 .chat-popover[open] > summary {
-  background-color: var(--g-glass-raised);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  background-color: var(--g-glass-control-hover);
   color: var(--g-fg-1);
 }
 
-/* Popovers are frosted glass: radius 14, a hairline rim and a soft, deep shadow. */
+/* Popovers are the raised layer, as the Grok Bot app's menus: radius 16, one faint edge and its shadow. */
 .chat-popover-panel {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1522,7 +1517,7 @@ details.setup-install-review[open] > summary::before {
   overflow: auto;
   /* The ring is an inset hairline, so the panel's content starts on the grid. */
   border: 0;
-  border-radius: var(--g-radius-14);
+  border-radius: var(--g-radius-16);
   background-color: var(--ui-menu-fill);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
@@ -1606,7 +1601,7 @@ details.setup-install-review[open] > summary::before {
 /* ---------- Dialogs (4.6, 6.19) ---------- */
 
 /*
- * Every dialog is the shared .g-dialog, frosted glass: sm 440 (the base), .g-dialog-md 560,
+ * Every dialog is the shared .g-dialog, the raised layer at radius 18: sm 440 (the base), .g-dialog-md 560,
  * .g-dialog-lg 760, a 16px viewport margin on every side, the title and close button in
  * .g-dialog-header. Long content scrolls the whole dialog. The rim is an inset hairline, so the
  * content starts 24px in, on the grid.
@@ -2162,7 +2157,7 @@ details.setup-install-review[open] > summary::before {
 .ui-toasts > .chat-banner {
   min-height: 0;
   padding: var(--g-space-12);
-  border-radius: var(--g-radius-14);
+  border-radius: var(--g-radius-16);
   background-color: var(--ui-menu-fill);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
