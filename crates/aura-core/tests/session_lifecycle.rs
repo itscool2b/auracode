@@ -796,6 +796,55 @@ async fn a_start_is_refused_only_when_every_agent_is_busy() {
     );
 }
 
+/// S20: Esc on a start that waits for room ends the wait: the chat never starts later on its own
+/// when the slot frees, and a start after it runs one agent, never a second one beside it.
+#[tokio::test(start_paused = true)]
+async fn a_start_stopped_while_it_waits_for_room_never_starts_on_its_own() {
+    // The idle agent asked to make room takes a while to go.
+    let (a, a_handle) = ScriptedDriver::new(vec![
+        ready_step("na"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_secs(10)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (b, _) = ScriptedDriver::new(vec![ready_step("nb")]);
+    let one = Options {
+        limits: ManagerLimits {
+            max_live_agents: 1,
+            ..ManagerLimits::STANDARD
+        },
+        ..Options::default()
+    };
+    let h = Harness::with(vec![a, b], one);
+    let a = h.chat().await;
+    h.status(&a.id, SessionStatus::Ready).await;
+    let b = h.chat().await;
+    command(&a_handle, CommandMatch::Shutdown).await;
+    h.status(&b.id, SessionStatus::Starting).await;
+    assert_eq!(h.factory.setups().len(), 1, "b waits for room");
+    // Esc while it waits.
+    h.manager.interrupt(&b.id).await.expect("interrupt");
+    h.status(&b.id, SessionStatus::Stopped).await;
+    // The slot frees, and the wait would have run out long since: b stays as the person left it.
+    h.status(&a.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(90)).await;
+    assert_eq!(h.factory.setups().len(), 1, "b never started on its own");
+    assert_eq!(
+        h.statuses.last(&b.id).map(|update| update.status),
+        Some(SessionStatus::Stopped)
+    );
+    assert!(errors(&h.stored(&b.id).await).is_empty(), "no late failure");
+    // Started again, it runs one agent, and nothing starts a second one later.
+    h.manager.start(&b.id, false).await.expect("start");
+    h.status(&b.id, SessionStatus::Ready).await;
+    tokio::time::sleep(Duration::from_secs(90)).await;
+    assert_eq!(h.factory.setups().len(), 2);
+    assert_eq!(
+        h.statuses.last(&b.id).map(|update| update.status),
+        Some(SessionStatus::Ready)
+    );
+}
+
 /// S20: a chat stopped to make room keeps its held messages and continues its own session on the
 /// next message.
 #[tokio::test(start_paused = true)]

@@ -1761,6 +1761,8 @@ impl ChatActor {
             || self.turn.is_some()
             || !self.queue.is_empty()
             || self.pending_start.is_some()
+            // A start waiting for room is a start: it would go on over the continuation.
+            || self.room.is_some()
             || self.native_identity_pending.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
@@ -1862,6 +1864,8 @@ impl ChatActor {
             self.last_error = None;
             self.auth = None;
             self.conflict = false;
+            // The continuation replaces any start still waiting for room.
+            self.end_room_wait();
             self.set_status(SessionStatus::Stopped, Some("Continuation saved. The next prompt includes its visible handoff.".into()));
             self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.agent_label()) }, None);
             self.flush();
@@ -1886,6 +1890,7 @@ impl ChatActor {
             || self.turn.is_some()
             // A held prompt waits for the person; one about to go would run on changed files.
             || self.queue.iter().any(|row| !row.held)
+            || self.room.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
         {
@@ -1943,7 +1948,8 @@ impl ChatActor {
                 || self.turn.is_some()
                 || !self.queue.is_empty()
                 || self.native_identity_pending.is_some()
-                || self.pending_start.is_some())
+                || self.pending_start.is_some()
+                || self.room.is_some())
         {
             let _ = reply.send(Err(SessionError::Organization(
                 "Stop the chat and clear queued prompts before moving it.".into(),
@@ -2898,6 +2904,14 @@ impl ChatActor {
         }
         self.hold_queue(HoldCause::Stop);
         self.pending_start = None;
+        // A start waiting for room gives up its wait, and a terminal waiting on that start (or on
+        // the restart just cancelled) hears so.
+        self.end_room_wait();
+        if let Some(reply) = self.terminal_request.take() {
+            drop(reply.send(Err(SessionError::OptionInvalid(
+                "Opening the terminal was stopped.".into(),
+            ))));
+        }
         if let Some(preparing) = self.preparing.take() {
             // Dropping the preparation kills a running install or probe.
             preparing.abort.abort();
@@ -2942,6 +2956,7 @@ impl ChatActor {
         self.browser_grant = None;
         self.force_wait = None;
         self.stop_deadline = None;
+        self.end_room_wait();
         if let Some(mut driver) = self.driver.take() {
             // No late event of this driver is ever applied.
             driver.events = None;
@@ -3031,6 +3046,9 @@ impl ChatActor {
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
         self.hold_queue(HoldCause::Stop);
+        // A start waiting for room ends here, whatever the status says (a continuation may have
+        // set it Stopped meanwhile).
+        self.end_room_wait();
         match self.status {
             SessionStatus::Stopped
             | SessionStatus::Failed
@@ -3041,7 +3059,6 @@ impl ChatActor {
             _ => {}
         }
         if self.driver.is_none() {
-            self.end_room_wait();
             if let Some(preparing) = self.preparing.take() {
                 preparing.abort.abort();
                 self.progress = None;
@@ -3238,6 +3255,12 @@ impl ChatActor {
                 return Ok(());
             }
             SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired => {}
+        }
+        // Never a second process over a live one: a driver, a preparation or a turn still here
+        // means the agent runs, whatever the status says.
+        if self.driver.is_some() || self.preparing.is_some() || self.turn.is_some() {
+            tracing::warn!(chat_id = %self.chat_id, status = ?self.status, "a start found its agent still running; nothing more starts");
+            return Ok(());
         }
         // A saved session resumes through the connection that made it; a new one (a first start,
         // Start fresh, a switch that cannot resume) takes the agent's Connection setting.
@@ -6611,6 +6634,17 @@ The person continues this conversation here, in your terminal. Reply only that y
         let Some(room) = self.room.take_if(|room| room.id == id) else {
             return;
         };
+        // Only a start still waiting goes on. Every path that ends or replaces a start ends its
+        // wait (end_room_wait); this guards the rest, so no second process ever starts.
+        if self.status != SessionStatus::Starting
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || self.turn.is_some()
+        {
+            self.shared.live.cancel_wait(&self.chat_id);
+            self.release_if_idle();
+            return;
+        }
         // The start begins again from where it waited.
         self.status = SessionStatus::Stopped;
         if !admitted {
