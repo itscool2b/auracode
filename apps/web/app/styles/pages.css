@@ -5,7 +5,7 @@
  */
 .page {
   position: relative;
-  padding: 88px 0 var(--s-section);
+  padding: 112px 0 var(--s-section);
 }
 
 .page-column {
@@ -361,7 +361,7 @@
 
 @media (max-width: 1023px) {
   .page {
-    padding-top: 72px;
+    padding-top: 96px;
   }
 
   .page-title {
@@ -377,7 +377,7 @@
 
 @media (max-width: 639px) {
   .page {
-    padding-top: 44px;
+    padding-top: 56px;
   }
 
   .page-title {

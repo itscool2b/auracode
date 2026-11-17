@@ -213,6 +213,15 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(await cursor.getAttribute("aria-pressed"), "true");
       assert.equal(await page.locator(".agents-view .m-pill.is-on").textContent(), "Cursor");
+      // The chosen chip shows its mark, in its agent's own colour; the others are names alone.
+      assert.equal(
+        await page.locator(".agent-chip[aria-pressed=true] .g-agent-mark").isVisible(),
+        true,
+      );
+      assert.equal(
+        await page.locator(".agent-chip[aria-pressed=false] .g-agent-mark:visible").count(),
+        0,
+      );
       await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
       await handoff.screenshot({ path: join(artifacts, `${name}-handoff-mobile.png`) });
@@ -223,6 +232,19 @@ try {
       // A chip's colours settle over a moment after it is chosen; measure them once they have.
       await settled(page);
       assertWall(await agentWall(page), "390px");
+      // Below 1024px the bar's Download waits while the hero's own is in view, and comes back
+      // once that has scrolled away, as dot.com's does.
+      const barAction = () =>
+        page.evaluate(() => getComputedStyle(document.querySelector(".nav-cta")).visibility);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector(".nav-cta")).visibility === "hidden",
+      );
+      await page.evaluate(() => window.scrollTo(0, 1600));
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector(".nav-cta")).visibility === "visible",
+      );
+      assert.equal(await barAction(), "visible");
       // The phone menu is a solid sheet under the bar, over whatever the page shows behind it.
       await page.evaluate(() => {
         const band = document.querySelector("#features");

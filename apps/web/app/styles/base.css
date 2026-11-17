@@ -425,8 +425,9 @@ svg {
 
 /*
  * Pills, as dot.com's. In a statement: 44px, 16px words, the primary in the page's ink and the
- * quiet one a grey a step off a card (36px and 14px on phones). In a section or the header: 40px
- * (36 for the header's own) with 14px medium words, the quiet one a quieter grey.
+ * quiet one a grey a step off a card (the opening pair is 36px with 14px words on phones). In a
+ * section or the header: 40px (36 for the header's own) with 14px medium words, the quiet one a
+ * quieter grey.
  */
 .btn {
   display: inline-flex;
@@ -508,8 +509,9 @@ svg {
   transform: translateX(2px);
 }
 
+/* On phones dot.com's opening pair is smaller, 36px with 14px words; the others keep 44. */
 @media (max-width: 639px) {
-  .btn-lg {
+  .hero-actions .btn-lg {
     height: 36px;
     padding: 0 16px;
     font-size: 14px;

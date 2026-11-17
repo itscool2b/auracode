@@ -13,7 +13,7 @@
 /* ---------------------------------------------------------------------------------- hero */
 
 .hero {
-  padding: 88px 0 var(--s-section);
+  padding: 112px 0 var(--s-section);
 }
 
 .hero-copy {
@@ -51,7 +51,7 @@
   position: relative;
   width: 0.92em;
   height: 0.92em;
-  margin: 0 0.02em;
+  margin: 0 -0.04em;
   border-radius: 50%;
   background-color: var(--s-primary);
   color: var(--s-on-primary);
@@ -137,10 +137,12 @@
   text-wrap: balance;
 }
 
+/* The paragraphs sit 4px down, so their first line meets the title's capitals. */
 .statement-text {
   display: grid;
   gap: 12px;
   max-width: 576px;
+  padding-top: 4px;
 }
 
 .statement-text p {
@@ -158,9 +160,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px 28px;
+  justify-content: center;
+  gap: 20px 32px;
   margin-top: 80px;
+}
+
+/* On one line across the full column, the agents spread to its edges as dot.com's bots do. */
+@media (min-width: 1280px) {
+  .statement-roster {
+    justify-content: space-between;
+  }
 }
 
 .statement-agent {
@@ -533,7 +542,7 @@ html.js .work-card[data-reveal]:not([data-revealed]) .tm-line {
 
 .agents-note {
   max-width: 456px;
-  min-height: 96px;
+  min-height: 104px;
   color: var(--s-soft);
   font-size: 16px;
   line-height: 24px;
@@ -890,7 +899,7 @@ html.js .work-card[data-reveal]:not([data-revealed]) .tm-line {
 
 @media (max-width: 1023px) {
   .hero {
-    padding-top: 72px;
+    padding-top: 96px;
   }
 
   .hero-title {
@@ -962,7 +971,7 @@ html.js .work-card[data-reveal]:not([data-revealed]) .tm-line {
 
 @media (max-width: 639px) {
   .hero {
-    padding-top: 44px;
+    padding-top: 56px;
   }
 
   .hero-title {
@@ -1071,6 +1080,12 @@ html.js .work-card[data-reveal]:not([data-revealed]) .tm-line {
 
   .finale {
     padding-top: 96px;
+  }
+
+  /* The closing pair stacks, centred, as dot.com's does on a phone. */
+  .finale-actions {
+    flex-direction: column;
+    align-items: center;
   }
 
   .finale-art {
