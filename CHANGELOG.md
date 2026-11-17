@@ -9,6 +9,7 @@ checks the format.
 
 ## 2026-11-17
 
+- auracode opens on new aircraft pictures. The fifteen text drawings are replaced by ten new pictures, from the Wright Flyer and the P-51 to the 747, the SR-71 and the Space Shuttle. Each one is drawn in your theme's own colours, light or dark, and you still see a different one each start. ([#143](https://github.com/itscool2b/auracode/pull/143))
 - New chats no longer break your other chats, and a second project works. Slow work in one folder no longer holds up the rest. When agents are in the way, auracode names the chats and offers to stop them, and at the limit of 16 agents it stops the one idle longest instead of refusing. Terminals open in every project, two projects can set up at once, and a folder you pick stays in the project it belongs to. ([#142](https://github.com/itscool2b/auracode/pull/142))
 - The website is redesigned after the Grok Bot page, in light and dark. It opens with the app drawn in its new flat look, then six feature cards, every agent in its own colour, the latest changes as cards, and a full-screen menu on phones. ([#141](https://github.com/itscool2b/auracode/pull/141))
 - auracode looks flat, soft and clean, after the Grok Bot app, in every theme. Glass, blur and glow are gone, dark mode uses faint edges instead of shadows, and thin text is a little heavier. New chat starts with the message box, so you type first, every dropdown opens auracode's own menu, and Settings and setup show your agents joining auracode. ([#140](https://github.com/itscool2b/auracode/pull/140))
