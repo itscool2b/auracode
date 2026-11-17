@@ -15,10 +15,13 @@ corepack pnpm --filter @auracode/web test:browser
 corepack pnpm --filter @auracode/web dev
 ```
 
-Browser checks use owned headless Chromium and WebKit and block external requests. They cover
+Browser checks use owned headless Chromium and WebKit and block external requests
+(`pnpm --filter @auracode/web test:browser chromium` runs one engine; Playwright's WebKit does not
+start on Arch Linux, which lacks the Ubuntu libraries it is built against). They cover
 dark and light with the system, desktop/mobile overflow, keyboard focus, the agents' chips at every
-width (complete, in view, still) and as toggle buttons, the feature cards, the phone menu, no canvas
-and no Pause button, and no-JavaScript downloads. Axe checks the home and changelog views. Chromium verifies native Tab
+width (complete, in view, still), as toggle buttons and with the chosen one's mark, the six feature
+cards, the FAQ's first answer standing open, the header's Download waiting for the hero's on phones,
+the phone menu, no canvas and no Pause button, and no-JavaScript downloads. Axe checks the home and changelog views. Chromium verifies native Tab
 order; Windows WebKit lacks the OS full-keyboard-access setting, so that harness explicitly focuses
 the skip link and verifies keyboard activation. Real Safari/macOS acceptance remains pending.
 
@@ -28,15 +31,16 @@ shared Geist font package and semantic tokens from `@auracode/ui`.
 
 ## Reference evidence
 
-The website was rebuilt on 10 November 2026 as a close copy of dot.com (the Grok Bot page), as [visual-language.md](../../docs/design/visual-language.md) describes. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
+The website was rebuilt on 10 November 2026 as a close copy of dot.com (the Grok Bot page), and again on 17 November 2026 against dot.com as it now stands, measured in dark and light at 1440, 1024, 768 and 390 wide, as [visual-language.md](../../docs/design/visual-language.md) describes. [reference-audit.md](../../docs/design/reference-audit.md) records the actual observations and their limits. The owner has not yet visually approved the pass. No third-party reference artwork or brand assets are shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it whenever the app changes visibly with
 `node apps/web/scripts/product-images.mjs`: it captures the desktop's `?preview=settled` at 1440 by
-760 and 2x, in light and in dark, and writes the WebP sources (480, 960, 1440 and 2240 wide) and
-the light PNG fallback. The card views are drawn from tokens after the app's own preview modes (New
-chat, a pending handoff, the Changes panel and the queue); update them with the
-app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
+760 and 2x, in light and in dark, with the window flat and opaque as the desktop draws it since its
+restyle of 17 November 2026, and writes the WebP sources (480, 960, 1440 and 2240 wide) and
+the light PNG fallback. The hero window and the card views are drawn from tokens after the app's
+own flat look and preview modes (New chat, a pending handoff, the queue, the Changes panel, a
+terminal chat, the browser in Annotate and the Dashboard); update them with the app. The favicons and social card are generated at build time by `scripts/site-images.ts` from the
 logo's own paths. Without JavaScript the site still follows the system appearance, the agents' chips show the
 default choice and the FAQ opens natively. The standalone notices page is script-free and follows the system appearance too. The changelog page is built from the repository's `CHANGELOG.md` by `scripts/changelog.ts`. The website has no appearance control or persisted theme. Reduced motion disables the live window and transitions.
 
