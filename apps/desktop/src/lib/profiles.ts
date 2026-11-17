@@ -8,7 +8,6 @@ import { inTauri } from "./ipc";
 export const profileApi = {
   list: () => invoke<ProfileMeta[]>("profiles_list"),
   activate: (profileId: string) => invoke<AppInfo>("profile_activate", { profileId }),
-  activateAccount: () => invoke<AppInfo>("account_activate"),
 };
 export type ProfileApi = typeof profileApi;
 
@@ -27,17 +26,17 @@ export async function performProfileSwitch(
 const RETURN_KEY = "auracode.settings-return";
 
 /**
- * A switch made in Settings reloads the page into another workspace. Opening the chats of a
- * workspace that was just made, and is empty, reads as everything having vanished; so the page
- * that asked for the switch asks to be shown again, where what comes next is offered.
+ * A switch made in Settings reloads the page into another profile. Landing on that profile's
+ * chats reads as Settings having closed by itself; so the page that asked for the switch asks to
+ * be shown again, where the list says which profile is open now.
  */
 export function takeSettingsReturn(
   storage: Pick<Storage, "getItem" | "removeItem"> | null,
-): "account" | null {
+): "privacy" | null {
   try {
     const page = storage?.getItem(RETURN_KEY);
     storage?.removeItem(RETURN_KEY);
-    return page === "account" ? "account" : null;
+    return page === "privacy" ? "privacy" : null;
   } catch {
     return null;
   }
@@ -66,7 +65,7 @@ function setBusy(busy: boolean): void {
   }
 }
 
-/** Install before boot. Native publication also covers account-key restoration at startup. */
+/** Install before boot, so a switch the shell publishes is never missed. */
 let eventReady: Promise<void> | null = null;
 export function installProfileEvents(): Promise<void> {
   if (!inTauri()) return Promise.resolve();
@@ -81,20 +80,20 @@ export function installProfileEvents(): Promise<void> {
   return eventReady;
 }
 
-/** `returnTo`: the Settings page to open again once the other workspace has loaded. */
-export async function switchProfile(profileId?: string, returnTo?: "account"): Promise<void> {
+/** `returnTo`: the Settings page to open again once the other profile has loaded. */
+export async function switchProfile(profileId: string, returnTo?: "privacy"): Promise<void> {
   if (switching) throw new Error("A profile is already opening.");
   switching = true;
   setBusy(true);
   try {
     await performProfileSwitch(
-      () => (profileId ? profileApi.activate(profileId) : profileApi.activateAccount()),
+      () => profileApi.activate(profileId),
       () => flushComposerDrafts(composerApi),
       () => {
         try {
           if (returnTo) sessionStorage.setItem(RETURN_KEY, returnTo);
         } catch {
-          // Without it the workspace opens on its chats, as before.
+          // Without it the profile opens on its chats.
         }
         reload();
       },

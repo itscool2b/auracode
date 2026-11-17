@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/desktop/src-tauri", "apps/api", "apps/web-worker"]
+members = ["crates/*", "apps/desktop/src-tauri", "apps/web-worker"]
 # Spikes are throwaway experiments with their own Cargo projects.
 exclude = ["docs/spikes"]
 
@@ -24,7 +24,6 @@ aura-process = { path = "crates/aura-process" }
 aura-agents = { path = "crates/aura-agents" }
 aura-core = { path = "crates/aura-core" }
 aura-drivers = { path = "crates/aura-drivers" }
-aura-sync = { path = "crates/aura-sync" }
 aura-config = { path = "crates/aura-config" }
 aura-remote = { path = "crates/aura-remote" }
 
@@ -63,8 +62,7 @@ tauri = { version = "2.12.5", features = [] }
 tauri-build = { version = "2.7.4", features = [] }
 tauri-plugin-opener = "2.7.2"
 tauri-plugin-window-state = "2.5.0"
-tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
-tauri-plugin-deep-link = "=2.6.2"
+tauri-plugin-single-instance = "2.5.4"
 # The folder picker and the quit question, called from Rust only (the webview gets no permission).
 tauri-plugin-dialog = "=2.8.3"
 

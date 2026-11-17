@@ -1,16 +1,32 @@
-//! Sign-in tokens of the agent accounts a person adds in auracode, one entry per account.
+//! Sign-in tokens of the agent accounts a person adds in auracode, one entry per account, in the
+//! computer's secure storage: Credential Manager on Windows, the login keychain on macOS, the
+//! Secret Service (GNOME Keyring, KWallet) on Linux. There is no plaintext fallback.
 //!
-//! They live in a service of their own (`auracode.agents.v1`), so the sync key review and its
-//! cleanup never meet them and they never meet sync keys. An entry's name is a digest of the
+//! They live in a service of their own (`auracode.agents.v1`). An entry's name is a digest of the
 //! account's id, a UUIDv7 no other install shares: it names no account, email or folder, and a
 //! data cleanup finds every entry from the ids its profiles list. Call these on a blocking worker.
-use super::{NATIVE_ACCESS, Result, VaultError, platform, validate};
-use crate::crypto;
+use std::sync::{Arc, Mutex};
+
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 const SERVICE: &str = "auracode.agents.v1";
+const MAX_SECRET: usize = 2048;
+// The Windows provider requires same-entry operations to be serialized across threads. This also
+// covers several `NativeTokens` handles in one process.
+static NATIVE_ACCESS: Mutex<()> = Mutex::new(());
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TokenError {
+    #[error("Secure storage is unavailable or locked. Unlock it and try again.")]
+    Unavailable,
+    #[error("The secure-store input is invalid.")]
+    Invalid,
+    #[error("The stored token is damaged. Remove the account and add it again.")]
+    Corrupt,
+}
+pub type Result<T> = std::result::Result<T, TokenError>;
 
 /// One account's entry, by the account's id.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -18,11 +34,11 @@ pub struct TokenEntry(String);
 impl TokenEntry {
     pub fn new(account: &str) -> Result<Self> {
         if account.is_empty() || account.len() > 128 {
-            return Err(VaultError::Invalid);
+            return Err(TokenError::Invalid);
         }
         let tuple = serde_json::to_vec(&("auracode-agent-token-v1", account))
-            .map_err(|_| VaultError::Invalid)?;
-        Ok(Self(crypto::encode(&Sha256::digest(tuple))))
+            .map_err(|_| TokenError::Invalid)?;
+        Ok(Self(URL_SAFE_NO_PAD.encode(Sha256::digest(tuple))))
     }
     /// The entry's name in the platform store, as Credential Manager and Keychain Access show it.
     pub fn target(&self) -> String {
@@ -30,15 +46,7 @@ impl TokenEntry {
     }
 }
 
-/// Where account tokens are kept. There is no plaintext fallback.
-pub trait TokenStore: Send + Sync {
-    fn load(&self, entry: &TokenEntry) -> Result<Option<Zeroizing<Vec<u8>>>>;
-    fn save(&self, entry: &TokenEntry, secret: &[u8]) -> Result<()>;
-    fn remove(&self, entry: &TokenEntry) -> Result<()>;
-}
-
-/// Credential Manager on Windows, the login keychain on macOS, the Secret Service (GNOME Keyring,
-/// KWallet) on Linux. Elsewhere it is unavailable.
+/// The platform's secure storage. On a platform without one it is unavailable.
 pub struct NativeTokens {
     store: Arc<keyring_core::CredentialStore>,
 }
@@ -52,7 +60,7 @@ impl NativeTokens {
         #[cfg(target_os = "linux")]
         let store = zbus_secret_service_keyring_store::Store::new().map_err(platform)?;
         #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        return Err(VaultError::Unavailable);
+        return Err(TokenError::Unavailable);
         #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         Ok(Self { store })
     }
@@ -73,31 +81,49 @@ impl NativeTokens {
             .build(SERVICE, &target, Some(&modifiers))
             .map_err(platform)
     }
-}
-impl TokenStore for NativeTokens {
-    fn load(&self, entry: &TokenEntry) -> Result<Option<Zeroizing<Vec<u8>>>> {
-        let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
+    pub fn load(&self, entry: &TokenEntry) -> Result<Option<Zeroizing<Vec<u8>>>> {
+        let _guard = NATIVE_ACCESS.lock().map_err(|_| TokenError::Unavailable)?;
         match self.entry(entry)?.get_secret() {
             Ok(secret) => {
                 let secret = Zeroizing::new(secret);
-                validate(&secret).map_err(|_| VaultError::Corrupt)?;
+                validate(&secret).map_err(|_| TokenError::Corrupt)?;
                 Ok(Some(secret))
             }
             Err(keyring_core::Error::NoEntry) => Ok(None),
             Err(error) => Err(platform(error)),
         }
     }
-    fn save(&self, entry: &TokenEntry, secret: &[u8]) -> Result<()> {
+    pub fn save(&self, entry: &TokenEntry, secret: &[u8]) -> Result<()> {
         validate(secret)?;
-        let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
+        let _guard = NATIVE_ACCESS.lock().map_err(|_| TokenError::Unavailable)?;
         self.entry(entry)?.set_secret(secret).map_err(platform)
     }
-    fn remove(&self, entry: &TokenEntry) -> Result<()> {
-        let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
+    pub fn remove(&self, entry: &TokenEntry) -> Result<()> {
+        let _guard = NATIVE_ACCESS.lock().map_err(|_| TokenError::Unavailable)?;
         match self.entry(entry)?.delete_credential() {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(error) => Err(platform(error)),
         }
+    }
+}
+
+fn validate(secret: &[u8]) -> Result<()> {
+    if secret.is_empty() || secret.len() > MAX_SECRET {
+        Err(TokenError::Invalid)
+    } else {
+        Ok(())
+    }
+}
+
+fn platform(error: keyring_core::Error) -> TokenError {
+    // Some provider errors carry failed secret bytes. Clear them before dropping; never format them.
+    match error {
+        keyring_core::Error::BadEncoding(mut bytes)
+        | keyring_core::Error::BadDataFormat(mut bytes, _) => {
+            bytes.zeroize();
+            TokenError::Corrupt
+        }
+        _ => TokenError::Unavailable,
     }
 }
 
@@ -123,5 +149,17 @@ mod tests {
         );
         assert!(TokenEntry::new("").is_err());
         assert!(TokenEntry::new(&"a".repeat(129)).is_err());
+    }
+
+    /// The entry names were first written by the removed sync crate: an added account's token
+    /// must stay findable under the same name after an update.
+    #[test]
+    fn entry_names_are_stable_across_releases() {
+        assert_eq!(
+            TokenEntry::new("01a1982d-2146-759a-a84c-cc94c4774f76")
+                .unwrap()
+                .target(),
+            "auracode.agents.v1:cZ76iU2j1YM0ubT7-mQeetEcvBFetHff8gV8iRHp3No"
+        );
     }
 }

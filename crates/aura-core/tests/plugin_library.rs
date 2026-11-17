@@ -109,7 +109,7 @@ impl Fixture {
         let started = Instant::now();
         let task = tokio::spawn(async move {
             manager
-                .plugin_library_progressive(refresh, true, Vec::new(), |library| {
+                .plugin_library_progressive(refresh, |library| {
                     tx.send((started.elapsed(), library)).is_ok()
                 })
                 .await
@@ -157,7 +157,7 @@ async fn cold_and_warm_sections_arrive_before_blocked_cli_and_fast_provider_publ
         let started = Instant::now();
         let mut first = true;
         manager
-            .plugin_library_progressive(false, true, Vec::new(), |library| {
+            .plugin_library_progressive(false, |library| {
                 if first {
                     assert!(
                         !listing_log.exists(),
@@ -250,13 +250,7 @@ async fn newer_refresh_and_profile_drain_cancel_old_updates_and_shutdown_cancels
     next(&mut rx).await;
     fixture.manager.shutdown_all(Duration::from_secs(2)).await;
     assert!(closing.await.unwrap().is_err());
-    assert!(
-        fixture
-            .manager
-            .plugin_library(false, false, Vec::new())
-            .await
-            .is_err()
-    );
+    assert!(fixture.manager.plugin_library(false).await.is_err());
     fixture.finish().await;
 }
 
@@ -269,7 +263,7 @@ async fn profile_drain_rejects_late_registration_and_abandoned_drain_reopens_adm
     let pause = fixture.manager.pause_plugin_refresh();
     let nested = fixture.manager.pause_plugin_refresh();
     let read = || {
-        admitted.plugin_library_progressive(true, true, Vec::new(), |_| {
+        admitted.plugin_library_progressive(true, |_| {
             panic!("a paused request must not publish or start helper work")
         })
     };
@@ -282,7 +276,7 @@ async fn profile_drain_rejects_late_registration_and_abandoned_drain_reopens_adm
     assert!(!fixture.machine.fake.join("claude.listing.log").exists());
     drop(pause);
     let reopened = admitted
-        .plugin_library_progressive(false, true, Vec::new(), |_| false)
+        .plugin_library_progressive(false, |_| false)
         .await
         .unwrap();
     assert_eq!(
@@ -298,11 +292,7 @@ async fn profile_drain_rejects_late_registration_and_abandoned_drain_reopens_adm
 async fn refresh_reprobes_providers_progressively_without_waiting_for_slow_detection() {
     let fixture = Fixture::new();
     std::fs::write(fixture.claude.join("release"), "ready").unwrap();
-    let cached = fixture
-        .manager
-        .plugin_library(false, true, Vec::new())
-        .await
-        .unwrap();
+    let cached = fixture.manager.plugin_library(false).await.unwrap();
     let previous = cached
         .agents
         .iter()
@@ -342,11 +332,7 @@ async fn refresh_reprobes_providers_progressively_without_waiting_for_slow_detec
 async fn a_warm_live_provider_becoming_missing_clears_final_and_reopened_live_facts() {
     let fixture = Fixture::new();
     std::fs::write(fixture.claude.join("release"), "ready").unwrap();
-    let warm = fixture
-        .manager
-        .plugin_library(false, true, Vec::new())
-        .await
-        .unwrap();
+    let warm = fixture.manager.plugin_library(false).await.unwrap();
     let claude = warm
         .agents
         .iter()
@@ -373,11 +359,7 @@ async fn a_warm_live_provider_becoming_missing_clears_final_and_reopened_live_fa
         fixture.machine.root.path().join("removed-claude"),
     )
     .unwrap();
-    let missing = fixture
-        .manager
-        .plugin_library(true, true, Vec::new())
-        .await
-        .unwrap();
+    let missing = fixture.manager.plugin_library(true).await.unwrap();
     let assert_missing = |library: &PluginLibrary| {
         let claude = library
             .agents
@@ -470,10 +452,6 @@ async fn unsupported_agents_are_explicitly_unavailable_and_opencode_sync_is_not_
         .iter()
         .find(|agent| agent.agent_id == "opencode")
         .unwrap();
-    assert!(matches!(
-        open.sync,
-        aura_protocol::plugins::AgentSync::Unsupported { .. }
-    ));
     assert!(
         open.features
             .iter()

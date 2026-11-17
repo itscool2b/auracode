@@ -447,7 +447,7 @@ export function ChatsPage({
   const general = prefs.shown?.general ?? DEFAULT_GENERAL;
   const disabled = !prefs.saved;
   const [installed, setInstalled] = useState<readonly ProjectEditor[] | null>(null);
-  // New chats' interface is this device's choice (lib/chatInterface.ts), not a synced setting.
+  // New chats' interface is this device's choice (lib/chatInterface.ts), not a saved preference.
   useSyncExternalStore(
     chatInterfaces.subscribe,
     chatInterfaces.getVersion,

@@ -91,14 +91,6 @@
   width: 100%;
   font-family: var(--g-mono);
 }
-.shared-mcp-conflict {
-  border-block: 1px solid var(--g-glass-rim);
-  padding-block: var(--g-space-16);
-}
-.shared-mcp-conflict pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .plugins-screen[data-embedded] {
   min-height: 0;
   height: auto;

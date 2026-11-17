@@ -79,12 +79,13 @@ fn updates_require_a_signed_version_and_only_rust_can_install() {
     }
 }
 
+/// auracode registers no link scheme with the system (`auracode://` existed only for the removed
+/// sign-in page), and the page frames nothing.
 #[test]
-fn sign_in_scheme_is_packaged_and_only_rust_receives_external_urls() {
-    assert_eq!(
-        json(TAURI_CONF)["plugins"]["deep-link"]["desktop"]["schemes"],
-        serde_json::json!(["auracode"])
-    );
+fn no_link_scheme_is_packaged_and_the_page_frames_nothing() {
+    let config = json(TAURI_CONF);
+    assert!(config["plugins"].get("deep-link").is_none());
+    assert_eq!(config["app"]["security"]["csp"]["frame-src"], "'none'");
     for entry in permissions() {
         assert!(!identifier(&entry).starts_with("deep-link:"));
     }

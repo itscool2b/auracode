@@ -213,7 +213,7 @@ mod tests {
             .unwrap();
         db.conn().execute("INSERT INTO queued_prompts (id,chat_id,text,parts_json,created_at,device_id) VALUES ('queue',?1,'text',?2,1,'dev')", params![chat,json]).unwrap();
         db.conn().execute("INSERT INTO steering_inputs (message_id,chat_id,turn_id,seq,parts_json,state,created_at,updated_at) VALUES ('steer',?1,'turn',1,?2,'pending',1,1)", params![chat,json]).unwrap();
-        let files = Attachments::Local(std::path::PathBuf::from("unused"));
+        let files = Attachments::new(std::path::PathBuf::from("unused"));
         for context in [
             ChatImageContext::Turn {
                 turn_id: "turn".into(),

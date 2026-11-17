@@ -3,7 +3,7 @@ use aura_protocol::memory::*;
 use rusqlite::{Connection, OptionalExtension, params};
 
 pub(crate) const MAX_MARKDOWN: usize = 16 * 1024;
-/// The longest revision source a synced record may carry.
+/// The longest source a revision may name.
 pub(crate) const MAX_SOURCE: usize = 128;
 /// A revision an agent saved directly names its chat: `agent:<chat id>`, well within
 /// [`MAX_SOURCE`].
@@ -214,7 +214,7 @@ fn agent_save(
 ) -> rusqlite::Result<(ProjectMemory, Option<AgentMemoryEdit>)> {
     check_markdown(&input.markdown, &input.reason)?;
     let current = read(conn, &input.project_id)?;
-    // The source must stay within what a synced revision may carry.
+    // The source must stay within what a revision may name.
     if chat_id.is_empty()
         || AGENT_SOURCE.len() + chat_id.len() > MAX_SOURCE
         || !chat_in_project(conn, chat_id, &input.project_id)?

@@ -9,16 +9,12 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-[features]
-account-sync = ["dep:aura-sync", "aura-sync/sqlcipher", "dep:zeroize"]
-
 [dependencies]
 aura-agents.workspace = true
 aura-config.workspace = true
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true
-aura-sync = { workspace = true, optional = true }
 base64 = "0.22.1"
 dirs.workspace = true
 futures.workspace = true
@@ -42,7 +38,6 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["net"] }
 tracing.workspace = true
 uuid.workspace = true
-zeroize = { version = "1.8", optional = true }
 tempfile.workspace = true
 # Directory-relative operations keep checkpoint reads/reverts inside the selected folder during
 # concurrent path changes, including symlink and Windows reparse-point traversal.

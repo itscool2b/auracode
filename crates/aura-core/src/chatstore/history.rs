@@ -130,9 +130,10 @@ pub(crate) fn page(
     })
 }
 
-/// The agent of every turn with rows in `lo..cursor`, by the rule conversation and sync use: the
-/// agent a synced turn names, else its agent session's, else the chat's. A turn that resolves to
-/// no agent is left out (the interface then shows the chat's agent).
+/// The agent of every turn with rows in `lo..cursor`, by the rule conversation uses: the agent
+/// the turn itself names (one an earlier version brought from another device), else its agent
+/// session's, else the chat's. A turn that resolves to no agent is left out (the interface then
+/// shows the chat's agent).
 fn turn_agents(
     conn: &Connection,
     chat_id: &str,
@@ -323,7 +324,7 @@ mod tests {
     }
 
     /// Each turn keeps the agent that ran it after the chat switches agents: its agent session's,
-    /// else the agent a synced turn names, else the chat's current agent.
+    /// else the agent the turn itself names, else the chat's current agent.
     #[test]
     fn history_pages_name_the_agent_of_each_turn() {
         let db = TestDb::new();

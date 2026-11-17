@@ -12,6 +12,7 @@ import { WorkspaceStore } from "../lib/workspace";
 import { createBrowserSettingsFixture } from "./browserSettingsFixture";
 import { createInstructionsFixture } from "./instructionsFixture";
 import { pluginFixture } from "./pluginLibraryPreview";
+import { oneProfile } from "./profilesFixture";
 import { createProjectMemoryFixture } from "./projectMemoryPreview";
 import { createSetupFixture } from "./setupFixture";
 
@@ -65,7 +66,6 @@ export function createCustomizeFixture() {
     plugins: {
       api: {
         snapshot: async () => pluginFixture("plugins"),
-        setSync: async () => [],
         update: unsupported,
       },
       libraryApi: {
@@ -87,13 +87,12 @@ export function createCustomizeFixture() {
         },
       },
       mcpApi: {
-        snapshot: async () => ({ revision: 1, servers: [], conflicts: [] }),
+        snapshot: async () => ({ revision: 1, servers: [] }),
         save: unsupported,
         remove: unsupported,
         credentials: unsupported,
         import: unsupported,
         export: unsupported,
-        conflict: unsupported,
         test: unsupported,
         sessionAction: unsupported,
         importNative: unsupported,
@@ -111,7 +110,6 @@ const info = {
   app_version: "0.1.0",
   data_dir: null,
   profile: null,
-  profile_locked: false,
   device: null,
 } as unknown as AppInfo;
 
@@ -122,6 +120,7 @@ export function mountCustomizePreview(container: HTMLElement) {
   createRoot(container).render(
     <StrictMode>
       <SettingsScreen
+        profiles={oneProfile}
         info={info}
         initialPage="plugins"
         workspace={workspace}

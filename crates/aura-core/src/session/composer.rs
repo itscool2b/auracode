@@ -242,7 +242,6 @@ impl SessionManager {
         }
         let folder = self.composer_folder(chat_id).await?;
         let dir = self.deps().store.attachment_dir().to_path_buf();
-        let reader = self.deps().store.attachment_reader();
         let attachments = self
             .deps()
             .store
@@ -267,9 +266,8 @@ impl SessionManager {
                     if !seen.insert(attachment.meta.id) {
                         continue;
                     }
-                    let bytes = aura_drivers::attachments::read_from(
-                        Some(&dir),
-                        reader.as_deref(),
+                    let bytes = aura_drivers::attachments::read(
+                        &dir,
                         &attachment.sha256,
                         if attachment.meta.image {
                             aura_drivers::attachments::MAX_IMAGE_BYTES

@@ -1,7 +1,5 @@
 //! Shared admission between in-memory dispatch and writer-owned parent tombstone projection.
 use rusqlite::Connection;
-#[cfg(feature = "account-sync")]
-use rusqlite::params;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, MutexGuard},
@@ -79,21 +77,6 @@ impl Activity {
             super::workspace_removal::available(conn, chat)?;
         Ok(())
     }
-}
-/// Keep the lock through projection and cache refresh. Dispatch either precedes the projection
-/// and defers it, or observes the committed unavailable parent before sending a prompt.
-#[cfg(feature = "account-sync")]
-pub(crate) fn prepare(conn: &Connection, states: &BTreeMap<String, State>) -> rusqlite::Result<()> {
-    conn.execute_batch("CREATE TEMP TABLE IF NOT EXISTS aura_workspace_active(chat_id TEXT PRIMARY KEY); DELETE FROM aura_workspace_active;")?;
-    for (id, state) in states {
-        if state.active {
-            conn.execute(
-                "INSERT INTO aura_workspace_active(chat_id) VALUES(?1)",
-                params![id],
-            )?;
-        }
-    }
-    Ok(())
 }
 pub(crate) fn refresh(conn: &Connection, states: &mut BTreeMap<String, State>) -> bool {
     let mut changed = false;

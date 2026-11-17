@@ -41,7 +41,7 @@ const AVAILABLE_SHOWN = 20;
 
 /**
  * The Plugins & MCP (Vercel's project pages): the agents on the left, and for the chosen agent
- * its harness status, its sync switch and what it supports, each feature as rows on hairlines with
+ * its harness status and what it supports, each feature as rows on hairlines with
  * where they came from. Rows read from the agent's own CLI where it lists them; the rest come from
  * its files. Every change runs the agent's own reviewed command in a terminal first.
  */
@@ -92,7 +92,7 @@ export function PluginLibraryScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"refresh" | "update" | "sync" | null>(null);
+  const [busy, setBusy] = useState<"refresh" | "update" | null>(null);
   const [vendor, setVendor] = useState<VendorPreset | null>(null);
   const [preview, setPreview] = useState<{
     item: LibraryItem;
@@ -173,18 +173,6 @@ export function PluginLibraryScreen({
     try {
       await api.update(target.agent_id);
       if (alive.current) setStatus(`${target.name} updated. Its plugins were read again.`);
-      await load(false);
-    } catch (reason) {
-      if (alive.current) setError(errorMessage(reason));
-    } finally {
-      if (alive.current) setBusy(null);
-    }
-  };
-  const setSync = async (target: AgentPlugins, enabled: boolean) => {
-    setBusy("sync");
-    setError(null);
-    try {
-      await api.setSync(target.agent_id, enabled);
       await load(false);
     } catch (reason) {
       if (alive.current) setError(errorMessage(reason));
@@ -313,7 +301,6 @@ export function PluginLibraryScreen({
               busy={busy}
               now={now}
               onUpdate={() => void update(agent)}
-              onSync={(enabled) => void setSync(agent, enabled)}
               onVendor={setVendor}
               onOpen={(entry) => void openItem(entry)}
               onHistory={() => void openHistory()}
@@ -398,7 +385,6 @@ export function AgentSection({
   busy,
   now,
   onUpdate,
-  onSync,
   onVendor,
   onOpen,
   onHistory,
@@ -407,10 +393,9 @@ export function AgentSection({
   onAddMcp,
 }: {
   readonly agent: AgentPlugins;
-  readonly busy: "refresh" | "update" | "sync" | null;
+  readonly busy: "refresh" | "update" | null;
   readonly now: () => number;
   readonly onUpdate: () => void;
-  readonly onSync: (enabled: boolean) => void;
   readonly onVendor: (preset: VendorPreset) => void;
   readonly onOpen: (entry: PluginEntry) => void;
   readonly onHistory: () => void;
@@ -499,30 +484,6 @@ export function AgentSection({
         </p>
       ) : null}
       <p className="plugins-summary">{agent.summary}</p>
-      <div className="plugins-sync">
-        <div>
-          <strong>Sync across devices</strong>
-          <span>
-            {agent.sync.state === "unsupported"
-              ? agent.sync.reason
-              : agent.sync.state === "on"
-                ? "Changes here are reviewed and shared with your other devices."
-                : "Off on this device. Its items wait here unchanged."}
-          </span>
-        </div>
-        {agent.sync.state !== "unsupported" ? (
-          <input
-            type="checkbox"
-            role="switch"
-            className="g-switch"
-            aria-label={`Sync ${agent.name} across devices`}
-            checked={agent.sync.state === "on"}
-            aria-checked={agent.sync.state === "on"}
-            disabled={busy !== null}
-            onChange={(event) => onSync(event.currentTarget.checked)}
-          />
-        ) : null}
-      </div>
       {agent.notices.map((notice) => (
         <p key={notice} className="plugins-note">
           {notice}

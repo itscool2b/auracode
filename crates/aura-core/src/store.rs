@@ -1,8 +1,7 @@
 //! The per-profile SQLite store.
 //!
-//! [`Store::open`] handles Local profiles. Account profiles require the feature-gated explicit keyed
-//! open and never enter plaintext recovery. Whatever is on disk, an open returns either a working,
-//! fully migrated database or an error, and it never destroys data:
+//! Whatever is on disk, [`Store::open`] returns either a working, fully migrated database or an
+//! error, and it never destroys data:
 //!
 //! 1. Opening is coordinated across processes through `<db>.lock` (see `store/lock.rs`): one
 //!    opener at a time holds it exclusively while it probes, repairs, and migrates, and every open
@@ -59,7 +58,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, InUseReason, Result};
 use crate::fsutil::{self, PARTIAL_SUFFIX, SQLITE_SIDECARS};
-use crate::profile::{Profile, ProfileKind};
+use crate::profile::Profile;
 use crate::time::now_millis;
 
 use lock::OpenLock;
@@ -215,8 +214,6 @@ pub struct Store {
     conn: Connection,
     path: PathBuf,
     backups_dir: PathBuf,
-    #[cfg(feature = "account-sync")]
-    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
     /// The shared hold on `<db>.lock`, released when the store drops, which tells other processes
     /// the database is in use (see `store/lock.rs`). Declared after `conn` because fields drop in
     /// declaration order: the connection must finish closing (and checkpointing) before another
@@ -228,39 +225,11 @@ impl Store {
     /// Opens (creating, migrating, or repairing as needed) the profile's `aura.db`, with backups in
     /// the profile's `backups/` directory.
     pub fn open(profile: &Profile) -> Result<(Store, StoreInfo)> {
-        if profile.meta.kind == ProfileKind::Account {
-            return Err(CoreError::ProfileLocked {
-                path: profile.db_path(),
-            });
-        }
         Store::open_at(&profile.db_path(), &profile.backups_dir())
     }
 
-    /// Explicit account-only open. A retained key protects every connection and migration backup.
-    /// Locked or damaged encrypted files never enter plaintext automatic recovery.
-    #[cfg(feature = "account-sync")]
-    pub fn open_encrypted(
-        profile: &Profile,
-        key: std::sync::Arc<aura_sync::crypto::DatabaseKey>,
-    ) -> Result<(Store, StoreInfo)> {
-        if profile.meta.kind != ProfileKind::Account {
-            return Err(CoreError::ProfileEncryptionMismatch);
-        }
-        encrypted::check_profile_layout(profile)?;
-        encrypted::open(
-            &profile.db_path(),
-            &profile.backups_dir(),
-            key,
-            migrations(),
-        )
-    }
-
-    /// Uses the same key as this store. Call on a blocking worker because it reads all data pages.
+    /// Call on a blocking worker because it reads all data pages.
     pub fn check_integrity(&self) -> Result<Integrity> {
-        #[cfg(feature = "account-sync")]
-        if let Some(key) = &self.key {
-            return encrypted::check_integrity(&self.path, key);
-        }
         check_integrity(&self.path)
     }
 
@@ -277,11 +246,6 @@ impl Store {
 
     pub fn conn(&self) -> &Connection {
         &self.conn
-    }
-
-    #[cfg(feature = "account-sync")]
-    pub(crate) fn is_encrypted(&self) -> bool {
-        self.key.is_some()
     }
 
     /// Mutable access, for `Connection::transaction`.
@@ -304,10 +268,6 @@ impl Store {
     pub fn note_query_error(&self, error: &rusqlite::Error) -> Result<bool> {
         if !is_damage(error) {
             return Ok(false);
-        }
-        #[cfg(feature = "account-sync")]
-        if self.key.is_some() {
-            return Err(encrypted::unavailable(&self.path));
         }
         recovery::mark_damaged(&self.path, &error.to_string())?;
         Ok(true)
@@ -422,8 +382,6 @@ fn open_inner(
         supported,
         busy_timeout,
         may_change: lock.as_ref().is_none_or(OpenLock::may_change),
-        #[cfg(feature = "account-sync")]
-        key: None,
     };
     let (conn, info) = open_locked(&ctx)?;
     let hold = lock.and_then(|lock| lock.into_store_hold(busy_timeout));
@@ -432,8 +390,6 @@ fn open_inner(
             conn,
             path: db_path.to_path_buf(),
             backups_dir: backups_dir.to_path_buf(),
-            #[cfg(feature = "account-sync")]
-            key: None,
             _lock: hold,
         },
         info,
@@ -450,8 +406,6 @@ struct Ctx<'a, 'm> {
     /// This open holds the lock exclusively (or locking doesn't work here), so it may repair and
     /// migrate. False when another auracode process has the database open.
     may_change: bool,
-    #[cfg(feature = "account-sync")]
-    key: Option<&'a aura_sync::crypto::DatabaseKey>,
 }
 
 /// Why a step of an open failed: damage, which a repair can fix, or anything else.
@@ -875,14 +829,6 @@ fn backup_database(
     let target = fsutil::free_path(ctx.backups_dir, &base, BACKUP_SUFFIX);
     let partial = fsutil::with_suffix(&target, PARTIAL_SUFFIX);
     let backup = {
-        #[cfg(feature = "account-sync")]
-        if let Some(key) = ctx.key {
-            encrypted::backup(conn, &partial, key)
-        } else {
-            conn.backup(rusqlite::MAIN_DB, &partial, None)
-                .map_err(CoreError::from)
-        }
-        #[cfg(not(feature = "account-sync"))]
         conn.backup(rusqlite::MAIN_DB, &partial, None)
             .map_err(CoreError::from)
     };

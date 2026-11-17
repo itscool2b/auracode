@@ -1207,17 +1207,14 @@ impl Session {
                     });
                     return;
                 };
-                let input = match crate::attachments::codex_with_reader(
-                    &parts,
-                    self.setup.attachment_dir.as_deref(),
-                    self.setup.attachment_reader.as_deref(),
-                ) {
-                    Ok(input) => input,
-                    Err(message) => {
-                        let _ = reply.send(SteerResult::Rejected { message });
-                        return;
-                    }
-                };
+                let input =
+                    match crate::attachments::codex(&parts, self.setup.attachment_dir.as_deref()) {
+                        Ok(input) => input,
+                        Err(message) => {
+                            let _ = reply.send(SteerResult::Rejected { message });
+                            return;
+                        }
+                    };
                 self.request("turn/steer", json!({"threadId":self.thread,"expectedTurnId":native_turn,"clientUserMessageId":message_id,"input":input}), Purpose::Steer { native_turn, reply });
             }
             DriverCommand::Prompt { turn, parts } => {
@@ -1230,22 +1227,19 @@ impl Session {
                     });
                     return;
                 }
-                let input = match crate::attachments::codex_with_reader(
-                    &parts,
-                    self.setup.attachment_dir.as_deref(),
-                    self.setup.attachment_reader.as_deref(),
-                ) {
-                    Ok(input) => input,
-                    Err(message) => {
-                        self.outbox.push_back(DriverEvent::TurnEnded {
-                            turn_id: turn.turn_id,
-                            stop_reason: StopReason::Error,
-                            usage: None,
-                            error: Some(protocol_error(&message)),
-                        });
-                        return;
-                    }
-                };
+                let input =
+                    match crate::attachments::codex(&parts, self.setup.attachment_dir.as_deref()) {
+                        Ok(input) => input,
+                        Err(message) => {
+                            self.outbox.push_back(DriverEvent::TurnEnded {
+                                turn_id: turn.turn_id,
+                                stop_reason: StopReason::Error,
+                                usage: None,
+                                error: Some(protocol_error(&message)),
+                            });
+                            return;
+                        }
+                    };
                 let (approval, _, sandbox) = options::policies(self.setup.autonomy);
                 let mut params = json!({"threadId":self.thread,"input":input,"model":self.model,"cwd":self.setup.agent_folder,"approvalPolicy":approval,"approvalsReviewer":"user","sandboxPolicy":sandbox,"clientUserMessageId":turn.turn_id});
                 if let Some(effort) = self.effort.as_ref().or_else(|| {

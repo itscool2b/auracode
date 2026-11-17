@@ -21,24 +21,23 @@ export async function checkProfiles(browser, url, out, engine) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`${url}/?preview=profiles&case=unsaved`);
     assert.equal(await page.getByRole("button", { name: "Current Local" }).isDisabled(), true);
-    await page.getByRole("button", { name: "Open Account", exact: true }).click();
+    await page.getByRole("button", { name: "Open Kept workspace", exact: true }).click();
     await page.getByRole("alert").filter({ hasText: "draft has not been saved" }).waitFor();
     assert.equal(await page.getByLabel("Activation count").textContent(), "0");
     await page.goto(`${url}/?preview=profiles&case=busy`);
-    await page.getByRole("button", { name: "Open Account", exact: true }).click();
+    await page.getByRole("button", { name: "Open Kept workspace", exact: true }).click();
     await page.getByText("Finish your active chat before switching profiles.").waitFor();
-    assert.equal(
-      await page.getByRole("status").first().textContent(),
-      "Current workspace preserved",
-    );
-    await page.goto(`${url}/?preview=profiles&case=locked`);
-    await page.getByRole("heading", { name: "Your account workspace is locked" }).waitFor();
-    await page.getByRole("button", { name: "Open Local", exact: true }).waitFor();
+    assert.equal(await page.getByRole("status").first().textContent(), "Current profile preserved");
+    // Every profile is on this computer: the list names no account and offers no sign-in.
+    await page.goto(`${url}/?preview=profiles`);
+    await page.getByRole("heading", { name: "Profiles", exact: true }).waitFor();
+    assert.equal(await page.getByText("On this computer", { exact: false }).count(), 2);
+    assert.equal(await page.getByText(/account|sign in/iu).count(), 0);
     await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-    await page.screenshot({ path: resolve(out, `${engine}-locked-profile.png`) });
-    await page.getByRole("button", { name: "Open Local", exact: true }).click();
-    await page.getByText("Opened local; old page discarded", { exact: true }).waitFor();
+    await page.screenshot({ path: resolve(out, `${engine}-profiles.png`) });
+    await page.getByRole("button", { name: "Open Kept workspace", exact: true }).click();
+    await page.getByText("Opened kept; old page discarded", { exact: true }).waitFor();
     assert.deepEqual(errors, []);
   } finally {
     await context.close();
@@ -52,7 +51,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const browser = await browserType.launch();
     try {
       await checkProfiles(browser, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
-      console.log(`${engine}: guarded profile switching and locked recovery passed`);
+      console.log(`${engine}: guarded profile switching passed`);
     } finally {
       await browser.close();
     }

@@ -30,12 +30,15 @@ tauri-build.workspace = true
 [dependencies]
 aura-agents.workspace = true
 aura-config.workspace = true
-aura-core = { workspace = true, features = ["account-sync"] }
+aura-core.workspace = true
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true
 aura-remote.workspace = true
-aura-sync.workspace = true
+# The computer's secure storage for added agent accounts' tokens (agent_tokens.rs): entry names
+# are base64url digests, and secret bytes are cleared when dropped.
+base64 = "0.22.1"
+keyring-core = "1.0.1"
 zeroize = "1.9.1"
 serde.workspace = true
 serde_json.workspace = true
@@ -45,7 +48,6 @@ tauri = { workspace = true, features = ["tray-icon"] }
 tauri-plugin-dialog.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-single-instance.workspace = true
-tauri-plugin-deep-link.workspace = true
 tauri-plugin-window-state.workspace = true
 tauri-specta.workspace = true
 thiserror.workspace = true
@@ -76,6 +78,8 @@ keepawake = "=0.6.1"
 tauri-plugin-notification = "=2.7.0"
 
 [target.'cfg(windows)'.dependencies]
+# Credential Manager, for added agent accounts' tokens.
+windows-native-keyring-store = { version = "1.1.0", default-features = false }
 # Already in the tree through tao and window-vibrancy; it reads the real build number (Mica needs
 # build 22000+) without the compatibility shims that make GetVersionEx lie.
 windows-version = "0.1.7"
@@ -94,6 +98,10 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# The desktop keyring (GNOME Keyring, KWallet or another Secret Service) over D-Bus, for added
+# agent accounts' tokens: pure Rust on the zbus the Linux build already has, its session encrypted
+# with Rust crypto rather than OpenSSL.
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-async-io-crypto-rust"] }
 # Checks for the AppIndicator library before the tray loads it, since a missing one panics there
 # (native_shell). Already in the tree through tao, at this version.
 dlopen2 = { version = "0.8.2", default-features = false }
@@ -102,6 +110,8 @@ dlopen2 = { version = "0.8.2", default-features = false }
 gtk = "0.18.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# The login keychain, for added agent accounts' tokens.
+apple-native-keyring-store = { version = "1.0.2", default-features = false, features = ["keychain"] }
 # "Delete data and move auracode to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.
 # Already in the tree through Tauri, at this version.
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }

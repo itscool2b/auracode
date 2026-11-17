@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::revert::STAGING_PREFIX;
-use super::{CheckpointError, Checkpoints, Manifest, Result, Storage, coordination, scan};
+use super::{CheckpointError, Checkpoints, Manifest, Result, coordination, scan};
 use scan::Fingerprint;
 
 const JOURNAL_LIMIT: usize = 16 * 1024 * 1024;
@@ -18,15 +18,9 @@ const JOURNAL_LIMIT: usize = 16 * 1024 * 1024;
 #[derive(Clone)]
 pub(super) struct Store {
     root: PathBuf,
-    #[cfg(feature = "account-sync")]
-    encrypted: Option<crate::profile_files::EncryptedFiles>,
 }
 pub(super) struct Group {
-    #[cfg(feature = "account-sync")]
-    token: String,
     local: Option<Dir>,
-    #[cfg(feature = "account-sync")]
-    encrypted: Option<crate::profile_files::EncryptedFiles>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -116,24 +110,10 @@ impl Journal {
 }
 
 impl Checkpoints {
-    pub(super) fn recovery_store(&self) -> Result<Store> {
-        if matches!(self.storage, Storage::Locked) {
-            return Err(invalid("Unlock the account before saving revert recovery."));
+    pub(super) fn recovery_store(&self) -> Store {
+        Store {
+            root: self.root.join("reverts"),
         }
-        Ok(Store {
-            root: match self.storage {
-                Storage::Local => self.root.join("reverts"),
-                _ => self.root.clone(),
-            },
-            #[cfg(feature = "account-sync")]
-            encrypted: match &self.storage {
-                Storage::Encrypted(files) => Some(files.clone()),
-                Storage::Local => None,
-                Storage::Locked => {
-                    return Err(invalid("Unlock the account before saving revert recovery."));
-                }
-            },
-        })
     }
 
     /// Recovery is scoped to a known checkpoint in this chat, folder and canonical root. Invalid
@@ -194,7 +174,7 @@ impl Checkpoints {
                 directory: stage,
                 validated_journal: Some(bytes.clone()),
             };
-            let store = self.recovery_store()?;
+            let store = self.recovery_store();
             let token = token.to_owned();
             let name = name
                 .into_string()
@@ -251,21 +231,6 @@ impl Store {
         sync_directory: &impl Fn(&Dir) -> io::Result<()>,
     ) -> Result<Group> {
         super::valid_id(token)?;
-        #[cfg(feature = "account-sync")]
-        if let Some(files) = &self.encrypted {
-            let child = match files.child(token, true) {
-                Ok(child) => child,
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                    files.child(token, false)?
-                }
-                Err(error) => return Err(error.into()),
-            };
-            return Ok(Group {
-                token: token.into(),
-                local: None,
-                encrypted: Some(child),
-            });
-        }
         // The checkpoint directory already exists before a revert. Create its recovery child
         // relative to that capability and persist the new name before creating any token group.
         let checkpoint = self
@@ -284,11 +249,7 @@ impl Store {
         private_child(&parent, std::ffi::OsStr::new(token))?;
         sync_directory(&parent)?;
         Ok(Group {
-            #[cfg(feature = "account-sync")]
-            token: token.into(),
             local: Some(parent.open_dir_nofollow(token)?),
-            #[cfg(feature = "account-sync")]
-            encrypted: None,
         })
     }
 }
@@ -308,24 +269,7 @@ fn private_child(parent: &Dir, name: &std::ffi::OsStr) -> io::Result<()> {
     }
 }
 impl Group {
-    #[cfg(feature = "account-sync")]
-    fn id(&self, name: &str) -> String {
-        format!(
-            "revert-{}-{}",
-            self.token,
-            crate::chatstore::rows::hex(&Sha256::digest(name.as_bytes()))
-        )
-    }
     pub(super) fn write(&self, name: &str, bytes: &[u8]) -> Result<()> {
-        #[cfg(feature = "account-sync")]
-        if let Some(files) = &self.encrypted {
-            let id = self.id(name);
-            files.write(&id, bytes)?;
-            if files.read(&id, bytes.len())? != bytes {
-                return Err(invalid("Encrypted recovery verification failed."));
-            }
-            return Ok(());
-        }
         let dir = self
             .local
             .as_ref()
@@ -354,14 +298,6 @@ impl Group {
         Ok(())
     }
     fn read_optional(&self, name: &str) -> Result<Option<Vec<u8>>> {
-        #[cfg(feature = "account-sync")]
-        if let Some(files) = &self.encrypted {
-            return match files.read(&self.id(name), JOURNAL_LIMIT) {
-                Ok(bytes) => Ok(Some(bytes)),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(error) => Err(error.into()),
-            };
-        }
         match read_regular(
             self.local
                 .as_ref()
@@ -416,7 +352,7 @@ pub(super) fn write_new(dir: &Dir, name: &str, bytes: &[u8]) -> io::Result<()> {
     sync(dir)
 }
 // Unix fsyncs directory entries. Windows currently flushes file handles only; directory-entry
-// crash durability is not established by this helper or the existing encrypted object store.
+// crash durability is not established by this helper.
 fn sync(dir: &Dir) -> io::Result<()> {
     #[cfg(unix)]
     crate::fsutil::fsync_dir(dir)?;
@@ -785,39 +721,13 @@ fn invalid(message: &str) -> CheckpointError {
 }
 #[cfg(test)]
 impl Store {
-    pub(super) fn fixture(root: PathBuf, encrypted: bool) -> Self {
-        #[cfg(feature = "account-sync")]
-        if encrypted {
-            use aura_sync::crypto::{AccountKey, files::Purpose};
-            let key = std::sync::Arc::new(
-                AccountKey::generate()
-                    .unwrap()
-                    .profile_file_key("account", "profile")
-                    .unwrap(),
-            );
-            return Self {
-                root: root.clone(),
-                encrypted: Some(
-                    crate::profile_files::EncryptedFiles::open(&root, Purpose::Checkpoint, key)
-                        .unwrap(),
-                ),
-            };
-        }
-        assert!(!encrypted);
-        Self {
-            root,
-            #[cfg(feature = "account-sync")]
-            encrypted: None,
-        }
+    pub(super) fn fixture(root: PathBuf) -> Self {
+        Self { root }
     }
 }
 #[cfg(test)]
 impl Group {
     pub(super) fn read(&self, name: &str) -> Vec<u8> {
-        #[cfg(feature = "account-sync")]
-        if let Some(files) = &self.encrypted {
-            return files.read(&self.id(name), JOURNAL_LIMIT).unwrap();
-        }
         read_regular(self.local.as_ref().unwrap(), name, JOURNAL_LIMIT).unwrap()
     }
 }
@@ -865,7 +775,7 @@ mod tests {
         let destination = tempfile::tempdir().unwrap();
         let token = crate::ids::new_id();
         let (root, journal, name) = fixture(source.path(), &token);
-        let store = Store::fixture(destination.path().join("reverts"), false);
+        let store = Store::fixture(destination.path().join("reverts"));
         let group = store.group(&token).unwrap();
         // Exercise the copy path on every platform, including same-volume fixtures. There is no
         // rename-to-destination fast path that could hide a cross-volume implementation failure.
@@ -904,13 +814,7 @@ mod tests {
         let token = crate::ids::new_id();
         let (root, journal, name) = fixture(source.path(), &token);
         std::fs::write(source.path().join("file"), "concurrent owner").unwrap();
-        let blocked = Group {
-            #[cfg(feature = "account-sync")]
-            token,
-            local: None,
-            #[cfg(feature = "account-sync")]
-            encrypted: None,
-        };
+        let blocked = Group { local: None };
         let mut outcome = result();
         settle(&root, &name, &journal, &blocked, &mut outcome);
         assert!(
@@ -936,13 +840,7 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let token = crate::ids::new_id();
         let (root, journal, name) = fixture(source.path(), &token);
-        let blocked = Group {
-            #[cfg(feature = "account-sync")]
-            token,
-            local: None,
-            #[cfg(feature = "account-sync")]
-            encrypted: None,
-        };
+        let blocked = Group { local: None };
         let mut outcome = result();
         settle(&root, &name, &journal, &blocked, &mut outcome);
         assert!(outcome.error.is_some());
@@ -962,13 +860,7 @@ mod tests {
             .unwrap()
             .hard_link("original-0", &root, "file")
             .unwrap();
-        let blocked = Group {
-            #[cfg(feature = "account-sync")]
-            token,
-            local: None,
-            #[cfg(feature = "account-sync")]
-            encrypted: None,
-        };
+        let blocked = Group { local: None };
         let mut outcome = result();
         settle(&root, &name, &journal, &blocked, &mut outcome);
         assert!(outcome.error.is_some());
@@ -985,7 +877,7 @@ mod tests {
         let destination = tempfile::tempdir().unwrap();
         let token = crate::ids::new_id();
         let (root, journal, name) = fixture(source.path(), &token);
-        let group = Store::fixture(destination.path().to_path_buf(), false)
+        let group = Store::fixture(destination.path().to_path_buf())
             .group(&token)
             .unwrap();
         let stage = root.open_dir_nofollow(&name).unwrap();
@@ -1013,7 +905,7 @@ mod tests {
         let checkpoint = Dir::open_ambient_dir(temp.path(), cap_std::ambient_authority()).unwrap();
         let expected =
             same_file::Handle::from_file(checkpoint.try_clone().unwrap().into_std_file()).unwrap();
-        let store = Store::fixture(temp.path().join("reverts"), false);
+        let store = Store::fixture(temp.path().join("reverts"));
         let token = crate::ids::new_id();
         std::fs::write(temp.path().join("work"), "unmodified working bytes").unwrap();
         let calls = std::cell::Cell::new(0);
@@ -1076,7 +968,7 @@ mod tests {
             let (root, journal, name) = fixture(source.path(), &token);
             let stage = root.open_dir_nofollow(&name).unwrap();
             let expected_journal = read_regular(&stage, "recovery.json", JOURNAL_LIMIT).unwrap();
-            let group = Store::fixture(destination.path().join("reverts"), false)
+            let group = Store::fixture(destination.path().join("reverts"))
                 .group(&token)
                 .unwrap();
             conflicting_newer_backup(&group);
@@ -1147,7 +1039,7 @@ mod tests {
         let token = crate::ids::new_id();
         let (root, journal, name) = fixture(source.path(), &token);
         let stage = root.open_dir_nofollow(&name).unwrap();
-        let group = Store::fixture(destination.path().join("reverts"), false)
+        let group = Store::fixture(destination.path().join("reverts"))
             .group(&token)
             .unwrap();
         conflicting_newer_backup(&group);
@@ -1224,7 +1116,7 @@ mod tests {
             b"unrelated replacement directory bytes",
         )
         .unwrap();
-        let group = Store::fixture(destination.path().join("reverts"), false)
+        let group = Store::fixture(destination.path().join("reverts"))
             .group(&token)
             .unwrap();
         let mut outcome = result();
@@ -1281,7 +1173,7 @@ mod tests {
         let stage = root.open_dir_nofollow(&name).unwrap();
         let expected = read_regular(&stage, "recovery.json", JOURNAL_LIMIT).unwrap();
         std::fs::write(source.path().join(&name).join("recovery.json"), b"{}").unwrap();
-        let group = Store::fixture(destination.path().join("reverts"), false)
+        let group = Store::fixture(destination.path().join("reverts"))
             .group(&token)
             .unwrap();
         let mut outcome = result();

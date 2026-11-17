@@ -88,7 +88,7 @@
   }
 }
 
-/* Progress: four soft bars; the steps behind fill grey, the current one fills white. */
+/* Progress: one soft bar per step; the steps behind fill grey, the current one fills white. */
 .setup-progress ol {
   display: flex;
   margin: calc(var(--g-space-8) * -1) 0 var(--g-space-24);

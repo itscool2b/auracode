@@ -24,7 +24,7 @@ import type { LibraryApi } from "../lib/library/api";
 import type { LibraryItem } from "../lib/library/bindings";
 import type { PluginsApi } from "../lib/plugins/api";
 import type { SharedMcpApi } from "../lib/sharedMcp";
-import { syntheticVendor } from "./configSyncPreview";
+import { syntheticVendor } from "./vendorFixture";
 
 declare global {
   interface Window {
@@ -136,7 +136,6 @@ export function pluginFixture(mode: string): PluginLibrary {
         : { state: "up_to_date", version: "2.1.312", checked_at: NOW - 3_600_000 },
     updated_at: NOW - 4 * 60_000,
     version_change: mode === "plugins-update" ? { from: "2.1.310", to: "2.1.312" } : null,
-    sync: { state: "on" },
     notices: [],
     features: [
       {
@@ -205,7 +204,6 @@ export function pluginFixture(mode: string): PluginLibrary {
     },
     updated_at: NOW - 60_000,
     version_change: null,
-    sync: { state: "on" },
     notices: [],
     features: [
       {
@@ -259,7 +257,6 @@ export function pluginFixture(mode: string): PluginLibrary {
     harness: { state: "up_to_date", version: "1.0.2", checked_at: NOW - 7_200_000 },
     updated_at: NOW - 2 * 60_000,
     version_change: null,
-    sync: { state: "off" },
     notices: [],
     features: [
       {
@@ -299,7 +296,6 @@ export function pluginFixture(mode: string): PluginLibrary {
     harness: { state: "not_installed" },
     updated_at: null,
     version_change: null,
-    sync: { state: "unsupported", reason: "Configuration sync covers Claude Code, Codex and Pi." },
     notices: [],
     features: [
       files(
@@ -328,7 +324,6 @@ export function pluginFixture(mode: string): PluginLibrary {
       : { state: "not_installed" },
     updated_at: null,
     version_change: null,
-    sync: { state: "unsupported", reason: "Configuration sync covers Claude Code, Codex and Pi." },
     notices: [],
     features: [
       ...(reviewed
@@ -398,7 +393,6 @@ export function pluginFixture(mode: string): PluginLibrary {
     harness: { state: "up_to_date", version, checked_at: NOW - 60_000 },
     updated_at: NOW - 60_000,
     version_change: null,
-    sync: { state: "unsupported", reason: "Configuration sync covers Claude Code, Codex and Pi." },
     notices: [],
     features,
   });
@@ -494,7 +488,6 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
         missing_credentials: ["headers/Authorization"],
       },
     ],
-    conflicts: [],
   };
   function mutate(expected: number, work: () => void) {
     if (expected !== mcp.revision)
@@ -556,10 +549,6 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
     },
     export: async () =>
       JSON.stringify({ version: 1, definitions: mcp.servers.map((s) => s.definition) }, null, 2),
-    conflict: async (expected) =>
-      mutate(expected, () => {
-        mcp.conflicts = [];
-      }),
     test: async () => {
       calls.push("mcp:test");
       return {
@@ -631,18 +620,6 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
         return new Promise((resolve) => pending.push({ update: onUpdate, resolve }));
       }
       return library;
-    },
-    setSync: async (agentId, enabled) => {
-      calls.push(`sync:${agentId}:${enabled}`);
-      library = {
-        ...library,
-        agents: library.agents.map((agent) =>
-          agent.agent_id === agentId
-            ? { ...agent, sync: { state: enabled ? "on" : "off" } }
-            : agent,
-        ),
-      };
-      return library.agents.filter((agent) => agent.sync.state === "off").map((a) => a.agent_id);
     },
     update: async (agentId) => {
       calls.push(`update:${agentId}`);
@@ -723,9 +700,7 @@ export function mountPluginLibraryPreview(container: HTMLElement, mode: string) 
     share: async (_folder, shared) => {
       const calls = (window as { libraryShares?: string[] }).libraryShares ?? [];
       Object.assign(window, { libraryShares: [...calls, shared.key] });
-      return { revision: 1, servers: [], conflicts: [] } as unknown as Awaited<
-        ReturnType<LibraryApi["share"]>
-      >;
+      return { revision: 1, servers: [] } as unknown as Awaited<ReturnType<LibraryApi["share"]>>;
     },
   };
   const initial =

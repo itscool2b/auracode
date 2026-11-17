@@ -1,7 +1,6 @@
 /**
- * The production sidebar footer (the logo and one Settings button) with synthetic profile switches
- * and delayed sync status only: no agent dock, no profile row, and a sync dot only while an
- * account's sync needs a hand.
+ * The production sidebar footer on a synthetic page: the logo and one Settings button, with no
+ * agent dock, no profile row and no status text.
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -66,15 +65,8 @@ try {
       await page.goto(`${origin}/scripts/fixtures/sidebar-footer.html`);
       const sidebar = page.getByRole("complementary", { name: "Sidebar" });
       const settings = sidebar.getByTestId("sidebar-settings");
-      const named = (name) =>
-        page.waitForFunction(
-          (expected) =>
-            document
-              .querySelector('[data-testid="sidebar-settings"]')
-              ?.getAttribute("aria-label") === expected,
-          name,
-        );
-      await named("Open settings");
+      await settings.waitFor();
+      assert.equal(await settings.getAttribute("aria-label"), "Open settings");
       const calls = () => page.evaluate(() => window.sidebarFooterFixture.calls());
       assert.deepEqual(await calls(), []);
       // Only the logo and Settings: no agent tiles, no profile row, no status text.
@@ -85,39 +77,9 @@ try {
       assert.equal(await settings.getAttribute("aria-keyshortcuts"), "Control+, Meta+,");
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      await sidebar.screenshot({ path: resolve(out, `${engine}-local.png`) });
-      await page.getByRole("button", { name: "Work account", exact: true }).click();
-      await page.evaluate(() => window.sidebarFooterFixture.resolve(0, "work"));
-      await named("Open settings");
-      assert.equal(await settings.getAttribute("data-attention"), null);
-      await page.evaluate(() => window.sidebarFooterFixture.event("work", "paused", 3));
-      await named("Open settings, sync paused · 3 pending");
-      assert.equal(await settings.getAttribute("data-attention"), "");
-      await settled(page);
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      await sidebar.screenshot({ path: resolve(out, `${engine}-paused.png`) });
+      await sidebar.screenshot({ path: resolve(out, `${engine}-footer.png`) });
       await settings.click();
-      assert.ok((await calls()).includes("settings"));
-      // Another profile never shows a status cached for the one before it.
-      await page.getByRole("button", { name: "Personal account", exact: true }).click();
-      await named("Open settings");
-      await page.evaluate(() => window.sidebarFooterFixture.event("work", "error", 9));
-      assert.equal(await settings.getAttribute("aria-label"), "Open settings");
-      await page.getByRole("button", { name: "Local", exact: true }).click();
-      await page.evaluate(() => {
-        window.sidebarFooterFixture.resolve(1, "personal");
-        window.sidebarFooterFixture.event("personal", "error", 2);
-      });
-      await named("Open settings");
-      assert.equal(await settings.getAttribute("data-attention"), null);
-      assert.equal((await calls()).filter((call) => call === "snapshot").length, 2);
-      assert.ok((await calls()).includes("stop:personal"));
-      await page.getByRole("button", { name: "Work account", exact: true }).click();
-      await page.evaluate(() => {
-        window.sidebarFooterFixture.event("work", "syncing", 1);
-        window.sidebarFooterFixture.resolve(2, "work");
-      });
-      await named("Open settings");
+      assert.deepEqual(await calls(), ["settings"]);
       await page.setViewportSize({ width: 390, height: 700 });
       assert.equal(
         await sidebar
@@ -130,7 +92,7 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-narrow.png`) });
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: logo and Settings only, sync dot on paused, cached/event ordering, profile switch cleanup and accessibility passed`,
+        `${engine}: logo and Settings only, the Settings action, a narrow sidebar and accessibility passed`,
       );
     } finally {
       await browser.close();

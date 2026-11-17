@@ -160,7 +160,6 @@ class FixtureBrowser implements BrowserApi {
     enabled: true,
     unavailable: null,
     passwords: true,
-    private: false,
   };
 
   constructor() {

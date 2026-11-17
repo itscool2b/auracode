@@ -61,44 +61,8 @@ export const commands = {
 	 *  through it. A release build refuses, so the window never acts as an agent there.
 	 */
 	browserAgentCall: (chatId: string, tool: string, input: string) => typedError<BrowserToolCheck, AppError>(__TAURI_INVOKE("browser_agent_call", { chatId, tool, input })),
-	signInLinkPending: () => __TAURI_INVOKE<SignInLink | null>("sign_in_link_pending"),
-	signInLinkAcknowledge: (id: string) => __TAURI_INVOKE<void>("sign_in_link_acknowledge", { id }),
-	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
-	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
-	/**
-	 *  Read the published runtime only. The sidebar must never initialize a vault, authenticate or
-	 *  start network work just to identify its workspace. The profile and engine share one snapshot.
-	 */
-	accountSyncStatus: () => __TAURI_INVOKE<[string, AccountSyncStatus] | null>("account_sync_status"),
-	accountVaultStatus: () => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_status")),
-	accountVaultUnlock: (passphrase: string, create: boolean) => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_unlock", { passphrase, create })),
-	accountResetStatus: () => typedError<AccountResetStatus, AccountFailure>(__TAURI_INVOKE("account_reset_status")),
-	accountResetReview: () => typedError<AccountResetReview, AccountFailure>(__TAURI_INVOKE("account_reset_review")),
-	accountResetConfirm: (reviewId: string, confirmation: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_confirm", { reviewId, confirmation, retained })),
-	accountRebindProfile: (profileId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_rebind_profile", { profileId })),
-	accountRemoveCandidates: () => typedError<AccountRemovalCandidate[], AccountFailure>(__TAURI_INVOKE("account_remove_candidates")),
-	accountRemovePreview: (profileId: string) => typedError<AccountRemovalReview, AccountFailure>(__TAURI_INVOKE("account_remove_preview", { profileId })),
-	accountRemoveApply: (token: string, confirmation: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_apply", { token, confirmation })),
-	accountRemoveCancel: (token: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_cancel", { token })),
-	accountResetRetry: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_retry")),
-	accountResetCancel: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_cancel")),
-	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
-	accountVerifyCode: (challengeId: string, code: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_verify_code", { challengeId, code })),
-	accountRefresh: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_refresh")),
-	accountRegisterDevice: (name: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_register_device", { name })),
-	accountPrepareRecovery: () => typedError<RecoverySetup, AccountFailure>(__TAURI_INVOKE("account_prepare_recovery")),
-	accountCancelSetup: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_cancel_setup")),
-	accountConfirmRecovery: (setupId: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_recovery", { setupId, retained })),
-	accountRecover: (recoveryKey: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_recover", { recoveryKey })),
-	accountConfirmFingerprint: (fingerprint: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_fingerprint", { fingerprint })),
-	accountDevices: () => typedError<AccountDevice[], AccountFailure>(__TAURI_INVOKE("account_devices")),
-	accountApproveDevice: (deviceId: string, verificationCode: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_approve_device", { deviceId, verificationCode })),
-	accountRevokeDevice: (deviceId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_revoke_device", { deviceId })),
-	accountSignOut: () => typedError<AccountSignOut, AccountFailure>(__TAURI_INVOKE("account_sign_out")),
 	profilesList: () => typedError<ProfileMeta[], AppError>(__TAURI_INVOKE("profiles_list")),
-	accountActivate: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("account_activate")),
 	profileActivate: (profileId: string) => typedError<AppInfo, AppError>(__TAURI_INVOKE("profile_activate", { profileId })),
-	configProfileRecover: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("config_profile_recover")),
 	appUpdateStatus: () => __TAURI_INVOKE<UpdateStatus>("app_update_status"),
 	appUpdateCheck: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_check")),
 	appUpdateDownload: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_download")),
@@ -109,32 +73,12 @@ export const commands = {
 	configVendorReview: (request: VendorRequest) => typedError<VendorReview, AppError>(__TAURI_INVOKE("config_vendor_review", { request })),
 	configVendorCancel: (token: string) => __TAURI_INVOKE<void>("config_vendor_cancel", { token }),
 	configVendorStart: (token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("config_vendor_start", { token, terminalId, rows, cols })),
-	configSyncInventory: (after: string | null) => typedError<ConfigSyncInventory, AppError>(__TAURI_INVOKE("config_sync_inventory", { after })),
-	configSyncPreview: (id: string, choice: ConfigSyncChoice) => typedError<ConfigSyncPreview, AppError>(__TAURI_INVOKE("config_sync_preview", { id, choice })),
-	configSyncCancel: (token: string) => __TAURI_INVOKE<void>("config_sync_cancel", { token }),
-	configSyncApply: (token: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_apply", { token })),
-	configSyncDeviceOnly: (id: string, deviceOnly: boolean) => typedError<null, AppError>(__TAURI_INVOKE("config_sync_device_only", { id, deviceOnly })),
-	configSyncHistory: () => typedError<ConfigSyncReceipt[], AppError>(__TAURI_INVOKE("config_sync_history")),
-	configSyncRollback: (id: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_rollback", { id })),
-	/**
-	 *  The agent's own installer ran for a reviewed declaration (`succeeded` and `exit_code` come
-	 *  from its terminal). Success that produced exactly the reviewed declaration is acknowledged;
-	 *  anything else restores that declaration and keeps every other item as it was.
-	 */
-	configSyncVendorFinish: (token: string, succeeded: boolean, exitCode: number | null) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_vendor_finish", { token, succeeded, exitCode })),
-	/**  Apply all for one agent: each ready item is its own transaction; one failure keeps the rest. */
-	configSyncApplyAgent: (agentId: string) => typedError<ConfigSyncOutcome[], AppError>(__TAURI_INVOKE("config_sync_apply_agent", { agentId })),
 	/**
 	 *  One section per agent. `refresh` is the explicit Refresh: agents are probed again and every
 	 *  listing reruns. Otherwise a listing is reused until its agent's installed version changes.
 	 */
 	pluginLibrarySnapshot: (refresh: boolean, channel: Channel<PluginLibrary>) => typedError<PluginLibrary, AppError>(__TAURI_INVOKE("plugin_library_snapshot", { refresh, channel })),
 	pluginManagementCapabilities: () => typedError<PluginManagement[], AppError>(__TAURI_INVOKE("plugin_management_capabilities")),
-	/**
-	 *  Turns configuration sync on or off for one agent on this device. Paused agents' items wait
-	 *  unchanged: nothing of theirs is published or applied until sync is on again.
-	 */
-	pluginSyncSet: (agentId: string, enabled: boolean) => typedError<string[], AppError>(__TAURI_INVOKE("plugin_sync_set", { agentId, enabled })),
 	sharedMcpSnapshot: () => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_snapshot")),
 	sharedMcpTest: (expected: number, id: string, projectId: string | null, chatId: string | null) => typedError<McpTestResult, AppError>(__TAURI_INVOKE("shared_mcp_test", { expected, id, projectId, chatId })),
 	sharedMcpSessionAction: (chatId: string, serverName: string, action: McpSessionAction) => typedError<McpActionResult, AppError>(__TAURI_INVOKE("shared_mcp_session_action", { chatId, serverName, action })),
@@ -144,7 +88,6 @@ export const commands = {
 	sharedMcpImport: (expected: number, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import", { expected, document })),
 	sharedMcpImportNative: (expected: number, projectId: string | null, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import_native", { expected, projectId, document })),
 	sharedMcpExport: () => typedError<string, AppError>(__TAURI_INVOKE("shared_mcp_export")),
-	sharedMcpConflict: (expected: number, revision: string, accept: boolean) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_conflict", { expected, revision, accept })),
 	readProjectMemory: (projectId: string) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("read_project_memory", { projectId })),
 	saveProjectMemory: (input: SaveProjectMemory) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("save_project_memory", { input })),
 	proposeProjectMemory: (input: ProposeProjectMemory) => typedError<MemoryProposal, AppError>(__TAURI_INVOKE("propose_project_memory", { input })),
@@ -306,17 +249,13 @@ export const commands = {
 	cloneRecoveryReady: (id: string) => typedError<CloneRecovery, AppError>(__TAURI_INVOKE("clone_recovery_ready", { id })),
 	cloneRecoveryOpen: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("clone_recovery_open", { id })),
 	cloneRecoveryDismiss: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("clone_recovery_dismiss", { id })),
-	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
 	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
 	chatDebugBundle: (chatId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_debug_bundle", { chatId })),
-	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
 	folderCodeRoots: () => typedError<string[], AppError>(__TAURI_INVOKE("folder_code_roots")),
 	folderSetCodeRoots: (roots: string[]) => typedError<string[], AppError>(__TAURI_INVOKE("folder_set_code_roots", { roots })),
 	folderResolution: (folderId: string, search: boolean) => typedError<FolderResolution, AppError>(__TAURI_INVOKE("folder_resolution", { folderId, search })),
 	folderLocateReview: (folderId: string, path: string) => typedError<FolderLocationReview, AppError>(__TAURI_INVOKE("folder_locate_review", { folderId, path })),
 	folderLocateApply: (review: FolderLocationReview) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("folder_locate_apply", { review })),
-	accountKeepLocalPreview: () => typedError<KeepLocalPreview, AppError>(__TAURI_INVOKE("account_keep_local_preview")),
-	accountKeepLocalApply: (token: string) => typedError<KeepLocalResult, AppError>(__TAURI_INVOKE("account_keep_local_apply", { token })),
 	repositoryPublicationReview: (folderId: string, input: RepositoryPublicationInput) => typedError<RepositoryPublicationReview, AppError>(__TAURI_INVOKE("repository_publication_review", { folderId, input })),
 	repositoryPublicationDraft: (folderId: string) => typedError<RepositoryPublicationDraft | null, AppError>(__TAURI_INVOKE("repository_publication_draft", { folderId })),
 	repositoryPublicationApply: (folderId: string, token: string) => typedError<RepositoryPublicationResult, AppError>(__TAURI_INVOKE("repository_publication_apply", { folderId, token })),
@@ -600,91 +539,6 @@ export type AcceptMemoryProposal = {
 	expected_revision: string | null,
 };
 
-export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "invite_required" | "deleted";
-
-export type AccountConfiguration = {
-	service_origin: string,
-	verification_url: string,
-};
-
-export type AccountDevice = {
-	id: string,
-	name: string,
-	platform: string,
-	verification_code: string,
-	current: boolean,
-	created_at: number,
-	last_seen: number,
-	approved_at: number | null,
-	revoked_at: number | null,
-};
-
-export type AccountFailure = {
-	code: AccountFailureCode,
-	message: string,
-	retry_after_seconds: number | null,
-};
-
-export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invite_required" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
-
-export type AccountRemovalCandidate = {
-	profile_id: string,
-	display_name: string,
-	pending: boolean,
-};
-
-export type AccountRemovalReview = {
-	token: string,
-	profile_id: string,
-	display_name: string,
-	other_profiles: number,
-	pending_changes: number | null,
-	resuming: boolean,
-};
-
-export type AccountResetReview = {
-	id: string,
-	key_version: number,
-	records: number,
-	blobs: number,
-	other_devices: number,
-	recovery_key: string,
-};
-
-export type AccountResetStatus = {
-	pending: boolean,
-	committed: boolean,
-};
-
-export type AccountSignOut = {
-	status: AccountStatus,
-	/**  False means the local session is removed, but remote revocation could not be confirmed. */
-	server_revoked: boolean,
-};
-
-export type AccountStatus = {
-	access: AccountAccess,
-	account_id: string | null,
-	device_id: string | null,
-	/**  An opaque local profile, available only after a locally trusted key exists. */
-	profile_id: string | null,
-	local_key_available: boolean,
-	/**  Computed from this device's own public key, never trusted from the server. */
-	approval_code: string | null,
-	/**  Compare this with the trusted approving device before confirming a new remote key. */
-	fingerprint: string | null,
-	sync: AccountSyncStatus,
-};
-
-export type AccountSyncState = "inactive" | "idle" | "syncing" | "offline" | "paused" | "error";
-
-export type AccountSyncStatus = {
-	state: AccountSyncState,
-	pending_changes: number | null,
-	last_sync_at: number | null,
-	message: string | null,
-};
-
 /**
  *  The usage limits one of an agent's accounts last reported: its windows (a session, a week, a
  *  model's own) and when it reported them. Agents report them while a chat runs on the account.
@@ -696,16 +550,9 @@ export type AccountUsage = {
 	observed_at: number,
 };
 
-export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlocked" | "restart_required";
-
-export type AccountVaultStatus = {
-	mode: AccountVaultMode,
-	can_create: boolean,
-};
-
 /**
  *  A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
- *  computer's secure storage and never becomes chat or account metadata.
+ *  computer's secure storage and never becomes chat metadata.
  */
 export type AgentAccount = {
 	id: string,
@@ -826,7 +673,7 @@ export type AgentInstallationCandidate = {
 	source: string,
 };
 
-/**  Device-local executable preference. Paths never become portable chat or account metadata. */
+/**  Device-local executable preference. Paths never become portable chat metadata. */
 export type AgentInstallations = {
 	agent_id: string,
 	/**  None follows the environment override, then PATH order. An explicit missing path stays selected. */
@@ -871,7 +718,6 @@ export type AgentPlugins = {
 	/**  When the listing was last read. None: never on this run. */
 	updated_at: number | null,
 	version_change: VersionChange | null,
-	sync: AgentSync,
 	notices: string[],
 };
 
@@ -880,9 +726,6 @@ export type AgentProcesses = {
 	pid: number,
 	processes: ProcessRow[],
 };
-
-/**  Configuration sync for this agent on this device. */
-export type AgentSync = { state: "on" } | { state: "off" } | { state: "unsupported"; reason: string };
 
 /**  What each of an agent's accounts last reported about its usage limits, newest first. */
 export type AgentUsage = {
@@ -970,12 +813,8 @@ export type AppInfo = {
 	device: DeviceIdentity | null,
 	/**  The active profile; `null` when startup failed before opening it. */
 	profile: ProfileMeta | null,
-	/**  The selected Account profile is waiting for its app-owned local key. */
-	profile_locked: boolean,
 	/**  Profile commands are temporarily unavailable while a reviewed switch is prepared. */
 	profile_switching: boolean,
-	/**  Managed configuration is blocked until this explicit recovery is confirmed. */
-	config_profile_recovery: ConfigProfileRecovery | null,
 	/**  The profile database; `null` when startup failed before opening it. */
 	db: DbInfo | null,
 	/**  The native material behind the window. `none` means the UI must paint an opaque background. */
@@ -1182,8 +1021,6 @@ export type BrowserStatus = {
 	unavailable: string | null,
 	/**  The engine offers to save sign-ins (Windows). */
 	passwords: boolean,
-	/**  This profile keeps no browser data on disk (an encrypted account profile). */
-	private: boolean,
 };
 
 /**  One tab of a chat's browser. */
@@ -1291,7 +1128,7 @@ export type ChatCreatePreview = {
 	busy_chats: ChatSummary[],
 };
 
-/**  Device-local launch context. This is never part of a stored transcript or sync record. */
+/**  Device-local launch context. This is never part of a stored transcript. */
 export type ChatFolderContext = {
 	primary: string,
 	additional: string[],
@@ -1590,41 +1427,7 @@ export type ConfigChoice = {
 	group: string | null,
 };
 
-/**
- *  Why an item is not applied on this device yet. Each has one defined behaviour: the item keeps
- *  its last synchronized base, nothing is removed, and the review says what would let it apply.
- */
-export type ConfigHold = 
-/**  The agent is not installed here. Its items wait until it is. */
-{ kind: "agent_missing" } | 
-/**  The person turned sync off for this agent on this device. */
-{ kind: "sync_paused" } | 
-/**  The installed agent is older than the version this feature needs here. */
-{ kind: "needs_version"; feature: string; minimum: string; found: string | null } | 
-/**
- *  A plugin's marketplace is not added here. `source` is a GitHub repository to add it from,
- *  when the other device synchronized one.
- */
-{ kind: "marketplace_missing"; marketplace: string; source: string | null } | 
-/**  A plugin or package declaration that only the agent's own installer can apply. */
-{ kind: "vendor_install" } | 
-/**  It uses paths of another operating system and stays with devices of that system. */
-{ kind: "device_specific"; platform: ConfigScope } | 
-/**  An MCP command path that does not exist here. It is never written. */
-{ kind: "missing_path"; path: string } | 
-/**
- *  An MCP command auracode will not look up: a network share, a device path, a `..` escape
- *  or another system's form. It is kept for the device it came from and never written here.
- */
-{ kind: "foreign_path"; path: string } | 
-/**  A previous apply or install did not finish; the reason says why. */
-{ kind: "retained"; reason: string } | 
-/**  The account could not be reached. The saved state is kept. */
-{ kind: "offline" };
-
 export type ConfigKind = { type: "select"; current: string; choices: ConfigChoice[] } | { type: "toggle"; current: boolean };
-
-export type ConfigOperation = "in_sync" | "apply" | "publish" | "merge" | "conflict" | "wait";
 
 /**  One session option the agent offers (or the driver synthesized from its legacy lists). */
 export type ConfigOption = {
@@ -1638,91 +1441,8 @@ export type ConfigOption = {
 	pending: ConfigValue | null,
 };
 
-export type ConfigProfileRecovery = {
-	transaction: string | null,
-	owner_profile: string | null,
-	from_profile: string | null,
-	to_profile: string | null,
-	phase: ConfigProfileRecoveryPhase,
-	detail: string,
-};
-
-export type ConfigProfileRecoveryPhase = "restore_previous" | "finish_switch" | "unavailable";
-
-export type ConfigReceiptStatus = "applied" | "recovery_required" | "rolled_back";
-
-export type ConfigScope = "portable" | "windows" | "macos";
-
-export type ConfigSyncChoice = "automatic" | "keep_local" | "use_remote";
-
-export type ConfigSyncInventory = {
-	items: ConfigSyncItem[],
-	next_cursor: string | null,
-	notices: string[],
-	/**  The account could not be reached: items are local only and nothing is applied. */
-	offline: boolean,
-	/**  Agents whose sync is off on this device (`claude`, `codex`, `pi`). Filled by the host. */
-	paused: string[],
-};
-
-export type ConfigSyncItem = {
-	id: string,
-	label: string,
-	provider: LibraryProvider | null,
-	scope: ConfigScope | null,
-	operation: ConfigOperation,
-	first_link: boolean,
-	device_only: boolean,
-	skipped: boolean,
-	detail: string | null,
-	hold: ConfigHold | null,
-	/**  Another device removed it. Applying removes it here after a confirmed review. */
-	removed_upstream: boolean,
-};
-
-export type ConfigSyncOutcome = {
-	item_id: string,
-	receipt_id: string | null,
-	completed: boolean,
-	message: string,
-};
-
-export type ConfigSyncPreview = {
-	token: string,
-	item: ConfigSyncItem,
-	choice: ConfigSyncChoice,
-	base: string | null,
-	local: string | null,
-	remote: string | null,
-	result: string | null,
-	conflicts: string[],
-	deletes_item: boolean,
-	can_apply: boolean,
-	warnings: string[],
-	/**  The agent's own installer steps, in order, for a declaration it must install itself. */
-	vendor_steps: ConfigVendorStep[],
-};
-
-export type ConfigSyncReceipt = {
-	id: string,
-	item_id: string,
-	label: string,
-	provider: LibraryProvider,
-	status: ConfigReceiptStatus,
-};
-
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
-
-export type ConfigVendorKind = "marketplace" | "plugin" | "package";
-
-/**  One step of the agent's own reviewed installer that would make a declaration true here. */
-export type ConfigVendorStep = {
-	provider: LibraryProvider,
-	kind: ConfigVendorKind,
-	/**  `name@marketplace`, a GitHub `owner/repository` or a package source. */
-	target: string,
-};
 
 export type ContinuationAction = { type: "fresh_session" } | { type: "continue_here" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
 
@@ -1797,14 +1517,6 @@ export type DataCleanupItemKind =
 /**  Update downloads and other leftovers in the temporary folder. */
 "temporary";
 
-/**  Only opaque secure-store targets and decisions are exposed to the renderer. */
-export type DataCleanupKey = {
-	target: string,
-	kind: string,
-	remove: boolean,
-	reason: string,
-};
-
 /**  What "Delete all auracode data" would remove, for the review. */
 export type DataCleanupReview = {
 	/**  One use, for [`data_cleanup_apply`], within ten minutes. */
@@ -1813,12 +1525,10 @@ export type DataCleanupReview = {
 	items: DataCleanupItem[],
 	worktrees: DataCleanupWorktree[],
 	/**
-	 *  Where auracode's keys are: "Windows Credential Manager", "the macOS keychain" or "the
-	 *  desktop keyring" (the Secret Service on Linux).
+	 *  Where the sign-in tokens of added agent accounts are: "Windows Credential Manager", "the
+	 *  macOS keychain" or "the desktop keyring" (the Secret Service on Linux).
 	 */
 	secure_store: string | null,
-	keys: DataCleanupKey[],
-	warnings: string[],
 	/**  macOS: the app bundle "move auracode to the Trash" would move; `None` where it cannot. */
 	app_bundle: string | null,
 };
@@ -2019,8 +1729,6 @@ export type GeneralPreferences = {
 	keep_awake: boolean,
 	/**  Closing the window keeps auracode running in the tray or menu bar. */
 	close_to_tray: boolean,
-	/**  Agents (`claude`, `codex`, `pi`) whose configuration sync is off on this device. */
-	config_sync_paused: string[],
 	/**
 	 *  Copy each source folder's Git-ignored instruction files (a local `AGENTS.md` or
 	 *  `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
@@ -2435,23 +2143,6 @@ export type IsolationResult = {
 	warning: string | null,
 };
 
-export type KeepLocalPreview = {
-	token: string,
-	projects: number,
-	chats: number,
-	turns: number,
-	notices: string[],
-};
-
-export type KeepLocalResult = {
-	profile_id: string,
-	display_name: string,
-	projects: number,
-	chats: number,
-	turns: number,
-	missing_attachments: number,
-};
-
 /**  Public release metadata. Stale cached data remains visible during offline use. */
 export type LatestRelease = {
 	version: string | null,
@@ -2598,33 +2289,6 @@ export type LoadedPlugin = {
 	version: string | null,
 };
 
-export type LocalImportPreview = {
-	projects: LocalImportProject[],
-	notices: string[],
-};
-
-export type LocalImportProject = {
-	project_id: string,
-	name: string,
-	folders: number,
-	chats: number,
-	turns: number,
-	revision: string,
-	already_imported: boolean,
-};
-
-export type LocalImportResult = {
-	project_ids: string[],
-	chats: number,
-	turns: number,
-	missing_attachments: number,
-};
-
-export type LocalImportSelection = {
-	project_id: string,
-	revision: string,
-};
-
 export type ManagedWorktree = {
 	id: string,
 	chat_id: string,
@@ -2650,14 +2314,7 @@ export type McpActionResult = {
 	servers: McpRuntimeServer[],
 };
 
-export type McpConflict = {
-	revision: string,
-	id: string,
-	project_id: string | null,
-	incoming: McpDefinition | null,
-};
-
-/**  This type never enters UI snapshots, sync or protocol logs. */
+/**  This type never enters UI snapshots or protocol logs. */
 export type McpCredentials = {
 	env: { [key in string]: string },
 	headers: { [key in string]: string },
@@ -2702,7 +2359,6 @@ export type McpSessionAction = "status" | "login" | "restart";
 export type McpSnapshot = {
 	revision: number,
 	servers: McpRecord[],
-	conflicts: McpConflict[],
 };
 
 export type McpTestResult = {
@@ -2942,9 +2598,7 @@ export type ProcessesSnapshot = {
 
 export type ProfileKind = 
 /**  Data that lives only on this machine. */
-"local" | 
-/**  Data that belongs to a signed-in account (M6/M7). */
-"account";
+"local";
 
 /**  The contents of `profile.json`. */
 export type ProfileMeta = {
@@ -3185,15 +2839,6 @@ export type QueuedPrompt = {
 	created_at: number,
 };
 
-/**
- *  The recovery key is intentionally shown only in response to an explicit setup action. Keep it
- *  in transient UI memory, never diagnostics, analytics, URLs or frontend persistence.
- */
-export type RecoverySetup = {
-	id: string,
-	recovery_key: string,
-};
-
 export type RemoteBot = {
 	id: string,
 	name: string,
@@ -3313,7 +2958,7 @@ export type RevertResult = {
 	/**  A partial failure is explicit; the caller must not report full success. */
 	error: string | null,
 	/**
-	 *  Durable recovery groups in the profile's data folder, encrypted for Account profiles.
+	 *  Durable recovery groups in the profile's data folder.
 	 *  A failed finalization also names any transient working-folder copy that was preserved.
 	 */
 	recovery_paths: string[],
@@ -3481,8 +3126,6 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 { type: "default_agent"; agent_id: string | null } | 
 /**  Changing the model clears the default thinking level, which was chosen for the old one. */
 { type: "default_model"; model: string | null } | { type: "default_effort"; effort: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "automatic_checkpoints"; enabled: boolean } | { type: "notifications"; enabled: boolean } | { type: "sounds"; enabled: boolean } | { type: "editor"; editor: ProjectEditor | null } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
-/**  Turns configuration sync on or off for one agent on this device. */
-{ type: "config_sync_agent"; agent_id: string; enabled: boolean } | 
 /**  Turns on or off copying Git-ignored instruction files into new worktree chats. */
 { type: "copy_instructions_to_worktrees"; enabled: boolean } | 
 /**  Turns on or off agents' edits to project memory. Off leaves it read-only for them. */
@@ -3524,18 +3167,7 @@ export type SetupSnapshot = {
 	notice: string | null,
 };
 
-export type SetupStep = "welcome" | "agents" | "account" | "motion" | "project";
-
-export type SignInChallenge = {
-	id: string,
-	expires_in: number,
-	resend_after: number,
-};
-
-export type SignInLink = {
-	id: string,
-	email: string | null,
-};
+export type SetupStep = "welcome" | "agents" | "motion" | "project";
 
 export type SlashCommand = {
 	name: string,

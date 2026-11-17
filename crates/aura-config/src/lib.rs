@@ -3,13 +3,13 @@
 //! part of an inventory. Content is untrusted data, never executable instructions for this crate.
 
 mod copy;
+pub mod declarations;
 pub mod extensions;
 pub mod instructions;
 mod inventory;
 mod mcp;
 mod mcp_document;
 mod safe_fs;
-pub mod sync;
 
 use std::path::PathBuf;
 

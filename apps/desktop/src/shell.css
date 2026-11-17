@@ -299,9 +299,6 @@
     .chat-permission-dock,
     .chat-composer,
     .settings-group,
-    .account-card,
-    .local-import-panel,
-    .config-sync-empty,
     .setup-agent-detail
   )
   .g-button:disabled:not(.g-button-ghost) {
@@ -436,15 +433,7 @@
  * Disclosures in settings, setup and the Library open with a quiet chevron rather than the platform
  * triangle: an fg-3 fill through a chevron mask, turning a quarter when open.
  */
-:is(
-    .settings-shell,
-    .locked-profile,
-    .configuration-recovery,
-    .setup-shell,
-    .setup-clone-dialog,
-    .library-screen,
-    .library-review
-  )
+:is(.settings-shell, .setup-shell, .setup-clone-dialog, .library-screen, .library-review)
   details
   > summary,
 details.setup-install-review > summary {
@@ -454,30 +443,14 @@ details.setup-install-review > summary {
   list-style: none;
 }
 
-:is(
-    .settings-shell,
-    .locked-profile,
-    .configuration-recovery,
-    .setup-shell,
-    .setup-clone-dialog,
-    .library-screen,
-    .library-review
-  )
+:is(.settings-shell, .setup-shell, .setup-clone-dialog, .library-screen, .library-review)
   details
   > summary::-webkit-details-marker,
 details.setup-install-review > summary::-webkit-details-marker {
   display: none;
 }
 
-:is(
-    .settings-shell,
-    .locked-profile,
-    .configuration-recovery,
-    .setup-shell,
-    .setup-clone-dialog,
-    .library-screen,
-    .library-review
-  )
+:is(.settings-shell, .setup-shell, .setup-clone-dialog, .library-screen, .library-review)
   details
   > summary::before,
 details.setup-install-review > summary::before {
@@ -495,15 +468,7 @@ details.setup-install-review > summary::before {
   transition: transform var(--g-dur-base) var(--g-ease);
 }
 
-:is(
-    .settings-shell,
-    .locked-profile,
-    .configuration-recovery,
-    .setup-shell,
-    .setup-clone-dialog,
-    .library-screen,
-    .library-review
-  )
+:is(.settings-shell, .setup-shell, .setup-clone-dialog, .library-screen, .library-review)
   details[open]
   > summary::before,
 details.setup-install-review[open] > summary::before {
@@ -1087,8 +1052,8 @@ details.setup-install-review[open] > summary::before {
 }
 
 /*
- * Something new: Settings' 6px dot on the bell's shoulder, cut out of the window; amber while a
- * notice warns, red while one failed.
+ * Something new: a 6px dot on the bell's shoulder, cut out of the window; amber while a notice
+ * warns, red while one failed.
  */
 .chat-inbox-bell[data-attention]::after {
   content: "";
@@ -1108,19 +1073,6 @@ details.setup-install-review[open] > summary::before {
 
 .chat-inbox-bell[data-attention="error"]::after {
   background-color: var(--g-red);
-}
-
-/* An account whose sync needs a hand: a 6px fg-1 dot on the corner, cut out of the black. */
-.chat-sidebar-settings[data-attention]::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-fg-1);
-  box-shadow: 0 0 0 2px var(--g-window);
 }
 
 /* Graphite's tooltip (4.6) in place of the platform's: 500ms of hover, then a 150ms fade. */

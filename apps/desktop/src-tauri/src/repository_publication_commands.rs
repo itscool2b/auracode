@@ -6,7 +6,7 @@ use crate::{
 use aura_protocol::repository_publication::{
     RepositoryPublicationInput, RepositoryPublicationResult, RepositoryPublicationReview,
 };
-use tauri::{Manager, State, Webview};
+use tauri::{State, Webview};
 #[tauri::command]
 #[specta::specta]
 pub async fn repository_publication_draft(
@@ -53,13 +53,12 @@ pub async fn repository_publication_apply(
 ) -> Result<RepositoryPublicationResult, AppError> {
     current(&webview, &state)?;
     let sessions = state.sessions()?;
-    let app = webview.app_handle().clone();
+    // The task owns the publication, so a page that reloads cannot abandon it halfway.
     tokio::spawn(async move {
-        let result = sessions
+        sessions
             .repository_publication_apply(folder_id, token)
-            .await?;
-        crate::account_sync::trigger(&app);
-        Ok(result)
+            .await
+            .map_err(AppError::from)
     })
     .await
     .map_err(|_| {

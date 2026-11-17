@@ -51,8 +51,6 @@ pub struct GitWorkspaces {
     env: Arc<EnvResolver>,
     registry: Arc<LeftoverRegistry>,
     root: PathBuf,
-    records: records::Backend,
-    publication_records: records::Backend,
     gate: tokio::sync::Mutex<()>,
     prepared: std::sync::Mutex<HashMap<String, create::Prepared>>,
     actions: std::sync::Mutex<HashMap<String, actions::PreparedAction>>,
@@ -73,75 +71,10 @@ impl GitWorkspaces {
         env: Arc<EnvResolver>,
         registry: Arc<LeftoverRegistry>,
     ) -> Arc<Self> {
-        let backend = if profile.meta.kind == crate::profile::ProfileKind::Account {
-            records::Backend::Locked
-        } else {
-            records::Backend::Local
-        };
-        let publications = if profile.meta.kind == crate::profile::ProfileKind::Account {
-            records::Backend::Locked
-        } else {
-            records::Backend::Local
-        };
-        Self::with_records(profile, env, registry, backend, publications)
-    }
-
-    #[cfg(feature = "account-sync")]
-    pub fn new_account(
-        profile: &crate::profile::Profile,
-        env: Arc<EnvResolver>,
-        registry: Arc<LeftoverRegistry>,
-        key: Arc<aura_sync::crypto::files::ProfileFileKey>,
-    ) -> Result<Arc<Self>> {
-        if profile.meta.kind != crate::profile::ProfileKind::Account {
-            return Err(GitError::Message(
-                "An account worktree key requires an Account profile.".into(),
-            ));
-        }
-        for name in ["registry.json", "publications.json"] {
-            let legacy = profile.worktrees_dir().join(name);
-            match std::fs::symlink_metadata(&legacy) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
-                Err(error) => return Err(error.into()),
-                Ok(_) => return Err(GitError::Message(
-                    "Existing worktree metadata needs an explicit encrypted import. It was left unchanged.".into()
-                )),
-            }
-        }
-        let file = crate::profile_files::EncryptedRecord::open(
-            &profile.dir.join("metadata"),
-            "worktree-registry",
-            8 * 1024 * 1024,
-            key.clone(),
-        )?;
-        let publications = crate::profile_files::EncryptedRecord::open(
-            &profile.dir.join("metadata"),
-            "repository-publications",
-            1024 * 1024,
-            key,
-        )?;
-        Ok(Self::with_records(
-            profile,
-            env,
-            registry,
-            records::Backend::Encrypted(file),
-            records::Backend::Encrypted(publications),
-        ))
-    }
-
-    fn with_records(
-        profile: &crate::profile::Profile,
-        env: Arc<EnvResolver>,
-        registry: Arc<LeftoverRegistry>,
-        records: records::Backend,
-        publication_records: records::Backend,
-    ) -> Arc<Self> {
         Arc::new(Self {
             env,
             registry,
             root: profile.worktrees_dir(),
-            records,
-            publication_records,
             gate: tokio::sync::Mutex::new(()),
             prepared: std::sync::Mutex::new(HashMap::new()),
             actions: std::sync::Mutex::new(HashMap::new()),
@@ -158,11 +91,6 @@ impl GitWorkspaces {
     }
 
     async fn git(&self) -> Result<git::Git> {
-        if matches!(self.records, records::Backend::Locked) {
-            return Err(GitError::Message(
-                "Unlock this account's worktree storage first.".into(),
-            ));
-        }
         crate::fsutil::ensure_private_dir(&self.root)?;
         let hooks = self.root.join("empty-hooks");
         crate::fsutil::ensure_private_dir(&hooks)?;

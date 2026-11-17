@@ -177,37 +177,8 @@ pub(crate) enum Request {
         command: super::agent_catalogs::Command,
         reply: oneshot::Sender<Result<Option<String>, StoreError>>,
     },
-    #[cfg(feature = "account-sync")]
-    PreserveAccount {
-        command: crate::account_preservation::Command,
-        reply: oneshot::Sender<
-            crate::account_preservation::Result<crate::account_preservation::Reply>,
-        >,
-    },
-    #[cfg(feature = "account-sync")]
-    LocalImport {
-        command: crate::local_import::Command,
-        reply:
-            oneshot::Sender<Result<crate::local_import::Reply, crate::local_import::ImportError>>,
-    },
     Steering {
         command: super::steering::Command,
-        reply: oneshot::Sender<Result<(), StoreError>>,
-    },
-    #[cfg(feature = "account-sync")]
-    SyncExchange {
-        command: crate::sync::exchange::Command,
-        reply: oneshot::Sender<crate::sync::Result<crate::sync::exchange::Reply>>,
-    },
-    #[cfg(feature = "account-sync")]
-    Config {
-        command: crate::sync::config::Command,
-        reply:
-            oneshot::Sender<Result<crate::sync::config::Reply, aura_config::sync::ConfigPortError>>,
-    },
-    #[cfg(feature = "account-sync")]
-    ConfigureSync {
-        context: crate::sync::SyncContext,
         reply: oneshot::Sender<Result<(), StoreError>>,
     },
     Flush {
@@ -547,14 +518,6 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         Work::Request(Request::Memory { command, .. }) => command.bytes(),
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::Config { command, .. }) => command.bytes(),
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::SyncExchange { command, .. }) => command.bytes(),
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::LocalImport { .. }) => 64 * 1024,
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::PreserveAccount { .. }) => 64 * 1024,
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -731,16 +694,6 @@ fn replace<T: PartialEq>(slot: &mut T, value: T) -> bool {
 
 fn work_name(work: &Work) -> &'static str {
     match work {
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::ConfigureSync { .. }) => "configure_sync",
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::Config { .. }) => "config_sync",
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::SyncExchange { .. }) => "sync_exchange",
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::LocalImport { .. }) => "local_import",
-        #[cfg(feature = "account-sync")]
-        Work::Request(Request::PreserveAccount { .. }) => "preserve_account",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -914,8 +867,6 @@ enum Next {
 
 /// The thread that owns the store.
 pub(crate) struct Writer {
-    #[cfg(feature = "account-sync")]
-    sync: Option<crate::sync::SyncContext>,
     shared: Arc<Shared>,
     store: Option<Store>,
     owner: Option<ProfileOwner>,
@@ -936,8 +887,6 @@ impl Writer {
         recovered: watch::Sender<Option<RecoveryReport>>,
     ) -> Writer {
         Writer {
-            #[cfg(feature = "account-sync")]
-            sync: None,
             shared,
             store: Some(store),
             owner: Some(owner),
@@ -1243,8 +1192,6 @@ impl Writer {
             &self.device_id,
             &self.files.attachments,
             &self.shared.config.compact,
-            #[cfg(feature = "account-sync")]
-            self.sync.as_ref(),
         );
         #[cfg(test)]
         if result.is_ok() {
@@ -1331,33 +1278,6 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
-            #[cfg(feature = "account-sync")]
-            Request::PreserveAccount { command, reply } => {
-                let result = match (self.store.as_ref(), &self.mode) {
-                    (Some(store), Mode::Normal) => crate::account_preservation::execute(
-                        store,
-                        &self.files.attachments,
-                        &self.device_id,
-                        command,
-                    ),
-                    _ => Err(crate::account_preservation::PreservationError::AccountRequired),
-                };
-                let _ = reply.send(result);
-            }
-            #[cfg(feature = "account-sync")]
-            Request::LocalImport { command, reply } => {
-                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
-                    (Some(store), Some(context), Mode::Normal) => crate::local_import::execute(
-                        store,
-                        context,
-                        &self.files.attachments,
-                        &self.device_id,
-                        command,
-                    ),
-                    _ => Err(crate::local_import::ImportError::AccountRequired),
-                };
-                let _ = reply.send(result);
-            }
             Request::Steering { command, reply } => {
                 let now = now_millis();
                 let result = if matches!(self.mode, Mode::Damaged) {
@@ -1365,55 +1285,6 @@ impl Writer {
                 } else {
                     self.write_tx(|conn| super::steering::execute(conn, now, command))
                 };
-                let _ = reply.send(result);
-            }
-            #[cfg(feature = "account-sync")]
-            Request::SyncExchange { command, reply } => {
-                let activity = Arc::clone(&self.shared.workspace_activity);
-                let mut active = activity.lock();
-                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
-                    (Some(store), Some(context), Mode::Normal) => {
-                        let prepared = super::workspace_activity::prepare(store.conn(), &active)
-                            .map_err(crate::sync::SyncError::from);
-                        prepared.and_then(|()| {
-                            crate::sync::exchange::execute_with_files(
-                                store,
-                                context,
-                                command,
-                                Some(&self.files.attachments),
-                            )
-                        })
-                    }
-                    _ => Err(crate::sync::SyncError::Unavailable),
-                };
-                if let Some(store) = &self.store
-                    && super::workspace_activity::refresh(store.conn(), &mut active)
-                {
-                    activity.changed();
-                }
-                let _ = reply.send(result);
-            }
-            #[cfg(feature = "account-sync")]
-            Request::Config { command, reply } => {
-                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
-                    (Some(store), Some(context), Mode::Normal) => {
-                        crate::sync::config::execute(store, context, command)
-                    }
-                    _ => Err(aura_config::sync::ConfigPortError::Unavailable),
-                };
-                let _ = reply.send(result);
-            }
-            #[cfg(feature = "account-sync")]
-            Request::ConfigureSync { context, reply } => {
-                let result = match self.store.as_mut() {
-                    Some(store) if matches!(self.mode, Mode::Normal) => context
-                        .initialize(store)
-                        .map_err(|error| StoreError::Other(error.to_string())),
-                    _ => Err(StoreError::Closed),
-                };
-                if result.is_ok() {
-                    self.sync = Some(context);
-                }
                 let _ = reply.send(result);
             }
             Request::Flush { reply } => {
@@ -1642,10 +1513,6 @@ impl Writer {
         let outcome = catch_unwind(AssertUnwindSafe(|| -> rusqlite::Result<T> {
             let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let value = write(&tx)?;
-            #[cfg(feature = "account-sync")]
-            if let Some(sync) = &self.sync {
-                crate::sync::capture::finish(&tx, sync, now_millis())?;
-            }
             tx.commit()?;
             Ok(value)
         }));
@@ -1670,21 +1537,12 @@ impl Writer {
                 return Err(StoreError::Closed);
             };
             let outcome = catch_unwind(AssertUnwindSafe(|| {
-                recover::recover_with(
+                recover::recover(
                     store.conn_mut(),
                     Scope::Chat(chat_id),
                     &device,
                     &limits,
                     now_millis(),
-                    |conn| {
-                        #[cfg(feature = "account-sync")]
-                        if let Some(sync) = &self.sync {
-                            crate::sync::capture::finish(conn, sync, now_millis())?;
-                        }
-                        #[cfg(not(feature = "account-sync"))]
-                        let _ = conn;
-                        Ok(())
-                    },
                 )
             }));
             settle(store.conn_mut());
@@ -1935,28 +1793,6 @@ impl Writer {
             return;
         }
         let at = now_millis();
-        #[cfg(feature = "account-sync")]
-        if let Some(recovery) = &self.files.recovery {
-            let written = (|| -> io::Result<()> {
-                let mut journal = super::journal::Journal::new(recovery)?;
-                for item in &items {
-                    if let Some(letter) = dead_letter(item, error, at) {
-                        serde_json::to_writer(&mut journal, &letter).map_err(io::Error::other)?;
-                        journal.write_all(b"\n")?;
-                    }
-                }
-                journal.finish()
-            })();
-            if written.is_err() {
-                // Never log the serialization error, which could contain rejected payload text.
-                tracing::error!(
-                    count = items.len(),
-                    "could not save encrypted recovery ops; some queued data was lost"
-                );
-            }
-            self.committed(&items);
-            return;
-        }
         let lines: Vec<String> = items
             .iter()
             .filter_map(|item| dead_letter_line(item, error, at))
@@ -2041,7 +1877,6 @@ fn commit(
     device_id: &str,
     attachments: &super::files::Attachments,
     limits: &CompactLimits,
-    #[cfg(feature = "account-sync")] sync: Option<&crate::sync::SyncContext>,
 ) -> Result<(), Failure> {
     let conn = store.conn_mut();
     let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<(), Failure> {
@@ -2051,10 +1886,6 @@ fn commit(
         let now = now_millis();
         for item in writes {
             apply(&tx, item, device_id, attachments, limits, now)?;
-        }
-        #[cfg(feature = "account-sync")]
-        if let Some(sync) = sync {
-            crate::sync::capture::finish(&tx, sync, now).map_err(classify)?;
         }
         tx.commit().map_err(classify)
     }));
@@ -2336,7 +2167,7 @@ mod tests {
             store,
             owner,
             "dev".into(),
-            super::super::files::Files::local(&profile),
+            super::super::files::Files::new(&profile),
             recovered,
         );
         writer.mode = Mode::Damaged;

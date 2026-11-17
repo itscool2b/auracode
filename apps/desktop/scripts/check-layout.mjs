@@ -63,14 +63,9 @@ export const MODES = [
   "questions&case=mixed#request",
   "questions&case=group#question-step",
   "steering",
-  "config-sync",
   "worktree-setup",
   "profiles",
-  "account",
-  "verification",
   "project-tools",
-  "data-transfer",
-  "keep-local",
   "git",
   "git&changes",
   "settings",
@@ -119,15 +114,13 @@ export const MODES = [
   "chat-options#busy-folder",
   // The Plugin library, one agent at a time: live listings, an agent without a plugin system, an
   // update with the reread after a version change, a failed CLI listing, a row menu open and an
-  // item's preview; and configuration sync grouped by agent with every hold.
+  // item's preview.
   "plugins",
   "plugins-pi",
   "plugins-update",
   "plugins-failed",
   "plugins#plugin-menu",
   "plugins#plugin-item",
-  "plugin-sync",
-  "plugin-sync#plugin-steps",
   "steering#queued",
   "steering#queue-edit",
   // A message typed during a turn: Steer beside the Queue disc, or, for an agent without
@@ -337,10 +330,6 @@ const OPENERS = {
     );
     await page.keyboard.press("Enter");
     await page.getByLabel("Copy destination").waitFor();
-  },
-  "plugin-steps": async (page) => {
-    await page.getByRole("button", { name: /Review settings.json · enabledPlugins/ }).click();
-    await page.getByLabel("Installer steps").waitFor();
   },
   queued: (page) => queueTwo(page),
   "queue-edit": async (page) => {

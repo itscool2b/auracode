@@ -10,7 +10,6 @@ fn setup(folder: &Path) -> SessionSetup {
     SessionSetup {
         mcp_servers: Vec::new(),
         attachment_dir: None,
-        attachment_reader: None,
         attachment_writer: None,
         chat_id: new_id(),
         agent_id: "claude".into(),

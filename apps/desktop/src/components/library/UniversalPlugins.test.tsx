@@ -14,7 +14,6 @@ function store(status: Partial<BrowserStatus> = {}): BrowserStore {
     enabled: true,
     unavailable: null,
     passwords: true,
-    private: false,
     ...status,
   };
   const api = {
@@ -104,10 +103,7 @@ describe("Universal plugins", () => {
     );
   });
 
-  it("explains an encrypted profile's browser, and a system that cannot run it", () => {
-    expect(render({ prefs: prefs(), os: "windows", browser: store({ private: true }) })).toContain(
-      "keeps nothing on disk",
-    );
+  it("explains a system that cannot run the browser", () => {
     expect(
       render({
         prefs: prefs(),

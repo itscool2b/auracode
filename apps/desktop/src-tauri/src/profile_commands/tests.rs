@@ -1,18 +1,6 @@
 use super::*;
 use crate::{glass::GlassEffect, launch::LaunchOptions, os::OsInfo};
 use aura_core::{chatstore::NewChat, owner::ProfileOwner};
-use aura_sync::crypto::AccountKey;
-
-fn sync_context(key: Arc<AccountKey>) -> SyncContext {
-    SyncContext {
-        identity: SyncIdentity {
-            account: "synthetic-account".into(),
-            device: "synthetic-device".into(),
-            key_version: 1,
-        },
-        key,
-    }
-}
 
 fn state(root: &DataRoot) -> AppState {
     let mut booted = boot::boot(Ok(root.clone()));
@@ -29,9 +17,6 @@ fn state(root: &DataRoot) -> AppState {
         LaunchOptions::from_lookup(|_| None),
         "0.1.0".into(),
     )
-}
-fn local(profile: Profile) -> Resolved {
-    Resolved { profile, key: None }
 }
 async fn add_chat(state: &AppState, folder: &std::path::Path) -> String {
     state
@@ -56,125 +41,6 @@ async fn close(state: &AppState) {
 }
 
 #[tokio::test]
-async fn failed_second_account_phase_publishes_local_and_keeps_account_data_separate() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let state = state(&root);
-    let profiles = Profiles::new(root.clone());
-    let a = profiles.create(ProfileKind::Account, "Account A").unwrap();
-    let b = profiles.create(ProfileKind::Account, "Account B").unwrap();
-    let key_a = Arc::new(AccountKey::generate().unwrap());
-    let key_b = Arc::new(AccountKey::generate().unwrap());
-    activate(
-        &state,
-        Resolved {
-            profile: b.clone(),
-            key: Some(sync_context(key_b)),
-        },
-        sessions::testing::outside,
-    )
-    .await
-    .unwrap();
-    activate(
-        &state,
-        Resolved {
-            profile: a.clone(),
-            key: Some(sync_context(key_a)),
-        },
-        sessions::testing::outside,
-    )
-    .await
-    .unwrap();
-    let preserved = std::fs::read(b.db_path()).unwrap();
-    assert!(
-        activate(
-            &state,
-            Resolved {
-                profile: b.clone(),
-                key: Some(sync_context(Arc::new(AccountKey::generate().unwrap())))
-            },
-            sessions::testing::outside
-        )
-        .await
-        .is_err()
-    );
-    assert_eq!(state.app_info().profile.unwrap().id, "local");
-    assert_eq!(profiles.open_active().unwrap().meta.id, "local");
-    assert!(
-        state
-            .app_info()
-            .notices
-            .iter()
-            .any(|notice| notice.contains("Local is now selected"))
-    );
-    assert_eq!(std::fs::read(b.db_path()).unwrap(), preserved);
-    assert!(state.sessions().is_ok());
-    close(&state).await;
-}
-
-#[tokio::test]
-async fn pending_configuration_recovery_blocks_desktop_and_direct_native_agent_admission() {
-    use aura_core::config_transition::{TransitionLease, TransitionLocator};
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let state = state(&root);
-    let chat = add_chat(&state, temp.path()).await;
-    let owner = uuid::Uuid::now_v7().to_string();
-    let locator = TransitionLocator {
-        schema: 1,
-        transaction: uuid::Uuid::now_v7().to_string(),
-        owner_profile: owner.clone(),
-        from_profile: "local".into(),
-        to_profile: owner,
-    };
-    let lease = TransitionLease::acquire(root.root()).unwrap();
-    lease.create(&locator).unwrap();
-    assert!(state.app_info().config_profile_recovery.is_some());
-    assert!(state.sessions().is_err());
-    assert!(state.onboarding().is_err());
-    let result = state.chats().unwrap().manager.start(&chat, false).await;
-    assert!(result.is_err_and(|error| error.to_string().contains("Recover the interrupted")));
-    lease.clear(&locator).unwrap();
-    assert!(state.sessions().is_ok());
-    close(&state).await;
-}
-
-#[tokio::test]
-async fn pending_transition_never_repairs_an_ambiguous_profile_pointer_to_local() {
-    use aura_core::config_transition::{TransitionLease, TransitionLocator};
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let state = state(&root);
-    let owner = uuid::Uuid::now_v7().to_string();
-    let locator = TransitionLocator {
-        schema: 1,
-        transaction: uuid::Uuid::now_v7().to_string(),
-        owner_profile: owner.clone(),
-        from_profile: "local".into(),
-        to_profile: owner,
-    };
-    TransitionLease::acquire(root.root())
-        .unwrap()
-        .create(&locator)
-        .unwrap();
-    std::fs::write(root.root().join("state.json"), b"{interrupted").unwrap();
-    let booted = boot::boot(Ok(root.clone()));
-    assert!(booted.profile.is_none());
-    assert!(booted.fatal.is_none());
-    assert_eq!(
-        std::fs::read(root.root().join("state.json")).unwrap(),
-        b"{interrupted"
-    );
-    assert_eq!(
-        crate::profile_config::status(root.root(), None)
-            .unwrap()
-            .phase,
-        crate::profile_config::ConfigProfileRecoveryPhase::Unavailable
-    );
-    close(&state).await;
-}
-
-#[tokio::test]
 async fn switching_keeps_datasets_separate_flushes_and_invalidates_old_channels() {
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));
@@ -184,14 +50,10 @@ async fn switching_keeps_datasets_separate_flushes_and_invalidates_old_channels(
     let chat = add_chat(&state, temp.path()).await;
     let generation = state.sessions().unwrap().generation();
     let page = state.pages.for_status("main");
-    let next = profiles
-        .create(ProfileKind::Local, "Another local dataset")
+    let next = profiles.create("Another local dataset").unwrap();
+    let info = activate(&state, next.clone(), |_, _, _, _| panic!("reuse services"))
+        .await
         .unwrap();
-    let info = activate(&state, local(next.clone()), |_, _, _, _| {
-        panic!("reuse services")
-    })
-    .await
-    .unwrap();
     assert_eq!(info.profile.unwrap().id, next.meta.id);
     assert!(!info.profile_switching);
     assert!(!page.is_current());
@@ -208,7 +70,7 @@ async fn switching_keeps_datasets_separate_flushes_and_invalidates_old_channels(
             .unwrap()
             .is_empty()
     );
-    activate(&state, local(first), sessions::testing::outside)
+    activate(&state, first, sessions::testing::outside)
         .await
         .unwrap();
     assert_eq!(
@@ -223,11 +85,9 @@ async fn admitted_command_drains_before_switch_and_new_commands_are_refused() {
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));
     let state = state(&root);
-    let next = Profiles::new(root.clone())
-        .create(ProfileKind::Local, "Next")
-        .unwrap();
+    let next = Profiles::new(root.clone()).create("Next").unwrap();
     let lease = state.sessions().unwrap();
-    let switching = activate(&state, local(next), sessions::testing::outside);
+    let switching = activate(&state, next, sessions::testing::outside);
     tokio::pin!(switching);
     tokio::select! {
         result = &mut switching => panic!("must wait for admitted command: {result:?}"),
@@ -246,12 +106,10 @@ async fn a_library_command_paused_after_lease_acquisition_cannot_register_during
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));
     let state = state(&root);
-    let next = Profiles::new(root)
-        .create(ProfileKind::Local, "Next")
-        .unwrap();
+    let next = Profiles::new(root).create("Next").unwrap();
     let lease = state.sessions().unwrap();
     let generation = lease.generation();
-    let mut switching = Box::pin(activate(&state, local(next), sessions::testing::outside));
+    let mut switching = Box::pin(activate(&state, next, sessions::testing::outside));
     // Poll exactly to the held command lease. No timer or scheduling guess releases the command.
     std::future::poll_fn(|cx| {
         assert!(std::future::Future::poll(switching.as_mut(), cx).is_pending());
@@ -265,7 +123,7 @@ async fn a_library_command_paused_after_lease_acquisition_cannot_register_during
     );
     assert!(
         lease
-            .plugin_library_progressive(true, true, Vec::new(), |_| {
+            .plugin_library_progressive(true, |_| {
                 panic!("late registration must be rejected before inventory or helper work")
             })
             .await
@@ -278,7 +136,7 @@ async fn a_library_command_paused_after_lease_acquisition_cannot_register_during
         state
             .sessions()
             .unwrap()
-            .plugin_library_progressive(false, true, Vec::new(), |_| false)
+            .plugin_library_progressive(false, |_| false)
             .await
             .is_ok()
     );
@@ -290,16 +148,10 @@ async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_curr
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));
     let state = state(&root);
-    let next = Profiles::new(root)
-        .create(ProfileKind::Local, "Next")
-        .unwrap();
+    let next = Profiles::new(root).create("Next").unwrap();
     let lease = state.sessions().unwrap();
     let generation = lease.generation();
-    let mut switching = Box::pin(activate(
-        &state,
-        local(next.clone()),
-        sessions::testing::outside,
-    ));
+    let mut switching = Box::pin(activate(&state, next.clone(), sessions::testing::outside));
     std::future::poll_fn(|cx| {
         assert!(std::future::Future::poll(switching.as_mut(), cx).is_pending());
         std::task::Poll::Ready(())
@@ -307,7 +159,7 @@ async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_curr
     .await;
     assert!(
         lease
-            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .plugin_library_progressive(false, |_| false)
             .await
             .is_err()
     );
@@ -316,7 +168,7 @@ async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_curr
     assert!(!state.app_info().profile_switching);
     assert!(
         lease
-            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .plugin_library_progressive(false, |_| false)
             .await
             .is_ok(),
         "dropping the switch future reopens the same admitted manager"
@@ -324,7 +176,7 @@ async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_curr
     drop(lease);
     let terminal = state.terminals.reserve("main").unwrap();
     assert!(
-        activate(&state, local(next), sessions::testing::outside)
+        activate(&state, next, sessions::testing::outside)
             .await
             .is_err()
     );
@@ -333,7 +185,7 @@ async fn abandoned_or_failed_profile_drains_reopen_library_admission_on_the_curr
         state
             .sessions()
             .unwrap()
-            .plugin_library_progressive(false, false, Vec::new(), |_| false)
+            .plugin_library_progressive(false, |_| false)
             .await
             .is_ok(),
         "a failed switch reopens the selected profile"
@@ -349,10 +201,10 @@ async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
     let state = state(&root);
     let profiles = Profiles::new(root);
     let first = profiles.open_active().unwrap();
-    let next = profiles.create(ProfileKind::Local, "Next").unwrap();
+    let next = profiles.create("Next").unwrap();
     let ticket = state.terminals.reserve("main").unwrap();
     assert!(
-        activate(&state, local(next.clone()), sessions::testing::outside)
+        activate(&state, next.clone(), sessions::testing::outside)
             .await
             .is_err()
     );
@@ -360,7 +212,7 @@ async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
     drop(ticket);
     let owner = ProfileOwner::acquire(&next).unwrap();
     assert!(
-        activate(&state, local(next), sessions::testing::outside)
+        activate(&state, next, sessions::testing::outside)
             .await
             .is_err()
     );
@@ -372,161 +224,87 @@ async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
     drop(owner);
 }
 
-#[tokio::test]
-async fn account_activation_is_keyed_and_wrong_key_never_replaces_current_dataset() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let state = state(&root);
-    let profiles = Profiles::new(root);
-    let first = profiles.open_active().unwrap();
-    let account = profiles.create(ProfileKind::Account, "Account").unwrap();
-    let key = Arc::new(AccountKey::generate().unwrap());
-    let resolved = || Resolved {
-        profile: account.clone(),
-        key: Some(sync_context(key.clone())),
-    };
-    activate(&state, resolved(), sessions::testing::outside)
-        .await
-        .unwrap();
-    assert!(account.db_path().exists());
-    assert!(!account.dir.join("aura.db").exists());
-    assert!(!state.app_info().profile_locked);
-    let chat = add_chat(&state, temp.path()).await;
-    activate(&state, local(first.clone()), sessions::testing::outside)
-        .await
-        .unwrap();
-    assert!(
-        !std::fs::read(account.db_path())
-            .unwrap()
-            .starts_with(b"SQLite format 3")
-    );
-    let before = std::fs::read(account.db_path()).unwrap();
-    let wrong = Resolved {
-        profile: account.clone(),
-        key: Some(sync_context(Arc::new(AccountKey::generate().unwrap()))),
-    };
-    assert!(
-        activate(&state, wrong, sessions::testing::outside)
-            .await
-            .is_err()
-    );
-    assert_eq!(std::fs::read(account.db_path()).unwrap(), before);
-    assert_eq!(profiles.open_active().unwrap().meta.id, first.meta.id);
-    activate(&state, resolved(), sessions::testing::outside)
-        .await
-        .unwrap();
-    assert_eq!(
-        state.chats().unwrap().store.chats().await.unwrap()[0].id,
-        chat
-    );
-    close(&state).await;
-}
-
-#[tokio::test]
-async fn selected_account_starts_locked_without_touching_its_database() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let profiles = Profiles::new(root.clone());
-    let account = profiles.create(ProfileKind::Account, "Account").unwrap();
-    profiles.set_active(&account.meta.id).unwrap();
-    let state = state(&root);
-    assert!(state.app_info().profile_locked);
-    assert!(state.app_info().fatal.is_none());
-    assert!(state.chats().is_none());
-    assert!(!account.db_path().exists());
-    assert!(!account.dir.join("aura.db").exists());
-    let _owner = ProfileOwner::acquire(&account).unwrap();
-}
-
-#[tokio::test]
-async fn account_config_services_are_keyed_persistent_and_invalidated_on_switch() {
-    use aura_config::sync::{ConfigPortError, ConfigScope, ConfigSnapshotMetadata};
-
-    let temp = tempfile::tempdir().unwrap();
-    let root = DataRoot::at(temp.path().join("data"));
-    let state = state(&root);
-    assert!(state.account_config().is_err());
-    let profiles = Profiles::new(root);
-    let local_profile = profiles.open_active().unwrap();
-    let account = profiles.create(ProfileKind::Account, "Account").unwrap();
-    let key = Arc::new(AccountKey::generate().unwrap());
-    let resolved = || Resolved {
-        profile: account.clone(),
-        key: Some(sync_context(key.clone())),
-    };
-    activate(&state, resolved(), sessions::testing::outside)
-        .await
-        .unwrap();
-
-    let lease = state.account_config().unwrap();
-    let generation = lease.generation();
-    let retained = Arc::clone(&lease);
+/// What an auracode account left in the data folder: a profile folder whose `profile.json` says
+/// `account`, with an encrypted database. Returns its id and every file with its bytes.
+fn account_leftover(root: &DataRoot) -> (String, Vec<(std::path::PathBuf, Vec<u8>)>) {
     let id = aura_core::ids::new_id();
-    let content = b"synthetic private apply receipt";
-    lease.journal.create(&id, content.to_vec().into()).unwrap();
-    let item = "ab".repeat(32);
-    let head = lease
-        .port
-        .publish_snapshot(
-            &item,
-            None,
-            b"private config".to_vec().into(),
-            ConfigSnapshotMetadata {
-                schema: 1,
-                scope: ConfigScope::Portable,
-                deleted: false,
-            },
-        )
-        .await
-        .unwrap();
-    drop(lease);
+    let dir = root.profile_dir(&id).unwrap();
+    std::fs::create_dir_all(dir.join("attachments")).unwrap();
+    let files = [
+        (
+            "profile.json",
+            format!(
+                r#"{{"id":"{id}","kind":"account","display_name":"me@example.com","created_at":1}}"#
+            )
+            .into_bytes(),
+        ),
+        ("aura.encrypted.db", b"ciphertext, not SQLite".to_vec()),
+        ("aura.encrypted.db.encryption", b"{\"version\":1}".to_vec()),
+        ("attachments/blob", b"encrypted attachment".to_vec()),
+    ];
+    let written = files
+        .into_iter()
+        .map(|(name, bytes)| {
+            let path = dir.join(name);
+            std::fs::write(&path, &bytes).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    (id, written)
+}
 
-    let broken = profiles
-        .create(ProfileKind::Account, "Broken journal")
-        .unwrap();
-    std::fs::create_dir(broken.dir.join("config-apply")).unwrap();
+/// auracode accounts were removed. A data folder whose last-used profile was an account's starts
+/// in Local (created here, since the account was the only profile), ready for chats; the
+/// account's folder is not offered, cannot be switched to, and is still there byte for byte.
+#[tokio::test]
+async fn a_leftover_account_profile_starts_local_and_is_neither_listed_nor_touched() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    root.ensure().unwrap();
+    let (account, files) = account_leftover(&root);
     std::fs::write(
-        broken.dir.join("config-apply").join("legacy.txt"),
-        b"preserved",
+        root.state_file(),
+        format!(r#"{{"active_profile":"{account}"}}"#),
     )
     .unwrap();
-    assert!(
-        activate(
-            &state,
-            Resolved {
-                profile: broken,
-                key: Some(sync_context(key.clone()))
-            },
-            sessions::testing::outside
-        )
-        .await
-        .is_err()
-    );
-    // A cross-Account request completes the separately encrypted A -> Local phase before opening
-    // B. A failure authenticating B therefore leaves Local selected and invalidates A's handles.
-    assert!(!generation.is_current());
-    assert_eq!(state.app_info().profile.unwrap().id, "local");
-    assert!(matches!(
-        retained.journal.read(&id),
-        Err(ConfigPortError::Unavailable)
-    ));
 
-    activate(&state, local(local_profile), sessions::testing::outside)
-        .await
-        .unwrap();
-    assert!(!generation.is_current());
-    assert!(state.account_config().is_err());
-    assert_eq!(retained.journal.list(), Err(ConfigPortError::Unavailable));
-    assert_eq!(
-        retained.port.list_heads().await,
-        Err(ConfigPortError::Unavailable)
-    );
-    activate(&state, resolved(), sessions::testing::outside)
-        .await
-        .unwrap();
-    let lease = state.account_config().unwrap();
-    assert_eq!(lease.journal.read(&id).unwrap().as_slice(), content);
-    assert_eq!(lease.port.read_head(&item).await.unwrap(), Some(head));
-    drop(lease);
+    let state = state(&root);
+    let info = state.app_info();
+    assert!(info.fatal.is_none(), "{:?}", info.fatal);
+    assert_eq!(info.profile.as_ref().unwrap().id, "local");
+    assert!(state.sessions().is_ok(), "chats open in Local");
+    add_chat(&state, temp.path()).await;
+
+    let profiles = Profiles::new(root.clone());
+    let listed: Vec<String> = profiles
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|meta| meta.id)
+        .collect();
+    assert_eq!(listed, ["local"]);
+    assert!(resolve(&state, account.clone()).await.is_err());
+    assert_eq!(state.app_info().profile.unwrap().id, "local");
+    assert_eq!(profiles.saved_active().as_deref(), Some("local"));
+
     close(&state).await;
+    for (path, bytes) in &files {
+        assert_eq!(&std::fs::read(path).unwrap(), bytes, "{}", path.display());
+    }
+    let dir = root.profile_dir(&account).unwrap();
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "attachments",
+            "aura.encrypted.db",
+            "aura.encrypted.db.encryption",
+            "profile.json"
+        ],
+        "nothing added, moved or removed"
+    );
 }

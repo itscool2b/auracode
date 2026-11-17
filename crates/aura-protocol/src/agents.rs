@@ -118,7 +118,7 @@ pub struct AgentInstallationCandidate {
     pub source: String,
 }
 
-/// Device-local executable preference. Paths never become portable chat or account metadata.
+/// Device-local executable preference. Paths never become portable chat metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentInstallations {
     pub agent_id: String,
@@ -160,7 +160,7 @@ pub struct LatestRelease {
 }
 
 /// A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
-/// computer's secure storage and never becomes chat or account metadata.
+/// computer's secure storage and never becomes chat metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentAccount {
     pub id: String,

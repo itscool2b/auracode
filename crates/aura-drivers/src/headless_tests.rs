@@ -99,7 +99,6 @@ fn setup(family: Family) -> SessionSetup {
     SessionSetup {
         mcp_servers: Vec::new(),
         attachment_dir: None,
-        attachment_reader: None,
         attachment_writer: None,
         chat_id: "chat".into(),
         agent_id: if family == Family::Agy {

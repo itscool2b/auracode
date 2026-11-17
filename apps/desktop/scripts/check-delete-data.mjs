@@ -1,8 +1,7 @@
 /**
  * Settings' "Delete all auracode data" in Chromium and WebKit on synthetic reviews
  * (dev/deleteDataPreview): the review, the worktree warning, the macOS Trash choice and a failed
- * start, plus scoped key retention and uncertain reference discovery. No file, key, worktree or
- * process is touched. Every state passes axe with no violations.
+ * start. No file, key, worktree or process is touched. Every state passes axe with no violations.
  *
  *   node scripts/check-delete-data.mjs [--server URL] [--engines chromium,webkit]
  *
@@ -37,51 +36,6 @@ const settled = (page) =>
       .getAnimations()
       .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
   );
-
-const uncertaintyWarning =
-  "Some secure-store entries or root identities could not be verified. All account keys and retry indexes are retained.";
-
-// Verify the complete decisions, including retained rows. Checking only the store label would
-// miss a regression that hides foreign references or advertises deletion despite unknown data.
-async function checkScopedKeys(review, uncertain = false) {
-  const entries = review.getByRole("list", { name: "Secure-store entries" });
-  await entries.waitFor();
-  const displayed = await entries.getByRole("listitem").evaluateAll((rows) =>
-    rows.map((row) => ({
-      decision: row.children[0]?.textContent?.replace(/\s+/gu, " ").trim(),
-      target: row.children[1]?.textContent?.trim(),
-      fields: row.children.length,
-    })),
-  );
-  const expected = uncertain
-    ? [
-        "Retain Index: Reference discovery is uncertain; retain index for retry",
-        "Retain Account: Reference discovery is uncertain",
-        "Retain Index: Index belongs to another data root",
-        "Retain Account: Reference discovery is uncertain",
-        "Retain Account: Reference discovery is uncertain",
-        "Retain Unknown: Unreadable, malformed or unsupported payload",
-      ]
-    : [
-        "Remove Index: Index belongs to a deleted root",
-        "Remove Account: Exclusively referenced by deleted roots",
-        "Retain Index: Index belongs to another data root",
-        "Retain Account: Referenced by another data root",
-        "Remove Account: Unreferenced account bundle; default root is deleted",
-      ];
-  assert.deepEqual(
-    displayed.map((row) => row.decision),
-    expected,
-  );
-  assert.equal(new Set(displayed.map((row) => row.target)).size, expected.length);
-  for (const row of displayed) {
-    assert.equal(row.fields, 2, "only a decision and opaque target are rendered");
-    assert.match(row.target ?? "", /^auracode\.sync\.v1:[A-Za-z0-9_-]{43}$/u);
-  }
-  const warning = review.getByRole("status").filter({ hasText: uncertaintyWarning });
-  if (uncertain) await warning.waitFor();
-  else assert.equal(await warning.count(), 0, "shared references alone are not uncertainty");
-}
 
 let server = null;
 let output = "";
@@ -167,7 +121,7 @@ try {
       };
       const apply = () => page.getByTestId("delete-data-apply");
 
-      // The review: what goes, the keys, what stays; the red pill waits for DELETE.
+      // The review: what goes, the agent tokens, what stays; the red pill waits for DELETE.
       await open("delete-data");
       const review = dialog();
       await review.getByText("Chats and settings", { exact: true }).waitFor();
@@ -176,11 +130,11 @@ try {
       await review.getByText("Update downloads", { exact: true }).waitFor();
       await review
         .getByText(
-          "Reviewed entries in Windows Credential Manager. Shared and unverifiable keys are retained.",
+          "Sign-in tokens of agent accounts you added in auracode, kept in Windows Credential Manager.",
           { exact: true },
         )
         .waitFor();
-      await checkScopedKeys(review);
+      assert.equal(await review.getByRole("list", { name: "Secure-store entries" }).count(), 0);
       await review.getByText(/Stays: your agents and their folders/).waitFor();
       assert.equal(await review.getByTestId("delete-data-worktrees").count(), 0);
       assert.equal(await review.getByText("Also move auracode to the Trash").count(), 0);
@@ -246,11 +200,10 @@ try {
       await open("delete-data-macos");
       await dialog()
         .getByText(
-          "Reviewed entries in the macOS keychain. Shared and unverifiable keys are retained.",
+          "Sign-in tokens of agent accounts you added in auracode, kept in the macOS keychain.",
           { exact: true },
         )
         .waitFor();
-      await checkScopedKeys(dialog());
       const trash = dialog().getByLabel("Also move auracode to the Trash");
       assert.equal(await trash.isChecked(), false);
       await trash.check();
@@ -263,15 +216,6 @@ try {
         .getByText(/auracode is quitting/)
         .waitFor();
       assert.ok((await calls()).some((call) => call.includes('"move_app_to_trash":true')));
-
-      // An unknown payload blocks all account and owning-index deletion, on both platforms.
-      for (const mode of ["delete-data", "delete-data-macos"]) {
-        await open(`${mode}&case=unknown`);
-        await checkScopedKeys(dialog(), true);
-        assert.equal(await apply().isDisabled(), true);
-        assert.ok(!(await calls()).some((call) => call.startsWith("apply")));
-        await audit(mode === "delete-data" ? "unknown-windows" : "unknown-macos");
-      }
 
       // A start that fails says so, uses up the review, and offers a fresh one.
       await open("delete-data&case=fail");
@@ -289,16 +233,13 @@ try {
       // A narrow window: nothing scrolls sideways.
       await page.setViewportSize({ width: 390, height: 800 });
       await open("delete-data-worktrees");
-      await checkScopedKeys(dialog());
       assert.equal(
         await page.locator(".g-dialog").evaluate((node) => node.scrollWidth <= node.clientWidth),
         true,
       );
       await audit("narrow");
       assert.deepEqual(errors, [], `${engine} page errors`);
-      console.log(
-        `${engine}: scoped review, shared/unknown retention, worktree warning, Trash, failed start and narrow passed`,
-      );
+      console.log(`${engine}: review, worktree warning, Trash, failed start and narrow passed`);
     } finally {
       await browser.close();
     }

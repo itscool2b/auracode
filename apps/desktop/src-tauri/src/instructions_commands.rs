@@ -1,6 +1,6 @@
 //! Thin Instructions commands. The webview names a target and a change; Rust resolves every folder,
 //! reviews exact bytes, and applies by review id. Writes share the configuration mutation gate
-//! with Library copies and config sync, so they never interleave.
+//! with Library copies, so they never interleave.
 
 use std::{
     collections::HashMap,

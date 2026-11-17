@@ -286,8 +286,8 @@ export function ItemDetail({
           <p className="library-detail-note">
             The shared definition keeps its command and arguments, or its address, and the names of
             its environment variables and headers. Their values stay on this device as local
-            credentials, never exported or synced. {LABELS[item.provider]}'s own configuration is
-            left as it is.
+            credentials, never exported. {LABELS[item.provider]}'s own configuration is left as it
+            is.
           </p>
           <div className="g-dialog-actions library-actions">
             <button

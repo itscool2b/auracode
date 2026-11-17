@@ -355,15 +355,6 @@ function Preview() {
         />
       </main>
     );
-  if (view === "account")
-    return (
-      <main className="setup-shell">
-        <h1>Account settings</h1>
-        <button type="button" onClick={() => setView("setup")}>
-          Back to setup
-        </button>
-      </main>
-    );
   if (view === "agents")
     return (
       <div className="pane-shell g-root">
@@ -404,10 +395,6 @@ function Preview() {
       clone={clone}
       onDone={() => setView("done")}
       onDemo={() => setView("demo")}
-      onAccount={() => {
-        setRestart(false);
-        setView("account");
-      }}
     />
   );
 }

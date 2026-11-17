@@ -126,9 +126,6 @@ pub struct SessionSetup {
     pub mcp_servers: Vec<aura_protocol::mcp::ResolvedMcpServer>,
     /// Private, app-owned blob directory. Never an arbitrary source file or agent credential path.
     pub attachment_dir: Option<PathBuf>,
-    /// Account profiles resolve encrypted bytes in memory. An installed reader is authoritative:
-    /// errors never fall back to opening plaintext files in attachment_dir.
-    pub attachment_reader: Option<Arc<dyn crate::attachments::AttachmentReader>>,
     /// Normalizes returned agent images into chat-owned profile attachments before mapping.
     pub attachment_writer: Option<Arc<dyn crate::incoming_images::AttachmentWriter>>,
     pub chat_id: String,
@@ -902,7 +899,6 @@ mod tests {
         let mut setup = SessionSetup {
             mcp_servers: Vec::new(),
             attachment_dir: None,
-            attachment_reader: None,
             attachment_writer: None,
             chat_id: "c".into(),
             agent_id: "hermes".into(),

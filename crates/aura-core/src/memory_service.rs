@@ -1,5 +1,5 @@
 //! App-owned memory service. A grant owns one generation's listener and revokes on drop.
-//! No database paths or account keys cross the process boundary.
+//! No database path crosses the process boundary.
 use crate::chatstore::{
     ChatStore,
     memory::{Command, Reply},

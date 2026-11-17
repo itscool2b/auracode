@@ -84,18 +84,20 @@ test("browser gates have explicit deadlines and retain standalone evidence", () 
   }
 });
 
-test("native desktop and isolated encrypted fixtures enable SQLCipher", () => {
-  assert.match(ci, /os: \[macos-26-intel, windows-2025, ubuntu-22\.04\]/u);
-  assert.match(ci, /cargo test -p aura-sync --features sqlcipher --lib --locked/u);
-  assert.match(ci, /cargo test -p aura-core --features account-sync --lib --locked/u);
-  assert.match(
+test("the app is local-only: no account crate, feature, encrypted store or API build remains", () => {
+  const workspace = read("Cargo.toml");
+  assert.doesNotMatch(workspace, /aura-sync|apps\/api/u);
+  assert.doesNotMatch(read("crates/aura-core/Cargo.toml"), /account-sync|sqlcipher|aura-sync/u);
+  assert.doesNotMatch(
     read("apps/desktop/src-tauri/Cargo.toml"),
-    /aura-core = \{[^\n]*features = \["account-sync"\]/u,
+    /account-sync|aura-sync|deep-link/u,
   );
-  assert.match(
-    read("crates/aura-core/Cargo.toml"),
-    /account-sync = \[[^\n]*"aura-sync\/sqlcipher"/u,
-  );
+  assert.doesNotMatch(read("Cargo.lock"), /name = "openssl-src"/u);
+  assert.doesNotMatch(ci, /sqlcipher|account-sync|@auracode\/api|encrypted_storage/u);
+  for (const workflow of [ci, build, read(".github/workflows/release.yml")])
+    assert.doesNotMatch(workflow, /select-native-perl|vendored OpenSSL/u);
+  // The checkpoint comparison keeps its own job, on the systems its baseline supports.
+  assert.match(ci, /checkpoint-benchmarks:[\s\S]*?os: \[macos-26-intel, windows-2025\]/u);
 });
 
 test("CI uses supported Intel macOS runners without changing universal packaging", () => {
@@ -117,7 +119,6 @@ test("unsigned packages use exact bindings and need no release secret or updater
     /--signed-updater|secrets\.|TAURI_SIGNING_PRIVATE_KEY|AURACODE_UPDATER_PUBLIC_KEY/u,
   );
   assert.match(build, /APPLE_SIGNING_IDENTITY=-/u);
-  assert.match(build, /select-native-perl\.ps1/u);
   for (const target of [
     "universal-apple-darwin",
     "x86_64-pc-windows-msvc",

@@ -4,10 +4,7 @@ use super::{SessionError, SessionManager};
 use aura_agents::config_vendor::{VendorPlan, prepare};
 use aura_config::{
     Kind, Library, Provider, Scope, Source,
-    sync::{
-        ConfigContent, ConfigFormat, ConfigIdentity, ConfigScanner, ConfigScope, ConfigSource,
-        LocalSnapshot,
-    },
+    declarations::{self, Declaration, DocumentFormat},
 };
 use aura_process::{LaunchSpec, ProcessCwd, SpawnSpec};
 use aura_protocol::{
@@ -145,19 +142,19 @@ fn declaration_revision(plan: &VendorPlan) -> Result<String, SessionError> {
         VendorProvider::Claude => (
             Provider::Claude,
             "settings.json",
-            ConfigFormat::Json,
+            DocumentFormat::Json,
             vec!["enabledPlugins", "extraKnownMarketplaces"],
         ),
         VendorProvider::Codex => (
             Provider::Codex,
             "config.toml",
-            ConfigFormat::Toml,
+            DocumentFormat::Toml,
             vec!["plugins", "marketplaces"],
         ),
         VendorProvider::Pi => (
             Provider::Pi,
             "settings.json",
-            ConfigFormat::Json,
+            DocumentFormat::Json,
             vec!["packages"],
         ),
         _ => return Err(unavailable()),
@@ -176,43 +173,16 @@ fn declaration_revision(plan: &VendorPlan) -> Result<String, SessionError> {
         }
         hash.update(b"missing-root");
     } else {
-        let platform = if cfg!(windows) {
-            ConfigScope::Windows
-        } else {
-            ConfigScope::Macos
-        };
-        let scanner = ConfigScanner::new(
-            vec![ConfigSource {
-                source: source.clone(),
-                installed: true,
-                version: None,
-                paused: false,
-            }],
-            plan.folder.clone(),
-            platform,
-        )
-        .map_err(|_| unavailable())?;
         for field in fields {
-            let identity = ConfigIdentity {
-                provider,
-                scope: platform,
-                format,
-                path: path.into(),
-                keys: vec![field.into()],
-            };
-            match scanner.observe(&identity).map_err(|_| unavailable())? {
-                LocalSnapshot::Absent => hash.update(b"absent"),
-                LocalSnapshot::Present(snapshot) => {
-                    let bytes = snapshot.encode().map_err(|_| unavailable())?;
-                    hash.update((bytes.len() as u64).to_le_bytes());
-                    hash.update(bytes.as_slice());
+            // A document that cannot be read is never taken for one without the declaration.
+            match declarations::read(&source, path, format, field).map_err(|_| unavailable())? {
+                Declaration::Absent => hash.update(b"absent"),
+                Declaration::Present(bytes) => {
                     // Pi's exact source may be an object with resource filters. Removing or
                     // updating is still delegated to Pi; no filtered declaration is rewritten here.
-                    if !matches!(snapshot.content, Some(ConfigContent::Value(_))) {
-                        return Err(unavailable());
-                    }
+                    hash.update((bytes.len() as u64).to_le_bytes());
+                    hash.update(bytes.as_slice());
                 }
-                LocalSnapshot::Unavailable => return Err(unavailable()),
             }
         }
         if let Some(expected) = &plan.review.request.item_revision {

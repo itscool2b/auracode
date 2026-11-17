@@ -334,7 +334,6 @@ export function ChatsScreen({
           }}
         />
         <SidebarFooter
-          profile={info.profile}
           onSettings={onSettings}
           notifications={
             <Notifications

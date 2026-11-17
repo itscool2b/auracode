@@ -157,12 +157,6 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
                 Clear…
               </button>
             </div>
-            {status?.private ? (
-              <p className="plugins-universal-note">
-                This profile is encrypted, so the browser keeps nothing on disk: history, cookies
-                and sign-ins last until auracode closes.
-              </p>
-            ) : null}
           </>
         ) : null}
       </section>
@@ -181,7 +175,7 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
       {clearing ? (
         <ClearDataDialog
           api={browser.api}
-          passwords={windows && !status?.private}
+          passwords={windows}
           onClose={() => setClearing(false)}
           onCleared={() => setCleared(true)}
         />

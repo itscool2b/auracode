@@ -235,38 +235,6 @@
   color: var(--g-fg-3);
 }
 
-/* Sync: one settings row, the words at left and the switch at right, on a settings group's card. */
-.plugins-sync {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--g-space-16);
-  min-height: 60px;
-  padding: var(--g-space-8) var(--g-space-16);
-  border-radius: var(--g-radius-16);
-  background-color: var(--ui-card-flat);
-  box-shadow: none;
-}
-
-.plugins-sync > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.plugins-sync strong {
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-}
-
-.plugins-sync span {
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
 /* ------------------------------------------------------------------ features and rows */
 
 .plugins-feature {

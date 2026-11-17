@@ -85,9 +85,9 @@ impl SessionManager {
                     "This restores the same saved item and chats. Previously archived chats stay archived; removed child folders stay removed.".into()
                 },
                 if action == WorkspaceRemovalAction::Remove {
-                    "Stop affected agents, clear queued prompts and close project terminals before applying. Account profiles sync this metadata change to your other devices.".into()
+                    "Stop affected agents, clear queued prompts and close project terminals before applying.".into()
                 } else {
-                    "Stop affected agents and close project terminals before restoring. Saved queued prompts remain held until you explicitly resume them. Account profiles sync this metadata change to your other devices.".into()
+                    "Stop affected agents and close project terminals before restoring. Saved queued prompts remain held until you explicitly resume them.".into()
                 },
             ],
         };

@@ -30,22 +30,16 @@ mod images;
 mod installer;
 mod instructions;
 mod live;
-#[cfg(feature = "account-sync")]
-mod local_import;
 mod login;
 mod memory;
 mod normalize;
 mod plugin_library;
 mod policy;
-#[cfg(feature = "account-sync")]
-mod preservation;
 mod project_tools;
 mod repository_publication;
 mod search;
 mod shared_mcp;
 mod spawner;
-#[cfg(feature = "account-sync")]
-mod sync_history;
 mod terminal_import;
 #[cfg(test)]
 mod tests;
@@ -341,8 +335,6 @@ pub(crate) struct Shared {
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
     removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
     worktree_chats: Mutex<HashMap<String, worktree_chat::Prepared>>,
-    #[cfg(feature = "account-sync")]
-    preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Settings' defaults for chats whose agent has never started.
     pub(crate) new_chat_defaults: Mutex<NewChatDefaults>,
     /// Read once at dispatch so changing the preference never changes an in-flight capture.
@@ -504,8 +496,6 @@ impl SessionManager {
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
-                    #[cfg(feature = "account-sync")]
-                    preservation: Mutex::new(HashMap::new()),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     removals: Mutex::new(HashMap::new()),

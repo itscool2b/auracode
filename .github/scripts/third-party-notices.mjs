@@ -219,19 +219,6 @@ export function collect() {
         targets: [target],
         files,
       });
-      if (pkg.name === "libsqlite3-sys") {
-        const license = join(directory, "sqlcipher/LICENSE");
-        add({
-          ecosystem: "native",
-          name: "SQLCipher (libsqlite3-sys source)",
-          version: pkg.version,
-          license: "BSD-3-Clause",
-          source: `${source}#sqlcipher`,
-          distributions: ["desktop"],
-          targets: [target],
-          files: [file(readFileSync(license, "utf8"), `${source}#sqlcipher/LICENSE`)],
-        });
-      }
       if (pkg.name === "transcribe-cpp-sys") {
         // transcribe.cpp vendors and statically links these; its own MIT text is the crate's LICENSE.
         for (const [name, path] of [
@@ -250,22 +237,6 @@ export function collect() {
             files: [file(readFileSync(join(directory, path), "utf8"), `${source}#${path}`)],
           });
       }
-    }
-    if (target.includes("windows")) {
-      // This build dependency contributes compiled native code through SQLCipher's vendored feature.
-      const pkg = metadata.packages.find((p) => p.name === "openssl-src");
-      if (!pkg) throw new Error("Missing vendored OpenSSL source metadata");
-      const source = `https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download`;
-      add({
-        ecosystem: "native",
-        name: "OpenSSL (openssl-src source)",
-        version: pkg.version,
-        license: "Apache-2.0",
-        source: `${source}#openssl`,
-        distributions: ["desktop"],
-        targets: [target],
-        files: installedFiles(join(dirname(pkg.manifest_path), "openssl"), `${source}#openssl`),
-      });
     }
   }
   // The speech models bundled as app resources (apps/desktop/scripts/dictation-models.mjs): model
@@ -306,7 +277,7 @@ export function collect() {
   return {
     version: 1,
     scope:
-      "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher, Windows vendored OpenSSL, transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
+      "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
     inputs: inputFiles(),
     records: [...records.values()].sort((a, b) =>
       `${a.ecosystem}/${a.name}/${a.version}`.localeCompare(

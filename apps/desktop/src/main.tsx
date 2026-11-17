@@ -31,7 +31,7 @@ installQuitQuestion();
 
 const container = document.getElementById("root");
 // The native window stays hidden until App paints. Resolve the active profile's appearance first,
-// including after a profile switch reload; a locked or unavailable profile uses the system theme.
+// including after a profile switch reload; an unavailable profile uses the system theme.
 const appearanceReady =
   inTauri() && !(import.meta.env.DEV && new URLSearchParams(location.search).has("preview"))
     ? installProfileEvents()
@@ -46,11 +46,7 @@ void appearanceReady.then(() => {
         void import("./dev/glassPreview").then(({ emulateGlass }) => emulateGlass());
       if (new URLSearchParams(location.search).has("quit"))
         void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
-      if (mode === "config-sync" || mode === "plugin-sync")
-        void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
-          mountConfigSyncPreview(container, mode),
-        );
-      else if (mode === "project-chat")
+      if (mode === "project-chat")
         void import("./dev/projectChatPreview").then(({ mountProjectChatPreview }) =>
           mountProjectChatPreview(container),
         );
@@ -133,25 +129,9 @@ void appearanceReady.then(() => {
         void import("./dev/profilesPreview").then(({ mountProfilesPreview }) =>
           mountProfilesPreview(container),
         );
-      else if (mode === "account")
-        void import("./dev/accountPreview").then(({ mountAccountPreview }) =>
-          mountAccountPreview(container),
-        );
-      else if (mode === "verification")
-        void import("./dev/verificationPreview").then(({ mountVerificationPreview }) =>
-          mountVerificationPreview(container),
-        );
       else if (mode === "project-tools")
         void import("./dev/projectToolsPreview").then(({ mountProjectToolsPreview }) =>
           mountProjectToolsPreview(container),
-        );
-      else if (mode === "data-transfer")
-        void import("./dev/dataTransferPreview").then(({ mountDataTransferPreview }) =>
-          mountDataTransferPreview(container),
-        );
-      else if (mode === "keep-local")
-        void import("./dev/accountPreservationPreview").then(
-          ({ mountAccountPreservationPreview }) => mountAccountPreservationPreview(container),
         );
       else if (mode === "git" || mode === "git-missing" || mode === "git-conflict")
         void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));

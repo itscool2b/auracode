@@ -1,6 +1,6 @@
 //! The browser's history: every page opened in it, with its title, how often and when last. The
-//! address bar searches it, and Settings > Browser lists, searches and removes it. A local profile
-//! keeps it in `<profile>/browser/history.json`; an encrypted account profile only in memory.
+//! address bar searches it, and Settings > Browser lists, searches and removes it. It is kept in
+//! `<profile>/browser/history.json`.
 
 use std::collections::HashMap;
 use std::path::Path;

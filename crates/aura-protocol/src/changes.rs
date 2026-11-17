@@ -97,7 +97,7 @@ pub struct RevertResult {
     pub applied: Vec<String>,
     /// A partial failure is explicit; the caller must not report full success.
     pub error: Option<String>,
-    /// Durable recovery groups in the profile's data folder, encrypted for Account profiles.
+    /// Durable recovery groups in the profile's data folder.
     /// A failed finalization also names any transient working-folder copy that was preserved.
     pub recovery_paths: Vec<String>,
 }

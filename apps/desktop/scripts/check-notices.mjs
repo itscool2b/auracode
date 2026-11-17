@@ -18,7 +18,8 @@ export async function checkNotices(page, out, engine) {
   await text.waitFor();
   const content = await text.textContent();
   assert.match(content, /^Third-party software notices/);
-  assert.match(content, /SQLCipher/);
+  // A vendored source the generator adds by hand, so the dialog shows the whole catalogue.
+  assert.match(content, /ggml \(transcribe-cpp-sys source\)/);
   await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-notices.png`) });

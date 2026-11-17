@@ -51,7 +51,7 @@ struct Host {
 thread_local! {
     static HOST: RefCell<Host> = RefCell::new(Host::default());
     /// The profile the pages keep their data in (Linux and the first Windows page build with it).
-    static CONTEXT: RefCell<Option<(PathBuf, bool, wry::WebContext)>> = const { RefCell::new(None) };
+    static CONTEXT: RefCell<Option<(PathBuf, wry::WebContext)>> = const { RefCell::new(None) };
 }
 
 static UNAVAILABLE: OnceLock<Option<String>> = OnceLock::new();
@@ -223,17 +223,9 @@ fn build(
         let webview = match environment {
             Some(environment) => {
                 use wry::WebViewBuilderExtWindows;
-                configure(
-                    WebViewBuilder::new(),
-                    &weak,
-                    tab_id,
-                    chat_id,
-                    url,
-                    &bounds,
-                    &profile,
-                )
-                .with_environment(environment)
-                .build_as_child(&window)
+                configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds)
+                    .with_environment(environment)
+                    .build_as_child(&window)
             }
             None => with_context(&profile, |context| {
                 configure(
@@ -243,7 +235,6 @@ fn build(
                     chat_id,
                     url,
                     &bounds,
-                    &profile,
                 )
                 .build_as_child(&window)
             }),
@@ -263,22 +254,10 @@ fn build(
     #[cfg(target_os = "macos")]
     {
         let _ = passwords;
-        let builder = configure(
-            WebViewBuilder::new(),
-            &weak,
-            tab_id,
-            chat_id,
-            url,
-            &bounds,
-            &profile,
-        );
-        let builder = if profile.private {
-            builder.with_incognito(true)
-        } else {
-            use wry::WebViewBuilderExtDarwin;
-            builder.with_data_store_identifier(*b"auracode-browser")
-        };
+        let builder = configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds);
+        use wry::WebViewBuilderExtDarwin;
         builder
+            .with_data_store_identifier(*b"auracode-browser")
             .with_back_forward_navigation_gestures(true)
             .build_as_child(&window)
             .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
@@ -308,7 +287,6 @@ fn build(
                 chat_id,
                 url,
                 if holder.is_some() { &inside } else { &bounds },
-                &profile,
             );
             #[cfg(target_os = "linux")]
             if let Some(holder) = &holder {
@@ -348,16 +326,12 @@ fn set_visible(view: &View, visible: bool) {
 fn with_context<T>(profile: &super::Profile, build: impl FnOnce(&mut wry::WebContext) -> T) -> T {
     let folder = profile.dir.join("webview");
     CONTEXT.with_borrow_mut(|context| {
-        if !matches!(context, Some((dir, private, _)) if *dir == folder && *private == profile.private) {
+        if !matches!(context, Some((dir, _)) if *dir == folder) {
             *context = None;
         }
-        let (_, _, web) = context.get_or_insert_with(|| {
+        let (_, web) = context.get_or_insert_with(|| {
             let _ = std::fs::create_dir_all(&folder);
-            (
-                folder.clone(),
-                profile.private,
-                wry::WebContext::new(Some(folder.clone())),
-            )
+            (folder.clone(), wry::WebContext::new(Some(folder.clone())))
         });
         build(web)
     })
@@ -391,7 +365,6 @@ fn configure<'a>(
     chat_id: &str,
     url: Option<&str>,
     bounds: &BrowserRect,
-    profile: &super::Profile,
 ) -> WebViewBuilder<'a> {
     let mut builder = builder
         .with_bounds(rect(bounds))
@@ -402,9 +375,6 @@ fn configure<'a>(
         .with_clipboard(true)
         .with_initialization_script(PAGE_SCRIPT)
         .with_general_autofill_enabled(true);
-    if profile.private {
-        builder = builder.with_incognito(true);
-    }
     #[cfg(windows)]
     {
         use wry::WebViewBuilderExtWindows;
@@ -580,7 +550,6 @@ fn popup(browser: &Arc<Browser>, chat_id: &str, opener: &str, url: &str) -> NewW
             chat_id,
             None,
             &bounds,
-            &profile,
         )
         .with_environment(environment)
         .build_as_child(&window);
@@ -948,17 +917,9 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
             match environment {
                 Some(environment) => {
                     use wry::WebViewBuilderExtWindows;
-                    configure(
-                        WebViewBuilder::new(),
-                        &weak,
-                        &id,
-                        "",
-                        None,
-                        &bounds,
-                        &profile,
-                    )
-                    .with_environment(environment)
-                    .build_as_child(&window)
+                    configure(WebViewBuilder::new(), &weak, &id, "", None, &bounds)
+                        .with_environment(environment)
+                        .build_as_child(&window)
                 }
                 None => with_context(&profile, |context| {
                     configure(
@@ -968,7 +929,6 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
                         "",
                         None,
                         &bounds,
-                        &profile,
                     )
                     .build_as_child(&window)
                 }),
@@ -977,17 +937,9 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
         #[cfg(target_os = "macos")]
         let built = {
             use wry::WebViewBuilderExtDarwin;
-            configure(
-                WebViewBuilder::new(),
-                &weak,
-                &id,
-                "",
-                None,
-                &bounds,
-                &profile,
-            )
-            .with_data_store_identifier(*b"auracode-browser")
-            .build_as_child(&window)
+            configure(WebViewBuilder::new(), &weak, &id, "", None, &bounds)
+                .with_data_store_identifier(*b"auracode-browser")
+                .build_as_child(&window)
         };
         #[cfg(not(any(windows, target_os = "macos")))]
         let built = with_context(&profile, |context| {
@@ -998,7 +950,6 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
                 "",
                 None,
                 &bounds,
-                &profile,
             )
             .build_as_child(&window)
         });

@@ -1,4 +1,4 @@
-/** Development-only settings harness. No native process, updater, keychain or network request. */
+/** Development-only settings harness. No native process, updater or network request. */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
@@ -9,9 +9,6 @@ import type {
   UpdateStatus,
 } from "../bindings";
 import { type Page, SettingsScreen } from "../components/settings/SettingsScreen";
-import { accountApi } from "../lib/account/api";
-import type { AccountStatus } from "../lib/account/bindings";
-import { accountResetApi } from "../lib/account/reset";
 import {
   getAppearancePreference,
   getTextSizePreference,
@@ -21,10 +18,10 @@ import {
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import type { DictationApi } from "../lib/dictation";
-import { profileApi } from "../lib/profiles";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
 import { createCustomizeFixture } from "./customizePreview";
+import { oneProfile } from "./profilesFixture";
 import { remoteFixture } from "./remoteFixture";
 
 const info: AppInfo = {
@@ -36,9 +33,7 @@ const info: AppInfo = {
   data_dir: "C:/fixture/auracode",
   device: null,
   profile: null,
-  profile_locked: false,
   profile_switching: false,
-  config_profile_recovery: null,
   db: null,
   glass: "none",
   launch: { type: "normal" },
@@ -47,83 +42,6 @@ const info: AppInfo = {
   fatal: null,
 };
 const calls: string[] = [];
-// `account=ready`: an approved Account profile with two devices, for reviewing the whole page.
-if (new URLSearchParams(location.search).get("account") === "ready") {
-  info.profile = { id: "work", kind: "account", display_name: "Work", created_at: 2 };
-  profileApi.list = async () => [
-    { id: "local", kind: "local", display_name: "Local", created_at: 1 },
-    { id: "work", kind: "account", display_name: "Work", created_at: 2 },
-  ];
-  const ready: AccountStatus = {
-    access: "ready",
-    account_id: "fixture",
-    device_id: "this",
-    profile_id: "work",
-    local_key_available: true,
-    approval_code: null,
-    fingerprint: "1234 5678 90AB CDEF 1234 5678 90AB CDEF",
-    sync: { state: "idle", last_sync_at: Date.now() - 120_000, pending_changes: 0, message: null },
-  };
-  accountApi.config = async () => ({
-    service_origin: "https://auracode.si",
-    verification_url: "https://auracode.si/verify-device",
-  });
-  accountApi.status = async () => structuredClone(ready);
-  accountApi.cancelSetup = async () => structuredClone(ready);
-  accountApi.devices = async () => [
-    {
-      id: "this",
-      name: "Studio PC",
-      platform: "windows",
-      verification_code: "THIS",
-      current: true,
-      created_at: 1,
-      last_seen: Date.now() - 60_000,
-      approved_at: 1,
-      revoked_at: null,
-    },
-    {
-      id: "laptop",
-      name: "MacBook Air",
-      platform: "macos",
-      verification_code: "LAPTOP",
-      current: false,
-      created_at: 1,
-      last_seen: Date.now() - 86_400_000,
-      approved_at: 1,
-      revoked_at: null,
-    },
-  ];
-  accountResetApi.status = async () => ({ pending: false, committed: false });
-}
-const signInFixture = new URLSearchParams(location.search).has("signin");
-if (signInFixture) {
-  const account: AccountStatus = {
-    access: new URLSearchParams(location.search).has("signed-out")
-      ? "signed_out"
-      : "needs_first_key",
-    account_id: "fixture",
-    device_id: "fixture",
-    profile_id: null,
-    local_key_available: false,
-    approval_code: null,
-    fingerprint: null,
-    sync: { state: "inactive", last_sync_at: null, pending_changes: null, message: null },
-  };
-  accountApi.config = async () => ({
-    service_origin: "https://auracode.si",
-    verification_url: "https://auracode.si/verify-device",
-  });
-  accountApi.status = async () => structuredClone(account);
-  accountApi.prepareRecovery = async () => ({
-    id: "fixture",
-    recovery_key: "SYNTHETIC-KEY-RETAINED-ACROSS-LINKS",
-  });
-  accountApi.cancelSetup = async () => {
-    calls.push("cancelSetup");
-    return structuredClone(account);
-  };
-}
 const preferences: SetupSnapshot = {
   cold_start: false,
   notice: null,
@@ -346,26 +264,17 @@ function Preview() {
       : params.get("scope") === "folder"
         ? { type: "folder", folder_id: "fixture-folder" }
         : { type: "global" };
-  const [entry, setEntry] = useState({ id: 0, email: "first@example.com" });
-  Object.assign(window, {
-    settingsNavigationFixture: {
-      open: (email: string) => setEntry((previous) => ({ id: previous.id + 1, email })),
-    },
-  });
   if (closed)
     return (
       <main className="g-root">
         <h1>Back to workspace</h1>
       </main>
     );
-  const page =
-    (params.get("page") as Page | null) ??
-    (signInFixture ? "account" : legacy ? "instructions" : "general");
+  const page = (params.get("page") as Page | null) ?? (legacy ? "instructions" : "general");
   return (
     <SettingsScreen
-      navigationId={String(entry.id)}
+      profiles={oneProfile}
       initialPage={page}
-      initialEmail={signInFixture ? entry.email : ""}
       instructionsTarget={target}
       info={info}
       setup={setup}

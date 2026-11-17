@@ -1,4 +1,4 @@
-//! Device-local folder discovery and reviewed mapping. Paths never enter portable sync records.
+//! Device-local folder discovery and reviewed mapping.
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
