@@ -108,6 +108,13 @@ dlopen2 = { version = "0.8.2", default-features = false }
 # The browser's pages on Wayland are GTK widgets in the window (src/browser/gtk_layer.rs).
 # Already in the tree through tao and wry, at this version.
 gtk = "0.18.2"
+# The browser's WebKitGTK abilities wry does not wrap: media switched off where GStreamer cannot
+# play it, a page process that ended, and page pictures (src/browser/media.rs, snapshot.rs). The
+# release and API level wry itself uses.
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+# Encodes those pictures as JPEG and PNG off the main thread. Already in the tree through
+# aura-core, at this version and with these codecs.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # The login keychain, for added agent accounts' tokens.

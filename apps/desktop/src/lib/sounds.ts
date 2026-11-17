@@ -23,12 +23,22 @@ const LEVEL = 0.12;
 
 let audio: AudioContext | null = null;
 
+/**
+ * Whether this window may make a sound: the app info's `media`, false until it arrives. On Linux
+ * without GStreamer's plugins an audio context would take the window's page down with it.
+ */
+let available = false;
+
+export function setNoticeSoundsAvailable(media: boolean): void {
+  available = media;
+}
+
 export function isNoticeSound(value: unknown): value is NoticeSound {
   return value === "finished" || value === "failed" || value === "attention";
 }
 
 export function playNotice(kind: NoticeSound): void {
-  if (typeof AudioContext === "undefined") return;
+  if (!available || typeof AudioContext === "undefined") return;
   audio ??= new AudioContext();
   const context = audio;
   // A context made before any click starts suspended; the next one resumes it.

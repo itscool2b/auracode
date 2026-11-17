@@ -25,7 +25,7 @@ import type { StreamStore } from "./lib/session";
 import { setupApi } from "./lib/setup";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
-import { subscribeNoticeSounds } from "./lib/sounds";
+import { setNoticeSoundsAvailable, subscribeNoticeSounds } from "./lib/sounds";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
 import type { WorkspaceStore } from "./lib/workspace";
@@ -197,6 +197,11 @@ export function App({
   useEffect(() => {
     if (glass !== null) document.documentElement.dataset.glass = glass;
   }, [glass]);
+
+  // Sounds stay silent until the app info says this window may make them (Linux without
+  // GStreamer's plugins may not).
+  const media = boot.status === "ready" && boot.info.media;
+  useEffect(() => setNoticeSoundsAvailable(media), [media]);
 
   // The platform, for what only one draws differently (Windows' scrollbars, styles.css).
   const os = boot.status === "ready" ? boot.info.os : null;

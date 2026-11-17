@@ -299,6 +299,19 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-update.png`) });
       await page.keyboard.press("Escape");
       await page.getByRole("heading", { name: "Back to workspace" }).waitFor();
+      // Linux without GStreamer's plugins: Sounds says why, once, and its switch waits.
+      await page.goto(`${url}/?preview=settings&media=off`);
+      const sounds = page.getByRole("switch", { name: "Sounds" });
+      await sounds.waitFor();
+      assert.equal(await sounds.isDisabled(), true, `${engine}: Sounds waits where none can play`);
+      const why =
+        "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode.";
+      await page.getByText(why, { exact: true }).waitFor();
+      assert.equal(await page.getByText(why, { exact: true }).count(), 1, `${engine}: said once`);
+      assert.equal(await page.getByRole("switch", { name: "Notifications" }).isDisabled(), false);
+      await settled(page);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${engine}-sounds-off.png`) });
       await page.goto(`${url}/?preview=settings&unsigned`);
       await page.getByRole("button", { name: "About", exact: true }).click();
       await page.getByText("Manual installation", { exact: true }).waitFor();

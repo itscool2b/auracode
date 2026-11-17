@@ -21,6 +21,8 @@ const INFO: AppInfo = {
   notices: [],
   recovery_notice: null,
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 
 function demoEvents(): AuraEvent[] {

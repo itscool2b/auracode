@@ -836,6 +836,13 @@ export type AppInfo = {
 	recovery_notice: string | null,
 	/**  Why startup could not complete, as a sentence to show on the error screen. */
 	fatal: string | null,
+	/**
+	 *  The window's page may play sound (Settings' Sounds). False on Linux where GStreamer's
+	 *  plugins are missing, and after the page stopped working once.
+	 */
+	media: boolean,
+	/**  Why it may not, as a sentence for Settings and the browser. */
+	media_notice: string | null,
 };
 
 /**  Appearance belongs to the active profile on this device, just like motion preferences. */
@@ -1023,6 +1030,11 @@ export type BrowserStatus = {
 	unavailable: string | null,
 	/**  The engine offers to save sign-ins (Windows). */
 	passwords: boolean,
+	/**
+	 *  Why pages play no sound or video on this system, when they cannot (Linux without
+	 *  GStreamer's plugins), naming what to install.
+	 */
+	media_notice: string | null,
 };
 
 /**  One tab of a chat's browser. */
@@ -1046,6 +1058,11 @@ export type BrowserTab = {
 	asleep: boolean,
 	/**  Annotate's picker runs in its page. */
 	annotating: boolean,
+	/**
+	 *  Its page may play sound and video. False on Linux where GStreamer's plugins are missing,
+	 *  and for a tab whose page process ended twice in a short time (it loads with them off).
+	 */
+	media: boolean,
 };
 
 /**  What one of the agents' browser tools answered, for development checks. */

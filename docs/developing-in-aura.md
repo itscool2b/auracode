@@ -181,7 +181,9 @@ build's folder is `~/.local/share/si.auracode.desktop.dev`, by the same rule as 
 **Toolchain.** Rust through rustup (`rust-toolchain.toml` picks stable with rustfmt and clippy),
 pnpm 12 (`mise use -g pnpm@12`, or corepack), Node from the supported range, CMake (dictation's
 `transcribe-cpp-sys` builds with it; `mise use -g cmake` without root) and Tauri's system
-packages; on Arch: `webkit2gtk-4.1 base-devel curl wget file openssl librsvg`.
+packages; on Arch: `webkit2gtk-4.1 base-devel curl wget file openssl librsvg`. An AppImage build
+also needs GStreamer's base and good plugins and `patchelf` (see "Sound and video" below); on
+Arch: `gst-plugins-base gst-plugins-good patchelf`.
 
 **What an agent's shell sees.** The AppImage's launcher points `LD_LIBRARY_PATH`, `PATH`,
 `PYTHONHOME`, `PERLLIB`, `XDG_DATA_DIRS`, `GIO_MODULE_DIR` and others into its mount
@@ -226,6 +228,81 @@ holder, cost nothing over the baseline (about 47 % with and without, three quiet
 that baseline is GTK 3 presenting a 4752x2600 frame, and forcing GDK's software path,
 `GDK_GL=software-draw-gl`, takes 100 % and halves the frame rate, so the fast path is in use).
 
+**Sound and video (GStreamer).** WebKitGTK plays media through GStreamer, and a page process that
+needs a GStreamer element it cannot find aborts. On 17 November 2026 every page with sound or video
+took its process down in the installed AppImage ("GStreamer element autoaudiosink not found", then
+SIGABRT inside `WebKitWebProcess`): the image carried GStreamer's libraries but no plugins, and its
+launcher (`AppRun.wrapped`) set `GST_PLUGIN_SYSTEM_PATH_1_0=$APPDIR/usr/lib/gstreamer-1.0:`, a
+folder the image did not have, which also hid the system's plugins. The window's own page was at
+the same risk, since Settings' Sounds play through Web Audio.
+
+- **At startup** (`apps/desktop/src-tauri/src/browser/media.rs`) auracode looks for the plugin
+  files WebKit's media cannot do without (`coreelements`, `app`, `audioconvert`, `audioresample`,
+  `autodetect`, `playback`, `typefindfunctions`) in the folders GStreamer will search, by its own
+  rules: `GST_PLUGIN_PATH_1_0` (else `GST_PLUGIN_PATH`), then `GST_PLUGIN_SYSTEM_PATH_1_0` (else
+  `GST_PLUGIN_SYSTEM_PATH`), else `~/.local/share/gstreamer-1.0/plugins` and the system's folder
+  (Debian's multiarch folder, `lib64`, then `lib`). It never starts GStreamer in its own process
+  for this. The log says what it found: `GStreamer's plugins are here` or `GStreamer's plugins are
+  not usable here ... missing=[...]`.
+- **Where they are missing**, every browser tab and the window's own page start with Web Audio,
+  media, Media Source, media stream, WebRTC, encrypted media and media capabilities off, set before
+  their first load (tabs load only after their settings; the window's page is reached in setup,
+  before its first document). Where they are there, WebKit's defaults stay. `app_info` carries
+  `media: false` and a sentence naming the packages for the distribution (`os-release`); Sounds
+  stay silent, Settings > Sounds says why and waits, and the browser panel says it once per device.
+- **A page process that ends** (a crash, or out of memory) shows "This page stopped working." with
+  Reload, on Linux (`web-process-terminated`, handled on the main loop's next turn) and on macOS
+  (wry's content-process-terminate hook), as on Windows. A Linux tab whose page ends twice within
+  30 seconds reloads with media off, and the panel says so. The window's own page reloads with media
+  off after its process ends (Settings says sounds are off until a restart); if it ends again within
+  30 seconds it is left alone rather than reloaded in a loop.
+- **Packages**: Arch `gst-plugins-base gst-plugins-good`; Debian and Ubuntu
+  `gstreamer1.0-plugins-base gstreamer1.0-plugins-good` (`gstreamer1.0-gl` for the GL video path,
+  `gstreamer1.0-pulseaudio` for sound); Fedora `gstreamer1-plugins-base gstreamer1-plugins-good`;
+  openSUSE `gstreamer-plugins-base gstreamer-plugins-good`. The deb and the rpm depend on them.
+
+**What an AppImage build needs.** `pnpm bundle --bundles appimage` (and any bundle that includes the
+AppImage) stages GStreamer's plugins from the build machine for Tauri's AppImage bundler
+(`bundleMediaFramework: true`), whose linuxdeploy GStreamer plugin copies every file of
+`GSTREAMER_PLUGINS_DIR` into the image with the libraries they need, copies the plugin scanner from
+`GSTREAMER_HELPERS_DIR`, and adds a launch hook that points GStreamer at them
+(`apps/desktop/scripts/appimage-media.mjs`). Only an allowlist is staged: GStreamer's core
+elements and base and good plugins (conversion, playback, the GL video path, Ogg, Opus, Vorbis,
+Theora, ALSA and PulseAudio output, MP4, WebM, VP8 and VP9, FLAC, MP3, WAV), never
+gst-plugins-ugly, gst-plugins-bad or gst-libav, so there is no H.264 or AAC. The script stops
+before the build, naming the packages for Arch, Debian and Ubuntu, and Fedora, when a required
+plugin or `patchelf` (which the bundler's GStreamer step runs) is missing. After the build it
+unpacks the image's GStreamer folder and launch hooks with the image's own runtime
+(`--appimage-extract`) and checks the required plugins and the hook are there.
+
+`--without-media` builds without plugins, on purpose and with a warning, and the check then makes
+sure the image has no plugin folder. Such an image uses the system's plugins: at the very start of
+`main`, when `APPDIR` is set and `$APPDIR/usr/lib/gstreamer-1.0` is missing, auracode runs itself
+again (the same single re-run as the NVIDIA switch below) with `GST_PLUGIN_SYSTEM_PATH_1_0` on the
+system's folders in place of the launcher's missing one (a value the person set after it is kept).
+Every AppImage also gets a GStreamer registry of its own under
+`~/.cache/si.auracode.desktop/gstreamer-1.0/` unless the person chose one: the image's plugins sit
+at a mount that moves with every launch, and in the shared registry they would make the person's
+other GStreamer apps scan everything again. Agents inherit none of these (`AURACODE_LAUNCH_SET`,
+and `strip_launch_context` drops the GStreamer hook's variables). An image without plugins loads
+the system's plugins with its own GStreamer, which refuses plugins built for a newer GStreamer: when
+the system's is newer than the image's, media stays off and Settings says so.
+
+**Pictures of a page on Linux.** The panel's stand-in while a menu opens over the page, and the
+agents' `browser_screenshot`, come from WebKitGTK's own snapshot (`browser/snapshot.rs`): what the
+tab shows as a JPEG, the whole page or one element as a PNG, in the screen's pixels, encoded on a
+worker thread. A whole page larger than 48 million pixels is refused with a sentence that says to
+picture what shows or one element instead. macOS has no pictures yet.
+
+**Pages parked for an agent on Wayland.** A page an agent works in while the panel is closed is
+parked at -24000 inside the overlay. Measured on 17 November 2026 (Hyprland, NVIDIA, the window on
+an output that draws at 60 frames a second): an animated page parked used 0.2 % of a core in the
+main process and 0.2 % in its own, drew no frames (`requestAnimationFrame` pauses) and kept its
+timers at full rate; hidden, it also drew nothing and WebKit slowed its timers to once a second;
+shown over the panel it drew 63 frames a second for 7.8 % and 2.2 %. Parking costs nothing and keeps
+the page's scripts running, and agents' snapshots and pictures do not need its frames, so it stays.
+A page that waits on `requestAnimationFrame` waits while parked on Wayland.
+
 **Measuring frame rate without a window on your screen.** `hyprctl output create headless NAME`
 adds a virtual monitor (give it a position far from the real one, such as `-30000x0`, or the
 pointer can slide onto it, and check the real monitor stayed at `0x0`); set its mode and scale to match the real one
@@ -245,7 +322,8 @@ variants interleaved, three rounds, and distrust a single reading.
 hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
 
 1. Build the AppImage: `pnpm bundle --bundles appimage`. It lands in
-   `target/release/bundle/appimage/`.
+   `target/release/bundle/appimage/`. It needs GStreamer's base and good plugins and `patchelf` on
+   this machine (see "Sound and video" above).
 2. Commit and push the branch.
 3. Arm the install from the chat: `host-upgrade install --after-exit` (the newest AppImage under
    `target`, or `--appimage <file>`). It copies the AppImage beside the installed one at once,
@@ -318,3 +396,24 @@ from a chat inside the installed AppImage:
 | The browser panel on Wayland (Hyprland), on the virtual monitor | pass: a local page draws in the panel at its rectangle (1040x1202 at 2x), follows a move and resize, hides with the panel and returns; an agent's snapshot reads the page while it is hidden; the chat holds 60 frames a second beside it. Not tested: real pointer and keyboard input into the page (no second seat to drive it) |
 | `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
 | `host-upgrade install`, `--after-exit` and its waiter, health rollback, `rollback --restore-database`, `cancel`, prune | pass against a stand-in install (`appimage-upgrade.test.mjs`); not yet run against the real install |
+
+Sound and video, page processes and pictures, run on 17 November 2026 on the same machine (GStreamer
+1.28.8 with `gst-plugins-base-libs` but neither `gst-plugins-base` nor `gst-plugins-good`, WebKitGTK
+2.54.1, the screen asleep and locked, the test windows on Hyprland's fallback output, which draws at
+60 frames a second), with a development build and a development AppImage built from this branch,
+each with a data folder of its own, driven through WebKit's remote inspector and the development
+`browser_agent_call` command:
+
+| Check | Result |
+|---|---|
+| Detection | pass: the log names `autodetect` missing in `~/.local/share/gstreamer-1.0/plugins` and `/usr/lib64/gstreamer-1.0`; `app_info` and the browser status carry the Arch packages |
+| The window's page and a tab where media is off | pass: no `AudioContext`, `RTCPeerConnection` or `navigator.mediaDevices`, `<video>` is no media element, `MediaSource.isTypeSupported` answers false; a page with video, audio and Web Audio loads and its process stays up, in the AppImage too |
+| Where media is believed available (a stand-in `autodetect` file) | pass: WebKit's defaults stay (`AudioContext` in the window's page and in tabs) |
+| A tab's page process killed (SIGKILL, no core dump) | pass: the tab reads crashed (the panel's Reload card), Reload builds it again; killed again within 30 seconds it reads `media: false`, and after Reload its page has no `AudioContext` and no media elements |
+| The window's page process killed | pass: it loads again with media off and `app_info` says so; killed again 15 seconds later it is left alone and the log says so |
+| Pictures | pass: the panel's stand-in is a 1280x800 JPEG with the test page's colours and box where they belong; the agents' viewport JPEG, full page PNG and element PNG come back |
+| Clear browsing data with no page open, on Wayland | pass (it failed with `UnsupportedWindowHandle` before) |
+| `pnpm bundle --bundles appimage` here | pass: stops before building, naming the missing plugin and `patchelf` and the packages for Arch, Debian and Ubuntu, and Fedora |
+| A development AppImage without plugins | pass: the image check passes for an image without media and refuses it as one with media; launched, one re-run sets the system's plugin folders, a registry of auracode's own and the NVIDIA switch, and `AURACODE_LAUNCH_SET` names all three |
+| X11 through XWayland (`GDK_BACKEND=x11`, pages as child windows) | pass: media off in a tab, its picture, a page end read as crashed, Clear browsing data with no page open. The first three X11 launches that afternoon left the window's page on `about:blank` (with either renderer); nine later launches of the same code, the very same binary among them, loaded normally, and the cause was not found |
+| An AppImage that carries the plugins; sound and video actually playing | not run: this machine has no `gst-plugins-good` and no `patchelf`. CI's Ubuntu 22.04 job installs the plugin packages |
