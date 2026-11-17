@@ -287,33 +287,58 @@ fn build(
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = passwords;
-        with_context(&profile, |context| {
+        // Wayland: a widget in a holder over the app's page, placed by the holder; X11: a child
+        // window, placed by its own bounds.
+        let holder = super::gtk_layer::installed()
+            .then(|| super::gtk_layer::holder((bounds.width, bounds.height)))
+            .flatten();
+        let inside = BrowserRect {
+            x: 0.0,
+            y: 0.0,
+            ..bounds
+        };
+        let built = with_context(&profile, |context| {
             let builder = configure(
                 WebViewBuilder::new_with_web_context(context),
                 &weak,
                 tab_id,
                 chat_id,
                 url,
-                &bounds,
+                if holder.is_some() { &inside } else { &bounds },
                 &profile,
             );
-            // Wayland: a widget in the layer over the app's page; X11: a child window.
-            #[cfg(target_os = "linux")]
-            if let Some(layer) = super::gtk_layer::layer() {
-                use wry::WebViewBuilderExtUnix;
-                return builder.build_gtk(&layer);
+            match &holder {
+                Some(holder) => {
+                    use wry::WebViewBuilderExtUnix;
+                    builder.build_gtk(holder)
+                }
+                None => builder.build_as_child(&window),
             }
-            builder.build_as_child(&window)
-        })
-        .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
+        });
+        if let Some(holder) = &holder {
+            super::gtk_layer::adopt(holder, built.as_ref().ok());
+        }
+        built
+            .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
     }
 }
 
 /// Moves a page to `at`.
 fn set_bounds(view: &View, at: &BrowserRect) {
-    let _ = view.webview.set_bounds(rect(at));
     #[cfg(target_os = "linux")]
-    super::gtk_layer::place(&view.webview, at);
+    if super::gtk_layer::place(&view.webview, at) {
+        return;
+    }
+    let _ = view.webview.set_bounds(rect(at));
+}
+
+/// Shows or hides a page.
+fn set_visible(view: &View, visible: bool) {
+    #[cfg(target_os = "linux")]
+    if super::gtk_layer::set_visible(&view.webview, visible) {
+        return;
+    }
+    let _ = view.webview.set_visible(visible);
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -651,7 +676,7 @@ fn show(tab_id: &str, at: Option<BrowserRect>, visible: bool) {
         if let Some(at) = at {
             set_bounds(view, &at);
         }
-        let _ = view.webview.set_visible(visible && !hidden && at.is_some());
+        set_visible(view, visible && !hidden && at.is_some());
     });
 }
 
@@ -720,7 +745,7 @@ fn hide_or_park(browser: &Arc<Browser>, tab_id: &str) {
         park(tab_id);
     } else {
         let _ = with_view(tab_id, |view| {
-            let _ = view.webview.set_visible(false);
+            set_visible(view, false);
         });
         HOST.with_borrow_mut(|host| {
             if let Some(view) = host.views.get_mut(tab_id) {
@@ -743,7 +768,7 @@ pub(super) fn park(tab_id: &str) {
     let at = parked_rect();
     let _ = with_view(tab_id, |view| {
         set_bounds(view, &at);
-        let _ = view.webview.set_visible(true);
+        set_visible(view, true);
     });
     HOST.with_borrow_mut(|host| {
         if let Some(view) = host.views.get_mut(tab_id) {

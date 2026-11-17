@@ -214,13 +214,19 @@ GPU renderer holds 60.
 
 **The browser beside the chat on Wayland.** wry's child webviews are X11 child windows, so the
 browser used to be unavailable on Wayland. There its pages are now GTK widgets: at startup, while
-the window is still hidden, the app's own page moves into a `gtk::Overlay` and a pass-through
-`gtk::Fixed` over it holds one WebKitGTK view per live tab
-(`apps/desktop/src-tauri/src/browser/gtk_layer.rs`). X11 keeps the child windows. The overlay
-costs no frames (60 with and without, two rounds each).
+the window is still hidden, the app's own page moves into a `gtk::Overlay`, and each live tab's
+WebKitGTK view joins it as an overlay child in a holder of exactly the panel's rectangle
+(`apps/desktop/src-tauri/src/browser/gtk_layer.rs`). X11 keeps the child windows. The holder is
+the page's size on purpose: GDK draws the app's page with OpenGL and uploads, every frame,
+whatever GTK draws over it, so one layer across the whole window cost the main process 75 to 95 %
+of a core for a small animation at 60 frames a second. The empty overlay, and a page in its
+holder, cost nothing over the baseline (about 47 % with and without, three quiet rounds each;
+that baseline is GTK 3 presenting a 4752x2600 frame, and forcing GDK's software path,
+`GDK_GL=software-draw-gl`, takes 100 % and halves the frame rate, so the fast path is in use).
 
 **Measuring frame rate without a window on your screen.** `hyprctl output create headless NAME`
-adds a virtual monitor; set its mode and scale to match the real one
+adds a virtual monitor (give it a position far from the real one, such as `-30000x0`, or the
+pointer can slide onto it, and check the real monitor stayed at `0x0`); set its mode and scale to match the real one
 (`hyprctl eval 'hl.monitor({ output = "NAME", mode = "3840x2160@60", scale = 1.6 })'`) and move the
 test window to the workspace it shows. A window on a workspace no monitor shows gets no frames, so
 `requestAnimationFrame` stalls and every measurement hangs. Start the build with
@@ -228,7 +234,10 @@ test window to the workspace it shows. A window on a workspace no monitor shows 
 drive the page over the inspector's WebSocket (`Runtime.evaluate`). `AURACODE_STRESS=orbs=24,seconds=0`
 opens the stress view; the scripted Demo agent (`mock`) gives a real chat to type, stream and
 scroll in without spending anything. Remove the monitor with `hyprctl output remove NAME`. Measure
-at the window's real size: at half width the same build drew several times the frames.
+at the window's real size: at half width the same build drew several times the frames. Other
+work on the machine moves the numbers a great deal (a compile in another worktree doubled the
+main process's CPU and halved frame rates): lower its priority with `renice`, run each pair of
+variants interleaved, three rounds, and distrust a single reading.
 
 **Getting a change into the installed app.** `pnpm --filter @auracode/desktop host-upgrade`
 hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
