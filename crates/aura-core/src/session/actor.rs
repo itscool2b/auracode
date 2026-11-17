@@ -6529,15 +6529,19 @@ The person continues this conversation here, in your terminal. Reply only that y
             idle.then(|| self.last_activity + self.shared.deps.limits.idle_eviction);
         let now = if idle {
             Reported::Idle(self.last_activity)
-        } else if self.terminal.is_some() {
+        } else if self.terminal.is_some() && self.terminal_import.is_some() {
             Reported::Terminal
-        } else if matches!(
-            self.status,
-            SessionStatus::Stopping
-                | SessionStatus::Stopped
-                | SessionStatus::Failed
-                | SessionStatus::AuthRequired
-        ) {
+        } else if self.terminal.is_some()
+            || matches!(
+                self.status,
+                SessionStatus::Stopping
+                    | SessionStatus::Stopped
+                    | SessionStatus::Failed
+                    | SessionStatus::AuthRequired
+            )
+        {
+            // A terminal that ended reads its conversation back, then gives the session back by
+            // itself: it is on its way out, as a stopping agent is.
             Reported::Stopping
         } else if self.normalizer.has_open_requests() {
             Reported::Waiting

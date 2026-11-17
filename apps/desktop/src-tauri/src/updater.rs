@@ -443,13 +443,16 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         );
         return Ok(updates.snapshot());
     }
-    // The person chose to install and restart: the chats' agents stop and the terminals close
-    // here (each chat resumes its session after the restart), then admission closes as before.
+    // The person chose to install and restart (its confirmation says so). Terminals close first:
+    // a chat open in its terminal gets its session back as that terminal ends, which Stop cannot
+    // do. Then the chats' agents stop, each resuming its session after the restart, and
+    // admission closes as before.
+    crate::terminal::end_terminal_chats(&state, None);
+    state.terminals.close_all();
     let report = chats
         .manager
         .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
         .await;
-    state.terminals.close_all();
     let _ = chats
         .manager
         .wait_project_terminals(Duration::from_secs(10))

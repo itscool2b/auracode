@@ -42,6 +42,34 @@ describe("a folder in use", () => {
     expect(terminals).not.toContain("<button");
   });
 
+  it("offers to close the terminal of a chat open in one, which is how such a chat stops", () => {
+    const terminal = {
+      chats: [{ ...blockers.chats[0], state: "terminal" as const }],
+      terminals: 0,
+    } as FolderBlockers;
+    const one = renderToStaticMarkup(<FolderBusy blockers={terminal} onStopped={() => {}} />);
+    expect(one).toContain("Fix the tests in auracode: open in a terminal");
+    expect(one).toMatch(/<button[^>]*>Close its terminal<\/button>/);
+    const two = {
+      chats: [
+        { ...blockers.chats[0], state: "terminal" as const },
+        { ...blockers.chats[1], state: "terminal" as const },
+      ],
+      terminals: 0,
+    } as FolderBlockers;
+    expect(renderToStaticMarkup(<FolderBusy blockers={two} onStopped={() => {}} />)).toMatch(
+      /<button[^>]*>Close their terminals<\/button>/,
+    );
+    // Mixed with a working chat, the action is still Stop.
+    const mixed = {
+      chats: [{ ...blockers.chats[0], state: "terminal" as const }, blockers.chats[1]],
+      terminals: 0,
+    } as FolderBlockers;
+    expect(renderToStaticMarkup(<FolderBusy blockers={mixed} onStopped={() => {}} />)).toMatch(
+      /<button[^>]*>Stop these chats<\/button>/,
+    );
+  });
+
   it("reads the blockers from Rust's refusal, and New chat's busy chats as blockers", () => {
     expect(busyFolder(new CommandError("folder_busy", "In use.", blockers))).toBe(blockers);
     expect(busyFolder(new CommandError("invalid_argument", "No."))).toBeNull();

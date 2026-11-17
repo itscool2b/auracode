@@ -300,6 +300,23 @@ impl TerminalChats {
         }
     }
 
+    /// Every terminal chat, or those of `chats`, taken: each terminal, its page, its chat and the
+    /// generation the chat opened it in.
+    fn take_chats(&self, chats: Option<&[String]>) -> Vec<(String, String, String, u64)> {
+        let mut map = lock(&self.0);
+        let ids: Vec<String> = map
+            .iter()
+            .filter(|(_, (_, chat, _))| chats.is_none_or(|wanted| wanted.contains(chat)))
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                map.remove(&id)
+                    .map(|(owner, chat, generation)| (id, owner, chat, generation))
+            })
+            .collect()
+    }
+
     /// Every terminal chat of a page that went away.
     pub fn drain_owner(&self, owner: &str) -> Vec<(String, u64)> {
         let mut map = lock(&self.0);
@@ -315,6 +332,25 @@ impl TerminalChats {
             })
             .collect()
     }
+}
+
+/// Closes the terminals chats run in (every terminal chat, or those of `chats`) and gives the chats
+/// their sessions back, as closing them in their page would. For what the person asked for that
+/// ends those chats (installing an update, Stop these chats): Stop alone cannot end a terminal's
+/// session. Answers the chats whose terminals closed.
+pub fn end_terminal_chats(state: &AppState, chats: Option<&[String]>) -> Vec<String> {
+    let ended = state.terminal_chats.take_chats(chats);
+    let sessions = state.chats();
+    ended
+        .into_iter()
+        .map(|(terminal_id, owner, chat_id, generation)| {
+            let _ = state.terminals.close(&owner, &terminal_id);
+            if let Some(sessions) = sessions.as_ref() {
+                sessions.manager.terminal_ended(&chat_id, generation);
+            }
+            chat_id
+        })
+        .collect()
 }
 
 fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -421,4 +457,33 @@ pub fn chat_terminal_ended(
         sessions.terminal_ended(&chat_id, generation);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ending_terminal_chats_takes_the_named_ones_once_from_every_page() {
+        let chats = TerminalChats::default();
+        chats.insert("t1", "main", "a", 1);
+        chats.insert("t2", "other", "b", 2);
+        chats.insert("t3", "main", "c", 3);
+        let mut named = chats.take_chats(Some(&["a".to_owned(), "b".to_owned()]));
+        named.sort();
+        assert_eq!(
+            named,
+            vec![
+                ("t1".into(), "main".into(), "a".into(), 1),
+                ("t2".into(), "other".into(), "b".into(), 2),
+            ]
+        );
+        // Taken once: a page's own ending later changes nothing.
+        assert_eq!(chats.take("main", "t1"), None);
+        assert_eq!(
+            chats.take_chats(None),
+            vec![("t3".into(), "main".into(), "c".into(), 3)]
+        );
+        assert!(chats.take_chats(None).is_empty());
+    }
 }

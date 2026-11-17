@@ -40,6 +40,14 @@ export function FolderBusy({
       (report) => {
         running.current = false;
         setStopping(false);
+        if (report.kept.length > 0) {
+          setError(
+            report.kept.length === 1
+              ? "A chat is open in its terminal. Close its terminal, then try again."
+              : `${report.kept.length} chats are open in their terminals. Close them, then try again.`,
+          );
+          return;
+        }
         if (report.stopping.length > 0) {
           setError(
             report.stopping.length === 1
@@ -57,6 +65,15 @@ export function FolderBusy({
       },
     );
   };
+  // A chat open in its terminal stops by its terminal closing, so the action says that.
+  const terminalsOnly = chats.length > 0 && chats.every((chat) => chat.state === "terminal");
+  const action = terminalsOnly
+    ? chats.length === 1
+      ? "Close its terminal"
+      : "Close their terminals"
+    : chats.length === 1
+      ? "Stop this chat"
+      : "Stop these chats";
   const title =
     heading ??
     (chats.length === 1
@@ -89,7 +106,7 @@ export function FolderBusy({
             disabled={stopping}
             onClick={stop}
           >
-            {stopping ? "Stopping…" : chats.length === 1 ? "Stop this chat" : "Stop these chats"}
+            {stopping ? "Stopping…" : action}
           </button>
         </div>
       ) : null}
