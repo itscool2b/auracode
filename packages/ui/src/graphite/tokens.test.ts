@@ -301,11 +301,7 @@ describe("Graphite stylesheet rules", () => {
   });
 
   it("never blurs what is behind, and shadows only through the shadow tokens", () => {
-    // The one filter blur is depth: a far swimmer is softened once, at raster time (4.16).
-    const depth =
-      /\.g-swimmer:where\(\[data-far\]\) > \.g-creature \{\s*filter: blur\(calc\(var\(--g-swimmer-depth\) \* [\d.]+px\)\);\s*\}/;
-    expect(graphiteCss).toMatch(depth);
-    const rest = graphiteCss.replace(depth, "");
+    const rest = graphiteCss;
     expect(rest).not.toMatch(/[^-]filter:\s*blur|drop-shadow|text-shadow/);
     // Flat layers, as the Grok Bot app draws them (owner, 17 November 2026): no surface blurs
     // what is behind it.

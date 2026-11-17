@@ -57,11 +57,6 @@
   --g-project-sand: #a59e92;
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
-  --g-water-surface: #1e1e1e;
-  --g-water-shallow: #161616;
-  --g-water-mid: #0d0d0d;
-  --g-water-low: #080808;
-  --g-water-deep: #050505;
   --g-shade-near: #080808;
   --g-shade-far: #121212;
   --g-hover: #232323;
@@ -86,11 +81,6 @@
   --g-diff-add-word: rgb(61 214 140 / 0.24);
   --g-diff-del-line: rgb(255 92 92 / 0.1);
   --g-diff-del-word: rgb(255 92 92 / 0.24);
-  --g-water-light: rgb(255 255 255 / 0.045);
-  --g-water-caustic: rgb(255 255 255 / 0.028);
-  --g-water-rim: rgb(255 255 255 / 0.05);
-  --g-shallows-radius: 12px;
-  --g-shallows-radius-compact: 12px;
   --g-shadow: 0 12px 32px rgb(0 0 0 / 0.32);
 
   /*
@@ -336,11 +326,6 @@
   --g-project-sand: #a59e92;
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
-  --g-water-surface: #ffffff;
-  --g-water-shallow: #fafafa;
-  --g-water-mid: #f4f4f5;
-  --g-water-low: #f4f4f5;
-  --g-water-deep: #ececef;
   --g-shade-near: #e4e4e7;
   --g-shade-far: #f0f0f2;
   --g-hover: #f3f3f3;
@@ -365,11 +350,6 @@
   --g-diff-add-word: #d1ead6;
   --g-diff-del-line: #fef0f0;
   --g-diff-del-word: #f9d5d5;
-  --g-water-light: transparent;
-  --g-water-caustic: transparent;
-  --g-water-rim: #e4e4e7;
-  --g-shallows-radius: 12px;
-  --g-shallows-radius-compact: 12px;
   --g-shadow: 0 12px 32px rgb(28 28 28 / 0.1);
   --g-window: #f5f5f5;
   --g-window-tint: rgb(245 245 245 / 0.6);
@@ -449,11 +429,6 @@
     --g-project-sand: #a59e92;
     --g-project-sage: #8c9c88;
     --g-project-clay: #a88e80;
-    --g-water-surface: #ffffff;
-    --g-water-shallow: #fafafa;
-    --g-water-mid: #f4f4f5;
-    --g-water-low: #f4f4f5;
-    --g-water-deep: #ececef;
     --g-shade-near: #e4e4e7;
     --g-shade-far: #f0f0f2;
     --g-hover: #f3f3f3;
@@ -478,11 +453,6 @@
     --g-diff-add-word: #d1ead6;
     --g-diff-del-line: #fef0f0;
     --g-diff-del-word: #f9d5d5;
-    --g-water-light: transparent;
-    --g-water-caustic: transparent;
-    --g-water-rim: #e4e4e7;
-    --g-shallows-radius: 12px;
-    --g-shallows-radius-compact: 12px;
     --g-shadow: 0 12px 32px rgb(28 28 28 / 0.1);
     --g-window: #f5f5f5;
     --g-window-tint: rgb(245 245 245 / 0.6);

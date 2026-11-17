@@ -93,13 +93,10 @@ describe("module surface", () => {
     for (const name of [
       "AgentMark",
       "CopyButton",
-      "Creature",
       "Keycap",
       "PixelLoader",
       "Logo",
-      "Shallows",
       "StatusDot",
-      "Swimmers",
       "Wordmark",
       "agentCode",
       "logoSvg",
@@ -111,10 +108,21 @@ describe("module surface", () => {
     }
   });
 
-  it("no longer ships the dither field, its engine or its sprites (Shallows replaced them)", () => {
-    for (const name of ["DitherField", "renderDitherFrame", "paintSprites", "DITHER_PALETTES"]) {
+  it("no longer ships the dither field, the water or its swimmers (no animal or water motifs)", () => {
+    for (const name of [
+      "DitherField",
+      "renderDitherFrame",
+      "paintSprites",
+      "DITHER_PALETTES",
+      "Shallows",
+      "Swimmers",
+      "Creature",
+      "swimPose",
+    ]) {
       expect(graphite, name).not.toHaveProperty(name);
     }
-    expect(graphiteCss).not.toContain("g-dither");
+    for (const retired of ["g-dither", "g-shallows", "g-swimmer", "g-creature", "--g-water"]) {
+      expect(graphiteCss).not.toContain(retired);
+    }
   });
 });

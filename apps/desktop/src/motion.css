@@ -7,13 +7,11 @@
  * component sheets keep their own motion next to their rules.
  */
 
-/* ------------------------------------------------------------- buttons: press and lean */
+/* -------------------------------------------------------------------- buttons: press */
 
 /*
- * Every button gives under the hand: pressed, it settles to 97% at once and eases back on release,
- * never moving its neighbours. The one white action on a screen (a primary pill, the send disc) is
- * magnetic: lib/magnetic.ts sets its inline translate as the pointer crosses it, up to 3px at its
- * edge, and it eases home when the pointer leaves.
+ * Every button gives under the hand: pressed, it settles a pixel at once and eases back on release,
+ * never moving its neighbours.
  */
 .g-button {
   transition:
@@ -21,8 +19,7 @@
     border-color var(--g-dur-settle) var(--g-ease-settle),
     box-shadow var(--g-dur-settle) var(--g-ease-settle),
     color var(--g-dur-settle) var(--g-ease-settle),
-    transform var(--g-dur-fast) var(--g-ease-out),
-    translate var(--g-dur-panel) var(--g-ease-out);
+    transform var(--g-dur-fast) var(--g-ease-out);
 }
 
 .g-button:active:not(:disabled, [aria-disabled="true"]) {
@@ -310,11 +307,6 @@
     transform: none;
   }
 
-  :is(.g-button-primary, .chat-send) {
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion overrides the inline lean. */
-    translate: none !important;
-  }
-
   :is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
     transform: none;
   }
@@ -361,9 +353,4 @@
     :is(.new-chat-agent, .chat-popover > summary):active
   ) {
   transform: none;
-}
-
-:root:is([data-motion="reduced"], [data-motion="off"]) :is(.g-button-primary, .chat-send) {
-  /* biome-ignore lint/complexity/noImportantStyles: The app's motion setting overrides the inline lean. */
-  translate: none !important;
 }
