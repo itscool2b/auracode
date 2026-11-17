@@ -9,6 +9,7 @@ checks the format.
 
 ## 2026-11-17
 
+- auracode no longer has accounts or sync. Claude Code and Codex now sync plugins on their own, so auracode does not need to. There is no sign-in: your chats, projects and settings stay on your computer. Remote access from your phone still works. ([#137](https://github.com/itscool2b/auracode/pull/137))
 - Linux is smooth on NVIDIA graphics, and the browser works on Wayland. Scrolling and streaming now hold 60 frames a second where they dropped to about 20. The browser beside the chat opens on Wayland instead of asking for X11, and agents' terminals work when auracode runs as an AppImage. ([#136](https://github.com/itscool2b/auracode/pull/136))
 
 ## 2026-11-16
