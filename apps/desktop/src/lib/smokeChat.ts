@@ -664,15 +664,37 @@ async function chooseAgentAndFolder(agentId: string, folder: string): Promise<vo
   );
 }
 
+/** What New chat shows, for a create that never opened its chat. */
+function newChatState(): string {
+  const form = one("new-chat");
+  if (form === null) return "New chat is gone";
+  const button = one("new-chat-create") as HTMLButtonElement | null;
+  const alerts = [...form.querySelectorAll('[role="alert"]')]
+    .map((node) => text(node as HTMLElement))
+    .filter(Boolean);
+  const chip = form.querySelector<HTMLElement>('[data-testid="new-chat-worktree"]');
+  return [
+    button
+      ? `Create is ${button.disabled ? "disabled" : "enabled"} and reads "${button.getAttribute("aria-label") ?? text(button)}"`
+      : "Create is missing",
+    `the folder is "${attr(one("new-chat-folder"), "folder")}"`,
+    chip ? `the worktree chip reads "${text(chip).slice(0, 80)}"` : "no worktree chip",
+    alerts.length > 0 ? `it says: ${alerts.join(" | ")}` : "no alert",
+  ].join("; ");
+}
+
 /** Presses Create on New chat and waits for the new chat to open; returns its id. */
 async function createChat(): Promise<string> {
   await clickWhenEnabled("Create", () => one("new-chat-create"));
-  const view = await waitFor("the new chat to open", () => {
-    const error = one("new-chat-error");
-    if (error !== null) throw new StepError(`creating the chat failed: ${text(error)}`);
-    const opened = one("chat-view");
-    return opened !== null && attr(opened, "chat-id") !== "" ? opened : null;
-  });
+  const view = await waitFor(
+    () => `the new chat to open (${newChatState()})`,
+    () => {
+      const error = one("new-chat-error");
+      if (error !== null) throw new StepError(`creating the chat failed: ${text(error)}`);
+      const opened = one("chat-view");
+      return opened !== null && attr(opened, "chat-id") !== "" ? opened : null;
+    },
+  );
   return attr(view, "chat-id");
 }
 
