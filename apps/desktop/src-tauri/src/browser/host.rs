@@ -595,7 +595,8 @@ fn popup(browser: &Arc<Browser>, chat_id: &str, opener: &str, url: &str) -> NewW
         browser.opened_by(&tab.id, opener);
         let weak = Arc::downgrade(browser);
         let environment = HOST.with_borrow(|host| host.environment.clone());
-        let (Some(environment), Some(window), Some(profile)) = (
+        // A popup needs an open profile; the environment above already carries its data.
+        let (Some(environment), Some(window), Some(_)) = (
             environment,
             browser.app.get_webview_window(MAIN_WINDOW),
             lock(&browser.inner).profile.clone(),
