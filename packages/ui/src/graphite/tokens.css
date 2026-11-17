@@ -113,7 +113,8 @@
   --g-glass-rim-strong: rgb(245 245 245 / 0.14);
   --g-glass-highlight: rgb(255 255 255 / 0.04);
   --g-switch-knob: #ffffff;
-  --g-shadow-control: 0 1px 2px rgb(0 0 0 / 0.3);
+  /* Dark draws no shadows, as the Grok Bot app: edges and tone carry depth. A list entry, so it composes. */
+  --g-shadow-control: 0 0 #0000;
   --g-shadow-primary: none;
   --g-shadow-layer: 0 0 0 1px rgb(255 255 255 / 0.04);
   /* The layer shadow's hairline alone, for an outline where a shadow is too costly. */

@@ -959,7 +959,7 @@
   overflow: hidden;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-code-fg);
 }
 
@@ -1545,9 +1545,10 @@
   overflow: auto;
   border-radius: var(--ui-composer-radius);
   background-color: var(--g-glass-pop);
+  /* The message box's own depth with its edge a step firmer: it is waiting on you. */
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim-strong),
-    var(--g-shadow-pop);
+    var(--g-shadow-inline);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
@@ -2119,9 +2120,7 @@
   padding: 0 var(--g-space-16);
   border-radius: 0 0 var(--g-radius-14) var(--g-radius-14);
   background-color: var(--g-glass-bar);
-  box-shadow:
-    0 0 0 1px var(--g-glass-rim),
-    var(--g-shadow-control);
+  box-shadow: 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   text-align: left;
 }
@@ -2345,14 +2344,15 @@
   font-weight: var(--g-weight-medium);
 }
 
-/* A code block is a well: a 32px header with the language and Copy, then the code (4.8). */
+/*
+ * A code block is a well: a 32px header with the language and Copy, then the code (4.8). Flat, with
+ * one faint edge, as the diff beside it.
+ */
 .chat-app .code-block {
   overflow: hidden;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .chat-app .code-header {
