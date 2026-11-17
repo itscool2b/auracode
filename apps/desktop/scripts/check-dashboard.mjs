@@ -129,10 +129,30 @@ export async function checkDashboard(browser, url, out, engine) {
         const box = await pi.boundingBox();
         await page.mouse.click(box.x + box.width / 2, box.y + box.height - 8);
         assert.equal(await page.evaluate(() => document.body.dataset.openedChat), "chat-pi");
-        const open = page.getByRole("button", { name: "Tidy the changelog check" });
+        const open = page.getByRole("button", { name: "Tidy the changelog check", exact: true });
         await open.focus();
         await page.keyboard.press("Enter");
         assert.equal(await page.evaluate(() => document.body.dataset.openedChat), "chat-pi");
+
+        // A card whose agent works or waits for an answer offers Stop; every other card Clear.
+        assert.equal(await claude.getByTestId("dashboard-card-stop").count(), 1);
+        assert.equal(await review.getByTestId("dashboard-card-stop").count(), 1);
+        assert.equal(await pi.getByTestId("dashboard-card-clear").count(), 1);
+        assert.equal(await pi.getByTestId("dashboard-card-stop").count(), 0);
+        await claude.getByTestId("dashboard-card-stop").click();
+        assert.equal(await page.evaluate(() => document.body.dataset.stoppedChat), "chat-claude");
+        assert.equal(
+          await page.evaluate(() => document.body.dataset.openedChat),
+          "chat-pi",
+          "Stop does not open the chat",
+        );
+        // Clear takes a card off the board without opening it; Clear finished takes the rest.
+        await pi.getByTestId("dashboard-card-clear").click();
+        await page.getByRole("heading", { name: "Finished 1", level: 2 }).waitFor();
+        assert.equal(await laneOf("chat-pi"), null);
+        await page.getByTestId("dashboard-clear-finished").click();
+        await page.getByRole("heading", { name: "Finished 0", level: 2 }).waitFor();
+        assert.equal(await page.getByTestId("dashboard-clear-finished").count(), 0);
 
         await page.goto(`${url}/?preview=dashboard&theme=${theme}&case=empty`);
         await page.getByText("Nothing is running.", { exact: false }).waitFor();
