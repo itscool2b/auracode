@@ -561,6 +561,7 @@
 }
 
 .g-keycap {
+  position: relative;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -584,6 +585,20 @@
 .g-keycap-glyph {
   display: block;
   flex: none;
+}
+
+.g-keycap-shown {
+  display: contents;
+}
+
+/* A key's spoken name: read by screen readers, never drawn. */
+.g-keycap-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .g-button-primary .g-keycap {

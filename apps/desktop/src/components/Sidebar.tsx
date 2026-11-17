@@ -8,6 +8,7 @@ import {
 import { AgentMark, Wordmark } from "@auracode/ui/graphite";
 import { ArrowLeft } from "lucide-react";
 import { useId } from "react";
+import { Select } from "./Select";
 
 /**
  * The slim sidebar of Diagnostics: wordmark, the way back to chats, and the sample agent's live
@@ -56,7 +57,7 @@ export function Sidebar({
           <label htmlFor={selectId} className="sr-only">
             Demo agent colour
           </label>
-          <select
+          <Select
             id={selectId}
             value={brandId}
             onChange={(event) => onBrandChange(event.currentTarget.value as AgentBrandId)}
@@ -66,7 +67,7 @@ export function Sidebar({
                 {AGENT_BRANDS[id].name}
               </option>
             ))}
-          </select>
+          </Select>
           <span className="agent-chip-state">Demo agent · {ORB_STATE_LABELS[orbState]}</span>
         </div>
       </div>

@@ -55,7 +55,8 @@ describe("the project memory panel", () => {
       />,
     );
     expect(two).toContain('aria-label="Project"');
-    expect(two).toMatch(/<option value="two" selected="">website<\/option>/);
+    expect(two).toContain('data-value="two"');
+    expect(two).toContain('<span class="ui-select-value">website</span>');
   });
   it("renders without projects or a subscription, and starts no write", () => {
     const save = vi.fn(never);

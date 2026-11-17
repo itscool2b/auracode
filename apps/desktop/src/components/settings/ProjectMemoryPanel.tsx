@@ -14,6 +14,7 @@ import { type SetupApi, setupApi } from "../../lib/setup";
 import { Row, Switch } from "./SettingsRow";
 import "./settings.css";
 import "./project-memory.css";
+import { Select } from "../Select";
 
 type Project = { readonly id: string; readonly name: string };
 
@@ -245,7 +246,7 @@ export function ProjectMemoryPanel({
               dirty ? "Save or discard your edit to switch." : "Each project has its own memory."
             }
           >
-            <select
+            <Select
               className="g-select settings-select settings-control"
               aria-label="Project"
               value={projectId}
@@ -257,7 +258,7 @@ export function ProjectMemoryPanel({
                   {project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Row>
         ) : null}
       </div>

@@ -31,6 +31,7 @@ import { Modal } from "../chat/Modal";
 import { type ReviewChoice, ReviewDialog } from "./InstructionsReview";
 import { Row, Switch } from "./SettingsRow";
 import "./instructions.css";
+import { Select } from "../Select";
 
 export interface InstructionsFolder {
   readonly id: string;
@@ -359,7 +360,7 @@ export function InstructionsPanel({
               )
             }
           >
-            <select
+            <Select
               className="g-select settings-select settings-control"
               aria-label="Applies to"
               value={key}
@@ -370,7 +371,7 @@ export function InstructionsPanel({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Row>
           {snapshot?.agents
             .filter((agent) => agent.status === "drift" && agent.installed)

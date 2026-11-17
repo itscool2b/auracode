@@ -95,7 +95,10 @@ describe("Settings' search", () => {
     expect(searchSettings("dark")[0]).toMatchObject({ page: "appearance", title: "Appearance" });
     expect(searchSettings("mcp")[0]).toMatchObject({ page: "plugins" });
     expect(searchSettings("worked for")[0]).toMatchObject({ title: "Keep steps open" });
-    expect(searchSettings("terminal")[0]).toMatchObject({ title: "Open new chats in" });
+    // A title that names it comes first; where new chats open is found by its other words too.
+    expect(searchSettings("terminal")[0]).toMatchObject({ title: "Terminal font" });
+    expect(searchSettings("terminal").map((entry) => entry.title)).toContain("Open new chats in");
+    expect(searchSettings("tui")[0]).toMatchObject({ title: "Open new chats in" });
     expect(searchSettings("menu bar")[0]).toMatchObject({
       title: "Keep running in the background",
     });

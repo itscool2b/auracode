@@ -1284,11 +1284,12 @@ details.setup-install-review[open] > summary::before {
   line-height: var(--g-leading-ui);
 }
 
+/* The theme's own red tint, which the token tests hold at 4.5:1 or better under red words. */
 .chat-status:is([data-status="failed"], [data-status="auth_required"]):not(
   [data-quiet],
   [data-activity="waiting"]
 ) {
-  background-color: color-mix(in srgb, var(--g-red) 14%, transparent);
+  background-color: var(--g-red-tint);
 }
 
 .chat-status:is(

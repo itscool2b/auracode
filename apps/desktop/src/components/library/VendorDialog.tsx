@@ -15,6 +15,7 @@ import type { TerminalTransport } from "../../lib/terminal";
 import { Modal } from "../chat/Modal";
 import { TerminalSheet } from "../TerminalSheet";
 import "./vendor.css";
+import { Select } from "../Select";
 
 const NAMES: Readonly<Record<string, string>> = {
   claude: "Claude",
@@ -161,7 +162,7 @@ export function VendorDialog({
         <div className="vendor-fields">
           <label>
             Agent
-            <select
+            <Select
               className="g-select"
               value={provider}
               disabled={busy || kind === "native"}
@@ -183,11 +184,11 @@ export function VendorDialog({
                   </option>
                 ),
               )}
-            </select>
+            </Select>
           </label>
           <label>
             Integration
-            <select
+            <Select
               className="g-select"
               value={kind}
               disabled={busy || kind === "native"}
@@ -204,11 +205,11 @@ export function VendorDialog({
                   {k === "native" ? "Native customization" : k}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Action
-            <select
+            <Select
               className="g-select"
               value={action}
               disabled={busy || kind === "native"}
@@ -219,7 +220,7 @@ export function VendorDialog({
                   {value === "open" ? "Open" : value}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
         <div className="vendor-target">

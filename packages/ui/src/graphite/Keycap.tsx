@@ -33,32 +33,41 @@ const KEY_GLYPHS: Readonly<Record<string, { readonly name: string; readonly d: s
 
 /**
  * One key, in Geist Mono 11/16 500 on a small cap; a key symbol is drawn as an icon in the same ink
- * (KEY_GLYPHS) and named for screen readers. Use one Keycap per key in a chord.
+ * (KEY_GLYPHS). Use one Keycap per key in a chord. A key with a spoken name (`label`, or a drawn
+ * symbol's own) says it as hidden text inside the kbd: a kbd may not carry aria-label.
  */
 export function Keycap({ children, label, className }: KeycapProps) {
   const glyph = typeof children === "string" ? KEY_GLYPHS[children] : undefined;
-  return (
-    <kbd
-      className={className ? `g-keycap ${className}` : "g-keycap"}
-      aria-label={label ?? glyph?.name}
+  const name = label ?? glyph?.name;
+  const shown = glyph ? (
+    <svg
+      className="g-keycap-glyph"
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      {glyph ? (
-        <svg
-          className="g-keycap-glyph"
-          viewBox="0 0 24 24"
-          width="12"
-          height="12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.25"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d={glyph.d} />
-        </svg>
+      <path d={glyph.d} />
+    </svg>
+  ) : (
+    children
+  );
+  return (
+    <kbd className={className ? `g-keycap ${className}` : "g-keycap"}>
+      {name ? (
+        <>
+          <span aria-hidden="true" className="g-keycap-shown">
+            {shown}
+          </span>
+          <span className="g-keycap-name">{name}</span>
+        </>
       ) : (
-        children
+        shown
       )}
     </kbd>
   );

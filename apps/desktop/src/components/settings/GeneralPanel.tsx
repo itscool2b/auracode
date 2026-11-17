@@ -15,6 +15,7 @@ import { editorName } from "../../lib/projectTools";
 import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
 import { playNotice } from "../../lib/sounds";
 import { TERMINAL_SIZES, terminalFonts } from "../../lib/terminalFont";
+import { Select } from "../Select";
 import type { Preferences } from "./preferences";
 import { Row, Switch } from "./SettingsRow";
 import { ThemeGallery } from "./ThemeGallery";
@@ -164,7 +165,7 @@ export function GeneralPage({
                   <AgentMark agent={agentId} size={16} />
                 </span>
               ) : null}
-              <select
+              <Select
                 className="g-select settings-select"
                 aria-label="Default agent"
                 data-testid="settings-default-agent"
@@ -183,7 +184,7 @@ export function GeneralPage({
                     {agent.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </span>
           </Row>
           {agentId ? (
@@ -196,7 +197,7 @@ export function GeneralPage({
               }
             >
               {modelChoices.length > 0 ? (
-                <select
+                <Select
                   className="g-select settings-control settings-select"
                   aria-label="Default model"
                   data-testid="settings-default-model"
@@ -215,7 +216,7 @@ export function GeneralPage({
                       {model.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : null}
             </Row>
           ) : null}
@@ -229,7 +230,7 @@ export function GeneralPage({
               }
             >
               {levelChoices.length > 0 ? (
-                <select
+                <Select
                   className="g-select settings-control settings-select"
                   aria-label="Default thinking level"
                   data-testid="settings-default-thinking"
@@ -248,7 +249,7 @@ export function GeneralPage({
                       {level.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : null}
             </Row>
           ) : null}
@@ -469,7 +470,7 @@ function TerminalFontRows() {
             : "Terminals use auracode's Geist Mono."
         }
       >
-        <select
+        <Select
           className="g-select settings-control settings-select"
           aria-label="Terminal font"
           data-testid="settings-terminal-font"
@@ -483,10 +484,10 @@ function TerminalFontRows() {
         >
           <option value="system">{matching}</option>
           <option value="auracode">auracode's</option>
-        </select>
+        </Select>
       </Row>
       <Row title="Terminal size" detail="The size of text in terminals and terminal chats.">
-        <select
+        <Select
           className="g-select settings-control settings-select"
           aria-label="Terminal size"
           data-testid="settings-terminal-size"
@@ -507,7 +508,7 @@ function TerminalFontRows() {
               {size}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
     </>
   );
@@ -566,7 +567,7 @@ export function ChatsPage({
               : "auracode's chat. Any chat can switch to its agent's own interface from the header."
           }
         >
-          <select
+          <Select
             className="g-select settings-control settings-select"
             aria-label="Open new chats in"
             data-testid="settings-new-chat-interface"
@@ -579,7 +580,7 @@ export function ChatsPage({
           >
             <option value="chat">Chat</option>
             <option value="terminal">Terminal</option>
-          </select>
+          </Select>
         </Row>
         {installed ? (
           <Row
@@ -591,7 +592,7 @@ export function ChatsPage({
             }
           >
             {chosen ? (
-              <select
+              <Select
                 className="g-select settings-control settings-select"
                 aria-label="Open files in"
                 data-testid="settings-editor"
@@ -609,7 +610,7 @@ export function ChatsPage({
                     {editorName[editor]}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : null}
           </Row>
         ) : null}

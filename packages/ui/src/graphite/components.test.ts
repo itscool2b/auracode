@@ -62,15 +62,20 @@ describe("server rendering", () => {
 
   it("renders keys as kbd, and key symbols as drawn glyphs with their names", () => {
     expect(renderToString(createElement(Keycap, {}, "K"))).toBe('<kbd class="g-keycap">K</kbd>');
-    // Geist Mono has no ⌘ or ↵, so the cap draws them and names them for screen readers.
+    // Geist Mono has no ⌘ or ↵, so the cap draws them and names them for screen readers, as hidden
+    // text: a kbd may not carry aria-label.
     const command = renderToString(createElement(Keycap, {}, "⌘"));
-    expect(command).toContain('aria-label="Command"');
     expect(command).toContain('<svg class="g-keycap-glyph"');
+    expect(command).toContain('<span class="g-keycap-name">Command</span>');
     expect(command).not.toContain("⌘");
-    expect(renderToString(createElement(Keycap, {}, "↵"))).toContain('aria-label="Enter"');
-    // A label the caller gives wins over the symbol's own name.
+    expect(command).not.toContain("aria-label");
+    expect(renderToString(createElement(Keycap, {}, "↵"))).toContain(">Enter</span>");
+    // A label the caller gives wins over the symbol's own name, and names a plain key too.
     expect(renderToString(createElement(Keycap, { label: "Return" }, "↵"))).toContain(
-      'aria-label="Return"',
+      ">Return</span>",
+    );
+    expect(renderToString(createElement(Keycap, { label: "Control" }, "Ctrl"))).toContain(
+      '<span aria-hidden="true" class="g-keycap-shown">Ctrl</span>',
     );
   });
 

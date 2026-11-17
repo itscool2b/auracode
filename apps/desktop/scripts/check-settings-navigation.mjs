@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { chosen } from "./choose.mjs";
 
 const PAGES = [
   "General",
@@ -52,13 +53,16 @@ export async function checkSettingsNavigation(page, url) {
     }
     // Instructions open on the scope Settings was opened for.
     await sections.getByRole("button", { name: "Instructions", exact: true }).click();
-    assert.equal(await page.getByRole("combobox", { name: "Applies to" }).inputValue(), "global");
+    assert.equal(await chosen(page.getByRole("combobox", { name: "Applies to" })), "global");
   }
   for (const scope of ["folder", "chat"]) {
     await page.goto(`${url}/?preview=settings&page=instructions&scope=${scope}`);
     await page.getByRole("combobox", { name: "Applies to" }).waitFor();
     await page.waitForFunction(
-      (value) => document.querySelector('select[aria-label="Applies to"]')?.value === value,
+      (value) =>
+        document
+          .querySelector('[role="combobox"][aria-label="Applies to"]')
+          ?.getAttribute("data-value") === value,
       `${scope}:fixture-${scope}`,
     );
   }
