@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChatSummary, WorkspaceChat } from "../../bindings";
 import { hasProcess } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
@@ -62,6 +62,11 @@ export function ChatActionsDialog({
   const [busy, setBusy] = useState<readonly ChatSummary[]>([]);
   const [acknowledged, setAcknowledged] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
+  // This dialog's own work only: another screen's change never disables it. Stop goes straight
+  // to the session, beside whatever else runs.
+  const [saving, setSaving] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const live = hasProcess(chat.status);
   const folders =
     state.data?.projects
@@ -86,28 +91,49 @@ export function ChatActionsDialog({
       current = false;
     };
   }, [folderId, store, chat.id]);
+  const running = useRef(false);
+  const run = <T,>(operation: () => Promise<T>, done: (value: T) => void) => {
+    if (running.current) return;
+    running.current = true;
+    setSaving(true);
+    setError(null);
+    void store.perform(operation).then((outcome) => {
+      running.current = false;
+      setSaving(false);
+      if (outcome.ok) done(outcome.value);
+      else setError(outcome.error);
+    });
+  };
   const save = (operation: () => Promise<WorkspaceChat>) =>
-    void store.perform(operation).then((result) => {
-      if (result) {
-        onChanged(result.chat);
-        onClose();
-      }
+    run(operation, (result) => {
+      onChanged(result.chat);
+      onClose();
     });
   const unchanged = projectId === entry.project_id && (!folderId || folderId === entry.folder_id);
   const move = () =>
-    void store
-      .perform(() =>
-        moveChat(store.api, chat.id, { projectId, folderId: folderId || null }, acknowledged),
-      )
-      .then((outcome) => {
-        if (!outcome) return;
+    run(
+      () => moveChat(store.api, chat.id, { projectId, folderId: folderId || null }, acknowledged),
+      (outcome) => {
         if (outcome.kind === "busy") {
           setBusy(outcome.busy);
           return;
         }
         onChanged(outcome.chat.chat);
         onClose();
-      });
+      },
+    );
+  const stop = () => {
+    if (stopping) return;
+    setStopping(true);
+    setError(null);
+    transport.stop(chat.id).then(
+      () => setStopping(false),
+      (reason: unknown) => {
+        setStopping(false);
+        setError(errorMessage(reason));
+      },
+    );
+  };
   return (
     <Modal title="Chat options" onClose={onClose}>
       <form
@@ -126,14 +152,14 @@ export function ChatActionsDialog({
             onChange={(event) => setTitle(event.currentTarget.value)}
           />
         </label>
-        <button type="submit" className="g-button" disabled={state.busy || !title.trim()}>
+        <button type="submit" className="g-button" disabled={saving || !title.trim()}>
           Rename chat
         </button>
         <div className="dialog-section">
           <button
             type="button"
             className="g-button"
-            disabled={state.busy}
+            disabled={saving}
             onClick={() => save(() => store.api.pin(chat.id, !entry.pinned))}
           >
             {entry.pinned ? "Unpin chat" : "Pin chat"}
@@ -141,7 +167,7 @@ export function ChatActionsDialog({
           <button
             type="button"
             className="g-button"
-            disabled={state.busy}
+            disabled={saving}
             onClick={() => save(() => store.api.archive(chat.id, !entry.archived))}
           >
             {entry.archived ? "Restore chat" : "Archive chat"}
@@ -205,8 +231,8 @@ export function ChatActionsDialog({
               <button
                 type="button"
                 className="g-button"
-                disabled={state.busy || chat.status === "stopping"}
-                onClick={() => void store.perform(() => transport.stop(chat.id))}
+                disabled={stopping || chat.status === "stopping"}
+                onClick={stop}
               >
                 Stop session
               </button>
@@ -215,15 +241,15 @@ export function ChatActionsDialog({
           <button
             type="button"
             className="g-button"
-            disabled={state.busy || live || unchanged || (busy.length > 0 && !acknowledged)}
+            disabled={saving || live || unchanged || (busy.length > 0 && !acknowledged)}
             onClick={move}
           >
             Move chat
           </button>
         </div>
-        {state.error ? (
+        {error ? (
           <p role="alert" className="ui-error">
-            {state.error}
+            {error}
           </p>
         ) : null}
       </form>

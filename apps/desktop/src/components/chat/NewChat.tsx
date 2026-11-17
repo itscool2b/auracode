@@ -181,7 +181,11 @@ export function NewChat({
         }
       },
       (error) => {
-        if (current) setRecoveryError(errorMessage(error));
+        // A failed list says so and stops waiting: Rust still refuses a managed worktree.
+        if (current) {
+          setRecoveryError(errorMessage(error));
+          setRetainedLoaded(true);
+        }
       },
     );
     return () => {
@@ -199,6 +203,12 @@ export function NewChat({
   );
   const openChip = useRef<(() => void) | null>(null);
   const adding = useRef<string | null>(null);
+  // This form's own work: the picked folder joining the workspace, and Create. Nothing another
+  // screen runs disables it; one Create at a time is enforced here, and Rust validates each.
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submitted = useRef(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   // Agents whose detection finished while this screen was open settle in once; first paint does not.
   const seen = useRef<ReadonlyMap<string, string> | "waiting" | null>(null);
   const [found, setFound] = useState<ReadonlySet<string>>(() => new Set());
@@ -274,6 +284,7 @@ export function NewChat({
     )
       return;
     adding.current = path;
+    setAddingFolder(true);
     void workspace
       .perform(async () => {
         if (draft.context) return workspace.api.addFolder(draft.context.projectId, path);
@@ -288,8 +299,14 @@ export function NewChat({
         });
         return project.folders[0] ?? null;
       })
-      .then((folder) => {
-        const id = folder?.id;
+      .then((outcome) => {
+        if (adding.current === path) setAddingFolder(false);
+        if (!outcome.ok) {
+          // Create adds the folder itself then, and says why if it still cannot.
+          if (draft.getSnapshot().folder === path) setCreateError(outcome.error);
+          return;
+        }
+        const id = outcome.value?.id;
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
   }, [workspace, state.folder, folderId, loaded, retainedLoaded, managedPicked, picked, draft]);
@@ -331,12 +348,15 @@ export function NewChat({
   const ready = selected ? readyLine(selected) : null;
   // A worktree chat never shares the project folder, so only Local waits on its running chats.
   const busy = !worktreeMode && preview !== null && preview.busy_chats.length > 0;
+  // Only an automatic prefill waits for the retained list (it may name a worktree); a folder the
+  // person chose does not, and a failed list ends the wait.
   const canCreate =
     selected !== null &&
-    (!workspace || retainedLoaded) &&
+    (!workspace || retainedLoaded || folderId !== null) &&
     !managedPicked &&
     (state.folder !== null || knownFolder !== "") &&
-    !organization.busy &&
+    !addingFolder &&
+    !submitting &&
     !worktree.creating &&
     !state.creating &&
     state.maintenanceBusy !== "update";
@@ -370,7 +390,7 @@ export function NewChat({
       data-testid="new-chat"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!canCreate || (busy && !allowBusy)) return;
+        if (!canCreate || (busy && !allowBusy) || submitted.current) return;
         if (!workspace) {
           void draft.create().then((chat) => {
             if (chat) created(chat);
@@ -378,6 +398,9 @@ export function NewChat({
           return;
         }
         const agentId = state.agentId;
+        submitted.current = true;
+        setSubmitting(true);
+        setCreateError(null);
         void workspace
           .perform(async () => {
             let destination = knownFolder;
@@ -425,7 +448,14 @@ export function NewChat({
             });
             return { type: "local" as const, entry };
           })
-          .then((made) => {
+          .then((outcome) => {
+            submitted.current = false;
+            setSubmitting(false);
+            if (!outcome.ok) {
+              setCreateError(outcome.error);
+              return;
+            }
+            const made = outcome.value;
             if (made?.type === "local") created(made.entry.chat);
             else if (made?.type === "worktree") madeWorktree(made.result, made.plan);
           });
@@ -643,7 +673,7 @@ export function NewChat({
             data-testid="new-chat-create"
             disabled={!canCreate || (busy && !allowBusy)}
           >
-            {state.creating || worktree.creating ? "Starting…" : "Start chat"}
+            {state.creating || worktree.creating || submitting ? "Starting…" : "Start chat"}
           </button>
         </div>
       </div>
@@ -708,9 +738,9 @@ export function NewChat({
           </div>
         ) : null}
         {note !== null ? <p className="new-chat-note">{note}</p> : null}
-        {(previewError ?? organization.error) ? (
+        {(previewError ?? createError ?? organization.error) ? (
           <p role="alert" className="new-chat-error">
-            {previewError ?? organization.error}
+            {previewError ?? createError ?? organization.error}
           </p>
         ) : null}
         {state.error !== null ? (

@@ -57,6 +57,21 @@ export function projectSourceFolder(
   return source?.id ?? (eligible.length === 1 ? (eligible[0]?.id ?? null) : null);
 }
 
+/** What the chats screen shows: a chat, or New chat with its draft. */
+export interface ChatsView<Draft> {
+  readonly selected: string | null;
+  readonly composing: boolean;
+  readonly draft: Draft;
+}
+
+/**
+ * Whether a chat New chat finished creating opens: only while the draft that made it still shows.
+ * Creating takes a while (a worktree, its setup), and the person may have moved on meanwhile.
+ */
+export function createdChatOpens<Draft>(view: ChatsView<Draft>, creator: Draft): boolean {
+  return view.selected === null && view.composing && view.draft === creator;
+}
+
 /** Project preference leads; an unavailable default falls back to the profile preference. */
 export function newChatAgent(
   context: NewChatContext | null,
