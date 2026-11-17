@@ -635,9 +635,12 @@ async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
         Err(other) => panic!("expected the working chat to be named, got {other}"),
         Ok(_) => panic!("a working agent's folder cannot be rewritten"),
     }
-    // The idle agent was stopped first; it resumes on its next message.
-    assert!(!rig.manager.shared().live.contains(&idle.id));
-    assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
+    // Refused before anything stopped: the idle agent runs on.
+    assert!(rig.manager.shared().live.contains(&idle.id));
+    assert!(
+        quiet_handle.commands().is_empty(),
+        "nothing was stopped for it"
+    );
     assert!(rig.manager.shared().live.contains(&busy.id));
     rig.manager.stop(&busy.id).await.expect("stop");
     eventually("working agent stopped", || {
@@ -653,4 +656,6 @@ async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
         made.worktree.state,
         aura_protocol::git::WorktreeState::Ready
     );
+    // Then the idle agent was stopped first; it resumes on its next message.
+    assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
 }

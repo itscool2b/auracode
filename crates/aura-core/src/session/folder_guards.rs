@@ -103,19 +103,48 @@ impl SessionManager {
         except: Option<&str>,
         setup_chat: Option<&str>,
     ) -> Result<Reservations, SessionError> {
-        if self.shared().is_shutting_down() {
-            return Err(SessionError::ShuttingDown);
-        }
-        let mut holders = self
-            .shared()
-            .live
-            .holders(&self.spellings(folders.clone()).await);
-        holders.retain(|chat| Some(chat.as_str()) != except);
+        let holders = self.exclusive_can_go(&folders, except, &[]).await?;
         if !holders.is_empty() {
             self.stop_unless_working(StopScope::Chats(holders)).await;
         }
         self.reserve_git_folders_with(folders, except, setup_chat)
             .await
+    }
+
+    /// Whether an exclusive change to `folders` can go ahead once the agents there that are not
+    /// working stop. Refused now, naming what would still be in its way (a chat that works,
+    /// waits for an answer, waits to start or is open in its terminal; a project terminal;
+    /// another change), so nothing is stopped for a change that cannot happen. Answers the chats
+    /// to stop first: those there, and `also` (a removed project's chats), but `except`.
+    pub(super) async fn exclusive_can_go(
+        &self,
+        folders: &[PathBuf],
+        except: Option<&str>,
+        also: &[String],
+    ) -> Result<Vec<String>, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let spellings = self.spellings(folders.to_vec()).await;
+        let live = &self.shared().live;
+        if live.quiescing_now() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let mut holders = live.holders(&spellings);
+        holders.extend(also.iter().cloned());
+        holders.retain(|chat| Some(chat.as_str()) != except);
+        holders.sort();
+        holders.dedup();
+        let blocking: Vec<String> = holders
+            .iter()
+            .filter(|chat| matches!(live.doing(chat), Some(doing) if doing != Doing::Idle))
+            .cloned()
+            .collect();
+        if !blocking.is_empty() || live.terminals_in(&spellings) > 0 || live.mutation_in(&spellings)
+        {
+            return Err(self.busy_naming(&spellings, blocking).await);
+        }
+        Ok(holders)
     }
 
     /// The chats saved in `folders` (by their resolved folder) and the folders resolved.
@@ -159,18 +188,28 @@ impl SessionManager {
         refused: Vec<String>,
         except: Option<&str>,
     ) -> SessionError {
-        let live = &self.shared().live;
         let spellings = self.spellings(folders.to_vec()).await;
-        let mut chats = live.holders(&spellings);
+        let mut chats = self.shared().live.holders(&spellings);
         chats.extend(refused);
         chats.retain(|chat| Some(chat.as_str()) != except);
+        self.busy_naming(&spellings, chats).await
+    }
+
+    /// The refusal of a change to the folders `spellings` names, naming `chats` as the ones in
+    /// its way, with the project terminals open there and any other change to them.
+    pub(super) async fn busy_naming(
+        &self,
+        spellings: &[PathBuf],
+        mut chats: Vec<String>,
+    ) -> SessionError {
         chats.sort();
         chats.dedup();
+        let live = &self.shared().live;
         let blockers = FolderBlockers {
             chats: self.blockers(chats).await,
-            terminals: u32::try_from(live.terminals_in(&spellings)).unwrap_or(u32::MAX),
+            terminals: u32::try_from(live.terminals_in(spellings)).unwrap_or(u32::MAX),
         };
-        let message = busy_message(&blockers, live.mutation_in(&spellings));
+        let message = busy_message(&blockers, live.mutation_in(spellings));
         SessionError::FolderBusy { message, blockers }
     }
 
