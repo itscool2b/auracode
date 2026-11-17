@@ -79,13 +79,16 @@ export function WorktreeChip({
   onPropose,
   onClearError,
   busyChats = 0,
+  onStopBusy,
   openRef,
 }: {
   readonly view: WorktreeChoiceView;
   readonly onPropose: (change: Partial<WorktreeOptions>, field: WorktreeField) => void;
   readonly onClearError: () => void;
-  /** Chats running in the project folder; bringing changes waits for them. */
+  /** Chats working in the project folder: copying its files needs them stopped first. */
   readonly busyChats?: number;
+  /** Stops those chats, so the copy can go; nothing waits for them on its own. */
+  readonly onStopBusy?: () => void;
   /** Lets New chat open the popover when Create stops on a refused change. */
   readonly openRef?: { current: (() => void) | null };
 }) {
@@ -132,6 +135,8 @@ export function WorktreeChip({
   const branches = view.plan?.local_branches ?? [];
   const start = startingBranch(view);
   const atCurrent = startsAtCurrent(view, view.options.startBranch);
+  // Copying working files while an agent edits them could catch a half-made change.
+  const copyBlocked = atCurrent && view.options.bringChanges && busyChats > 0;
   const setup = setupLine(view);
   const error = (field: WorktreeField) =>
     view.error?.field === field ? (
@@ -330,8 +335,8 @@ export function WorktreeChip({
                     <small>
                       {!atCurrent
                         ? `Only when starting from ${current ?? "the current branch"}.`
-                        : view.options.bringChanges && busyChats > 0
-                          ? "Copies your working files once the chats in this folder stop."
+                        : copyBlocked
+                          ? `${busyChats === 1 ? "A chat is" : `${busyChats} chats are`} working in this folder, so its files can still change. Stop ${busyChats === 1 ? "it" : "them"} to copy them, or create without your changes.`
                           : "Copies your working files. The project folder keeps them too."}
                     </small>
                   </span>
@@ -347,6 +352,28 @@ export function WorktreeChip({
                     }
                   />
                 </label>
+                {copyBlocked ? (
+                  <div className="new-chat-actions" data-testid="new-chat-worktree-busy">
+                    {onStopBusy ? (
+                      <button
+                        type="button"
+                        className="g-button g-button-outline g-button-28"
+                        disabled={disabled}
+                        onClick={onStopBusy}
+                      >
+                        {busyChats === 1 ? "Stop this chat" : "Stop these chats"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="g-button g-button-outline g-button-28"
+                      disabled={disabled}
+                      onClick={() => onPropose({ bringChanges: false }, "bring")}
+                    >
+                      Create without my changes
+                    </button>
+                  </div>
+                ) : null}
                 {error("bring")}
                 {setup ? (
                   <label className="new-chat-worktree-switch">

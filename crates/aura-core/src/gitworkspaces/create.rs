@@ -120,7 +120,6 @@ impl GitWorkspaces {
     /// Call only for the user's explicit confirmation of the displayed preview. An uncertain Git
     /// outcome is retained as RecoveryRequired, with no force removal or branch rollback.
     pub async fn isolation_apply(&self, chat_id: &str, token: &str) -> Result<IsolationResult> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .prepared
             .lock()
@@ -134,6 +133,7 @@ impl GitWorkspaces {
                 "This isolation preview no longer belongs to the selected chat.",
             ));
         }
+        let _repository = self.hold_common(&prepared.source.common).await;
         let git = self.git().await?;
         let current = inspect(&git, &prepared.source.root).await?;
         if current.fingerprint != prepared.source.fingerprint
@@ -259,14 +259,15 @@ impl GitWorkspaces {
                 "The proposed branch already exists or could not be checked. Review a new preview.",
             ));
         }
-        let mut records = self.read_records()?;
-        if records.len() >= 5000 {
-            return Err(invalid(
-                "This profile has too many managed worktree records.",
-            ));
-        }
-        records.push(record.clone());
-        self.write_records(records.clone())?;
+        self.update_records(|records| {
+            if records.len() >= 5000 {
+                return Err(invalid(
+                    "This profile has too many managed worktree records.",
+                ));
+            }
+            records.push(record.clone());
+            Ok(())
+        })?;
         let command: Vec<OsString> = vec![
             "worktree".into(),
             "add".into(),
@@ -332,10 +333,8 @@ impl GitWorkspaces {
                 record.detail = Some(error.to_string());
             }
         }
-        if let Some(saved) = records.iter_mut().find(|saved| saved.id == record.id) {
-            *saved = record.clone();
-        }
-        self.write_records(records)?;
+        // Into the registry as it is now: other worktrees' records changed while Git ran.
+        self.save_record(&record)?;
         Ok(record)
     }
 }

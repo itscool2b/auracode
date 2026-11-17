@@ -49,36 +49,36 @@ fn holds_ports(record: &ManagedWorktree) -> bool {
 impl GitWorkspaces {
     /// The worktree `chat_id` works in, ready, and the first of its ports, given once and kept.
     /// A block another live worktree took meanwhile (a restored worktree's, say) is given anew.
-    /// The caller holds `gate`.
+    /// One short read-modify-write of the registry, so it never waits for a Git change.
     pub(super) fn port_under_gate(&self, chat_id: &str) -> Result<(ManagedWorktree, u16)> {
-        let mut records = self.read_records()?;
-        let index = records
-            .iter()
-            .position(|record| record.chat_id == chat_id && record.state == WorktreeState::Ready)
-            .ok_or_else(|| invalid("This chat has no ready worktree."))?;
-        let id = records[index].id.clone();
-        let taken: HashSet<u16> = records
-            .iter()
-            .filter(|record| record.id != id && holds_ports(record))
-            .filter_map(|record| record.port)
-            .collect();
-        if let Some(port) = records[index].port.filter(|port| !taken.contains(port)) {
-            return Ok((records[index].clone(), port));
-        }
-        let port = free_block(&taken, bindable).ok_or_else(|| {
-            invalid(
-                "No block of ten free local ports is left. Retire a worktree you no longer use.",
-            )
-        })?;
-        records[index].port = Some(port);
-        let record = records[index].clone();
-        self.write_records(records)?;
-        Ok((record, port))
+        self.update_records(|records| {
+            let index = records
+                .iter()
+                .position(|record| {
+                    record.chat_id == chat_id && record.state == WorktreeState::Ready
+                })
+                .ok_or_else(|| invalid("This chat has no ready worktree."))?;
+            let id = records[index].id.clone();
+            let taken: HashSet<u16> = records
+                .iter()
+                .filter(|record| record.id != id && holds_ports(record))
+                .filter_map(|record| record.port)
+                .collect();
+            if let Some(port) = records[index].port.filter(|port| !taken.contains(port)) {
+                return Ok((records[index].clone(), port));
+            }
+            let port = free_block(&taken, bindable).ok_or_else(|| {
+                invalid(
+                    "No block of ten free local ports is left. Retire a worktree you no longer use.",
+                )
+            })?;
+            records[index].port = Some(port);
+            Ok((records[index].clone(), port))
+        })
     }
 
-    /// [`Self::port_under_gate`], taking `gate`.
+    /// [`Self::port_under_gate`], for the session.
     pub(crate) async fn worktree_port(&self, chat_id: &str) -> Result<(ManagedWorktree, u16)> {
-        let _gate = self.gate.lock().await;
         self.port_under_gate(chat_id)
     }
 

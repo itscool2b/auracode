@@ -11,6 +11,7 @@ import type {
 import { ChatActionsDialog } from "../components/chat/ChatActionsDialog";
 import { chatSummary, FakeTransport } from "../lib/chat/testing";
 import { type WorkspaceApi, WorkspaceStore } from "../lib/workspace";
+import { fixtureFolderMatches } from "./folderMatches";
 
 const folder = (id: string, projectId: string, name: string, path: string): ProjectFolder => ({
   id,
@@ -85,6 +86,7 @@ const api: WorkspaceApi = {
     folder: site,
     busy_chats: folderId === site.id ? [working] : [],
   }),
+  folderMatches: fixtureFolderMatches(() => snapshot),
   createChat: fail,
 };
 Object.assign(window, { chatOptionsFixture: { moves: () => [...calls] } });

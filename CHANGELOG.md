@@ -9,6 +9,7 @@ checks the format.
 
 ## 2026-11-17
 
+- New chats no longer break your other chats, and a second project works. Slow work in one folder no longer holds up the rest. When agents are in the way, auracode names the chats and offers to stop them, and at the limit of 16 agents it stops the one idle longest instead of refusing. Terminals open in every project, two projects can set up at once, and a folder you pick stays in the project it belongs to. ([#142](https://github.com/itscool2b/auracode/pull/142))
 - Terminals open your own shell, and the keyboard stays where you type. Terminal tabs start your shell with your settings, full colour and your terminal's font, and shortcuts no longer lose your place. The Dashboard drops chats left from earlier days, and any card can be cleared or stopped. On Linux, the browser no longer stops on pages with sound or video, a page that stops can be reloaded, and menus over a page show its picture. ([#139](https://github.com/itscool2b/auracode/pull/139))
 - Behind the scenes: the old account service is switched off. With accounts gone from the app, its servers and storage were removed too. The website and remote access are not affected. ([#138](https://github.com/itscool2b/auracode/pull/138))
 - auracode no longer has accounts or sync. Claude Code and Codex now sync plugins on their own, so auracode does not need to. There is no sign-in: your chats, projects and settings stay on your computer. Remote access from your phone still works. ([#137](https://github.com/itscool2b/auracode/pull/137))

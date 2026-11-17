@@ -34,6 +34,8 @@ const REVIEWS: usize = 16;
 
 pub(super) struct PreparedCommit {
     root: PathBuf,
+    /// The repository's common directory, which its apply holds.
+    common: PathBuf,
     branch: String,
     parent: Option<String>,
     paths: Vec<String>,
@@ -45,6 +47,8 @@ pub(super) struct PreparedCommit {
 
 pub(super) struct PreparedPush {
     root: PathBuf,
+    /// The repository's common directory, which its apply holds.
+    common: PathBuf,
     branch: String,
     head: String,
     remote: String,
@@ -428,7 +432,6 @@ impl GitWorkspaces {
     /// Reviews committing the chosen files of the chat's folder as they are now.
     pub async fn commit_preview(&self, folder: &Path, input: CommitInput) -> Result<CommitPreview> {
         let message = clean_message(&input.message)?;
-        let _guard = self.gate.lock().await;
         let git = self.git().await?;
         let source = inspect(&git, folder).await?;
         let branch = ready(&source)?;
@@ -488,6 +491,7 @@ impl GitWorkspaces {
             token.clone(),
             PreparedCommit {
                 root: source.root.clone(),
+                common: source.common.clone(),
                 branch: branch.clone(),
                 parent: parent.clone(),
                 paths,
@@ -515,7 +519,7 @@ impl GitWorkspaces {
     /// Commits the reviewed files, when the branch and their contents are still as reviewed.
     pub async fn commit_apply(&self, folder: &Path, token: &str) -> Result<CommitResult> {
         let prepared = take(&self.commits, token, |review| review.expires)?;
-        let _guard = self.gate.lock().await;
+        let _repository = self.hold_common(&prepared.common).await;
         let git = self.git().await?;
         let source = inspect(&git, folder).await?;
         let branch = ready(&source)?;
@@ -644,7 +648,6 @@ impl GitWorkspaces {
 
     /// Reviews a fast-forward push of the folder's branch to its upstream, or to origin.
     pub async fn push_preview(&self, folder: &Path) -> Result<PushPreview> {
-        let _guard = self.gate.lock().await;
         let git = self.git().await?;
         let source = inspect(&git, folder).await?;
         let branch = ready(&source)?;
@@ -745,6 +748,7 @@ impl GitWorkspaces {
             &self.pushes,
             token.clone(),
             PreparedPush {
+                common: source.common.clone(),
                 root,
                 branch: branch.clone(),
                 head: head.clone(),
@@ -776,7 +780,7 @@ impl GitWorkspaces {
     /// Pushes the reviewed commit, fast-forward only, when the branch is still where it was.
     pub async fn push_apply(&self, folder: &Path, token: &str) -> Result<PushResult> {
         let prepared = take(&self.pushes, token, |review| review.expires)?;
-        let _guard = self.gate.lock().await;
+        let _repository = self.hold_common(&prepared.common).await;
         let git = self.git().await?;
         let source = inspect(&git, folder).await?;
         if source.root != prepared.root

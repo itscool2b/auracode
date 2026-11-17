@@ -214,7 +214,6 @@ impl GitWorkspaces {
         chat_id: &str,
         token: &str,
     ) -> Result<ManagedWorktree> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .new_chats
             .lock()
@@ -228,6 +227,7 @@ impl GitWorkspaces {
                 "This worktree chat preview expired or was already used. Review it again.",
             ));
         }
+        let _repository = self.hold_common(&prepared.source.common).await;
         let git = self.git().await?;
         let current = inspect(&git, &prepared.source.root).await?;
         if current.common != prepared.source.common {
@@ -287,9 +287,10 @@ impl GitWorkspaces {
         id: &str,
         brought_changes: bool,
     ) -> Result<()> {
-        let _guard = self.gate.lock().await;
-        let mut record = self.recovery_record(chat_id, id)?;
+        let source = self.recovery_record(chat_id, id)?.source;
         let git = self.git().await?;
+        let _repository = self.hold_repository(&git, Path::new(&source)).await;
+        let mut record = self.recovery_record(chat_id, id)?;
         match self.remove_created(&git, &record, brought_changes).await {
             Ok(()) => Ok(()),
             Err(error) => {
@@ -382,9 +383,10 @@ impl GitWorkspaces {
             .await
             .map_err(|_| invalid("The new branch has commits or moved. It was kept for review."))?;
         }
-        let mut entries = self.read_records()?;
-        entries.retain(|entry| entry.id != record.id);
-        self.write_records(entries)
+        self.update_records(|entries| {
+            entries.retain(|entry| entry.id != record.id);
+            Ok(())
+        })
     }
 }
 

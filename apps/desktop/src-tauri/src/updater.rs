@@ -443,14 +443,34 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         );
         return Ok(updates.snapshot());
     }
+    // The person chose to install and restart (its confirmation says so). Terminals close first:
+    // a chat open in its terminal gets its session back as that terminal ends, which Stop cannot
+    // do. Then the chats' agents stop, each resuming its session after the restart, and
+    // admission closes as before.
+    crate::terminal::end_terminal_chats(&state, None);
+    state.terminals.close_all();
+    let report = chats
+        .manager
+        .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
+        .await;
+    let _ = chats
+        .manager
+        .wait_project_terminals(Duration::from_secs(10))
+        .await;
     let Some(_sessions) = chats.manager.try_quiesce_when_idle() else {
-        updates.phase(UpdatePhase::WaitingForIdle, Some("Stop all agents and wait for folder operations and agent updates to finish, then retry installation.".into()));
+        let reason = if report.stopping.is_empty() {
+            "Wait for Git changes and agent updates to finish, then retry installation.".to_owned()
+        } else {
+            let names = chats.manager.chat_names(report.stopping).await;
+            aura_core::session::still_stopping(&names, "Retry installation in a moment.")
+        };
+        updates.phase(UpdatePhase::WaitingForIdle, Some(reason));
         return Ok(updates.snapshot());
     };
     let Some(_terminals) = state.terminals.try_quiesce_when_idle() else {
         updates.phase(
             UpdatePhase::WaitingForIdle,
-            Some("Close all terminals, then retry installation.".into()),
+            Some("Terminals are still closing. Retry installation in a moment.".into()),
         );
         return Ok(updates.snapshot());
     };

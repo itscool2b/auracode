@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectShellChoice, ProjectToolsReview } from "../bindings";
+import type { ProjectShellChoice, ProjectTerminalReview } from "../bindings";
 import type { ProjectToolsApi } from "./projectTools";
 import type { TerminalState, TerminalTransport } from "./terminal";
 import type { RememberedPanel, TerminalMemory } from "./terminalMemory";
@@ -21,8 +21,8 @@ const SHELLS: ProjectShellChoice[] = [
   { id: "command_prompt", label: "Command Prompt", program: "cmd.exe", args: ["/D"] },
 ];
 
-function review(token: string, shells = SHELLS): ProjectToolsReview {
-  return { token, folder: "C:/worktrees/sidebar", shells, editors: [], expires_at: 1 };
+function review(shells = SHELLS): ProjectTerminalReview {
+  return { folder: "C:/worktrees/sidebar", shells };
 }
 
 interface FakeRuntime extends TerminalRuntime {
@@ -49,22 +49,28 @@ function memory(initial: Record<string, RememberedPanel> = {}) {
 
 function rig(
   options: {
-    reviews?: (() => Promise<ProjectToolsReview>)[];
+    reviews?: (() => Promise<ProjectTerminalReview>)[];
     limit?: number;
     memory?: TerminalMemory;
   } = {},
 ) {
-  let count = 0;
   const reviews = options.reviews ?? [];
   const api: ProjectToolsApi = {
     review: vi.fn(async () => {
+      throw new Error("The panel never asks for a review that holds a token.");
+    }),
+    terminalReview: vi.fn(async () => {
       const next = reviews.shift();
-      return next ? next() : review(`token-${++count}`);
+      return next ? next() : review();
     }),
     openEditor: vi.fn(async () => {}),
     terminal: vi.fn(
-      (chatId: string, token: string, shell: string) =>
-        ({ chatId, token, shell }) as unknown as TerminalTransport,
+      (chatId: string, shell: string) =>
+        ({
+          chatId,
+          shell,
+          start: vi.fn(async (id: string) => id),
+        }) as unknown as TerminalTransport,
     ),
   };
   const runtimes: FakeRuntime[] = [];
@@ -99,7 +105,7 @@ describe("the docked terminal panels", () => {
       folder: "C:/worktrees/setup",
       shell: null,
     });
-    expect(api.review).not.toHaveBeenCalled();
+    expect(api.terminalReview).not.toHaveBeenCalled();
     expect(runtimes[0]?.transport).toBe(transport);
     panels.hide("chat");
     expect(runtimes[0]?.disposed).toBe(false);
@@ -118,7 +124,7 @@ describe("the docked terminal panels", () => {
       url: "http://localhost:25040",
       status: { state: "starting" },
     });
-    expect(api.review).not.toHaveBeenCalled();
+    expect(api.terminalReview).not.toHaveBeenCalled();
     expect(runtimes[0]?.transport).toBe(transport);
     expect(panels.runningTab("chat")).toBe(id);
     expect(panels.runningTab("other")).toBeNull();
@@ -135,6 +141,9 @@ describe("the docked terminal panels", () => {
     runtimes[0]?.status({ state: "finished", exitCode: 1, truncated: false });
     expect(panels.runningTab("chat")).toBeNull();
     panels.runTab("other", transport, "C:/worktrees/other", "http://localhost:25050");
+    // Shown, the shell and the other Run start and hold their slots.
+    runtimes[1]?.status({ state: "running" });
+    runtimes[2]?.status({ state: "running" });
     panels.runTab("third", transport, "C:/worktrees/third", "http://localhost:25060");
     expect(panels.panel("third").notice).toBe(
       "2 terminals are open. Close one before starting Run.",
@@ -190,11 +199,11 @@ describe("the docked terminal panels", () => {
     const { panels, api, runtimes, tab } = rig({ memory: store });
     panels.restore("chat");
     expect(panels.panel("chat")).toMatchObject({ open: true, resume: remembered.tabs, tabs: [] });
-    expect(api.review).not.toHaveBeenCalled();
+    expect(api.terminalReview).not.toHaveBeenCalled();
     // Showing the panel shows the offer, not a new shell.
     panels.hide("chat");
     panels.show("chat");
-    expect(api.review).not.toHaveBeenCalled();
+    expect(api.terminalReview).not.toHaveBeenCalled();
     // A second look in the same run offers nothing new.
     panels.restore("chat");
     const onRun = vi.fn(() =>
@@ -225,14 +234,14 @@ describe("the docked terminal panels", () => {
   it("shows a reviewed shell in the chat's folder on the first toggle, and only then", async () => {
     const { api, panels, runtimes, tab } = rig();
     expect(panels.panel("chat").open).toBe(false);
-    expect(api.review).not.toHaveBeenCalled();
+    expect(api.terminalReview).not.toHaveBeenCalled();
     panels.toggle("chat");
     const panel = panels.panel("chat");
     expect(panel.open).toBe(true);
     expect(tab(panel.active)?.status).toEqual({ state: "reviewing" });
     await vi.waitFor(() => expect(runtimes).toHaveLength(1));
-    expect(api.review).toHaveBeenCalledWith("chat");
-    expect(api.terminal).toHaveBeenCalledWith("chat", "token-1", "power_shell");
+    expect(api.terminalReview).toHaveBeenCalledWith("chat");
+    expect(api.terminal).toHaveBeenCalledWith("chat", "power_shell");
     const opened = tab(panels.panel("chat").active);
     expect(opened).toMatchObject({
       title: "PowerShell",
@@ -254,7 +263,7 @@ describe("the docked terminal panels", () => {
     expect(runtimes[0]?.disposed).toBe(false);
     panels.toggle("chat");
     expect(panels.panel("chat").open).toBe(true);
-    expect(api.review).toHaveBeenCalledTimes(1);
+    expect(api.terminalReview).toHaveBeenCalledTimes(1);
   });
 
   it("asks for focus when the person shows, adds or picks a terminal, never when hiding", async () => {
@@ -284,7 +293,7 @@ describe("the docked terminal panels", () => {
     await panels.newTab("other");
     const titles = panels.panel("chat").tabs.map((id) => tab(id)?.title);
     expect(titles).toEqual(["PowerShell", "PowerShell 2", "Command Prompt"]);
-    expect(api.terminal).toHaveBeenLastCalledWith("other", "token-4", "power_shell");
+    expect(api.terminal).toHaveBeenLastCalledWith("other", "power_shell");
     expect(panels.panel("other").tabs.map((id) => tab(id)?.title)).toEqual(["PowerShell"]);
     expect(nextTitle("PowerShell", ["PowerShell", "PowerShell 3"])).toBe("PowerShell 2");
   });
@@ -299,12 +308,19 @@ describe("the docked terminal panels", () => {
     );
   });
 
-  it("refuses a terminal past the app's limit before asking Rust, counting only live shells", async () => {
+  it("refuses a terminal past the app's limit before asking Rust, counting only started shells", async () => {
     const { api, panels, runtimes, tab } = rig({ limit: 2 });
     await panels.newTab("chat");
     await panels.newTab("other");
+    // Neither tab was shown yet, so neither shell started: they hold no slot.
+    await panels.newTab("third");
+    expect(panels.panel("third").notice).toBeNull();
+    await panels.closeTab(panels.panel("third").active ?? "");
+    // Shown, their shells start and count.
+    runtimes[0]?.status({ state: "running" });
+    runtimes[1]?.status({ state: "starting" });
     await panels.newTab("chat");
-    expect(api.review).toHaveBeenCalledTimes(2);
+    expect(api.terminalReview).toHaveBeenCalledTimes(3);
     expect(panels.panel("chat").notice).toBe(
       "2 terminals are open. Close one before opening another.",
     );
@@ -313,10 +329,30 @@ describe("the docked terminal panels", () => {
     runtimes[0]?.status({ state: "finished", exitCode: 0, truncated: false });
     expect(tab(panels.panel("chat").active)?.status.state).toBe("finished");
     await panels.newTab("chat");
-    expect(api.review).toHaveBeenCalledTimes(3);
+    expect(api.terminalReview).toHaveBeenCalledTimes(4);
     expect(panels.panel("chat").notice).toBeNull();
     expect(holdsShell({ state: "finished", exitCode: 0, truncated: false })).toBe(false);
     expect(holdsShell({ state: "running" })).toBe(true);
+  });
+
+  it("a tab first shown after ten minutes starts", async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, panels, runtimes } = rig();
+      await panels.newTab("chat");
+      await panels.newTab("chat");
+      // The second tab waits unseen well past any review's lifetime...
+      await vi.advanceTimersByTimeAsync(11 * 60 * 1000);
+      const transport = runtimes[1]?.transport;
+      // ...and opens in one step when it shows: Rust checks the folder and the shell then, so
+      // nothing it carries can have expired.
+      expect(api.terminal).toHaveBeenLastCalledWith("chat", "power_shell");
+      await expect(transport?.start("terminal-2", "", { rows: 24, cols: 80 })).resolves.toBe(
+        "terminal-2",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("closes a tab by stopping its shell, picks its neighbour, and hides with the last one", async () => {
@@ -342,7 +378,7 @@ describe("the docked terminal panels", () => {
         async () => {
           throw new Error("Locate this chat's folder before opening project tools.");
         },
-        async () => review("empty", []),
+        async () => review([]),
       ],
     });
     await panels.newTab("chat");
@@ -359,14 +395,14 @@ describe("the docked terminal panels", () => {
   });
 
   it("never creates a shell for a tab closed while its review was pending", async () => {
-    let finish: (value: ProjectToolsReview) => void = () => {};
+    let finish: (value: ProjectTerminalReview) => void = () => {};
     const { api, panels, runtimes } = rig({
       reviews: [() => new Promise((resolve) => (finish = resolve))],
     });
     const opening = panels.newTab("chat");
-    await vi.waitFor(() => expect(api.review).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.terminalReview).toHaveBeenCalled());
     await panels.closeTab(panels.panel("chat").active ?? "");
-    finish(review("late"));
+    finish(review());
     await opening;
     expect(runtimes).toHaveLength(0);
     expect(api.terminal).not.toHaveBeenCalled();

@@ -1,5 +1,5 @@
 import { FolderOpen, Plus } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
   ManagedWorktree,
@@ -64,6 +64,9 @@ export function ProjectDialog({
   const [model, setModel] = useState(project?.default_model ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // This dialog's own save; another screen's change never disables it.
+  const [saving, setSaving] = useState(false);
+  const submitted = useRef(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
   const [recoveryRevision, setRecoveryRevision] = useState(0);
@@ -93,8 +96,10 @@ export function ProjectDialog({
     try {
       const path = await transport.pickFolder();
       if (!path) return;
-      if (current) await store.perform(() => store.api.addFolder(current.id, path));
-      else {
+      if (current) {
+        const outcome = await store.perform(() => store.api.addFolder(current.id, path));
+        if (!outcome.ok) setLocalError(outcome.error);
+      } else {
         setFolder(path);
         if (!name.trim()) setName(projectName(path));
       }
@@ -138,20 +143,27 @@ export function ProjectDialog({
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (submitted.current) return;
           const input = {
             name: name.trim(),
             color: color ?? null,
             default_agent: agent || null,
             default_model: agent && model.trim() ? model.trim() : null,
           };
+          submitted.current = true;
+          setSaving(true);
+          setLocalError(null);
           void store
             .perform(() =>
               project
                 ? store.api.updateProject(project.id, input)
                 : store.api.createProject({ project: input, folder: folder ?? "" }),
             )
-            .then((result) => {
-              if (result) onClose();
+            .then((outcome) => {
+              submitted.current = false;
+              setSaving(false);
+              if (outcome.ok) onClose();
+              else setLocalError(outcome.error);
             });
         }}
       >
@@ -222,7 +234,7 @@ export function ProjectDialog({
           <button
             type="button"
             className="g-button"
-            disabled={picking || state.busy}
+            disabled={picking || saving}
             onClick={() => void chooseFolder()}
           >
             <Plus size={14} />
@@ -240,7 +252,7 @@ export function ProjectDialog({
             <CloneProject
               className="g-button chat-project-clone"
               api={cloneApi}
-              disabled={picking || state.busy}
+              disabled={picking || saving}
               pickParent={() => transport.pickFolder()}
               onFolder={(path, cloned) => {
                 setFolder(path);
@@ -322,9 +334,9 @@ export function ProjectDialog({
           <button
             type="submit"
             className="g-button g-button-primary"
-            disabled={state.busy || picking || !name.trim() || (!project && !folder)}
+            disabled={saving || picking || !name.trim() || (!project && !folder)}
           >
-            {state.busy ? "Saving…" : project ? "Save project" : "Create project"}
+            {saving ? "Saving…" : project ? "Save project" : "Create project"}
           </button>
         </footer>
       </form>

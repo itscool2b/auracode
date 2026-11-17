@@ -1,8 +1,9 @@
 //! Project organization and device-local folder preflight. No operation moves files on disk.
 
 use aura_protocol::workspace::{
-    ChatCreatePreview, ChatMove, ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput,
-    ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
+    ChatCreatePreview, ChatMove, FolderMatch, FolderMatches, ProjectChatCreate, ProjectCreate,
+    ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
+    WorktreeOrigin,
 };
 
 use super::*;
@@ -156,40 +157,39 @@ impl SessionManager {
         request: ChatMove,
     ) -> Result<WorkspaceChat, SessionError> {
         bounded(&request.project_id, "Project ID", 128)?;
-        let _guard = self.shared().organization.lock().await;
+        bounded(chat_id, "Chat ID", 128)?;
+        // The chat's folder and the destination, each read again once held: a busy check made
+        // under them stays true until the move is saved.
+        let read = (self.clone(), chat_id.to_owned(), request.folder_id.clone());
+        let (_organization, (current, destination)) = self
+            .hold_folders(move || {
+                let (manager, chat_id, folder_id) = read.clone();
+                Box::pin(async move {
+                    let current = manager
+                        .chat_record(&chat_id)
+                        .await
+                        .map_err(|_| missing())?
+                        .folder;
+                    let destination = match &folder_id {
+                        Some(folder_id) => Some(manager.chat_create_preview(folder_id).await?),
+                        None => None,
+                    };
+                    let mut folders = vec![current.clone()];
+                    if let Some(preview) = &destination {
+                        folders.push(PathBuf::from(usable(&preview.folder)?));
+                    }
+                    Ok((folders, (current, destination)))
+                })
+            })
+            .await?;
         let mut preserves_folder = true;
-        if let Some(folder_id) = &request.folder_id {
-            let preview = self.chat_create_preview(folder_id).await?;
+        if let Some(preview) = destination {
             if preview.folder.project_id != request.project_id {
                 return Err(invalid(
                     "The folder does not belong to the destination project.",
                 ));
             }
             let destination = PathBuf::from(usable(&preview.folder)?);
-            let current = self
-                .deps()
-                .store
-                .chats()
-                .await
-                .map_err(|error| storage_error(&error))?
-                .into_iter()
-                .find(|chat| chat.id == chat_id)
-                .map(|chat| chat.folder);
-            // Archived chats are absent from the legacy list, so consult the complete workspace.
-            let current = match current {
-                Some(path) => path,
-                None => self
-                    .workspace_snapshot(WorkspaceFilter {
-                        include_archived: true,
-                        project_id: None,
-                    })
-                    .await?
-                    .chats
-                    .into_iter()
-                    .find(|chat| chat.chat.id == chat_id)
-                    .map(|chat| PathBuf::from(chat.chat.folder))
-                    .ok_or_else(missing)?,
-            };
             preserves_folder = tokio::task::spawn_blocking(move || {
                 live::normalize_path(current) == live::normalize_path(destination)
             })
@@ -215,6 +215,143 @@ impl SessionManager {
         .await
     }
 
+    /// What a picked folder already is on this device: the project folders it is, however the
+    /// pick spelled it, and whether it is a worktree auracode manages. Both sides are compared
+    /// canonical, as folder keys are, so a pick through a link or in other letter case on a
+    /// case-insensitive file system finds its project instead of becoming a new one. The folder
+    /// whose chat was active most recently comes first, then the workspace's order.
+    pub async fn workspace_folder_matches(
+        &self,
+        path: &str,
+    ) -> Result<FolderMatches, SessionError> {
+        bounded(path, "Folder path", 32_768)?;
+        let picked = PathBuf::from(path);
+        if !picked.is_absolute() {
+            return Err(invalid("Choose an absolute folder path."));
+        }
+        // The saved projects as they are, without the chat list's folder checks: the folders
+        // are read below, within one short wait.
+        let workspace = self
+            .organization(OrganizationCommand::Snapshot(WorkspaceFilter {
+                include_archived: true,
+                project_id: None,
+            }))
+            .await?;
+        let worktrees = match self.worktrees() {
+            Ok(service) => service.profile_records().await.unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        // The picked folder, and every stored one, each read on its own thread and all within the
+        // folder check's short wait: a folder that does not answer (a disconnected network share)
+        // is in no project, and never holds up the picker.
+        let shared = Arc::clone(self.shared());
+        let wait = shared.knobs.folder_check_wait;
+        let pick = tokio::time::timeout(
+            wait,
+            tokio::task::spawn_blocking(move || {
+                shared.slow_disk(&picked);
+                let canonical = std::fs::canonicalize(&picked)
+                    .map_err(|error| invalid(&format!("Cannot resolve this folder: {error}")))?;
+                if !canonical.is_dir() {
+                    return Err(invalid("Choose a folder, not a file."));
+                }
+                let stored = crate::fsutil::plain_path(&canonical);
+                let key = live::normalize_path(stored.clone());
+                Ok((stored, key))
+            }),
+        );
+        let candidates: Vec<PathBuf> = workspace
+            .projects
+            .iter()
+            .flat_map(|project| &project.folders)
+            .filter_map(|folder| folder.path.as_ref().map(PathBuf::from))
+            .chain(worktrees.iter().map(|record| PathBuf::from(&record.path)))
+            .collect();
+        let (pick, keys) = tokio::join!(pick, self.resolve_folders(candidates));
+        let (stored, key) = pick
+            .map_err(|_| {
+                invalid("This folder did not answer. Check that its drive or share is connected, then choose it again.")
+            })?
+            .map_err(|_| SessionError::Internal("Checking the folder failed.".into()))??;
+        {
+            let same = |other: &str| keys.get(Path::new(other)) == Some(&key);
+            let worktree = worktrees
+                .iter()
+                .find(|record| same(&record.path))
+                .map(|record| WorktreeOrigin {
+                    branch: record.branch.clone(),
+                    source: crate::fsutil::plain_path(Path::new(&record.source))
+                        .to_string_lossy()
+                        .into_owned(),
+                });
+            let mut matches: Vec<FolderMatch> = workspace
+                .projects
+                .iter()
+                .flat_map(|project| {
+                    project.folders.iter().filter_map(move |folder| {
+                        let path = folder.path.as_deref()?;
+                        same(path).then(|| FolderMatch {
+                            folder_id: folder.id.clone(),
+                            project_id: project.id.clone(),
+                            project_name: project.name.clone(),
+                            last_chat_at: None,
+                        })
+                    })
+                })
+                .collect();
+            for found in &mut matches {
+                found.last_chat_at = workspace
+                    .chats
+                    .iter()
+                    .filter(|entry| entry.folder_id.as_deref() == Some(found.folder_id.as_str()))
+                    .map(|entry| entry.chat.updated_at)
+                    .max();
+            }
+            // Stable: equally recent folders keep the workspace's order.
+            matches.sort_by_key(|found| std::cmp::Reverse(found.last_chat_at));
+            Ok(FolderMatches {
+                path: stored.to_string_lossy().into_owned(),
+                matches,
+                worktree,
+            })
+        }
+    }
+
+    /// Each of `paths` resolved as folder keys are, each on its own blocking thread, all within
+    /// the folder check's short wait. One that does not answer in time is left out, and is not
+    /// asked again while its thread still waits on the disk.
+    async fn resolve_folders(&self, mut paths: Vec<PathBuf>) -> HashMap<PathBuf, PathBuf> {
+        paths.sort();
+        paths.dedup();
+        let shared = Arc::clone(self.shared());
+        let found = Arc::new(Mutex::new(HashMap::new()));
+        let started: Vec<PathBuf> = {
+            let mut resolving = lock(&shared.resolving);
+            paths
+                .into_iter()
+                .filter(|path| resolving.insert(path.clone()))
+                .collect()
+        };
+        let tasks: futures::stream::FuturesUnordered<_> = started
+            .into_iter()
+            .map(|path| {
+                let (shared, found) = (Arc::clone(&shared), Arc::clone(&found));
+                self.deps().rt.spawn_blocking(move || {
+                    shared.slow_disk(&path);
+                    let key = live::normalize_path(path.clone());
+                    lock(&shared.resolving).remove(&path);
+                    lock(&found).insert(path, key);
+                })
+            })
+            .collect();
+        let _ = tokio::time::timeout(
+            shared.knobs.folder_check_wait,
+            futures::StreamExt::collect::<Vec<_>>(tasks),
+        )
+        .await;
+        std::mem::take(&mut *lock(&found))
+    }
+
     pub async fn chat_create_preview(
         &self,
         folder_id: &str,
@@ -236,7 +373,13 @@ impl SessionManager {
             .chats
             .into_iter()
             .map(|chat| chat.chat)
-            .filter(|chat| self.shared().live.contains(&chat.id))
+            .filter(|chat| {
+                // Working or waiting for an answer: an agent idle here edits nothing until it is
+                // given a message, so it does not make the folder busy.
+                self.shared()
+                    .live
+                    .busy(&chat.id, self.shared().knobs.busy_settle)
+            })
             .collect();
         let path = folder.path.clone();
         let busy_chats = tokio::task::spawn_blocking(move || {
@@ -263,8 +406,18 @@ impl SessionManager {
         if self.deps().detector.agent(&request.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(request.agent_id));
         }
-        let _guard = self.shared().organization.lock().await;
-        let preview = self.chat_create_preview(&request.folder_id).await?;
+        // Creates in one folder go one at a time, so a second cannot pass the busy check before
+        // the first one's agent counts; other folders' creates go at once.
+        let read = (self.clone(), request.folder_id.clone());
+        let (_organization, preview) = self
+            .hold_folders(move || {
+                let (manager, folder_id) = read.clone();
+                Box::pin(async move {
+                    let preview = manager.chat_create_preview(&folder_id).await?;
+                    Ok((vec![PathBuf::from(usable(&preview.folder)?)], preview))
+                })
+            })
+            .await?;
         let path = usable(&preview.folder)?;
         checked_folder(path).await?;
         if !request.allow_busy_folder && !preview.busy_chats.is_empty() {
@@ -369,11 +522,10 @@ impl SessionManager {
                         crate::fsutil::plain_path(Path::new(&record.path))
                             == crate::fsutil::plain_path(Path::new(path))
                     }) {
-                        folder.display_name = format!(
-                            "{} (worktree from {})",
-                            record.branch,
-                            crate::fsutil::plain_path(Path::new(&record.source)).display()
-                        );
+                        let source = crate::fsutil::plain_path(Path::new(&record.source));
+                        folder.display_name =
+                            format!("{} (worktree from {})", record.branch, source.display());
+                        folder.worktree_of = Some(source.to_string_lossy().into_owned());
                     }
                     folder.folder_state = checked
                         .get(&PathBuf::from(path))

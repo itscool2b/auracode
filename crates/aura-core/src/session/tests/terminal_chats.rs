@@ -149,6 +149,154 @@ async fn a_terminal_opened_while_the_new_chats_agent_starts_opens_once_that_agen
     rig.manager.terminal_ended(&chat.id, opened.generation);
 }
 
+/// Stop cannot end a terminal's session, so stopping every chat keeps a chat open in its terminal
+/// at once instead of waiting out its deadline for it; once the terminal ends, the chat gives its
+/// session back by itself.
+#[tokio::test]
+async fn stopping_chats_keeps_one_open_in_its_terminal_instead_of_waiting_for_it() {
+    let (_home, rig) = with_home(claude_rig);
+    let chat = rig
+        .manager
+        .create_chat("claude", &rig.folder)
+        .await
+        .unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    assert!(rig.manager.shared().live.contains(&chat.id));
+    let report = tokio::time::timeout(
+        std::time::Duration::from_secs(4),
+        rig.manager.stop_all(
+            super::super::stopping::StopScope::Chats(vec![chat.id.clone()]),
+            std::time::Duration::from_secs(3),
+        ),
+    )
+    .await
+    .expect("answers without waiting out its deadline");
+    assert_eq!(report.kept, vec![chat.id.clone()]);
+    assert!(report.stopping.is_empty(), "{report:?}");
+    assert!(report.stopped.is_empty(), "{report:?}");
+    assert!(
+        rig.manager.shared().live.contains(&chat.id),
+        "still the terminal's"
+    );
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    let report = rig
+        .manager
+        .stop_all(
+            super::super::stopping::StopScope::Chats(vec![chat.id.clone()]),
+            std::time::Duration::from_secs(10),
+        )
+        .await;
+    assert!(report.kept.is_empty(), "{report:?}");
+    assert!(report.stopping.is_empty(), "{report:?}");
+    assert!(!rig.manager.shared().live.contains(&chat.id));
+}
+
+/// A claude chat in a new worktree whose setup command has not run yet.
+async fn claude_chat_awaiting_setup(rig: &Rig) -> String {
+    let chat = rig
+        .store
+        .create_chat(crate::chatstore::NewChat {
+            agent_host: Default::default(),
+            agent_id: "claude".into(),
+            folder: rig.folder.clone(),
+            device_id: "device".into(),
+            now: now_millis(),
+        })
+        .await
+        .unwrap();
+    let id = chat.id.clone();
+    let (saved, done) = oneshot::channel();
+    rig.store.with_store(move |store| {
+        store.conn().execute("INSERT INTO worktree_setup_attempts VALUES (?1,'device','fixture-tree',1,'awaiting',NULL)",[id]).unwrap();
+        let _ = saved.send(());
+    });
+    done.await.unwrap();
+    chat.id
+}
+
+#[tokio::test]
+async fn a_terminal_chat_waits_for_its_worktree_setup_and_opens_when_it_succeeds() {
+    use aura_protocol::worktree_setup::WorktreeSetupState;
+    let (_home, rig) = with_home(claude_rig);
+    let chat = claude_chat_awaiting_setup(&rig).await;
+    let opening = tokio::spawn({
+        let manager = rig.manager.clone();
+        let chat = chat.clone();
+        async move { manager.open_terminal(&chat).await }
+    });
+    // Setup runs first: the terminal waits for it instead of failing.
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(!opening.is_finished(), "the terminal waits for setup");
+    // Its terminal closed while it waited: the wait ends, and the chat opens again (it is not
+    // "already open in the terminal").
+    opening.abort();
+    let _ = opening.await;
+    let opening = tokio::spawn({
+        let manager = rig.manager.clone();
+        let chat = chat.clone();
+        async move { manager.open_terminal(&chat).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(
+        !opening.is_finished(),
+        "opened again, it waits for setup too"
+    );
+    rig.manager
+        .set_setup_attempt(&chat, Some(1), WorktreeSetupState::Running, None)
+        .await
+        .unwrap();
+    rig.manager
+        .set_setup_attempt(&chat, Some(1), WorktreeSetupState::Succeeded, None)
+        .await
+        .unwrap();
+    let opened = tokio::time::timeout(std::time::Duration::from_secs(20), opening)
+        .await
+        .expect("the terminal opens once setup succeeds")
+        .unwrap()
+        .expect("opened");
+    assert!(session_arg(&argv(&opened), "--session-id=").is_some());
+    rig.manager.terminal_ended(&chat, opened.generation);
+    // A setup that fails answers a waiting terminal with its reason.
+    let (_home, rig) = with_home(claude_rig);
+    let chat = claude_chat_awaiting_setup(&rig).await;
+    let opening = tokio::spawn({
+        let manager = rig.manager.clone();
+        let chat = chat.clone();
+        async move { manager.open_terminal(&chat).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    rig.manager
+        .set_setup_attempt(
+            &chat,
+            Some(1),
+            WorktreeSetupState::Failed,
+            Some("Setup exited with code 1. Retry setup.".into()),
+        )
+        .await
+        .unwrap();
+    let refused = tokio::time::timeout(std::time::Duration::from_secs(20), opening)
+        .await
+        .expect("a failed setup answers the terminal")
+        .unwrap()
+        .err()
+        .expect("refused");
+    assert!(
+        refused.to_string().contains("Setup exited with code 1"),
+        "{refused}"
+    );
+    // Opened again after it failed, it says why at once.
+    let again = rig
+        .manager
+        .open_terminal(&chat)
+        .await
+        .err()
+        .expect("refused");
+    assert!(
+        again.to_string().contains("Setup exited with code 1"),
+        "{again}"
+    );
+}
+
 /// The session a new chat starts for Chat has no file until its first message, and Claude Code
 /// cannot resume it: the terminal starts a session of its own instead.
 #[tokio::test]

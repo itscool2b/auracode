@@ -98,8 +98,8 @@ impl GitWorkspaces {
                 "Only an instruction file can be committed here.".into(),
             ));
         }
-        let _gate = self.gate.lock().await;
         let git = self.git().await?;
+        let _repository = self.hold_repository(&git, folder).await;
         let facts = self.instruction_facts(folder, &[path]).await?;
         if facts.files.get(path) != Some(&GitState::Untracked) {
             return Err(GitError::Message(format!(

@@ -673,48 +673,220 @@ async fn replay_summary_compared_at_ready() {
     );
 }
 
-/// S20: a start beyond the live-agent limit fails (an error for `chat_start`, a card for an
-/// implicit start); nothing is evicted.
-#[tokio::test(start_paused = true)]
-async fn live_agent_limit() {
-    let options = Options {
+fn two_agents() -> Options {
+    Options {
         limits: ManagerLimits {
             max_live_agents: 2,
             ..ManagerLimits::STANDARD
         },
         ..Options::default()
-    };
-    let drivers = (0..4)
-        .map(|i| ScriptedDriver::new(vec![ready_step(&format!("n{i}"))]).0)
-        .collect();
-    let h = Harness::with(drivers, options);
+    }
+}
+
+/// S20: at the live-agent limit, a start stops the agent idle longest (ready, unwatched, nothing
+/// open or queued) and takes its slot once its process is gone; the others keep running.
+#[tokio::test(start_paused = true)]
+async fn a_start_at_the_limit_stops_the_longest_idle_agent() {
+    let (a, a_handle) = ScriptedDriver::new(vec![
+        ready_step("na"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (b, b_handle) = ScriptedDriver::new(vec![ready_step("nb")]);
+    let (c, _) = ScriptedDriver::new(vec![ready_step("nc")]);
+    let h = Harness::with(vec![a, b, c], two_agents());
+    let a = h.chat().await;
+    h.status(&a.id, SessionStatus::Ready).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let b = h.chat().await;
+    h.status(&b.id, SessionStatus::Ready).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let c = h.chat().await;
+    h.status(&c.id, SessionStatus::Ready).await;
+    h.status(&a.id, SessionStatus::Stopped).await;
+    assert_eq!(a_handle.commands(), [LoggedCommand::Shutdown]);
+    assert!(
+        b_handle.commands().is_empty(),
+        "the newer idle agent runs on"
+    );
+    assert_eq!(
+        h.statuses.last(&b.id).map(|update| update.status),
+        Some(SessionStatus::Ready)
+    );
+    assert!(
+        errors(&h.stored(&c.id).await).is_empty(),
+        "the start made room instead of failing"
+    );
+    // An explicit start makes room the same way.
+    let (d, _) = ScriptedDriver::new(vec![ready_step("nd")]);
+    h.factory.push(d);
+    let d = h
+        .manager
+        .create_chat(MOCK, &h.folder)
+        .await
+        .expect("create");
+    h.status(&d.id, SessionStatus::Ready).await;
+    h.status(&b.id, SessionStatus::Stopped).await;
+    assert_eq!(b_handle.commands(), [LoggedCommand::Shutdown]);
+}
+
+/// S20: a start is refused only when no agent is idle, saying what the others are doing; one turn
+/// ending is enough to make room again.
+#[tokio::test(start_paused = true)]
+async fn a_start_is_refused_only_when_every_agent_is_busy() {
+    let (working, working_handle) = ScriptedDriver::new(vec![
+        ready_step("working"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Any),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let (asking, asking_handle) = ScriptedDriver::new(vec![
+        ready_step("asking"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::EmitInTurn(DriverEvent::Permission {
+            turn: None,
+            request: permission("write", Some(ToolKind::Edit)),
+        }),
+    ]);
+    let (third, _) = ScriptedDriver::new(vec![ready_step("third")]);
+    let h = Harness::with(vec![working, asking, third], two_agents());
     let a = h.chat().await;
     let b = h.chat().await;
     h.status(&a.id, SessionStatus::Ready).await;
     h.status(&b.id, SessionStatus::Ready).await;
+    h.manager.send(&a.id, "work".into()).await.expect("send");
+    prompt_turn(&working_handle).await;
+    h.manager.send(&b.id, "ask".into()).await.expect("send");
+    prompt_turn(&asking_handle).await;
+    h.status(&a.id, SessionStatus::Running).await;
+    eventually("b asks", || {
+        h.statuses
+            .last(&b.id)
+            .is_some_and(|update| update.needs_attention)
+    })
+    .await;
     let c = h.chat().await;
     h.status(&c.id, SessionStatus::Failed).await;
+    let refusal = "2 agents are running and none is idle: 1 working and 1 waiting for your answer. Stop one, then try again.";
     assert_eq!(
         errors(&h.stored(&c.id).await),
-        [(
-            ErrorKind::SpawnFailed,
-            "2 agents are already running. Stop one, then try again.".to_owned()
-        )]
+        [(ErrorKind::SpawnFailed, refusal.to_owned())]
     );
-    assert!(matches!(
-        h.manager.start(&c.id, false).await,
-        Err(SessionError::TooManyAgents(2))
-    ));
+    match h.manager.start(&c.id, false).await {
+        Err(SessionError::TooManyAgents { limit: 2, message }) => assert_eq!(message, refusal),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
     assert_eq!(
         h.statuses.last(&a.id).map(|update| update.status),
-        Some(SessionStatus::Ready),
-        "nothing evicted"
+        Some(SessionStatus::Running),
+        "a working agent is never stopped for room"
     );
-    assert!(h.manager.has_live_sessions());
-    h.manager.stop(&a.id).await.expect("stop");
-    h.status(&a.id, SessionStatus::Stopped).await;
+    // The turn ends: that agent is idle, so the next start takes its slot.
+    h.manager.interrupt(&a.id).await.expect("interrupt");
+    command(&working_handle, CommandMatch::Interrupt).await;
+    h.status(&a.id, SessionStatus::Ready).await;
     h.manager.start(&c.id, false).await.expect("room again");
     h.status(&c.id, SessionStatus::Ready).await;
+    h.status(&a.id, SessionStatus::Stopped).await;
+    assert!(
+        h.statuses
+            .last(&b.id)
+            .is_some_and(|update| update.needs_attention && update.status != SessionStatus::Stopped),
+        "the agent waiting for an answer keeps waiting"
+    );
+}
+
+/// S20: Esc on a start that waits for room ends the wait: the chat never starts later on its own
+/// when the slot frees, and a start after it runs one agent, never a second one beside it.
+#[tokio::test(start_paused = true)]
+async fn a_start_stopped_while_it_waits_for_room_never_starts_on_its_own() {
+    // The idle agent asked to make room takes a while to go.
+    let (a, a_handle) = ScriptedDriver::new(vec![
+        ready_step("na"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_secs(10)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (b, _) = ScriptedDriver::new(vec![ready_step("nb")]);
+    let one = Options {
+        limits: ManagerLimits {
+            max_live_agents: 1,
+            ..ManagerLimits::STANDARD
+        },
+        ..Options::default()
+    };
+    let h = Harness::with(vec![a, b], one);
+    let a = h.chat().await;
+    h.status(&a.id, SessionStatus::Ready).await;
+    let b = h.chat().await;
+    command(&a_handle, CommandMatch::Shutdown).await;
+    h.status(&b.id, SessionStatus::Starting).await;
+    assert_eq!(h.factory.setups().len(), 1, "b waits for room");
+    // Esc while it waits.
+    h.manager.interrupt(&b.id).await.expect("interrupt");
+    h.status(&b.id, SessionStatus::Stopped).await;
+    // The slot frees, and the wait would have run out long since: b stays as the person left it.
+    h.status(&a.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(90)).await;
+    assert_eq!(h.factory.setups().len(), 1, "b never started on its own");
+    assert_eq!(
+        h.statuses.last(&b.id).map(|update| update.status),
+        Some(SessionStatus::Stopped)
+    );
+    assert!(errors(&h.stored(&b.id).await).is_empty(), "no late failure");
+    // Started again, it runs one agent, and nothing starts a second one later.
+    h.manager.start(&b.id, false).await.expect("start");
+    h.status(&b.id, SessionStatus::Ready).await;
+    tokio::time::sleep(Duration::from_secs(90)).await;
+    assert_eq!(h.factory.setups().len(), 2);
+    assert_eq!(
+        h.statuses.last(&b.id).map(|update| update.status),
+        Some(SessionStatus::Ready)
+    );
+}
+
+/// S20: a chat stopped to make room keeps its held messages and continues its own session on the
+/// next message.
+#[tokio::test(start_paused = true)]
+async fn an_evicted_chat_resumes_its_session_on_the_next_message() {
+    let (a1, _) = ScriptedDriver::new(vec![ready_step("na")]);
+    let (b1, _) = ScriptedDriver::new(vec![ready_step("nb")]);
+    let (c1, _) = ScriptedDriver::new(vec![ready_step("nc")]);
+    let mut resumed_info = ready_info("na");
+    resumed_info.resumed = ResumeOutcome::Resumed;
+    let (a2, a2_handle) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Ready(resumed_info)),
+        Step::Expect(CommandMatch::Prompt),
+        in_turn(message("m1", "Back again.")),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let h = Harness::with(vec![a1, b1, c1, a2], two_agents());
+    let a = h.chat().await;
+    h.status(&a.id, SessionStatus::Ready).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let b = h.chat().await;
+    h.status(&b.id, SessionStatus::Ready).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let c = h.chat().await;
+    h.status(&c.id, SessionStatus::Ready).await;
+    h.status(&a.id, SessionStatus::Stopped).await;
+    // The next message starts it again on its own session, making room the same way.
+    h.manager.send(&a.id, "again".into()).await.expect("send");
+    let turn = prompt_turn(&a2_handle).await;
+    assert!(!turn.is_empty());
+    h.status(&a.id, SessionStatus::Ready).await;
+    h.status(&b.id, SessionStatus::Stopped).await;
+    let setups = h.factory.setups();
+    assert_eq!(setups.len(), 4);
+    assert_eq!(setups[0].resume, None);
+    assert_eq!(
+        setups[3].resume.as_deref(),
+        Some("na"),
+        "the evicted chat continues its session"
+    );
+    let stored = h.stored(&a.id).await;
+    assert!(stored.contains(&message("m1", "Back again.")));
+    assert!(errors(&stored).is_empty());
 }
 
 /// S28: one native session is never open in two chats: refused for the id an agent returns at
@@ -803,7 +975,8 @@ async fn a_force_stopped_agent_holds_its_session_until_its_process_is_gone() {
         errors(&h.stored(&b.id).await),
         [(
             ErrorKind::SpawnFailed,
-            "1 agents are already running. Stop one, then try again.".to_owned()
+            "1 agent is running and it is not idle: 1 stopping. Stop it, then try again."
+                .to_owned()
         )],
         "the force-stopped agent still holds the only slot"
     );

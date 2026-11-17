@@ -427,6 +427,8 @@ fn snapshot(
                 },
                 git_remote_url: row.get(5)?,
                 git_default_branch: row.get(6)?,
+                // Set from the worktree registry when the workspace is shown.
+                worktree_of: None,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

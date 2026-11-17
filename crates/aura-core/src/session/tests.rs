@@ -14,6 +14,7 @@ mod project_tools;
 mod queue_changes;
 mod rewind;
 mod steering;
+mod stop_many;
 mod terminal_chats;
 mod workspace;
 mod workspace_removal;
@@ -129,6 +130,16 @@ fn rig_with_spec(
 thread_local! {
     /// More variables for the next rig built on this thread (a test's home folder, say).
     static RIG_ENV: std::cell::RefCell<Vec<(String, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The limits of the next rig built on this thread, when not the standard ones.
+    static RIG_LIMITS: std::cell::Cell<Option<ManagerLimits>> = const { std::cell::Cell::new(None) };
+}
+
+/// A rig built with `limits` (a cap of one agent, say).
+fn with_limits(limits: ManagerLimits, build: impl FnOnce() -> Rig) -> Rig {
+    RIG_LIMITS.with(|cell| cell.set(Some(limits)));
+    let rig = build();
+    RIG_LIMITS.with(|cell| cell.set(None));
+    rig
 }
 
 fn rig_from_store(
@@ -184,7 +195,9 @@ fn rig_from_store(
             redactor,
             device_id: "device".into(),
             app_version: "0.1.0".into(),
-            limits: ManagerLimits::STANDARD,
+            limits: RIG_LIMITS
+                .with(std::cell::Cell::get)
+                .unwrap_or(ManagerLimits::STANDARD),
             timings: SessionTimings::STANDARD,
             rt,
         },

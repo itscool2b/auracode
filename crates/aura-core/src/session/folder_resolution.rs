@@ -218,7 +218,8 @@ impl SessionManager {
         &self,
         review: FolderLocationReview,
     ) -> Result<ProjectFolder, SessionError> {
-        let _organization = self.shared().organization.lock().await;
+        // Locating a folder can move any chat's folder, so it waits for every change in flight.
+        let _organization = self.shared().organization.exclusive().await;
         let _idle = self.try_quiesce_when_idle().ok_or_else(|| {
             invalid(
                 "Stop running chats and wait for owned tasks to finish before locating a folder.",

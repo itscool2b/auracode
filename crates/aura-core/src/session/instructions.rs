@@ -177,7 +177,12 @@ impl SessionManager {
         if !Path::new(&source).join(path).is_file() {
             return Err(missing());
         }
-        let _organization = self.shared().organization.lock().await;
+        // Saving the folder's setup orders behind other changes to this folder only.
+        let _organization = self
+            .shared()
+            .organization
+            .scoped(vec![PathBuf::from(&source)])
+            .await;
         let read = |save| crate::chatstore::worktree_setup::Command {
             chat_id: String::new(),
             source: source.clone(),
@@ -228,7 +233,8 @@ impl SessionManager {
             .ok_or_else(|| invalid("This project folder isn't on this device."))?;
         let worktrees = self.worktrees()?;
         let folders = vec![PathBuf::from(&folder)];
-        let _reservation = self.reserve_git_folders(folders).await?;
+        // Adding one new file to Git: agents in the folder only wait.
+        let _reservation = self.hold_quiet(folders).await?;
         worktrees
             .commit_instruction_file(Path::new(&folder), path)
             .await

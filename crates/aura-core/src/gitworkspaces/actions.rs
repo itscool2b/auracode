@@ -34,7 +34,6 @@ impl GitWorkspaces {
         worktree_id: &str,
         destination: aura_protocol::git::WorktreeDestination,
     ) -> Result<(ManagedWorktree, PathBuf)> {
-        let _guard = self.gate.lock().await;
         let record = self.owned_record(chat_id, worktree_id)?;
         let git = self.git().await?;
         let isolated = inspect(&git, Path::new(&record.path)).await?;
@@ -62,7 +61,6 @@ impl GitWorkspaces {
         id: &str,
         action: WorktreeAction,
     ) -> Result<WorktreeActionPreview> {
-        let _guard = self.gate.lock().await;
         let record = self.owned_record(chat_id, id)?;
         let git = self.git().await?;
         let work = inspect(&git, Path::new(&record.path)).await?;
@@ -129,7 +127,6 @@ impl GitWorkspaces {
     /// The session manager must hold both folder reservations for the duration of this operation,
     /// including paused, queued, starting and retiring agents. This method is not direct UI IPC.
     pub async fn action_apply(&self, chat_id: &str, token: &str) -> Result<WorktreeActionResult> {
-        let _guard = self.gate.lock().await;
         let prepared = self
             .actions
             .lock()
@@ -141,13 +138,14 @@ impl GitWorkspaces {
                 "This action preview no longer belongs to this chat.",
             ));
         }
+        let _repository = self.hold_common(&prepared.work.common).await;
         if !prepared.conflicts.is_empty() {
             return Err(invalid(
                 "Resolve the previewed conflicts before merging. Neither working tree was changed.",
             ));
         }
         let current = self.owned_record(chat_id, &prepared.record.id)?;
-        if current != prepared.record {
+        if !records::unchanged_since_review(&current, &prepared.record) {
             return Err(invalid(
                 "The saved worktree changed after preview. Review it again.",
             ));
@@ -229,14 +227,20 @@ impl GitWorkspaces {
         Ok(record)
     }
 
+    /// Saves what an operation changed in `record`, into the registry as it is now. Its ports
+    /// are the registry's own ([`Self::port_under_gate`] gives them out beside other work), so the
+    /// stored block is kept rather than the copy read before the operation.
     pub(super) fn save_record(&self, record: &ManagedWorktree) -> Result<()> {
-        let mut entries = self.read_records()?;
-        let existing = entries
-            .iter_mut()
-            .find(|entry| entry.id == record.id)
-            .ok_or_else(|| invalid("The worktree ownership record is missing."))?;
-        *existing = record.clone();
-        self.write_records(entries)
+        self.update_records(|entries| {
+            let existing = entries
+                .iter_mut()
+                .find(|entry| entry.id == record.id)
+                .ok_or_else(|| invalid("The worktree ownership record is missing."))?;
+            let port = existing.port;
+            *existing = record.clone();
+            existing.port = port;
+            Ok(())
+        })
     }
 
     async fn retire(

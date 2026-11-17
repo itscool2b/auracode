@@ -195,7 +195,7 @@ function fixture(kind: string | null) {
       })),
     },
     error: null,
-    busy: false,
+    pending: 0,
   };
   const workspace = {
     subscribe: () => () => {},

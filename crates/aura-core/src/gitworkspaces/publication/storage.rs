@@ -50,29 +50,34 @@ impl GitWorkspaces {
         }
         Ok(journal.records)
     }
+    /// Saves `record` into the journal as it is now, so another folder's publication saved
+    /// meanwhile is kept, and leaves that journal in `records`.
     pub(super) fn save_publication(
         &self,
         records: &mut Vec<Record>,
         record: &Record,
     ) -> Result<()> {
-        if let Some(previous) = records
+        let _records = self.records_lock();
+        let mut current = self.read_publications()?;
+        if let Some(previous) = current
             .iter_mut()
             .find(|entry| entry.folder_id == record.folder_id)
         {
             *previous = record.clone();
         } else {
-            records.push(record.clone());
+            current.push(record.clone());
         }
         let journal = Journal {
             version: 1,
-            records: records.clone(),
+            records: current,
         };
         let bytes = serde_json::to_vec(&journal)
             .map_err(|_| invalid("Publication recovery could not be encoded."))?;
-        if bytes.len() > 1024 * 1024 || records.len() > 256 {
+        if bytes.len() > 1024 * 1024 || journal.records.len() > 256 {
             return Err(invalid("Publication recovery exceeds its limit."));
         }
         crate::fsutil::write_json_atomic(&self.root.join("publications.json"), &journal)?;
+        *records = journal.records;
         Ok(())
     }
 }

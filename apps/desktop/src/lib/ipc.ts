@@ -17,6 +17,7 @@ import {
   type DemoKind,
   type EnvStatus,
   type EventBatch,
+  type FolderBlockers,
   type HistoryPage,
   type PromptAck,
   type QueuedPrompt,
@@ -43,11 +44,18 @@ const NO_REASON = "The app's shell refused the request without giving a reason."
 export class CommandError extends Error {
   /** The shell's stable code, or `ipc_rejected` for a call Tauri refused (see `toCommandError`). */
   readonly code: AppErrorCode | typeof IPC_REJECTED;
+  /** What stands in the way of a folder change, for `folder_busy`. */
+  readonly blockers: FolderBlockers | null;
 
-  constructor(code: AppErrorCode | typeof IPC_REJECTED, message: string) {
+  constructor(
+    code: AppErrorCode | typeof IPC_REJECTED,
+    message: string,
+    blockers: FolderBlockers | null = null,
+  ) {
     super(message);
     this.name = "CommandError";
     this.code = code;
+    this.blockers = blockers;
   }
 }
 
@@ -72,7 +80,11 @@ function isAppError(value: unknown): value is AppError {
 export function toCommandError(rejection: unknown): CommandError {
   if (rejection instanceof CommandError) return rejection;
   if (isAppError(rejection)) {
-    return new CommandError(rejection.code, rejection.message || NO_REASON);
+    return new CommandError(
+      rejection.code,
+      rejection.message || NO_REASON,
+      rejection.blockers ?? null,
+    );
   }
   if (rejection instanceof Error) {
     return new CommandError(IPC_REJECTED, rejection.message || NO_REASON);

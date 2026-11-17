@@ -260,6 +260,11 @@ async function inspect(engine, launcher) {
     );
     await page.getByTestId("composer-input").waitFor();
 
+    // Nothing waits for the retained list: a list that never arrives still lets the chat start.
+    await open(page, "new-worktree&retained=never");
+    await chipReady(page, "worktree");
+    await page.locator('[data-testid="new-chat-create"]:not([disabled])').waitFor();
+
     // Worktrees kept from chats that are gone: one quiet line, closed, that opens to their names
     // (each start of auracode used to list every worktree as a box of two full paths).
     await open(page, "new-worktree&retained=6");
@@ -286,7 +291,7 @@ async function inspect(engine, launcher) {
 
     assert.deepEqual(errors, [], "browser errors");
     console.log(
-      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); zero-click worktree, popover, refused and typed names, Local, stale review, fallback, plain folder, setup terminal and retained worktrees passed`,
+      `${engine}: ${scans.length} accessibility scans (${scans.join(", ")}); zero-click worktree, popover, refused and typed names, Local, stale review, fallback, plain folder, setup terminal, no wait for retained worktrees and retained worktrees passed`,
     );
   } finally {
     await browser.close();

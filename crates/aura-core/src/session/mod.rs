@@ -24,6 +24,8 @@ mod config_vendor;
 mod conversation;
 mod editors;
 mod file_open;
+mod folder_guards;
+mod folder_locks;
 mod folder_resolution;
 mod gitworkspaces;
 mod images;
@@ -40,6 +42,7 @@ mod repository_publication;
 mod search;
 mod shared_mcp;
 mod spawner;
+mod stopping;
 mod terminal_import;
 #[cfg(test)]
 mod tests;
@@ -54,9 +57,10 @@ pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
 pub use plugin_library::{PluginFacts, PluginRefreshPause, assemble as assemble_plugin_library};
 pub use project_tools::{EditorLaunch, EditorOpen, UrlTarget};
+pub use stopping::{StopReport, StopScope, still_stopping};
 pub use worktree_setup::WorktreeSetupLaunch;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -193,7 +197,8 @@ impl NewChatDefaults {
 /// How much the manager allows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ManagerLimits {
-    /// A start beyond this fails; nothing is evicted to make room.
+    /// A start beyond this stops the agent idle longest to make room, and fails only when no
+    /// agent is idle.
     pub max_live_agents: usize,
     pub max_queue: usize,
     pub max_prompt_bytes: usize,
@@ -204,10 +209,10 @@ pub struct ManagerLimits {
 }
 
 impl ManagerLimits {
-    /// 12 live agents, 20 queued prompts, 1 MiB per prompt, 10 minutes idle, 4 views per chat, 16
+    /// 16 live agents, 20 queued prompts, 1 MiB per prompt, 10 minutes idle, 4 views per chat, 16
     /// per webview.
     pub const STANDARD: ManagerLimits = ManagerLimits {
-        max_live_agents: 12,
+        max_live_agents: 16,
         max_queue: 20,
         max_prompt_bytes: 1024 * 1024,
         idle_eviction: Duration::from_secs(10 * 60),
@@ -284,13 +289,18 @@ pub(crate) struct Knobs {
     /// The chat list waits this long for its folder checks; a folder that has not answered by then
     /// (a hung network mount) shows what it showed last.
     pub(crate) folder_check_wait: Duration,
+    /// An agent that started or ended a turn this recently still makes its folder busy for a new
+    /// chat: it is likely to get the next message.
+    pub(crate) busy_settle: Duration,
 }
 
 impl Knobs {
-    /// The actor outbox holds 4 MiB; the chat list waits 1 s for folder checks.
+    /// The actor outbox holds 4 MiB; the chat list waits 1 s for folder checks; an agent counts as
+    /// busy for 15 s after its last activity.
     pub(crate) const STANDARD: Knobs = Knobs {
         outbox_bytes: 4 * 1024 * 1024,
         folder_check_wait: Duration::from_secs(1),
+        busy_settle: Duration::from_secs(15),
     };
 }
 
@@ -329,8 +339,12 @@ pub(crate) struct Shared {
     pub(crate) lost_writes: AtomicU64,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
-    /// Serializes busy-folder preflight and project chat creation/moves.
-    organization: tokio::sync::Mutex<()>,
+    /// Folders a picked folder is being compared with, still resolving on a blocking thread: one
+    /// that hangs (a dead network share) is not asked again until it answers.
+    resolving: Mutex<HashSet<PathBuf>>,
+    /// Orders busy-folder preflight, chat creation and moves, and Git and folder changes: per
+    /// folder, so one folder's slow change never holds up another's (`folder_locks.rs`).
+    organization: folder_locks::FolderLocks,
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
     removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
@@ -401,9 +415,8 @@ impl Shared {
         lock(&self.chat_states).get(chat_id).cloned()
     }
 
-    /// Checks one folder for the chat list (`metadata` only), on a blocking thread, and records the
-    /// result.
-    fn check_folder(&self, folder: PathBuf) {
+    /// Tests: a folder set slow (a hung network mount) takes its delay here, counted.
+    fn slow_disk(&self, folder: &Path) {
         #[cfg(test)]
         {
             // Release the hook lock before delaying one folder, so unrelated probes stay free.
@@ -413,6 +426,14 @@ impl Shared {
                 std::thread::sleep(delay);
             }
         }
+        #[cfg(not(test))]
+        let _ = folder;
+    }
+
+    /// Checks one folder for the chat list (`metadata` only), on a blocking thread, and records the
+    /// result.
+    fn check_folder(&self, folder: PathBuf) {
+        self.slow_disk(&folder);
         let state = folder_state(&folder, false);
         let mut checks = lock(&self.folders);
         let check = checks.entry(folder).or_default();
@@ -495,7 +516,8 @@ impl SessionManager {
                     plugin_refresh: tokio::sync::watch::channel(Default::default()).0,
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
-                    organization: tokio::sync::Mutex::new(()),
+                    resolving: Mutex::new(HashSet::new()),
+                    organization: folder_locks::FolderLocks::new(),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     removals: Mutex::new(HashMap::new()),
@@ -1752,6 +1774,13 @@ pub struct ShutdownSummary {
 pub enum SessionError {
     #[error("{0}")]
     Organization(String),
+    /// Chats or project terminals are in the way of a change to a folder; `blockers` names
+    /// them, so the person can stop them and try again.
+    #[error("{message}")]
+    FolderBusy {
+        message: String,
+        blockers: aura_protocol::workspace::FolderBlockers,
+    },
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
     #[error("auracode doesn't know an agent called \"{0}\".")]
@@ -1772,8 +1801,10 @@ pub enum SessionError {
     OptionInvalid(String),
     #[error("The agent isn't running in this chat. Start it, then try again.")]
     SessionNotReady,
-    #[error("{0} agents are already running. Stop one, then try again.")]
-    TooManyAgents(usize),
+    /// Every live-agent slot is taken and no agent is idle to make room; the message says what
+    /// the running agents are doing.
+    #[error("{message}")]
+    TooManyAgents { limit: usize, message: String },
     #[error("Too many views are open for this chat.")]
     TooManySubscriptions,
     #[error("auracode's database is not available: {0}")]

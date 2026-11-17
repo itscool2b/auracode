@@ -15,22 +15,25 @@ import type {
   AgentInstallation,
   ChatCreatePreview,
   ChatSummary,
+  FolderMatches,
   ManagedWorktree,
   WorktreeChatPlan,
   WorktreeChatResult,
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
-import { projectSourceFolder } from "../../lib/chat/newChatContext";
+import { chosenMatch, projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { type ChatInterface, chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
+import { blockersFromChats, type FolderBusyApi, folderBusyApi } from "../../lib/folderBusy";
 import { agentVersion, builtInPath } from "../../lib/format";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
 import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { projectName } from "./ChatList";
+import { FolderBusy } from "./FolderBusy";
 import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
@@ -143,6 +146,7 @@ export function NewChat({
   workspace,
   worktreeApi = worktreeChatApi,
   recoveryApi = worktreeRecoveryApi,
+  folderBusy = folderBusyApi,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly refreshing: boolean;
@@ -152,6 +156,8 @@ export function NewChat({
   readonly workspace?: WorkspaceStore;
   readonly worktreeApi?: WorktreeChatApi;
   readonly recoveryApi?: WorktreeRecoveryApi;
+  /** Stops the chats working in the chosen folder ("Stop these chats"). */
+  readonly folderBusy?: Pick<FolderBusyApi, "stop">;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
   const organization = useSyncExternalStore(
@@ -181,7 +187,11 @@ export function NewChat({
         }
       },
       (error) => {
-        if (current) setRecoveryError(errorMessage(error));
+        // A failed list says so and stops waiting: Rust still refuses a managed worktree.
+        if (current) {
+          setRecoveryError(errorMessage(error));
+          setRetainedLoaded(true);
+        }
       },
     );
     return () => {
@@ -191,6 +201,8 @@ export function NewChat({
   const [preview, setPreview] = useState<ChatCreatePreview | null>(null);
   const [allowBusy, setAllowBusy] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // Read again once the chats working in the folder were stopped.
+  const [previewRevision, setPreviewRevision] = useState(0);
   const folderChoice = useMemo(() => new WorktreeChoice(worktreeApi), [worktreeApi]);
   const worktree = useSyncExternalStore(
     folderChoice.subscribe,
@@ -199,6 +211,35 @@ export function NewChat({
   );
   const openChip = useRef<(() => void) | null>(null);
   const adding = useRef<string | null>(null);
+  // This form's own work: the picked folder joining the workspace, and Create. Nothing another
+  // screen runs disables it; one Create at a time is enforced here, and Rust validates each.
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submitted = useRef(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  // What Rust found the picked folder to be (the project folders it already is, however it was
+  // spelled, or a managed worktree), for the path it was asked about.
+  const [match, setMatch] = useState<{
+    readonly path: string;
+    readonly found: FolderMatches;
+  } | null>(null);
+  useEffect(() => {
+    const path = state.folder;
+    if (!workspace || !path) return;
+    let current = true;
+    void workspace.api.folderMatches(path).then(
+      (found) => {
+        if (current) setMatch({ path, found });
+      },
+      () => {
+        // Unreadable here: adding the folder says why, in Rust's words.
+        if (current) setMatch({ path, found: { path, matches: [], worktree: null } });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [workspace, state.folder]);
   // Agents whose detection finished while this screen was open settle in once; first paint does not.
   const seen = useRef<ReadonlyMap<string, string> | "waiting" | null>(null);
   const [found, setFound] = useState<ReadonlySet<string>>(() => new Set());
@@ -218,28 +259,57 @@ export function NewChat({
     seen.current = new Map(agents.map((agent) => [agent.id, agent.availability.state]));
     if (settled.length > 0) setFound((current) => new Set([...current, ...settled]));
   }, [agents]);
-  // The project folder this chat would use: chosen under Projects, or the picked folder's own.
-  const sourceFolder = (folder: { path: string | null }) =>
-    !folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string));
+  // The project folder this chat would use: chosen under Projects, or the picked folder's own. A
+  // worktree is never offered: a chat starts from the folder it was made from.
+  const sourceFolder = (folder: { path: string | null; worktree_of?: string | null }) =>
+    !folder.worktree_of &&
+    (!folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string)));
+  // Rust's answer for the folder picked now: the project folder it already is (the draft's
+  // project first, then the one used last), so another spelling of it never makes a new project.
+  const answer = match && match.path === state.folder ? match.found : null;
+  const matched = chosenMatch(answer, draft.context?.projectId ?? null);
+  // The draft's project (every project without one), and the project a picked folder is in.
+  const shownProject = (project: { readonly id: string }) =>
+    !draft.context || project.id === draft.context.projectId || project.id === matched?.project_id;
   const folders =
     organization.data?.projects
-      .filter((project) => !draft.context || project.id === draft.context.projectId)
+      .filter(shownProject)
       .flatMap((project) => project.folders)
       .filter(sourceFolder) ?? [];
   const picked = state.folder ? folders.find((folder) => folder.path === state.folder) : undefined;
-  const automaticFolder = retainedLoaded
-    ? projectSourceFolder(draft.context, organization.data, retained)
-    : draft.context?.folderId;
+  const automaticFolder = projectSourceFolder(draft.context, organization.data, retained);
   const requestedFolder = folderId ?? (state.folder ? "" : automaticFolder) ?? "";
   const knownFolder =
     (folders.some((folder) => folder.id === requestedFolder) ? requestedFolder : "") ||
+    matched?.folder_id ||
     picked?.id ||
     "";
-  const managedPicked =
+  const retainedPick =
     !knownFolder && state.folder
       ? retained.find((record) => sameFolder(record.path, state.folder as string))
       : undefined;
+  const managedPicked =
+    !knownFolder && state.folder ? (answer?.worktree ?? retainedPick) : undefined;
+  // A picked folder waits for Rust's answer before it is used or added, so it never joins twice.
+  const pickPending = Boolean(workspace && state.folder && !folderId && !answer);
+  const loaded = organization.data !== null;
+  // A picked folder in no project joins the workspace by itself (the effect below). Create waits
+  // for exactly that, from Rust's answer until the folder is in the workspace (and while the
+  // workspace still loads, before the effect can add it), so a click never adds the folder a
+  // second time or reviews one still joining. A failed add ends the wait: Create then tries
+  // itself and says why if it still cannot.
+  const joining = Boolean(
+    workspace &&
+      state.folder &&
+      !folderId &&
+      answer &&
+      answer.matches.length === 0 &&
+      !managedPicked &&
+      !picked &&
+      adding.current !== state.folder,
+  );
   useEffect(() => {
+    void previewRevision;
     let current = true;
     setAllowBusy(false);
     setPreview(null);
@@ -256,10 +326,9 @@ export function NewChat({
     return () => {
       current = false;
     };
-  }, [knownFolder, workspace]);
+  }, [knownFolder, workspace, previewRevision]);
   // A picked folder joins the workspace as its own project at once (as a project is added in the
   // Codex app), so its Git state is reviewed before Create. A failure leaves it to Create.
-  const loaded = organization.data !== null;
   useEffect(() => {
     const path = state.folder;
     if (
@@ -267,13 +336,15 @@ export function NewChat({
       !path ||
       folderId ||
       !loaded ||
-      !retainedLoaded ||
+      !answer ||
+      answer.matches.length > 0 ||
       managedPicked ||
       picked ||
       adding.current === path
     )
       return;
     adding.current = path;
+    setAddingFolder(true);
     void workspace
       .perform(async () => {
         if (draft.context) return workspace.api.addFolder(draft.context.projectId, path);
@@ -288,11 +359,17 @@ export function NewChat({
         });
         return project.folders[0] ?? null;
       })
-      .then((folder) => {
-        const id = folder?.id;
+      .then((outcome) => {
+        if (adding.current === path) setAddingFolder(false);
+        if (!outcome.ok) {
+          // Create adds the folder itself then, and says why if it still cannot.
+          if (draft.getSnapshot().folder === path) setCreateError(outcome.error);
+          return;
+        }
+        const id = outcome.value?.id;
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
-  }, [workspace, state.folder, folderId, loaded, retainedLoaded, managedPicked, picked, draft]);
+  }, [workspace, state.folder, folderId, loaded, answer, managedPicked, picked, draft]);
   // The one lineup every agent list reads, so "Other agents" counts the same everywhere.
   const { usable: available, others: unavailable } = agentLineup(agents ?? []);
   const selected = available.find((agent) => agent.id === state.agentId) ?? null;
@@ -331,12 +408,30 @@ export function NewChat({
   const ready = selected ? readyLine(selected) : null;
   // A worktree chat never shares the project folder, so only Local waits on its running chats.
   const busy = !worktreeMode && preview !== null && preview.busy_chats.length > 0;
+  const projectOfChat = (chatId: string) => {
+    const saved = organization.data?.chats.find((entry) => entry.chat.id === chatId);
+    return (
+      organization.data?.projects.find((project) => project.id === saved?.project_id)?.name ?? null
+    );
+  };
+  // The worktree chip's "Stop these chats": stop the chats working in the folder, then look again.
+  const stopBusy = () => {
+    if (!preview || preview.busy_chats.length === 0) return;
+    folderBusy.stop(preview.busy_chats.map((chat) => chat.id)).then(
+      () => setPreviewRevision((value) => value + 1),
+      (error: unknown) => setPreviewError(errorMessage(error)),
+    );
+  };
+  // Nothing waits for the retained list: Rust marks worktree folders in the workspace, and says
+  // whether a picked folder is one.
   const canCreate =
     selected !== null &&
-    (!workspace || retainedLoaded) &&
+    !pickPending &&
+    !joining &&
     !managedPicked &&
     (state.folder !== null || knownFolder !== "") &&
-    !organization.busy &&
+    !addingFolder &&
+    !submitting &&
     !worktree.creating &&
     !state.creating &&
     state.maintenanceBusy !== "update";
@@ -346,7 +441,7 @@ export function NewChat({
     state.folder;
   const projects = workspace
     ? (organization.data?.projects ?? [])
-        .filter((project) => !draft.context || project.id === draft.context.projectId)
+        .filter(shownProject)
         .map((project) => ({ ...project, folders: project.folders.filter(sourceFolder) }))
         .filter((project) => project.folders.length > 0)
     : [];
@@ -370,7 +465,7 @@ export function NewChat({
       data-testid="new-chat"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!canCreate || (busy && !allowBusy)) return;
+        if (!canCreate || (busy && !allowBusy) || submitted.current) return;
         if (!workspace) {
           void draft.create().then((chat) => {
             if (chat) created(chat);
@@ -378,6 +473,9 @@ export function NewChat({
           return;
         }
         const agentId = state.agentId;
+        submitted.current = true;
+        setSubmitting(true);
+        setCreateError(null);
         void workspace
           .perform(async () => {
             let destination = knownFolder;
@@ -425,7 +523,14 @@ export function NewChat({
             });
             return { type: "local" as const, entry };
           })
-          .then((made) => {
+          .then((outcome) => {
+            submitted.current = false;
+            setSubmitting(false);
+            if (!outcome.ok) {
+              setCreateError(outcome.error);
+              return;
+            }
+            const made = outcome.value;
             if (made?.type === "local") created(made.entry.chat);
             else if (made?.type === "worktree") madeWorktree(made.result, made.plan);
           });
@@ -643,7 +748,7 @@ export function NewChat({
             data-testid="new-chat-create"
             disabled={!canCreate || (busy && !allowBusy)}
           >
-            {state.creating || worktree.creating ? "Starting…" : "Start chat"}
+            {state.creating || worktree.creating || submitting ? "Starting…" : "Start chat"}
           </button>
         </div>
       </div>
@@ -653,6 +758,13 @@ export function NewChat({
           <p className="ui-error" role="alert">
             This folder is a managed worktree on {managedPicked.branch}. Choose its original project
             folder: {managedPicked.source}.
+          </p>
+        ) : null}
+        {matched &&
+        knownFolder === matched.folder_id &&
+        matched.project_id !== draft.context?.projectId ? (
+          <p className="new-chat-note" data-testid="new-chat-folder-project">
+            This folder is in {matched.project_name}, so the chat starts there.
           </p>
         ) : null}
         {recoveryError ? (
@@ -689,14 +801,19 @@ export function NewChat({
         <WorktreeChip
           view={worktree}
           busyChats={preview?.busy_chats.length ?? 0}
+          onStopBusy={stopBusy}
           openRef={openChip}
           onPropose={(change, field) => folderChoice.propose(change, field)}
           onClearError={() => folderChoice.clearError()}
         />
         {preview && busy ? (
-          <div className="new-chat-busy">
-            <strong>This folder has active work</strong>
-            <p>{preview.busy_chats.map((chat) => chat.title ?? chat.agent_name).join(", ")}</p>
+          <FolderBusy
+            className="new-chat-busy"
+            heading="This folder has active work"
+            blockers={blockersFromChats(preview.busy_chats, projectOfChat)}
+            api={folderBusy}
+            onStopped={() => setPreviewRevision((value) => value + 1)}
+          >
             <label>
               <input
                 type="checkbox"
@@ -705,12 +822,12 @@ export function NewChat({
               />
               Start another chat in this folder. Agents may edit the same files.
             </label>
-          </div>
+          </FolderBusy>
         ) : null}
         {note !== null ? <p className="new-chat-note">{note}</p> : null}
-        {(previewError ?? organization.error) ? (
+        {(previewError ?? createError ?? organization.error) ? (
           <p role="alert" className="new-chat-error">
-            {previewError ?? organization.error}
+            {previewError ?? createError ?? organization.error}
           </p>
         ) : null}
         {state.error !== null ? (

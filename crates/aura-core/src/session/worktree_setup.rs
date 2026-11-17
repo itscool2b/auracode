@@ -18,7 +18,7 @@ impl SessionManager {
         token: &str,
     ) -> Result<String, SessionError> {
         let plan = self.prepare_worktree_setup_terminal(chat_id, token).await?;
-        let ticket = match terminals.reserve(owner) {
+        let ticket = match terminals.reserve_setup(owner) {
             Ok(ticket) => ticket,
             Err(error) => {
                 if let Some(completion) = plan.completion {
@@ -139,8 +139,8 @@ impl SessionManager {
         chat_id: &str,
         token: &str,
     ) -> Result<aura_protocol::worktree_setup::WorktreeSetupResult, SessionError> {
-        let _organization = self.shared().organization.lock().await;
         let service = self.worktrees()?;
+        let _organization = self.hold_setup_folders(&service, chat_id, token).await?;
         let current = self
             .deps()
             .store
@@ -174,7 +174,8 @@ impl SessionManager {
             let folders = service
                 .setup_folders(chat_id, token)
                 .map_err(|error| SessionError::Organization(error.to_string()))?;
-            let reservations = self.reserve_setup_folders(folders, chat_id).await?;
+            // Copying setup files only adds missing files: a chat there waits, nothing stops.
+            let reservations = self.hold_quiet(folders).await?;
             let value = service
                 .setup_apply(chat_id, token)
                 .await
@@ -229,8 +230,8 @@ impl SessionManager {
         chat_id: &str,
         token: &str,
     ) -> Result<WorktreeSetupLaunch, SessionError> {
-        let _organization = self.shared().organization.lock().await;
         let service = self.worktrees()?;
+        let _organization = self.hold_setup_folders(&service, chat_id, token).await?;
         let attempt = self
             .deps()
             .store
@@ -305,6 +306,33 @@ impl SessionManager {
         }
     }
 
+    /// Holds the worktree a setup review copies into, and its source while files are copied.
+    async fn hold_setup_folders(
+        &self,
+        service: &Arc<crate::gitworkspaces::GitWorkspaces>,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<super::folder_locks::FolderGuard, SessionError> {
+        let read = (
+            self.clone(),
+            Arc::clone(service),
+            chat_id.to_owned(),
+            token.to_owned(),
+        );
+        let (guard, ()) = self
+            .hold_folders(move || {
+                let (manager, service, chat_id, token) = read.clone();
+                Box::pin(async move {
+                    // A review that is gone is refused below, with its own reason.
+                    let mut folders = service.setup_folders(&chat_id, &token).unwrap_or_default();
+                    folders.push(manager.chat_record(&chat_id).await?.folder);
+                    Ok((folders, ()))
+                })
+            })
+            .await?;
+        Ok(guard)
+    }
+
     pub async fn worktree_setup(&self, chat_id: &str) -> Result<WorktreeSetup, SessionError> {
         self.setup_settings(chat_id, None).await
     }
@@ -322,11 +350,17 @@ impl SessionManager {
         chat_id: &str,
         save: Option<WorktreeSetupInput>,
     ) -> Result<WorktreeSetup, SessionError> {
-        let _organization = self.shared().organization.lock().await;
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
-        let chat = self.git_chat(chat_id).await?;
+        // Reading the settings waits for nothing; a save goes behind changes to this folder.
+        let (_organization, chat) = match save {
+            Some(_) => {
+                let (guard, _) = self.hold_chat_folder(chat_id, &[]).await?;
+                (Some(guard), self.git_chat(chat_id).await?)
+            }
+            None => (None, self.git_chat(chat_id).await?),
+        };
         let source = self
             .worktrees()?
             .setup_source(chat_id, &chat.folder)
