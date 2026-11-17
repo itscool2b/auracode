@@ -38,6 +38,7 @@ import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
 import "./new-chat.css";
+import { Select } from "../Select";
 
 const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
@@ -672,7 +673,7 @@ export function NewChat({
             {chosenFolder ?? "No folder chosen"}
           </span>
           {projects.length > 0 ? (
-            <select
+            <Select
               className="g-select new-chat-projects"
               aria-label="Project folder"
               value={knownFolder}
@@ -702,7 +703,7 @@ export function NewChat({
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
           ) : null}
           <button
             type="button"

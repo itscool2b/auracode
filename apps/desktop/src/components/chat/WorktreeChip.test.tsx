@@ -84,8 +84,10 @@ describe("the worktree chip", () => {
     expect(html).toContain('data-test-start="main"');
     // The popover: both modes, the branches with the current one marked, the generated name.
     expect(html).toMatch(/<button[^>]*class="g-segment"[^>]*aria-pressed="true"[^>]*>.*Worktree/);
-    expect(html).toContain('<option value="main" selected="">main (current)</option>');
-    expect(html).toContain('<option value="release/1.4">release/1.4</option>');
+    // Start from: the app's dropdown shows the chosen branch and offers every branch.
+    expect(html).toContain('<span class="ui-select-value">main (current)</span>');
+    expect(html).toContain('<span data-value="main">main (current)</span>');
+    expect(html).toContain('<span data-value="release/1.4">release/1.4</span>');
     expect(html).toContain('placeholder="aura/7f3a9c2e"');
     expect(html).toContain("Named for you. Type a name to use your own.");
     expect(html).toContain("Bring uncommitted changes");
@@ -171,7 +173,7 @@ describe("the worktree chip", () => {
   it("disables every control while Create applies the review", () => {
     const html = chip(view({ creating: true }));
     expect(html).toMatch(/<fieldset class="g-segmented new-chat-worktree-modes"[^>]*disabled=""/);
-    expect(html).toMatch(/<select[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*role="combobox"[^>]*disabled=""/);
   });
 
   it("summarises the saved setup, or says it is skipped", () => {
