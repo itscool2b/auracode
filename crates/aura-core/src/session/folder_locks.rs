@@ -49,17 +49,25 @@ impl FolderLocks {
     /// Waits for the changes to `folders` that arrived first, and for an exclusive change in
     /// flight. Spellings of one folder share a key (symbolic links, and letter case on Windows).
     pub(crate) async fn scoped(&self, folders: Vec<PathBuf>) -> FolderGuard {
-        let gate = Arc::clone(&self.gate).read_owned().await;
+        self.scoped_by(folders, live::normalize_path).await
+    }
+
+    /// [`Self::scoped`], with each folder resolved by `resolve` before the gate is taken.
+    /// Resolving reads the disk, which can hang on a network mount: holding the gate meanwhile
+    /// would hold up a change waiting for every folder, and, as new changes queue behind a
+    /// waiting one, every other folder's change in every project after it.
+    async fn scoped_by(
+        &self,
+        folders: Vec<PathBuf>,
+        resolve: impl Fn(PathBuf) -> PathBuf + Send + 'static,
+    ) -> FolderGuard {
         let given = folders.clone();
-        // Resolving a path reads the disk, which can hang on a network mount.
         let keys = tokio::task::spawn_blocking(move || {
-            folders
-                .into_iter()
-                .map(live::normalize_path)
-                .collect::<Vec<_>>()
+            folders.into_iter().map(resolve).collect::<Vec<_>>()
         })
         .await
         .unwrap_or(given);
+        let gate = Arc::clone(&self.gate).read_owned().await;
         FolderGuard {
             _folders: self.folders.lock_all(keys).await,
             _gate: Gate::Shared(gate),
@@ -141,6 +149,52 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[tokio::test]
+    async fn a_folder_slow_to_resolve_holds_no_one_up() {
+        let locks = Arc::new(FolderLocks::new());
+        let (resolving, resolved) = std::sync::mpsc::channel::<()>();
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let wait = std::sync::Mutex::new(wait);
+        // A folder on a network mount that does not answer, until it does.
+        let slow = tokio::spawn({
+            let locks = Arc::clone(&locks);
+            async move {
+                locks
+                    .scoped_by(vec![PathBuf::from("/mnt/share")], move |path| {
+                        let _ = resolving.send(());
+                        let _ = wait.lock().map(|wait| wait.recv());
+                        path
+                    })
+                    .await
+            }
+        });
+        tokio::task::spawn_blocking(move || resolved.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        // A change that waits for every folder, and one to another folder, go meanwhile.
+        let every = tokio::time::timeout(Duration::from_secs(2), locks.exclusive())
+            .await
+            .expect("an exclusive change does not wait for a folder still resolving");
+        drop(every);
+        let other = tempfile::tempdir().unwrap();
+        drop(
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                locks.scoped(vec![other.path().to_path_buf()]),
+            )
+            .await
+            .expect("another folder's change does not wait for it"),
+        );
+        release.send(()).unwrap();
+        drop(
+            tokio::time::timeout(Duration::from_secs(2), slow)
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
 
     #[tokio::test]
     async fn folders_wait_only_for_themselves_and_exclusive_waits_for_all() {
