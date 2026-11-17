@@ -3,24 +3,22 @@
 Created and verified on 2026-10-26 in Cloudflare account `5feb14f2fe605875bcf1472f348cb7ed`.
 These identifiers are not credentials.
 
-**Accounts were removed from the code on 16 November 2026, at the owner's request.** Claude Code
-and Codex sync plugins natively, so the app is local-only: no sign-in, no sync, nothing uploaded by
-an account. The account API Workers, the D1 databases, the blob R2 buckets, the Email Sending
-domain and the Turnstile widgets listed below were created for the account service. No code in
-this repository uses them any more: `apps/api` and `infra/migrations` are gone from the tree. That
-change did **not** delete them. They still exist in Cloudflare and wait for the owner to
-decommission them; [the last section](#accounts-removed-from-the-code-2026-11-16) lists them. The
-record below is kept as it was written, with the unused parts marked. The relay Workers, the
-release bucket and the website Workers are current.
+**Accounts were removed from the code on 16 November 2026, at the owner's request, and their
+cloud resources were deleted on 17 November 2026.** Claude Code and Codex sync plugins natively, so
+the app is local-only: no sign-in, no sync, nothing uploaded by an account. The account API
+Workers, the D1 databases, the blob R2 buckets, the Email Sending domain and the Turnstile widgets
+no longer exist; [the last section](#accounts-removed-from-the-code-2026-11-16) records what was
+deleted and what it held. The record below is kept as it was written, with the deleted parts
+marked. The relay Workers, the release bucket and the website Workers are current.
 
 | Resource | Identifier | Purpose | Status |
 |---|---|---|---|
-| D1 database | `auracode`, `b5b9de26-4714-4475-aacc-9f599a7c2eb2` | Accounts, sessions, device registry, encrypted sync records | Unused since 2026-11-16, not deleted |
-| R2 bucket | `auracode-blobs` | Private encrypted attachments and config blobs | Unused since 2026-11-16, not deleted |
+| D1 database | `auracode`, `b5b9de26-4714-4475-aacc-9f599a7c2eb2` | Accounts, sessions, device registry, encrypted sync records | Deleted 2026-11-17 |
+| R2 bucket | `auracode-blobs` | Private encrypted attachments and config blobs | Deleted 2026-11-17 |
 | R2 bucket | `auracode-releases` | Installers, checksums, updater manifests | Current |
-| Email Sending domain | `auracode.si`, `84273eb1ef3c4b108b774bc0e0a000ed` | Passwordless sign-in sender | Unused since 2026-11-16, not deleted |
-| Preview D1 database | `auracode-preview`, `11d6fa29-5c39-49c5-a85b-1ecc7645dbd5` | Isolated acceptance data, US jurisdiction | Unused since 2026-11-16, not deleted |
-| Preview R2 bucket | `auracode-preview-blobs` | Private acceptance ciphertext | Unused since 2026-11-16, not deleted |
+| Email Sending domain | `auracode.si`, `84273eb1ef3c4b108b774bc0e0a000ed` | Passwordless sign-in sender | Deleted 2026-11-17 |
+| Preview D1 database | `auracode-preview`, `11d6fa29-5c39-49c5-a85b-1ecc7645dbd5` | Isolated acceptance data, US jurisdiction | Deleted 2026-11-17 |
+| Preview R2 bucket | `auracode-preview-blobs` | Private acceptance ciphertext | Deleted 2026-11-17 |
 | Worker | `auracode-relay`, route `auracode.si/api/remote/*` | Remote sessions relay: one Durable Object (`Room`, SQLite-backed) per computer. Stores key and token hashes only | Current |
 | Preview Worker | `auracode-relay-preview`, route `preview.auracode.si/api/remote/*` | The same relay for the preview site | Current |
 
@@ -45,7 +43,7 @@ Workers uses the Standard model; subscription billing was not queried. Actual de
 unverified. Production Turnstile and API preparation are recorded below.
 No Neon project, Neon Auth service, Hyperdrive connection, or Resend domain is needed.
 
-> **Unused since 2026-11-16 (accounts removed from the code). Not deleted.**
+> **Deleted on 2026-11-17 (accounts removed from the code).**
 > The next four paragraphs: the preview bucket and database, their migrations, `auracode-api-preview`
 > and its live checks.
 
@@ -121,7 +119,7 @@ download path with a query string, and the preview host returned 301 to the same
 
 ## Production preparation, public API route inactive
 
-> **Unused since 2026-11-16 (accounts removed from the code). Not deleted.**
+> **Deleted on 2026-11-17 (accounts removed from the code).**
 > This whole section: the production sending domain, database, Turnstile widget and `auracode-api`.
 
 On 2026-10-26, email-content previews were disabled for the existing `auracode.si` sending domain
@@ -169,7 +167,7 @@ test bypasses, and no denied Assets upload, auth or billing endpoint was retried
 
 ## Private preview and website analytics
 
-> **Unused since 2026-11-16 (accounts removed from the code). Not deleted.**
+> **Deleted on 2026-11-17 (accounts removed from the code).**
 > The first and last paragraphs of this section: the invitation policy and the invitation build of
 > both API Workers. The analytics rule between them is current.
 
@@ -227,7 +225,7 @@ tested modules as preview (JS `7fea5f5a…`, Wasm `e926c1c6…`). All 53 public 
 `https://auracode.si`, with ten page HEAD checks, the notices page and policy, footer link and
 missing-asset 404. The unrouted `/api/v1/config` still returns a plain non-HTML 404.
 
-> **Unused since 2026-11-16 (accounts removed from the code). Not deleted.**
+> **Deleted on 2026-11-17 (accounts removed from the code).**
 
 Production API `auracode-api` version `a173e36a-cd71-437d-aa9f-b783af83fdd1` is staged with the same
 invitation-order build as preview (Wasm `9d545e66…`). All three secrets, D1, R2, email, plain vars,
@@ -266,27 +264,29 @@ has no account, no sign-in and no sync. The account API (`apps/api`), its D1 mig
 (`infra/migrations`), the website's sign-in, sign-up, account and device verification pages, and
 the Turnstile origin in the website's CSP were removed from the repository.
 
-Nothing in Cloudflare was changed or deleted by that change. No deploy, D1, R2, email, Turnstile
-or DNS command was run. These resources were created for accounts, are used by no code in this
-repository, and wait for the owner to decommission them:
+That change itself ran no deploy, D1, R2, email, Turnstile or DNS command. The owner then asked for
+the resources to be removed, and they were deleted on 17 November 2026 through the Cloudflare API,
+after a read-only look at what they held:
 
-- Workers `auracode-api` and `auracode-api-preview`, with their routes, their five-minute cleanup
-  cron triggers and their secrets (`TURNSTILE_SECRET`, `AUTH_HMAC_KEY`, `CLOUD_ACCOUNT_ALLOWLIST`).
-  The preview route is `preview.auracode.si/api/*`. This file records the production route as
-  inactive, but `docs/progress.md` (the M6 notes) records that `auracode.si/api/*` was later
-  pointed at `auracode-api`: check the zone's routes rather than this file.
+- Workers `auracode-api` and `auracode-api-preview`, with their routes `auracode.si/api/*` and
+  `preview.auracode.si/api/*`, their five-minute cleanup cron triggers and their secrets
+  (`TURNSTILE_SECRET`, `AUTH_HMAC_KEY`, `CLOUD_ACCOUNT_ALLOWLIST`). The routes went first, each
+  checked against its recorded pattern and script before it was deleted.
 - D1 databases `auracode` (`b5b9de26-4714-4475-aacc-9f599a7c2eb2`) and `auracode-preview`
-  (`11d6fa29-5c39-49c5-a85b-1ecc7645dbd5`).
-- R2 buckets `auracode-blobs` and `auracode-preview-blobs`.
-- The Email Sending domain `auracode.si` (`84273eb1ef3c4b108b774bc0e0a000ed`) and the DNS records
-  provisioned for it (`cf-bounce.auracode.si`, SPF, DKIM, DMARC).
+  (`11d6fa29-5c39-49c5-a85b-1ecc7645dbd5`). Production held one account with one approved device,
+  a Windows PC, six sessions and one key record, and no sync changes or blobs; the owner confirmed
+  it was a test. Preview held no rows. No export was kept.
+- R2 buckets `auracode-blobs` and `auracode-preview-blobs`, both empty.
+- The Email Sending domain `auracode.si` (`84273eb1ef3c4b108b774bc0e0a000ed`). Cloudflare removed
+  its `cf-bounce.auracode.si` MX, SPF and DKIM records with it. `_dmarc.auracode.si` stays at
+  `v=DMARC1; p=reject;`: the domain sends no mail, and the record keeps others from sending as it.
 - The Turnstile widgets `auracode production sign-in` (site key `0x4AAAAAAFnCekg62MEAwe_j`) and
-  the preview widget (site key `0x4AAAAAAFmu9KbL2voFn5QY`).
+  `auracode preview sign-in` (site key `0x4AAAAAAFmu9KbL2voFn5QY`).
 
-Until the API Workers and their routes are removed, `/api/*` on those hosts still reaches them, and
-the databases and buckets keep whatever invited accounts stored there. The relay's
-`/api/remote/*` routes are more specific and are not affected. Until the website is deployed
-from this source, the live site still serves the old pages.
+Afterwards `/api/*` outside `/api/remote/*` falls to the website Workers and answers 404, the
+relay still answers on `/api/remote/v1/`, and the zone's routes are the two relay routes and the
+two website routes. An installed build from before the removal that is signed in can no longer
+reach its account; its account profile stays on that computer's disk, untouched.
 
 Still current: the relay Workers `auracode-relay` and `auracode-relay-preview`, the release bucket
 `auracode-releases`, the website Workers `auracode-web` and `auracode-web-preview` with their
