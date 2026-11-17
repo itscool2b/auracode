@@ -44,7 +44,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 
@@ -183,7 +183,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -210,13 +210,13 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
 }
 
 .agent-row-status:is([data-phase="missing"], [data-phase="checking"]) {
   color: var(--g-fg-3);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .agent-row-status[data-phase="signin"] {
@@ -763,7 +763,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 

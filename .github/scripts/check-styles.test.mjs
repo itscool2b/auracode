@@ -23,7 +23,7 @@ test("a stylesheet on Graphite's tokens passes", () => {
       color: var(--g-fg-1);
       font-size: var(--g-text-ui);
       line-height: var(--g-leading-ui);
-      font-weight: 500;
+      font-weight: var(--g-weight-medium);
       transition: color var(--g-dur-fast) cubic-bezier(0.4, 0, 0.2, 1), opacity 0ms;
       animation: spin var(--g-dur-count) steps(1, end) infinite;
     }`;
@@ -73,12 +73,15 @@ test("type sizes and line heights must use tokens", () => {
   );
 });
 
-test("weights stay on Graphite's integers", () => {
+test("weights come only from the weight tokens, which each platform grades", () => {
   assert.equal(problems(".a { font-weight: 450; }").length, 1);
+  assert.equal(problems(".a { font-weight: 600; }").length, 1);
   assert.equal(problems(".a { font-weight: 700; }").length, 1);
   assert.equal(problems(".a { font-weight: bold; }").length, 1);
   assert.deepEqual(
-    problems(".a { font-weight: 600; } .b { font-weight: var(--g-weight-medium); }"),
+    problems(
+      ".a { font-weight: var(--g-weight-semibold); } .b { font-weight: var(--g-weight-medium); } .c { font-weight: inherit; }",
+    ),
     [],
   );
 });

@@ -177,7 +177,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-display);
   line-height: var(--g-leading-display);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-display);
   text-wrap: balance;
 }
@@ -308,7 +308,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .setup-folder small {
@@ -326,14 +326,14 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .setup-hint {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .setup-project-form {
@@ -627,7 +627,7 @@
   color: var(--g-red);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   overflow-wrap: anywhere;
 }
 
@@ -636,7 +636,7 @@
   align-items: center;
   gap: var(--g-space-2);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* "Clone into" groups the folder and the name; the fieldset draws nothing of its own. */
@@ -679,7 +679,7 @@
   background-color: var(--g-surface-1);
   color: var(--g-fg-1);
   font: inherit;
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   cursor: pointer;
   transition:
     border-color var(--g-dur-fast) var(--g-ease),
@@ -963,14 +963,14 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .setup-installations :where(legend small) {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 /*
@@ -1056,7 +1056,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .setup-executable-actions {
@@ -1083,7 +1083,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 

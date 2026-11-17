@@ -49,7 +49,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-display);
   text-wrap: balance;
 }
@@ -97,7 +97,7 @@
 .new-chat-field-label {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .new-chat-agents {
@@ -135,7 +135,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -327,7 +327,7 @@
   margin-left: auto;
   font-size: var(--g-text-meta);
   color: var(--g-fg-3);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .new-chat-path {
@@ -402,7 +402,7 @@
   align-items: center;
   gap: var(--g-space-8);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .new-chat-busy strong::before {
@@ -499,7 +499,7 @@
 .new-chat-more-label {
   flex: none;
   color: var(--g-fg-2);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
@@ -590,7 +590,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .new-chat-unavailable strong + span {
@@ -638,7 +638,7 @@
 .new-chat-worktree-mode {
   flex: none;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .new-chat-worktree-word {
@@ -937,7 +937,7 @@
   gap: var(--g-space-6);
   min-width: 0;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .new-chat-created p {

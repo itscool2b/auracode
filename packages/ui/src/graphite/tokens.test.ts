@@ -264,13 +264,29 @@ describe("Graphite motion tokens", () => {
 });
 
 describe("Graphite stylesheet rules", () => {
-  it("imports the tokens and keeps type to integer weights 400, 500 and 600", () => {
+  it("imports the tokens and sets type only through the three weight tokens", () => {
     expect(graphiteCss).toContain('@import "./tokens.css";');
     for (const match of graphiteCss.matchAll(/font-weight:\s*([^;]+);/g)) {
-      expect(["400", "500", "600"]).toContain((match[1] ?? "").trim());
+      expect([
+        "var(--g-weight-regular)",
+        "var(--g-weight-medium)",
+        "var(--g-weight-semibold)",
+        "inherit",
+      ]).toContain((match[1] ?? "").trim());
     }
-    for (const match of tokensCss.matchAll(/--g-weight-[\w-]+:\s*([^;]+);/g)) {
-      expect(["400", "500", "600"]).toContain((match[1] ?? "").trim());
+    // 400, 500 and 600 by default; each platform grades them (macOS a touch heavier, Linux more),
+    // always in order and within the face's range.
+    expect(token("weight-regular")).toBe("400");
+    expect(token("weight-medium")).toBe("500");
+    expect(token("weight-semibold")).toBe("600");
+    for (const block of tokensCss.matchAll(/:root\[data-os="\w+"\][^{]*\{([^}]+)\}/g)) {
+      const weight = (name: string) =>
+        Number(new RegExp(`--g-weight-${name}:\\s*(\\d+);`).exec(block[1] ?? "")?.[1]);
+      const [regular, medium, semibold] = ["regular", "medium", "semibold"].map(weight);
+      expect(regular).toBeGreaterThanOrEqual(400);
+      expect(medium).toBeGreaterThan(regular ?? 0);
+      expect(semibold).toBeGreaterThan(medium ?? 0);
+      expect(semibold).toBeLessThanOrEqual(700);
     }
   });
 

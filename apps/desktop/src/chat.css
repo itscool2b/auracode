@@ -128,7 +128,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-decoration: underline;
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
@@ -278,7 +278,7 @@
 
 .chat-byline {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-now {
@@ -549,7 +549,7 @@
 
 .chat-tool-status[data-status="failed"] {
   color: var(--g-red);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-tool-chevron {
@@ -831,7 +831,7 @@
 
 .chat-tool-group-result[data-tone="failed"] {
   color: var(--g-red);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* A settled or running stretch says nothing at its end; screen readers still hear it. */
@@ -928,7 +928,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-decoration: underline;
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
@@ -992,7 +992,7 @@
 .chat-diff-path strong {
   flex: none;
   color: var(--g-fg-1);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-diff-totals {
@@ -1120,7 +1120,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-align: left;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
@@ -1225,7 +1225,7 @@
   flex: 1;
   min-width: 0;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -1309,7 +1309,7 @@
 
 .chat-block[data-notify] .chat-block-title {
   color: var(--g-fg-2);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-resolution {
@@ -1339,7 +1339,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-prose);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -1614,7 +1614,7 @@
   margin-left: auto;
   padding-left: var(--g-space-4);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-handoff pre {
@@ -1658,7 +1658,7 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1821,7 +1821,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* 36px tall, so its 28px buttons sit 4px in on every side, on the grid. */
@@ -1926,7 +1926,7 @@
 .chat-changed-count {
   flex: none;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-changed-list {
@@ -2075,7 +2075,7 @@
 
 .chat-plan li[data-status="in_progress"] {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-plan input[type="checkbox"] {
@@ -2149,7 +2149,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   translate: -50% 0;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
@@ -2190,7 +2190,7 @@
   margin-bottom: calc(var(--g-space-6) * -1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .chat-app .answer .md-block:first-child > :is(h3, h4):first-child {
@@ -2198,12 +2198,12 @@
 }
 
 .chat-app .answer strong {
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .chat-app .answer em {
   font-style: normal;
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-app .answer :is(ul, ol) {
@@ -2325,7 +2325,7 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* A code block is a well: a 32px header with the language and Copy, then the code (4.8). */
@@ -2553,7 +2553,7 @@
   padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
@@ -2781,7 +2781,7 @@
   max-width: 200px;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2870,7 +2870,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 }
 .chat-control-heading > strong {
   font-size: var(--g-text-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 .chat-control-heading > p {
   margin: var(--g-space-4) 0;
@@ -2922,7 +2922,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-1);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 .chat-account-rings {
   position: absolute;
@@ -3069,7 +3069,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-picker-thinking > .ui-field {
@@ -3117,7 +3117,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* "More models": a quiet row at the list's end that opens the rest in place. */
@@ -3217,7 +3217,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   display: block;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3342,7 +3342,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-picker-field .g-select {
@@ -3468,7 +3468,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   gap: var(--g-space-8);
   min-height: 36px;
   padding: 0 var(--g-space-8);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* ---------- Reduced motion (3.8) ---------- */
@@ -3556,7 +3556,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-form-note,
@@ -3582,7 +3582,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 
 .chat-link-host {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* Comments on a diff's lines (Changes' review). A line's button shows on hover or focus. */
@@ -3726,7 +3726,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
   transition: color var(--g-dur-micro) var(--g-ease);
 }

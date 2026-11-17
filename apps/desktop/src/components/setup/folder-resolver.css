@@ -24,7 +24,7 @@
 
 .folder-resolver-lead strong {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .folder-resolver h3 {
@@ -35,14 +35,14 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .folder-resolver h3 small {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .folder-resolver ul {

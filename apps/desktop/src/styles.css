@@ -49,7 +49,7 @@
 
   b,
   strong {
-    font-weight: 600;
+    font-weight: var(--g-weight-semibold);
   }
 
   code,
@@ -337,7 +337,7 @@
     appearance: none;
     max-width: 100%;
     color: var(--g-fg-1);
-    font-weight: 500;
+    font-weight: var(--g-weight-medium);
   }
 
   .agent-chip-state {
@@ -374,7 +374,7 @@
     color: var(--g-fg-1);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
-    font-weight: 500;
+    font-weight: var(--g-weight-medium);
   }
 
   .muted {
@@ -655,7 +655,7 @@
     color: var(--g-fg-1);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
-    font-weight: 500;
+    font-weight: var(--g-weight-medium);
   }
 
   .plan ol {
@@ -712,7 +712,7 @@
     margin: var(--g-space-4) 0 0;
     font-size: var(--g-text-heading);
     line-height: var(--g-leading-heading);
-    font-weight: 600;
+    font-weight: var(--g-weight-semibold);
   }
 
   .answer p + p {
@@ -845,7 +845,7 @@
   .answer th {
     color: var(--g-fg-3);
     font-size: var(--g-text-meta);
-    font-weight: 500;
+    font-weight: var(--g-weight-medium);
   }
 
   .answer a {
@@ -981,7 +981,7 @@
   .fps strong {
     color: var(--g-fg-1);
     font-size: var(--g-text-title);
-    font-weight: 500;
+    font-weight: var(--g-weight-medium);
   }
 
   /* ---------- Motion ---------- */

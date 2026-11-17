@@ -48,10 +48,10 @@
   --g-terminal-cursor-text: #1e1d1b;
   --g-terminal-selection: #3d2c24;
   --g-window: #121110;
-  --g-window-tint: rgb(25 24 23 / 0.45);
-  --g-glass-layer: rgb(33 32 29 / 0.72);
-  --g-glass-bar: rgb(28 27 25 / 0.66);
-  --g-glass-pop: rgb(42 40 37 / 0.88);
+  --g-window-tint: rgb(18 17 16 / 0.6);
+  --g-glass-layer: #21201d;
+  --g-glass-bar: #21201d;
+  --g-glass-pop: #2a2825;
 }
 
 /* Claude Code, light */
@@ -95,10 +95,10 @@
   --g-terminal-cursor-text: #f2efe8;
   --g-terminal-selection: #f3dccf;
   --g-window: #eeebe4;
-  --g-window-tint: rgb(248 246 241 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 254 251 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(238 235 228 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Codex, dark */
@@ -143,10 +143,10 @@
   --g-terminal-cursor-text: #13161b;
   --g-terminal-selection: #1f2b3d;
   --g-window: #0b0d10;
-  --g-window-tint: rgb(15 17 21 / 0.45);
-  --g-glass-layer: rgb(22 26 31 / 0.72);
-  --g-glass-bar: rgb(18 21 26 / 0.66);
-  --g-glass-pop: rgb(30 35 42 / 0.88);
+  --g-window-tint: rgb(11 13 16 / 0.6);
+  --g-glass-layer: #161a1f;
+  --g-glass-bar: #161a1f;
+  --g-glass-pop: #1e232a;
 }
 
 /* Codex, light */
@@ -190,10 +190,10 @@
   --g-terminal-cursor-text: #f1f4f7;
   --g-terminal-selection: #dbe6fb;
   --g-window: #edf0f4;
-  --g-window-tint: rgb(247 249 251 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(237 240 244 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Grok Build, dark */
@@ -238,10 +238,10 @@
   --g-terminal-cursor-text: #202020;
   --g-terminal-selection: #3a3a3a;
   --g-window: #151514;
-  --g-window-tint: rgb(31 31 30 / 0.45);
-  --g-glass-layer: rgb(38 38 38 / 0.72);
-  --g-glass-bar: rgb(30 30 30 / 0.66);
-  --g-glass-pop: rgb(46 46 46 / 0.88);
+  --g-window-tint: rgb(21 21 20 / 0.6);
+  --g-glass-layer: #262626;
+  --g-glass-bar: #262626;
+  --g-glass-pop: #2e2e2e;
 }
 
 /* Grok Build, light */
@@ -285,10 +285,10 @@
   --g-terminal-cursor-text: #f5f5f5;
   --g-terminal-selection: #e6e6e6;
   --g-window: #f2f2f2;
-  --g-window-tint: rgb(255 255 255 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(242 242 242 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Pi, dark */
@@ -333,10 +333,10 @@
   --g-terminal-cursor-text: #17181c;
   --g-terminal-selection: #3b2f1b;
   --g-window: #0d0e10;
-  --g-window-tint: rgb(18 19 22 / 0.45);
-  --g-glass-layer: rgb(26 27 31 / 0.72);
-  --g-glass-bar: rgb(22 23 27 / 0.66);
-  --g-glass-pop: rgb(36 37 42 / 0.88);
+  --g-window-tint: rgb(13 14 16 / 0.6);
+  --g-glass-layer: #1a1b1f;
+  --g-glass-bar: #1a1b1f;
+  --g-glass-pop: #24252a;
 }
 
 /* Pi, light */
@@ -380,10 +380,10 @@
   --g-terminal-cursor-text: #f5f2ec;
   --g-terminal-selection: #f6e3c2;
   --g-window: #efece5;
-  --g-window-tint: rgb(251 249 245 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(239 236 229 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Antigravity, dark */
@@ -428,10 +428,10 @@
   --g-terminal-cursor-text: #13121f;
   --g-terminal-selection: #2a2552;
   --g-window: #0a0912;
-  --g-window-tint: rgb(14 13 24 / 0.45);
-  --g-glass-layer: rgb(24 22 38 / 0.72);
-  --g-glass-bar: rgb(19 18 31 / 0.66);
-  --g-glass-pop: rgb(34 31 52 / 0.88);
+  --g-window-tint: rgb(10 9 18 / 0.6);
+  --g-glass-layer: #181626;
+  --g-glass-bar: #181626;
+  --g-glass-pop: #221f34;
 }
 
 /* Antigravity, light */
@@ -475,10 +475,10 @@
   --g-terminal-cursor-text: #f2f0fd;
   --g-terminal-selection: #e0dcff;
   --g-window: #efedfa;
-  --g-window-tint: rgb(248 247 255 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(239 237 250 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Cursor, dark */
@@ -523,10 +523,10 @@
   --g-terminal-cursor-text: #111117;
   --g-terminal-selection: #23273c;
   --g-window: #08080c;
-  --g-window-tint: rgb(12 12 17 / 0.45);
-  --g-glass-layer: rgb(21 21 28 / 0.72);
-  --g-glass-bar: rgb(17 17 23 / 0.66);
-  --g-glass-pop: rgb(30 30 39 / 0.88);
+  --g-window-tint: rgb(8 8 12 / 0.6);
+  --g-glass-layer: #15151c;
+  --g-glass-bar: #15151c;
+  --g-glass-pop: #1e1e27;
 }
 
 /* Cursor, light */
@@ -570,10 +570,10 @@
   --g-terminal-cursor-text: #f2f2f7;
   --g-terminal-selection: #dfe3f6;
   --g-window: #eeeef4;
-  --g-window-tint: rgb(248 248 251 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(238 238 244 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* OpenCode, dark */
@@ -618,10 +618,10 @@
   --g-terminal-cursor-text: #0b1510;
   --g-terminal-selection: #12361f;
   --g-window: #050b08;
-  --g-window-tint: rgb(7 16 11 / 0.45);
-  --g-glass-layer: rgb(14 26 19 / 0.72);
-  --g-glass-bar: rgb(11 21 15 / 0.66);
-  --g-glass-pop: rgb(22 36 28 / 0.88);
+  --g-window-tint: rgb(5 11 8 / 0.6);
+  --g-glass-layer: #0e1a13;
+  --g-glass-bar: #0e1a13;
+  --g-glass-pop: #16241c;
 }
 
 /* OpenCode, light */
@@ -665,10 +665,10 @@
   --g-terminal-cursor-text: #eff7f2;
   --g-terminal-selection: #d3efdc;
   --g-window: #ecf4ef;
-  --g-window-tint: rgb(246 251 248 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(236 244 239 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* oh-my-pi, dark */
@@ -713,10 +713,10 @@
   --g-terminal-cursor-text: #190b15;
   --g-terminal-selection: #42153a;
   --g-window: #0d050b;
-  --g-window-tint: rgb(19 8 16 / 0.45);
-  --g-glass-layer: rgb(30 14 25 / 0.72);
-  --g-glass-bar: rgb(25 11 21 / 0.66);
-  --g-glass-pop: rgb(42 20 35 / 0.88);
+  --g-window-tint: rgb(13 5 11 / 0.6);
+  --g-glass-layer: #1e0e19;
+  --g-glass-bar: #1e0e19;
+  --g-glass-pop: #2a1423;
 }
 
 /* oh-my-pi, light */
@@ -760,10 +760,10 @@
   --g-terminal-cursor-text: #fcf0f6;
   --g-terminal-selection: #fbd9ec;
   --g-window: #f8eef3;
-  --g-window-tint: rgb(255 247 251 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(248 238 243 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Hermes, dark */
@@ -808,10 +808,10 @@
   --g-terminal-cursor-text: #18140d;
   --g-terminal-selection: #3b2e10;
   --g-window: #0e0b07;
-  --g-window-tint: rgb(19 16 10 / 0.45);
-  --g-glass-layer: rgb(29 24 16 / 0.72);
-  --g-glass-bar: rgb(24 20 13 / 0.66);
-  --g-glass-pop: rgb(40 33 23 / 0.88);
+  --g-window-tint: rgb(14 11 7 / 0.6);
+  --g-glass-layer: #1d1810;
+  --g-glass-bar: #1d1810;
+  --g-glass-pop: #282117;
 }
 
 /* Hermes, light */
@@ -855,10 +855,10 @@
   --g-terminal-cursor-text: #f8f3e7;
   --g-terminal-selection: #f6e7bf;
   --g-window: #f3eee2;
-  --g-window-tint: rgb(253 250 242 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-window-tint: rgb(243 238 226 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
 }
 
 /* Reduce transparency: a theme's layers turn solid too, as Graphite's do (ui-tokens.css). */

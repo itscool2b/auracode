@@ -96,7 +96,7 @@ button.chat-task-pill:active {
   flex: 0 1 auto;
   min-width: 4em;
   overflow: hidden;
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
 }
 
@@ -257,7 +257,7 @@ button.chat-task-pill:active {
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

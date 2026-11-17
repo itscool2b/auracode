@@ -22,7 +22,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   font-synthesis: none;
 }
 
@@ -379,7 +379,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .ui-row {
@@ -391,12 +391,12 @@
 
 .ui-muted {
   color: var(--g-fg-3);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .ui-error {
   color: var(--g-red);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   overflow-wrap: anywhere;
 }
 
@@ -684,7 +684,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-section-toggle {
@@ -749,7 +749,7 @@ details.setup-install-review[open] > summary::before {
 
 .chat-attention .chat-section-count {
   color: var(--g-volt);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-attention-row {
@@ -806,7 +806,7 @@ details.setup-install-review[open] > summary::before {
 .chat-project-toggle {
   padding-right: var(--g-space-64);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-project-new {
@@ -935,7 +935,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-red);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-row-menu {
@@ -1101,7 +1101,7 @@ details.setup-install-review[open] > summary::before {
   font-family: var(--g-sans);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 0;
@@ -1217,7 +1217,7 @@ details.setup-install-review[open] > summary::before {
   min-width: 0;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
 }
 
@@ -1232,7 +1232,7 @@ details.setup-install-review[open] > summary::before {
 .chat-header-folder .chat-row-flag {
   font-size: inherit;
   line-height: inherit;
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 /* The status speaks only when it says something: working, waiting, failed, a sign-in. */
@@ -1277,7 +1277,7 @@ details.setup-install-review[open] > summary::before {
 
 .chat-status[data-activity="waiting"] {
   color: var(--g-volt);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /*
@@ -1401,7 +1401,7 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-session-info strong {
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-session-info > span {
@@ -1543,7 +1543,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   text-align: left;
   animation: chat-popover-in var(--g-dur-base) var(--g-ease) both;
 }
@@ -1645,7 +1645,7 @@ details.setup-install-review[open] > summary::before {
   margin: 0 0 var(--g-space-8);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .g-dialog form {
@@ -1703,7 +1703,7 @@ details.setup-install-review[open] > summary::before {
   align-items: center;
   gap: var(--g-space-8);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* Volt: the one thing to look at before moving. */
@@ -1777,7 +1777,7 @@ details.setup-install-review[open] > summary::before {
 .chat-color-choices legend {
   margin-bottom: var(--g-space-8);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-color-choices label {
@@ -1833,7 +1833,7 @@ details.setup-install-review[open] > summary::before {
 
 .conversation-target > div > strong {
   display: block;
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .conversation-target > div > span {
@@ -1858,7 +1858,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .conversation-context pre {
@@ -1934,7 +1934,7 @@ details.setup-install-review[open] > summary::before {
 
 .conversation-edit label {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .conversation-edit p {
@@ -2030,7 +2030,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
     color var(--g-dur-fast) var(--g-ease);
@@ -2110,7 +2110,7 @@ details.setup-install-review[open] > summary::before {
   display: block;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2250,7 +2250,7 @@ details.setup-install-review[open] > summary::before {
 .ui-toast-title {
   margin: 0;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -2323,7 +2323,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-inbox-list {

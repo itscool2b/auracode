@@ -86,7 +86,7 @@
   background-color: transparent;
   color: var(--g-fg-2);
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
   cursor: pointer;
   transition:

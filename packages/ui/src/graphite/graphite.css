@@ -22,7 +22,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   font-synthesis: none;
   font-kerning: normal;
   text-rendering: optimizeLegibility;
@@ -62,20 +62,20 @@
 .g-text-heading {
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .g-text-title {
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 
 .g-text-display {
   font-size: var(--g-text-display);
   line-height: var(--g-leading-display);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-display);
   text-wrap: balance;
 }
@@ -95,7 +95,7 @@
 .g-web-hero {
   font-size: var(--g-web-hero);
   line-height: var(--g-web-hero-leading);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-web-hero-tracking);
   text-wrap: balance;
 }
@@ -103,7 +103,7 @@
 .g-web-h2 {
   font-size: var(--g-web-h2);
   line-height: var(--g-web-h2-leading);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-web-h2-tracking);
   text-wrap: balance;
 }
@@ -111,7 +111,7 @@
 .g-web-h3 {
   font-size: var(--g-web-h3);
   line-height: var(--g-web-h3-leading);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-web-h3-tracking);
 }
 
@@ -157,7 +157,7 @@
 
 .g-lead-in > :where(strong, b) {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .g-link {
@@ -176,8 +176,9 @@
 /* ---------------------------------------------------------------------- buttons (4.1) */
 
 /*
- * Every button is a pill. A translucent fill and a hairline rim read the same on an opaque surface
- * and on glass; the one primary is solid, with a lit top edge. A press settles the pill by 3%.
+ * Every button is a pill, after the Grok Bot app: a quiet step of ink for the ordinary one, solid
+ * ink with the page's colour for the one primary, nothing at rest for a ghost. No rims and no lit
+ * edges. A press settles the pill by 3%.
  */
 .g-button {
   --g-button-h: 32px;
@@ -192,12 +193,12 @@
   border: 1px solid transparent;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  box-shadow: none;
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
@@ -236,6 +237,8 @@
   box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
 }
 
+/* The outline's hover keeps its edge and adds the quiet fill. */
+
 .g-button-ghost {
   background-color: transparent;
   box-shadow: none;
@@ -259,7 +262,7 @@
 
   .g-button-outline:where(:hover) {
     background-color: var(--g-glass-control);
-    box-shadow: inset 0 0 0 1px var(--g-line-strong);
+    box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
   }
 
   .g-button-ghost:where(:hover) {
@@ -333,14 +336,14 @@
   height: 36px;
   margin: 0;
   padding: 0 12px;
-  border: 1px solid var(--g-line-strong);
+  border: 1px solid var(--g-glass-rim-strong);
   border-radius: var(--g-radius-10);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-glass-card);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   transition: border-color var(--g-dur-fast) var(--g-ease);
 }
 
@@ -350,11 +353,11 @@
 }
 
 :is(.g-input, .g-select, .g-textarea):where(:hover) {
-  border-color: var(--g-fg-4);
+  border-color: color-mix(in srgb, var(--g-fg-1) 22%, transparent);
 }
 
 :is(.g-input, .g-select, .g-textarea):where(:focus) {
-  border-color: var(--g-fg-3);
+  border-color: color-mix(in srgb, var(--g-fg-1) 32%, transparent);
 }
 
 :is(.g-input, .g-select, .g-textarea):where(:focus-visible) {
@@ -382,7 +385,7 @@
 }
 
 :is(.g-input, .g-select, .g-textarea):where(:disabled) {
-  border-color: var(--g-line);
+  border-color: var(--g-glass-rim);
   color: var(--g-fg-4);
   cursor: not-allowed;
 }
@@ -391,11 +394,11 @@
   border-color: var(--g-red);
 }
 
-/* Segmented control: a recessed pill track with one raised, lit segment (4.3). */
+/* Segmented control: a recessed pill track with one raised segment (4.3). */
 .g-segmented {
   --g-segment-on-bg: var(--g-glass-raised);
   --g-segment-on-fg: var(--g-fg-1);
-  --g-segment-on-ring: var(--g-glass-rim);
+  --g-segment-on-ring: transparent;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -404,13 +407,13 @@
   padding: 2px;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  box-shadow: none;
 }
 
 .g-segmented-quiet {
   --g-segment-on-bg: var(--g-glass-raised);
   --g-segment-on-fg: var(--g-fg-1);
-  --g-segment-on-ring: var(--g-glass-rim-strong);
+  --g-segment-on-ring: var(--g-glass-rim);
 }
 
 .g-segment {
@@ -428,7 +431,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -471,7 +474,7 @@
   margin: 0;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-control-active);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: none;
   cursor: pointer;
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
@@ -525,12 +528,12 @@
   padding: 0 9px;
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
+  box-shadow: none;
   color: var(--g-fg-2);
   font-family: var(--g-sans);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
 }
 
@@ -548,7 +551,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
 }
 
@@ -563,12 +566,12 @@
   padding: 0 5px;
   border-radius: var(--g-radius-6);
   background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-2);
   font-family: var(--g-mono);
   font-size: var(--g-text-key);
   line-height: var(--g-leading-key);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   font-variant-ligatures: none;
 }
 
@@ -650,7 +653,7 @@
   box-shadow: inset 0 0 0 1px var(--g-line-strong);
   color: var(--g-fg-2);
   font-family: var(--g-sans);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   line-height: 1;
   letter-spacing: -0.02em;
   user-select: none;
@@ -754,7 +757,7 @@
   gap: 0.375em;
   color: var(--g-fg-1);
   font-family: var(--g-sans);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: 1;
   letter-spacing: -0.035em;
   white-space: nowrap;
@@ -938,7 +941,7 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
@@ -972,9 +975,9 @@
   margin: 0;
   padding: 12px 16px;
   overflow: auto;
-  border: 1px solid var(--g-line);
+  border: 1px solid var(--g-glass-rim);
   border-radius: var(--g-radius-10);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-code-bg);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
@@ -1134,8 +1137,8 @@
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  background-color: var(--g-glass-card);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 /* A row on a hairline. Rows contain their own layout, so a long list never relayouts as one. */
@@ -1145,7 +1148,7 @@
   gap: 12px;
   box-sizing: border-box;
   min-height: 44px;
-  border-bottom: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line-faint);
   contain: layout style;
 }
 
@@ -1167,7 +1170,7 @@
   padding: 16px 20px;
   border-radius: var(--g-radius-12);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   list-style: none;
   cursor: pointer;
 }
@@ -1183,7 +1186,7 @@
   color: var(--g-fg-2);
   font-size: 20px;
   line-height: 20px;
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   text-align: center;
 }
 
@@ -1203,13 +1206,17 @@
 
 /* ----------------------------------------------------- menus, tooltips, dialogs (4.6) */
 
-/* Menus, tooltips and dialogs are frosted glass: radius 14 outside, 10 for the rows inside. */
+/*
+ * Menus, tooltips and dialogs are solid and raised, as the Grok Bot app draws them: the raised
+ * layer with one faint edge and, in light, a soft two-step shadow. Menus are radius 16 with rows
+ * of 32 at radius 10, 6px in.
+ */
 .g-menu {
   box-sizing: border-box;
   min-width: 200px;
-  padding: 4px;
+  padding: 6px;
   border: 0;
-  border-radius: var(--g-radius-14);
+  border-radius: var(--g-radius-16);
   background-color: var(--g-glass-pop);
   -webkit-backdrop-filter: var(--g-blur-pop);
   backdrop-filter: var(--g-blur-pop);
@@ -1242,7 +1249,7 @@
 /* The highlight is the focus indicator inside a menu, as in every native menu. */
 .g-menu-item:where(:hover, :focus-visible, [data-highlighted]) {
   outline: none;
-  background-color: var(--g-glass-control-active);
+  background-color: var(--g-glass-control);
 }
 
 .g-menu-item:where(:disabled, [aria-disabled="true"]) {
@@ -1264,17 +1271,17 @@
 
 .g-menu-separator {
   height: 1px;
-  margin: 4px 6px;
+  margin: 6px 4px;
   border: 0;
-  background-color: var(--g-glass-rim-strong);
+  background-color: var(--g-glass-rim);
 }
 
 .g-tooltip {
   box-sizing: border-box;
   max-width: 280px;
-  padding: 4px 9px;
+  padding: 4px 8px;
   border: 0;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-6);
   background-color: var(--g-glass-pop);
   -webkit-backdrop-filter: var(--g-blur-pop);
   backdrop-filter: var(--g-blur-pop);
@@ -1325,7 +1332,7 @@
   margin: 0;
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 

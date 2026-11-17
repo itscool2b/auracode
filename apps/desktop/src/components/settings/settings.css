@@ -78,7 +78,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 
@@ -131,7 +131,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-section > h2::after {
@@ -284,7 +284,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -415,7 +415,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* Fine print, folded under one line until it is wanted. */
@@ -430,7 +430,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
@@ -497,7 +497,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-sheet-foot {
@@ -600,7 +600,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   pointer-events: none;
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
@@ -637,7 +637,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-actions {
@@ -694,7 +694,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   cursor: pointer;
 }
 
@@ -709,7 +709,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
@@ -818,7 +818,7 @@ h1 + .settings-group {
 }
 
 .settings-confirm strong {
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-confirm p {
@@ -846,7 +846,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   overflow-wrap: anywhere;
 }
 
@@ -1010,7 +1010,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .settings-sidebar nav {
@@ -1053,7 +1053,7 @@ h1 + .settings-group {
 /* The open page: a lit glass capsule, ink and 500, as the open chat is. */
 .settings-sidebar nav button[aria-current] {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-sidebar nav button[aria-current]::before {

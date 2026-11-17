@@ -537,7 +537,7 @@
   background-color: var(--g-volt);
   color: var(--g-bg);
   font-size: var(--g-text-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-meta);
 }
 
@@ -587,7 +587,7 @@
   margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-title);
 }
 
@@ -653,7 +653,7 @@
   margin: var(--g-space-8) 0 var(--g-space-4);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-ui);
 }
 
@@ -789,7 +789,7 @@
   background-color: var(--g-surface-1);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-ui);
 }
 
@@ -976,7 +976,7 @@
   background-color: var(--g-volt);
   color: var(--g-bg);
   font-size: var(--g-text-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-meta);
 }
 

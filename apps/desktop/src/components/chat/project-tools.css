@@ -21,7 +21,7 @@
 .project-tools-body h3 {
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .project-tools-options {

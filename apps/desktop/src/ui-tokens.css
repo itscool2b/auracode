@@ -1,11 +1,11 @@
 /*
- * Halo for the desktop app (docs/design/visual-language.md). Every colour, type size, space,
- * radius and duration is a --g-* token from @auracode/ui; stylesheets read them directly. The few
- * values below are the app window's own layout, which the shared tokens do not define.
+ * The desktop app's own layout values (docs/design/visual-language.md). Every colour, type size,
+ * space, radius and duration is a --g-* token from @auracode/ui; stylesheets read them directly.
  *
- * The window is glass: the sidebar sits on the window's material (Acrylic, Mica, vibrancy or
- * Liquid Glass, under a light tint), and the work happens on translucent layers that float 8px in
- * from its edges. With no material the same layers sit on the opaque --g-window colour.
+ * The window is flat and soft, after the Grok Bot app (owner, 17 November 2026): the sidebar sits
+ * on the window's colour (over the native material on macOS and Windows, under a tint), and the
+ * work happens on solid panes a step lighter in dark and white in light, 8px in from its edges.
+ * Depth is tone and one faint edge, never blur.
  */
 @import "@auracode/ui/graphite.css";
 /* Desktop themes, one per supported agent: palettes over these tokens (themes.ts). */
@@ -47,26 +47,23 @@
    * goes. Both appearances and every theme take it from their own glass tokens.
    */
   --ui-composer-fill: var(--g-glass-pop);
-  --ui-composer-sheen: linear-gradient(180deg, var(--g-glass-card) 0, transparent 10px);
-  --ui-composer-shadow:
-    var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight), inset 0 0 0 1px var(--g-glass-rim);
-  --ui-composer-shadow-focus:
-    var(--g-shadow-pop), inset 0 1px 0 var(--g-glass-highlight),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  --ui-composer-sheen: none;
+  --ui-composer-shadow: inset 0 0 0 1px var(--g-glass-rim), var(--g-shadow-control);
+  --ui-composer-shadow-focus: inset 0 0 0 1px var(--g-glass-rim-strong), var(--g-shadow-control);
 
   /*
    * Paper and the ink on it, for the sent message (the Grok Bot app's light block on a dark
    * window): the theme's ink a step toward its page, with the page's colour for the words. Set
    * here, on the root, because the block redefines the text tokens for what sits inside it.
    */
-  --ui-paper: color-mix(in srgb, var(--g-fg-1) 92%, var(--g-bg));
-  --ui-paper-ink: var(--g-bg);
+  --ui-paper: color-mix(in srgb, var(--g-fg-1) 16%, var(--g-glass-layer));
+  --ui-paper-ink: var(--g-fg-1);
 
   /*
    * A card, as the Grok Bot app draws one: a faint fill of the theme's ink, a 16px radius, no rim
    * and no shadow. Grouped settings rows, transcript cards, the dashboard's cards and the like.
    */
-  --ui-card-flat: color-mix(in srgb, var(--g-fg-1) 6%, transparent);
+  --ui-card-flat: var(--g-glass-card);
 
   /* A quiet disclosure chevron, as a mask so it takes any colour. */
   --ui-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E");
@@ -96,6 +93,15 @@
   [data-glass="acrylic"]
 ) {
   background-color: transparent;
+}
+
+/*
+ * The sent message, as the Grok Bot app sets it: a soft step of ink in dark, solid ink in light
+ * with the page's colour for its words.
+ */
+:root[data-theme="light"] {
+  --ui-paper: var(--g-fg-1);
+  --ui-paper-ink: var(--g-bg);
 }
 
 /*

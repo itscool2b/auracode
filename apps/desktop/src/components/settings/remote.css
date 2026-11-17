@@ -35,7 +35,7 @@
   margin-bottom: var(--g-space-8);
   padding: 0;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .remote-level {
@@ -61,7 +61,7 @@
 
 .remote-level strong {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .remote-level span > span {

@@ -39,7 +39,7 @@
 .shared-mcp-row .plugins-row-text > strong {
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 .shared-mcp-panel .plugins-agent-head {
   gap: var(--g-space-8);

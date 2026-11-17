@@ -7,7 +7,8 @@
  * - px, rem or em lengths in margin, padding and gap (use --g-space-*; 0 and 1px hairlines pass);
  * - px, rem or em lengths in border radii (use --g-radius-*);
  * - font sizes and line heights that are not tokens (inherit and normal pass);
- * - font weights other than 400, 500 and 600 (Graphite's integer weights);
+ * - font weights that are not the weight tokens (--g-weight-regular, -medium, -semibold), which
+ *   each platform grades so text reads the same weight everywhere;
  * - transition and animation times that are not --g-dur-* tokens (0ms and 0s pass).
  *
  * Custom property definitions are not checked: a value given a name is a token by definition. The
@@ -68,7 +69,7 @@ const RADIUS = /^border(?:-[a-z]+)*-radius$/;
 const LENGTH = /(?<![\w-])(-?\d*\.?\d+)(px|rem|em)\b/g;
 const HEX = /#[0-9a-fA-F]{3,8}\b|%23[0-9a-fA-F]{3,8}\b/;
 const TIME = /(?<![\w-])(\d*\.?\d+)(ms|s)\b/g;
-const WEIGHTS = new Set(["400", "500", "600", "inherit"]);
+const WEIGHTS = new Set(["inherit"]);
 
 /** Comments become spaces, so offsets and line numbers stay true. */
 function stripComments(css) {
@@ -110,7 +111,9 @@ function problemsIn(property, value) {
   if (property === "font-weight") {
     const weight = value.trim();
     if (!WEIGHTS.has(weight) && !/^var\(--g-weight-[\w-]+\)$/.test(weight)) {
-      problems.push(`font-weight ${weight}; Graphite uses 400, 500 and 600 only`);
+      problems.push(
+        `font-weight ${weight}; use var(--g-weight-regular), -medium or -semibold, which each platform grades`,
+      );
     }
   }
   if (/^(?:transition|animation)(?:-duration|-delay)?$/.test(property)) {
