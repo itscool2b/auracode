@@ -1,8 +1,9 @@
 /**
- * Scripted theme checks (`?preview=settings`, `?preview=plan`, `?preview=permission`). The gallery
- * lists Aura and one theme per agent, each named by its theme alone; a click or an arrow key
- * applies a theme at once, a reload keeps it, and Aura sets no palette. Every theme then passes
- * axe, contrast included, over the chat's busiest surfaces in both appearances.
+ * Scripted theme checks (`?preview=settings`, `?preview=plan`, `?preview=permission`,
+ * `?preview=new`, `?preview=settings&page=agents`). The gallery lists Aura and one theme per agent,
+ * each named by its theme alone; a click or an arrow key applies a theme at once, a reload keeps
+ * it, and Aura sets no palette. Every theme then passes axe, contrast included, over the chat's
+ * busiest surfaces, New chat's stage and Settings > Agents, in both appearances.
  * Usage: node scripts/check-themes.mjs (CHECK_URL defaults to http://localhost:1448).
  */
 import assert from "node:assert/strict";
@@ -29,6 +30,10 @@ const THEMES = [
 const VIEWS = {
   plan: (page) => page.getByText("Plan ready for review").waitFor(),
   permission: (page) => page.getByRole("button", { name: /Allow/ }).first().waitFor(),
+  // New chat's stage: the message box first, the agent, folder and Chat or Terminal chips under it.
+  new: (page) => page.getByRole("textbox", { name: "First message" }).waitFor(),
+  // Settings > Agents: the agents joining auracode, above their rows.
+  "settings&page=agents": (page) => page.getByTestId("agent-connect").first().waitFor(),
 };
 
 // A new palette repaints every control; audit once every finite transition has ended.
@@ -50,12 +55,12 @@ export async function checkThemes(browser, url, out, engine) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
-      const palette = async () =>
-        (await page.locator("html").getAttribute("data-palette")) ?? "aura";
+      const palette = async (on = page) =>
+        (await on.locator("html").getAttribute("data-palette")) ?? "aura";
       // Settings is a whole page; a chat preview is one pane, audited as check-chat does.
-      const audit = async (label, tags) => {
-        await settled(page);
-        const builder = new AxeBuilder({ page });
+      const audit = async (label, tags, on = page) => {
+        await settled(on);
+        const builder = new AxeBuilder({ page: on });
         const { violations } = await (tags ? builder.withTags(tags) : builder).analyze();
         assert.deepEqual(
           violations.map(
@@ -157,16 +162,29 @@ export async function checkThemes(browser, url, out, engine) {
       await page.getByRole("alert").waitFor({ state: "hidden" });
       assert.equal(await saved(), "aura");
 
-      // Every theme over the chat's busiest surfaces: a plan to review and an approval.
-      for (const [id] of THEMES)
-        for (const [view, ready] of Object.entries(VIEWS)) {
-          await page.goto(`${url}/?preview=${view}&theme=${appearance}&palette=${id}`);
-          await ready(page);
-          assert.equal(await palette(), id, `${view} paints ${id}`);
-          await audit(`${view} ${id}`, ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
-          if (view === "plan" && (id === "claude" || id === "grok"))
-            await page.screenshot({ path: resolve(out, `${engine}-${appearance}-plan-${id}.png`) });
+      // Every theme over the chat's busiest surfaces (a plan to review and an approval), New chat's
+      // stage and Settings > Agents. Each theme gets a fresh page: one page loading every view's
+      // modules from the dev server 80 times ran Chromium out of resources
+      // (net::ERR_INSUFFICIENT_RESOURCES) and drew nothing.
+      await page.close();
+      for (const [id] of THEMES) {
+        const themed = await context.newPage();
+        themed.on("pageerror", (error) => errors.push(error.message));
+        try {
+          for (const [view, ready] of Object.entries(VIEWS)) {
+            await themed.goto(`${url}/?preview=${view}&theme=${appearance}&palette=${id}`);
+            await ready(themed);
+            assert.equal(await palette(themed), id, `${view} paints ${id}`);
+            await audit(`${view} ${id}`, ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"], themed);
+            if (view === "plan" && (id === "claude" || id === "grok"))
+              await themed.screenshot({
+                path: resolve(out, `${engine}-${appearance}-plan-${id}.png`),
+              });
+          }
+        } finally {
+          await themed.close();
         }
+      }
       assert.deepEqual(errors, []);
     } finally {
       await context.close();
