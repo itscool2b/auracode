@@ -91,19 +91,36 @@ named by `OPENSSL_SRC_PERL`.
 ## Changelog
 
 Every pull request merged into `main` adds its line to [CHANGELOG.md](../CHANGELOG.md) in the
-same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, saying in plain
-words what changed for the person using auracode, and ending with its link,
-`([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to learn its
-number, then commit the line. If it merges on a later day than planned, move the line. `pnpm lint`
-runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the links and that
-each pull request appears once.
+same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, and ending with
+its link, `([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to
+learn its number, then commit the line. If it merges on a later day than planned, move the line.
+`pnpm lint` runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the
+links, that each pull request appears once, and that no line runs past 600 characters before its
+link.
+
+Write the line in simple English about what changed for the person using auracode (owner, 16
+November 2026: the changelog is to "speak in English, simple English, about functionality changes
+in auracode"). The reader uses the app and may not be a programmer:
+
+- **Headline first.** The words up to the line's first colon or full stop are the headline: a plain
+  statement of the change, about twelve words at most. Then one to three short sentences of detail,
+  and no more. Most lines stay well under 400 characters.
+- **Short everyday words and short sentences.** Say what the app does differently now: "message
+  box", not "composer"; "the chat shows", not "the transcript renders".
+- **No internal names.** No crates, files, functions, style names, protocol names, test names or
+  build tools. Names the person sees are fine: Claude Code, Codex, Settings, MCP servers, Windows,
+  Mac.
+- **Internal work says so plainly.** A change to the build, the tests, the tooling or the docs
+  opens with "Behind the scenes:" and says what it was for, such as "Behind the scenes: the Mac app
+  builds again." Never invent an effect the person would not see, and never leave a pull request
+  out.
+- **Plain punctuation.** No em dashes, no emoji and no marketing words.
 
 The website's changelog page is built from this file (`apps/web/scripts/changelog.ts`), and every
 push to `main` redeploys the site, so a merged line is public within minutes (owner, 10 November
-2026: every merge adds to the changelog, "which updates on the website as well"). Write each line
-for that reader. The page shows a line's words and its pull request number, never the link: the
-repository is private. The words up to the line's first colon or full stop are set in ink as its
-headline, so open with what changed.
+2026: every merge adds to the changelog, "which updates on the website as well"). The page shows a
+line's words and its pull request number, never the link: the repository is private. The headline
+is set in ink and the rest of the line follows it as the body.
 
 ## Getting a change into the installed app
 
@@ -185,11 +202,26 @@ then `target/debug/auracode`. It opens the development folder, is titled `auraco
 beside the installed app. Never stop `auracode` by name (`pkill auracode`): the installed app's
 process has the same name. Stop the PID you started.
 
-On NVIDIA's driver under Wayland, WebKitGTK's DMA-BUF renderer ends a build that links the
-system's WebKitGTK as soon as its window opens ("Error 71 (Protocol error) dispatching to Wayland
-display"). The installed AppImage carries its own WebKitGTK, so it was not affected. The app now
-runs itself again with `WEBKIT_DISABLE_DMABUF_RENDERER=1` there, unless that variable is already
-set (`avoid_dmabuf_on_nvidia_wayland` in `apps/desktop/src-tauri/src/main.rs`).
+On NVIDIA's driver under Wayland the window used to close as soon as it opened ("Error 71
+(Protocol error) dispatching to Wayland display"): the driver puts the window's surface under
+explicit sync once WebKitGTK's GPU renderer draws to it, and GTK 3 then commits a frame without an
+acquire point ("Missing acquire timeline"). The app runs itself again with
+`__NV_DISABLE_EXPLICIT_SYNC=1` there, unless that variable or `WEBKIT_DISABLE_DMABUF_RENDERER` is
+already set (`keep_gpu_rendering_on_nvidia_wayland` in `apps/desktop/src-tauri/src/main.rs`). Do
+not reach for `WEBKIT_DISABLE_DMABUF_RENDERER=1` instead: it also stops the error, but WebKitGTK
+then paints on the CPU and copies every frame, and a chat scrolls at 21 frames a second where the
+GPU renderer holds 60.
+
+**Measuring frame rate without a window on your screen.** `hyprctl output create headless NAME`
+adds a virtual monitor; set its mode and scale to match the real one
+(`hyprctl eval 'hl.monitor({ output = "NAME", mode = "3840x2160@60", scale = 1.6 })'`) and move the
+test window to the workspace it shows. A window on a workspace no monitor shows gets no frames, so
+`requestAnimationFrame` stalls and every measurement hangs. Start the build with
+`AURACODE_DATA_DIR` on a scratch folder and `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:<port>`, then
+drive the page over the inspector's WebSocket (`Runtime.evaluate`). `AURACODE_STRESS=orbs=24,seconds=0`
+opens the stress view; the scripted Demo agent (`mock`) gives a real chat to type, stream and
+scroll in without spending anything. Remove the monitor with `hyprctl output remove NAME`. Measure
+at the window's real size: at half width the same build drew several times the frames.
 
 **Getting a change into the installed app.** `pnpm --filter @auracode/desktop host-upgrade`
 hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
@@ -263,6 +295,7 @@ from a chat inside the installed AppImage:
 | An agent's shell in the installed build (before the fix) | fail, as described above: `node`, `python3` and `pacman` do not start, `git` warns |
 | `strip_launch_context` against the variables that AppImage's launcher set | pass (unit tests), including entries outside the mount kept in order and an `APPDIR` that is not a mount |
 | The memory helper started through the mount's `AppRun` from an env without the image's variables | pass: MCP `initialize` answered in 39 ms |
-| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass with the DMA-BUF switch: titled `auracode dev`, its own data folder, same PID after the restart, the installed app untouched; without it the window closes with Wayland error 71 |
+| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass: titled `auracode dev`, its own data folder, same PID after the restart with the NVIDIA switch, the installed app untouched; without the switch the window closes with Wayland error 71 |
+| Frame rate at 2376x1300 on a virtual 4K monitor at 1.6 (GDK scale 2), NVIDIA RTX 5080, same build, GPU renderer against CPU painting | stress view 60 against 12 to 25; a chat with the scripted agent: streaming 56 to 63 against 42, scrolling 60 (worst frame 28 ms) against 21 (153 ms); idle 0 % CPU on both; typing reaches the screen in about 23 ms on both |
 | `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
 | `host-upgrade install`, `--after-exit` and its waiter, health rollback, `rollback --restore-database`, `cancel`, prune | pass against a stand-in install (`appimage-upgrade.test.mjs`); not yet run against the real install |

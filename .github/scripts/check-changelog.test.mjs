@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { checkChangelog, EM_DASH } from "./check-changelog.mjs";
+import { checkChangelog, EM_DASH, MAX_WORDS_LENGTH } from "./check-changelog.mjs";
 
 const script = fileURLToPath(new URL("./check-changelog.mjs", import.meta.url));
 const pr = (n) => `([#${n}](https://github.com/itscool2b/auracode/pull/${n}))`;
@@ -52,6 +52,11 @@ for (const [name, text, problem] of [
   ],
   ["an entry before any date", valid.replace("Intro.", `- Early. ${pr(1)}`), /not under a date/],
   ["an em dash", valid.replace("Dictation works.", `Dictation ${EM_DASH} works.`), /em dash/],
+  [
+    "a line longer than the limit",
+    valid.replace("Dictation works.", `Dictation works. ${"a".repeat(MAX_WORDS_LENGTH)}`),
+    /#68 runs to \d+ characters before its link/,
+  ],
   ["no entries", "# Changelog\n", /no entries/],
 ]) {
   test(`rejects ${name}`, () => {
@@ -62,6 +67,11 @@ for (const [name, text, problem] of [
     );
   });
 }
+
+test("a line of exactly the limit passes, whatever the length of its link", () => {
+  const words = `${"a".repeat(MAX_WORDS_LENGTH - 1)}.`;
+  assert.deepEqual(checkChangelog(valid.replace("Dictation works.", words)).problems, []);
+});
 
 test("the command reads CHANGELOG.md from the given folder and sets the exit code", (t) => {
   const root = mkdtempSync(join(tmpdir(), "auracode-changelog-"));
