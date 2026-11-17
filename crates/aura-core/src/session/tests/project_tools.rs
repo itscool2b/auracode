@@ -167,11 +167,12 @@ async fn the_persons_own_shell_comes_first() {
         "{:?}",
         review.shells
     );
-    let plan = rig
+    let (plan, choice) = rig
         .manager
-        .prepare_project_terminal(&chat.id, &review.token, first.id)
+        .open_project_terminal(&chat.id, Some(first.id))
         .await
         .unwrap();
+    assert_eq!(choice.id, first.id);
     assert_eq!(
         plan.spec.launch.args,
         expected
