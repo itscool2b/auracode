@@ -373,6 +373,10 @@ function rgba([r, g, b]: readonly [number, number, number], alpha: number): stri
   return `rgb(${r} ${g} ${b} / ${alpha})`;
 }
 
+function hex([r, g, b]: readonly [number, number, number]): string {
+  return `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function channels(hex: string): readonly [number, number, number] {
   const n = Number.parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -436,10 +440,12 @@ export function themeTokens(
     "terminal-cursor-text": codeBg,
     "terminal-selection": seed.selection,
     window: seed.window,
-    "window-tint": rgba(channels(seed.bg), dark ? 0.45 : 0.5),
-    "glass-layer": rgba(seed.glass.layer, dark ? 0.72 : 0.76),
-    "glass-bar": rgba(seed.glass.bar, dark ? 0.66 : 0.68),
-    "glass-pop": rgba(seed.glass.pop, dark ? 0.88 : 0.9),
+    "window-tint": rgba(channels(seed.window), 0.6),
+    // Solid layers, as the Grok Bot app draws them (owner, 17 November 2026): no translucency,
+    // so a theme reads the same over any window material and on Linux, which has none.
+    "glass-layer": hex(seed.glass.layer),
+    "glass-bar": hex(seed.glass.layer),
+    "glass-pop": hex(seed.glass.pop),
   };
 }
 

@@ -102,15 +102,18 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
                 ))}
               </ul>
             </div>
-            {windows ? (
-              <div className="plugins-universal-setting" data-setting="Save passwords">
-                <div>
-                  <strong>Save passwords</strong>
-                  <span>
-                    The browser offers to save sign-ins and fills them in. Agents never see saved
-                    passwords.
-                  </span>
-                </div>
+            {/* Only Windows' engine keeps saved passwords; elsewhere the row says so outright, so
+                Settings search for passwords still lands on it. */}
+            <div className="plugins-universal-setting" data-setting="Save passwords">
+              <div>
+                <strong>Save passwords</strong>
+                <span>
+                  {windows
+                    ? "The browser offers to save sign-ins and fills them in. Agents never see saved passwords."
+                    : "Windows only. Here the browser does not offer to save sign-ins."}
+                </span>
+              </div>
+              {windows ? (
                 <Switch
                   label="Save passwords"
                   testId="plugins-browser-passwords"
@@ -118,8 +121,8 @@ export function UniversalPlugins({ prefs, os, browser = nativeBrowserStore }: Un
                   disabled={disabled}
                   onChange={(enabled) => prefs.change({ type: "browser_passwords", enabled })}
                 />
-              </div>
-            ) : null}
+              ) : null}
+            </div>
             <div className="plugins-universal-setting" data-setting="Browsing history">
               <div>
                 <strong>Browsing history</strong>

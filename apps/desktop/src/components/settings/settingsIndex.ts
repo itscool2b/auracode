@@ -72,6 +72,12 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "appearance", title: "Motion", words: "animation reduced off" },
   { page: "appearance", title: "Text size", words: "font density compact comfortable" },
   {
+    page: "appearance",
+    title: "Terminal font",
+    words: "monospace typeface kitty alacritty ghostty foot nerd font system terminal",
+  },
+  { page: "appearance", title: "Terminal size", words: "font size points pixels terminal text" },
+  {
     page: "chats",
     title: "Open new chats in",
     words: "terminal tui gui interface claude code codex own cli new chat default",

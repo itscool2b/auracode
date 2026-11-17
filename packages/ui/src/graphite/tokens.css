@@ -4,30 +4,32 @@
  */
 
 :root {
-  --g-brand-plate: #202226;
-  --g-bg: #101112;
-  --g-surface-1: #141516;
-  --g-surface-2: #1c1d1f;
-  --g-surface-3: #202226;
-  --g-surface-4: #292b2f;
-  --g-line-faint: #25272a;
-  --g-line: #303236;
-  --g-line-strong: #666a70;
-  --g-fg-1: #fafafa;
-  --g-fg-2: #a1a1aa;
-  --g-fg-3: #9b9ba4;
-  --g-fg-4: #666a70;
-  --g-on-light: #18181b;
-  --g-primary: #fafafa;
-  --g-primary-hover: #e4e4e7;
-  --g-primary-active: #d4d4d8;
-  --g-volt: #d4d4d8;
+  --g-brand-plate: #252525;
+  --g-bg: #161616;
+  --g-surface-1: #1b1b1b;
+  --g-surface-2: #1f1f1f;
+  --g-surface-3: #252525;
+  --g-surface-4: #2b2b2b;
+  --g-line-faint: #232323;
+  --g-line: #2c2c2c;
+  --g-line-strong: #6b6b6b;
+  --g-fg-1: #f5f5f5;
+  --g-fg-2: #ababab;
+  --g-fg-3: #959595;
+  --g-fg-4: #666666;
+  --g-on-light: #161616;
+  --g-primary: #f5f5f5;
+  --g-primary-hover: #e0e0e0;
+  --g-primary-active: #cccccc;
+  /* A primary that cannot act yet, as the Grok Bot app greys one: its ink at 13% in dark, 15% in light. */
+  --g-fill-primary-disabled: rgb(245 245 245 / 0.13);
+  --g-volt: #d4d4d4;
   --g-green: #3dd68c;
   --g-red: #ff5c5c;
   --g-red-hover: #ff7a7a;
-  --g-diff-hunk: #111111;
-  --g-selection: #292b2f;
-  --g-focus: #d4d4d8;
+  --g-diff-hunk: #121212;
+  --g-selection: #333333;
+  --g-focus: #d4d4d4;
   --g-code-fg: #d4d4d4;
   --g-code-bright: #ededed;
   --g-code-dim: #858585;
@@ -55,75 +57,70 @@
   --g-project-sand: #a59e92;
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
-  --g-water-surface: #1e1e1e;
-  --g-water-shallow: #161616;
-  --g-water-mid: #0d0d0d;
-  --g-water-low: #080808;
-  --g-water-deep: #050505;
   --g-shade-near: #080808;
   --g-shade-far: #121212;
-  --g-hover: #202226;
-  --g-selected: #292b2f;
-  --g-outline: #666a70;
-  --g-overlay: #1c1d1f;
+  --g-hover: #232323;
+  --g-selected: #2b2b2b;
+  --g-outline: #6b6b6b;
+  --g-overlay: #1f1f1f;
   --g-warning: #e6cc6e;
   --g-warning-tint: #2a2517;
   --g-green-tint: #14251b;
   --g-red-tint: #2d191d;
   --g-on-danger: #18181b;
-  --g-code-bg: #141516;
-  --g-terminal-bg: #141516;
+  --g-code-bg: #1b1b1b;
+  --g-terminal-bg: #161616;
   --g-terminal-fg: #d4d4d4;
-  --g-terminal-cursor: #fafafa;
-  --g-terminal-cursor-text: #141516;
+  --g-terminal-cursor: #f5f5f5;
+  --g-terminal-cursor-text: #161616;
   --g-terminal-selection: #333333;
   --g-color-scheme: dark;
-  --g-volt-tint: rgb(212 212 216 / 0.12);
-  --g-scrim: rgb(0 0 0 / 0.64);
+  --g-volt-tint: rgb(212 212 212 / 0.12);
+  --g-scrim: rgb(0 0 0 / 0.7);
   --g-diff-add-line: rgb(61 214 140 / 0.1);
   --g-diff-add-word: rgb(61 214 140 / 0.24);
   --g-diff-del-line: rgb(255 92 92 / 0.1);
   --g-diff-del-word: rgb(255 92 92 / 0.24);
-  --g-water-light: rgb(255 255 255 / 0.045);
-  --g-water-caustic: rgb(255 255 255 / 0.028);
-  --g-water-rim: rgb(255 255 255 / 0.05);
-  --g-shallows-radius: 12px;
-  --g-shallows-radius-compact: 12px;
-  --g-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
+  --g-shadow: 0 12px 32px rgb(0 0 0 / 0.32);
 
   /*
    * Halo glass. Translucent layers sit over the native window material (Mica, Acrylic, vibrancy,
    * Liquid Glass) or, with no material, over the opaque --g-window. Text sits on a layer, on the
    * window tint, or on an opaque surface, never on bare material.
    */
-  --g-window: #0b0b0c;
-  --g-window-tint: rgb(14 15 16 / 0.45);
-  --g-glass-layer: rgb(24 25 28 / 0.72);
-  --g-glass-bar: rgb(20 21 24 / 0.66);
-  --g-glass-pop: rgb(34 35 39 / 0.88);
-  --g-glass-raised: rgb(255 255 255 / 0.1);
-  --g-glass-card: rgb(255 255 255 / 0.04);
-  --g-glass-control: rgb(255 255 255 / 0.06);
-  --g-glass-control-hover: rgb(255 255 255 / 0.1);
-  --g-glass-control-active: rgb(255 255 255 / 0.14);
-  --g-glass-selected: rgb(255 255 255 / 0.09);
-  --g-glass-rim: rgb(255 255 255 / 0.08);
-  --g-glass-rim-strong: rgb(255 255 255 / 0.14);
-  --g-glass-highlight: rgb(255 255 255 / 0.07);
+  --g-window: #0e0e0e;
+  --g-window-tint: rgb(14 14 14 / 0.6);
+  --g-glass-layer: #161616;
+  --g-glass-bar: #161616;
+  --g-glass-pop: #1f1f1f;
+  --g-glass-raised: rgb(245 245 245 / 0.1);
+  --g-glass-card: rgb(245 245 245 / 0.04);
+  --g-glass-control: rgb(245 245 245 / 0.06);
+  --g-glass-control-hover: rgb(245 245 245 / 0.1);
+  --g-glass-control-active: rgb(245 245 245 / 0.16);
+  --g-glass-selected: rgb(245 245 245 / 0.08);
+  --g-glass-rim: rgb(245 245 245 / 0.08);
+  --g-glass-rim-strong: rgb(245 245 245 / 0.14);
+  --g-glass-highlight: rgb(255 255 255 / 0.04);
   --g-switch-knob: #ffffff;
-  --g-blur-bar: blur(20px) saturate(150%);
-  --g-blur-pop: blur(28px) saturate(170%);
-  --g-blur-scrim: blur(6px);
-  --g-shadow-control: 0 1px 2px rgb(0 0 0 / 0.32);
-  --g-shadow-primary: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 -1px 0 rgb(0 0 0 / 0.14);
-  --g-shadow-layer: 0 0 0 1px rgb(0 0 0 / 0.3), 0 16px 40px -20px rgb(0 0 0 / 0.6);
+  /* Dark draws no shadows, as the Grok Bot app: edges and tone carry depth. A list entry, so it composes. */
+  --g-shadow-control: 0 0 #0000;
+  --g-shadow-primary: none;
+  --g-shadow-layer: 0 0 0 1px rgb(255 255 255 / 0.04);
   /* The layer shadow's hairline alone, for an outline where a shadow is too costly. */
-  --g-ring-layer: rgb(0 0 0 / 0.3);
-  --g-shadow-pop:
-    0 0 0 1px rgb(0 0 0 / 0.34), 0 6px 16px -6px rgb(0 0 0 / 0.4),
-    0 24px 56px -16px rgb(0 0 0 / 0.6);
+  --g-ring-layer: rgb(255 255 255 / 0.04);
+  --g-shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.55);
+  /*
+   * What lifts an inline surface (the message box) off its pane: nothing in dark, where the edge
+   * alone does it, as in the Grok Bot app; a list entry, so it can follow an edge in one shadow.
+   */
+  --g-shadow-inline: 0 0 #0000;
 
-  /* Type. Integer weights only: 400, 500, 600. */
+  /*
+   * Type. Three weights, set through these tokens only, so each platform can take the weight that
+   * reads as regular there (below): the same 400 is thinner on Linux, drawn at 2x and scaled down
+   * by the compositor, than on macOS or Windows.
+   */
   --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --g-mono:
     "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -134,9 +131,9 @@
   /* App scale: size / line height, tracking only where it is negative */
   --g-text-ui: 13px;
   --g-leading-ui: 20px;
-  /* Interface and chat text sit a hair tighter than the face's own spacing. */
-  --g-tracking-ui: -0.08px;
-  --g-tracking-chat: -0.15px;
+  /* Interface and chat text keep the face's own spacing, as the Grok Bot app does. */
+  --g-tracking-ui: 0px;
+  --g-tracking-chat: 0px;
   --g-text-prose: 15px;
   --g-leading-prose: 24px;
   /*
@@ -148,14 +145,16 @@
   --g-leading-chat: 22px;
   --g-text-meta: 12px;
   --g-leading-meta: 16px;
-  --g-text-heading: 16px;
-  --g-leading-heading: 22px;
-  --g-text-title: 20px;
+  /* Headings on the Grok Bot app's scale: 17/24, 22/28 and 26/32, each a little tighter. */
+  --g-text-heading: 17px;
+  --g-leading-heading: 24px;
+  --g-tracking-heading: -0.008em;
+  --g-text-title: 22px;
   --g-leading-title: 28px;
-  --g-tracking-title: -0.015em;
-  --g-text-display: 32px;
-  --g-leading-display: 38px;
-  --g-tracking-display: -0.025em;
+  --g-tracking-title: -0.012em;
+  --g-text-display: 26px;
+  --g-leading-display: 32px;
+  --g-tracking-display: -0.015em;
   --g-text-code: 13px;
   --g-leading-code: 20px;
   --g-text-code-inline: 0.9em; /* inline code, relative to the sentence around it */
@@ -276,29 +275,30 @@
 }
 
 :root[data-theme="light"] {
-  --g-bg: #fafafa;
+  --g-bg: #ffffff;
   --g-surface-1: #ffffff;
-  --g-surface-2: #f4f4f5;
-  --g-surface-3: #f0f0f2;
-  --g-surface-4: #e8e8eb;
-  --g-line-faint: #ececef;
-  --g-line: #e4e4e7;
-  --g-line-strong: #8b8d94;
-  --g-fg-1: #18181b;
-  --g-fg-2: #52525b;
-  --g-fg-3: #63636d;
-  --g-fg-4: #8b8d94;
-  --g-on-light: #fafafa;
-  --g-primary: #18181b;
-  --g-primary-hover: #303036;
-  --g-primary-active: #09090b;
-  --g-volt: #3f3f46;
+  --g-surface-2: #f8f8f8;
+  --g-surface-3: #f3f3f3;
+  --g-surface-4: #ececec;
+  --g-line-faint: #efefef;
+  --g-line: #e5e5e5;
+  --g-line-strong: #8a8a8a;
+  --g-fg-1: #1c1c1c;
+  --g-fg-2: #505050;
+  --g-fg-3: #676767;
+  --g-fg-4: #a0a0a0;
+  --g-on-light: #ffffff;
+  --g-primary: #1c1c1c;
+  --g-primary-hover: #363636;
+  --g-primary-active: #000000;
+  --g-fill-primary-disabled: rgb(28 28 28 / 0.15);
+  --g-volt: #3f3f3f;
   --g-green: #166534;
   --g-red: #b91c1c;
   --g-red-hover: #991b1b;
-  --g-diff-hunk: #f4f4f5;
-  --g-selection: #dde2ea;
-  --g-focus: #71717a;
+  --g-diff-hunk: #f6f6f6;
+  --g-selection: #e1e1e1;
+  --g-focus: #6e6e6e;
   --g-code-fg: #24292f;
   --g-code-bright: #18181b;
   --g-code-dim: #63636d;
@@ -326,92 +326,82 @@
   --g-project-sand: #a59e92;
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
-  --g-water-surface: #ffffff;
-  --g-water-shallow: #fafafa;
-  --g-water-mid: #f4f4f5;
-  --g-water-low: #f4f4f5;
-  --g-water-deep: #ececef;
   --g-shade-near: #e4e4e7;
   --g-shade-far: #f0f0f2;
-  --g-hover: #f0f0f2;
-  --g-selected: #e8e8eb;
-  --g-outline: #8b8d94;
+  --g-hover: #f3f3f3;
+  --g-selected: #ececec;
+  --g-outline: #8a8a8a;
   --g-overlay: #ffffff;
   --g-warning: #92400e;
   --g-warning-tint: #fff7e6;
   --g-green-tint: #edf7ef;
   --g-red-tint: #fef0f0;
   --g-on-danger: #fafafa;
-  --g-code-bg: #f4f4f5;
-  --g-terminal-bg: #f4f4f5;
+  --g-code-bg: #f6f6f6;
+  --g-terminal-bg: #fafafa;
   --g-terminal-fg: #24292f;
-  --g-terminal-cursor: #18181b;
-  --g-terminal-cursor-text: #f4f4f5;
-  --g-terminal-selection: #dde2ea;
+  --g-terminal-cursor: #1c1c1c;
+  --g-terminal-cursor-text: #fafafa;
+  --g-terminal-selection: #e1e1e1;
   --g-color-scheme: light;
-  --g-volt-tint: rgb(63 63 70 / 0.08);
-  --g-scrim: rgb(24 24 27 / 0.32);
+  --g-volt-tint: rgb(63 63 63 / 0.08);
+  --g-scrim: rgb(0 0 0 / 0.5);
   --g-diff-add-line: #edf7ef;
   --g-diff-add-word: #d1ead6;
   --g-diff-del-line: #fef0f0;
   --g-diff-del-word: #f9d5d5;
-  --g-water-light: transparent;
-  --g-water-caustic: transparent;
-  --g-water-rim: #e4e4e7;
-  --g-shallows-radius: 12px;
-  --g-shallows-radius-compact: 12px;
-  --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
-  --g-window: #efeff1;
-  --g-window-tint: rgb(250 250 250 / 0.5);
-  --g-glass-layer: rgb(255 255 255 / 0.76);
-  --g-glass-bar: rgb(255 255 255 / 0.68);
-  --g-glass-pop: rgb(255 255 255 / 0.9);
+  --g-shadow: 0 12px 32px rgb(28 28 28 / 0.1);
+  --g-window: #f5f5f5;
+  --g-window-tint: rgb(245 245 245 / 0.6);
+  --g-glass-layer: #ffffff;
+  --g-glass-bar: #ffffff;
+  --g-glass-pop: #ffffff;
   --g-glass-raised: #ffffff;
-  --g-glass-card: #ffffff;
-  --g-glass-control: rgb(24 24 27 / 0.05);
-  --g-glass-control-hover: rgb(24 24 27 / 0.08);
-  --g-glass-control-active: rgb(24 24 27 / 0.12);
-  --g-glass-selected: rgb(255 255 255 / 0.92);
-  --g-glass-rim: rgb(24 24 27 / 0.08);
-  --g-glass-rim-strong: rgb(24 24 27 / 0.14);
-  --g-glass-highlight: rgb(255 255 255 / 0.9);
-  --g-shadow-control: 0 1px 2px rgb(24 24 27 / 0.08);
-  --g-shadow-primary: 0 1px 2px rgb(24 24 27 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.16);
-  --g-shadow-layer:
-    0 0 0 1px rgb(24 24 27 / 0.04), 0 1px 2px rgb(24 24 27 / 0.04),
-    0 16px 40px -24px rgb(24 24 27 / 0.18);
-  --g-ring-layer: rgb(24 24 27 / 0.04);
+  --g-glass-card: rgb(28 28 28 / 0.035);
+  --g-glass-control: rgb(28 28 28 / 0.05);
+  --g-glass-control-hover: rgb(28 28 28 / 0.08);
+  --g-glass-control-active: rgb(28 28 28 / 0.12);
+  --g-glass-selected: rgb(28 28 28 / 0.06);
+  --g-glass-rim: rgb(28 28 28 / 0.08);
+  --g-glass-rim-strong: rgb(28 28 28 / 0.14);
+  --g-glass-highlight: rgb(255 255 255 / 0);
+  --g-shadow-control: 0 1px 3px rgb(28 28 28 / 0.12);
+  --g-shadow-primary: 0 1px 2px rgb(28 28 28 / 0.12);
+  --g-shadow-layer: 0 0 0 1px rgb(28 28 28 / 0.06);
+  --g-ring-layer: rgb(28 28 28 / 0.06);
   --g-shadow-pop:
-    0 0 0 1px rgb(24 24 27 / 0.05), 0 6px 16px -6px rgb(24 24 27 / 0.1),
-    0 24px 56px -16px rgb(24 24 27 / 0.2);
+    0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
+    0 4px 6px -4px rgb(28 28 28 / 0.1);
+  --g-shadow-inline: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
 }
 
 /* No JavaScript is needed to follow the system appearance. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --g-bg: #fafafa;
+    --g-bg: #ffffff;
     --g-surface-1: #ffffff;
-    --g-surface-2: #f4f4f5;
-    --g-surface-3: #f0f0f2;
-    --g-surface-4: #e8e8eb;
-    --g-line-faint: #ececef;
-    --g-line: #e4e4e7;
-    --g-line-strong: #8b8d94;
-    --g-fg-1: #18181b;
-    --g-fg-2: #52525b;
-    --g-fg-3: #63636d;
-    --g-fg-4: #8b8d94;
-    --g-on-light: #fafafa;
-    --g-primary: #18181b;
-    --g-primary-hover: #303036;
-    --g-primary-active: #09090b;
-    --g-volt: #3f3f46;
+    --g-surface-2: #f8f8f8;
+    --g-surface-3: #f3f3f3;
+    --g-surface-4: #ececec;
+    --g-line-faint: #efefef;
+    --g-line: #e5e5e5;
+    --g-line-strong: #8a8a8a;
+    --g-fg-1: #1c1c1c;
+    --g-fg-2: #505050;
+    --g-fg-3: #676767;
+    --g-fg-4: #a0a0a0;
+    --g-on-light: #ffffff;
+    --g-primary: #1c1c1c;
+    --g-primary-hover: #363636;
+    --g-primary-active: #000000;
+    --g-fill-primary-disabled: rgb(28 28 28 / 0.15);
+    --g-volt: #3f3f3f;
     --g-green: #166534;
     --g-red: #b91c1c;
     --g-red-hover: #991b1b;
-    --g-diff-hunk: #f4f4f5;
-    --g-selection: #dde2ea;
-    --g-focus: #71717a;
+    --g-diff-hunk: #f6f6f6;
+    --g-selection: #e1e1e1;
+    --g-focus: #6e6e6e;
     --g-code-fg: #24292f;
     --g-code-bright: #18181b;
     --g-code-dim: #63636d;
@@ -439,65 +429,78 @@
     --g-project-sand: #a59e92;
     --g-project-sage: #8c9c88;
     --g-project-clay: #a88e80;
-    --g-water-surface: #ffffff;
-    --g-water-shallow: #fafafa;
-    --g-water-mid: #f4f4f5;
-    --g-water-low: #f4f4f5;
-    --g-water-deep: #ececef;
     --g-shade-near: #e4e4e7;
     --g-shade-far: #f0f0f2;
-    --g-hover: #f0f0f2;
-    --g-selected: #e8e8eb;
-    --g-outline: #8b8d94;
+    --g-hover: #f3f3f3;
+    --g-selected: #ececec;
+    --g-outline: #8a8a8a;
     --g-overlay: #ffffff;
     --g-warning: #92400e;
     --g-warning-tint: #fff7e6;
     --g-green-tint: #edf7ef;
     --g-red-tint: #fef0f0;
     --g-on-danger: #fafafa;
-    --g-code-bg: #f4f4f5;
-    --g-terminal-bg: #f4f4f5;
+    --g-code-bg: #f6f6f6;
+    --g-terminal-bg: #fafafa;
     --g-terminal-fg: #24292f;
-    --g-terminal-cursor: #18181b;
-    --g-terminal-cursor-text: #f4f4f5;
-    --g-terminal-selection: #dde2ea;
+    --g-terminal-cursor: #1c1c1c;
+    --g-terminal-cursor-text: #fafafa;
+    --g-terminal-selection: #e1e1e1;
     --g-color-scheme: light;
-    --g-volt-tint: rgb(63 63 70 / 0.08);
-    --g-scrim: rgb(24 24 27 / 0.32);
+    --g-volt-tint: rgb(63 63 63 / 0.08);
+    --g-scrim: rgb(0 0 0 / 0.5);
     --g-diff-add-line: #edf7ef;
     --g-diff-add-word: #d1ead6;
     --g-diff-del-line: #fef0f0;
     --g-diff-del-word: #f9d5d5;
-    --g-water-light: transparent;
-    --g-water-caustic: transparent;
-    --g-water-rim: #e4e4e7;
-    --g-shallows-radius: 12px;
-    --g-shallows-radius-compact: 12px;
-    --g-shadow: 0 12px 32px rgb(24 24 27 / 0.12);
-    --g-window: #efeff1;
-    --g-window-tint: rgb(250 250 250 / 0.5);
-    --g-glass-layer: rgb(255 255 255 / 0.76);
-    --g-glass-bar: rgb(255 255 255 / 0.68);
-    --g-glass-pop: rgb(255 255 255 / 0.9);
+    --g-shadow: 0 12px 32px rgb(28 28 28 / 0.1);
+    --g-window: #f5f5f5;
+    --g-window-tint: rgb(245 245 245 / 0.6);
+    --g-glass-layer: #ffffff;
+    --g-glass-bar: #ffffff;
+    --g-glass-pop: #ffffff;
     --g-glass-raised: #ffffff;
-    --g-glass-card: #ffffff;
-    --g-glass-control: rgb(24 24 27 / 0.05);
-    --g-glass-control-hover: rgb(24 24 27 / 0.08);
-    --g-glass-control-active: rgb(24 24 27 / 0.12);
-    --g-glass-selected: rgb(255 255 255 / 0.92);
-    --g-glass-rim: rgb(24 24 27 / 0.08);
-    --g-glass-rim-strong: rgb(24 24 27 / 0.14);
-    --g-glass-highlight: rgb(255 255 255 / 0.9);
-    --g-shadow-control: 0 1px 2px rgb(24 24 27 / 0.08);
-    --g-shadow-primary: 0 1px 2px rgb(24 24 27 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.16);
-    --g-shadow-layer:
-      0 0 0 1px rgb(24 24 27 / 0.04), 0 1px 2px rgb(24 24 27 / 0.04),
-      0 16px 40px -24px rgb(24 24 27 / 0.18);
-    --g-ring-layer: rgb(24 24 27 / 0.04);
+    --g-glass-card: rgb(28 28 28 / 0.035);
+    --g-glass-control: rgb(28 28 28 / 0.05);
+    --g-glass-control-hover: rgb(28 28 28 / 0.08);
+    --g-glass-control-active: rgb(28 28 28 / 0.12);
+    --g-glass-selected: rgb(28 28 28 / 0.06);
+    --g-glass-rim: rgb(28 28 28 / 0.08);
+    --g-glass-rim-strong: rgb(28 28 28 / 0.14);
+    --g-glass-highlight: rgb(255 255 255 / 0);
+    --g-shadow-control: 0 1px 3px rgb(28 28 28 / 0.12);
+    --g-shadow-primary: 0 1px 2px rgb(28 28 28 / 0.12);
+    --g-shadow-layer: 0 0 0 1px rgb(28 28 28 / 0.06);
+    --g-ring-layer: rgb(28 28 28 / 0.06);
     --g-shadow-pop:
-      0 0 0 1px rgb(24 24 27 / 0.05), 0 6px 16px -6px rgb(24 24 27 / 0.1),
-      0 24px 56px -16px rgb(24 24 27 / 0.2);
+      0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
+      0 4px 6px -4px rgb(28 28 28 / 0.1);
+    --g-shadow-inline: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
   }
+}
+
+/*
+ * Weights by platform. macOS draws Geist a touch light at 400, as the Grok Bot app finds (it sets
+ * regular at 420 there). Linux draws text at 2x and lets the compositor scale it to the screen's
+ * 1.6 or 1.25, which thins stems and greys out hairline counters: regular and medium step up,
+ * more on a dark page, where light text on dark looks thinner still. Windows keeps 400.
+ */
+:root[data-os="macos"] {
+  --g-weight-regular: 420;
+  --g-weight-medium: 510;
+  --g-weight-semibold: 600;
+}
+
+:root[data-os="linux"] {
+  --g-weight-regular: 450;
+  --g-weight-medium: 550;
+  --g-weight-semibold: 640;
+}
+
+:root[data-os="linux"][data-theme="light"] {
+  --g-weight-regular: 430;
+  --g-weight-medium: 530;
+  --g-weight-semibold: 620;
 }
 
 @media (max-width: 767px) {

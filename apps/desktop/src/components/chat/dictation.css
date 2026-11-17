@@ -149,7 +149,6 @@
 }
 
 .dictation-bar .chat-send[aria-disabled="true"] {
-  background-color: var(--g-glass-control-active);
   color: var(--g-fg-3);
   cursor: default;
 }

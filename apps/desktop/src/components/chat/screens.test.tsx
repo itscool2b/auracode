@@ -596,7 +596,7 @@ describe("the pickers", () => {
     const stopped = render("stopped");
     expect(stopped).not.toMatch(/<button[^>]*data-picker-value[^>]*disabled/);
     expect(stopped).not.toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
-    expect(stopped).toMatch(/<select[^>]*data-test-option-id="mode"[^>]*disabled/);
+    expect(stopped).toMatch(/<button[^>]*data-test-option-id="mode"[^>]*disabled/);
     expect(stopped).toContain("Applies when the agent starts.");
     expect(stopped).toContain("Automatic checkpoints are optional in");
     expect(stopped).not.toContain("A local checkpoint is saved before each turn.");
@@ -608,7 +608,7 @@ describe("the pickers", () => {
     expect(starting).toContain("Changes open once the agent has started.");
     const running = render("running");
     expect(running).not.toMatch(/<button[^>]*data-picker-value[^>]*disabled/);
-    expect(running).toMatch(/<select[^>]*data-test-option-id="mode"[^>]*disabled/);
+    expect(running).toMatch(/<button[^>]*data-test-option-id="mode"[^>]*disabled/);
     expect(running).not.toContain("Applies when the agent starts.");
     const ready = render("ready");
     expect(ready).not.toMatch(/disabled/);

@@ -31,6 +31,23 @@
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
+/*
+ * The header draws no line; words scrolling up fade out beneath it into the pane, as the Grok Bot
+ * app's toolbar does. A 16px band held at the scroller's top that takes no room, so at rest it
+ * covers only the column's top padding.
+ */
+.chat-transcript::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  height: var(--g-space-16);
+  margin-bottom: calc(var(--g-space-16) * -1);
+  background-image: linear-gradient(var(--ui-pane-fill), transparent);
+  pointer-events: none;
+}
+
 .chat-transcript-inner {
   display: flex;
   flex-direction: column;
@@ -106,7 +123,7 @@
   --g-glass-rim: color-mix(in srgb, var(--ui-paper-ink) 14%, transparent);
   --g-glass-rim-strong: color-mix(in srgb, var(--ui-paper-ink) 22%, transparent);
   padding: var(--g-space-8) var(--g-space-12);
-  border-radius: var(--g-radius-16);
+  border-radius: var(--g-radius-18);
   background-color: var(--ui-paper);
   color: var(--ui-paper-ink);
   font-size: var(--g-text-chat);
@@ -128,7 +145,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-decoration: underline;
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
@@ -278,7 +295,7 @@
 
 .chat-byline {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-now {
@@ -549,7 +566,7 @@
 
 .chat-tool-status[data-status="failed"] {
   color: var(--g-red);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-tool-chevron {
@@ -831,7 +848,7 @@
 
 .chat-tool-group-result[data-tone="failed"] {
   color: var(--g-red);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* A settled or running stretch says nothing at its end; screen readers still hear it. */
@@ -928,7 +945,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-decoration: underline;
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
@@ -942,7 +959,7 @@
   overflow: hidden;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-code-fg);
 }
 
@@ -992,7 +1009,7 @@
 .chat-diff-path strong {
   flex: none;
   color: var(--g-fg-1);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-diff-totals {
@@ -1120,7 +1137,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-align: left;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
@@ -1225,7 +1242,7 @@
   flex: 1;
   min-width: 0;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -1309,7 +1326,7 @@
 
 .chat-block[data-notify] .chat-block-title {
   color: var(--g-fg-2);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-resolution {
@@ -1339,7 +1356,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-prose);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -1515,16 +1532,23 @@
   margin-top: 0;
 }
 
+/*
+ * A request takes focus as it arrives, for screen readers; the dock's own edge already says where
+ * it is, so the programmatic focus draws no ring around the whole card. Its controls keep theirs.
+ */
+.chat-permission-dock:focus-visible {
+  outline: none;
+}
+
 .chat-permission-dock {
   max-height: 50vh;
   overflow: auto;
-  border-radius: var(--g-radius-22);
+  border-radius: var(--ui-composer-radius);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
+  /* The message box's own depth with its edge a step firmer: it is waiting on you. */
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim-strong),
-    var(--g-shadow-pop);
+    var(--g-shadow-inline);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
@@ -1614,7 +1638,7 @@
   margin-left: auto;
   padding-left: var(--g-space-4);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-handoff pre {
@@ -1640,10 +1664,8 @@
   display: flex;
   flex-direction: column;
   padding: var(--g-space-4) var(--g-space-8) var(--g-space-8) var(--g-space-16);
-  border-radius: var(--g-radius-22);
+  border-radius: var(--ui-composer-radius);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim),
     var(--g-shadow-layer);
@@ -1658,7 +1680,7 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1821,7 +1843,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* 36px tall, so its 28px buttons sit 4px in on every side, on the grid. */
@@ -1926,7 +1948,7 @@
 .chat-changed-count {
   flex: none;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-changed-list {
@@ -2075,7 +2097,7 @@
 
 .chat-plan li[data-status="in_progress"] {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-plan input[type="checkbox"] {
@@ -2098,11 +2120,7 @@
   padding: 0 var(--g-space-16);
   border-radius: 0 0 var(--g-radius-14) var(--g-radius-14);
   background-color: var(--g-glass-bar);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
-  box-shadow:
-    0 0 0 1px var(--g-glass-rim),
-    var(--g-shadow-control);
+  box-shadow: 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
   text-align: left;
 }
@@ -2141,15 +2159,13 @@
   padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     inset 0 0 0 1px var(--g-glass-rim-strong),
     var(--g-shadow-pop);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   translate: -50% 0;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
@@ -2190,7 +2206,7 @@
   margin-bottom: calc(var(--g-space-6) * -1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .chat-app .answer .md-block:first-child > :is(h3, h4):first-child {
@@ -2198,12 +2214,12 @@
 }
 
 .chat-app .answer strong {
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .chat-app .answer em {
   font-style: normal;
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-app .answer :is(ul, ol) {
@@ -2325,17 +2341,18 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
-/* A code block is a well: a 32px header with the language and Copy, then the code (4.8). */
+/*
+ * A code block is a well: a 32px header with the language and Copy, then the code (4.8). Flat, with
+ * one faint edge, as the diff beside it.
+ */
 .chat-app .code-block {
   overflow: hidden;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
-  box-shadow:
-    var(--g-shadow-control),
-    inset 0 0 0 1px var(--g-glass-rim-strong);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
 }
 
 .chat-app .code-header {
@@ -2382,28 +2399,21 @@
 /* ---------- Composer (6.9) ---------- */
 
 /*
- * Grok's pill: the message on top, one row of controls under it. At most four controls show
- * besides the box: attach, the agent chip, Stop while a turn runs, and the send pill (Send, or
- * Queue with Steer beside it while a turn runs). The attach glyph and the text share one left edge
- * (x 16 inside the pill); Send sits as far in from the right.
- */
-/*
- * The composer is a glass capsule floating over the pane, radius 22: the popover glass under the
- * stronger blur, a lit top edge with a short sheen under it, a hairline rim and one long soft
- * shadow. Focus within brightens the rim a step and draws no coloured ring (owner, 9 November
- * 2026: "remove the outline of color and make this whole thing like a nice glass styling").
- * Nothing glows (owner, 2 November 2026), and nothing swims along the rim while the agent works
- * (owner, 6 November 2026).
+ * The Grok Bot app's message box: the message on top, one row of controls under it. At most four
+ * controls show besides the box: attach, the agent chip, Stop while a turn runs, and the send
+ * pill (Send, or Queue with Steer beside it while a turn runs). The attach glyph and the text
+ * share one left edge (x 16 inside the box); Send sits as far in from the right.
+ *
+ * The box is the raised layer at radius 18 with one faint edge (ui-tokens.css); focus steps the
+ * edge up and draws no coloured ring (owner, 9 November 2026). Nothing glows (owner, 2 November
+ * 2026), and nothing moves along the edge while the agent works (owner, 6 November 2026).
  */
 .chat-composer {
   position: relative;
   display: flex;
   flex-direction: column;
-  border-radius: var(--g-radius-22);
+  border-radius: var(--ui-composer-radius);
   background-color: var(--ui-composer-fill);
-  background-image: var(--ui-composer-sheen);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
@@ -2429,7 +2439,7 @@
   max-height: 240px;
   padding: var(--g-space-12) var(--g-space-16) var(--g-space-8);
   border: 0;
-  border-radius: var(--g-radius-22) var(--g-radius-22) 0 0;
+  border-radius: var(--ui-composer-radius) var(--ui-composer-radius) 0 0;
   background: transparent;
   box-shadow: none;
   font-size: var(--g-text-chat);
@@ -2500,16 +2510,12 @@
 }
 
 /*
- * Send and Stop: 32px discs. The white disc is always what Enter or Esc does next; disabled it
- * stays a grey disc one step above the composer, which is itself surface-2.
+ * Send and Stop: 32px discs. The solid disc is always what Enter or Esc does next; with nothing to
+ * send it stays a faint disc of ink (the primary's disabled step), as the Grok Bot app's does.
  */
 .chat-send {
   --g-button-h: 32px;
   border-radius: var(--g-radius-pill);
-}
-
-.chat-send:disabled {
-  background-color: var(--g-glass-control-active);
 }
 
 .chat-send[data-quiet] {
@@ -2553,7 +2559,7 @@
   padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
@@ -2781,7 +2787,7 @@
   max-width: 200px;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2870,7 +2876,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 }
 .chat-control-heading > strong {
   font-size: var(--g-text-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 .chat-control-heading > p {
   margin: var(--g-space-4) 0;
@@ -2922,7 +2928,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-1);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 .chat-account-rings {
   position: absolute;
@@ -3069,7 +3075,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-picker-thinking > .ui-field {
@@ -3117,7 +3123,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* "More models": a quiet row at the list's end that opens the rest in place. */
@@ -3217,7 +3223,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   display: block;
   overflow: hidden;
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3342,7 +3348,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .chat-picker-field .g-select {
@@ -3468,7 +3474,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   gap: var(--g-space-8);
   min-height: 36px;
   padding: 0 var(--g-space-8);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* ---------- Reduced motion (3.8) ---------- */
@@ -3556,7 +3562,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .chat-form-note,
@@ -3582,7 +3588,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 
 .chat-link-host {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* Comments on a diff's lines (Changes' review). A line's button shows on hover or focus. */
@@ -3726,7 +3732,7 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
   transition: color var(--g-dur-micro) var(--g-ease);
 }

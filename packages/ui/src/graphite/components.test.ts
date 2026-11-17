@@ -60,9 +60,23 @@ describe("server rendering", () => {
     expect(html).toContain('aria-label="Working"');
   });
 
-  it("renders keys as kbd", () => {
-    const html = renderToString(createElement(Keycap, { label: "Command" }, "⌘"));
-    expect(html).toBe('<kbd class="g-keycap" aria-label="Command">⌘</kbd>');
+  it("renders keys as kbd, and key symbols as drawn glyphs with their names", () => {
+    expect(renderToString(createElement(Keycap, {}, "K"))).toBe('<kbd class="g-keycap">K</kbd>');
+    // Geist Mono has no ⌘ or ↵, so the cap draws them and names them for screen readers, as hidden
+    // text: a kbd may not carry aria-label.
+    const command = renderToString(createElement(Keycap, {}, "⌘"));
+    expect(command).toContain('<svg class="g-keycap-glyph"');
+    expect(command).toContain('<span class="g-keycap-name">Command</span>');
+    expect(command).not.toContain("⌘");
+    expect(command).not.toContain("aria-label");
+    expect(renderToString(createElement(Keycap, {}, "↵"))).toContain(">Enter</span>");
+    // A label the caller gives wins over the symbol's own name, and names a plain key too.
+    expect(renderToString(createElement(Keycap, { label: "Return" }, "↵"))).toContain(
+      ">Return</span>",
+    );
+    expect(renderToString(createElement(Keycap, { label: "Control" }, "Ctrl"))).toContain(
+      '<span aria-hidden="true" class="g-keycap-shown">Ctrl</span>',
+    );
   });
 
   it("styles the copy button with Graphite classes and keeps the Orbit hooks", () => {
@@ -84,13 +98,10 @@ describe("module surface", () => {
     for (const name of [
       "AgentMark",
       "CopyButton",
-      "Creature",
       "Keycap",
       "PixelLoader",
       "Logo",
-      "Shallows",
       "StatusDot",
-      "Swimmers",
       "Wordmark",
       "agentCode",
       "logoSvg",
@@ -102,10 +113,21 @@ describe("module surface", () => {
     }
   });
 
-  it("no longer ships the dither field, its engine or its sprites (Shallows replaced them)", () => {
-    for (const name of ["DitherField", "renderDitherFrame", "paintSprites", "DITHER_PALETTES"]) {
+  it("no longer ships the dither field, the water or its swimmers (no animal or water motifs)", () => {
+    for (const name of [
+      "DitherField",
+      "renderDitherFrame",
+      "paintSprites",
+      "DITHER_PALETTES",
+      "Shallows",
+      "Swimmers",
+      "Creature",
+      "swimPose",
+    ]) {
       expect(graphite, name).not.toHaveProperty(name);
     }
-    expect(graphiteCss).not.toContain("g-dither");
+    for (const retired of ["g-dither", "g-shallows", "g-swimmer", "g-creature", "--g-water"]) {
+      expect(graphiteCss).not.toContain(retired);
+    }
   });
 });

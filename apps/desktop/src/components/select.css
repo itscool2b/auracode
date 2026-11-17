@@ -1,0 +1,155 @@
+/*
+ * The app's dropdown (Select.tsx): the field is the shared .g-select field drawn as a button, and
+ * its list is a menu in the Grok Bot app's shape: the raised layer at radius 16, 6px in, 32px rows
+ * at radius 10, the active row a step of ink and the chosen one ticked. It opens in the top layer,
+ * so the Popover API's own box (inset, margin, border, padding) is reset here.
+ */
+.ui-select {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--g-space-8);
+  padding-right: var(--g-space-8);
+  /* The drawn chevron replaces the field's background one. */
+  background-image: none;
+  text-align: left;
+  cursor: default;
+}
+
+.ui-select-sizer,
+.ui-select-value {
+  grid-row: 1;
+  grid-column: 1;
+  min-width: 0;
+}
+
+/* Every label at no height: the column is as wide as the widest, the row as tall as one line. */
+.ui-select-sizer {
+  display: flex;
+  flex-direction: column;
+  visibility: hidden;
+}
+
+.ui-select-sizer > span {
+  height: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ui-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-chevron {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--g-fg-3);
+}
+
+.ui-select[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--g-fg-1) 32%, transparent);
+}
+
+.ui-select:disabled .ui-select-chevron {
+  color: var(--g-fg-4);
+}
+
+.ui-select-list {
+  position: fixed;
+  inset: auto;
+  z-index: 60;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(480px, calc(100vw - var(--g-space-16)));
+  height: auto;
+  margin: 0;
+  padding: var(--g-space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-menu-fill);
+  box-shadow:
+    inset 0 0 0 1px var(--g-glass-rim),
+    var(--g-shadow-pop);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-regular);
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+  animation: ui-select-in var(--g-dur-base) var(--g-ease) both;
+}
+
+.ui-select-list[data-side="top"] {
+  animation-name: ui-select-in-up;
+}
+
+.ui-select-group {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: var(--g-space-4) calc(var(--g-space-8) + var(--g-space-2)) 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: var(--g-weight-medium);
+}
+
+.ui-select-option {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 32px;
+  padding: 0 calc(var(--g-space-8) + var(--g-space-2));
+  border-radius: var(--g-radius-10);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ui-select-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-select-option > svg {
+  flex: none;
+  color: var(--g-fg-1);
+}
+
+.ui-select-option[data-active] {
+  background-color: var(--g-glass-control);
+}
+
+.ui-select-option[aria-disabled="true"] {
+  color: var(--g-fg-4);
+}
+
+@keyframes ui-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes ui-select-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-select-list {
+    animation: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .ui-select-list {
+  animation: none;
+}

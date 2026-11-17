@@ -19,7 +19,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .repository-publisher .setup-field {

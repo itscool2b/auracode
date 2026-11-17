@@ -31,7 +31,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   white-space: nowrap;
 }
 
@@ -275,7 +275,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .instructions-empty p {
@@ -298,7 +298,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
@@ -337,7 +337,7 @@
 
 .instructions-lead strong {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .instructions-review .instructions-lead {
@@ -388,7 +388,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .instructions-choice small {
@@ -426,7 +426,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 [data-action="remove"] > .instructions-review-file > .instructions-review-action {
@@ -474,7 +474,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .instructions-removals label {
@@ -509,7 +509,7 @@
 .instructions-mode-choice > h3 {
   margin: 0;
   font-size: var(--g-text-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 .instructions-mode-choice > p {
   margin: var(--g-space-6) 0 var(--g-space-12);
@@ -545,7 +545,7 @@
 .instructions-mode-options strong {
   display: block;
   font-size: var(--g-text-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 .instructions-mode-options small {
   display: block;

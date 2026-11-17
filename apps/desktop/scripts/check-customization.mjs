@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose, chosen } from "./choose.mjs";
 
 const url = process.argv[2] ?? "http://127.0.0.1:1474";
 const out = resolve("target/customization-browser");
@@ -93,7 +94,9 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(`${url}/?preview=project-chat`);
       await page.getByRole("button", { name: "New chat in auracode", exact: true }).click();
-      await page.getByText("Start a session in auracode.", { exact: true }).waitFor();
+      await page
+        .getByText("In auracode. Say what you want done, then send.", { exact: true })
+        .waitFor();
       await page.getByLabel("Claude Code. Choose agent", { exact: true }).waitFor();
       await capture("project-new-chat");
       await page.getByTestId("new-chat-pick-folder").click();
@@ -122,13 +125,9 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         .getByRole("heading", { name: "How instructions are shared", exact: true })
         .waitFor();
       const scope = page.getByLabel("Applies to", { exact: true });
-      await scope.selectOption("global");
+      await choose(scope, "global");
       await page.evaluate(() => window.customizeFixture.refresh());
-      assert.equal(
-        await scope.inputValue(),
-        "global",
-        "Workspace refresh must retain the chosen scope",
-      );
+      assert.equal(await chosen(scope), "global", "Workspace refresh must retain the chosen scope");
       await capture("customize-instructions");
       await tabs.getByRole("button", { name: "Project memory", exact: true }).click();
       assert.match(await memory.inputValue(), /Keep this draft/);

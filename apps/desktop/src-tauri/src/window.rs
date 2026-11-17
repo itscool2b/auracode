@@ -116,12 +116,12 @@ pub fn main_title(configured: &str, development: bool) -> &str {
 /// How long the page gets to report its first paint before the window is shown regardless.
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
-/// The light `--g-window`, behind opaque windows (and the webview before it paints). Halo lays its
-/// panes on this window colour, so the frame and the page start as one surface.
-pub const BASE_COLOR: Color = Color(239, 239, 241, 255);
+/// The light `--g-window`, behind opaque windows (and the webview before it paints). The panes sit
+/// on this window colour, so the frame and the page start as one surface.
+pub const BASE_COLOR: Color = Color(245, 245, 245, 255);
 
 /// The dark `--g-window`, for opaque windows in the dark appearance.
-const BASE_COLOR_DARK: Color = Color(11, 11, 12, 255);
+const BASE_COLOR_DARK: Color = Color(14, 14, 14, 255);
 
 /// What the window-state plugin restores: size, position, maximized, fullscreen. Never visibility
 /// (that would show the window before first paint) and never decorations (code owns the chrome).
@@ -276,8 +276,8 @@ fn paints_on_cpu(get: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
 #[cfg(any(windows, test))]
 fn caption_colors(theme: tauri::Theme) -> [u32; 2] {
     match theme {
-        tauri::Theme::Dark => [0x000c_0b0b, 0x00aa_a1a1],
-        _ => [0x00f1_efef, 0x005b_5252],
+        tauri::Theme::Dark => [0x000e_0e0e, 0x00ab_abab],
+        _ => [0x00f5_f5f5, 0x0050_5050],
     }
 }
 

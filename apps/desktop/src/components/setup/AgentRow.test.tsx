@@ -45,11 +45,12 @@ const claude: AgentEntry = {
 
 const noop = async (): Promise<void> => {};
 
+/** The choices the closed dropdown offers: its unseen labels carry each one's value and state. */
 function options(html: string): [string, string, boolean][] {
-  return [...html.matchAll(/<option value="([^"]*)"([^>]*)>([^<]*)<\/option>/g)].map((match) => [
+  return [...html.matchAll(/<span data-value="([^"]*)"([^>]*)>([^<]*)<\/span>/g)].map((match) => [
     match[1] ?? "",
     match[3] ?? "",
-    (match[2] ?? "").includes("disabled"),
+    (match[2] ?? "").includes("data-disabled"),
   ]);
 }
 

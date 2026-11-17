@@ -14,7 +14,7 @@
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .git-branch code {
@@ -23,7 +23,7 @@
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 /* A path is one 12/16 mono line, so the repository well stays on the 4px grid. */
@@ -149,7 +149,7 @@
   margin: 0 0 var(--g-space-12);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .git-section > p,
@@ -254,7 +254,7 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .git-review .git-conflict-title {
@@ -292,7 +292,7 @@
 .git-conflict-label {
   margin: 0 0 var(--g-space-6);
   color: var(--g-fg-2);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .git-conflict-actions {
@@ -326,7 +326,7 @@
 }
 
 .git-worktrees strong {
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .git-worktrees li > p {

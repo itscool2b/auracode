@@ -24,6 +24,7 @@ import { AgentRoster } from "./AgentsScreen";
 import { CloneBody, cloneHeading, useClone } from "./CloneProject";
 import { type IntroMode, SetupIntro } from "./SetupIntro";
 import "./setup.css";
+import { Select } from "../Select";
 
 /**
  * Three steps, each skippable: Continue never requires anything. Motion is not one of them: Full
@@ -388,7 +389,17 @@ export function Onboarding({
                 />
                 <div className="setup-inline">
                   {installed === 0 && agentsState.agents !== null && looking === 0 ? (
-                    <button type="button" className="g-button g-button-outline" onClick={onDemo}>
+                    <button
+                      type="button"
+                      className="g-button g-button-outline"
+                      disabled={busy}
+                      onClick={() => {
+                        // Setup ends and New chat opens with the scripted Demo agent chosen.
+                        onDemo();
+                        if (saved) void run(() => apply({ type: "finish" }));
+                        else onDone();
+                      }}
+                    >
                       Explore the local demo <ArrowRight size={14} aria-hidden="true" />
                     </button>
                   ) : null}
@@ -471,7 +482,7 @@ export function Onboarding({
                     Clone a repository
                   </button>
                   {existing.length > 0 ? (
-                    <select
+                    <Select
                       className="g-select setup-existing"
                       aria-label="Or choose a project"
                       disabled={busy}
@@ -493,7 +504,7 @@ export function Onboarding({
                           {item.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   ) : null}
                 </div>
               </>

@@ -6,19 +6,17 @@ revision checked and acknowledged after an atomic write. Invalid data is preserv
 future formats are left unchanged. A failed save remains visible and can be retried or bypassed
 without claiming success. Re-running setup preserves the user's motion and project selection.
 
-The desktop loads cached detection while presenting the intro: the window lights up like water
-seen from below (Shallows), a seal and a turtle glide in and shrink into the seal and turtle logo,
-and "auracode" rises under it. The first scene lasts 1.8 seconds, a warm boot 240 ms. Escape, Enter
-or Skip intro ends it early; reduced motion holds the formed mark still on the lit water and
-notification chat navigation bypasses it. Smoke/stress
-launches do not enter setup. No vendor login, install, update, credential inspection or model
-prompt is triggered by opening setup or Agents. Explicit status and maintenance buttons use the
-existing Rust vendor commands; Sign in opens the existing terminal sheet whose Start action is
-separately explicit.
+The desktop loads cached detection while presenting the intro: the auracode logo and wordmark,
+1.8 seconds on a cold start and 240 ms on a warm boot. Escape, Enter or Skip intro ends it early;
+reduced motion shows the formed mark at once, and notification chat navigation bypasses it.
+Smoke/stress launches do not enter setup. No vendor login, install, update or model prompt is
+triggered by opening setup or Agents; each installed agent's sign-in is checked with its own status
+command (owner, 17 November 2026: an agent that needed a sign-in did not say so until "Check
+sign-in" was found in a menu). Sign in opens the existing terminal sheet whose Start action is
+separately explicit, and the sign-in is checked again when the sheet closes.
 
-Setup is three steps (Welcome, Your agents, First project) in one calm, centred column
-after Grok's start screen, on one card over window-wide lit water with seals and turtles passing
-behind it, as on the website hero (docs/design/visual-language.md, 4.16 and 6.17). Every step is
+Setup is three steps (Welcome, Your agents, First project) in one calm, centred column on one card
+(docs/design/visual-language.md). Every step is
 skippable: Continue never requires anything, the progress bars visit any step and Skip setup
 finishes from anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
 step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
@@ -49,12 +47,14 @@ only its journal record; recovery never deletes the cloned folder or changes the
 
 Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
 performs the write. A project created before a setup-save failure is reused on retry. Existing
-projects are available after reload. The no-agent path opens the existing local demo screen.
+projects are available after reload. With no agent found, "Explore the local demo" finishes setup
+and opens New chat with the scripted Demo agent chosen.
 
 Agents (6.17a) is one list: a row per harness with its status, version and verified date, at most
 one action (Install for the one-click installers, Update when a newer release is known, Sign in
-after a check found it needed) and a menu for the rest. Opening Agents looks up maintenance
-metadata for installed agents; it never checks sign-in, updates or installs by itself.
+when its check found it needed) and a menu for the rest; setup's compact rows show that action
+too. Opening Agents looks up maintenance metadata for installed agents and checks their sign-in;
+it never updates or installs by itself.
 One-click installs are reviewed, version-pinned npm commands for Claude Code, Codex, Pi, OpenCode 1
 and Grok Build. Sign in runs the vendor's own login for Claude Code, Codex, Cursor, Grok Build,
 OpenCode and Hermes. Claude Code's details also list the accounts its chats can run on and Add

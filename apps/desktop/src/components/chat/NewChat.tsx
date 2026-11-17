@@ -1,5 +1,5 @@
 import { AgentMark, Logo, PixelLoader } from "@auracode/ui/graphite";
-import { Check, ChevronDown, Folder, RefreshCw, Search } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Folder, FolderOpen, RefreshCw, Search } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -22,6 +22,7 @@ import type {
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
+import { holdFirstMessage } from "../../lib/chat/firstMessage";
 import { chosenMatch, projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { type ChatInterface, chatInterfaces, terminalSupported } from "../../lib/chatInterface";
@@ -38,6 +39,7 @@ import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
 import "./new-chat.css";
+import { Select } from "../Select";
 
 const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
@@ -378,12 +380,22 @@ export function NewChat({
     chatInterfaces.defaultInterface(),
   );
   const terminalOffered = selected !== null && terminalSupported(selected.id, agents);
-  // Every way a chat is made ends here: it opens as chosen, Chat for agents without a terminal.
+  const terminalMode = terminalOffered && interfaceChoice === "terminal";
+  // Type first: what the person writes before choosing goes to the chat this makes.
+  const [message, setMessage] = useState("");
+  const messageBox = useRef<HTMLTextAreaElement>(null);
+  const hasMessage = !terminalMode && message.trim() !== "";
+  // The box takes the keyboard as the page opens, so typing starts at once.
+  useEffect(() => {
+    messageBox.current?.focus({ preventScroll: true });
+  }, []);
+  // Every way a chat is made ends here: it opens as chosen, Chat for agents without a terminal,
+  // and a chat that opens as Chat sends the words it was started with (its view sends them, and
+  // keeps them in its message box if they cannot go).
   const created = (chat: ChatSummary) => {
-    chatInterfaces.set(
-      chat.id,
-      terminalSupported(chat.agent_id, agents) ? interfaceChoice : "chat",
-    );
+    const opensIn = terminalSupported(chat.agent_id, agents) ? interfaceChoice : "chat";
+    chatInterfaces.set(chat.id, opensIn);
+    if (opensIn === "chat") holdFirstMessage(chat.id, message);
     onCreated(chat);
   };
   // Rust reviews the worktree for the chosen agent, or the first one that can run until one is.
@@ -458,6 +470,12 @@ export function NewChat({
       ),
   );
   const selectedState = selected ? choiceState(selected) : null;
+  const starting = state.creating || worktree.creating || submitting;
+  const startLabel = hasMessage
+    ? "Start chat and send"
+    : terminalMode
+      ? "Open terminal"
+      : "Start chat";
   return (
     <form
       className="new-chat"
@@ -537,221 +555,259 @@ export function NewChat({
       }}
     >
       <header className="new-chat-hero">
-        <div className="new-chat-heading">
-          <Logo className="new-chat-logo" size={24} />
-          <h1 className="new-chat-title">New chat</h1>
-        </div>
+        <Logo className="new-chat-logo" size={28} />
+        <h1 className="new-chat-title">New chat</h1>
         <p className="new-chat-hint">
           {draft.context
-            ? `Start a session in ${draft.context.projectName}.`
-            : "Choose an agent and a folder to work in."}
+            ? `In ${draft.context.projectName}. Say what you want done, then send.`
+            : "Say what you want done, choose the agent and the folder, then send."}
         </p>
       </header>
-      <div className="new-chat-card">
-        <div className="new-chat-row">
-          <span className="new-chat-field-label">Agent</span>
-          <div className="new-chat-agents" data-testid="new-chat-agent">
-            {agents === null ? (
-              <span className="new-chat-scan" role="status">
-                <span className="new-chat-scan-pulse" aria-hidden="true">
-                  <span className="ui-pulse" />
+      {/*
+       * Type first (owner, 17 November 2026): the message box leads, as the Grok Bot app's new
+       * chat does, with the agent, the folder and Chat or Terminal as chips under the words.
+       */}
+      <div className="new-chat-card" data-layout="type-first">
+        {terminalMode ? (
+          <p className="new-chat-terminal-note" data-testid="new-chat-terminal-note">
+            {selected?.name ?? "The agent"} opens in its own terminal here: type to it there once it
+            starts.
+          </p>
+        ) : (
+          <textarea
+            ref={messageBox}
+            className="new-chat-message"
+            data-testid="new-chat-message"
+            aria-label="First message"
+            placeholder={selected ? `Ask ${selected.name} to…` : "What should the agent do?"}
+            rows={3}
+            value={message}
+            onChange={(event) => setMessage(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Enter sends, as in a chat; Shift+Enter starts a new line.
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }}
+          />
+        )}
+        <div className="new-chat-controls">
+          <div className="new-chat-chips">
+            <div className="new-chat-agents" data-testid="new-chat-agent">
+              {agents === null ? (
+                <span className="new-chat-scan" role="status">
+                  <span className="new-chat-scan-pulse" aria-hidden="true">
+                    <span className="ui-pulse" />
+                  </span>
+                  Looking for agents
                 </span>
-                Looking for agents
-              </span>
-            ) : available.length === 0 ? (
-              <span className="new-chat-none">No agent can run here yet.</span>
-            ) : (
-              <Popover
-                label="Choose agent"
-                triggerLabel={`${selected?.name ?? "Select an agent"}. Choose agent`}
-                className="new-chat-agent-picker"
-                trigger={
-                  <>
-                    {selected ? <AgentMark agent={selected.id} size={20} /> : null}
-                    <span className="new-chat-selected-name">
-                      {selected?.name ?? "Select an agent"}
-                    </span>
-                    <ChevronDown size={14} />
-                  </>
-                }
-                onOpenChange={(open) => {
-                  if (!open) setAgentQuery("");
+              ) : available.length === 0 ? (
+                <span className="new-chat-none">No agent can run here yet.</span>
+              ) : (
+                <Popover
+                  label="Choose agent"
+                  triggerLabel={`${selected?.name ?? "Select an agent"}. Choose agent`}
+                  className="new-chat-agent-picker"
+                  trigger={
+                    <>
+                      {selected ? <AgentMark agent={selected.id} size={20} /> : null}
+                      <span className="new-chat-selected-name">
+                        {selected?.name ?? "Select an agent"}
+                      </span>
+                      <ChevronDown size={14} />
+                    </>
+                  }
+                  onOpenChange={(open) => {
+                    if (!open) setAgentQuery("");
+                  }}
+                >
+                  <label className="new-chat-agent-search">
+                    <Search size={14} aria-hidden="true" />
+                    <input
+                      className="g-input"
+                      type="search"
+                      aria-label="Search agents"
+                      placeholder="Search agents…"
+                      value={agentQuery}
+                      onChange={(event) => setAgentQuery(event.currentTarget.value)}
+                    />
+                  </label>
+                  <fieldset className="new-chat-choices">
+                    <legend className="sr-only">Agent</legend>
+                    {available
+                      .filter((agent) =>
+                        agent.name.toLowerCase().includes(agentQuery.toLowerCase()),
+                      )
+                      .map((agent) => {
+                        const checked = agent.id === state.agentId;
+                        const choice = choiceState(agent);
+                        return (
+                          <label
+                            key={agent.id}
+                            className="new-chat-agent"
+                            data-state={choice}
+                            data-found={found.has(agent.id) ? "" : undefined}
+                          >
+                            <input
+                              type="radio"
+                              name={group}
+                              value={agent.id}
+                              checked={checked}
+                              aria-label={`${agent.name}, ${STATE_LABEL[choice]}`}
+                              onChange={(event) => {
+                                draft.chooseAgent(agent.id);
+                                const popup = event.currentTarget.closest("details");
+                                closePopover(event.currentTarget);
+                                popup?.querySelector("summary")?.focus();
+                              }}
+                            />
+                            {/* Still looked for: the mark waits dimmed inside a soft circular pulse. */}
+                            <span className="new-chat-agent-mark">
+                              <AgentMark
+                                agent={agent.id}
+                                size={24}
+                                state={choice === "sign-in" ? "waiting" : "idle"}
+                              />
+                            </span>
+                            <span className="new-chat-agent-name">{agent.name}</span>
+                            <small>{STATE_LABEL[choice]}</small>
+                            {checked ? <Check size={14} aria-hidden="true" /> : null}
+                          </label>
+                        );
+                      })}
+                  </fieldset>
+                  {!available.some((agent) =>
+                    agent.name.toLowerCase().includes(agentQuery.toLowerCase()),
+                  ) ? (
+                    <p className="chat-picker-empty">No matching agents.</p>
+                  ) : null}
+                </Popover>
+              )}
+            </div>
+            {projects.length > 0 ? (
+              <Select
+                className="g-select new-chat-projects"
+                aria-label="Project folder"
+                value={knownFolder}
+                onChange={(event) => {
+                  setFolderId(event.currentTarget.value);
+                  const project = organization.data?.projects.find((item) =>
+                    item.folders.some((folder) => folder.id === event.currentTarget.value),
+                  );
+                  // The project's agent fills an empty choice only: an agent already picked here
+                  // stays picked when the folder changes.
+                  if (project?.default_agent && draft.getSnapshot().agentId === null)
+                    draft.chooseAgent(project.default_agent);
                 }}
               >
-                <label className="new-chat-agent-search">
-                  <Search size={14} aria-hidden="true" />
-                  <input
-                    className="g-input"
-                    type="search"
-                    aria-label="Search agents"
-                    placeholder="Search agents…"
-                    value={agentQuery}
-                    onChange={(event) => setAgentQuery(event.currentTarget.value)}
-                  />
-                </label>
-                <fieldset className="new-chat-choices">
-                  <legend className="sr-only">Agent</legend>
-                  {available
-                    .filter((agent) => agent.name.toLowerCase().includes(agentQuery.toLowerCase()))
-                    .map((agent) => {
-                      const checked = agent.id === state.agentId;
-                      const choice = choiceState(agent);
-                      return (
-                        <label
-                          key={agent.id}
-                          className="new-chat-agent"
-                          data-state={choice}
-                          data-found={found.has(agent.id) ? "" : undefined}
-                        >
-                          <input
-                            type="radio"
-                            name={group}
-                            value={agent.id}
-                            checked={checked}
-                            aria-label={`${agent.name}, ${STATE_LABEL[choice]}`}
-                            onChange={(event) => {
-                              draft.chooseAgent(agent.id);
-                              const popup = event.currentTarget.closest("details");
-                              closePopover(event.currentTarget);
-                              popup?.querySelector("summary")?.focus();
-                            }}
-                          />
-                          {/* Still looked for: the mark waits dimmed inside a soft circular pulse. */}
-                          <span className="new-chat-agent-mark">
-                            <AgentMark
-                              agent={agent.id}
-                              size={24}
-                              state={choice === "sign-in" ? "waiting" : "idle"}
-                            />
-                          </span>
-                          <span className="new-chat-agent-name">{agent.name}</span>
-                          <small>{STATE_LABEL[choice]}</small>
-                          {checked ? <Check size={14} aria-hidden="true" /> : null}
-                        </label>
-                      );
-                    })}
-                </fieldset>
-                {!available.some((agent) =>
-                  agent.name.toLowerCase().includes(agentQuery.toLowerCase()),
-                ) ? (
-                  <p className="chat-picker-empty">No matching agents.</p>
-                ) : null}
-              </Popover>
-            )}
-          </div>
-          <button
-            type="button"
-            className="g-button g-button-ghost g-button-icon g-button-28 new-chat-refresh"
-            data-testid="new-chat-refresh"
-            aria-label={refreshing ? "Refreshing…" : "Refresh agents"}
-            title="Refresh agents"
-            disabled={refreshing}
-            onClick={onRefreshAgents}
-          >
-            {refreshing ? (
-              <PixelLoader size={12} tempo="thinking" />
-            ) : (
-              <RefreshCw size={14} aria-hidden="true" />
-            )}
-          </button>
-        </div>
-        {terminalOffered ? (
-          <div className="new-chat-row new-chat-interface" data-testid="new-chat-interface">
-            <span className="new-chat-field-label">Open in</span>
-            <fieldset className="g-segmented new-chat-interface-choice" aria-label="Open in">
-              {(["chat", "terminal"] as const).map((choice) => (
-                <button
-                  key={choice}
-                  type="button"
-                  className="g-segment"
-                  aria-pressed={interfaceChoice === choice}
-                  data-test-interface={choice}
-                  onClick={() => setInterfaceChoice(choice)}
-                >
-                  {choice === "chat" ? "Chat" : "Terminal"}
-                </button>
-              ))}
-            </fieldset>
-            <span aria-hidden="true" />
-          </div>
-        ) : null}
-        <div className="new-chat-folder">
-          <span className="new-chat-field-label">Folder</span>
-          <Folder className="new-chat-folder-icon" size={16} aria-hidden="true" />
-          <span
-            className="new-chat-path"
-            data-testid="new-chat-folder"
-            data-test-folder={state.folder ?? ""}
-            data-empty={chosenFolder ? undefined : ""}
-            title={chosenFolder ?? undefined}
-          >
-            {chosenFolder ?? "No folder chosen"}
-          </span>
-          {projects.length > 0 ? (
-            <select
-              className="g-select new-chat-projects"
-              aria-label="Project folder"
-              value={knownFolder}
-              onChange={(event) => {
-                setFolderId(event.currentTarget.value);
-                const project = organization.data?.projects.find((item) =>
-                  item.folders.some((folder) => folder.id === event.currentTarget.value),
-                );
-                // The project's agent fills an empty choice only: an agent already picked here
-                // stays picked when the folder changes.
-                if (project?.default_agent && draft.getSnapshot().agentId === null)
-                  draft.chooseAgent(project.default_agent);
+                <option value="">{draft.context ? "Select folder" : "Projects"}</option>
+                {projects.map((project) => (
+                  <optgroup key={project.id} label={project.name}>
+                    {project.folders.map((folder) => (
+                      <option
+                        key={folder.id}
+                        value={folder.id}
+                        disabled={folder.folder_state !== "ok"}
+                      >
+                        {folder.display_name}
+                        {folder.folder_state !== "ok" ? " (unavailable on this device)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            ) : null}
+            <button
+              type="button"
+              className="g-button g-button-ghost g-button-icon g-button-28 new-chat-pick"
+              data-testid="new-chat-pick-folder"
+              aria-label={state.picking ? "Choosing…" : "Choose folder"}
+              title="Choose folder"
+              disabled={state.picking}
+              onClick={() => {
+                void draft.chooseFolder().then((folder) => {
+                  if (folder !== null) setFolderId("");
+                });
               }}
             >
-              <option value="">{draft.context ? "Select folder" : "Projects"}</option>
-              {projects.map((project) => (
-                <optgroup key={project.id} label={project.name}>
-                  {project.folders.map((folder) => (
-                    <option
-                      key={folder.id}
-                      value={folder.id}
-                      disabled={folder.folder_state !== "ok"}
+              <FolderOpen size={14} aria-hidden="true" />
+            </button>
+            {terminalOffered ? (
+              <span className="new-chat-interface" data-testid="new-chat-interface">
+                <fieldset className="g-segmented new-chat-interface-choice" aria-label="Open in">
+                  {(["chat", "terminal"] as const).map((choice) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      className="g-segment"
+                      aria-pressed={interfaceChoice === choice}
+                      data-test-interface={choice}
+                      onClick={() => setInterfaceChoice(choice)}
                     >
-                      {folder.display_name}
-                      {folder.folder_state !== "ok" ? " (unavailable on this device)" : ""}
-                    </option>
+                      {choice === "chat" ? "Chat" : "Terminal"}
+                    </button>
                   ))}
-                </optgroup>
-              ))}
-            </select>
-          ) : null}
-          <button
-            type="button"
-            className="g-button g-button-outline"
-            data-testid="new-chat-pick-folder"
-            disabled={state.picking}
-            onClick={() => {
-              void draft.chooseFolder().then((folder) => {
-                if (folder !== null) setFolderId("");
-              });
-            }}
-          >
-            {state.picking ? "Choosing…" : "Choose folder"}
-          </button>
-        </div>
-        <div className="new-chat-submit">
-          <span>
-            {chosenFolder
-              ? worktreeMode
-                ? "Starts in a separate worktree"
-                : "Starts in this folder"
-              : "Select a folder to continue"}
-          </span>
-          <button
-            type="submit"
-            className="g-button g-button-primary"
-            data-testid="new-chat-create"
-            disabled={!canCreate || (busy && !allowBusy)}
-          >
-            {state.creating || worktree.creating || submitting ? "Starting…" : "Start chat"}
-          </button>
+                </fieldset>
+              </span>
+            ) : null}
+          </div>
+          <div className="new-chat-send">
+            <button
+              type="button"
+              className="g-button g-button-ghost g-button-icon g-button-28 new-chat-refresh"
+              data-testid="new-chat-refresh"
+              aria-label={refreshing ? "Refreshing…" : "Refresh agents"}
+              title="Refresh agents"
+              disabled={refreshing}
+              onClick={onRefreshAgents}
+            >
+              {refreshing ? (
+                <PixelLoader size={12} tempo="thinking" />
+              ) : (
+                <RefreshCw size={14} aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="submit"
+              className="g-button g-button-primary new-chat-start"
+              data-testid="new-chat-create"
+              data-with-message={hasMessage ? "" : undefined}
+              disabled={!canCreate || (busy && !allowBusy)}
+              aria-label={startLabel}
+              title={hasMessage ? `${startLabel} (Enter)` : undefined}
+            >
+              {starting ? (
+                "Starting…"
+              ) : hasMessage ? (
+                <ArrowUp size={16} strokeWidth={2.25} aria-hidden="true" />
+              ) : terminalMode ? (
+                "Open terminal"
+              ) : (
+                "Start chat"
+              )}
+            </button>
+          </div>
         </div>
       </div>
+      <p className="new-chat-where">
+        <Folder className="new-chat-folder-icon" size={14} aria-hidden="true" />
+        <span
+          className="new-chat-path"
+          data-testid="new-chat-folder"
+          data-test-folder={state.folder ?? ""}
+          data-empty={chosenFolder ? undefined : ""}
+          title={chosenFolder ?? undefined}
+        >
+          {chosenFolder ?? "No folder chosen"}
+        </span>
+        <span className="new-chat-where-mode">
+          {chosenFolder
+            ? worktreeMode
+              ? "Starts in a separate worktree"
+              : "Starts in this folder"
+            : "Select a folder to continue"}
+        </span>
+      </p>
       {/* Under the card: where it works, then the agent's facts, consent, warnings and errors. */}
       <div className="new-chat-below">
         {managedPicked ? (

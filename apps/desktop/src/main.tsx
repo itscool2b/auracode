@@ -21,6 +21,14 @@ import { StreamStore } from "./lib/session";
 import { setupApi } from "./lib/setup";
 import { WorkspaceStore, workspaceApi } from "./lib/workspace";
 
+// The platform before the first paint: type weights are tuned per platform (tokens.css), and a
+// weight that changed after paint would reflow every line. App confirms it from the native side.
+{
+  const agent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const preview = import.meta.env.DEV ? new URLSearchParams(location.search).get("os") : null;
+  document.documentElement.dataset.os =
+    preview ?? (/Mac/.test(agent) ? "macos" : /Windows/.test(agent) ? "windows" : "linux");
+}
 initializeAppearance();
 installProfileEvents();
 const store = new StreamStore({ start: startDemoStream, cancel: cancelDemoStream });

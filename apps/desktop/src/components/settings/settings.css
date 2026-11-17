@@ -50,8 +50,6 @@
   padding: 0 var(--g-space-32);
   border-bottom: 1px solid var(--g-glass-rim);
   background-color: var(--g-glass-bar);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
 }
@@ -78,7 +76,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 
@@ -121,25 +119,21 @@
   margin-top: var(--g-space-32);
 }
 
+/*
+ * A section's title stands alone over its card, as the Grok Bot app sets its settings: the page's
+ * chrome size in medium, a step quieter than the page title, no rule after it.
+ */
 .settings-section > h2,
 .settings-heading {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
   min-height: 28px;
-  margin: 0;
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 500;
-}
-
-.settings-section > h2::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  margin-left: var(--g-space-8);
-  background-color: var(--g-line);
+  margin: 0 0 0 var(--g-space-4);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-heading > :is(h2, h3) {
@@ -238,15 +232,13 @@ h1 + .settings-group {
   display: grid;
   place-items: center;
   background-color: var(--ui-pane-fill);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   color: var(--g-fg-2);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-/* Hairlines between rows, inset 16px on both sides (X Money). */
+/* Hairlines between rows, inset 16px on both sides, a faint step of ink. */
 .settings-group > * + *::before {
   content: "";
   position: absolute;
@@ -254,7 +246,7 @@ h1 + .settings-group {
   right: 16px;
   left: 16px;
   height: 1px;
-  background-color: var(--g-line);
+  background-color: var(--g-glass-rim);
 }
 
 .settings-group > * {
@@ -284,7 +276,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -415,7 +407,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 /* Fine print, folded under one line until it is wanted. */
@@ -430,7 +422,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
@@ -497,7 +489,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-sheet-foot {
@@ -600,7 +592,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   pointer-events: none;
   transition:
     background-color var(--g-dur-fast) var(--g-ease),
@@ -637,7 +629,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-actions {
@@ -694,7 +686,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   cursor: pointer;
 }
 
@@ -709,7 +701,7 @@ h1 + .settings-group {
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
@@ -818,7 +810,7 @@ h1 + .settings-group {
 }
 
 .settings-confirm strong {
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-confirm p {
@@ -846,7 +838,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   overflow-wrap: anywhere;
 }
 
@@ -1010,7 +1002,7 @@ h1 + .settings-group {
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .settings-sidebar nav {
@@ -1053,7 +1045,7 @@ h1 + .settings-group {
 /* The open page: a lit glass capsule, ink and 500, as the open chat is. */
 .settings-sidebar nav button[aria-current] {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .settings-sidebar nav button[aria-current]::before {

@@ -6,6 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { chromium, webkit } from "playwright";
+import { choose, chosen } from "./choose.mjs";
 
 const url = process.argv[2] ?? "http://127.0.0.1:1474";
 for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
@@ -57,13 +58,19 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
         const folder = form.getByLabel("Project folder", { exact: true });
         const selected = (value) =>
           page.waitForFunction(
-            (value) => document.querySelector("#new-chat-selection-test select")?.value === value,
+            (value) =>
+              document
+                .querySelector('#new-chat-selection-test [aria-label="Project folder"]')
+                ?.getAttribute("data-value") === value,
             value,
           );
         // The recent chat ran in a worktree: its source is prefilled at once, before the retained
         // list arrives, and the worktree itself is never offered.
         await selected("folder-auracode");
-        assert.equal(await form.locator('option[value="folder-managed"]').count(), 0);
+        assert.equal(
+          await form.locator('.ui-select-sizer > span[data-value="folder-managed"]').count(),
+          0,
+        );
         if (choice === "automatic")
           assert.equal(
             await form.getByTestId("new-chat-create").isEnabled(),
@@ -82,7 +89,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
             // briefly (React may disable it again before this callback runs).
             new MutationObserver((records) => {
               const joined = document.querySelector(
-                '#new-chat-selection-test option[value="folder-fresh"]',
+                '#new-chat-selection-test .ui-select-sizer > span[data-value="folder-fresh"]',
               );
               if (!joined && records.some((record) => record.oldValue === ""))
                 window.createWhileJoining.push(performance.now());
@@ -92,8 +99,8 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
               attributeFilter: ["disabled"],
             });
           });
-        if (choice === "dropdown") await folder.selectOption("folder-alternate");
-        else if (choice === "clear") await folder.selectOption("");
+        if (choice === "dropdown") await choose(folder, "folder-alternate");
+        else if (choice === "clear") await choose(folder, "");
         else if (choice === "picked" || choice === "elsewhere" || choice === "new")
           await form.getByTestId("new-chat-pick-folder").click();
         if (choice === "new") {
@@ -119,7 +126,10 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
           window.newChatSelectionFixture.releaseRetained();
           await window.newChatSelectionFixture.refresh();
         });
-        assert.equal(await form.locator('option[value="folder-managed"]').count(), 0);
+        assert.equal(
+          await form.locator('.ui-select-sizer > span[data-value="folder-managed"]').count(),
+          0,
+        );
         const expected =
           {
             automatic: "folder-auracode",
@@ -128,7 +138,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
             new: "folder-fresh",
           }[choice] ?? "folder-alternate";
         assert.equal(
-          await folder.inputValue(),
+          await chosen(folder),
           expected,
           `${engine}/${theme}: the ${choice} selection must hold once the retained list arrives`,
         );
@@ -137,7 +147,7 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
           await window.newChatSelectionFixture.refresh();
         });
         assert.equal(
-          await folder.inputValue(),
+          await chosen(folder),
           expected,
           "Workspace refresh must preserve the resolved selection",
         );

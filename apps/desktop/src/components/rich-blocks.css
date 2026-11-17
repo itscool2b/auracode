@@ -64,7 +64,7 @@
 }
 
 .hljs .hljs-strong {
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 /* Math: display math centred in its own row, scrolling sideways when wider than the column. */

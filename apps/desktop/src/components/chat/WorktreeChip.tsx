@@ -8,6 +8,7 @@ import {
   type WorktreeField,
   type WorktreeOptions,
 } from "../../lib/chat/worktreeChoice";
+import { Select } from "../Select";
 import { Popover } from "./Popover";
 
 /** The words a chip shows, and its accessible name: the same words, then what it opens. */
@@ -249,7 +250,7 @@ export function WorktreeChip({
                 </h2>
                 <div className="new-chat-worktree-field">
                   <label htmlFor={`${id}-start`}>Start from</label>
-                  <select
+                  <Select
                     id={`${id}-start`}
                     className="g-select"
                     value={start ?? ""}
@@ -268,7 +269,7 @@ export function WorktreeChip({
                         {name === current ? `${name} (current)` : name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   {error("start")}
                 </div>
                 <div className="new-chat-worktree-field">

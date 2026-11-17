@@ -88,7 +88,10 @@ export async function exerciseApp(driver, folder, save, checks = []) {
   await until("start screen", () => driver.visible(byTest("launch-art")));
   await driver.click(byTest("new-chat-button"));
   await until("new chat form", () => driver.visible(byTest("new-chat")));
-  await driver.click(`select[aria-label="Project folder"] option[value="${folderId}"]`);
+  // The folder is the app's own dropdown (apps/desktop/src/components/Select.tsx), not a native
+  // select: open the field, then press the folder's row. Its list carries the field's name too.
+  await driver.click('[role="combobox"][aria-label="Project folder"]');
+  await driver.click(`[role="listbox"] [role="option"][data-value="${folderId}"]`);
   // The agent is a menu: open it and choose the Demo agent. A new choice closes the menu (it
   // animates out, marked data-closing); choosing the agent already chosen changes nothing and
   // leaves it open, so close it then. A second click on a closing menu would keep it open.

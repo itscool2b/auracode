@@ -178,6 +178,8 @@ const RESTART_INPUT = "/echo restarted by a prompt";
 
 /** The displayed prompts, including the native attachment label where one is sent. */
 export const PROMPTS = {
+  /** Typed on New chat before Create (type first): the new chat sends it as it opens. */
+  fromNewChat: "/echo Sent from New chat",
   echo: "/echo Hello from the smoke run",
   demo: "Tidy up src/main.rs",
   autoApproved: "/permission while in Full auto",
@@ -243,6 +245,7 @@ function demoTurn(prompt: string): SegmentShape {
 
 /** What each step of the chat scenario leaves in the transcript. */
 export const SEGMENTS = {
+  fromNewChat: echoTurn(PROMPTS.fromNewChat),
   echo: echoTurn(PROMPTS.echo),
   demo: demoTurn(PROMPTS.demo),
   autoApproved: turn(PROMPTS.autoApproved, "end_turn", [
@@ -292,6 +295,7 @@ export const SEGMENTS = {
  * live at its end, and what the reopened history must show again.
  */
 export const CHAT_TRANSCRIPT: readonly SegmentShape[] = [
+  SEGMENTS.fromNewChat,
   SEGMENTS.echo,
   SEGMENTS.demo,
   SEGMENTS.autoApproved,
@@ -556,12 +560,33 @@ async function choose(select: HTMLElement | null, what: string, value: string): 
     click(row, what);
     return;
   }
+  // The app's own dropdown (components/Select.tsx): open it and press the choice's row.
+  if (select instanceof HTMLButtonElement && select.getAttribute("role") === "combobox") {
+    const field = select;
+    await waitFor(`${what} to be enabled`, () => !field.disabled);
+    if (field.dataset.value === value) return;
+    click(field, what);
+    const option = await waitFor(`${what} to offer "${value}"`, () =>
+      document
+        .getElementById(field.getAttribute("aria-controls") ?? "")
+        ?.querySelector<HTMLElement>(`[role="option"][data-value="${CSS.escape(value)}"]`),
+    );
+    click(option, `${what}'s "${value}"`);
+    await waitFor(`${what} to take "${value}"`, () => field.dataset.value === value);
+    return;
+  }
   if (!(select instanceof HTMLSelectElement)) throw new StepError(`${what} is not on the page`);
   await waitFor(`${what} to be enabled`, () => !select.disabled);
   if (![...select.options].some((option) => option.value === value)) {
     throw new StepError(`${what} offers no "${value}"`);
   }
   setValue(select, value);
+}
+
+/** What a field labelled `label` holds: a native select's value, or the app's own dropdown's. */
+function fieldValue(root: ParentNode, label: string): string | undefined {
+  const field = root.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`);
+  return field instanceof HTMLSelectElement ? field.value : field?.dataset.value;
 }
 
 function pickerOption(id: string): HTMLElement | null {
@@ -639,15 +664,37 @@ async function chooseAgentAndFolder(agentId: string, folder: string): Promise<vo
   );
 }
 
+/** What New chat shows, for a create that never opened its chat. */
+function newChatState(): string {
+  const form = one("new-chat");
+  if (form === null) return "New chat is gone";
+  const button = one("new-chat-create") as HTMLButtonElement | null;
+  const alerts = [...form.querySelectorAll('[role="alert"]')]
+    .map((node) => text(node as HTMLElement))
+    .filter(Boolean);
+  const chip = form.querySelector<HTMLElement>('[data-testid="new-chat-worktree"]');
+  return [
+    button
+      ? `Create is ${button.disabled ? "disabled" : "enabled"} and reads "${button.getAttribute("aria-label") ?? text(button)}"`
+      : "Create is missing",
+    `the folder is "${attr(one("new-chat-folder"), "folder")}"`,
+    chip ? `the worktree chip reads "${text(chip).slice(0, 80)}"` : "no worktree chip",
+    alerts.length > 0 ? `it says: ${alerts.join(" | ")}` : "no alert",
+  ].join("; ");
+}
+
 /** Presses Create on New chat and waits for the new chat to open; returns its id. */
 async function createChat(): Promise<string> {
   await clickWhenEnabled("Create", () => one("new-chat-create"));
-  const view = await waitFor("the new chat to open", () => {
-    const error = one("new-chat-error");
-    if (error !== null) throw new StepError(`creating the chat failed: ${text(error)}`);
-    const opened = one("chat-view");
-    return opened !== null && attr(opened, "chat-id") !== "" ? opened : null;
-  });
+  const view = await waitFor(
+    () => `the new chat to open (${newChatState()})`,
+    () => {
+      const error = one("new-chat-error");
+      if (error !== null) throw new StepError(`creating the chat failed: ${text(error)}`);
+      const opened = one("chat-view");
+      return opened !== null && attr(opened, "chat-id") !== "" ? opened : null;
+    },
+  );
   return attr(view, "chat-id");
 }
 
@@ -793,9 +840,7 @@ async function settingsCustomize(chatId: string, appearance: "light" | "dark"): 
         if (label === "Instructions") {
           await waitFor(
             "global Instructions scope",
-            () =>
-              destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')
-                ?.value === "global",
+            () => fieldValue(destination, "Applies to") === "global",
           );
         }
         if (document.documentElement.dataset.theme !== appearance) {
@@ -835,9 +880,7 @@ async function customizeScopes(chatId: string): Promise<string> {
     let destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact chat Instructions scope",
-      () =>
-        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
-        `chat:${chatId}`,
+      () => fieldValue(destination, "Applies to") === `chat:${chatId}`,
     );
     await returnToRetainedChat(chatId, input, draft);
 
@@ -859,9 +902,7 @@ async function customizeScopes(chatId: string): Promise<string> {
     destination = await settingsDestination("Instructions");
     await waitFor(
       "the exact project folder Instructions scope",
-      () =>
-        destination.querySelector<HTMLSelectElement>('select[aria-label="Applies to"]')?.value ===
-        `folder:${folder.id}`,
+      () => fieldValue(destination, "Applies to") === `folder:${folder.id}`,
     );
     await returnToRetainedChat(chatId, input, draft);
     return "chat command and project folder action opened Settings' Instructions on their exact scope, with destination focus and the unsent chat draft retained";
@@ -900,10 +941,23 @@ async function chatScenario(
 
   await checks.run("create-chat", async () => {
     const started = Date.now();
+    // Type first: the words written on New chat go to the chat it makes.
+    const box = await waitFor(
+      "New chat's message box",
+      () => one("new-chat-message") as HTMLTextAreaElement | null,
+    );
+    setValue(box, PROMPTS.fromNewChat);
     chatId = await createChat();
     await waitFor("the chat list to list the chat", () => row(chatId));
     await waitStatus("ready", START_TIMEOUT_MS);
     return `chat ${chatId} opened, and its agent was ready after ${Date.now() - started} ms`;
+  });
+
+  await checks.run("first-message", async () => {
+    const ended = await waitTurnEnded(PROMPTS.fromNewChat, START_TIMEOUT_MS);
+    expectSegment(ended, echoTurn(PROMPTS.fromNewChat));
+    expectReply(ended, echoed(PROMPTS.fromNewChat));
+    return `the words typed on New chat were the new chat's first message, and the reply read "${echoed(PROMPTS.fromNewChat)}"`;
   });
 
   await checks.run("pickers", async () => {
@@ -1353,7 +1407,8 @@ async function reopenScenario(
     }
     chatId = attr(listed, "chat-id");
     const title = text(one("chat-row-title", listed));
-    if (title !== PROMPTS.echo) throw new StepError(`the chat is titled "${title}"`);
+    // Titled by its first prompt: the one typed on New chat.
+    if (title !== PROMPTS.fromNewChat) throw new StepError(`the chat is titled "${title}"`);
     if (attr(listed, "status") !== "stopped" || attr(listed, "attention") !== "false") {
       throw new StepError(
         `the chat reads ${attr(listed, "status")}, attention ${attr(listed, "attention")}`,

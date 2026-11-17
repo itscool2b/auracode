@@ -60,7 +60,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: var(--g-tracking-title);
 }
 
@@ -226,7 +226,7 @@
     var(--g-shadow-control),
     inset 0 0 0 1px var(--g-glass-rim);
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .library-categories > button:focus-visible {
@@ -238,7 +238,7 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
   font-variant-numeric: tabular-nums;
 }
 
@@ -276,13 +276,13 @@
 .library-sources summary {
   vertical-align: top;
   color: var(--g-fg-2);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
 .library-sources :where(summary small) {
   color: var(--g-fg-3);
-  font-weight: 400;
+  font-weight: var(--g-weight-regular);
 }
 
 .library-sources p {
@@ -387,7 +387,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -409,7 +409,7 @@
 
 .library-notices summary {
   color: var(--g-fg-2);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
@@ -442,7 +442,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   overflow-wrap: anywhere;
 }
 
@@ -526,7 +526,7 @@
 .library-file-list summary {
   vertical-align: top;
   color: var(--g-fg-2);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 
@@ -577,7 +577,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .library-copy-controls select {
@@ -607,7 +607,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   letter-spacing: 0;
 }
 
@@ -641,7 +641,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
 }
 
 .library-history > p {
@@ -679,7 +679,7 @@
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   overflow-wrap: anywhere;
 }
 
@@ -716,7 +716,7 @@
 
 .library-review-intro strong {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .library-comparison {
@@ -741,7 +741,7 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
 }
 
 .library-comparison pre {
@@ -767,7 +767,7 @@
 
 .library-review-files summary {
   color: var(--g-fg-1);
-  font-weight: 500;
+  font-weight: var(--g-weight-medium);
   cursor: pointer;
 }
 

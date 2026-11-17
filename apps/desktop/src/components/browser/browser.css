@@ -1,6 +1,6 @@
 /*
  * The browser beside the chat (docs/superpowers/plans/2026-11-09-browser.md). On a wide window it
- * is a glass pane of its own beside the chat's, as Changes is, with a drag handle in the gutter;
+ * is a pane of its own beside the chat's, as Changes is, with a drag handle in the gutter;
  * narrower, or in Full view, it covers the chat's work area under the header. Its tabs sit in the
  * header's band, its toolbar under them, and the page fills the rest: a native view auracode
  * places over `.browser-page`. Menus and the note are solid, like the composer's popovers.
@@ -537,7 +537,7 @@
   background-color: var(--g-volt);
   color: var(--g-bg);
   font-size: var(--g-text-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-meta);
 }
 
@@ -587,7 +587,7 @@
   margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-title);
 }
 
@@ -653,7 +653,7 @@
   margin: var(--g-space-8) 0 var(--g-space-4);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-ui);
 }
 
@@ -789,7 +789,7 @@
   background-color: var(--g-surface-1);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-ui);
 }
 
@@ -976,7 +976,7 @@
   background-color: var(--g-volt);
   color: var(--g-bg);
   font-size: var(--g-text-meta);
-  font-weight: 600;
+  font-weight: var(--g-weight-semibold);
   line-height: var(--g-leading-meta);
 }
 

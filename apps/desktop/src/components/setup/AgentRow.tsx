@@ -25,6 +25,7 @@ import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
 import "../settings/settings.css";
 import { type AgentAccountsApi, takesAccounts } from "../../lib/agentAccounts";
+import { Select } from "../Select";
 import { AgentAccounts, AgentUsage } from "./AgentAccounts";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
@@ -88,7 +89,7 @@ export function ConnectionSetting({
   return (
     <div className="agent-connection" data-testid="agent-connection">
       <Row title="Connection" detail={connectionDetail(connections)}>
-        <select
+        <Select
           className="g-select settings-control settings-select"
           aria-label={`${agent.name} connection`}
           data-test-agent={agent.id}
@@ -113,7 +114,7 @@ export function ConnectionSetting({
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
     </div>
   );
@@ -379,6 +380,7 @@ export function AgentRow({
   compact = false,
   index = 0,
   working = 0,
+  onPhase,
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
@@ -391,6 +393,8 @@ export function AgentRow({
   /** Setup's roster: no date or menu on the row; the actions sit in the details. */
   readonly compact?: boolean;
   readonly index?: number;
+  /** Tells the page what this row shows, and whether an action is under way, for its picture. */
+  readonly onPhase?: (agentId: string, phase: AgentPhase, busy: boolean) => void;
 }) {
   const ready = agent.availability.state === "ready";
   const installKey = `${agent.installation?.launch_path ?? ""}:${agent.installation?.version ?? ""}`;
@@ -466,6 +470,16 @@ export function AgentRow({
       setAuth(status);
       setMessage(authText(status));
     });
+  // Sign-in is checked by itself once the agent says it can be (owner, 17 November 2026: setup's
+  // agents did not show they needed a sign-in until "Check sign-in" was found in a menu). The
+  // check runs the agent's own status command: no prompt, nothing spent.
+  const autoChecked = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: One check per installation.
+  useEffect(() => {
+    if (!maintenance?.auth_status || auth !== null || autoChecked.current === installKey) return;
+    autoChecked.current = installKey;
+    checkSignIn();
+  }, [maintenance, auth, installKey]);
   const update = () =>
     void run("update", async () => {
       setUpdateFailed(false);
@@ -493,6 +507,9 @@ export function AgentRow({
       setMessage(after !== null && after !== before ? `Updated to ${after}.` : "Update finished.");
     });
   const phase = agentPhase(agent, auth);
+  useEffect(() => {
+    onPhase?.(agent.id, phase, busy !== null);
+  }, [onPhase, agent.id, phase, busy]);
   const guide = INSTALL_GUIDES[agent.id];
   const newer = newerRelease(agent);
   const canUpdate = maintenance?.update_unavailable === null;
@@ -648,7 +665,12 @@ export function AgentRow({
             </span>
           )}
         </button>
-        {compact ? null : (
+        {compact ? (
+          // Setup's rows keep their one action in reach: Install or Sign in without opening them.
+          primaryButton ? (
+            <div className="agent-row-actions">{primaryButton}</div>
+          ) : null
+        ) : (
           <div className="agent-row-actions">
             {primaryButton}
             {items.length ? (
@@ -715,9 +737,8 @@ export function AgentRow({
           onConnection={onConnection}
           onError={setError}
         >
-          {compact && (primaryButton || items.length) ? (
+          {compact && items.length ? (
             <div className="agent-detail-actions">
-              {primaryButton}
               {items
                 .filter((item) => !item.separator)
                 .map((item) =>
@@ -775,8 +796,10 @@ export function AgentRow({
           onClose={() => {
             setSignIn(false);
             onRefresh();
+            // Whether the sign-in took: checked at once, not left to a menu.
+            if (maintenance?.auth_status) checkSignIn();
           }}
-          onFinished={() => setMessage("Sign-in finished. Check sign-in to confirm access.")}
+          onFinished={() => setMessage("Sign-in finished.")}
         />
       ) : null}
     </li>

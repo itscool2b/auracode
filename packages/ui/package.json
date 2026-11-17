@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "auracode design system shared by the desktop app and auracode.si: Graphite (tokens, primitives, Shallows, AgentMark, Logo), plus the legacy Aura and Orbit modules.",
+  "description": "auracode design system shared by the desktop app and auracode.si: Graphite (tokens, primitives, AgentMark, Logo), plus the legacy Aura and Orbit modules.",
   "sideEffects": [
     "*.css"
   ],

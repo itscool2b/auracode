@@ -1,7 +1,6 @@
 /**
  * Aura's shared foundation retains the Graphite import path for compatibility. Production
- * styling follows docs/design/visual-language.md; legacy Creature and Shallows exports are for
- * historical Design Lab studies. Import the stylesheet once at the app root:
+ * styling follows docs/design/visual-language.md. Import the stylesheet once at the app root:
  *   import "@auracode/ui/graphite.css"; // or graphite-tokens.css for the variables alone
  */
 
@@ -10,17 +9,6 @@ export { AgentLogo, type AgentLogoProps, LogoSymbol, logoViewBox } from "./Agent
 export { AgentMark, type AgentMarkProps, agentCode, logoSide } from "./AgentMark";
 export { AGENT_LOGOS, type AgentLogo as AgentLogoData, agentLogo } from "./agentLogos";
 export { CopyButton, type CopyButtonProps } from "./CopyButton";
-export { Creature, type CreatureKind, type CreatureProps, creatureHeight } from "./Creature";
-export { type Cadence, type CadenceHost, createCadence, IDLE_WAIT_MS } from "./cadence";
-export {
-  CREATURE_SMALL_MAX,
-  SEAL_PATH,
-  SEAL_SMALL_PATH,
-  SEAL_VIEWBOX,
-  TURTLE_PATH,
-  TURTLE_SMALL_PATH,
-  TURTLE_VIEWBOX,
-} from "./creaturePaths";
 export { Keycap, type KeycapProps } from "./Keycap";
 export { Logo, type LogoProps, Wordmark, type WordmarkProps } from "./Logo";
 export {
@@ -47,18 +35,7 @@ export {
   loaderFrame,
   type PixelRect,
 } from "./pixels";
-export { Shallows, type ShallowsProps } from "./Shallows";
 export { StatusDot, type StatusDotProps, type StatusTone } from "./StatusDot";
-export { Swimmers, type SwimmersProps } from "./Swimmers";
-export {
-  ease,
-  GAITS,
-  giveWay,
-  type SwimmerSpec,
-  type SwimPose,
-  swimPose,
-  swumDistance,
-} from "./swim";
 export {
   THEME_IDS,
   THEMES,

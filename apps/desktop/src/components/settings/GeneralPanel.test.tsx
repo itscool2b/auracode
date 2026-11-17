@@ -127,7 +127,7 @@ describe("Settings' General defaults", () => {
     const appearance = renderToStaticMarkup(<AppearancePage prefs={loading} />);
     const chats = renderToStaticMarkup(<ChatsPage prefs={loading} />);
     expect(general).toContain('aria-label="Default agent"');
-    expect(general).toContain(">Choose each time</option>");
+    expect(general).toContain('<span class="ui-select-value">Choose each time</span>');
     // No default agent yet: no model row.
     expect(general).not.toContain('aria-label="Default model"');
     for (const level of ["Ask", "Auto-edit", "Full auto"])
