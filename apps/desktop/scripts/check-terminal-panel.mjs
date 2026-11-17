@@ -283,6 +283,11 @@ async function inspect(engine, launcher) {
     await offer.waitFor({ state: "detached" });
     await tabs(page).nth(1).waitFor();
     assert.deepEqual(await tabs(page).allTextContents(), ["Tests", "PowerShell"]);
+    // The shown tab starts once its terminal has measured itself, a moment after the tabs show
+    // (a slower machine, such as CI's Mac, reads the calls before it).
+    await page.waitForFunction(() =>
+      window.terminalPanelFixture.calls().some((call) => call.startsWith("start:")),
+    );
     assert.deepEqual(
       (await calls(page))
         .filter((call) => call.startsWith("start:"))

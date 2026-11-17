@@ -256,7 +256,8 @@ fn build(
 
     #[cfg(target_os = "macos")]
     {
-        let _ = passwords;
+        // WebKit keeps the profile's data by the store identifier below, not by the profile.
+        let _ = (passwords, profile);
         let builder = configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds);
         use wry::WebViewBuilderExtDarwin;
         let ended = weak.clone();
@@ -998,6 +999,8 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
         };
         #[cfg(target_os = "macos")]
         let built = {
+            // WebKit keeps the profile's data by the store identifier below, not by the profile.
+            let _ = profile;
             use wry::WebViewBuilderExtDarwin;
             configure(WebViewBuilder::new(), &weak, &id, "", None, &bounds)
                 .with_data_store_identifier(*b"auracode-browser")

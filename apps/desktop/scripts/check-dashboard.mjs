@@ -149,6 +149,9 @@ export async function checkDashboard(browser, url, out, engine) {
         // Clear takes a card off the board without opening it; Clear finished takes the rest.
         await pi.getByTestId("dashboard-card-clear").click();
         await page.getByRole("heading", { name: "Finished 1", level: 2 }).waitFor();
+        // The lane's count changes at once; the card leaves once its (here instant) exit settles,
+        // which a slower machine reads before.
+        await pi.waitFor({ state: "detached" });
         assert.equal(await laneOf("chat-pi"), null);
         await page.getByTestId("dashboard-clear-finished").click();
         await page.getByRole("heading", { name: "Finished 0", level: 2 }).waitFor();

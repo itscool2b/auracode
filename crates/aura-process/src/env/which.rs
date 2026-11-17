@@ -102,17 +102,16 @@ pub(crate) fn is_program(path: &Path) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
     };
-    if !meta.is_file() {
-        return false;
-    }
+    // Each system's whole answer in one expression: an early `return false` before a bare `true`
+    // is a needless bool on Windows (Clippy, Rust 1.100).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        meta.permissions().mode() & 0o111 != 0
+        meta.is_file() && meta.permissions().mode() & 0o111 != 0
     }
     #[cfg(not(unix))]
     {
-        true
+        meta.is_file()
     }
 }
 
