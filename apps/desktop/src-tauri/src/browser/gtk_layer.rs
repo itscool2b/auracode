@@ -12,6 +12,8 @@
 //! fills costs nothing beyond the page, and with no page shown nothing lies over the app at all.
 //!
 //! Everything here runs on the main thread, as the rest of the host does.
+//!
+//! The overlay also keeps keyboard focus on a page (see [`keep_focus`]).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,6 +24,10 @@ use super::BrowserRect;
 
 thread_local! {
     static OVERLAY: RefCell<Option<gtk::Overlay>> = const { RefCell::new(None) };
+    /// The app's own page.
+    static PAGE: RefCell<Option<gtk::Widget>> = const { RefCell::new(None) };
+    /// The page that owns keyboard focus: the app's own, or the browser page last clicked.
+    static OWNER: RefCell<Option<gtk::Widget>> = const { RefCell::new(None) };
     /// Where each holder goes, in the overlay's own coordinates (logical pixels).
     static PLACES: RefCell<HashMap<gtk::Widget, gtk::gdk::Rectangle>> = RefCell::new(HashMap::new());
 }
@@ -54,7 +60,148 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), String> {
     column.reorder_child(&overlay, i32::try_from(index).unwrap_or(0));
     overlay.show();
     OVERLAY.set(Some(overlay));
+    PAGE.set(Some(page.clone()));
+    if let Ok(toplevel) = window.gtk_window() {
+        keep_focus(toplevel.upcast_ref());
+    }
+    // Moving the page out of the window's tree left the window with no focus to give it back.
+    page.grab_focus();
     Ok(())
+}
+
+/// Below this x a page is parked off the window ([`super::host`]): it draws, but is not shown.
+const PARKED_BEFORE: i32 = -10_000;
+
+/// Keyboard focus stays on a page (owner, 17 November 2026: after a key in a terminal, typing
+/// stopped until a click). The window holds the app's page and, over it, each browser page in its
+/// holder. GTK's own focus moves (its arrow and Tab key bindings, and a page passing focus on past
+/// its last control) would carry focus to a browser page, shown or parked off the window, or to
+/// nothing. So focus moves between pages only by a click (or a page's own focus call) into a page
+/// on screen, and focus that ends on nothing, or on a page hidden or parked, returns to the page
+/// that held it. `AURACODE_FOCUS_PROBE=1` logs every focus change and key the window sees.
+fn keep_focus(window: &gtk::Window) {
+    // GTK moving focus between the window's widgets by keyboard: never. A page moves focus among
+    // its own controls itself.
+    window.connect_focus(|_, direction| {
+        probe(|| format!("window focus move {direction:?} stopped"));
+        gtk::glib::Propagation::Stop
+    });
+    window.connect_set_focus(|window, widget| {
+        probe(|| format!("set-focus {}", describe(widget)));
+        if let Some(widget) = widget
+            && takes_focus(widget)
+        {
+            OWNER.set(Some(widget.clone()));
+            return;
+        }
+        let window = window.clone();
+        gtk::glib::idle_add_local_once(move || refocus(&window));
+    });
+    window.connect_is_active_notify(|window| {
+        probe(|| {
+            format!(
+                "window {} with focus on {}",
+                if window.is_active() {
+                    "active"
+                } else {
+                    "inactive"
+                },
+                describe(window.focused_widget().as_ref())
+            )
+        });
+        if window.is_active() {
+            refocus(window);
+        }
+    });
+    if probing() {
+        window.connect_key_press_event(|window, event| {
+            probe(|| {
+                format!(
+                    "key {:?} state {:#x} on {}",
+                    event.keyval().name(),
+                    event.state().bits(),
+                    describe(window.focused_widget().as_ref())
+                )
+            });
+            gtk::glib::Propagation::Proceed
+        });
+    }
+}
+
+/// The app's page, or a browser page whose holder is shown at a place in the window.
+fn takes_focus(widget: &gtk::Widget) -> bool {
+    if PAGE.with_borrow(|page| page.as_ref() == Some(widget)) {
+        return true;
+    }
+    let Some(holder) = widget.parent() else {
+        return false;
+    };
+    holder.is_visible()
+        && PLACES.with_borrow(|places| {
+            places
+                .get(&holder)
+                .is_some_and(|place| place.x() > PARKED_BEFORE)
+        })
+}
+
+/// Gives focus back to the page that owns it when it is on nothing or on a page not shown.
+fn refocus(window: &gtk::Window) {
+    let current = window.focused_widget();
+    if current.as_ref().is_some_and(takes_focus) {
+        return;
+    }
+    let owner = OWNER
+        .with_borrow(Clone::clone)
+        .filter(takes_focus)
+        .or_else(|| PAGE.with_borrow(Clone::clone));
+    if let Some(owner) = owner {
+        probe(|| format!("focus returned to {}", describe(Some(&owner))));
+        owner.grab_focus();
+    }
+}
+
+/// Before a browser page hides or goes, the app's page takes focus if that page held it.
+fn release_focus(holder: &gtk::Widget) {
+    let Some(window) = holder.toplevel().and_downcast::<gtk::Window>() else {
+        return;
+    };
+    let held = window
+        .focused_widget()
+        .is_some_and(|focus| &focus == holder || focus.is_ancestor(holder));
+    if held && let Some(page) = PAGE.with_borrow(Clone::clone) {
+        OWNER.set(Some(page.clone()));
+        page.grab_focus();
+    }
+}
+
+fn probing() -> bool {
+    static PROBING: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PROBING.get_or_init(|| std::env::var_os("AURACODE_FOCUS_PROBE").is_some_and(|v| v == "1"))
+}
+
+fn probe(message: impl FnOnce() -> String) {
+    if probing() {
+        tracing::info!(target: "auracode::focus", "{}", message());
+    }
+}
+
+fn describe(widget: Option<&gtk::Widget>) -> String {
+    match widget {
+        None => "nothing".into(),
+        Some(widget) if PAGE.with_borrow(|page| page.as_ref() == Some(widget)) => {
+            "the app's page".into()
+        }
+        Some(widget) => match widget.parent() {
+            Some(holder) if PLACES.with_borrow(|places| places.contains_key(&holder)) => {
+                let shown = takes_focus(widget);
+                format!(
+                    "a browser page ({})",
+                    if shown { "shown" } else { "hidden or parked" }
+                )
+            }
+            _ => widget.type_().name().to_owned(),
+        },
+    }
 }
 
 /// Whether the pages are widgets here (Wayland) rather than child windows (X11).
@@ -90,6 +237,7 @@ pub(super) fn adopt(holder: &gtk::Fixed, webview: Option<&wry::WebView>) {
 }
 
 fn discard(holder: &gtk::Widget) {
+    release_focus(holder);
     PLACES.with_borrow_mut(|places| places.remove(holder));
     if let Some(overlay) = OVERLAY.with_borrow(Clone::clone) {
         overlay.remove(holder);
@@ -117,6 +265,9 @@ pub(super) fn place(webview: &wry::WebView, at: &BrowserRect) -> bool {
         return false;
     };
     let (width, height) = (whole(at.width).max(1), whole(at.height).max(1));
+    if whole(at.x) <= PARKED_BEFORE {
+        release_focus(&holder);
+    }
     PLACES.with_borrow_mut(|places| {
         places.insert(
             holder.clone(),
@@ -136,6 +287,7 @@ pub(super) fn set_visible(webview: &wry::WebView, visible: bool) -> bool {
     if visible {
         holder.show_all();
     } else {
+        release_focus(&holder);
         holder.hide();
     }
     true

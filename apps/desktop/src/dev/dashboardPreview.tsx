@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import type { BackgroundTask, ChatSummary, ProcessesSnapshot, ProcessRow } from "../bindings";
 import { DashboardScreen } from "../components/dashboard/DashboardScreen";
 import type { AppStore } from "../lib/chat/appStore";
+import { DashboardCleared } from "../lib/dashboardCleared";
 import type { ProcessesApi } from "../lib/processes";
 import type { WorkspaceStore } from "../lib/workspace";
 
@@ -235,6 +236,12 @@ export function mountDashboardPreview(container: HTMLElement) {
           app={app}
           workspace={workspace}
           api={api}
+          // Clearing lasts for the page only, so each check starts from the full board.
+          cleared={new DashboardCleared(null)}
+          stopChat={async (id) => {
+            // The checks read which chat's agent a card asked to stop.
+            document.body.dataset.stoppedChat = id;
+          }}
           onBack={() => {}}
           onOpenChat={(id) => {
             // The checks read which chat a card asked to open.

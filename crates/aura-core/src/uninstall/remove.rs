@@ -188,17 +188,15 @@ fn allow_changes(path: &Path, meta: &std::fs::Metadata) {
 
 /// A symbolic link, or on Windows any reparse point (junctions included).
 fn is_link(meta: &std::fs::Metadata) -> bool {
-    if meta.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
-    {
+    let reparse = {
         use std::os::windows::fs::MetadataExt;
         const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
         meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
+    };
     #[cfg(not(windows))]
-    false
+    let reparse = false;
+    meta.file_type().is_symlink() || reparse
 }
 
 fn link_to_directory(meta: &std::fs::Metadata) -> bool {

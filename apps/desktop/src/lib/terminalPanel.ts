@@ -94,6 +94,16 @@ export function holdsShell(status: TabStatus): boolean {
   return status.state === "reviewing" || status.state === "starting" || status.state === "running";
 }
 
+/**
+ * What a shell's tab is called: the person's own shell by its program's name ("bash", "fish"), as
+ * their terminal app names it, and the others by their label ("Plain Bash", "PowerShell").
+ */
+export function shellTitle(shell: Pick<ProjectShellChoice, "id" | "label" | "program">): string {
+  if (shell.id !== "login") return shell.label;
+  const name = shell.program.split(/[\\/]/).pop()?.trim();
+  return name ? name : shell.label;
+}
+
 /** "PowerShell", then "PowerShell 2" and so on: the lowest number no open tab of this chat uses. */
 export function nextTitle(label: string, taken: readonly string[]): string {
   if (!taken.includes(label)) return label;
@@ -362,7 +372,7 @@ export class TerminalPanels {
       const taken = this.panel(chatId)
         .tabs.filter((other) => other !== id)
         .map((other) => this.#tabs.get(other)?.title ?? "");
-      const title = nextTitle(choice.label, taken);
+      const title = nextTitle(shellTitle(choice), taken);
       this.#runtimes.set(
         id,
         this.factory({
@@ -432,7 +442,7 @@ export class TerminalPanels {
       .map((other) => this.#tabs.get(other)?.title ?? "");
     this.#setTab(tabId, {
       title: tab.shell
-        ? nextTitle(tab.shell.label, taken)
+        ? nextTitle(shellTitle(tab.shell), taken)
         : tab.purpose === "setup"
           ? "Setup"
           : tab.purpose === "run"

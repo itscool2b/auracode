@@ -5,8 +5,14 @@ import type { TerminalUse } from "./terminalActivity";
 /**
  * The Dashboard's board: every chat sorted into what it asks of you. A chat that waits on you,
  * failed or lost its folder needs you; one whose agent runs is working; one whose agent went quiet
- * in the last day is finished, as is a terminal whose agent waits at its prompt. Older quiet chats
- * stay in the sidebar only.
+ * in the last day is finished, as is a terminal whose agent waits at its prompt.
+ *
+ * Nothing stale stays (owner, 17 November 2026: "if there's a bunch of stale chats that people
+ * aren't working on anymore, it should remove those"). A chat whose agent works or waits for an
+ * answer always shows, since it holds a live agent. A failed start or a needed sign-in shows until
+ * cleared (both belong to this run: they reset when auracode restarts). A lost folder and a
+ * finished chat leave a day after their last activity, or when cleared. Clearing hides a card until
+ * its chat's next activity; it never archives or deletes. Older chats stay in the sidebar.
  */
 export type Lane = "attention" | "working" | "finished";
 
@@ -36,23 +42,34 @@ export type InTerminal = (chatId: string) => TerminalUse;
 
 const nowhere: InTerminal = () => null;
 
+/** Whether the person cleared this chat's card since its last activity. */
+export type Cleared = (chat: ChatSummary) => boolean;
+
+const noneCleared: Cleared = () => false;
+
+/** Whether a card holds a live agent, so it stays on the board and offers Stop rather than Clear. */
+export function holdsAgent(chat: ChatSummary, lane: Lane): boolean {
+  return lane === "working" || (lane === "attention" && chat.needs_attention);
+}
+
 export function laneOf(
   chat: ChatSummary,
   now: number,
   inTerminal: InTerminal = nowhere,
+  cleared: Cleared = noneCleared,
 ): Lane | null {
-  if (
-    chat.needs_attention ||
-    chat.status === "auth_required" ||
-    chat.status === "failed" ||
-    folderStateLabel(chat.folder_state) !== null
-  )
-    return "attention";
+  // A live agent: waiting for the person's answer, or working. Always shown, however old.
+  if (chat.needs_attention) return "attention";
   const terminal = inTerminal(chat.id);
   if (terminal === "working" || WORKING.has(chat.status)) return "working";
+  if (cleared(chat)) return null;
+  // This run's failed start or needed sign-in, until cleared.
+  if (chat.status === "auth_required" || chat.status === "failed") return "attention";
+  const recent = now - chat.updated_at <= FINISHED_WINDOW_MS;
+  if (folderStateLabel(chat.folder_state) !== null) return recent ? "attention" : null;
   // Open, whatever its last activity: its agent waits at its prompt for the person.
   if (terminal === "open") return "finished";
-  return now - chat.updated_at <= FINISHED_WINDOW_MS ? "finished" : null;
+  return recent ? "finished" : null;
 }
 
 /**
@@ -126,11 +143,12 @@ export function boardOf(
   now: number,
   inTerminal: InTerminal = nowhere,
   arrivals: Arrivals = new Map(),
+  cleared: Cleared = noneCleared,
 ): Board {
   const board: Board = { attention: [], working: [], finished: [] };
   const seen = new Set<string>();
   for (const chat of chats) {
-    const lane = laneOf(chat, now, inTerminal);
+    const lane = laneOf(chat, now, inTerminal, cleared);
     if (lane === null) continue;
     seen.add(chat.id);
     const before = arrivals.get(chat.id);

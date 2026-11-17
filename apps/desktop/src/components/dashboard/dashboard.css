@@ -80,17 +80,32 @@
   min-width: 0;
 }
 
+/* The lane's title, with Clear finished at its right. */
+.dashboard-lane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-8);
+  min-height: 28px;
+  margin: 0 0 var(--g-space-12);
+  padding: 0 var(--g-space-4) var(--g-space-12);
+  border-bottom: 1px solid var(--g-line-faint);
+}
+
 .dashboard-lane-title {
   display: flex;
   align-items: baseline;
   gap: var(--g-space-8);
-  margin: 0 0 var(--g-space-12);
-  padding: 0 var(--g-space-4) var(--g-space-12);
-  border-bottom: 1px solid var(--g-line-faint);
+  margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
   font-weight: 500;
+}
+
+.dashboard-lane-clear {
+  flex: none;
+  color: var(--g-fg-2);
 }
 
 .dashboard-lane-mark {
@@ -183,9 +198,16 @@
 
 .dashboard-card-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--g-space-12);
+}
+
+/* Stop or Clear: above the title's cover, which makes the rest of the card open the chat. */
+.dashboard-card-action {
+  position: relative;
+  z-index: 1;
+  color: var(--g-fg-2);
 }
 
 .dashboard-card-text {

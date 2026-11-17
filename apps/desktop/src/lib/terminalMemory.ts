@@ -31,7 +31,13 @@ export interface TerminalMemory {
 const PREFIX = "auracode.terminals.";
 /** An offer older than this is no longer what anyone expects back. */
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const SHELLS: ReadonlySet<string> = new Set(["power_shell", "command_prompt", "zsh", "bash"]);
+const SHELLS: ReadonlySet<string> = new Set([
+  "login",
+  "power_shell",
+  "command_prompt",
+  "zsh",
+  "bash",
+]);
 const MAX_TABS = 8;
 const MAX_TITLE = 40;
 

@@ -8,6 +8,7 @@ describe("a remembered terminal panel", () => {
     const text = JSON.stringify({
       tabs: [
         { kind: "shell", shell: "power_shell", title: "PowerShell", named: false },
+        { kind: "shell", shell: "login", title: "Your shell (bash)", named: false },
         { kind: "shell", shell: "fish", title: "Unknown shell", named: false },
         { kind: "shell", shell: "bash", title: "x".repeat(41), named: true },
         { kind: "run" },
@@ -20,6 +21,7 @@ describe("a remembered terminal panel", () => {
     expect(parseRemembered(text, NOW)).toEqual({
       tabs: [
         { kind: "shell", shell: "power_shell", title: "PowerShell", named: false },
+        { kind: "shell", shell: "login", title: "Your shell (bash)", named: false },
         { kind: "run" },
       ],
       open: true,

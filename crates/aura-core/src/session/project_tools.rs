@@ -152,7 +152,7 @@ fn same_folder(left: &std::path::Path, right: &std::path::Path) -> bool {
 }
 
 fn shell(env: &ResolvedEnv) -> Vec<Shell> {
-    let mut choices = Vec::<(ProjectShell, &str, PathBuf, Vec<&str>)>::new();
+    let mut choices = Vec::<(ProjectShell, String, PathBuf, Vec<&str>)>::new();
     #[cfg(windows)]
     if let Some(root) = env
         .vars
@@ -162,48 +162,65 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
     {
         choices.push((
             ProjectShell::PowerShell,
-            "PowerShell",
+            "PowerShell".into(),
             root.join("System32/WindowsPowerShell/v1.0/powershell.exe"),
             vec!["-NoLogo", "-NoProfile"],
         ));
         choices.push((
             ProjectShell::CommandPrompt,
-            "Command Prompt",
+            "Command Prompt".into(),
             root.join("System32/cmd.exe"),
             vec!["/D"],
         ));
     }
+    // macOS and Linux: the person's own shell first, started as their terminal app starts it,
+    // with their startup files (prompt, aliases, tool activation; owner, 17 November 2026: the
+    // terminal is "the default terminal of the system itself"). Its path comes from their login
+    // environment or passwd entry, never from a project. The plain shells stay below it, started
+    // without startup files, for when a startup file is what is broken.
+    #[cfg(unix)]
+    if let Some(path) = aura_process::env::user_shell(&env.vars) {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let args = aura_process::env::terminal_args(&path, cfg!(target_os = "macos"));
+        choices.push((
+            ProjectShell::Login,
+            format!("Your shell ({name})"),
+            path,
+            args,
+        ));
+    }
     #[cfg(target_os = "macos")]
     {
-        let _ = env;
         choices.push((
             ProjectShell::Zsh,
-            "Zsh",
+            "Plain Zsh".into(),
             PathBuf::from("/bin/zsh"),
             vec!["-f", "-i"],
         ));
         choices.push((
             ProjectShell::Bash,
-            "Bash",
+            "Plain Bash".into(),
             PathBuf::from("/bin/bash"),
             vec!["--noprofile", "--norc", "-i"],
         ));
     }
-    // Linux: Bash first, as most distributions set it, then Zsh when installed. Both start
-    // without startup files, as on macOS: the reviewed environment already carries the login PATH.
+    // Linux: Bash, as most distributions have it, then Zsh when installed, without startup files:
+    // the reviewed environment already carries the login PATH.
     #[cfg(target_os = "linux")]
     {
-        let _ = env;
         for (id, label, places, args) in [
             (
                 ProjectShell::Bash,
-                "Bash",
+                "Plain Bash",
                 ["/usr/bin/bash", "/bin/bash"],
                 vec!["--noprofile", "--norc", "-i"],
             ),
             (
                 ProjectShell::Zsh,
-                "Zsh",
+                "Plain Zsh",
                 ["/usr/bin/zsh", "/bin/zsh"],
                 vec!["-f", "-i"],
             ),
@@ -213,11 +230,11 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
                 .map(PathBuf::from)
                 .find(|path| path.is_file())
             {
-                choices.push((id, label, path, args));
+                choices.push((id, label.into(), path, args));
             }
         }
     }
-    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(windows, unix)))]
     let _ = env;
     choices
         .into_iter()
@@ -230,7 +247,7 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
             Some(Shell {
                 choice: ProjectShellChoice {
                     id,
-                    label: label.into(),
+                    label,
                     program: display_path(&program).ok()?,
                     args: args.into_iter().map(String::from).collect(),
                 },

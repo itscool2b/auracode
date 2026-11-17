@@ -14,6 +14,7 @@ import { chatInterfaces } from "../../lib/chatInterface";
 import { editorName } from "../../lib/projectTools";
 import { DEFAULT_GENERAL, type GeneralApi } from "../../lib/setup";
 import { playNotice } from "../../lib/sounds";
+import { TERMINAL_SIZES, terminalFonts } from "../../lib/terminalFont";
 import type { Preferences } from "./preferences";
 import { Row, Switch } from "./SettingsRow";
 import { ThemeGallery } from "./ThemeGallery";
@@ -150,6 +151,9 @@ export function GeneralPage({
   const modelChoices = defaultModelChoices(models, general.default_model);
   const levelChoices = defaultLevelChoices(levels, general.default_effort);
   const tray = info.os === "macos" ? "menu bar" : "tray";
+  // The window cannot make a sound here (Linux without GStreamer's plugins): Sounds says why once,
+  // and its switch waits until it can.
+  const silent = info.media === false;
   return (
     <>
       <section className="settings-section" aria-labelledby="settings-new-chats">
@@ -288,12 +292,19 @@ export function GeneralPage({
               onChange={(enabled) => prefs.change({ type: "notifications", enabled })}
             />
           </Row>
-          <Row title="Sounds" detail="A short sound when a chat finishes, fails or needs you.">
+          <Row
+            title="Sounds"
+            detail={
+              silent
+                ? (info.media_notice ?? "Sounds cannot play here.")
+                : "A short sound when a chat finishes, fails or needs you."
+            }
+          >
             <Switch
               label="Sounds"
               testId="settings-sounds"
               checked={general.sounds}
-              disabled={disabled}
+              disabled={disabled || silent}
               onChange={(enabled) => {
                 // Turning them on plays one, so the choice is heard as it is made.
                 if (enabled) playNotice("finished");
@@ -426,8 +437,88 @@ export function AppearancePage({ prefs }: { readonly prefs: Preferences }) {
             ))}
           </fieldset>
         </Row>
+        <TerminalFontRows />
       </div>
       <PreferencesError prefs={prefs} />
+    </>
+  );
+}
+
+/** "JetBrainsMono Nerd Font, 11 pt": what the person's terminal app uses, as its settings say it. */
+function systemFontText(): string | null {
+  const system = terminalFonts.system();
+  if (!system) return null;
+  const family = system.family === "ui-monospace" ? "SF Mono" : system.family;
+  const size =
+    system.size_points === null ? null : `${Math.round(system.size_points * 10) / 10} pt`;
+  return [family, size].filter(Boolean).join(", ") || null;
+}
+
+/**
+ * The terminals' font and size, this device's choice (lib/terminalFont.ts): the person's own
+ * terminal app's by default, or auracode's.
+ */
+function TerminalFontRows() {
+  useSyncExternalStore(terminalFonts.subscribe, terminalFonts.getVersion, terminalFonts.getVersion);
+  useEffect(() => {
+    void terminalFonts.load();
+  }, []);
+  const preference = terminalFonts.preference();
+  const system = terminalFonts.system();
+  const systemText = systemFontText();
+  const matching = system ? `Your terminal (${system.source})` : "Your terminal";
+  return (
+    <>
+      <Row
+        title="Terminal font"
+        detail={
+          preference.font === "system"
+            ? systemText
+              ? `Terminals and terminal chats draw like your own terminal app: ${systemText}.`
+              : "Terminals draw like your own terminal app once auracode finds its font; until then they use auracode's."
+            : "Terminals use auracode's Geist Mono."
+        }
+      >
+        <select
+          className="g-select settings-control settings-select"
+          aria-label="Terminal font"
+          data-testid="settings-terminal-font"
+          value={preference.font}
+          onChange={(event) =>
+            terminalFonts.set({
+              ...preference,
+              font: event.currentTarget.value === "auracode" ? "auracode" : "system",
+            })
+          }
+        >
+          <option value="system">{matching}</option>
+          <option value="auracode">auracode's</option>
+        </select>
+      </Row>
+      <Row title="Terminal size" detail="The size of text in terminals and terminal chats.">
+        <select
+          className="g-select settings-control settings-select"
+          aria-label="Terminal size"
+          data-testid="settings-terminal-size"
+          value={preference.size === null ? "auto" : String(preference.size)}
+          onChange={(event) => {
+            const value = Number(event.currentTarget.value);
+            terminalFonts.set({
+              ...preference,
+              size: event.currentTarget.value === "auto" || !Number.isFinite(value) ? null : value,
+            });
+          }}
+        >
+          <option value="auto">
+            {preference.font === "system" ? "Same as the font" : "Default"}
+          </option>
+          {TERMINAL_SIZES.map((size) => (
+            <option key={size} value={String(size)}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </Row>
     </>
   );
 }
@@ -481,8 +572,8 @@ export function ChatsPage({
           title="Open new chats in"
           detail={
             newChatInterface === "terminal"
-              ? "Claude Code and Codex open in their own interface, in auracode's terminal; other agents open in Chat. Any chat switches from its header. This device only."
-              : "auracode's chat. Claude Code and Codex chats can switch to their own interface from the header."
+              ? "Agents open in their own interface, in auracode's terminal. Any chat switches back from its header. This device only."
+              : "auracode's chat. Any chat can switch to its agent's own interface from the header."
           }
         >
           <select

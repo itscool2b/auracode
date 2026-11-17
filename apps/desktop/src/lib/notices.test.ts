@@ -18,6 +18,8 @@ const INFO: AppInfo = {
   notices: ["Your data was upgraded from version 1 to 2."],
   recovery_notice: "Your database was damaged, so auracode rebuilt it.",
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 
 describe("notices that arrive after startup", () => {

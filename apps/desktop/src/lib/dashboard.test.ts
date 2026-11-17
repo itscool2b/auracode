@@ -4,10 +4,12 @@ import {
   boardOf,
   boardSummary,
   FINISHED_WINDOW_MS,
+  holdsAgent,
   laneOf,
   SETTLE_MS,
   stateLine,
 } from "./dashboard";
+import { DashboardCleared } from "./dashboardCleared";
 
 const NOW = 1_800_000_000_000;
 
@@ -34,6 +36,43 @@ describe("the Dashboard's lanes", () => {
     expect(laneOf(chat("a", { status: "failed" }), NOW)).toBe("attention");
     expect(laneOf(chat("b", { status: "auth_required" }), NOW)).toBe("attention");
     expect(laneOf(chat("c", { folder_state: "missing" }), NOW)).toBe("attention");
+  });
+
+  it("drops a lost folder a day after the chat's last activity, as it does a finished chat", () => {
+    const old = NOW - FINISHED_WINDOW_MS - 1;
+    expect(laneOf(chat("a", { folder_state: "missing", updated_at: old }), NOW)).toBeNull();
+    expect(laneOf(chat("b", { updated_at: old }), NOW)).toBeNull();
+    // This run's failed start or needed sign-in stays until it is cleared, however old the chat.
+    expect(laneOf(chat("c", { status: "failed", updated_at: old }), NOW)).toBe("attention");
+    expect(laneOf(chat("d", { status: "auth_required", updated_at: old }), NOW)).toBe("attention");
+  });
+
+  it("keeps a chat whose agent works or waits for an answer, however old, and never clears it", () => {
+    const old = NOW - 10 * FINISHED_WINDOW_MS;
+    const cleared = () => true;
+    const waiting = chat("a", { needs_attention: true, updated_at: old });
+    const working = chat("b", { status: "running", updated_at: old });
+    expect(laneOf(waiting, NOW, undefined, cleared)).toBe("attention");
+    expect(laneOf(working, NOW, undefined, cleared)).toBe("working");
+    expect(holdsAgent(waiting, "attention")).toBe(true);
+    expect(holdsAgent(working, "working")).toBe(true);
+    expect(holdsAgent(chat("c", { status: "failed" }), "attention")).toBe(false);
+    expect(holdsAgent(chat("d"), "finished")).toBe(false);
+  });
+
+  it("hides a cleared card until its chat changes", () => {
+    const quiet = chat("a");
+    const failed = chat("b", { status: "failed" });
+    const store = new DashboardCleared(null);
+    expect(boardOf([quiet, failed], NOW, undefined, undefined, store.isCleared).finished).toEqual([
+      quiet,
+    ]);
+    store.clear([quiet, failed], [quiet, failed]);
+    const board = boardOf([quiet, failed], NOW, undefined, undefined, store.isCleared);
+    expect(board.finished).toEqual([]);
+    expect(board.attention).toEqual([]);
+    const used = { ...quiet, updated_at: quiet.updated_at + 1 };
+    expect(boardOf([used], NOW, undefined, undefined, store.isCleared).finished).toEqual([used]);
   });
 
   it("puts running, starting and stopping agents under Working", () => {

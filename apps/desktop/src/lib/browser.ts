@@ -149,6 +149,7 @@ export class BrowserStore {
           enabled: false,
           unavailable: "The browser is not available here.",
           passwords: false,
+          media_notice: null,
         };
         this.#changed();
       },

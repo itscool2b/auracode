@@ -7,13 +7,16 @@
 // Tauri's own setting). Elsewhere this is plain `tauri build`. Arguments are passed on to it. See
 // ../README.md. Every bundle first fetches dictation's speech models, or verifies the ones already
 // fetched, against their pinned SHA-256 (scripts/dictation-models.mjs), since the installer carries
-// them.
+// them. A Linux AppImage carries GStreamer's base and good plugins, staged from this machine and
+// checked in the image afterwards, unless `--without-media` says otherwise
+// (scripts/appimage-media.mjs).
 
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { builtImages, checkImage, imageDir, prepareMedia } from "./appimage-media.mjs";
 import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
 import { ensureModels } from "./dictation-models.mjs";
 
@@ -45,11 +48,12 @@ if (sysroot.status !== 0) {
   process.exit(1);
 }
 const home = homedir();
+const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const env = releaseBuildEnv(process.env, [
   [home, "/build-home"],
   [process.env.CARGO_HOME ?? join(home, ".cargo"), "/cargo"],
   [sysroot.stdout.trim(), "/rust-toolchain"],
-  [fileURLToPath(new URL("../../../", import.meta.url)), "/auracode/"],
+  [repoRoot, "/auracode/"],
 ]);
 if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   const lookup = spawnSync("sh", [signingScript, "identity"], {
@@ -69,21 +73,53 @@ if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   }
 }
 
+// Sound and video in a Linux AppImage: the plugins are staged now, before the long build.
+let media;
+try {
+  media = prepareMedia(args, env);
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
 try {
   await ensureModels();
 } catch (error) {
+  media.cleanup();
   console.error(
     `auracode: the dictation models are not ready, so the bundle would lack them: ${error.message}`,
   );
   process.exit(1);
 }
 
-const build = spawnSync(process.execPath, [tauriCli, "build", ...args], {
+const startedAt = Date.now();
+const build = spawnSync(process.execPath, [tauriCli, "build", ...media.args], {
   stdio: "inherit",
-  env,
+  env: media.env,
 });
+media.cleanup();
 if (build.error) {
   console.error(`auracode: could not run tauri build: ${build.error.message}`);
   process.exit(1);
+}
+if (build.status === 0 && media.appimage) {
+  const images = builtImages(imageDir(media.args, media.env, repoRoot), startedAt);
+  if (images.length === 0) {
+    console.error("auracode: the build made no AppImage to check.");
+    process.exit(1);
+  }
+  for (const image of images) {
+    try {
+      checkImage(image, media.withMedia);
+    } catch (error) {
+      console.error(`auracode: ${image}: ${error.message}`);
+      process.exit(1);
+    }
+    console.log(
+      media.withMedia
+        ? `auracode: ${image} carries GStreamer's plugins.`
+        : `auracode: ${image} carries no GStreamer plugins: it plays sound and video only with the system's.`,
+    );
+  }
 }
 process.exit(build.status ?? 1);

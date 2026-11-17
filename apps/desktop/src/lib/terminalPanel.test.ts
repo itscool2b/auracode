@@ -11,6 +11,7 @@ import {
   PANEL_HEIGHT_MAX,
   PANEL_HEIGHT_MIN,
   type RuntimeFactory,
+  shellTitle,
   TerminalPanels,
   type TerminalRuntime,
 } from "./terminalPanel";
@@ -286,6 +287,16 @@ describe("the docked terminal panels", () => {
     expect(api.terminal).toHaveBeenLastCalledWith("other", "token-4", "power_shell");
     expect(panels.panel("other").tabs.map((id) => tab(id)?.title)).toEqual(["PowerShell"]);
     expect(nextTitle("PowerShell", ["PowerShell", "PowerShell 3"])).toBe("PowerShell 2");
+  });
+
+  it("names the person's own shell by its program, as their terminal app does", () => {
+    const own = { id: "login", label: "Your shell (fish)", program: "/usr/bin/fish" } as const;
+    expect(shellTitle(own)).toBe("fish");
+    expect(shellTitle({ ...own, program: "C:\\tools\\nu.exe" })).toBe("nu.exe");
+    expect(shellTitle({ ...own, program: "" })).toBe("Your shell (fish)");
+    expect(shellTitle({ id: "bash", label: "Plain Bash", program: "/usr/bin/bash" })).toBe(
+      "Plain Bash",
+    );
   });
 
   it("refuses a terminal past the app's limit before asking Rust, counting only live shells", async () => {

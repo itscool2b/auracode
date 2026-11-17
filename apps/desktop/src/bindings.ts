@@ -263,6 +263,8 @@ export const commands = {
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
 	terminalClose: (terminalId: string) => typedError<null, AppError>(__TAURI_INVOKE("terminal_close", { terminalId })),
+	/**  The person's terminal font, or `None` when nothing could be read. */
+	terminalSystemFont: () => typedError<SystemTerminalFont | null, AppError>(__TAURI_INVOKE("terminal_system_font")),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -834,6 +836,13 @@ export type AppInfo = {
 	recovery_notice: string | null,
 	/**  Why startup could not complete, as a sentence to show on the error screen. */
 	fatal: string | null,
+	/**
+	 *  The window's page may play sound (Settings' Sounds). False on Linux where GStreamer's
+	 *  plugins are missing, and after the page stopped working once.
+	 */
+	media: boolean,
+	/**  Why it may not, as a sentence for Settings and the browser. */
+	media_notice: string | null,
 };
 
 /**  Appearance belongs to the active profile on this device, just like motion preferences. */
@@ -1021,6 +1030,11 @@ export type BrowserStatus = {
 	unavailable: string | null,
 	/**  The engine offers to save sign-ins (Windows). */
 	passwords: boolean,
+	/**
+	 *  Why pages play no sound or video on this system, when they cannot (Linux without
+	 *  GStreamer's plugins), naming what to install.
+	 */
+	media_notice: string | null,
 };
 
 /**  One tab of a chat's browser. */
@@ -1044,6 +1058,11 @@ export type BrowserTab = {
 	asleep: boolean,
 	/**  Annotate's picker runs in its page. */
 	annotating: boolean,
+	/**
+	 *  Its page may play sound and video. False on Linux where GStreamer's plugins are missing,
+	 *  and for a tab whose page process ended twice in a short time (it loads with them off).
+	 */
+	media: boolean,
 };
 
 /**  What one of the agents' browser tools answered, for development checks. */
@@ -2683,7 +2702,12 @@ export type ProjectSearchHit = {
 	name: string,
 };
 
-export type ProjectShell = "power_shell" | "command_prompt" | "zsh" | "bash";
+export type ProjectShell = 
+/**
+ *  The person's own login shell (`$SHELL`, else the passwd entry) with their startup files,
+ *  as their terminal app starts it. macOS and Linux.
+ */
+"login" | "power_shell" | "command_prompt" | "zsh" | "bash";
 
 export type ProjectShellChoice = {
 	id: ProjectShell,
@@ -3281,6 +3305,18 @@ export type StressConfig = {
 	rate: number,
 	aura: boolean,
 	seconds: number,
+};
+
+/**  What the page shows and uses. */
+export type SystemTerminalFont = {
+	/**  The font family as CSS takes it, or `None` when only the size is known. */
+	family: string | null,
+	/**  The size in CSS pixels, or `None` when only the family is known. */
+	size_px: number | null,
+	/**  The same size in points, as the terminal's own settings say it. */
+	size_points: number | null,
+	/**  Where it came from, as Settings names it: "kitty", "GNOME" and the like. */
+	source: string,
 };
 
 /**  What a task runs. */

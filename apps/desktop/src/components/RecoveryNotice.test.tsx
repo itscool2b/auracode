@@ -25,6 +25,8 @@ const INFO: AppInfo = {
   notices: [],
   recovery_notice: NOTICE,
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 
 const ENABLED_BUTTON = /<button type="button" class="[^"]*">Dismiss<\/button>/;

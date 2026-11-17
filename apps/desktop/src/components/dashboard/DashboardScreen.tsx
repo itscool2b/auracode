@@ -1,6 +1,6 @@
 import { springs, usePrefersReducedMotion } from "@auracode/ui";
 import { AgentMark, PixelLoader, StatusDot } from "@auracode/ui/graphite";
-import { ArrowLeft, Check, ChevronRight, Square } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChatProcesses, ChatSummary, ProcessesSnapshot } from "../../bindings";
@@ -9,12 +9,15 @@ import {
   type Arrivals,
   boardOf,
   boardSummary,
+  holdsAgent,
   LANE_TITLES,
   LANES,
   type Lane,
   stateLine,
 } from "../../lib/dashboard";
+import { type DashboardCleared, dashboardCleared } from "../../lib/dashboardCleared";
 import { errorMessage } from "../../lib/errors";
+import { chatStop } from "../../lib/ipc";
 import { ago } from "../../lib/plugins/format";
 import {
   cpuPercent,
@@ -79,6 +82,8 @@ export function DashboardScreen({
   app,
   workspace,
   api = processesApi,
+  cleared = dashboardCleared,
+  stopChat = chatStop,
   onBack,
   onOpenChat,
 }: {
@@ -86,6 +91,10 @@ export function DashboardScreen({
   /** Names each chat's project, and leaves archived chats off the board. */
   readonly workspace?: WorkspaceStore;
   readonly api?: ProcessesApi;
+  /** The cards cleared on this device. */
+  readonly cleared?: DashboardCleared;
+  /** Stops a chat's agent, as its header's Stop does. */
+  readonly stopChat?: (chatId: string) => Promise<void>;
   readonly onBack: () => void;
   readonly onOpenChat: (chatId: string) => void;
 }) {
@@ -111,6 +120,8 @@ export function DashboardScreen({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [stopping, setStopping] = useState<ReadonlySet<number>>(new Set());
+  const [stoppingChats, setStoppingChats] = useState<ReadonlySet<string>>(new Set());
+  useSyncExternalStore(cleared.subscribe, cleared.getVersion, cleared.getVersion);
   const now = useClock(true);
   const reduced = usePrefersReducedMotion();
 
@@ -157,12 +168,29 @@ export function DashboardScreen({
     }
   };
 
+  const stopAgent = async (chat: ChatSummary) => {
+    setStoppingChats((current) => new Set(current).add(chat.id));
+    setNotice(null);
+    try {
+      await stopChat(chat.id);
+      setNotice(`Stopped the agent in ${chat.title ?? "New chat"}.`);
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setStoppingChats((current) => {
+        const next = new Set(current);
+        next.delete(chat.id);
+        return next;
+      });
+    }
+  };
+
   // A chat open in its terminal here shows as stopped to the store; its terminal says whether its
   // agent works (draws output) or waits at its prompt, read again with every tick of the clock.
   // When each chat came into its lane keeps the lanes' order steady while their agents stream.
   const inTerminal = (chatId: string) => terminalChats.use(chatId, now);
   const arrivals = useRef<Arrivals>(new Map());
-  const board = boardOf(summaries, now, inTerminal, arrivals.current);
+  const board = boardOf(summaries, now, inTerminal, arrivals.current, cleared.isCleared);
   const processes = new Map(
     (reading.current?.chats ?? []).map((chat) => [chat.chat_id, chat] as const),
   );
@@ -202,11 +230,24 @@ export function DashboardScreen({
                 aria-labelledby={`dashboard-lane-${lane}`}
                 data-testid="dashboard-lane"
               >
-                <h2 id={`dashboard-lane-${lane}`} className="dashboard-lane-title">
-                  <LaneMark lane={lane} busy={board[lane].length > 0} />
-                  {LANE_TITLES[lane]}{" "}
-                  <span className="dashboard-lane-count">{board[lane].length}</span>
-                </h2>
+                <div className="dashboard-lane-head">
+                  <h2 id={`dashboard-lane-${lane}`} className="dashboard-lane-title">
+                    <LaneMark lane={lane} busy={board[lane].length > 0} />
+                    {LANE_TITLES[lane]}{" "}
+                    <span className="dashboard-lane-count">{board[lane].length}</span>
+                  </h2>
+                  {lane === "finished" && board.finished.length > 0 ? (
+                    <button
+                      type="button"
+                      className="g-button g-button-ghost g-button-28 dashboard-lane-clear"
+                      data-testid="dashboard-clear-finished"
+                      title="Take every finished chat off the Dashboard until it is used again"
+                      onClick={() => cleared.clear(board.finished, listed)}
+                    >
+                      Clear finished
+                    </button>
+                  ) : null}
+                </div>
                 {board[lane].length === 0 ? (
                   <p className="dashboard-lane-empty">{EMPTY[lane]}</p>
                 ) : null}
@@ -232,6 +273,10 @@ export function DashboardScreen({
                           stopping={stopping}
                           onStop={stop}
                           onOpenChat={onOpenChat}
+                          holdsAgent={holdsAgent(chat, lane)}
+                          stoppingAgent={stoppingChats.has(chat.id)}
+                          onStopAgent={() => void stopAgent(chat)}
+                          onClear={() => cleared.clear([chat], listed)}
                         />
                       </motion.li>
                     ))}
@@ -294,6 +339,10 @@ function DashboardCard({
   stopping,
   onStop,
   onOpenChat,
+  holdsAgent,
+  stoppingAgent,
+  onStopAgent,
+  onClear,
 }: {
   readonly chat: ChatSummary;
   readonly lane: Lane;
@@ -307,6 +356,11 @@ function DashboardCard({
   readonly stopping: ReadonlySet<number>;
   readonly onStop: (chatId: string, pid: number, name: string) => void;
   readonly onOpenChat: (chatId: string) => void;
+  /** Its agent is live (working, or waiting for an answer): it offers Stop rather than Clear. */
+  readonly holdsAgent: boolean;
+  readonly stoppingAgent: boolean;
+  readonly onStopAgent: () => void;
+  readonly onClear: () => void;
 }) {
   const title = chat.title ?? "New chat";
   const tasks = orderedTasks(processes?.tasks ?? []).filter((task) => task.status === "running");
@@ -332,6 +386,30 @@ function DashboardCard({
           </p>
         </div>
         <ChevronRight className="dashboard-card-go" size={14} aria-hidden="true" />
+        {holdsAgent ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-28 dashboard-card-action"
+            data-testid="dashboard-card-stop"
+            aria-label={`Stop the agent in ${title}`}
+            title="Stop this chat's agent"
+            disabled={stoppingAgent}
+            onClick={onStopAgent}
+          >
+            <Square size={12} aria-hidden="true" /> {stoppingAgent ? "Stopping…" : "Stop"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon g-button-28 dashboard-card-action"
+            data-testid="dashboard-card-clear"
+            aria-label={`Clear ${title} from the Dashboard`}
+            title="Take this card off the Dashboard until the chat is used again"
+            onClick={onClear}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        )}
       </div>
       <p className="dashboard-card-state" data-testid="dashboard-card-state">
         <span>{line}</span>

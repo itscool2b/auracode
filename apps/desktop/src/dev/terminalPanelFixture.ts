@@ -25,6 +25,7 @@ const SHELLS: ProjectShellChoice[] = [
   },
 ];
 const PROMPTS: Record<ProjectShell, string> = {
+  login: "❯ ",
   power_shell: `PS ${FOLDER}> `,
   command_prompt: `${FOLDER}>`,
   zsh: "% ",
