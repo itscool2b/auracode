@@ -1,8 +1,9 @@
 //! Project organization and device-local folder preflight. No operation moves files on disk.
 
 use aura_protocol::workspace::{
-    ChatCreatePreview, ChatMove, ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput,
-    ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
+    ChatCreatePreview, ChatMove, FolderMatch, FolderMatches, ProjectChatCreate, ProjectCreate,
+    ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
+    WorktreeOrigin,
 };
 
 use super::*;
@@ -214,6 +215,83 @@ impl SessionManager {
         .await
     }
 
+    /// What a picked folder already is on this device: the project folders it is, however the
+    /// pick spelled it, and whether it is a worktree auracode manages. Both sides are compared
+    /// canonical, as folder keys are, so a pick through a link or in other letter case on a
+    /// case-insensitive file system finds its project instead of becoming a new one. The folder
+    /// whose chat was active most recently comes first, then the workspace's order.
+    pub async fn workspace_folder_matches(
+        &self,
+        path: &str,
+    ) -> Result<FolderMatches, SessionError> {
+        bounded(path, "Folder path", 32_768)?;
+        let picked = PathBuf::from(path);
+        if !picked.is_absolute() {
+            return Err(invalid("Choose an absolute folder path."));
+        }
+        let workspace = self
+            .workspace_snapshot(WorkspaceFilter {
+                include_archived: true,
+                project_id: None,
+            })
+            .await?;
+        let worktrees = match self.worktrees() {
+            Ok(service) => service.profile_records().await.unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        tokio::task::spawn_blocking(move || {
+            let canonical = std::fs::canonicalize(&picked)
+                .map_err(|error| invalid(&format!("Cannot resolve this folder: {error}")))?;
+            if !canonical.is_dir() {
+                return Err(invalid("Choose a folder, not a file."));
+            }
+            let stored = crate::fsutil::plain_path(&canonical);
+            let key = live::normalize_path(stored.clone());
+            let same = |other: &str| live::normalize_path(PathBuf::from(other)) == key;
+            let worktree = worktrees
+                .iter()
+                .find(|record| same(&record.path))
+                .map(|record| WorktreeOrigin {
+                    branch: record.branch.clone(),
+                    source: crate::fsutil::plain_path(Path::new(&record.source))
+                        .to_string_lossy()
+                        .into_owned(),
+                });
+            let mut matches: Vec<FolderMatch> = workspace
+                .projects
+                .iter()
+                .flat_map(|project| {
+                    project.folders.iter().filter_map(move |folder| {
+                        let path = folder.path.as_deref()?;
+                        same(path).then(|| FolderMatch {
+                            folder_id: folder.id.clone(),
+                            project_id: project.id.clone(),
+                            project_name: project.name.clone(),
+                            last_chat_at: None,
+                        })
+                    })
+                })
+                .collect();
+            for found in &mut matches {
+                found.last_chat_at = workspace
+                    .chats
+                    .iter()
+                    .filter(|entry| entry.folder_id.as_deref() == Some(found.folder_id.as_str()))
+                    .map(|entry| entry.chat.updated_at)
+                    .max();
+            }
+            // Stable: equally recent folders keep the workspace's order.
+            matches.sort_by_key(|found| std::cmp::Reverse(found.last_chat_at));
+            Ok(FolderMatches {
+                path: stored.to_string_lossy().into_owned(),
+                matches,
+                worktree,
+            })
+        })
+        .await
+        .map_err(|_| SessionError::Internal("Checking the folder failed.".into()))?
+    }
+
     pub async fn chat_create_preview(
         &self,
         folder_id: &str,
@@ -384,11 +462,10 @@ impl SessionManager {
                         crate::fsutil::plain_path(Path::new(&record.path))
                             == crate::fsutil::plain_path(Path::new(path))
                     }) {
-                        folder.display_name = format!(
-                            "{} (worktree from {})",
-                            record.branch,
-                            crate::fsutil::plain_path(Path::new(&record.source)).display()
-                        );
+                        let source = crate::fsutil::plain_path(Path::new(&record.source));
+                        folder.display_name =
+                            format!("{} (worktree from {})", record.branch, source.display());
+                        folder.worktree_of = Some(source.to_string_lossy().into_owned());
                     }
                     folder.folder_state = checked
                         .get(&PathBuf::from(path))

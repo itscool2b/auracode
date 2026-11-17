@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AgentEntry, ProjectFolder, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
-import { newChatAgent, projectChatContext, projectSourceFolder } from "./newChatContext";
+import {
+  chosenMatch,
+  newChatAgent,
+  projectChatContext,
+  projectSourceFolder,
+} from "./newChatContext";
 import { chatSummary } from "./testing";
 
 const folder = (id: string, ok = true): ProjectFolder => ({
@@ -100,6 +105,55 @@ describe("project new-chat context", () => {
       projectSourceFolder(context, snapshot, [{ path: "/code/managed", source: "/code/foreign" }]),
     ).toBeNull();
     expect(projectSourceFolder(null, snapshot, [])).toBeNull();
+  });
+  it("never prefills a worktree: a recent chat in one prefills the folder it was made from", () => {
+    const tree = { ...folder("tree"), worktree_of: "/code/second" };
+    // The worktree is the only folder besides its source: the source is the sole startable one.
+    const pair = project([folder("second"), tree]);
+    const inTree = (value: ProjectSummary): WorkspaceSnapshot => ({
+      ...workspace(value),
+      chats: [
+        {
+          chat: { ...chatSummary("in-tree"), updated_at: 30 },
+          project_id: "project",
+          folder_id: "tree",
+          pinned: false,
+          archived: false,
+        },
+      ],
+    });
+    expect(projectChatContext(pair, inTree(pair)).folderId).toBe("second");
+    // With several folders, the recent worktree chat stands for its source.
+    const several = project([folder("first"), folder("second"), tree]);
+    expect(projectChatContext(several, inTree(several)).folderId).toBe("second");
+    // Without any retained record: Rust marked the folder, so nothing waits for the list.
+    const context = { ...projectChatContext(several, inTree(several)), folderId: "tree" };
+    expect(projectSourceFolder(context, inTree(several), [])).toBe("second");
+    // A worktree whose source is not in this project leaves the choice to the person.
+    const orphan = project([folder("first"), folder("other"), { ...tree, worktree_of: "/gone" }]);
+    expect(projectChatContext(orphan, inTree(orphan)).folderId).toBeNull();
+    expect(projectSourceFolder({ ...context, folderId: "tree" }, inTree(orphan), [])).toBeNull();
+    // A project of nothing but a worktree prefills nothing.
+    const alone = project([tree]);
+    expect(projectChatContext(alone, inTree(alone)).folderId).toBeNull();
+  });
+  it("chooses the draft project's folder for a pick, else the one used last, never a worktree", () => {
+    const matches = {
+      path: "/code/first",
+      worktree: null,
+      matches: [
+        { folder_id: "b", project_id: "recent", project_name: "Recent", last_chat_at: 9 },
+        { folder_id: "a", project_id: "draft", project_name: "Draft", last_chat_at: null },
+      ],
+    };
+    expect(chosenMatch(matches, "draft")?.folder_id).toBe("a");
+    expect(chosenMatch(matches, null)?.folder_id).toBe("b");
+    expect(chosenMatch(matches, "unrelated")?.folder_id).toBe("b");
+    expect(chosenMatch({ ...matches, matches: [] }, "draft")).toBeNull();
+    expect(
+      chosenMatch({ ...matches, worktree: { branch: "aura/x", source: "/code/src" } }, "draft"),
+    ).toBeNull();
+    expect(chosenMatch(null, "draft")).toBeNull();
   });
   it("uses project then profile agent defaults without replacing a deliberate selection", () => {
     const value = project([folder("first")]);

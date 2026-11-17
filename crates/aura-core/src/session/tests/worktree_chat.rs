@@ -178,6 +178,53 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
     );
     // The source chat kept running in the original folder.
     assert!(rig.manager.shared().live.contains(&direct.chat.id));
+    // The worktree is known as the worktree it is: its project folder names its source, so a
+    // new chat never starts in it by itself, and a pick of it says where it came from.
+    let snapshot = rig
+        .manager
+        .workspace_snapshot(aura_protocol::workspace::WorkspaceFilter {
+            include_archived: true,
+            project_id: None,
+        })
+        .await
+        .expect("snapshot");
+    let folders: Vec<_> = snapshot
+        .projects
+        .iter()
+        .flat_map(|project| &project.folders)
+        .collect();
+    let at = |path: &Path| {
+        folders
+            .iter()
+            .find(|folder| {
+                folder
+                    .path
+                    .as_deref()
+                    .is_some_and(|stored| canonical(stored) == canonical(path))
+            })
+            .copied()
+    };
+    let tree = at(Path::new(&preview.path)).expect("the worktree is a project folder");
+    assert_eq!(
+        tree.worktree_of.as_deref().map(canonical),
+        Some(canonical(&rig.folder))
+    );
+    assert_eq!(at(&rig.folder).expect("source").worktree_of, None);
+    let picked = rig
+        .manager
+        .workspace_folder_matches(&preview.path)
+        .await
+        .expect("matches");
+    let origin = picked.worktree.expect("a managed worktree");
+    assert_eq!(origin.branch, "aura/parallel-fix");
+    assert_eq!(canonical(&origin.source), canonical(&rig.folder));
+    let source = rig
+        .manager
+        .workspace_folder_matches(&rig.folder.to_string_lossy())
+        .await
+        .expect("matches");
+    assert_eq!(source.worktree, None);
+    assert_eq!(source.matches[0].folder_id, project.folders[0].id);
 }
 
 #[tokio::test]

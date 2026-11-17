@@ -19,6 +19,7 @@ import {
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 import { type WorkspaceApi, WorkspaceStore } from "../lib/workspace";
 import { worktreeRecoveryApi } from "../lib/worktreeRecovery";
+import { fixtureFolderMatches } from "./folderMatches";
 import { withPreviewContext } from "./previewContext";
 
 const SOURCE =
@@ -149,6 +150,7 @@ export function mountHeaderLabelsPreview(container: HTMLElement): void {
     archive: unavailable,
     move: unavailable,
     preview: unavailable,
+    folderMatches: fixtureFolderMatches(() => snapshot),
     createChat: unavailable,
   };
   // New chat mounts briefly before the real navigation request opens its saved chat.

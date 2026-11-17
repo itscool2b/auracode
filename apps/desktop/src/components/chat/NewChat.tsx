@@ -15,13 +15,14 @@ import type {
   AgentInstallation,
   ChatCreatePreview,
   ChatSummary,
+  FolderMatches,
   ManagedWorktree,
   WorktreeChatPlan,
   WorktreeChatResult,
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
-import { projectSourceFolder } from "../../lib/chat/newChatContext";
+import { chosenMatch, projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { type ChatInterface, chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
@@ -216,6 +217,29 @@ export function NewChat({
   const [submitting, setSubmitting] = useState(false);
   const submitted = useRef(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // What Rust found the picked folder to be (the project folders it already is, however it was
+  // spelled, or a managed worktree), for the path it was asked about.
+  const [match, setMatch] = useState<{
+    readonly path: string;
+    readonly found: FolderMatches;
+  } | null>(null);
+  useEffect(() => {
+    const path = state.folder;
+    if (!workspace || !path) return;
+    let current = true;
+    void workspace.api.folderMatches(path).then(
+      (found) => {
+        if (current) setMatch({ path, found });
+      },
+      () => {
+        // Unreadable here: adding the folder says why, in Rust's words.
+        if (current) setMatch({ path, found: { path, matches: [], worktree: null } });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [workspace, state.folder]);
   // Agents whose detection finished while this screen was open settle in once; first paint does not.
   const seen = useRef<ReadonlyMap<string, string> | "waiting" | null>(null);
   const [found, setFound] = useState<ReadonlySet<string>>(() => new Set());
@@ -235,27 +259,39 @@ export function NewChat({
     seen.current = new Map(agents.map((agent) => [agent.id, agent.availability.state]));
     if (settled.length > 0) setFound((current) => new Set([...current, ...settled]));
   }, [agents]);
-  // The project folder this chat would use: chosen under Projects, or the picked folder's own.
-  const sourceFolder = (folder: { path: string | null }) =>
-    !folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string));
+  // The project folder this chat would use: chosen under Projects, or the picked folder's own. A
+  // worktree is never offered: a chat starts from the folder it was made from.
+  const sourceFolder = (folder: { path: string | null; worktree_of?: string | null }) =>
+    !folder.worktree_of &&
+    (!folder.path || !retained.some((record) => sameFolder(record.path, folder.path as string)));
+  // Rust's answer for the folder picked now: the project folder it already is (the draft's
+  // project first, then the one used last), so another spelling of it never makes a new project.
+  const answer = match && match.path === state.folder ? match.found : null;
+  const matched = chosenMatch(answer, draft.context?.projectId ?? null);
+  // The draft's project (every project without one), and the project a picked folder is in.
+  const shownProject = (project: { readonly id: string }) =>
+    !draft.context || project.id === draft.context.projectId || project.id === matched?.project_id;
   const folders =
     organization.data?.projects
-      .filter((project) => !draft.context || project.id === draft.context.projectId)
+      .filter(shownProject)
       .flatMap((project) => project.folders)
       .filter(sourceFolder) ?? [];
   const picked = state.folder ? folders.find((folder) => folder.path === state.folder) : undefined;
-  const automaticFolder = retainedLoaded
-    ? projectSourceFolder(draft.context, organization.data, retained)
-    : draft.context?.folderId;
+  const automaticFolder = projectSourceFolder(draft.context, organization.data, retained);
   const requestedFolder = folderId ?? (state.folder ? "" : automaticFolder) ?? "";
   const knownFolder =
     (folders.some((folder) => folder.id === requestedFolder) ? requestedFolder : "") ||
+    matched?.folder_id ||
     picked?.id ||
     "";
-  const managedPicked =
+  const retainedPick =
     !knownFolder && state.folder
       ? retained.find((record) => sameFolder(record.path, state.folder as string))
       : undefined;
+  const managedPicked =
+    !knownFolder && state.folder ? (answer?.worktree ?? retainedPick) : undefined;
+  // A picked folder waits for Rust's answer before it is used or added, so it never joins twice.
+  const pickPending = Boolean(workspace && state.folder && !folderId && !answer);
   useEffect(() => {
     void previewRevision;
     let current = true;
@@ -285,7 +321,8 @@ export function NewChat({
       !path ||
       folderId ||
       !loaded ||
-      !retainedLoaded ||
+      !answer ||
+      answer.matches.length > 0 ||
       managedPicked ||
       picked ||
       adding.current === path
@@ -317,7 +354,7 @@ export function NewChat({
         const id = outcome.value?.id;
         if (id && draft.getSnapshot().folder === path) setFolderId(id);
       });
-  }, [workspace, state.folder, folderId, loaded, retainedLoaded, managedPicked, picked, draft]);
+  }, [workspace, state.folder, folderId, loaded, answer, managedPicked, picked, draft]);
   // The one lineup every agent list reads, so "Other agents" counts the same everywhere.
   const { usable: available, others: unavailable } = agentLineup(agents ?? []);
   const selected = available.find((agent) => agent.id === state.agentId) ?? null;
@@ -370,11 +407,11 @@ export function NewChat({
       (error: unknown) => setPreviewError(errorMessage(error)),
     );
   };
-  // Only an automatic prefill waits for the retained list (it may name a worktree); a folder the
-  // person chose does not, and a failed list ends the wait.
+  // Nothing waits for the retained list: Rust marks worktree folders in the workspace, and says
+  // whether a picked folder is one.
   const canCreate =
     selected !== null &&
-    (!workspace || retainedLoaded || folderId !== null) &&
+    !pickPending &&
     !managedPicked &&
     (state.folder !== null || knownFolder !== "") &&
     !addingFolder &&
@@ -388,7 +425,7 @@ export function NewChat({
     state.folder;
   const projects = workspace
     ? (organization.data?.projects ?? [])
-        .filter((project) => !draft.context || project.id === draft.context.projectId)
+        .filter(shownProject)
         .map((project) => ({ ...project, folders: project.folders.filter(sourceFolder) }))
         .filter((project) => project.folders.length > 0)
     : [];
@@ -705,6 +742,13 @@ export function NewChat({
           <p className="ui-error" role="alert">
             This folder is a managed worktree on {managedPicked.branch}. Choose its original project
             folder: {managedPicked.source}.
+          </p>
+        ) : null}
+        {matched &&
+        knownFolder === matched.folder_id &&
+        matched.project_id !== draft.context?.projectId ? (
+          <p className="new-chat-note" data-testid="new-chat-folder-project">
+            This folder is in {matched.project_name}, so the chat starts there.
           </p>
         ) : null}
         {recoveryError ? (

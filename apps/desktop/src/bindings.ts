@@ -424,6 +424,11 @@ export const commands = {
 	chatArchive: (chatId: string, archived: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_archive", { chatId, archived })),
 	chatMove: (chatId: string, request: ChatMove) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_move", { chatId, request })),
 	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
+	/**
+	 *  What a folder the person picked already is: its projects (compared canonical, so a link or
+	 *  another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+	 */
+	workspaceFolderMatches: (path: string) => typedError<FolderMatches, AppError>(__TAURI_INVOKE("workspace_folder_matches", { path })),
 	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
 	/**
 	 *  Stops these chats, a turn in progress included, and answers once their agents' processes
@@ -1766,6 +1771,31 @@ export type FolderLocationReview = {
 	notices: string[],
 };
 
+/**  A project folder that is the picked folder. */
+export type FolderMatch = {
+	folder_id: string,
+	project_id: string,
+	project_name: string,
+	/**  When the folder's most recent chat was last active; none without chats. */
+	last_chat_at: number | null,
+};
+
+/**
+ *  What a picked folder already is on this device, however the pick spelled it (a link, `..`,
+ *  letter case where the file system ignores it): Rust compares canonical folders.
+ */
+export type FolderMatches = {
+	/**  The folder as auracode stores it: canonical, in its plain spelling. */
+	path: string,
+	/**
+	 *  The project folders it already is: the one whose chat was active most recently first, then
+	 *  the oldest. A folder is in several projects only when it was added to each on purpose.
+	 */
+	matches: FolderMatch[],
+	/**  When it is a worktree auracode manages: a new chat starts from its source instead. */
+	worktree: WorktreeOrigin | null,
+};
+
 export type FolderResolution = {
 	folder: ProjectFolder,
 	roots: string[],
@@ -2732,6 +2762,11 @@ export type ProjectFolder = {
 	kind: FolderKind,
 	git_remote_url: string | null,
 	git_default_branch: string | null,
+	/**
+	 *  When this folder is a worktree auracode made: the folder it was made from (this device's
+	 *  path). A new chat never starts in one by itself; it starts from that source.
+	 */
+	worktree_of?: string | null,
 };
 
 /**  Complete editable project values. `None` clears an optional field on update. */
@@ -3804,6 +3839,12 @@ export type WorktreeChatResult = {
 };
 
 export type WorktreeDestination = "isolated" | "direct";
+
+/**  The branch and source folder of a worktree auracode manages. */
+export type WorktreeOrigin = {
+	branch: string,
+	source: string,
+};
 
 export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
 

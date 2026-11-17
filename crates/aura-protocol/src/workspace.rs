@@ -55,6 +55,10 @@ pub struct ProjectFolder {
     pub kind: FolderKind,
     pub git_remote_url: Option<String>,
     pub git_default_branch: Option<String>,
+    /// When this folder is a worktree auracode made: the folder it was made from (this device's
+    /// path). A new chat never starts in one by itself; it starts from that source.
+    #[serde(default)]
+    pub worktree_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -95,6 +99,36 @@ pub struct ChatCreatePreview {
     /// open in a terminal, or just started or finished) or waiting for the person's answer. An
     /// agent idle there does not count: it edits nothing until it is given a message.
     pub busy_chats: Vec<ChatSummary>,
+}
+
+/// What a picked folder already is on this device, however the pick spelled it (a link, `..`,
+/// letter case where the file system ignores it): Rust compares canonical folders.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct FolderMatches {
+    /// The folder as auracode stores it: canonical, in its plain spelling.
+    pub path: String,
+    /// The project folders it already is: the one whose chat was active most recently first, then
+    /// the oldest. A folder is in several projects only when it was added to each on purpose.
+    pub matches: Vec<FolderMatch>,
+    /// When it is a worktree auracode manages: a new chat starts from its source instead.
+    pub worktree: Option<WorktreeOrigin>,
+}
+
+/// A project folder that is the picked folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct FolderMatch {
+    pub folder_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    /// When the folder's most recent chat was last active; none without chats.
+    pub last_chat_at: Option<Millis>,
+}
+
+/// The branch and source folder of a worktree auracode manages.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeOrigin {
+    pub branch: String,
+    pub source: String,
 }
 
 /// What a chat in the way of a change to a folder is doing.

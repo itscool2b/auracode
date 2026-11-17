@@ -274,6 +274,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::workspace_commands::chat_archive,
             crate::workspace_commands::chat_move,
             crate::workspace_commands::chat_create_preview,
+            crate::workspace_commands::workspace_folder_matches,
             crate::workspace_commands::chat_project_create,
             crate::workspace_commands::chats_stop,
             crate::workspace_commands::agents_stop_idle,

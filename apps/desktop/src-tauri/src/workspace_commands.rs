@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use aura_core::session::{StopReport, StopScope};
 use aura_protocol::workspace::{
-    ChatCreatePreview, ChatMove, ChatsStopped, FolderBlockers, FolderScope, ProjectChatCreate,
-    ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat, WorkspaceFilter,
-    WorkspaceSnapshot,
+    ChatCreatePreview, ChatMove, ChatsStopped, FolderBlockers, FolderMatches, FolderScope,
+    ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat,
+    WorkspaceFilter, WorkspaceSnapshot,
 };
 use tauri::{State, Webview};
 
@@ -166,6 +166,17 @@ pub async fn chat_move(
     request: ChatMove,
 ) -> Result<WorkspaceChat, AppError> {
     Ok(state.sessions()?.chat_move(&chat_id, request).await?)
+}
+
+/// What a folder the person picked already is: its projects (compared canonical, so a link or
+/// another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_folder_matches(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<FolderMatches, AppError> {
+    Ok(state.sessions()?.workspace_folder_matches(&path).await?)
 }
 
 #[tauri::command]

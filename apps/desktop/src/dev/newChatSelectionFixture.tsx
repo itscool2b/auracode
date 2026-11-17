@@ -1,4 +1,9 @@
-/** Synthetic delayed-retention services for check-new-chat-selection.mjs. No native calls run. */
+/**
+ * Synthetic services for check-new-chat-selection.mjs: a project whose recent chat ran in a worktree
+ * Rust marked, a retained list that arrives late, a second project, and a folder picker that
+ * returns `pick` (by default the alternate source spelled with a trailing slash). No native calls
+ * run.
+ */
 import { createRoot } from "react-dom/client";
 import type { AgentEntry, ManagedWorktree, ProjectFolder } from "../bindings";
 import { NewChat } from "../components/chat/NewChat";
@@ -7,19 +12,25 @@ import { projectChatContext } from "../lib/chat/newChatContext";
 import { chatSummary, FakeTransport } from "../lib/chat/testing";
 import { WorkspaceStore } from "../lib/workspace";
 import { worktreeRecoveryApi } from "../lib/worktreeRecovery";
+import { fixtureFolderMatches } from "./folderMatches";
 import { FIXTURE_FOLDER, newChatFixture } from "./newChatWorktreeFixture";
 
-export async function mountNewChatSelectionFixture(container: HTMLElement) {
+export async function mountNewChatSelectionFixture(
+  container: HTMLElement,
+  pick = "/workspace/alternate/",
+) {
   const base = newChatFixture("plain");
   const snapshot = await base.workspace.api.snapshot();
   const project = snapshot.projects[0];
   const source = project?.folders[0];
   if (!project || !source) throw new Error("Missing synthetic project");
+  // A worktree of the source, as Rust shows it: marked with the folder it was made from.
   const managed: ProjectFolder = {
     ...source,
     id: "folder-managed",
     path: "/workspace/retained",
-    display_name: "Retained worktree",
+    display_name: "aura/retained (worktree from /workspace/auracode)",
+    worktree_of: FIXTURE_FOLDER,
   };
   const alternate: ProjectFolder = {
     ...source,
@@ -27,8 +38,18 @@ export async function mountNewChatSelectionFixture(container: HTMLElement) {
     path: "/workspace/alternate",
     display_name: "Other source",
   };
+  const site: ProjectFolder = {
+    ...source,
+    id: "folder-site",
+    project_id: "project-site",
+    path: "/workspace/site",
+    display_name: "site",
+  };
   const data = {
-    projects: [{ ...project, folders: [source, managed, alternate] }],
+    projects: [
+      { ...project, folders: [source, managed, alternate] },
+      { ...project, id: "project-site", name: "Website", folders: [site] },
+    ],
     chats: [
       {
         chat: { ...chatSummary("recent"), folder: managed.path as string, updated_at: 100 },
@@ -60,14 +81,17 @@ export async function mountNewChatSelectionFixture(container: HTMLElement) {
     ...base.workspace.api,
     snapshot: async () => structuredClone(data),
     preview: async (id) => {
-      const folder = data.projects[0]?.folders.find((folder) => folder.id === id);
+      const folder = data.projects
+        .flatMap((project) => project.folders)
+        .find((folder) => folder.id === id);
       if (!folder) throw new Error("Unknown synthetic folder");
       return { folder, busy_chats: [] };
     },
+    folderMatches: fixtureFolderMatches(() => data),
   });
   await workspace.refresh();
   const draft = new NewChatDraft(
-    new FakeTransport({ pickFolder: async () => alternate.path }),
+    new FakeTransport({ pickFolder: async () => pick }),
     projectChatContext(data.projects[0] as typeof project, data),
   );
   const agent: AgentEntry = {

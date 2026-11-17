@@ -20,6 +20,9 @@ export const workspaceApi = {
   archive: (id: string, archived: boolean) => settle(commands.chatArchive(id, archived)),
   move: (id: string, request: ChatMove) => settle(commands.chatMove(id, request)),
   preview: (folderId: string) => settle(commands.chatCreatePreview(folderId)),
+  /** What a picked folder already is: its projects (Rust compares canonical folders) and
+   * whether it is a managed worktree. */
+  folderMatches: (path: string) => settle(commands.workspaceFolderMatches(path)),
   createChat: (request: ProjectChatCreate) => settle(commands.chatProjectCreate(request)),
 };
 export type WorkspaceApi = typeof workspaceApi;
