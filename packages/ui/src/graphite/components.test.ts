@@ -60,9 +60,18 @@ describe("server rendering", () => {
     expect(html).toContain('aria-label="Working"');
   });
 
-  it("renders keys as kbd", () => {
-    const html = renderToString(createElement(Keycap, { label: "Command" }, "⌘"));
-    expect(html).toBe('<kbd class="g-keycap" aria-label="Command">⌘</kbd>');
+  it("renders keys as kbd, and key symbols as drawn glyphs with their names", () => {
+    expect(renderToString(createElement(Keycap, {}, "K"))).toBe('<kbd class="g-keycap">K</kbd>');
+    // Geist Mono has no ⌘ or ↵, so the cap draws them and names them for screen readers.
+    const command = renderToString(createElement(Keycap, {}, "⌘"));
+    expect(command).toContain('aria-label="Command"');
+    expect(command).toContain('<svg class="g-keycap-glyph"');
+    expect(command).not.toContain("⌘");
+    expect(renderToString(createElement(Keycap, {}, "↵"))).toContain('aria-label="Enter"');
+    // A label the caller gives wins over the symbol's own name.
+    expect(renderToString(createElement(Keycap, { label: "Return" }, "↵"))).toContain(
+      'aria-label="Return"',
+    );
   });
 
   it("styles the copy button with Graphite classes and keeps the Orbit hooks", () => {

@@ -580,6 +580,12 @@
   font-variant-ligatures: none;
 }
 
+/* A drawn key symbol (Keycap.tsx) sits in the cap's ink, centred, with no text box around it. */
+.g-keycap-glyph {
+  display: block;
+  flex: none;
+}
+
 .g-button-primary .g-keycap {
   background-color: var(--g-primary-active);
   box-shadow: none;
