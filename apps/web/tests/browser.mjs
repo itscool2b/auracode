@@ -169,8 +169,12 @@ try {
       // No canvas anywhere (the window is CSS) and no film Pause button.
       assert.equal(await page.locator("canvas").count(), 0);
       assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
-      // The feature cards: four, each a title over a product view; the handoff shows both planes.
-      assert.equal(await page.locator(".work-card").count(), 4);
+      // The feature cards: six, two to a row as dot.com's, each a title over a product view; the
+      // handoff shows both its parts.
+      assert.equal(await page.locator(".work-card").count(), 6);
+      // The FAQ opens on its first answer, as dot.com's does, and keeps one open at a time.
+      assert.equal(await page.locator("details.faq-item[open]").count(), 1);
+      assert.equal(await page.locator("details.faq-item").first().getAttribute("open"), "");
       const handoff = page.locator(".work-view .handoff-stage");
       await handoff.scrollIntoViewIfNeeded();
       assert.equal(await handoff.locator(".handoff-prior").isVisible(), true);

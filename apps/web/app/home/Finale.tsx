@@ -1,13 +1,14 @@
 import { Logo } from "@auracode/ui/graphite";
 
 /**
- * The page's last call, as dot.com closes: one line, one sentence, the two pills, and the mark
- * drawn very large in a hairline under them, running off the section's foot.
+ * The page's last call, as dot.com closes: one line, one sentence, the two pills, and the hero's
+ * mark (the logo on its disc) drawn very large in one hairline under them, running off into the
+ * footer as dot.com's outlined bot does.
  */
 export function Finale() {
   return (
     <section className="finale" aria-labelledby="finale-title">
-      <div className="inner center-head" data-reveal="">
+      <div className="center-head finale-head">
         <h2 id="finale-title" className="title">
           Your agents. Your machine.
         </h2>
@@ -21,8 +22,10 @@ export function Finale() {
           </a>
         </div>
       </div>
-      <div className="finale-art" aria-hidden="true">
-        <Logo size={960} />
+      <div className="inner finale-art" aria-hidden="true">
+        <span className="finale-disc">
+          <Logo size={976} />
+        </span>
       </div>
     </section>
   );

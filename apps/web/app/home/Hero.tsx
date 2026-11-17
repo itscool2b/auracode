@@ -1,5 +1,5 @@
 import { Logo } from "@auracode/ui/graphite";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import catalog from "#release-catalog";
 import { HeroWindow, useHandoffLoop } from "./HeroWindow";
 
@@ -22,10 +22,14 @@ function usePlatform(): string | null {
   return platform;
 }
 
+/** A word of the headline, flipping up into place after the ones before it. */
+const word = (i: number) => ({ "--w": i }) as CSSProperties;
+
 /**
  * The page's opening, composed as dot.com's is: the name with its mark set into the line, two
- * grey lines saying what it is, the two pills, and the app itself under them. The window is live:
- * one session replayed, handed from agent to agent.
+ * grey lines saying what it is, the two pills, and the app itself under them. The headline's words
+ * flip up one after another, the lines and the pills settle down out of a blur, and the window
+ * follows. The window is live: one session replayed, handed from agent to agent.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
@@ -36,11 +40,15 @@ export function Hero() {
     <section className="hero" aria-labelledby="hero-title" data-zone="">
       <div className="hero-copy">
         <h1 id="hero-title" className="hero-title" aria-label="Meet auracode">
-          <span aria-hidden="true">Meet</span>
-          <span className="hero-mark" aria-hidden="true">
+          <span className="hero-word" aria-hidden="true" style={word(0)}>
+            Meet
+          </span>{" "}
+          <span className="hero-word hero-mark" aria-hidden="true" style={word(1)}>
             <Logo size={40} />
+          </span>{" "}
+          <span className="hero-word" aria-hidden="true" style={word(2)}>
+            auracode
           </span>
-          <span aria-hidden="true">auracode</span>
         </h1>
         <p className="hero-lead">
           One window for every coding agent. Run Claude Code, Codex, Cursor and six more side by
@@ -55,7 +63,7 @@ export function Hero() {
           </a>
         </div>
       </div>
-      <div className="wrap hero-stage" ref={stage}>
+      <div className="inner hero-stage" ref={stage}>
         <div className="hero-detail" aria-hidden="true">
           <HeroWindow state={state} />
         </div>

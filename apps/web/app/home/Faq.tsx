@@ -43,10 +43,10 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
 const CLOSE = 300;
 
 /**
- * Questions as rows between hairlines: the heading and a quiet link at left, six questions at
- * right, one open at a time; the plus closes into a minus as its answer slides open. Built on
- * <details>, so every answer opens without JavaScript; the script adds the eased open and close
- * and keeps one row open.
+ * Questions as rows between hairlines, as dot.com sets its FAQs: the heading and a quiet link at
+ * left, six questions at right with the first answer open, one open at a time; the plus turns into
+ * a cross as its answer slides open. Built on <details>, so every answer opens without JavaScript;
+ * the script adds the eased open and close and keeps one row open.
  */
 export function Faq() {
   const list = useRef<HTMLDivElement>(null);
@@ -113,7 +113,7 @@ export function Faq() {
   return (
     <section className="section faq" id="faq" aria-labelledby="faq-title">
       <div className="inner two-col">
-        <div className="two-col-head faq-head" data-reveal="">
+        <div className="two-col-head faq-head">
           <h2 id="faq-title" className="title">
             FAQs
           </h2>
@@ -121,9 +121,10 @@ export function Faq() {
             Privacy notice <Arrow />
           </a>
         </div>
-        <div className="faq-list" ref={list} data-reveal="">
-          {QUESTIONS.map((item) => (
-            <details className="faq-item" key={item.question}>
+        <div className="faq-list" ref={list}>
+          {QUESTIONS.map((item, index) => (
+            // The first answer stands open, as dot.com's does.
+            <details className="faq-item" key={item.question} open={index === 0}>
               <summary>
                 <span className="faq-question">{item.question}</span>
                 <span className="faq-icon" aria-hidden="true">

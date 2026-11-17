@@ -1,5 +1,12 @@
-import type { CSSProperties, ReactNode } from "react";
-import { ChangesView, HandoffView, QueueView, TerminalView } from "./Scenes";
+import type { ReactNode } from "react";
+import {
+  BrowserView,
+  ChangesView,
+  DashboardView,
+  HandoffView,
+  QueueView,
+  TerminalView,
+} from "./Scenes";
 
 const CARDS: readonly { id: string; title: string; text: string; view: ReactNode }[] = [
   {
@@ -26,6 +33,18 @@ const CARDS: readonly { id: string; title: string; text: string; view: ReactNode
     text: "Open any chat in its agent's own interface, right inside auracode. Back in Chat, the turns are already there.",
     view: <TerminalView />,
   },
+  {
+    id: "browser",
+    title: "A browser beside the chat",
+    text: "Open what you are building next to the conversation, point at the part that should change, and send it to the agent.",
+    view: <BrowserView />,
+  },
+  {
+    id: "dashboard",
+    title: "A dashboard for every chat",
+    text: "One board shows which agents are working, which need you and which have finished.",
+    view: <DashboardView />,
+  },
 ];
 
 function Glyph({ children }: { children: ReactNode }) {
@@ -50,28 +69,6 @@ function Glyph({ children }: { children: ReactNode }) {
 
 /** What else ships in the app today, each a real part of it (docs/design/visual-language.md). */
 const MORE: readonly { id: string; glyph: ReactNode; title: string; text: string }[] = [
-  {
-    id: "browser",
-    glyph: (
-      <>
-        <circle cx="10" cy="10" r="7" />
-        <path d="M3 10h14M10 3c2.2 2 3.2 4.3 3.2 7s-1 5-3.2 7c-2.2-2-3.2-4.3-3.2-7s1-5 3.2-7Z" />
-      </>
-    ),
-    title: "A browser beside the chat",
-    text: "Open what you are building next to the conversation, point at the part that should change, and send it to the agent.",
-  },
-  {
-    id: "dashboard",
-    glyph: (
-      <>
-        <rect x="3" y="3.5" width="14" height="13" rx="2.5" />
-        <path d="M7.7 3.5v13M12.3 3.5v13" />
-      </>
-    ),
-    title: "A dashboard for every chat",
-    text: "One board shows which agents are working, which need you and which have finished.",
-  },
   {
     id: "dictation",
     glyph: (
@@ -120,13 +117,14 @@ const MORE: readonly { id: string; glyph: ReactNode; title: string; text: string
 
 /**
  * What auracode does, laid out as dot.com lays out its own: a centred statement over a grid of
- * cards, each a title and two lines above a picture of the product. The four views are authored
- * illustrations of supported states. Six smaller cards under them name other shipped parts.
+ * cards two to a row, each a title and two lines above a picture of the product that runs off the
+ * card's foot. The pictures are authored illustrations of supported states. Four smaller cards
+ * under them name other shipped parts.
  */
 export function Work() {
   return (
     <section className="section work" id="features" aria-labelledby="work-title" data-zone="">
-      <div className="inner center-head" data-reveal="">
+      <div className="center-head">
         <h2 id="work-title" className="title">
           Built for long turns
         </h2>
@@ -136,13 +134,12 @@ export function Work() {
         </p>
       </div>
       <div className="wrap work-grid">
-        {CARDS.map((card, i) => (
+        {CARDS.map((card) => (
           <article
             key={card.id}
             className="card work-card"
             data-card={card.id}
-            data-reveal=""
-            style={{ "--i": i % 2 } as CSSProperties}
+            data-reveal={card.id === "terminal" ? "trigger" : undefined}
           >
             <div className="work-text">
               <h3>{card.title}</h3>
@@ -155,13 +152,8 @@ export function Work() {
         ))}
       </div>
       <ul className="wrap more-grid">
-        {MORE.map((item, i) => (
-          <li
-            key={item.id}
-            className="card more-card"
-            data-reveal=""
-            style={{ "--i": i % 3 } as CSSProperties}
-          >
+        {MORE.map((item) => (
+          <li key={item.id} className="card more-card">
             <Glyph>{item.glyph}</Glyph>
             <h3>{item.title}</h3>
             <p>{item.text}</p>
