@@ -266,8 +266,9 @@ const SIDEBAR_CHATS = [
 ] as const;
 
 /**
- * The hero's glass window: the app's sidebar, the chat's toolbar, a transcript that keeps the last
- * turns, and the composer with its handoff. `.handoff-prior` and `.handoff-next`
+ * The hero's window, in the desktop's flat look: the sidebar on the window's colour with the
+ * window's controls at its top, then the open chat on its pane: the toolbar, a transcript that
+ * keeps the last turns, and the composer with its handoff. `.handoff-prior` and `.handoff-next`
  * name the parts the browser checks look for.
  */
 export function HeroWindow({ state }: { state: HandoffState }) {
@@ -299,16 +300,16 @@ export function HeroWindow({ state }: { state: HandoffState }) {
       data-settled={state.settled ? "" : undefined}
       data-working={working ? "" : undefined}
     >
-      <div className="hw-bar">
-        <span className="hw-dots">
-          <i />
-          <i />
-          <i />
-        </span>
-      </div>
       <div className="hw-body">
         <div className="hw-side">
-          <p className="m-nav">
+          <div className="hw-bar">
+            <span className="hw-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
+          <p className="m-nav m-search">
             <Icon name="search" />
             Search
           </p>

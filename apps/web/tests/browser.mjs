@@ -169,8 +169,12 @@ try {
       // No canvas anywhere (the window is CSS) and no film Pause button.
       assert.equal(await page.locator("canvas").count(), 0);
       assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
-      // The feature cards: four, each a title over a product view; the handoff shows both planes.
-      assert.equal(await page.locator(".work-card").count(), 4);
+      // The feature cards: six, two to a row as dot.com's, each a title over a product view; the
+      // handoff shows both its parts.
+      assert.equal(await page.locator(".work-card").count(), 6);
+      // The FAQ opens on its first answer, as dot.com's does, and keeps one open at a time.
+      assert.equal(await page.locator("details.faq-item[open]").count(), 1);
+      assert.equal(await page.locator("details.faq-item").first().getAttribute("open"), "");
       const handoff = page.locator(".work-view .handoff-stage");
       await handoff.scrollIntoViewIfNeeded();
       assert.equal(await handoff.locator(".handoff-prior").isVisible(), true);
@@ -209,6 +213,15 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(await cursor.getAttribute("aria-pressed"), "true");
       assert.equal(await page.locator(".agents-view .m-pill.is-on").textContent(), "Cursor");
+      // The chosen chip shows its mark, in its agent's own colour; the others are names alone.
+      assert.equal(
+        await page.locator(".agent-chip[aria-pressed=true] .g-agent-mark").isVisible(),
+        true,
+      );
+      assert.equal(
+        await page.locator(".agent-chip[aria-pressed=false] .g-agent-mark:visible").count(),
+        0,
+      );
       await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
       await handoff.screenshot({ path: join(artifacts, `${name}-handoff-mobile.png`) });
@@ -219,6 +232,19 @@ try {
       // A chip's colours settle over a moment after it is chosen; measure them once they have.
       await settled(page);
       assertWall(await agentWall(page), "390px");
+      // Below 1024px the bar's Download waits while the hero's own is in view, and comes back
+      // once that has scrolled away, as dot.com's does.
+      const barAction = () =>
+        page.evaluate(() => getComputedStyle(document.querySelector(".nav-cta")).visibility);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector(".nav-cta")).visibility === "hidden",
+      );
+      await page.evaluate(() => window.scrollTo(0, 1600));
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector(".nav-cta")).visibility === "visible",
+      );
+      assert.equal(await barAction(), "visible");
       // The phone menu is a solid sheet under the bar, over whatever the page shows behind it.
       await page.evaluate(() => {
         const band = document.querySelector("#features");
@@ -254,6 +280,14 @@ try {
         "rgb(10, 10, 10)",
         "the phone menu is solid",
       );
+      // And it covers the page from under the bar to the screen's foot, as dot.com's does.
+      const cover = await page.locator(".nav-sheet").evaluate((sheet) => {
+        const box = sheet.getBoundingClientRect();
+        const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 140);
+        return { bottom: box.bottom, height: window.innerHeight, covers: sheet.contains(hit) };
+      });
+      assert.ok(cover.bottom >= cover.height - 1, "the phone menu reaches the screen's foot");
+      assert.ok(cover.covers, "the phone menu covers the page");
       await page.keyboard.press("Escape");
       await page.getByRole("navigation", { name: "Menu" }).waitFor({ state: "hidden" });
       // A link to a section of this page closes the menu and goes there.

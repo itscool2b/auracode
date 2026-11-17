@@ -11,11 +11,32 @@ const SECTIONS = [
 
 /**
  * The bar dot.com has: the wordmark, the page's sections beside it, and the primary Download at
- * right. Under 768px the links fold into a menu built on <details>, so it opens without JavaScript
- * too; Download stays in the bar.
+ * right. Under 1024px the links fold into a menu built on <details>, so it opens without
+ * JavaScript too: a quiet disc beside Download, opening a sheet that covers the page with the
+ * sections and Download at its foot.
  */
 export function SiteHeader() {
   const menu = useRef<HTMLDetailsElement>(null);
+
+  // Below 1024px the bar's Download waits while the hero's own is in view, as dot.com's does, so
+  // the screen never shows two of it; it fades in once the hero's has scrolled away.
+  useEffect(() => {
+    const header = document.querySelector(".site-nav");
+    const action = document.querySelector(".hero-actions .btn-primary");
+    if (!header || !action || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        if (entry) header.toggleAttribute("data-hero-action", entry.isIntersecting);
+      },
+      { rootMargin: "-84px 0px 0px 0px" },
+    );
+    observer.observe(action);
+    return () => {
+      observer.disconnect();
+      header.removeAttribute("data-hero-action");
+    };
+  }, []);
 
   useEffect(() => {
     const details = menu.current;
@@ -59,7 +80,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="nav-end">
-          <a className="btn btn-primary btn-sm" href="/download">
+          <a className="btn btn-primary btn-sm nav-cta" href="/download">
             Download
           </a>
           <details className="nav-menu" ref={menu}>
@@ -70,13 +91,18 @@ export function SiteHeader() {
                 <path className="nav-menu-bar" d="M2 10.5h12" />
               </svg>
             </summary>
-            <nav className="nav-sheet" aria-label="Menu">
-              {SECTIONS.map((link) => (
-                <a key={link.href} href={link.href}>
-                  {link.text}
-                </a>
-              ))}
-            </nav>
+            <div className="nav-sheet">
+              <nav aria-label="Menu">
+                {SECTIONS.map((link) => (
+                  <a key={link.href} href={link.href}>
+                    {link.text}
+                  </a>
+                ))}
+              </nav>
+              <a className="btn btn-primary btn-lg" href="/download">
+                Download auracode
+              </a>
+            </div>
           </details>
         </div>
       </div>

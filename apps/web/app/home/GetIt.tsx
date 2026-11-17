@@ -7,12 +7,12 @@ const PUBLISHED = catalog.release !== null;
 const PLATFORMS: readonly { name: string; detail: string; glyph: ReactNode }[] = [
   {
     name: "Windows",
-    detail: "Windows 10 or newer, x64 and ARM64",
+    detail: "Windows 10 or newer · x64 and ARM64",
     glyph: <path d="M3.5 4.5h7v7h-7zM13.5 4.5h7v7h-7zM3.5 13.5h7v6h-7zM13.5 13.5h7v6h-7z" />,
   },
   {
     name: "macOS",
-    detail: "macOS 13.3 or newer, Apple silicon and Intel",
+    detail: "macOS 13.3 or newer · Apple silicon and Intel",
     glyph: (
       <>
         <rect x="4.5" y="5" width="15" height="10.5" rx="1.5" />
@@ -22,7 +22,7 @@ const PLATFORMS: readonly { name: string; detail: string; glyph: ReactNode }[] =
   },
   {
     name: "Linux",
-    detail: "x64: deb, rpm and AppImage",
+    detail: "x64 · deb, rpm and AppImage",
     glyph: (
       <>
         <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
@@ -41,7 +41,7 @@ export function GetIt() {
   return (
     <section className="section getit" id="download" aria-labelledby="getit-title">
       <div className="inner two-col">
-        <div className="two-col-head" data-reveal="">
+        <div className="two-col-head">
           <h2 id="getit-title" className="title">
             Download auracode
           </h2>
@@ -51,18 +51,18 @@ export function GetIt() {
               : "Free for Windows, macOS and Linux, with no account needed. Installers are on the way."}
           </p>
         </div>
-        <ul className="getit-rows" data-reveal="">
+        <ul className="getit-rows">
           {PLATFORMS.map((platform) => (
             <li key={platform.name}>
-              <a className="card getit-row" href="/download">
+              <a className="getit-row" href="/download">
                 <svg
                   className="getit-glyph"
-                  width="24"
-                  height="24"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.6"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
@@ -76,12 +76,12 @@ export function GetIt() {
                 </span>
                 <svg
                   className="getit-arrow"
-                  width="18"
-                  height="18"
+                  width="16"
+                  height="16"
                   viewBox="0 0 18 18"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.4"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"

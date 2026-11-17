@@ -1,22 +1,20 @@
 const WIDTHS = [480, 960, 1440, 2240] as const;
 const sources = (theme: "light" | "dark") =>
   WIDTHS.map((width) => `/images/desktop-${theme}-${width}.webp ${width}w`).join(", ");
-const SIZES = "(max-width: 1327px) calc(100vw - 48px), 1280px";
+/** The frame is the page's column; a phone shows it nearly twice as large, cropped (home.css). */
+const SIZES =
+  "(max-width: 639px) calc(179vw - 57px), (max-width: 1279px) calc(100vw - 48px), 1232px";
 
 /**
  * The real desktop, screenshotted from its preview (scripts/product-images.mjs) in the appearance
- * the page is shown in, under one line and in one large rounded frame, where dot.com sets its film.
+ * the page is shown in, in one large rounded frame across the column, where dot.com sets its film,
+ * with one line under it.
  */
 export function Showcase() {
   return (
-    <section className="section showcase" aria-labelledby="showcase-title">
-      <div className="inner center-head" data-reveal="">
-        <h2 id="showcase-title" className="title">
-          The whole workspace, on your machine
-        </h2>
-      </div>
-      <div className="wrap">
-        <figure className="showcase-frame" data-reveal="">
+    <div className="film">
+      <figure className="wrap film-figure">
+        <div className="showcase-frame">
           <picture>
             <source
               media="(prefers-color-scheme: dark)"
@@ -30,11 +28,12 @@ export function Showcase() {
               width="1440"
               height="760"
               decoding="async"
-              alt="The auracode desktop: projects and chats in the sidebar, an agent's reply with code, the composer with agent, model and access controls, and the Changes panel listing edited files."
+              alt="The auracode desktop: projects and chats in the sidebar, an agent's reply with code, the composer with access, account and model controls, and the Changes panel with a file's diff."
             />
           </picture>
-        </figure>
-      </div>
-    </section>
+        </div>
+        <figcaption className="film-caption">The whole workspace, on your machine</figcaption>
+      </figure>
+    </div>
   );
 }

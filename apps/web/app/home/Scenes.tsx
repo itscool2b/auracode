@@ -1,13 +1,25 @@
 import { AGENT_BRANDS, type AgentBrandId } from "@auracode/ui";
 import { Logo } from "@auracode/ui/graphite";
-import type { CSSProperties } from "react";
-import { Check, Composer, Header, Icon, SendDisc, Stat, Tool, TurnAgent } from "./Mock";
+import type { CSSProperties, ReactNode } from "react";
+import {
+  Check,
+  Composer,
+  Icon,
+  type IconName,
+  Loader,
+  SendDisc,
+  Stat,
+  Tool,
+  TurnAgent,
+} from "./Mock";
 import { AGENTS, SpriteMark } from "./Sprite";
 
 /*
  * The product views the cards and the agents section show: authored illustrations of supported app
- * states, drawn from the same parts as the hero window (Mock.tsx). They are decorative and sit in
- * aria-hidden frames; the words beside them carry the meaning.
+ * states, drawn from the same parts as the hero window (Mock.tsx), in the desktop's flat look. A
+ * card's view is a pane that runs off the card's foot, as dot.com's pictures do, so each one puts
+ * what it shows at its top. They are decorative and sit in aria-hidden frames; the words beside
+ * them carry the meaning.
  */
 
 /** The agents New chat finds in this view; the rest wait under "Other agents". */
@@ -66,24 +78,23 @@ export function NewChatView({ chosen }: { chosen: AgentBrandId }) {
   );
 }
 
-/** A chat handed from Claude Code to Codex: the handoff waits in view above the composer. */
+/**
+ * A chat handed from Claude Code to Codex: the end of Claude Code's turn, then the handoff waiting
+ * over the composer with the next message typed.
+ */
 export function HandoffView() {
   return (
-    <div className="handoff-stage">
-      <div className="handoff-prior m-window">
-        <Header title="Review the pacing change" project="auracode" />
-        <div className="m-body">
-          <p className="m-user">Check the pacing change before we ship.</p>
-          <div className="m-turn">
-            <TurnAgent agent="claude-code" />
-            <Tool icon="edit" verb="Edited" object="src/pacing.ts">
-              <Stat add={12} del={3} />
-            </Tool>
-            <p className="m-prose">
-              Frame pacing now waits on the clock and the tests pass. I did not look at what happens
-              when a frame lands late.
-            </p>
-          </div>
+    <div className="m-pane handoff-stage">
+      <div className="handoff-prior m-pane-body">
+        <div className="m-turn">
+          <TurnAgent agent="claude-code" />
+          <Tool icon="edit" verb="Edited" object="src/pacing.ts">
+            <Stat add={12} del={3} />
+          </Tool>
+          <p className="m-prose">
+            Frame pacing now waits on the clock and the tests pass. I did not look at what happens
+            when a frame lands late.
+          </p>
         </div>
       </div>
       <div className="handoff-next">
@@ -103,90 +114,11 @@ export function HandoffView() {
   );
 }
 
-const DIFF: readonly (readonly [string, string, string, "add" | "del" | null])[] = [
-  ["41", "41", "const frame = clock.now();", null],
-  ["42", "", "if (late) skip(frame);", "del"],
-  ["", "42", "if (late) return defer(frame);", "add"],
-  ["", "43", "budget.record(frame);", "add"],
-  ["43", "44", "paint(frame);", null],
-];
-
-/** The Changes panel: a turn's files, the diff of the open one, and a revert to review. */
-export function ChangesView() {
-  return (
-    <div className="m-window m-changes-window">
-      <div className="m-changes">
-        <div className="m-tabs">
-          <span className="m-tab is-on">
-            Changes <span className="m-count">2</span>
-          </span>
-          <span className="m-tab">Files</span>
-          <span className="m-tab">Plan</span>
-          <span className="m-head-end">
-            <span className="m-icon-button">
-              <Icon name="close" />
-            </span>
-          </span>
-        </div>
-        <div className="m-changes-body">
-          <p className="m-select">
-            Before the latest turn
-            <Icon name="chevron-down" size={12} />
-          </p>
-          <p className="m-file is-on" style={{ "--n": 0 } as CSSProperties}>
-            <span className="m-box is-on">
-              <Check />
-            </span>
-            <Icon name="file" size={14} />
-            <code>src/pacing.ts</code>
-            <span className="m-letter">M</span>
-          </p>
-          <p className="m-file" style={{ "--n": 1 } as CSSProperties}>
-            <span className="m-box" />
-            <Icon name="file" size={14} />
-            <code>src/budget.ts</code>
-            <span className="m-letter">M</span>
-          </p>
-          <div className="m-diff">
-            <p className="m-diff-head">
-              <code>
-                <span className="m-quiet">src/</span>pacing.ts
-              </code>
-              <Stat add={12} del={3} />
-            </p>
-            {DIFF.map(([old, now, text, kind], i) => (
-              <p
-                key={`${old}-${now}`}
-                className={kind ? `m-diff-line is-${kind}` : "m-diff-line"}
-                style={{ "--n": i } as CSSProperties}
-              >
-                <span className="m-ln">{old}</span>
-                <span className="m-ln">{now}</span>
-                <span className="m-sign">{kind === "add" ? "+" : kind === "del" ? "−" : ""}</span>
-                {text}
-              </p>
-            ))}
-          </div>
-        </div>
-        <div className="m-changes-foot">
-          <span className="m-quiet">1 selected</span>
-          <span className="m-button">
-            <Icon name="retry" size={13} />
-            Review revert
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** A running turn with a message queued behind it, and a typed one ready to steer. */
 export function QueueView() {
   return (
-    <div className="m-window m-dock-window">
-      <Header title="Tighten the sidebar" project="auracode" working />
-      <div className="m-body">
-        <p className="m-user">Make the sidebar easier to scan.</p>
+    <div className="m-pane m-queue-view">
+      <div className="m-pane-body">
         <div className="m-turn">
           <TurnAgent agent="codex" />
           <Tool icon="edit" verb="Edited" object="src/app/Sidebar.tsx">
@@ -223,6 +155,74 @@ export function QueueView() {
             </>
           }
         />
+      </div>
+    </div>
+  );
+}
+
+const DIFF: readonly (readonly [string, string, string, "add" | "del" | null])[] = [
+  ["41", "41", "const frame = clock.now();", null],
+  ["42", "", "if (late) skip(frame);", "del"],
+  ["", "42", "if (late) return defer(frame);", "add"],
+  ["", "43", "budget.record(frame);", "add"],
+  ["43", "44", "paint(frame);", null],
+];
+
+/** The Changes panel: a turn's files, the diff of the open one, and a revert to review. */
+export function ChangesView() {
+  return (
+    <div className="m-pane m-changes">
+      <div className="m-tabs">
+        <span className="m-tab is-on">
+          Changes <span className="m-count">2</span>
+        </span>
+        <span className="m-tab">Files</span>
+        <span className="m-tab">Plan</span>
+        <span className="m-head-end">
+          <span className="m-icon-button">
+            <Icon name="close" />
+          </span>
+        </span>
+      </div>
+      <div className="m-changes-body">
+        <p className="m-file is-on">
+          <span className="m-box is-on">
+            <Check />
+          </span>
+          <Icon name="file" size={14} />
+          <code>src/pacing.ts</code>
+          <span className="m-letter">M</span>
+        </p>
+        <p className="m-file">
+          <span className="m-box" />
+          <Icon name="file" size={14} />
+          <code>src/budget.ts</code>
+          <span className="m-letter">M</span>
+        </p>
+        <div className="m-diff">
+          <p className="m-diff-head">
+            <code>
+              <span className="m-quiet">src/</span>pacing.ts
+            </code>
+            <Stat add={12} del={3} />
+          </p>
+          {/* A change's band: the fold before it, with its own Revert once no agent works. */}
+          <p className="m-diff-band">
+            <span>Show 40 unchanged lines</span>
+            <span className="m-diff-revert">
+              <Icon name="retry" size={12} />
+              Revert
+            </span>
+          </p>
+          {DIFF.map(([old, now, text, kind]) => (
+            <p key={`${old}-${now}`} className={kind ? `m-diff-line is-${kind}` : "m-diff-line"}>
+              <span className="m-ln">{old}</span>
+              <span className="m-ln">{now}</span>
+              <span className="m-sign">{kind === "add" ? "+" : kind === "del" ? "−" : ""}</span>
+              {text}
+            </p>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -277,6 +277,156 @@ export function TerminalView() {
           {"> "}
           <span className="tm-cursor" />
         </span>
+      </div>
+    </div>
+  );
+}
+
+function BarButton({ icon }: { icon: IconName }) {
+  return (
+    <span className="m-icon-button">
+      <Icon name={icon} />
+    </span>
+  );
+}
+
+/**
+ * The browser beside the chat, in Annotate: the page being built, the element under the pointer
+ * outlined with its tag and size, and the note that sends it to the agent.
+ */
+export function BrowserView() {
+  return (
+    <div className="m-pane m-browser">
+      <div className="m-browser-tabs">
+        <span className="m-browser-tab is-on">
+          <Icon name="globe" size={13} />
+          Pricing
+        </span>
+        <span className="m-browser-tab">
+          <Icon name="globe" size={13} />
+          Docs
+        </span>
+        <span className="m-icon-button">
+          <Icon name="plus" size={14} />
+        </span>
+      </div>
+      <div className="m-browser-bar">
+        <BarButton icon="back" />
+        <BarButton icon="forward" />
+        <BarButton icon="refresh" />
+        <span className="m-address">
+          <Icon name="lock" size={12} />
+          localhost:5173<span className="m-quiet">/pricing</span>
+        </span>
+        <span className="m-annotate">
+          <Icon name="crosshair" size={13} />
+          Annotate
+        </span>
+      </div>
+      <div className="m-page">
+        <div className="m-page-hero">
+          <span className="m-skel m-skel-title" />
+          <span className="m-skel m-skel-line" />
+          <span className="m-page-actions">
+            <span className="m-page-button m-picked">
+              Start free
+              <span className="m-pick-tag">button 112 × 36</span>
+            </span>
+            <span className="m-page-button m-page-quiet">Compare plans</span>
+          </span>
+        </div>
+        <div className="m-note">
+          <code className="m-note-target">button.cta</code>
+          <p className="m-note-field">Make this the primary action</p>
+          <p className="m-note-foot">
+            <span className="m-button m-button-primary">Add to chat</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface BoardCard {
+  readonly agent: AgentBrandId;
+  readonly title: string;
+  readonly project: string;
+  readonly line: ReactNode;
+  readonly tone: "needs" | "working" | "done";
+}
+
+const LANES: readonly {
+  name: string;
+  mark: ReactNode;
+  count: number;
+  card: BoardCard;
+}[] = [
+  {
+    name: "Needs you",
+    mark: <span className="m-dot is-volt" />,
+    count: 1,
+    card: {
+      agent: "claude-code",
+      title: "Fix the login flow",
+      project: "auracode",
+      line: "Waiting on you · 2 min",
+      tone: "needs",
+    },
+  },
+  {
+    name: "Working",
+    mark: <Loader />,
+    count: 2,
+    card: {
+      agent: "codex",
+      title: "Tighten the sidebar",
+      project: "auracode",
+      line: "Running pnpm test · 0:12",
+      tone: "working",
+    },
+  },
+  {
+    name: "Finished",
+    mark: <Check />,
+    count: 3,
+    card: {
+      agent: "pi",
+      title: "Measure frame pacing",
+      project: "parser",
+      line: "Done · 12 min ago",
+      tone: "done",
+    },
+  },
+];
+
+/** The Dashboard: every chat by what it asks of you, in three lanes. */
+export function DashboardView() {
+  return (
+    <div className="m-pane m-board">
+      <div className="m-board-head">
+        <p className="m-board-title">Dashboard</p>
+        <p className="m-board-sum">1 needs you, 2 working, 3 finished in the last day</p>
+      </div>
+      <div className="m-lanes">
+        {LANES.map((lane) => (
+          <div className="m-lane" key={lane.name}>
+            <p className="m-lane-head">
+              {lane.mark}
+              {lane.name}
+              <span className="m-count">{lane.count}</span>
+            </p>
+            <div className="m-board-card" data-tone={lane.card.tone}>
+              <p className="m-board-card-title">
+                <SpriteMark agent={lane.card.agent} size={14} />
+                <span>{lane.card.title}</span>
+              </p>
+              <p className="m-quiet">
+                {AGENT_BRANDS[lane.card.agent].name} · {lane.card.project}
+              </p>
+              <p className="m-board-card-line">{lane.card.line}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

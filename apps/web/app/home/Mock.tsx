@@ -4,10 +4,11 @@ import type { CSSProperties, ReactNode } from "react";
 import { SpriteMark } from "./Sprite";
 
 /*
- * Illustration parts that mirror the desktop: glass layers, the chat header, the transcript's
- * gutter, the floating composer with access on its left and the agent picker on its right, tool
- * rows and the Changes panel. They draw supported app states only. Everything here is decorative
- * and sits inside aria-hidden views; the words around them carry the meaning.
+ * Illustration parts that mirror the desktop in its flat look: solid panes on the window's colour,
+ * the chat header, the transcript's gutter, the composer with access on its left and the agent
+ * picker on its right, tool rows and the Changes panel. They draw supported app states only.
+ * Everything here is decorative and sits inside aria-hidden views; the words around them carry the
+ * meaning.
  */
 
 export type IconName =
@@ -32,7 +33,14 @@ export type IconName =
   | "settings"
   | "shield"
   | "sliders"
-  | "check";
+  | "check"
+  | "globe"
+  | "lock"
+  | "back"
+  | "forward"
+  | "crosshair"
+  | "plus"
+  | "board";
 
 const ICONS: Record<IconName, ReactNode> = {
   panel: (
@@ -141,6 +149,33 @@ const ICONS: Record<IconName, ReactNode> = {
     </>
   ),
   check: <path d="m3.5 8.3 2.8 2.8 6.2-6.4" />,
+  globe: (
+    <>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M2.5 8h11M8 2.5c1.7 1.5 2.5 3.4 2.5 5.5S9.7 12 8 13.5C6.3 12 5.5 10.1 5.5 8S6.3 4 8 2.5Z" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4" y="7" width="8" height="6" rx="1.5" />
+      <path d="M5.75 7V5.5a2.25 2.25 0 0 1 4.5 0V7" />
+    </>
+  ),
+  back: <path d="M12.5 8h-9M7 4.5 3.5 8 7 11.5" />,
+  forward: <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" />,
+  crosshair: (
+    <>
+      <circle cx="8" cy="8" r="4.5" />
+      <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" />
+    </>
+  ),
+  plus: <path d="M8 3.5v9M3.5 8h9" />,
+  board: (
+    <>
+      <rect x="2.5" y="3" width="11" height="10" rx="2" />
+      <path d="M6.2 3v10M9.8 3v10" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
@@ -180,7 +215,7 @@ export function Loader() {
   );
 }
 
-/** The chat's glass toolbar: title, project, a status only when it says something, two controls. */
+/** The chat's toolbar: title, project, a status only when it says something, two controls. */
 export function Header({
   title,
   project,
@@ -261,8 +296,8 @@ export function Streamed({ text }: { text: string }) {
 }
 
 /**
- * The floating composer: the message on top, one row of controls under it. Access sits on the
- * left (with attach), the agent picker and send on the right, as in the desktop.
+ * The composer: the message on top, one row of ghost controls under it. Access sits on the left
+ * (with attach), the agent picker and send on the right, as in the desktop.
  */
 export function Composer({
   agent,

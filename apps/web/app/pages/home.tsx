@@ -3,10 +3,10 @@ import { Faq } from "../home/Faq";
 import { Finale } from "../home/Finale";
 import { GetIt } from "../home/GetIt";
 import { Hero } from "../home/Hero";
-import { Intro } from "../home/Intro";
 import { News } from "../home/News";
 import { Showcase } from "../home/Showcase";
 import { AgentSprite } from "../home/Sprite";
+import { Statement } from "../home/Statement";
 import { Work } from "../home/Work";
 
 export const meta = () => [
@@ -19,19 +19,19 @@ export const meta = () => [
 ];
 
 /**
- * The page in dot.com's order: the name over the live app, what it is on one wide card, what it
- * does in a grid of cards, the agents as chips, the real app in one frame, where to get it, the
- * changelog, answers, and the last call over the mark drawn large.
+ * The page in dot.com's order: the name over the live app, what it is with every agent's mark, the
+ * real app in one frame, what it does in a grid of cards, the agents as chips, where to get it,
+ * what shipped, answers, and the last call over the mark drawn large.
  */
 export default function Home() {
   return (
     <main id="main" className="home">
       <AgentSprite />
       <Hero />
-      <Intro />
+      <Statement />
+      <Showcase />
       <Work />
       <AgentPicker />
-      <Showcase />
       <GetIt />
       <News />
       <Faq />

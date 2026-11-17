@@ -6,10 +6,11 @@
  * shows the capture that matches.
  * Run it whenever the app changes visibly.
  *
- * Usage: node apps/web/scripts/product-images.mjs [--server http://127.0.0.1:1426] [--no-glass]
+ * Usage: node apps/web/scripts/product-images.mjs [--server http://127.0.0.1:1426] [--glass]
  * Without --server it starts the desktop's Vite on 127.0.0.1:1426 (strictPort) and stops it after.
- * The window is shown as it is on Windows 11 and macOS, glass over a desktop (?glass=acrylic, the
- * development stand-in for the native material); --no-glass shows the opaque fallback instead.
+ * The window is shown flat and opaque, as the desktop draws it since its restyle of 17 November
+ * 2026 (solid layers, no glass). --glass shows it over the development stand-in for the native
+ * material (?glass=acrylic) instead; --no-glass is the default and kept for older notes.
  */
 import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
@@ -20,7 +21,11 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 
 const { values } = parseArgs({
-  options: { server: { type: "string" }, "no-glass": { type: "boolean", default: false } },
+  options: {
+    server: { type: "string" },
+    glass: { type: "boolean", default: false },
+    "no-glass": { type: "boolean", default: false },
+  },
 });
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = resolve(web, "../desktop");
@@ -66,7 +71,7 @@ try {
     if (ok) break;
     await new Promise((done) => setTimeout(done, 100));
   }
-  const glass = values["no-glass"] ? "" : "&glass=acrylic";
+  const glass = values.glass && !values["no-glass"] ? "&glass=acrylic" : "";
   for (const theme of ["light", "dark"]) {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 760 },

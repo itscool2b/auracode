@@ -69,18 +69,18 @@ export function ErrorBoundary() {
   const missing = isRouteErrorResponse(error) && error.status === 404;
   return (
     <main id="main" className="page error-page">
-      <div className="frame page-frame">
+      <div className="wrap page-column">
         <div className="error-panel">
           <h1 className="error-title">
             {missing ? "This page does not exist." : "This page could not load."}{" "}
             <span>{missing ? "It may have moved." : "Your local workspace is unaffected."}</span>
           </h1>
           <div className="error-actions">
-            <a className="g-button g-button-primary g-button-44" href="/">
+            <a className="btn btn-primary btn-lg" href="/">
               Go home
             </a>
             {missing ? null : (
-              <a className="g-button g-button-outline g-button-44" href="/download">
+              <a className="btn btn-quiet btn-lg" href="/download">
                 Downloads
               </a>
             )}

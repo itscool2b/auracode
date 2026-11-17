@@ -63,7 +63,11 @@ test("public pages are prerendered to follow the system appearance without JavaS
       ),
       theme,
     );
-  assert.match(home, /sizes="\(max-width: 1327px\) calc\(100vw - 48px\), 1280px"/);
+  // The frame is the page's 1232px column; a phone crops it to the chat pane at 179% (home.css).
+  assert.match(
+    home,
+    /sizes="\(max-width: 639px\) calc\(179vw - 57px\), \(max-width: 1279px\) calc\(100vw - 48px\), 1232px"/,
+  );
 });
 test("the changelog page lists every pull request in CHANGELOG.md, newest first", async () => {
   const source = await readFile(new URL("../../../CHANGELOG.md", import.meta.url), "utf8");
@@ -84,6 +88,15 @@ test("the changelog page lists every pull request in CHANGELOG.md, newest first"
   );
   // The repository is private: no page or script may carry a link into it.
   assert.doesNotMatch(html, /github\.com/);
+  // The home page shows the three newest days as cards, each leading to its day on this page.
+  const home = await readFile(new URL("index.html", root), "utf8");
+  assert.deepEqual(
+    [...home.matchAll(/class="card news-card" href="\/changelog#day-(\d{4}-\d{2}-\d{2})"/g)].map(
+      (match) => match[1],
+    ),
+    days.slice(0, 3),
+  );
+  assert.doesNotMatch(home, /github\.com/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");
@@ -121,8 +134,12 @@ test("the site is for a local app: no account pages, and no page offers one", as
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
     assert.doesNotMatch(html, /href="\/(?:signin|signup|account|verify-device)\b/, path);
     assert.doesNotMatch(html, /href="auracode:/, path);
-    // The changelog is the project's history, so only its own chrome is held to the wording.
-    const text = path === "changelog/" ? html.replace(/<main[\s\S]*<\/main>/, "") : html;
+    // The changelog is the project's history, so only its own chrome is held to the wording; the
+    // home page's three latest days quote it too.
+    const text =
+      path === "changelog/"
+        ? html.replace(/<main[\s\S]*<\/main>/, "")
+        : html.replace(/<ul class="inner news-grid">[\s\S]*?<\/ul>/, "");
     assert.doesNotMatch(text, /Sign in|Sign up|Create (?:your |an )?account|[Ii]nvit/, path);
     assert.doesNotMatch(text, /open.source|Choose a plan|Subscribe now/i, path);
   }

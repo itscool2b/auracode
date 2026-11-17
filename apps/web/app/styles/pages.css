@@ -1,25 +1,18 @@
 /*
- * Inner pages: a two-tone title that stands on its own (ink, then grey on its own line), and plain
- * white sheets with a hairline rim on the paper. Nothing sits above a title.
+ * Inner pages, in the home page's language (dot.com's): a two-tone title at the statement's size
+ * (ink, then grey on its own line) that stands on its own, a grey line under it, and flat cards a
+ * step off the page with 24px corners. Nothing sits above a title.
  */
 .page {
   position: relative;
-  padding: 80px 0 128px;
-}
-
-.frame {
-  box-sizing: border-box;
-  width: min(100% - 2 * var(--s-gutter), var(--s-max));
-  margin: 0 auto;
-  padding: 0 var(--s-pad);
+  padding: 112px 0 var(--s-section);
 }
 
 .page-column {
-  max-width: 760px;
-  margin: 0 auto;
+  max-width: 720px;
 }
 
-/* Wide pages take the whole column, so their titles start where the header's wordmark does. */
+/* Wide pages take the page's column, so their titles start where the header's wordmark does. */
 .page-column-wide {
   max-width: none;
 }
@@ -31,7 +24,7 @@
 }
 
 .page-head {
-  margin-bottom: 48px;
+  margin-bottom: 56px;
 }
 
 /* A head with a picture: the words at left, the picture at right, their bottoms aligned. */
@@ -41,33 +34,28 @@
   gap: 40px;
 }
 
-/* The app as an object: the logo on a raised white tile, as an icon sits on a dock. */
+/* The app as an object: the logo on a disc of the page's ink, the headline's own mark. */
 .app-tile {
   display: grid;
   place-items: center;
   width: 104px;
   height: 104px;
-  border-radius: 26px;
-  background-color: var(--s-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--s-line),
-    0 1px 2px rgb(0 0 0 / 0.05),
-    0 16px 32px -20px rgb(0 0 0 / 0.28);
-  color: var(--s-ink);
+  border-radius: 50%;
+  background-color: var(--s-primary);
+  color: var(--s-on-primary);
 }
 
 .app-tile-small {
   width: 68px;
   height: 68px;
-  border-radius: 18px;
 }
 
 .page-title {
   color: var(--s-ink);
-  font-size: clamp(34px, 4.4vw, 56px);
-  line-height: 1.04;
+  font-size: 48px;
+  line-height: 52px;
   font-weight: 500;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
@@ -78,30 +66,29 @@
 
 .page-lead {
   max-width: 560px;
-  color: var(--g-fg-2);
-  font-size: 17px;
-  line-height: 28px;
+  color: var(--s-soft);
+  font-size: 18px;
+  line-height: 29.25px;
+  text-wrap: pretty;
 }
 
-/*
- * A sheet: the one surface inner pages put content on. White on the paper, held by a hairline rim;
- * nothing behind it to blur, so it is solid.
- */
+/* A card: the one surface inner pages put content on. */
 .download-cell,
 .release-entry,
 .prose-section,
 .error-panel,
 .page-column > .prose {
+  box-sizing: border-box;
   border-radius: var(--s-radius);
-  background-color: var(--s-surface);
+  background-color: var(--s-card);
 }
 
 /* -------------------------------------------------------------------------------- prose */
 
 .prose {
-  color: var(--g-fg-2);
+  color: var(--s-ink);
   font-size: 16px;
-  line-height: 27px;
+  line-height: 28px;
 }
 
 .prose > * + * {
@@ -110,11 +97,11 @@
 
 .prose h2 {
   margin-top: 40px;
-  color: var(--g-fg-1);
-  font-size: 22px;
+  color: var(--s-ink);
+  font-size: 20px;
   line-height: 28px;
   font-weight: 500;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.01em;
 }
 
 .prose h2:first-child {
@@ -123,9 +110,9 @@
 
 .prose h3 {
   margin-top: 28px;
-  color: var(--g-fg-1);
-  font-size: 18px;
-  line-height: 26px;
+  color: var(--s-ink);
+  font-size: 16px;
+  line-height: 24px;
   font-weight: 500;
 }
 
@@ -139,26 +126,30 @@
 }
 
 .prose a:not(.text-link) {
-  color: var(--g-fg-1);
-  text-decoration-color: var(--g-fg-4);
+  color: var(--s-ink);
+  text-decoration-color: var(--s-soft);
   text-underline-offset: 3px;
 }
 
 .prose strong {
-  color: var(--g-fg-1);
+  color: var(--s-ink);
   font-weight: 500;
 }
 
 .prose code {
   padding: 1px 6px;
   border-radius: 6px;
-  background-color: rgb(var(--s-k) / 0.05);
+  background-color: var(--s-quiet);
   font-family: var(--g-mono);
   font-size: 0.88em;
 }
 
+.prose .note {
+  color: var(--s-soft);
+}
+
 .page-column > .prose {
-  padding: 40px 44px;
+  padding: 40px;
 }
 
 .prose-sections {
@@ -168,7 +159,7 @@
 }
 
 .prose-section {
-  padding: 32px 36px;
+  padding: 32px;
 }
 
 /* ----------------------------------------------------------------------------- download */
@@ -186,23 +177,26 @@
 
 .download-cell {
   display: grid;
+  /* One column no wider than the card: a long label wraps rather than pushing it out. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   gap: 24px;
-  padding: 28px;
+  padding: 32px;
 }
 
 .download-name {
-  color: var(--g-fg-1);
-  font-size: 24px;
-  line-height: 30px;
+  color: var(--s-ink);
+  font-size: 20px;
+  line-height: 28px;
   font-weight: 500;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.01em;
 }
 
 .download-sub {
-  margin-top: 6px;
-  color: var(--g-fg-3);
-  font-size: 15px;
+  margin-top: 4px;
+  color: var(--s-soft);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .data-rows {
@@ -214,23 +208,29 @@
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 16px;
   padding: 11px 0;
-  border-top: 1px solid rgb(var(--s-k) / 0.07);
+  border-top: 1px solid var(--s-line);
   font-size: 14px;
   line-height: 22px;
 }
 
 .data-row dt {
-  color: var(--g-fg-3);
+  color: var(--s-soft);
 }
 
 .data-row dd {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: var(--g-fg-1);
+  color: var(--s-ink);
 }
 
-.download-action .g-button {
+/* A phone breaks "Download macOS · Apple silicon and Intel" over two lines; it stays one elsewhere. */
+.download-action .btn {
   width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding-block: 10px;
+  white-space: normal;
+  text-align: center;
 }
 
 .download-status {
@@ -246,14 +246,14 @@
 /* The days, newest first: each a card with its date at left and its changes at right. */
 .changes {
   display: grid;
-  gap: 20px;
+  gap: 16px;
 }
 
 .release-entry {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
-  gap: 36px;
-  padding: 32px 40px;
+  gap: 40px;
+  padding: 32px;
 }
 
 .release-meta {
@@ -262,14 +262,15 @@
   align-content: start;
   color: var(--s-soft);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .release-meta h2 {
   color: var(--s-ink);
-  font-size: 16px;
-  line-height: 26px;
+  font-size: 20px;
+  line-height: 28px;
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .change-list {
@@ -285,7 +286,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 24px;
   align-items: baseline;
-  padding: 14px 0;
+  padding: 16px 0;
 }
 
 .change:first-child {
@@ -297,13 +298,13 @@
 }
 
 .change + .change {
-  border-top: 1px solid rgb(var(--s-k) / 0.08);
+  border-top: 1px solid var(--s-line);
 }
 
 .change p {
   color: var(--s-soft);
-  font-size: 15px;
-  line-height: 24px;
+  font-size: 16px;
+  line-height: 26px;
   text-wrap: pretty;
 }
 
@@ -315,7 +316,7 @@
 .change code {
   padding: 1px 5px;
   border-radius: 6px;
-  background-color: rgb(var(--s-k) / 0.07);
+  background-color: var(--s-quiet-strong);
   font-family: var(--g-mono);
   font-size: 0.88em;
 }
@@ -324,7 +325,7 @@
   color: var(--s-soft);
   font-family: var(--g-mono);
   font-size: 13px;
-  line-height: 24px;
+  line-height: 26px;
 }
 
 .page-lead .text-link {
@@ -339,19 +340,17 @@
 
 .error-panel {
   display: grid;
-  gap: 24px;
+  gap: 32px;
   justify-items: start;
-  max-width: 760px;
-  margin: 0 auto;
   padding: 48px;
 }
 
 .error-title {
   color: var(--s-ink);
-  font-size: clamp(30px, 3.7vw, 44px);
-  line-height: 1.08;
+  font-size: 36px;
+  line-height: 40px;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
 }
 
 .error-title span {
@@ -363,21 +362,44 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* ---------------------------------------------------------------------------- responsive */
 
-@media (max-width: 899px) {
+@media (max-width: 1023px) {
+  .page {
+    padding-top: 96px;
+  }
+
+  .page-title {
+    font-size: 36px;
+    line-height: 40px;
+  }
+
   .release-entry {
     grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
+    gap: 20px;
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 639px) {
   .page {
-    padding: 48px 0 88px;
+    padding-top: 56px;
+  }
+
+  .page-title {
+    font-size: 30px;
+    line-height: 36px;
+  }
+
+  .page-lead {
+    font-size: 16px;
+    line-height: 26px;
+  }
+
+  .page-head {
+    margin-bottom: 40px;
   }
 
   .page-head-art {
@@ -395,13 +417,14 @@
   .download-cell,
   .release-entry,
   .prose-section,
-  .error-panel {
-    padding: 24px 20px;
-    border-radius: 14px;
+  .error-panel,
+  .page-column > .prose {
+    padding: 24px;
   }
 
-  .page-column > .prose {
-    padding: 28px 22px;
+  .error-title {
+    font-size: 30px;
+    line-height: 36px;
   }
 
   .data-row {

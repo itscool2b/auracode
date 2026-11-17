@@ -44,7 +44,7 @@ export default function Download() {
           Staging preview. These builds are for release qualification.
         </p>
       ) : null}
-      <div className="download-grid" data-reveal="">
+      <div className="download-grid">
         {release
           ? release.downloads.map((download) => (
               <article className="download-cell" key={download.kind}>
@@ -73,7 +73,7 @@ export default function Download() {
                   </div>
                 </dl>
                 <div className="download-action">
-                  <a className="g-button g-button-primary g-button-44" href={download.url}>
+                  <a className="btn btn-primary btn-lg" href={download.url}>
                     Download {download.label}
                   </a>
                 </div>
@@ -104,7 +104,7 @@ export default function Download() {
                   </div>
                 </dl>
                 <div className="download-action">
-                  <button type="button" className="g-button g-button-44" disabled>
+                  <button type="button" className="btn btn-quiet btn-lg" disabled>
                     Installer coming soon
                   </button>
                 </div>

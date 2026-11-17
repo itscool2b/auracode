@@ -1,11 +1,15 @@
 /*
- * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Scenes.tsx): the desktop in
- * miniature. A sidebar on the window's glass, a floating content layer, a glass toolbar, the
- * transcript's gutter, the floating composer and its popovers. Its palette (--m-*) is set with the
- * site's in base.css, so the windows are light on a light page and dark on a dark one.
+ * The illustrated app (home/Mock.tsx, HeroWindow.tsx, Scenes.tsx): the desktop in miniature, in its
+ * flat look of 17 November 2026. The sidebar sits on the window's colour, the work happens on a
+ * solid pane a step lighter in dark and white in light, 8px in from the window's edges, and one ink
+ * at set strengths draws fields, controls and the open row. Depth is tone and one faint edge; no
+ * glass, no blur, no glow. Its palette (--m-*) is set with the site's in base.css, and its text
+ * takes the desktop's own greys (--g-fg-*), so the windows are light on a light page and dark on
+ * a dark one.
  */
 
 .m-window,
+.m-pane,
 .hw {
   position: relative;
   box-sizing: border-box;
@@ -17,21 +21,38 @@
 }
 
 .m-window *,
+.m-pane *,
 .hw * {
   box-sizing: border-box;
 }
 
+/* A pane on its own (the cards' pictures), its top corners showing over the card. */
+.m-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  background-color: var(--m-surface);
+  box-shadow: 0 0 0 1px var(--m-ring);
+}
+
+.m-pane-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px 18px 0;
+}
+
+/* A whole window (New chat): the pane's colour, the frame's ring. */
 .m-window {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 14px;
   background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.08),
-    0 1px 2px rgb(0 0 0 / 0.04),
-    0 24px 48px -28px rgb(0 0 0 / 0.26);
+  box-shadow: 0 0 0 1px rgb(var(--s-k) / 0.1);
 }
 
 .m-icon {
@@ -60,11 +81,17 @@
 
 .m-icon-button {
   display: grid;
+  flex: none;
   place-items: center;
   width: 26px;
   height: 26px;
   border-radius: 999px;
   color: var(--g-fg-3);
+}
+
+.m-count {
+  color: var(--g-fg-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The 2x3 loader walks its pixels while an agent works. */
@@ -104,10 +131,9 @@
   flex: none;
   align-items: center;
   gap: 8px;
-  height: 42px;
-  padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--m-line);
-  background-color: transparent;
+  height: 40px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--m-rim);
   white-space: nowrap;
 }
 
@@ -118,14 +144,11 @@
   text-overflow: ellipsis;
 }
 
+/* Working stays plain words beside the loader, as the desktop's header says it. */
 .m-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 9px 0 7px;
-  border-radius: 999px;
-  background-color: var(--m-fill);
   color: var(--g-fg-2);
   font-size: 11.5px;
 }
@@ -138,26 +161,16 @@
 
 /* --------------------------------------------------------------------- the transcript */
 
-.m-body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-  padding: 20px 26px;
-  overflow: hidden;
-}
-
+/* The sent message: paper with ink on it, one even 16px radius, no rim. */
 .m-user {
   align-self: flex-end;
   max-width: 78%;
-  padding: 9px 14px;
-  border-radius: 16px 16px 5px 16px;
-  background-color: rgb(var(--m-k) / 0.055);
-  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.03);
-  color: var(--g-fg-1);
+  padding: 7px 12px;
+  border-radius: 16px;
+  background-color: var(--m-paper);
+  color: var(--m-paper-ink);
   font-size: 13px;
-  line-height: 19px;
+  line-height: 20px;
 }
 
 /* One column as wide as the turn: a long tool line truncates its argument, as the app's do, and
@@ -165,7 +178,7 @@
 .m-turn {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
+  gap: 6px;
 }
 
 .m-turn-agent {
@@ -231,6 +244,7 @@
   font-size: 11.5px;
 }
 
+/* Answers run unframed, in the chat's text. */
 .m-prose {
   max-width: 560px;
   color: var(--g-fg-1);
@@ -276,23 +290,22 @@
 
 /* ----------------------------------------------------------------------- the composer */
 
+/* What floats over a pane: a raised layer, a hairline rim and the control's soft shadow. */
 .m-composer {
   position: relative;
-  padding: 11px 10px 9px 15px;
+  padding: 10px 8px 8px 14px;
   border-radius: 20px;
-  background-color: var(--m-surface);
+  background-color: var(--m-raised);
   box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 1px 2px rgb(0 0 0 / 0.05),
-    0 16px 36px -18px rgb(0 0 0 / 0.32),
-    inset 0 1px 0 var(--m-sheen);
+    inset 0 0 0 1px var(--m-rim),
+    var(--m-float);
 }
 
 .m-input {
   display: flex;
   align-items: center;
   min-height: 22px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   overflow: hidden;
   color: var(--g-fg-1);
   font-size: 13.5px;
@@ -334,16 +347,19 @@
 .m-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
+/* Attach is a disc lit a step at rest; the other controls are ghost pills. */
 .m-attach {
   display: grid;
+  flex: none;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
-  color: var(--g-fg-3);
+  background-color: var(--m-fill);
+  color: var(--g-fg-2);
 }
 
 .m-access,
@@ -352,14 +368,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 8px;
+  height: 26px;
+  padding: 0 8px;
   border-radius: 999px;
-  background-color: var(--m-fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.05);
   color: var(--g-fg-2);
   font-size: 12px;
-  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -375,27 +388,25 @@
 .m-controls-end {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-left: auto;
 }
 
+/* Send: a disc, ink once there is something to send. */
 .m-disc {
   display: grid;
   flex: none;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  background-color: rgb(var(--m-k) / 0.07);
+  background-color: var(--m-fill);
   color: var(--g-fg-3);
 }
 
 .m-disc.is-ready,
 .m-stop {
   background-color: var(--m-ink);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.2),
-    inset 0 1px 0 rgb(255 255 255 / 0.16);
   color: var(--m-on-ink);
 }
 
@@ -403,17 +414,18 @@
   width: 9px;
   height: 9px;
   border-radius: 2px;
-  background-color: var(--m-surface);
+  background-color: var(--m-on-ink);
 }
 
 .m-steer {
-  padding: 0 1px 0 12px;
+  padding: 0 1px 0 10px;
+  background-color: var(--m-fill);
   color: var(--g-fg-1);
 }
 
 .m-steer .m-disc {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 /* The handoff waits above the composer, its agent's mark at left and Preview at right. */
@@ -421,14 +433,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 8px 8px 11px;
-  border-radius: 14px;
-  background-color: var(--m-surface);
-  -webkit-backdrop-filter: blur(16px) saturate(170%);
-  backdrop-filter: blur(16px) saturate(170%);
+  height: 34px;
+  padding: 0 6px 0 10px;
+  border-radius: 12px;
+  background-color: var(--m-raised);
   box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 10px 24px -14px rgb(0 0 0 / 0.3);
+    inset 0 0 0 1px var(--m-rim),
+    var(--m-float);
   color: var(--g-fg-2);
   font-size: 12px;
   white-space: nowrap;
@@ -456,9 +467,9 @@
 .m-row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 10px;
   color: var(--g-fg-2);
   white-space: nowrap;
@@ -468,13 +479,20 @@
   color: var(--g-fg-3);
 }
 
+/* Search is a field: a faint fill and a hairline rim, its word in the placeholder's tone. */
+.m-search {
+  margin-bottom: 4px;
+  background-color: var(--m-fill);
+  box-shadow: inset 0 0 0 1px var(--m-rim);
+  color: var(--g-fg-3);
+}
+
 .m-section {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 14px 10px 4px;
+  margin: 14px 8px 4px;
   color: var(--g-fg-3);
-  font-size: 11.5px;
   font-weight: 500;
 }
 
@@ -488,7 +506,7 @@
 }
 
 .m-chat {
-  padding-left: 33px;
+  padding-left: 32px;
 }
 
 .m-row-title {
@@ -501,13 +519,12 @@
   margin-left: auto;
 }
 
-/* The open chat is a lit glass capsule. */
+/* The open chat is raised off the window: the selected fill, a hairline and a soft shadow. */
 .m-chat.is-open {
-  background-color: var(--m-surface);
+  background-color: var(--m-selected);
   box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.05),
-    0 1px 2px rgb(0 0 0 / 0.06),
-    inset 0 1px 0 var(--m-sheen);
+    inset 0 0 0 1px var(--m-rim),
+    var(--m-float);
   color: var(--g-fg-1);
 }
 
@@ -516,7 +533,7 @@
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  padding: 8px 4px 2px 10px;
+  padding: 8px 0 0 8px;
   color: var(--g-fg-1);
 }
 
@@ -529,87 +546,30 @@
 }
 
 .m-dot.is-volt {
-  background-color: var(--m-amber);
-}
-
-.m-dot.is-done {
-  background-color: var(--m-green);
-}
-
-.m-badge {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background-color: var(--m-amber);
-  color: var(--m-on-ink);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.m-trail {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.m-needs {
-  color: var(--m-amber-text);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.m-attention {
-  background-color: var(--m-amber-bg);
-  color: var(--g-fg-1);
+  background-color: var(--g-volt);
 }
 
 /* ------------------------------------------------------------------- the hero window */
 
+/*
+ * dot.com's frame: 24px corners and a hairline of the page's ink at 10% around the window, which
+ * is the desktop's own: the sidebar on the window's colour and the open chat on its pane.
+ */
 .hw {
   display: flex;
-  flex-direction: column;
   width: 100%;
-  height: 620px;
+  height: 660px;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--s-radius);
   background-color: var(--m-window);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.09),
-    0 1px 2px rgb(0 0 0 / 0.04),
-    0 40px 80px -40px rgb(0 0 0 / 0.28),
-    0 16px 32px -20px rgb(0 0 0 / 0.14);
-}
-
-.hw-bar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  height: 36px;
-  padding: 0 16px;
-}
-
-.hw-dots {
-  display: flex;
-  gap: 7px;
-}
-
-.hw-dots i {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background-color: rgb(var(--m-k) / 0.1);
-  box-shadow: inset 0 0 0 0.5px rgb(var(--m-k) / 0.08);
+  box-shadow: 0 0 0 1px rgb(var(--s-k) / 0.1);
 }
 
 .hw-body {
   display: grid;
   flex: 1;
-  grid-template-columns: 228px minmax(0, 1fr);
-  min-height: 0;
+  grid-template-columns: 236px minmax(0, 1fr);
+  min-width: 0;
 }
 
 .hw-side {
@@ -617,7 +577,28 @@
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  padding: 2px 10px 12px 12px;
+  padding: 0 10px 14px 14px;
+}
+
+/* The window's controls, quiet greys in the sidebar's top band. */
+.hw-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 44px;
+  padding-left: 6px;
+}
+
+.hw-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.hw-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background-color: rgb(var(--m-k) / 0.16);
 }
 
 .hw-side .m-chat.is-open .g-agent-mark,
@@ -626,23 +607,17 @@
   margin-left: auto;
 }
 
-/* The content layer floats on the window's glass, inset from its edges. */
+/* The pane, 8px in from the window's edges, its corners concentric with the frame's. */
 .hw-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  margin: 0 8px 8px 0;
+  margin: 8px 8px 8px 0;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 16px;
   background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 1px 2px rgb(0 0 0 / 0.04);
-}
-
-.hw-main .m-head {
-  background-color: transparent;
+  box-shadow: 0 0 0 1px var(--m-ring);
 }
 
 .hw .handoff-stage {
@@ -659,7 +634,10 @@
   flex-direction: column;
   justify-content: flex-end;
   gap: 22px;
+  width: 100%;
+  max-width: 640px;
   min-height: 0;
+  margin: 0 auto;
   padding: 18px 28px 64px;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 72px);
@@ -686,12 +664,15 @@
 .hw-handed-rule {
   flex: 1;
   height: 1px;
-  background-color: var(--m-line);
+  background-color: var(--m-rim);
 }
 
 .hw .handoff-next {
   position: relative;
   flex: none;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
   padding: 0 16px 16px;
 }
 
@@ -773,87 +754,101 @@
   }
 }
 
-/* ---------------------------------------------------------------- capability scenes */
+/* ------------------------------------------------------------------- the cards' views */
 
-.m-split {
+/* The handoff: the end of a turn, then the handoff over the composer. */
+.work-view .handoff-stage {
+  display: flex;
+  flex-direction: column;
+}
+
+.work-view .handoff-prior {
+  flex: none;
+}
+
+.work-view .handoff-next {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46%;
+  gap: 8px;
+  padding: 14px 14px 0;
 }
 
-.m-split-chat {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border-right: 1px solid var(--m-line);
+/* The queue: a running turn, then the queue and the composer docked under it. */
+.m-dock {
+  display: grid;
+  gap: 8px;
+  padding: 14px 14px 0;
 }
 
-.m-changes {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background-color: var(--m-sunk);
+.m-queue {
+  padding: 6px;
+  border-radius: 14px;
+  background-color: var(--m-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--m-rim),
+    var(--m-float);
 }
 
-.m-tabs {
+.m-queue-head {
+  padding: 2px 8px 5px;
+  color: var(--g-fg-3);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.m-queue-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 10px;
+  background-color: var(--m-card);
+  color: var(--g-fg-1);
+}
+
+.m-queue-row .m-icon {
+  color: var(--g-fg-3);
+}
+
+/* The Changes panel. */
+.m-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
   gap: 2px;
-  height: 42px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--m-line);
+  height: 40px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--m-rim);
 }
 
 .m-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 11px;
+  height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   color: var(--g-fg-3);
   font-weight: 500;
 }
 
 .m-tab.is-on {
-  background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.06),
-    0 1px 2px rgb(0 0 0 / 0.06);
+  background-color: var(--m-selected);
   color: var(--g-fg-1);
-}
-
-.m-count {
-  color: var(--g-fg-3);
-  font-variant-numeric: tabular-nums;
 }
 
 .m-changes-body {
   display: grid;
-  flex: 1;
   align-content: start;
-  gap: 6px;
-  padding: 12px;
-  overflow: hidden;
-}
-
-.m-select {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 32px;
-  padding: 0 10px 0 12px;
-  margin-bottom: 4px;
-  border-radius: 10px;
-  background-color: var(--m-surface);
-  box-shadow: 0 0 0 1px rgb(var(--m-k) / 0.1);
-  color: var(--g-fg-1);
+  gap: 4px;
+  padding: 10px;
 }
 
 .m-file {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
+  height: 30px;
   padding: 0 10px;
   border-radius: 10px;
   color: var(--g-fg-2);
@@ -866,7 +861,7 @@
 }
 
 .m-file.is-on {
-  background-color: rgb(var(--m-k) / 0.045);
+  background-color: var(--m-card);
 }
 
 .m-letter {
@@ -879,10 +874,10 @@
 .m-box {
   display: grid;
   place-items: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 5px;
-  box-shadow: inset 0 0 0 1.5px rgb(var(--m-k) / 0.25);
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--g-fg-4);
   color: var(--m-on-ink);
 }
 
@@ -895,8 +890,8 @@
   margin-top: 6px;
   overflow: hidden;
   border-radius: 12px;
-  background-color: var(--m-surface);
-  box-shadow: 0 0 0 1px rgb(var(--m-k) / 0.07);
+  background-color: var(--m-code);
+  box-shadow: inset 0 0 0 1px var(--m-rim-strong);
   font-family: var(--g-mono);
   font-size: 11px;
   line-height: 20px;
@@ -908,25 +903,48 @@
   gap: 8px;
   height: 32px;
   padding: 0 10px;
-  border-bottom: 1px solid var(--m-line);
 }
 
 .m-diff-head code {
   color: var(--g-fg-1);
 }
 
+/* A change's band: the fold before it in the hunk colour, with its Revert at the right. */
+.m-diff-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 6px 0 12px;
+  background-color: var(--g-diff-hunk);
+  color: var(--g-fg-3);
+  font-family: var(--g-sans);
+  font-size: 11px;
+}
+
+.m-diff-revert {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--g-fg-2);
+  font-weight: 500;
+}
+
 .m-diff-line {
   display: grid;
-  grid-template-columns: 22px 22px 14px 1fr;
+  grid-template-columns: 24px 24px 14px 1fr;
   padding-right: 10px;
   color: var(--g-fg-1);
   white-space: pre;
 }
 
 .m-ln {
+  padding-right: 6px;
   color: var(--g-fg-3);
   text-align: right;
-  padding-right: 6px;
 }
 
 .m-sign {
@@ -949,34 +967,296 @@
   color: var(--m-red);
 }
 
-.m-changes-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 48px;
-  padding: 0 12px;
-  border-top: 1px solid var(--m-line);
-}
-
 .m-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 26px;
+  padding: 0 11px;
   border-radius: 999px;
-  background-color: rgb(var(--m-k) / 0.05);
-  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.06);
+  background-color: var(--m-fill);
   color: var(--g-fg-1);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .m-button-primary {
   background-color: var(--m-ink);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.2),
-    inset 0 1px 0 rgb(255 255 255 / 0.16);
   color: var(--m-on-ink);
+}
+
+/* The browser beside the chat: its tabs, its toolbar, and the page in Annotate. */
+.m-browser-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 38px;
+  padding: 0 8px;
+}
+
+.m-browser-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px 0 9px;
+  border-radius: 999px;
+  color: var(--g-fg-2);
+  font-weight: 500;
+}
+
+.m-browser-tab .m-icon {
+  color: var(--g-fg-3);
+}
+
+.m-browser-tab.is-on {
+  background-color: var(--m-selected);
+  box-shadow: inset 0 0 0 1px var(--m-rim);
+  color: var(--g-fg-1);
+}
+
+.m-browser-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--m-rim);
+}
+
+.m-address {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 28px;
+  margin: 0 6px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background-color: var(--m-fill);
+  color: var(--g-fg-1);
+  white-space: nowrap;
+}
+
+.m-address .m-icon {
+  color: var(--g-fg-3);
+}
+
+.m-annotate {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background-color: var(--m-selected);
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+/* The page being built, drawn in the window's own tones, with one button picked. */
+.m-page {
+  position: relative;
+  flex: 1;
+  margin: 8px;
+  padding: 26px 24px;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: var(--m-window);
+}
+
+.m-page-hero {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.m-skel {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background-color: rgb(var(--m-k) / 0.12);
+}
+
+.m-skel-title {
+  width: 58%;
+  height: 16px;
+  background-color: rgb(var(--m-k) / 0.22);
+}
+
+.m-skel-line {
+  width: 42%;
+}
+
+.m-page-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.m-page-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background-color: var(--m-ink);
+  color: var(--m-on-ink);
+  font-weight: 500;
+}
+
+.m-page-quiet {
+  background-color: rgb(var(--m-k) / 0.1);
+  color: var(--g-fg-1);
+}
+
+/* The pick, outlined in the volt with its tag and size. */
+.m-picked {
+  outline: 1.5px solid var(--g-volt);
+  outline-offset: 3px;
+}
+
+.m-pick-tag {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: var(--g-volt);
+  color: var(--m-surface);
+  font-family: var(--g-mono);
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* The note beside the pick: a solid popover with the element, what should change, and its send. */
+.m-note {
+  position: absolute;
+  top: 22px;
+  right: 18px;
+  display: grid;
+  gap: 8px;
+  width: 196px;
+  padding: 10px;
+  border-radius: 14px;
+  background-color: var(--m-raised);
+  box-shadow: var(--m-pop);
+}
+
+.m-note-target {
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: 11px;
+}
+
+.m-note-field {
+  padding: 6px 9px;
+  border-radius: 10px;
+  background-color: var(--m-fill);
+  box-shadow: inset 0 0 0 1px var(--m-rim);
+  color: var(--g-fg-1);
+}
+
+.m-note-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The Dashboard: a line that sums it up, then three lanes with a card each. */
+.m-board-head {
+  display: grid;
+  gap: 2px;
+  padding: 16px 16px 12px;
+}
+
+.m-board-title {
+  color: var(--g-fg-1);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.m-board-sum {
+  color: var(--g-fg-3);
+}
+
+.m-lanes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.m-lane {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.m-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 4px;
+  color: var(--g-fg-1);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.m-check {
+  flex: none;
+}
+
+.m-lane-head .m-check {
+  color: var(--g-fg-2);
+}
+
+.m-board-card {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background-color: var(--m-card);
+  box-shadow: inset 0 0 0 1px var(--m-rim);
+}
+
+.m-board-card[data-tone="needs"] {
+  box-shadow: inset 0 0 0 1px var(--g-volt);
+}
+
+.m-board-card > p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.m-board-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.m-board-card-title > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-board-card-line {
+  margin-top: 4px;
+  color: var(--g-fg-2);
 }
 
 /* New chat. */
@@ -989,7 +1269,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: min(92%, 470px);
+  width: min(88%, 400px);
 }
 
 .m-new-logo {
@@ -1002,18 +1282,18 @@
   color: var(--g-fg-1);
   font-size: 19px;
   line-height: 26px;
-  font-weight: 560;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: -0.012em;
 }
 
 .m-card {
   width: 100%;
   overflow: hidden;
   border-radius: 18px;
-  background-color: var(--m-surface);
+  background-color: var(--m-raised);
   box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 18px 40px -24px rgb(0 0 0 / 0.3);
+    inset 0 0 0 1px var(--m-rim),
+    var(--m-float);
 }
 
 .m-card-row {
@@ -1024,8 +1304,8 @@
 }
 
 .m-card-folder {
-  border-top: 1px solid var(--m-line);
   padding-left: 14px;
+  border-top: 1px solid var(--m-rim);
 }
 
 .m-pills {
@@ -1041,8 +1321,7 @@
   height: 32px;
   padding: 0 12px 0 6px;
   border-radius: 999px;
-  background-color: rgb(var(--m-k) / 0.04);
-  box-shadow: inset 0 0 0 1px rgb(var(--m-k) / 0.05);
+  background-color: var(--m-fill);
   color: var(--g-fg-2);
   font-weight: 500;
   transition:
@@ -1052,10 +1331,8 @@
 }
 
 .m-pill.is-on {
-  background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1.5px var(--m-ink),
-    0 6px 14px -8px rgb(0 0 0 / 0.4);
+  background-color: var(--m-selected);
+  box-shadow: inset 0 0 0 1.5px var(--m-ink);
   color: var(--g-fg-1);
 }
 
@@ -1090,159 +1367,8 @@
 }
 
 .m-other.is-on {
-  background-color: rgb(var(--m-k) / 0.06);
+  background-color: var(--m-selected);
   color: var(--g-fg-1);
-}
-
-/* The dock: the picker or the queue stacked over the composer. */
-.m-dock-window .m-body {
-  flex: 1;
-}
-
-.m-dock {
-  display: grid;
-  gap: 8px;
-  padding: 0 16px 16px;
-}
-
-.m-picker {
-  justify-self: end;
-  display: grid;
-  gap: 2px;
-  width: min(100%, 330px);
-  padding: 6px;
-  border-radius: 18px;
-  background-color: var(--m-surface);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
-  backdrop-filter: blur(20px) saturate(170%);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 24px 50px -24px rgb(0 0 0 / 0.38);
-}
-
-.m-picker-agent,
-.m-picker-model,
-.m-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 4px 10px;
-  border-radius: 12px;
-}
-
-.m-picker-agent {
-  background-color: rgb(var(--m-k) / 0.045);
-}
-
-.m-picker-model > span:first-child {
-  display: grid;
-}
-
-.m-picker-model .m-quiet {
-  font-size: 11.5px;
-}
-
-.m-version {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: 11px;
-}
-
-.m-check {
-  margin-left: auto;
-  color: var(--g-fg-1);
-}
-
-.m-field-name {
-  color: var(--g-fg-2);
-}
-
-.m-segments {
-  display: inline-flex;
-  gap: 2px;
-  margin-left: auto;
-  padding: 2px;
-  border-radius: 999px;
-  background-color: rgb(var(--m-k) / 0.05);
-}
-
-.m-segments > span {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  color: var(--g-fg-3);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.m-segments > .is-on {
-  background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.05),
-    0 1px 2px rgb(0 0 0 / 0.08);
-  color: var(--g-fg-1);
-}
-
-.m-queue {
-  padding: 8px;
-  border-radius: 18px;
-  background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.07),
-    0 18px 36px -22px rgb(0 0 0 / 0.32);
-}
-
-.m-queue-head {
-  padding: 2px 8px 6px;
-  color: var(--g-fg-3);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.m-queue-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 32px;
-  padding: 0 8px 0 10px;
-  border-radius: 10px;
-  background-color: rgb(var(--m-k) / 0.04);
-  color: var(--g-fg-1);
-}
-
-.m-queue-row .m-icon {
-  color: var(--g-fg-3);
-}
-
-/* The app shell: a sidebar on glass and the open chat on its layer. */
-.m-shell {
-  display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  background-color: var(--m-window);
-}
-
-.m-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  padding: 12px 10px 10px;
-}
-
-.m-shell-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  margin: 8px 8px 8px 0;
-  overflow: hidden;
-  border-radius: 14px;
-  background-color: var(--m-surface);
-  box-shadow:
-    0 0 0 1px rgb(var(--m-k) / 0.06),
-    0 16px 36px -24px rgb(0 0 0 / 0.3);
 }
 
 /* Reduced motion: loaders, carets and shimmers hold still; the live window never starts. */
@@ -1256,5 +1382,123 @@
   .m-loader rect[data-level="3"],
   .m-loader rect[data-level="2"] {
     opacity: 0.95;
+  }
+
+  .m-pill,
+  .m-other {
+    transition: none;
+  }
+}
+
+/* Narrower windows: the sidebar folds to the desktop's rail, its rows to their icons. */
+@media (max-width: 1023px) {
+  .hw-body {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .hw-side {
+    align-items: center;
+    padding: 0 0 14px;
+  }
+
+  .hw-bar {
+    justify-content: center;
+    padding-left: 0;
+  }
+
+  .hw-dots {
+    gap: 5px;
+  }
+
+  .hw-dots i {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* A row keeps its icon; its words (bare text, so sized away) and its time go. */
+  .hw-side .m-nav,
+  .hw-side .m-row {
+    justify-content: center;
+    width: 36px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .hw-side .m-search {
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .hw-side :is(.m-nav, .m-row) > :not(.m-icon, .g-agent-mark, .m-loader),
+  .hw-side .m-section,
+  .hw-side .m-chat:not(.is-open) {
+    display: none;
+  }
+
+  .hw-side .m-chat.is-open .g-agent-mark,
+  .hw-side .m-chat.is-open .m-loader {
+    margin-left: 0;
+  }
+
+  .hw-side .m-foot {
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+  }
+
+  /* A card two to a row is narrow: its composer keeps attach, the agent and send. */
+  .work-view .m-access {
+    display: none;
+  }
+
+  /* The browser keeps its address and Annotate; the page keeps its picked button and the note. */
+  .m-browser-bar > .m-icon-button {
+    display: none;
+  }
+
+  .m-page-quiet {
+    display: none;
+  }
+
+  .m-skel-title {
+    width: 44%;
+  }
+
+  .m-skel-line {
+    width: 32%;
+  }
+
+  .m-note {
+    right: 12px;
+    width: 156px;
+  }
+
+  /* The Dashboard shows its first two lanes. */
+  .m-lanes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .m-lane:nth-child(3) {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .hw-transcript {
+    padding: 14px 16px 60px;
+  }
+
+  .hw .handoff-next {
+    padding: 0 10px 10px;
+  }
+
+  .hw .m-handoff {
+    right: 10px;
+    left: 10px;
+  }
+
+  .hw .m-access,
+  .m-handoff .m-strong {
+    display: none;
   }
 }

@@ -1,46 +1,65 @@
 import { Wordmark } from "@auracode/ui/graphite";
 
+const COLUMNS: readonly { heading: string; links: readonly { href: string; text: string }[] }[] = [
+  {
+    heading: "Product",
+    links: [
+      { href: "/#features", text: "Features" },
+      { href: "/#agents", text: "Agents" },
+      { href: "/#faq", text: "FAQ" },
+      { href: "/changelog", text: "Changelog" },
+    ],
+  },
+  {
+    heading: "Download",
+    links: [
+      { href: "/download", text: "Windows" },
+      { href: "/download", text: "macOS" },
+      { href: "/download", text: "Linux" },
+    ],
+  },
+  {
+    heading: "Legal",
+    links: [
+      { href: "/privacy", text: "Privacy" },
+      { href: "/terms", text: "Terms" },
+      { href: "/third-party-notices", text: "Notices" },
+    ],
+  },
+];
+
 /**
- * The footer on every page: the wordmark with what it stands for, then two columns of links,
- * under the page's last hairline.
+ * The footer on every page, as dot.com sets its own: under a hairline, the wordmark with what it
+ * stands for at left, then a dotted rule and columns of small links.
  */
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="wrap footer-grid">
-        <div className="footer-home">
-          <a href="/" aria-label="auracode home">
-            <Wordmark size={17} />
-          </a>
-          <p className="footer-statement">Your agents. Your machine.</p>
+      <div className="footer-frame">
+        <div className="footer-grid">
+          <div className="footer-home">
+            <a href="/" aria-label="auracode home">
+              <Wordmark size={17} />
+            </a>
+            <p className="footer-statement">Your agents. Your machine.</p>
+          </div>
+          <nav className="footer-links" aria-label="Footer">
+            <div className="footer-cols">
+              {COLUMNS.map((column) => (
+                <div className="footer-col" key={column.heading}>
+                  <p className="footer-heading">{column.heading}</p>
+                  <ul>
+                    {column.links.map((link) => (
+                      <li key={link.text}>
+                        <a href={link.href}>{link.text}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </nav>
         </div>
-        <nav className="footer-links" aria-label="Footer">
-          <div className="footer-col">
-            <p className="footer-heading">Product</p>
-            <ul>
-              <li>
-                <a href="/download">Download</a>
-              </li>
-              <li>
-                <a href="/changelog">Changelog</a>
-              </li>
-            </ul>
-          </div>
-          <div className="footer-col">
-            <p className="footer-heading">Legal</p>
-            <ul>
-              <li>
-                <a href="/privacy">Privacy</a>
-              </li>
-              <li>
-                <a href="/terms">Terms</a>
-              </li>
-              <li>
-                <a href="/third-party-notices">Notices</a>
-              </li>
-            </ul>
-          </div>
-        </nav>
       </div>
     </footer>
   );

@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 
 /**
- * Inline boot script, the first thing in <head>. It marks the page as scripted so reveal start
- * states may apply, and removes the mark again if the app never hydrates, so nothing stays hidden.
- * The build hashes it into the static CSP (scripts/headers.mjs).
+ * Inline boot script, the first thing in <head>. It marks the page as scripted so a picture that
+ * plays on arrival may wait for it, and removes the mark again if the app never hydrates, so
+ * nothing stays hidden. The build hashes it into the static CSP (scripts/headers.mjs).
  */
 export const BOOT_SCRIPT =
   '(function(){var d=document.documentElement;if(!("IntersectionObserver"in window))return;d.classList.add("js");setTimeout(function(){if(!d.hasAttribute("data-ready"))d.classList.remove("js")},4000)})();';
@@ -11,8 +11,10 @@ export const BOOT_SCRIPT =
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
 /**
- * The page-wide motion layer:
- * - reveals: blocks marked [data-reveal] arrive once as they enter (at once under reduced motion);
+ * The page-wide motion layer. dot.com's sections do not move as they scroll in, and neither do
+ * these; only the product pictures play:
+ * - arrivals: a block marked [data-reveal] is marked [data-revealed] once it enters (at once under
+ *   reduced motion), so its picture can start then (the terminal card prints its lines);
  * - zones: [data-zone] sections hold their ambient loops while offscreen, and the page holds them
  *   all while its tab is hidden ([data-hidden] on the root).
  * Nothing here follows the pointer or paints light: the site has no glow
