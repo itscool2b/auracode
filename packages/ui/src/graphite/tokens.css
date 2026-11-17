@@ -162,9 +162,6 @@
   --g-leading-term: 18px;
   --g-text-key: 11px;
   --g-leading-key: 16px;
-  /* Pictures in ASCII (the start screen's aircraft): lines close enough that strokes join. */
-  --g-text-art: 12px;
-  --g-leading-art: 14px;
 
   /* Website scale */
   --g-web-hero: 48px;

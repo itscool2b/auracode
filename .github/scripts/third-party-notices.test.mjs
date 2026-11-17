@@ -117,9 +117,10 @@ test("both outputs say the agent marks are their owners' trademarks and point at
   }
 });
 
-test("the desktop output credits the start screen's aircraft art; the website, which has none, does not", () => {
+test("the desktop output says where the start screen's aircraft pictures come from; the website, which has none, does not", () => {
   const desktop = renderText(verifiedCatalogue(), "desktop");
-  assert.match(desktop, /Start screen aircraft: .*ASCII renderings of public-domain photographs/);
+  assert.match(desktop, /Start screen aircraft: .*supplied by auracode's owner/);
+  assert.doesNotMatch(desktop, /Wikimedia|public-domain/);
   assert.match(desktop, /third-party\/ascii-art\.md/);
   assert.doesNotMatch(renderText(verifiedCatalogue(), "web"), /Start screen aircraft/);
 });

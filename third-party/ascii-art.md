@@ -1,64 +1,50 @@
 # Start screen aircraft
 
-auracode's start screen shows one American military aircraft in ASCII, a different one at each
-launch (`apps/desktop/src/components/chat/LaunchArt.tsx`). The owner asked for art that looks like
-the exact aircraft, from images on the internet (7 November 2026: "It needs to look like the exact
-thing", then "just actually put in images from the internet"). Each of the fifteen pieces in
-`apps/desktop/src/components/chat/launch-art/` was made from a real image of that aircraft:
-fourteen photographs (U.S. Air Force, U.S. Navy, U.S. Army Air Forces, and Convair's archive at the
-San Diego Air & Space Museum) and one U.S. Air Force drawing, all public domain on Wikimedia
-Commons. None needs attribution; the photographers are credited below anyway.
+auracode's start screen shows one American aircraft, a different one at each launch
+(`apps/desktop/src/components/chat/LaunchArt.tsx`). The ten pictures in
+`apps/desktop/src/components/chat/launch-art/` are the ten images the owner supplied on
+17 November 2026 as `american_aviation_ascii.zip` ("delete all of those and just replace them with
+these images"): aircraft drawn in text characters, ten JPEG files of 1168 by 784 pixels. auracode
+did not fetch or generate them, and this file records only what was received: their origin and
+terms are the owner's to state.
 
-Retrieved 2026-11-07, at 1600 pixels wide. SHA-1 is Commons' hash of the original file; SHA-256 is
-the stored text (LF line endings, final newline).
+They replace the fifteen text drawings the start screen opened on from 7 to 17 November 2026,
+which were made from public-domain photographs on Wikimedia Commons. None of those drawings or
+photographs ships any more; the list of them is in this file's history.
 
-## How a photograph became ASCII
+## How an image became a start screen picture
 
-1. **The aircraft is cut out of its sky.** A smooth colour surface is fitted to the photograph's
-   border, and whatever differs from it or has a strong edge is aircraft; gaps are bridged, holes
-   filled and thin trails (vapour, contrails) dropped. The SR-71, shot over snow, is cut by
-   darkness instead, and the X-29 drawing by its outline.
-2. **It is shaded by its own light and dark**, kept within the darker part of the range so the
-   silhouette stays whole, with a solid rim around the outline.
-3. **Every character cell gets a glyph.** Each of `` .,:;'"`^-_~=+*!/\|()<>#%&@8WM`` is drawn in
-   Geist Mono, as the app draws it, and the cell takes the one whose density matches its tone and,
-   where the cell holds an edge, whose shape follows it.
+The start screen draws each picture in the theme's own ink on the theme's own pane, so one set of
+files serves every theme, dark and light. For that each image is stored as an ink map: grey only,
+white where the picture has ink and black where it has none.
 
-The B-2 and the F/A-18 were turned (90 and 45 degrees) to show their planform level; nothing else
-was redrawn. The converter ran once, outside the repository; it is not part of auracode.
+- **Drawn on black** (six images): the picture is already light ink on nothing. Its colour
+  channels were dropped and its brightness kept exactly as received
+  (`jpegtran -grayscale -optimize -progressive -copy none`, which does not decode the image).
+- **Drawn on white** (four images): the picture is dark ink on a white page, so it was made grey
+  and negated, then saved again at quality 92
+  (`magick IN -colorspace Gray -negate -strip -interlace JPEG -quality 92 OUT`).
 
-## Pieces
+Nothing was cropped, resized, retouched or redrawn. On a dark theme the six drawn on black look as
+received and the four drawn on white show as their negatives; on a light theme it is the other way
+round. The conversion ran once, outside the repository.
 
-| File | Aircraft | Photograph | Credit | License | SHA-1 (photo) | SHA-256 (text) |
-| --- | --- | --- | --- | --- | --- | --- |
-| `a-10-thunderbolt-ii.txt` | A-10 Thunderbolt II | [A-10 Thunderbolt of the 354th FS over the Netherlands in March 2015][a10] | U.S. Air Force photo by Senior Airman Damon Kasberg | Public domain | `abaa4637846fde9d5f505765210c52dd23ed6fc1` | `d2c65191f0b58c71da6ce7d8b3b1b9c823014ad1a68353178c7eca1906b5911a` |
-| `b-1b-lancer.txt` | B-1B Lancer | [170916-F-HB600-0111][b1] | U.S. Air Force photo by Senior Airman Denise M. Jenson | Public domain | `3a6896527626e55b76e2c4432402b6940e93a9ce` | `47d99f73a69e892234ae205336865519950018f6dfaa6636ab8a268e8d5b0322` |
-| `b-2-spirit.txt` | B-2 Spirit | [A B-2 Spirit flies over the Power in the Pines Open House and Air Show][b2] | U.S. Air Force photo by Tech. Sgt. Matt Hecht, 108th Wing | Public domain | `d48056d554c69319b63c228c190c61ab7e3c3d4d` | `948d58a9f4638e93ac8df568b23c594e25c88a61360cd5561355b85e71e27dab` |
-| `f-117-nighthawk.txt` | F-117 Nighthawk | [F-117 Nighthawk Front][f117] | U.S. Air Force photo by Staff Sgt. Aaron Allmon II | Public domain | `074fb56c1fe5f8d454a7225e99dae175f0583945` | `0da60c55733a8fe0effdbc0d4d4fa8c63cd9385f10c6fdbad2108605a8d709d5` |
-| `f-14-tomcat.txt` | F-14 Tomcat | [F-14A Tomcat VF-33 in flight 1982][f14] | U.S. Navy photo by George McGarry | Public domain | `20f2fe3df9c14860d7dc80427e5bc927ed8b2bbe` | `24885409cfe1eba5a21b935a62cb0b6c914f66054d3b4098a4699a9315a5a850` |
-| `f-15-eagle.txt` | F-15 Eagle | [Defense.gov News Photo 050408-F-4905S-006][f15] | U.S. Air Force photo by Staff Sgt. Jeremy Smith | Public domain | `6248adc0319fa169d8d5a5bf5a88a5137775848e` | `ca4577da266d6a89be9bdfebcdea1704652a06e810bdfeedd7a1d720e518adb9` |
-| `f-16-fighting-falcon.txt` | F-16 Fighting Falcon | [31 FW conducts ACE training during Agile Wyvern][f16] | U.S. Air Force photo by Senior Airman Brooke Moeder | Public domain | `d2ee8f63e9ff6eb221f2feb994e9e9043de98f47` | `08db47f23702e46621306c65767abb50cfe5eee7ba526aba3020526b4b15cd5e` |
-| `f-22-raptor.txt` | F-22 Raptor | [F-22 Raptor edit1 (cropped)][f22] | U.S. Air Force photo by Master Sgt. Andy Dunaway | Public domain | `a5646b401882fc3b78bc3e6e553e8deb593e88fc` | `5fe2b6864898ef8e1704e383d361bcc090c05b6a202f70ed0bb0864478504991` |
-| `f-35-lightning-ii.txt` | F-35 Lightning II | [F-35B Lightning II Asymmetric Flying Qualities Test][f35] | U.S. Navy (VX), via DVIDS | Public domain | `0436d2cf40bfd1913775fe7a5f39be2b52f8b13c` | `4d86e60dd05bb1b510802d9ad65a0f96353fe9dc65fc66129f95674d9f83b1da` |
-| `f-4-phantom-ii.txt` | F-4 Phantom II | [Convair Negative Image - Tomahawk on F-4 Phantom][f4] | San Diego Air & Space Museum Archives | Public domain | `eda319a668073170002aafe4691f6dfa38ab36f1` | `f6d336b46d60febddf94c5682fbe83b19dee6ec58b5aabeae87320ec437577b4` |
-| `f4u-corsair.txt` | F4U Corsair | [F4U-1 Corsair in flight c1942][f4u] | U.S. Navy | Public domain | `30b46b82ce34c9867856be6eaa5dc8a3db233314` | `d827fc47d67a513d2ba12672b19423e96f5a686a67ee1bf8921cce5008259786` |
-| `fa-18-super-hornet.txt` | F/A-18 Super Hornet | [110531-N-DR144-569][fa18] | U.S. Navy photo (U.S. Department of Defense) | Public domain | `bd18f83c1c55fa3515d0340c5ef32faeb65db45e` | `eb207a4b8e48a826343b0b1760dc4ccad9b54a963c68c0d8a2f651240435a62c` |
-| `p-51-mustang.txt` | P-51 Mustang | [P-51D Mustang "American Beauty", 31st FG, over Italy, 1944][p51] | U.S. Army Air Forces | Public domain | `56795fe53ff9a35229b5cf600a37cb5ff109ae9d` | `4293a93dacaf4b7e0954e852deb2a60089c3531242d2f322523276226c5d269e` |
-| `sr-71-blackbird.txt` | SR-71 Blackbird | [Lockheed SR-71 in flight (SN 61-7968)][sr71] | National Museum of the U.S. Air Force | Public domain | `a4e76ca10e79b07d69b338c708453bc74dda0922` | `bd8c35f8802116172b67d3277ed9d7b320addef55e19c24937db152a21ccdd53` |
-| `x-29.txt` | Grumman X-29 | [Grumman X-29 afg-041110-053][x29] | U.S. Air Force drawing | Public domain | `a9f118d1ebe7bbc47b5c99ba3ec9568ca6e4faa4` | `112ab620fda5d6a3d8c8832fef1ed8fa9ed13d12b1cd1a1d467df7629c8ebda5` |
+## Pictures
 
-[a10]: https://commons.wikimedia.org/wiki/File:A-10_Thunderbolt_of_the_354th_FS_over_the_Netherlands_in_March_2015.jpg
-[b1]: https://commons.wikimedia.org/wiki/File:170916-F-HB600-0111.jpg
-[b2]: https://commons.wikimedia.org/wiki/File:A_B-2_Spirit_flies_over_the_Power_in_the_Pines_Open_House_and_Air_Show_on_Joint_Base_McGuire-Dix-Lakehurst,_N.J._(27061449661).jpg
-[f117]: https://commons.wikimedia.org/wiki/File:F-117_Nighthawk_Front.jpg
-[f14]: https://commons.wikimedia.org/wiki/File:F-14A_Tomcat_VF-33_in_flight_1982.JPEG
-[f15]: https://commons.wikimedia.org/wiki/File:Defense.gov_News_Photo_050408-F-4905S-006.jpg
-[f16]: https://commons.wikimedia.org/wiki/File:31_FW_conducts_ACE_training_during_Agile_Wyvern_210908-F-ZR251-1194.jpg
-[f22]: https://commons.wikimedia.org/wiki/File:F-22_Raptor_edit1_(cropped).jpg
-[f35]: https://commons.wikimedia.org/wiki/File:F-35B_Lightning_II_Asymmetric_Flying_Qualities_Test_150713-D-DW096-355.jpg
-[f4]: https://commons.wikimedia.org/wiki/File:23_0071114_Convair_Negative_Image_-_Tomahawk_on_F-4_Phantom_(54222731754).jpg
-[f4u]: https://commons.wikimedia.org/wiki/File:F4U-1_Corsair_in_flight_c1942.jpg
-[fa18]: https://commons.wikimedia.org/wiki/File:110531-N-DR144-569_(5804591946).jpg
-[p51]: https://commons.wikimedia.org/wiki/File:44-15439-P-51D-Mustang-31FG308FS-HLB-American-Beauty-Capt-John-J-Voll-over-Italy-1944.jpg
-[sr71]: https://commons.wikimedia.org/wiki/File:Lockheed_SR-71_in_flight_(SN_61-7968)_061122-F-1234P-051.jpg
-[x29]: https://commons.wikimedia.org/wiki/File:Grumman_X-29_afg-041110-053.jpg
+SHA-256 is of the file as received and of the stored ink map.
+
+| File | Aircraft | Received as | Conversion | SHA-256 (received) | SHA-256 (stored) |
+| --- | --- | --- | --- | --- | --- |
+| `b-2-spirit.jpg` | B-2 Spirit | `Udmii.jpg` | brightness kept | `177ba1451ccd36eb76ccbfc8f047327f94746f7d6df6254f6403684849e3a6a8` | `7ff03480fa5dd4d9efcb4185b491f448f06d662289510cc74a9398d7cf4dd294` |
+| `b-29-superfortress.jpg` | B-29 Superfortress | `mMTpV.jpg` | negated | `043485471e9d4abdf9caee92893f211132c7896740bb0e603c0947c45918ff00` | `bb706c228142fa29f4be34b68694a7a4bc6f711486c5da55429764c8ed9be3f6` |
+| `boeing-747-400.jpg` | Boeing 747-400 | `QIkKc.jpg` | brightness kept | `7d6e28d21e7e8987b4a9f444b5755a0622eec1f8b64646833bbf55a80f897676` | `db56744301bfd3db4f698c72b99c95bbfe429f2b0c3d8f5f07c090bfbdca70cd` |
+| `boeing-787-dreamliner.jpg` | Boeing 787 Dreamliner | `2oRaL.jpg` | brightness kept | `3f1183bdbad1580209bb92ed2d5a03876653c77208929fcac8987cb863e35e60` | `97aa0fd2361d4ff411c1350daae2760b0d850ceda59d7d3ec81f4ecd9ff93821` |
+| `f-22-raptor.jpg` | F-22 Raptor | `98l3o.jpg` | negated | `c341b7f374fa96174f771a4d4bd0506c763969766c940485753d74d6f9ec2cd3` | `ead6951a5d92b58dbcc2e07dbbf33e5a6853eb06583f5a4ed7bb1af1e31b7d52` |
+| `f-35-lightning-ii.jpg` | F-35 Lightning II | `HKWaL.jpg` | negated | `3c9892348ceec3d03768e2c4e85c6ba8f33d1860ef71996676534e0a47e38ac1` | `9603ae7c86feeaf08b4b92b159f5b4f0656af98f2f05ba6a8266524cf2a945f2` |
+| `p-51-mustang.jpg` | P-51 Mustang | `kvc0V.jpg` | negated | `a7d2dbb59c71277cf6f2e43e448a40465b5a4a65fcbefaed8458a6c668f7f74e` | `c18a77c41bb400d415a55aa592cc5f482a9ab7c08f58e0fb4da0662a29c1353e` |
+| `space-shuttle.jpg` | Space Shuttle | `5sEKT.jpg` | brightness kept | `1a6df3b9efa29c63a7b22425637d6d3a57b3478e17a6d4d462531224d6535026` | `306e4e05f8087356e066481bd6674f8167901d0c606f95476e6a4251b9961fe7` |
+| `sr-71-blackbird.jpg` | SR-71 Blackbird | `wpWEX.jpg` | brightness kept | `5101df78f52964a4c66468b6698805296836e1e6aa5ae21e16a493ec24d7deaa` | `63f59a4ed1aa13350aedd74876f3c2e3f87c2313819915e5658cf71982970417` |
+| `wright-flyer.jpg` | Wright Flyer | `oCuDT.jpg` | brightness kept | `2f2e0fe664e6410199eb52d6dc584d156bdc5e6e2c29844f33528f4127048187` | `663900908a986ce1286628bb831ebc31412d2d46676d0bdc6e0d4d1b51a3a403` |
+
+The Boeing 787 and Boeing 747-400 images carry their own lettering, and the B-29's tail names it;
+the other seven are named here by what they show.
