@@ -2,7 +2,7 @@ import type { Terminal } from "@xterm/xterm";
 import { subscribeAppearance, subscribeTheme } from "../lib/appearance";
 import { type TerminalVariant, terminalFonts } from "../lib/terminalFont";
 import {
-  actsOutsideText,
+  cancelsDefault,
   copiesSelection,
   focusBeyond,
   leavesTerminal,
@@ -123,11 +123,12 @@ export function createXterm(
     if (typesText(event)) event.stopPropagation();
     return true;
   });
-  // In screen reader mode xterm leaves most keys it sends uncancelled, so the browser and the
-  // app would act on them too: Shift+Tab sent its code and moved focus out of the terminal.
+  // In screen reader mode xterm leaves most keys it sends uncancelled, so the browser, the app
+  // and the window would act on them too: Shift+Tab sent its code and moved focus out of the
+  // terminal. Every key it sent but typed text is the program's alone (terminalKeys.ts).
   const held = term.onKey(({ domEvent }) => {
     domEvent.stopPropagation();
-    if (actsOutsideText(domEvent)) domEvent.preventDefault();
+    if (cancelsDefault(domEvent)) domEvent.preventDefault();
   });
   term.open(element);
   term.textarea?.setAttribute("aria-label", options.inputLabel);

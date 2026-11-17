@@ -13,6 +13,7 @@ import { Onboarding } from "./components/setup/Onboarding";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
+import { installFocusReturn, restoreFocusSoon } from "./lib/focusReturn";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
@@ -61,6 +62,14 @@ export function App({
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
   const [view, setView] = useState<View>("setup");
+  // Keyboard focus never falls to nothing: back from Settings or the Dashboard, the terminal or
+  // control that held it takes it again (lib/focusReturn.ts).
+  useEffect(() => {
+    installFocusReturn();
+  }, []);
+  useEffect(() => {
+    if (view === "chats") restoreFocusSoon();
+  }, [view]);
   const [restartSetup, setRestartSetup] = useState(false);
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
   /** Where Settings opens: its page, and the project, chat or revision a page opens on. */

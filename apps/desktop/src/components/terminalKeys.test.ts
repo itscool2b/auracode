@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   actsOutsideText,
+  cancelsDefault,
   copiesSelection,
   leavesTerminal,
   scrollsTerminal,
@@ -27,10 +28,31 @@ describe("keys a terminal keeps from the browser", () => {
     expect(actsOutsideText(key({ key: "Tab", shiftKey: true }))).toBe(true);
   });
 
-  it("keeps the textarea's typing, so a screen reader still echoes it", () => {
+  it("names the keys whose browser action happens outside the text", () => {
     for (const name of ["a", "A", " ", "Enter", "Backspace", "Delete", "ArrowUp", "Home", "F"])
       expect(actsOutsideText(key({ key: name })), name).toBe(false);
     expect(actsOutsideText(key({ type: "keypress", key: "Tab" }))).toBe(false);
+  });
+
+  it("cancels every key the terminal sent but typed text, which a screen reader echoes", () => {
+    for (const fields of [
+      { key: "Escape" },
+      { key: "Enter" },
+      { key: "Backspace" },
+      { key: "Delete" },
+      { key: "ArrowUp" },
+      { key: "ArrowLeft", altKey: true },
+      { key: "Home" },
+      { key: "End" },
+      { key: "Tab", shiftKey: true },
+      { key: "c", ctrlKey: true },
+      { key: "r", ctrlKey: true },
+      { key: "F5" },
+    ])
+      expect(cancelsDefault(key(fields)), JSON.stringify(fields)).toBe(true);
+    for (const fields of [{ key: "a" }, { key: "A", shiftKey: true }, { key: " " }, { key: "é" }])
+      expect(cancelsDefault(key(fields)), JSON.stringify(fields)).toBe(false);
+    expect(cancelsDefault(key({ type: "keyup", key: "Escape" }))).toBe(false);
   });
 });
 
