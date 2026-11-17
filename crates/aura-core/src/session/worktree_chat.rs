@@ -222,10 +222,15 @@ impl SessionManager {
         // Copying working files reads the source, so its chats and terminals must be idle. Without a
         // copy, Git only adds a branch and a worktree registration; the source is not touched.
         let source = if prepared.bring_changes {
-            Some(
-                self.reserve_git_folders(vec![prepared.source.clone()])
-                    .await?,
-            )
+            match self.hold_quiet(vec![prepared.source.clone()]).await {
+                Ok(held) => Some(held),
+                Err(error @ SessionError::FolderBusy { .. }) => {
+                    // The review stays usable: stop what works there, then create it again.
+                    lock(&self.shared().worktree_chats).insert(token.to_owned(), prepared);
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
+            }
         } else {
             None
         };
@@ -374,9 +379,7 @@ impl SessionManager {
         input: WorktreeSetupInput,
     ) -> Result<WorktreeSetupResult, SessionError> {
         let service = self.worktrees()?;
-        let _reservations = self
-            .reserve_git_folders(vec![PathBuf::from(&worktree.path)])
-            .await?;
+        let _reservations = self.hold_quiet(vec![PathBuf::from(&worktree.path)]).await?;
         let preview = service
             .setup_preview(chat_id, &worktree.id, input)
             .await

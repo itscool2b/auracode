@@ -49,6 +49,9 @@ pub enum AppErrorCode {
     /// The most agents that may run at once already run and none is idle to make room; the
     /// message says what they are doing.
     TooManyAgents,
+    /// Chats or project terminals are in the way of a change to a folder: `blockers` names them,
+    /// so the page can offer to stop them and try again.
+    FolderBusy,
     /// Too many views are open for the chat, or the webview.
     TooManySubscriptions,
     /// The profile database can't be reached right now.
@@ -64,12 +67,15 @@ pub enum AppErrorCode {
     DialogFailed,
 }
 
-/// A command failure, serialized as `{ code, message }`.
+/// A command failure, serialized as `{ code, message }`, and `blockers` for `folder_busy`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type, thiserror::Error)]
 #[error("{message}")]
 pub struct AppError {
     pub code: AppErrorCode,
     pub message: String,
+    /// What stands in the way of a folder change (`folder_busy` only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockers: Option<aura_protocol::workspace::FolderBlockers>,
 }
 
 impl AppError {
@@ -77,6 +83,7 @@ impl AppError {
         AppError {
             code,
             message: message.into(),
+            blockers: None,
         }
     }
 
@@ -87,8 +94,16 @@ impl AppError {
 
 impl From<SessionError> for AppError {
     fn from(error: SessionError) -> AppError {
+        if let SessionError::FolderBusy { message, blockers } = error {
+            return AppError {
+                code: AppErrorCode::FolderBusy,
+                message,
+                blockers: Some(blockers),
+            };
+        }
         let code = match &error {
             SessionError::Organization(_) => AppErrorCode::InvalidArgument,
+            SessionError::FolderBusy { .. } => AppErrorCode::FolderBusy,
             SessionError::ChatNotFound(_) => AppErrorCode::ChatNotFound,
             SessionError::UnknownAgent(_) => AppErrorCode::UnknownAgent,
             SessionError::AgentUnavailable(_) => AppErrorCode::AgentUnavailable,
@@ -165,6 +180,13 @@ mod tests {
             ),
             (SessionError::TooManySubscriptions, "too_many_subscriptions"),
             (
+                SessionError::FolderBusy {
+                    message: "\u{201c}Fix tests\u{201d} in auracode is working in this folder. Stop it, then try again.".into(),
+                    blockers: Default::default(),
+                },
+                "folder_busy",
+            ),
+            (
                 SessionError::StorageUnavailable("busy".into()),
                 "storage_unavailable",
             ),
@@ -186,6 +208,6 @@ mod tests {
             assert_eq!(app.message, sentence);
             assert!(codes.insert(code), "{code} is used twice");
         }
-        assert_eq!(codes.len(), 16, "one case per variant");
+        assert_eq!(codes.len(), 17, "one case per variant");
     }
 }

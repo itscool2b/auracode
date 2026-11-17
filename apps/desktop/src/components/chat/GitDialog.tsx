@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   CommitPreview,
   CommitResult,
+  FolderBlockers,
   GitInitializePreview,
   GitWorkspace,
   IsolationPreview,
@@ -20,9 +21,11 @@ import type {
   WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
+import { busyFolder, type FolderBusyApi } from "../../lib/folderBusy";
 import { type GitWorkspaceApi, sameFolder, withoutVerbatimPrefix } from "../../lib/gitWorkspace";
 import type { ProjectToolsApi } from "../../lib/projectTools";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
+import { FolderBusy } from "./FolderBusy";
 import { MergeConflicts } from "./MergeConflicts";
 import { Modal } from "./Modal";
 import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
@@ -147,10 +150,12 @@ export function GitDialog({
   agentName = "the agent",
   onAskAgent,
   projectTools,
+  folderBusy,
 }: {
   readonly chatId: string;
   readonly title: string;
   readonly api: GitWorkspaceApi;
+  /** This chat's agent is working (starting, running a turn, stopping): changes wait for it. */
   readonly live: boolean;
   readonly onStop: () => Promise<void>;
   readonly onClose: () => void;
@@ -163,12 +168,16 @@ export function GitDialog({
   readonly onAskAgent?: (text: string) => Promise<string | null>;
   /** Detected editors for the chat's folder, for a conflicted merge's "Open in …". */
   readonly projectTools?: Pick<ProjectToolsApi, "review" | "openEditor">;
+  /** Stops the chats Rust named as in a change's way ("Stop these chats"). */
+  readonly folderBusy?: Pick<FolderBusyApi, "stop">;
 }) {
   const [workspace, setWorkspace] = useState<GitWorkspace | null>(null);
   const [initialBranch, setInitialBranch] = useState("main");
   const [initialized, setInitialized] = useState(false);
   const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Other chats working in a folder this change rewrites: the review stays until they stop.
+  const [inTheWay, setInTheWay] = useState<FolderBlockers | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -272,6 +281,7 @@ export function GitDialog({
       if (!preview) return;
       const chosen = preview;
       setPreview(null);
+      setInTheWay(null);
       try {
         if (chosen.type === "commit") {
           const value = await api.commitApply(chatId, chosen.value.token);
@@ -333,6 +343,14 @@ export function GitDialog({
         } else {
           const value = await api.actionApply(chatId, chosen.value.token);
           if (alive.current) setResult(value);
+        }
+      } catch (failure) {
+        // Other chats work there: name them and keep the review, so stopping them applies it.
+        const blockers = busyFolder(failure);
+        if (!blockers) throw failure;
+        if (alive.current) {
+          setPreview(chosen);
+          setInTheWay(blockers);
         }
       } finally {
         if (alive.current) {
@@ -420,8 +438,8 @@ export function GitDialog({
         {live ? (
           <div className="git-notice">
             <p>
-              Stop this session before changing its workspace. Other chats using either folder must
-              also be stopped.
+              This chat's agent is working. Stop it, or wait for it to finish, before changing its
+              workspace.
             </p>
             <button
               type="button"
@@ -437,6 +455,16 @@ export function GitDialog({
           <p role="alert" className="git-warning">
             {error}
           </p>
+        ) : null}
+        {inTheWay && preview ? (
+          <FolderBusy
+            blockers={inTheWay}
+            api={folderBusy}
+            onStopped={() => {
+              setInTheWay(null);
+              void apply();
+            }}
+          />
         ) : null}
         {loading ? <p role="status">Reading repository state…</p> : null}
         {workspace ? <Repository workspace={workspace} /> : null}

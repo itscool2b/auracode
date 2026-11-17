@@ -174,10 +174,22 @@ async fn activate_serial(
                 unavailable("Wait for current profile commands to finish, then retry switching.")
             })?;
     let _mutation = mutation.lock_owned().await;
-    let _terminals = state
-        .terminals
-        .try_quiesce_when_idle()
-        .ok_or_else(|| unavailable("Close all terminals before switching profiles."))?;
+    // An open terminal runs the person's own process (a shell, a terminal chat, a setup command,
+    // a sign-in or an install), which a switch never ends for them: it asks first, before
+    // stopping anything.
+    let _terminals = state.terminals.try_quiesce_when_idle().ok_or_else(|| {
+        unavailable(
+            "Close every open terminal (shells, terminal chats, setup commands and sign-ins) before switching profiles.",
+        )
+    })?;
+    // Switching closes this profile: its chats' agents stop here, so the switch never asks the
+    // person to stop them. Each chat resumes its session when this profile opens again.
+    if let Some(chats) = state.chats() {
+        chats
+            .manager
+            .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
+            .await;
+    }
     activate_one(state, selected, outside).await
 }
 
@@ -193,7 +205,11 @@ async fn activate_one(
         .ok_or_else(|| unavailable("The current profile is unavailable."))?;
     let old = state.chats();
     let _sessions = match &old {
-        Some(old) => Some(old.manager.try_quiesce_when_idle().ok_or_else(|| unavailable("Stop all agents and wait for folder operations to finish before switching profiles."))?),
+        Some(old) => Some(old.manager.try_quiesce_when_idle().ok_or_else(|| {
+            unavailable(
+                "Wait for Git changes and agent updates to finish, then switch profiles again.",
+            )
+        })?),
         None => None,
     };
     if let Some(old) = &old {

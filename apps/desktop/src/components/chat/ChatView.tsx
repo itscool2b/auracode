@@ -438,6 +438,8 @@ export function ChatView({
     };
   }, [transport.conversation, state.phase, chatId, status, handoffRevision]);
   const live = hasProcess(status);
+  // Git changes wait only for an agent at work: a ready one stays, or is stopped by Rust first.
+  const working = live && status !== "ready";
   const runningTasks = shownTasks(tasks).filter(
     (item) => taskDisplay(item, live, state.liveTasks) === "running",
   ).length;
@@ -1487,7 +1489,7 @@ export function ChatView({
               chatId={chatId}
               title={state.chat?.title ?? "work"}
               api={transport.git}
-              live={live}
+              live={working}
               agentName={agent?.name ?? state.chat?.agent_name}
               // The conflict message goes out as the person's own visible message, exactly as the
               // composer would send it, and only when the composer could send.

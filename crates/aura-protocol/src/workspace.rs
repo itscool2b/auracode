@@ -91,8 +91,66 @@ pub struct ProjectCreate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ChatCreatePreview {
     pub folder: ProjectFolder,
-    /// Sessions holding this canonical folder, including preparation and shutdown.
+    /// Sessions working in this canonical folder (starting, running a turn or background work,
+    /// open in a terminal, or just started or finished) or waiting for the person's answer. An
+    /// agent idle there does not count: it edits nothing until it is given a message.
     pub busy_chats: Vec<ChatSummary>,
+}
+
+/// What a chat in the way of a change to a folder is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockerState {
+    /// Starting, running a turn or background work, or stopping.
+    Working,
+    /// Waiting for the person to answer a request or a question.
+    Waiting,
+    /// Open in its agent's own terminal.
+    Terminal,
+    /// Ready, with nothing running: stopping it loses nothing.
+    Idle,
+}
+
+/// A chat in the way of a change to a folder, for the person to see and stop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct FolderBlocker {
+    pub chat_id: String,
+    pub title: Option<String>,
+    pub agent_name: String,
+    /// The name of the chat's project.
+    pub project: Option<String>,
+    pub state: BlockerState,
+}
+
+/// What stands in the way of a change to a folder.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct FolderBlockers {
+    pub chats: Vec<FolderBlocker>,
+    /// Project terminals (and Run) open in the folder: close them to continue.
+    pub terminals: u32,
+}
+
+/// Which folders `folder_blockers` looks at.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FolderScope {
+    /// The chat's folder.
+    Chat { chat_id: String },
+    /// One project folder.
+    Folder { folder_id: String },
+    /// Every folder of a project.
+    Project { project_id: String },
+}
+
+/// What stopping several chats did, by chat id.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChatsStopped {
+    /// Stopped: their agents' processes are gone.
+    pub stopped: Vec<String>,
+    /// Left running because they were not idle (stopping idle agents only).
+    pub kept: Vec<String>,
+    /// Still stopping when the wait ended.
+    pub stopping: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

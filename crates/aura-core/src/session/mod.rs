@@ -24,6 +24,7 @@ mod config_vendor;
 mod conversation;
 mod editors;
 mod file_open;
+mod folder_guards;
 mod folder_locks;
 mod folder_resolution;
 mod gitworkspaces;
@@ -288,13 +289,18 @@ pub(crate) struct Knobs {
     /// The chat list waits this long for its folder checks; a folder that has not answered by then
     /// (a hung network mount) shows what it showed last.
     pub(crate) folder_check_wait: Duration,
+    /// An agent that started or ended a turn this recently still makes its folder busy for a new
+    /// chat: it is likely to get the next message.
+    pub(crate) busy_settle: Duration,
 }
 
 impl Knobs {
-    /// The actor outbox holds 4 MiB; the chat list waits 1 s for folder checks.
+    /// The actor outbox holds 4 MiB; the chat list waits 1 s for folder checks; an agent counts as
+    /// busy for 15 s after its last activity.
     pub(crate) const STANDARD: Knobs = Knobs {
         outbox_bytes: 4 * 1024 * 1024,
         folder_check_wait: Duration::from_secs(1),
+        busy_settle: Duration::from_secs(15),
     };
 }
 
@@ -1751,6 +1757,13 @@ pub struct ShutdownSummary {
 pub enum SessionError {
     #[error("{0}")]
     Organization(String),
+    /// Chats or project terminals are in the way of a change to a folder; `blockers` names
+    /// them, so the person can stop them and try again.
+    #[error("{message}")]
+    FolderBusy {
+        message: String,
+        blockers: aura_protocol::workspace::FolderBlockers,
+    },
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
     #[error("auracode doesn't know an agent called \"{0}\".")]

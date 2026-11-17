@@ -16,19 +16,51 @@ pub(super) struct PreparedRelocation {
     pub(super) to: PathBuf,
 }
 
+/// Folders and chats held for a change, released when dropped.
 pub(super) struct Reservations {
-    shared: Arc<Shared>,
-    folders: Vec<PathBuf>,
-    actors: Vec<(mpsc::UnboundedSender<ChatMsg>, String)>,
+    pub(super) shared: Arc<Shared>,
+    pub(super) folders: Vec<PathBuf>,
+    pub(super) actors: Vec<(mpsc::UnboundedSender<ChatMsg>, String)>,
+    /// A quiet hold (`folder_guards.rs`): agents stay and only wait. Otherwise a reservation.
+    pub(super) quiet: bool,
+}
+
+impl Reservations {
+    pub(super) fn new(shared: Arc<Shared>) -> Self {
+        Self {
+            shared,
+            folders: Vec::new(),
+            actors: Vec::new(),
+            quiet: false,
+        }
+    }
+
+    pub(super) fn quiet(shared: Arc<Shared>) -> Self {
+        Self {
+            shared,
+            folders: Vec::new(),
+            actors: Vec::new(),
+            quiet: true,
+        }
+    }
 }
 
 impl Drop for Reservations {
     fn drop(&mut self) {
         for (mailbox, id) in &self.actors {
-            let _ = mailbox.send(ChatMsg::ReleaseGit { id: id.clone() });
+            let id = id.clone();
+            let _ = mailbox.send(if self.quiet {
+                ChatMsg::ReleaseQuiet { id }
+            } else {
+                ChatMsg::ReleaseGit { id }
+            });
         }
-        for folder in &self.folders {
-            self.shared.live.release_folder(folder);
+        if self.quiet {
+            self.shared.live.release_quiet(&self.folders);
+        } else {
+            for folder in &self.folders {
+                self.shared.live.release_folder(folder);
+            }
         }
     }
 }
@@ -153,7 +185,7 @@ impl SessionManager {
                     Ok((folders.clone(), (record, folders)))
                 })
             }).await?;
-            let _reservations=manager.reserve_git_folders(folders).await?;
+            let _reservations=manager.hold_exclusive(folders, None, None).await?;
             let result=if recreate {service.recreate_apply(&record.chat_id,&id,&token).await}else{service.recovery_apply(&record.chat_id,&id,&token).await}.map_err(|error|invalid(error.to_string()))?;
             if recreate && result.error.is_none() {
                 manager.copy_worktree_instructions_quietly(&result.worktree).await;
@@ -226,7 +258,8 @@ impl SessionManager {
             manager.git_chat(&chat_id).await?;
             let service = manager.worktrees()?;
             let (_organization, folders) = manager.hold_ready_worktrees(&service, &chat_id).await?;
-            let _reservations = manager.reserve_git_folders(folders).await?;
+            // Publishing pushes the branch and opens the request: agents there only wait.
+            let _reservations = manager.hold_quiet(folders).await?;
             service.pull_request_apply(&chat_id, &token).await.map_err(|error|invalid(error.to_string()))
         }).await.map_err(|_| invalid("The publishing task ended unexpectedly. Refresh GitHub to check the branch and pull request before retrying."))?
     }
@@ -304,9 +337,8 @@ impl SessionManager {
             .rt
             .spawn(async move {
                 let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
-                let _reservations = manager
-                    .reserve_git_folders(vec![chat.folder.clone()])
-                    .await?;
+                // An idle agent may stay; its next turn waits for the commit.
+                let _reservations = manager.hold_quiet(vec![chat.folder.clone()]).await?;
                 manager
                     .worktrees()?
                     .commit_apply(&chat.folder, &token)
@@ -331,7 +363,9 @@ impl SessionManager {
             .map_err(|error| invalid(error.to_string()))
     }
 
-    /// Pushes a reviewed push, with no agent working in the folder.
+    /// Pushes a reviewed push. It reads no working file (only the branch and Git's settings),
+    /// so agents in the folder keep working; the push holds its repository, as every Git change
+    /// does, and nothing else.
     pub async fn git_push_apply(
         &self,
         chat_id: &str,
@@ -343,8 +377,7 @@ impl SessionManager {
         self.deps()
             .rt
             .spawn(async move {
-                let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
-                let _reservations = manager.reserve_git_folders(vec![chat.folder.clone()]).await?;
+                let chat = manager.git_chat(&chat_id).await?;
                 manager
                     .worktrees()?
                     .push_apply(&chat.folder, &token)
@@ -398,7 +431,9 @@ impl SessionManager {
             .rt
             .spawn(async move {
                 let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
-                let _reservations = manager.reserve_git_folders(vec![chat.folder]).await?;
+                let _reservations = manager
+                    .hold_exclusive(vec![chat.folder], None, None)
+                    .await?;
                 let mut result = manager
                     .worktrees()?
                     .isolation_apply(&chat_id, &token)
@@ -447,7 +482,7 @@ impl SessionManager {
             // Conservatively reserve every active worktree owned by this chat as well as sources.
             // The service still binds the token to one exact record before mutation.
             let (_organization, folders) = manager.hold_ready_worktrees(&service, &chat_id).await?;
-            let _reservations=manager.reserve_git_folders(folders).await?;
+            let _reservations=manager.hold_exclusive(folders, None, None).await?;
             service.action_apply(&chat_id,&token).await.map_err(|error|invalid(error.to_string()))
         }).await.map_err(|_|invalid("The Git task ended unexpectedly. Review its recovery record before trying again."))?
     }
@@ -459,24 +494,16 @@ impl SessionManager {
         self.reserve_git_folders_with(folders, None, None).await
     }
 
-    async fn reserve_git_folders_except(
-        &self,
-        folders: Vec<PathBuf>,
-        except: Option<&str>,
-    ) -> Result<Reservations, SessionError> {
-        self.reserve_git_folders_with(folders, except, None).await
-    }
-
+    /// The setup command's terminal rewrites the worktree for as long as it runs.
     pub(super) async fn reserve_setup_folders(
         &self,
         folders: Vec<PathBuf>,
         chat_id: &str,
     ) -> Result<Reservations, SessionError> {
-        self.reserve_git_folders_with(folders, None, Some(chat_id))
-            .await
+        self.hold_exclusive(folders, None, Some(chat_id)).await
     }
 
-    async fn reserve_git_folders_with(
+    pub(super) async fn reserve_git_folders_with(
         &self,
         folders: Vec<PathBuf>,
         except: Option<&str>,
@@ -490,42 +517,16 @@ impl SessionManager {
                 "Wait for saving to resume before Git actions.".into(),
             ));
         }
-        let chats = self
-            .deps()
-            .store
-            .chats()
-            .await
-            .map_err(|error| storage_error(&error))?;
-        let (folders, chats) = self
-            .deps()
-            .rt
-            .spawn_blocking(move || {
-                let mut folders = folders
-                    .into_iter()
-                    .map(live::normalize_path)
-                    .collect::<Vec<_>>();
-                folders.sort();
-                folders.dedup();
-                let chats = chats
-                    .into_iter()
-                    .filter(|chat| folders.contains(&live::normalize_path(chat.folder.clone())))
-                    .map(|chat| chat.id)
-                    .collect::<Vec<_>>();
-                (folders, chats)
-            })
-            .await
-            .map_err(|_| invalid("Could not resolve Git folder ownership."))?;
-        let mut reservations = Reservations {
-            shared: Arc::clone(self.shared()),
-            folders: Vec::new(),
-            actors: Vec::new(),
-        };
+        let (folders, chats) = self.chats_in(folders).await?;
+        let mut reservations = Reservations::new(Arc::clone(self.shared()));
         if !self.shared().live.reserve_folders(&folders) {
-            return Err(invalid(
-                "Stop all chats and close project terminals using these folders before Git actions. Wait for their process cleanup to finish.",
-            ));
+            if self.shared().live.quiescing_now() {
+                return Err(SessionError::ShuttingDown);
+            }
+            return Err(self.folder_busy(&folders, Vec::new(), except).await);
         }
-        reservations.folders = folders;
+        reservations.folders.clone_from(&folders);
+        let mut refused = Vec::new();
         for chat in chats {
             if Some(chat.as_str()) == except {
                 continue;
@@ -547,7 +548,15 @@ impl SessionManager {
             mailbox.send(message).map_err(|_| stopped())?;
             // Register the release before awaiting, so cancellation cannot leave an actor locked.
             reservations.actors.push((mailbox, id));
-            answer.await.map_err(|_| stopped())??;
+            match answer.await.map_err(|_| stopped())? {
+                Ok(()) => {}
+                Err(SessionError::Organization(_)) => refused.push(chat),
+                Err(error) => return Err(error),
+            }
+        }
+        if !refused.is_empty() {
+            drop(reservations);
+            return Err(self.folder_busy(&folders, refused, except).await);
         }
         Ok(reservations)
     }
@@ -587,7 +596,7 @@ impl SessionManager {
                     Ok((folders.clone(), folders))
                 })
             }).await?;
-            let _reservations = manager.reserve_git_folders(folders).await?;
+            let _reservations = manager.hold_exclusive(folders, None, None).await?;
             service.recovery_apply(&chat_id, &worktree_id, &token).await
                 .map_err(|error| invalid(error.to_string()))
         }).await.map_err(|_| invalid("The recovery task ended unexpectedly. Its saved state and files remain available for review."))?
@@ -630,7 +639,7 @@ impl SessionManager {
                     Ok((folders.clone(), folders))
                 })
             }).await?;
-            let _reservations = manager.reserve_git_folders(folders).await?;
+            let _reservations = manager.hold_exclusive(folders, None, None).await?;
             let result = service.recreate_apply(&chat_id, &worktree_id, &token).await
                 .map_err(|error| invalid(error.to_string()))?;
             if result.error.is_none() {
@@ -706,7 +715,7 @@ impl SessionManager {
             if prepared.expires <= Instant::now() || prepared.apply.source_chat != chat_id {
                 return Err(invalid("This relocation preview no longer belongs to the selected chat."));
             }
-            let relocation = prepared.relocation.as_ref().ok_or_else(|| invalid("This preview is not a worktree relocation."))?;
+            let relocation = prepared.relocation.clone().ok_or_else(|| invalid("This preview is not a worktree relocation."))?;
             let (_organization, _) = manager.hold_chat_folder(
                 &chat_id, &[relocation.from.clone(), relocation.to.clone()],
             ).await?;
@@ -717,9 +726,17 @@ impl SessionManager {
             }
             // Other chats are reserved here. Continue serializes the moving chat's own admission
             // and persistence barrier, while folder reservations prevent any new native process.
-            let _reservations = manager.reserve_git_folders_except(
-                vec![relocation.from.clone(), relocation.to.clone()], Some(&chat_id),
-            ).await?;
+            let _reservations = match manager.hold_exclusive(
+                vec![relocation.from.clone(), relocation.to.clone()], Some(&chat_id), None,
+            ).await {
+                Ok(reservations) => reservations,
+                Err(error @ SessionError::FolderBusy { .. }) => {
+                    // The review stays usable: stop what is in the way, then apply it again.
+                    lock(&manager.shared().continuations).insert(token.clone(), prepared);
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
+            };
             manager.ask(&chat_id, |reply| ChatMsg::Continue {
                 apply: Box::new(prepared.apply.clone()),
                 prompt: None,

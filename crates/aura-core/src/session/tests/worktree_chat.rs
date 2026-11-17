@@ -61,8 +61,14 @@ fn canonical(path: impl AsRef<Path>) -> PathBuf {
 
 #[tokio::test]
 async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy() {
+    let (working, working_handle) = ScriptedDriver::new(vec![
+        ready_step("direct"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
     let mut rig = rig(
-        vec![idle_driver("direct"), idle_driver("isolated")],
+        vec![working, idle_driver("isolated")],
         WriterConfig::STANDARD,
         Knobs::STANDARD,
     );
@@ -78,6 +84,11 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
         .await
         .expect("direct chat");
     status(&rig, &direct.chat.id, SessionStatus::Ready).await;
+    rig.manager
+        .send(&direct.chat.id, "work in the source".into())
+        .await
+        .expect("send");
+    working_handle.wait_for(CommandMatch::Prompt).await;
     let preview = plan(
         &rig,
         WorktreeChatInput {
@@ -95,7 +106,8 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
     );
     assert!(preview.setup.is_none());
     assert!(!Path::new(&preview.path).exists());
-    // Bringing changes reads the source, so a busy source is refused for that variant only.
+    // Bringing changes reads the source, so a source whose agent works is refused for that
+    // variant only, naming the chat.
     let copying = plan(
         &rig,
         WorktreeChatInput {
@@ -104,12 +116,15 @@ async fn worktree_chat_is_created_in_its_own_worktree_while_the_source_is_busy()
         },
     )
     .await;
-    assert!(
-        rig.manager
-            .worktree_chat_apply(&copying.token)
-            .await
-            .is_err()
-    );
+    match rig.manager.worktree_chat_apply(&copying.token).await {
+        Err(SessionError::FolderBusy { message, blockers }) => {
+            assert_eq!(blockers.chats.len(), 1, "{message}");
+            assert_eq!(blockers.chats[0].chat_id, direct.chat.id);
+            assert!(message.contains("is working in this folder"), "{message}");
+        }
+        Err(other) => panic!("expected the working chat to be named, got {other}"),
+        Ok(_) => panic!("copying from a working source must wait"),
+    }
     assert!(!Path::new(&copying.path).exists());
     let result = rig
         .manager
@@ -565,26 +580,14 @@ async fn a_deleted_worktree_folder_is_recreated_for_its_stopped_chat() {
         .worktree_recreate_preview(&chat_id, &result.worktree.id)
         .await
         .expect("recreate preview");
-    // A live chat still holds the folder; Git actions wait for it to stop.
-    assert!(
-        rig.manager
-            .worktree_recreate_apply(&chat_id, &result.worktree.id, &recreate.token)
-            .await
-            .is_err()
-    );
-    rig.manager.stop(&chat_id).await.expect("stop");
-    eventually("stopped", || !rig.manager.shared().live.contains(&chat_id)).await;
-    let recreate = rig
-        .manager
-        .worktree_recreate_preview(&chat_id, &result.worktree.id)
-        .await
-        .expect("recreate preview again");
+    // Its idle agent stops first (it resumes on the next message); then the folder is recreated.
     let recreated = rig
         .manager
         .worktree_recreate_apply(&chat_id, &result.worktree.id, &recreate.token)
         .await
         .expect("recreate");
     assert!(recreated.error.is_none(), "{:?}", recreated.error);
+    assert!(!rig.manager.shared().live.contains(&chat_id));
     assert_eq!(recreated.worktree.state, WorktreeState::Ready);
     assert!(Path::new(&result.worktree.path).join(".git").is_file());
     assert_eq!(

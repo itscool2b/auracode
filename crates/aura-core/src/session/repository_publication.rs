@@ -97,7 +97,7 @@ impl SessionManager {
                 .path
                 .ok_or_else(|| invalid("Locate this folder before publishing."))?,
         );
-        let _reservations = self.reserve_git_folders(vec![path.clone()]).await?;
+        let _reservations = self.hold_quiet(vec![path.clone()]).await?;
         let service = self
             .deps()
             .worktrees

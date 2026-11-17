@@ -384,6 +384,39 @@ async function commitAndPush(page, url, out, engine) {
   await page.screenshot({ path: resolve(out, `${engine}-git-push-review.png`) });
   await page.getByRole("button", { name: "Push reviewed commits", exact: true }).click();
   await page.getByRole("heading", { name: "Pushed origin/main", exact: true }).waitFor();
+  await blockedCommit(page, url, out, engine);
+}
+
+/**
+ * Another chat working in the folder: the commit is refused naming it, the review stays, and
+ * "Stop this chat" stops it and commits the same review.
+ */
+async function blockedCommit(page, url, out, engine) {
+  await page.goto(`${url}/?preview=git&changes&blocked`);
+  const form = page.getByRole("form", { name: "Commit changes" });
+  await form.getByLabel("Commit message").fill("Add the release checklist");
+  await form.getByRole("button", { name: "Review commit", exact: true }).click();
+  await page.getByRole("button", { name: "Commit reviewed files", exact: true }).click();
+  const busy = page.getByTestId("folder-busy");
+  await busy.getByText("A chat is working in this folder", { exact: true }).waitFor();
+  await busy.getByText("Fix the tests in orbit: working", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Commit reviewed files", exact: true }).count(),
+    1,
+    "the review stays for the retry",
+  );
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-git-folder-busy.png`) });
+  await busy.getByRole("button", { name: "Stop this chat", exact: true }).click();
+  await page.getByRole("heading", { name: "Committed on main", exact: true }).waitFor();
+  assert.deepEqual(
+    (await page.evaluate(() => window.gitFixture.calls())).filter(
+      (call) => call.startsWith("apply-commit") || call.startsWith("stop-chats"),
+    ),
+    ["apply-commit:commit-1", "stop-chats:other", "apply-commit:commit-1"],
+  );
+  assert.equal(await page.getByTestId("folder-busy").count(), 0);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

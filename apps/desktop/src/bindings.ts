@@ -415,6 +415,21 @@ export const commands = {
 	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
 	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
 	/**
+	 *  Stops these chats, a turn in progress included, and answers once their agents' processes
+	 *  are gone: an action that waited for them can then go at once.
+	 */
+	chatsStop: (chatIds: string[]) => typedError<ChatsStopped, AppError>(__TAURI_INVOKE("chats_stop", { chatIds })),
+	/**
+	 *  Stops every idle agent (ready, unwatched, nothing open, queued or running in the background)
+	 *  and answers once they are gone. Working, waiting and terminal chats are left as they are.
+	 */
+	agentsStopIdle: () => typedError<ChatsStopped, AppError>(__TAURI_INVOKE("agents_stop_idle")),
+	/**
+	 *  The chats with a live agent in the folders `scope` names, with what each does, and the
+	 *  project terminals open there.
+	 */
+	folderBlockers: (scope: FolderScope) => typedError<FolderBlockers, AppError>(__TAURI_INVOKE("folder_blockers", { scope })),
+	/**
 	 *  Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
 	 *  chat whose agent `needs_download` is the consent to download its adapter.
 	 */
@@ -733,10 +748,12 @@ export type AgentUsage = {
 	accounts: AccountUsage[],
 };
 
-/**  A command failure, serialized as `{ code, message }`. */
+/**  A command failure, serialized as `{ code, message }`, and `blockers` for `folder_busy`. */
 export type AppError = {
 	code: AppErrorCode,
 	message: string,
+	/**  What stands in the way of a folder change (`folder_busy` only). */
+	blockers?: FolderBlockers | null,
 };
 
 /**  What went wrong, as a stable code the UI can switch on. */
@@ -783,6 +800,11 @@ export type AppErrorCode =
  *  message says what they are doing.
  */
 "too_many_agents" | 
+/**
+ *  Chats or project terminals are in the way of a change to a folder: `blockers` names them,
+ *  so the page can offer to stop them and try again.
+ */
+"folder_busy" | 
 /**  Too many views are open for the chat, or the webview. */
 "too_many_subscriptions" | 
 /**  The profile database can't be reached right now. */
@@ -969,6 +991,17 @@ export type BlobText = {
 	eof: boolean,
 };
 
+/**  What a chat in the way of a change to a folder is doing. */
+export type BlockerState = 
+/**  Starting, running a turn or background work, or stopping. */
+"working" | 
+/**  Waiting for the person to answer a request or a question. */
+"waiting" | 
+/**  Open in its agent's own terminal. */
+"terminal" | 
+/**  Ready, with nothing running: stopping it loses nothing. */
+"idle";
+
 /**  Everything the browser tells the window. */
 export type BrowserEvent = 
 /**  A chat's tabs changed (opened, closed, moved front, loading, titled, crashed). */
@@ -1127,7 +1160,11 @@ export type ChatBrowser = {
 
 export type ChatCreatePreview = {
 	folder: ProjectFolder,
-	/**  Sessions holding this canonical folder, including preparation and shutdown. */
+	/**
+	 *  Sessions working in this canonical folder (starting, running a turn or background work,
+	 *  open in a terminal, or just started or finished) or waiting for the person's answer. An
+	 *  agent idle there does not count: it edits nothing until it is given a message.
+	 */
 	busy_chats: ChatSummary[],
 };
 
@@ -1255,6 +1292,16 @@ export type ChatTerminalStarted = {
 	 *  (Ctrl+C twice for most agents).
 	 */
 	exit_input: string,
+};
+
+/**  What stopping several chats did, by chat id. */
+export type ChatsStopped = {
+	/**  Stopped: their agents' processes are gone. */
+	stopped: string[],
+	/**  Left running because they were not idle (stopping idle agents only). */
+	kept: string[],
+	/**  Still stopping when the wait ended. */
+	stopping: string[],
 };
 
 export type CheckpointSummary = {
@@ -1682,6 +1729,23 @@ export type FileMention = {
 	directory: boolean,
 };
 
+/**  A chat in the way of a change to a folder, for the person to see and stop. */
+export type FolderBlocker = {
+	chat_id: string,
+	title: string | null,
+	agent_name: string,
+	/**  The name of the chat's project. */
+	project: string | null,
+	state: BlockerState,
+};
+
+/**  What stands in the way of a change to a folder. */
+export type FolderBlockers = {
+	chats: FolderBlocker[],
+	/**  Project terminals (and Run) open in the folder: close them to continue. */
+	terminals: number,
+};
+
 export type FolderKind = "local" | "git";
 
 export type FolderLocationReview = {
@@ -1698,6 +1762,15 @@ export type FolderResolution = {
 	truncated: boolean,
 	notices: string[],
 };
+
+/**  Which folders `folder_blockers` looks at. */
+export type FolderScope = 
+/**  The chat's folder. */
+{ type: "chat"; chat_id: string } | 
+/**  One project folder. */
+{ type: "folder"; folder_id: string } | 
+/**  Every folder of a project. */
+{ type: "project"; project_id: string };
 
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 

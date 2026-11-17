@@ -32,10 +32,19 @@ pub(crate) enum Activity {
     Waiting,
     /// Open in the agent's own terminal.
     Terminal,
-    /// Ready, with a view of the chat open.
-    Shown,
+    /// Ready, with a view of the chat open, since its last activity at `since`.
+    Shown { since: Instant },
     /// Stopping, or stopped while its processes still exit.
     Stopping,
+}
+
+/// What a live agent does, for a person deciding whether to stop it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Doing {
+    Working,
+    Waiting,
+    Terminal,
+    Idle,
 }
 
 /// The live agents by what they are doing, for a start that found no room.
@@ -250,6 +259,14 @@ struct Inner {
     /// Starts waiting for a slot, first come first served, each with the folder it registers.
     /// Each has an agent stopping for it in `evicting`, or is owed one: the next agent to turn idle.
     waiting: VecDeque<(String, PathBuf)>,
+    /// Folders a quiet change holds (a commit, a setup copy): agents and terminals stay, new
+    /// turns wait, and only an exclusive change is kept out. Counted per folder.
+    quiet: HashMap<PathBuf, usize>,
+}
+
+/// Whether two paths overlap: one is the other or inside it.
+fn overlap(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
 }
 
 impl Inner {
@@ -287,7 +304,7 @@ impl Inner {
                 _ if self.evicting.contains(chat) => occupancy.stopping += 1,
                 Some(Activity::Waiting) => occupancy.waiting += 1,
                 Some(Activity::Terminal) => occupancy.terminals += 1,
-                Some(Activity::Shown) => occupancy.shown += 1,
+                Some(Activity::Shown { .. }) => occupancy.shown += 1,
                 Some(Activity::Stopping) => occupancy.stopping += 1,
                 Some(Activity::Idle { .. } | Activity::Working) | None => occupancy.working += 1,
             }
@@ -490,12 +507,19 @@ impl LiveAgents {
             || !inner.slots.is_empty()
             || !inner.waiting.is_empty()
             || !inner.mutations.is_empty()
+            || !inner.quiet.is_empty()
             || !inner.folder_uses.is_empty()
         {
             return false;
         }
         inner.quiescing = true;
         true
+    }
+
+    /// Whether an update or a quit closed admission.
+    pub(crate) fn quiescing_now(&self) -> bool {
+        let inner = self.lock();
+        inner.quiescing || inner.owned_draining
     }
 
     pub(crate) fn resume_admission(&self) {
@@ -537,7 +561,10 @@ impl LiveAgents {
 
     pub(crate) fn owned_work_count(&self) -> usize {
         let inner = self.lock();
-        inner.maintenance.saturating_add(inner.mutations.len())
+        inner
+            .maintenance
+            .saturating_add(inner.mutations.len())
+            .saturating_add(inner.quiet.values().sum::<usize>())
     }
 
     pub(crate) fn project_terminal_count(&self) -> usize {
@@ -637,6 +664,7 @@ impl LiveAgents {
                         .mutations
                         .iter()
                         .any(|held| folder.starts_with(held) || held.starts_with(folder))
+                    || inner.quiet.keys().any(|held| overlap(folder, held))
                     || inner.slots.iter().any(|chat| {
                         inner.folders.get(chat).is_none_or(|held| {
                             held.iter()
@@ -653,6 +681,94 @@ impl LiveAgents {
 
     pub(crate) fn release_folder(&self, folder: &Path) {
         self.lock().mutations.remove(folder);
+    }
+
+    /// A quiet hold of `folders`: agents and terminals there stay; only an exclusive change
+    /// (and an update or a quit) is kept out. False when one holds an overlapping folder.
+    pub(crate) fn hold_quietly(&self, folders: &[PathBuf]) -> bool {
+        let mut inner = self.lock();
+        if inner.quiescing
+            || inner.owned_draining
+            || folders
+                .iter()
+                .any(|folder| inner.mutations.iter().any(|held| overlap(folder, held)))
+        {
+            return false;
+        }
+        for folder in folders {
+            *inner.quiet.entry(folder.clone()).or_default() += 1;
+        }
+        true
+    }
+
+    pub(crate) fn release_quiet(&self, folders: &[PathBuf]) {
+        let mut inner = self.lock();
+        for folder in folders {
+            if let Some(count) = inner.quiet.get_mut(folder) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    inner.quiet.remove(folder);
+                }
+            }
+        }
+    }
+
+    /// Whether `chat` makes its folder busy for a new chat: working, waiting for an answer, open
+    /// in a terminal, waiting for a slot, or active within `settle` (just started or just
+    /// finished a turn, so likely to be given the next message). An agent idle longer, or
+    /// stopping, edits nothing.
+    pub(crate) fn busy(&self, chat: &str, settle: std::time::Duration) -> bool {
+        let inner = self.lock();
+        if inner.waiting.iter().any(|(waiting, _)| waiting == chat) {
+            return true;
+        }
+        if !inner.slots.contains(chat) || inner.evicting.contains(chat) {
+            return false;
+        }
+        match inner.activity.get(chat) {
+            Some(Activity::Idle { since, .. } | Activity::Shown { since }) => {
+                since.elapsed() < settle
+            }
+            Some(Activity::Stopping) => false,
+            Some(Activity::Working | Activity::Waiting | Activity::Terminal) | None => true,
+        }
+    }
+
+    /// What `chat`'s agent does, if it holds a slot or waits for one.
+    pub(crate) fn doing(&self, chat: &str) -> Option<Doing> {
+        let inner = self.lock();
+        if inner.waiting.iter().any(|(waiting, _)| waiting == chat) {
+            return Some(Doing::Working);
+        }
+        if !inner.slots.contains(chat) {
+            return None;
+        }
+        Some(match inner.activity.get(chat) {
+            Some(Activity::Idle { .. } | Activity::Shown { .. }) => Doing::Idle,
+            Some(Activity::Waiting) => Doing::Waiting,
+            Some(Activity::Terminal) => Doing::Terminal,
+            Some(Activity::Working | Activity::Stopping) | None => Doing::Working,
+        })
+    }
+
+    /// How many project terminals (and Runs) are open in `folders` or inside one.
+    pub(crate) fn terminals_in(&self, folders: &[PathBuf]) -> usize {
+        let inner = self.lock();
+        inner
+            .folder_uses
+            .iter()
+            .filter(|(held, _)| folders.iter().any(|folder| overlap(folder, held)))
+            .map(|(_, count)| *count)
+            .sum()
+    }
+
+    /// Whether a change to an overlapping folder is in progress.
+    pub(crate) fn mutation_in(&self, folders: &[PathBuf]) -> bool {
+        let inner = self.lock();
+        folders.iter().any(|folder| {
+            inner.mutations.iter().any(|held| overlap(folder, held))
+                || inner.quiet.keys().any(|held| overlap(folder, held))
+        })
     }
 
     /// A terminal can share a folder with agents, but cannot race destructive folder operations.
@@ -1022,6 +1138,45 @@ mod tests {
         live.report("a", idle(&notify, Duration::ZERO));
         assert_eq!(live.admit("b", Path::new("/fixture")), Admission::Waiting);
         assert!(!live.try_quiesce());
+    }
+
+    #[test]
+    fn a_quiet_hold_keeps_agents_and_terminals_and_keeps_out_only_exclusive_changes() {
+        let live = LiveAgents::new(4);
+        let folder = PathBuf::from("/fixture/project");
+        let notify = Arc::new(Notify::new());
+        assert_eq!(live.admit("agent", &folder), Admission::Admitted);
+        live.report("agent", idle(&notify, Duration::ZERO));
+        assert!(live.begin_folder_use(folder.clone()));
+        // An agent and a terminal in the folder do not stand in a quiet change's way.
+        assert!(live.hold_quietly(std::slice::from_ref(&folder)));
+        assert!(
+            live.hold_quietly(&[folder.join("child")]),
+            "quiet changes share folders"
+        );
+        assert!(live.contains("agent"), "nothing was stopped");
+        assert_eq!(live.owned_work_count(), 2, "a quit waits for them");
+        assert!(!live.try_quiesce());
+        assert!(live.mutation_in(std::slice::from_ref(&folder)));
+        live.release_quiet(&[folder.join("child")]);
+        live.release_quiet(std::slice::from_ref(&folder));
+        assert_eq!(live.owned_work_count(), 0);
+        // A quiet change and an exclusive one keep each other out, nested folders included.
+        let other = PathBuf::from("/fixture/other");
+        assert!(live.hold_quietly(&[other.join("inner")]));
+        assert!(!live.reserve_folder(&other));
+        live.release_quiet(&[other.join("inner")]);
+        assert!(live.reserve_folder(&other));
+        assert!(!live.hold_quietly(&[other.join("inner")]));
+        live.release_folder(&other);
+        // Busy for a new chat: working or recently active only.
+        assert!(!live.busy("agent", Duration::ZERO));
+        assert!(live.busy("agent", Duration::from_secs(60)));
+        live.report("agent", Activity::Working);
+        assert!(live.busy("agent", Duration::ZERO));
+        assert_eq!(live.doing("agent"), Some(Doing::Working));
+        assert_eq!(live.terminals_in(&[PathBuf::from("/fixture")]), 1);
+        live.end_folder_use(&folder);
     }
 
     #[test]

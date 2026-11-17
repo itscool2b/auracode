@@ -236,9 +236,11 @@ impl SessionManager {
             .into_iter()
             .map(|chat| chat.chat)
             .filter(|chat| {
-                // A start waiting for room is about to work here too.
-                let live = &self.shared().live;
-                live.contains(&chat.id) || live.is_waiting(&chat.id)
+                // Working or waiting for an answer: an agent idle here edits nothing until it is
+                // given a message, so it does not make the folder busy.
+                self.shared()
+                    .live
+                    .busy(&chat.id, self.shared().knobs.busy_settle)
             })
             .collect();
         let path = folder.path.clone();

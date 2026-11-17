@@ -174,7 +174,8 @@ impl SessionManager {
             let folders = service
                 .setup_folders(chat_id, token)
                 .map_err(|error| SessionError::Organization(error.to_string()))?;
-            let reservations = self.reserve_setup_folders(folders, chat_id).await?;
+            // Copying setup files only adds missing files: a chat there waits, nothing stops.
+            let reservations = self.hold_quiet(folders).await?;
             let value = service
                 .setup_apply(chat_id, token)
                 .await

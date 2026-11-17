@@ -501,7 +501,7 @@ impl SessionManager {
                 let (_organization, _) = manager.hold_chat_folder(&chat_id, &[]).await?;
                 let chat = manager.git_chat(&chat_id).await?;
                 let _reservation = manager
-                    .reserve_git_folders(vec![chat.folder.clone()])
+                    .hold_exclusive(vec![chat.folder.clone()], None, None)
                     .await?;
                 manager
                     .worktrees()?

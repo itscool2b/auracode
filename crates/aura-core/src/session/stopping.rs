@@ -67,6 +67,16 @@ impl SessionManager {
     /// queued, no background work), and answers once their slots are free. Working, waiting and
     /// terminal chats are left as they are and listed as kept.
     pub async fn stop_idle(&self, scope: StopScope) -> StopReport {
+        self.stop_idle_with(scope, false).await
+    }
+
+    /// Stops the agents in `scope` that are not working, ones with a view open included: a
+    /// change that rewrites their folder does this first.
+    pub(super) async fn stop_unless_working(&self, scope: StopScope) -> StopReport {
+        self.stop_idle_with(scope, true).await
+    }
+
+    async fn stop_idle_with(&self, scope: StopScope, even_shown: bool) -> StopReport {
         let mut asked = Vec::new();
         let mut kept = Vec::new();
         for chat in self.stop_targets(scope).await {
@@ -74,7 +84,10 @@ impl SessionManager {
                 continue;
             };
             let (reply, answer) = oneshot::channel();
-            if mailbox.send(ChatMsg::StopIfIdle { reply }).is_err() {
+            if mailbox
+                .send(ChatMsg::StopIfIdle { even_shown, reply })
+                .is_err()
+            {
                 continue;
             }
             match answer.await {

@@ -568,3 +568,64 @@ async fn failed_codex_startup_recovery_keeps_project_model_and_queued_text() {
     );
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
+
+#[tokio::test]
+async fn an_idle_agent_does_not_make_its_folder_busy() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("idle-here"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let knobs = Knobs {
+        busy_settle: Duration::from_millis(400),
+        ..Knobs::STANDARD
+    };
+    let rig = rig(vec![driver], WriterConfig::STANDARD, knobs);
+    let project = project(&rig, "Idle").await;
+    let folder_id = project.folders[0].id.clone();
+    let chat = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: folder_id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .expect("chat");
+    status(&rig, &chat.chat.id, SessionStatus::Ready).await;
+    // Just started, it is likely to get the next message, so the folder counts as busy...
+    assert_eq!(
+        rig.manager
+            .chat_create_preview(&folder_id)
+            .await
+            .expect("preview")
+            .busy_chats
+            .len(),
+        1
+    );
+    // ...and once it has idled a moment, it does not: it edits nothing until it is given work.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let preview = rig
+        .manager
+        .chat_create_preview(&folder_id)
+        .await
+        .expect("preview");
+    assert!(preview.busy_chats.is_empty(), "{:?}", preview.busy_chats);
+    assert!(rig.manager.shared().live.contains(&chat.chat.id));
+    // A turn makes it busy again.
+    rig.manager
+        .send(&chat.chat.id, "work".into())
+        .await
+        .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
+    let busy = rig
+        .manager
+        .chat_create_preview(&folder_id)
+        .await
+        .expect("preview")
+        .busy_chats;
+    assert_eq!(busy.len(), 1);
+    assert_eq!(busy[0].id, chat.chat.id);
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}

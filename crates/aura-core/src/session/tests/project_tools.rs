@@ -255,9 +255,10 @@ async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_repl
 }
 
 #[tokio::test]
-async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_through_completion() {
-    let (driver, _) = ScriptedDriver::new(vec![
+async fn initialization_waits_for_a_working_agent_and_keeps_admission_through_completion() {
+    let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("native-init"),
+        Step::Expect(CommandMatch::Prompt),
         Step::Expect(CommandMatch::Shutdown),
         Step::Exit(DriverExit::Closed),
     ]);
@@ -274,6 +275,11 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
         .git_initialize_preview(&chat.id, "main")
         .await
         .expect("read-only review");
+    rig.manager
+        .send(&chat.id, "working".into())
+        .await
+        .expect("send");
+    handle.wait_for(CommandMatch::Prompt).await;
     let released = Arc::new(AtomicBool::new(false));
     let error = rig
         .manager
@@ -283,8 +289,11 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
             Box::new(Admission(released.clone())),
         )
         .await
-        .expect_err("live folder stays protected");
-    assert!(error.to_string().contains("Stop all chats"));
+        .expect_err("a working agent's folder stays protected");
+    assert!(
+        error.to_string().contains("is working in this folder"),
+        "{error}"
+    );
     assert!(released.load(Ordering::Acquire));
     assert!(!rig.folder.join(".git").exists());
     rig.manager.stop(&chat.id).await.expect("stop");
@@ -307,7 +316,7 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
 }
 
 /// Runs Git in `cwd` for a fixture.
-async fn fixture_git(cwd: &Path, args: &[&str]) {
+pub(super) async fn fixture_git(cwd: &Path, args: &[&str]) {
     use aura_process::{HelperEnv, HelperSpec, LeftoverRegistry, find_exe, run_helper};
     let vars = aura_process::process_env();
     let git = find_exe("git", &vars).expect("Git is required for this fixture");

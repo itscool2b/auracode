@@ -121,6 +121,15 @@ pub(crate) enum ChatMsg {
     ReleaseGit {
         id: String,
     },
+    /// A quiet change to the chat's folder (a commit, a setup copy): refused while a turn, a
+    /// start or a stop is under way; otherwise new turns and starts wait until `ReleaseQuiet`.
+    HoldQuiet {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReleaseQuiet {
+        id: String,
+    },
     FolderLocated {
         reservation: String,
         record: ChatRecord,
@@ -241,8 +250,10 @@ pub(crate) enum ChatMsg {
     Stop {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
-    /// Stops the agent only while it idles (see `idles`); answers whether it began stopping.
+    /// Stops the agent only while it idles (see `idles`), or with `even_shown` while it is not
+    /// working though a view is open; answers whether it began stopping.
     StopIfIdle {
+        even_shown: bool,
         reply: oneshot::Sender<Result<bool, SessionError>>,
     },
     /// The account switch: the agent of `agent` starts again on the account it starts on now,
@@ -297,7 +308,8 @@ impl ChatMsg {
             ChatMsg::ReserveWorkspace { reply, .. } | ChatMsg::ReserveGit { reply, .. } => {
                 drop(reply.send(Err(error)))
             }
-            ChatMsg::ReleaseGit { .. } => {}
+            ChatMsg::ReleaseGit { .. } | ChatMsg::ReleaseQuiet { .. } => {}
+            ChatMsg::HoldQuiet { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::FolderLocated { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
@@ -338,7 +350,7 @@ impl ChatMsg {
                 let _ = reply.send(());
             }
             ChatMsg::OpenTerminal { reply } => drop(reply.send(Err(error))),
-            ChatMsg::StopIfIdle { reply } => drop(reply.send(Err(error))),
+            ChatMsg::StopIfIdle { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Detach { .. }
             | ChatMsg::DropOwner { .. }
             | ChatMsg::SetupChanged(_)
@@ -897,6 +909,11 @@ pub(crate) struct ChatActor {
     rooms: u64,
     /// How a start at the limit asks this chat's agent to stop when it is the idle one.
     make_room: Arc<tokio::sync::Notify>,
+    /// Quiet changes to the chat's folder under way (a commit, a setup copy): new turns and
+    /// starts wait for the last one to end.
+    quiet_holds: std::collections::HashSet<String>,
+    /// A start asked for while a quiet change held the folder, Start fresh if `true`.
+    start_after_hold: Option<bool>,
     /// What this chat last reported to the live-agent table, so it reports only changes.
     reported: Option<Reported>,
 }
@@ -915,7 +932,7 @@ enum Reported {
     Working,
     Waiting,
     Terminal,
-    Shown,
+    Shown(Instant),
     Stopping,
 }
 
@@ -1065,6 +1082,8 @@ impl ChatActor {
             rooms: 0,
             make_room: Arc::new(tokio::sync::Notify::new()),
             reported: None,
+            quiet_holds: std::collections::HashSet::new(),
+            start_after_hold: None,
             shared,
             chat,
         }
@@ -1163,13 +1182,20 @@ impl ChatActor {
             || !self.retiring.is_empty()
             || self.checkpointing.is_some()
             || self.turn.is_some()
-            || (!restoring && !self.queue.is_empty())
+            // A held prompt waits for the person, so it stays; one about to go does not.
+            || (!restoring && self.queue.iter().any(|row| !row.held))
             || self.pending_start.is_some()
             || self.native_identity_pending.is_some()
+            || !self.quiet_holds.is_empty()
+            || self.room.is_some()
+            || self.terminal.is_some()
             || self.quitting
             || self.shared.is_shutting_down()
         {
-            Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing this workspace.".into()))
+            Err(SessionError::Organization(format!(
+                "{} is working in this folder.",
+                self.agent_label()
+            )))
         } else if self.store.is_paused() {
             Err(SessionError::StorageUnavailable(
                 "Wait for saving to resume before changing this workspace.".into(),
@@ -1213,6 +1239,7 @@ impl ChatActor {
                 ChatMsg::Detach { .. }
                 | ChatMsg::DropOwner { .. }
                 | ChatMsg::ReleaseGit { .. }
+                | ChatMsg::ReleaseQuiet { .. }
                 | ChatMsg::Lists { .. }
                 | ChatMsg::FolderContext { .. } => {}
                 // A second quit is answered at once by `refuse`; anything else would queue work
@@ -1278,6 +1305,13 @@ impl ChatActor {
                     }
                 }
             }
+            ChatMsg::HoldQuiet { id, reply } => {
+                let result = self.hold_quiet(id.clone());
+                if reply.send(result).is_err() {
+                    self.release_quiet(&id);
+                }
+            }
+            ChatMsg::ReleaseQuiet { id } => self.release_quiet(&id),
             ChatMsg::FolderLocated {
                 reservation,
                 record,
@@ -1472,8 +1506,8 @@ impl ChatActor {
                 self.stop();
                 drop(reply.send(Ok(())));
             }
-            ChatMsg::StopIfIdle { reply } => {
-                let idle = self.idles();
+            ChatMsg::StopIfIdle { even_shown, reply } => {
+                let idle = self.idles() || (even_shown && self.idles_but_shown());
                 if idle {
                     self.pending_start = None;
                     self.stop();
@@ -1832,13 +1866,15 @@ impl ChatActor {
             || !self.retiring.is_empty()
             || self.checkpointing.is_some()
             || self.turn.is_some()
-            || !self.queue.is_empty()
+            // A held prompt waits for the person; one about to go would run on changed files.
+            || self.queue.iter().any(|row| !row.held)
             || self.quitting
             || self.shared.is_shutting_down()
         {
-            let _ = reply.send(Err(SessionError::Organization(
-                "Stop the chat and clear queued prompts before reverting files.".into(),
-            )));
+            let _ = reply.send(Err(SessionError::Organization(format!(
+                "{} is working in this chat. Wait for it to finish, or stop it, then revert again.",
+                self.agent_label()
+            ))));
             return;
         }
         let Some(service) = self.shared.deps.checkpoints.clone() else {
@@ -2075,6 +2111,7 @@ impl ChatActor {
             .as_ref()
             .is_some_and(|attempt| attempt.blocks_agent())
             && !self.organizing
+            && self.quiet_holds.is_empty()
             && !self.steering_pending
             && self.control_pending.is_none()
             && self.controls_valid()
@@ -3138,6 +3175,16 @@ impl ChatActor {
         }
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
+        }
+        if !self.quiet_holds.is_empty()
+            && matches!(
+                self.status,
+                SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
+            )
+        {
+            // A commit or a setup copy holds the folder: the start follows once it ends.
+            self.start_after_hold = Some(fresh || self.start_after_hold.unwrap_or(false));
+            return Ok(());
         }
         match self.status {
             SessionStatus::Starting if self.room.is_some() => {
@@ -6390,6 +6437,20 @@ The person continues this conversation here, in your terminal. Reply only that y
                 .is_none_or(|driver| driver.run_idle != Some(false))
     }
 
+    /// Idle but for an open view: a change that rewrites the folder may stop it, losing nothing.
+    fn idles_but_shown(&self) -> bool {
+        self.status == SessionStatus::Ready
+            && self.turn.is_none()
+            && !self.normalizer.has_open_requests()
+            && !self.queue.first().is_some_and(|row| !row.held)
+            && !self.quitting
+            && self.terminal.is_none()
+            && self
+                .driver
+                .as_ref()
+                .is_none_or(|driver| driver.run_idle != Some(false))
+    }
+
     /// Idle eviction: idle long enough, by [`Self::idles`]. The live-agent table learns what the
     /// agent does whenever that changes, so a start at the limit can stop the one idle longest.
     fn update_idle(&mut self) {
@@ -6411,7 +6472,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         } else if self.normalizer.has_open_requests() {
             Reported::Waiting
         } else if self.status == SessionStatus::Ready && !self.subscribers.is_empty() {
-            Reported::Shown
+            Reported::Shown(self.last_activity)
         } else {
             Reported::Working
         };
@@ -6427,7 +6488,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             Reported::Working => super::live::Activity::Working,
             Reported::Waiting => super::live::Activity::Waiting,
             Reported::Terminal => super::live::Activity::Terminal,
-            Reported::Shown => super::live::Activity::Shown,
+            Reported::Shown(since) => super::live::Activity::Shown { since },
             Reported::Stopping => super::live::Activity::Stopping,
         };
         if self.shared.live.report(&self.chat_id, activity) {
@@ -6517,6 +6578,52 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.set_status(SessionStatus::Stopped, None);
             self.refuse_terminal(error);
         }
+    }
+
+    /// A quiet change to the folder begins: refused only while a turn, a start or a stop is
+    /// under way (or the agent works in its terminal), so an idle agent may stay.
+    fn hold_quiet(&mut self, id: String) -> Result<(), SessionError> {
+        let busy = self.turn.is_some()
+            || self.preparing.is_some()
+            || self.room.is_some()
+            || self.checkpointing.is_some()
+            || self.steering_pending
+            || self.pending_start.is_some()
+            || self.terminal.is_some()
+            || !self.retiring.is_empty()
+            || self.normalizer.has_open_requests()
+            || matches!(
+                self.status,
+                SessionStatus::Starting
+                    | SessionStatus::Running
+                    | SessionStatus::Cancelling
+                    | SessionStatus::Stopping
+            );
+        if busy {
+            return Err(SessionError::Organization(format!(
+                "{} is working in this folder.",
+                self.agent_label()
+            )));
+        }
+        self.quiet_holds.insert(id);
+        self.info_dirty = true;
+        self.schedule_flush();
+        Ok(())
+    }
+
+    /// A quiet change ended: what waited for the last one goes on.
+    fn release_quiet(&mut self, id: &str) {
+        if !self.quiet_holds.remove(id) || !self.quiet_holds.is_empty() {
+            return;
+        }
+        self.info_dirty = true;
+        self.schedule_flush();
+        if let Some(fresh) = self.start_after_hold.take()
+            && let Err(error) = self.start(fresh, false)
+        {
+            self.refuse_terminal(error);
+        }
+        self.dispatch_next();
     }
 
     /// Ends a wait for room (a Stop, a quit).
@@ -6830,7 +6937,7 @@ The person continues this conversation here, in your terminal. Reply only that y
                 after: self.hold_cause,
             });
         }
-        if self.organizing {
+        if self.organizing || !self.quiet_holds.is_empty() {
             return Some(QueueWait::ChatChanging);
         }
         match self.status {

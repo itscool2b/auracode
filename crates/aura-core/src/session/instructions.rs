@@ -233,7 +233,8 @@ impl SessionManager {
             .ok_or_else(|| invalid("This project folder isn't on this device."))?;
         let worktrees = self.worktrees()?;
         let folders = vec![PathBuf::from(&folder)];
-        let _reservation = self.reserve_git_folders(folders).await?;
+        // Adding one new file to Git: agents in the folder only wait.
+        let _reservation = self.hold_quiet(folders).await?;
         worktrees
             .commit_instruction_file(Path::new(&folder), path)
             .await

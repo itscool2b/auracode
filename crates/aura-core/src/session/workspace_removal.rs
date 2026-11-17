@@ -10,21 +10,7 @@ pub(super) struct Prepared {
     before: Snapshot,
     action: WorkspaceRemovalAction,
 }
-struct Reservations {
-    shared: Arc<Shared>,
-    actors: Vec<(mpsc::UnboundedSender<ChatMsg>, String)>,
-    folders: Vec<PathBuf>,
-}
-impl Drop for Reservations {
-    fn drop(&mut self) {
-        for (mailbox, id) in &self.actors {
-            let _ = mailbox.send(ChatMsg::ReleaseGit { id: id.clone() });
-        }
-        for folder in &self.folders {
-            self.shared.live.release_folder(folder);
-        }
-    }
-}
+use super::gitworkspaces::Reservations;
 fn invalid(message: impl Into<String>) -> SessionError {
     SessionError::Organization(message.into())
 }
@@ -122,6 +108,7 @@ impl SessionManager {
                 invalid("This review expired or was already used. Review the workspace again.")
             })?;
         let manager = self.clone();
+        let token = token.to_owned();
         self.deps()
             .rt
             .spawn(async move {
@@ -133,32 +120,6 @@ impl SessionManager {
                     .live
                     .try_maintenance()
                     .ok_or(SessionError::ShuttingDown)?;
-                let mut reservations = Reservations {
-                    shared: Arc::clone(manager.shared()),
-                    actors: Vec::new(),
-                    folders: Vec::new(),
-                };
-                for (chat, _) in &review.before.chats {
-                    let mailbox = manager.actor(chat);
-                    let id = crate::ids::new_id();
-                    let (reply, answer) = oneshot::channel();
-                    mailbox
-                        .send(ChatMsg::ReserveWorkspace {
-                            id: id.clone(),
-                            restoring: review.action == WorkspaceRemovalAction::Restore,
-                            reply,
-                        })
-                        .map_err(|_| stopped())?;
-                    reservations.actors.push((mailbox, id));
-                    answer.await.map_err(|_| stopped())??;
-                    // Flush each actor before comparing reviewed membership and update times.
-                    manager
-                        .ask(chat, |reply| ChatMsg::CheckpointContext {
-                            turn_id: None,
-                            reply,
-                        })
-                        .await?;
-                }
                 let paths = review
                     .before
                     .folders
@@ -166,7 +127,10 @@ impl SessionManager {
                     .filter_map(|(_, path, _, _)| path.as_ref().map(PathBuf::from))
                     .collect::<Vec<_>>();
                 let folders = tokio::task::spawn_blocking(move || {
-                    let mut paths = paths.into_iter().map(live::normalize_path).collect::<Vec<_>>();
+                    let mut paths = paths
+                        .into_iter()
+                        .map(live::normalize_path)
+                        .collect::<Vec<_>>();
                     paths.sort();
                     paths.dedup();
                     let mut roots: Vec<PathBuf> = Vec::new();
@@ -179,11 +143,66 @@ impl SessionManager {
                 })
                 .await
                 .map_err(|_| invalid("Folder ownership could not be checked."))?;
-                for folder in folders {
-                    if !manager.shared().live.reserve_folder(&folder) {
-                        return Err(invalid("Stop agents and close project terminals using these folders, then review removal again."));
+                // The removed chats' agents, and any agent in these folders, stop first unless
+                // they are working; each resumes its session if the workspace is restored.
+                let mut holders = manager
+                    .shared()
+                    .live
+                    .holders(&manager.spellings(folders.clone()).await);
+                holders.extend(review.before.chats.iter().map(|(chat, _)| chat.clone()));
+                holders.sort();
+                holders.dedup();
+                manager
+                    .stop_unless_working(super::stopping::StopScope::Chats(holders))
+                    .await;
+                let mut reservations = Reservations::new(Arc::clone(manager.shared()));
+                let mut refused = Vec::new();
+                for (chat, _) in &review.before.chats {
+                    let mailbox = manager.actor(chat);
+                    let id = crate::ids::new_id();
+                    let (reply, answer) = oneshot::channel();
+                    mailbox
+                        .send(ChatMsg::ReserveWorkspace {
+                            id: id.clone(),
+                            restoring: review.action == WorkspaceRemovalAction::Restore,
+                            reply,
+                        })
+                        .map_err(|_| stopped())?;
+                    reservations.actors.push((mailbox, id));
+                    match answer.await.map_err(|_| stopped())? {
+                        Ok(()) => {}
+                        Err(SessionError::Organization(_)) => {
+                            refused.push(chat.clone());
+                            continue;
+                        }
+                        Err(error) => return Err(error),
                     }
-                    reservations.folders.push(folder);
+                    // Flush each actor before comparing reviewed membership and update times.
+                    manager
+                        .ask(chat, |reply| ChatMsg::CheckpointContext {
+                            turn_id: None,
+                            reply,
+                        })
+                        .await?;
+                }
+                let busy = if refused.is_empty() {
+                    folders.iter().find_map(|folder| {
+                        if manager.shared().live.reserve_folder(folder) {
+                            reservations.folders.push(folder.clone());
+                            None
+                        } else {
+                            Some(())
+                        }
+                    })
+                } else {
+                    Some(())
+                };
+                if busy.is_some() {
+                    drop(reservations);
+                    let error = manager.folder_busy(&folders, refused, None).await;
+                    // The review stays usable: stop what is in the way, then apply it again.
+                    lock(&manager.shared().removals).insert(token, review);
+                    return Err(error);
                 }
                 match manager
                     .deps()
@@ -196,10 +215,14 @@ impl SessionManager {
                     .map_err(|e| storage_error(&e))?
                 {
                     Reply::Applied => Ok(()),
-                    _ => Err(invalid("The workspace change returned an invalid response.")),
+                    _ => Err(invalid(
+                        "The workspace change returned an invalid response.",
+                    )),
                 }
             })
             .await
-            .map_err(|_| invalid("The workspace change was interrupted. Refresh before reviewing it again."))?
+            .map_err(|_| {
+                invalid("The workspace change was interrupted. Refresh before reviewing it again.")
+            })?
     }
 }

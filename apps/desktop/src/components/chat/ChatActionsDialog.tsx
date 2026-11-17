@@ -4,38 +4,51 @@ import { hasProcess } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { busyElsewhere, moveChat } from "../../lib/chatMove";
 import { errorMessage } from "../../lib/errors";
+import { blockersFromChats, type FolderBusyApi } from "../../lib/folderBusy";
 import type { WorkspaceStore } from "../../lib/workspace";
+import { FolderBusy } from "./FolderBusy";
 import { Modal } from "./Modal";
 
 /**
- * The busy-folder warning New chat shows, for a move: the chats already working in the folder
- * and one explicit checkbox. Nothing overrides the warning until it is checked.
+ * The busy-folder warning New chat shows, for a move: the chats already working in the folder,
+ * an offer to stop them, and one explicit checkbox. Nothing overrides the warning until it is
+ * checked; stopping them clears it.
  */
 export function MoveBusyWarning({
   busy,
   acknowledged,
   onAcknowledge,
+  onStopped = () => {},
+  projectOf = () => null,
+  api,
 }: {
   readonly busy: readonly ChatSummary[];
   readonly acknowledged: boolean;
   readonly onAcknowledge: (value: boolean) => void;
+  /** The chats were stopped: check the folder again. */
+  readonly onStopped?: () => void;
+  readonly projectOf?: (chatId: string) => string | null;
+  readonly api?: Pick<FolderBusyApi, "stop">;
 }) {
   if (busy.length === 0) return null;
   return (
-    <div className="chat-move-busy" data-testid="move-busy">
-      <strong>This folder has active work</strong>
-      <span className="chat-move-busy-names">
-        {busy.map((chat) => chat.title ?? chat.agent_name).join(", ")}
-      </span>
-      <label>
-        <input
-          type="checkbox"
-          data-testid="move-busy-acknowledge"
-          checked={acknowledged}
-          onChange={(event) => onAcknowledge(event.currentTarget.checked)}
-        />
-        Move this chat into it anyway. Agents may edit the same files.
-      </label>
+    <div data-testid="move-busy">
+      <FolderBusy
+        heading="This folder has active work"
+        blockers={blockersFromChats(busy, projectOf)}
+        onStopped={onStopped}
+        api={api}
+      >
+        <label>
+          <input
+            type="checkbox"
+            data-testid="move-busy-acknowledge"
+            checked={acknowledged}
+            onChange={(event) => onAcknowledge(event.currentTarget.checked)}
+          />
+          Move this chat into it anyway. Agents may edit the same files.
+        </label>
+      </FolderBusy>
     </div>
   );
 }
@@ -72,8 +85,15 @@ export function ChatActionsDialog({
     state.data?.projects
       .find((project) => project.id === projectId)
       ?.folders.filter((folder) => folder.path !== null) ?? [];
+  // Checked again once the chats in its way were stopped.
+  const [recheck, setRecheck] = useState(0);
+  const projectOf = (chatId: string) => {
+    const saved = state.data?.chats.find((item) => item.chat.id === chatId);
+    return state.data?.projects.find((project) => project.id === saved?.project_id)?.name ?? null;
+  };
   // A new destination folder starts unacknowledged: the warning is about that folder only.
   useEffect(() => {
+    void recheck;
     let current = true;
     setBusy([]);
     setAcknowledged(false);
@@ -90,7 +110,7 @@ export function ChatActionsDialog({
     return () => {
       current = false;
     };
-  }, [folderId, store, chat.id]);
+  }, [folderId, store, chat.id, recheck]);
   const running = useRef(false);
   const run = <T,>(operation: () => Promise<T>, done: (value: T) => void) => {
     if (running.current) return;
@@ -219,6 +239,8 @@ export function ChatActionsDialog({
             busy={busy}
             acknowledged={acknowledged}
             onAcknowledge={setAcknowledged}
+            projectOf={projectOf}
+            onStopped={() => setRecheck((value) => value + 1)}
           />
           {checkError ? (
             <p role="alert" className="ui-error">

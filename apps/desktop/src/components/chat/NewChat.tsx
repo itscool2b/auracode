@@ -25,12 +25,14 @@ import { projectSourceFolder } from "../../lib/chat/newChatContext";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { type ChatInterface, chatInterfaces, terminalSupported } from "../../lib/chatInterface";
 import { errorMessage } from "../../lib/errors";
+import { blockersFromChats, type FolderBusyApi, folderBusyApi } from "../../lib/folderBusy";
 import { agentVersion, builtInPath } from "../../lib/format";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
 import { type WorktreeRecoveryApi, worktreeRecoveryApi } from "../../lib/worktreeRecovery";
 import { projectName } from "./ChatList";
+import { FolderBusy } from "./FolderBusy";
 import { closePopover, Popover } from "./Popover";
 import { WorktreeChip } from "./WorktreeChip";
 import { needsRecovery, WorktreeRecoveryList, worktreesToReview } from "./WorktreeRecoveryList";
@@ -143,6 +145,7 @@ export function NewChat({
   workspace,
   worktreeApi = worktreeChatApi,
   recoveryApi = worktreeRecoveryApi,
+  folderBusy = folderBusyApi,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly refreshing: boolean;
@@ -152,6 +155,8 @@ export function NewChat({
   readonly workspace?: WorkspaceStore;
   readonly worktreeApi?: WorktreeChatApi;
   readonly recoveryApi?: WorktreeRecoveryApi;
+  /** Stops the chats working in the chosen folder ("Stop these chats"). */
+  readonly folderBusy?: Pick<FolderBusyApi, "stop">;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
   const organization = useSyncExternalStore(
@@ -195,6 +200,8 @@ export function NewChat({
   const [preview, setPreview] = useState<ChatCreatePreview | null>(null);
   const [allowBusy, setAllowBusy] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // Read again once the chats working in the folder were stopped.
+  const [previewRevision, setPreviewRevision] = useState(0);
   const folderChoice = useMemo(() => new WorktreeChoice(worktreeApi), [worktreeApi]);
   const worktree = useSyncExternalStore(
     folderChoice.subscribe,
@@ -250,6 +257,7 @@ export function NewChat({
       ? retained.find((record) => sameFolder(record.path, state.folder as string))
       : undefined;
   useEffect(() => {
+    void previewRevision;
     let current = true;
     setAllowBusy(false);
     setPreview(null);
@@ -266,7 +274,7 @@ export function NewChat({
     return () => {
       current = false;
     };
-  }, [knownFolder, workspace]);
+  }, [knownFolder, workspace, previewRevision]);
   // A picked folder joins the workspace as its own project at once (as a project is added in the
   // Codex app), so its Git state is reviewed before Create. A failure leaves it to Create.
   const loaded = organization.data !== null;
@@ -348,6 +356,20 @@ export function NewChat({
   const ready = selected ? readyLine(selected) : null;
   // A worktree chat never shares the project folder, so only Local waits on its running chats.
   const busy = !worktreeMode && preview !== null && preview.busy_chats.length > 0;
+  const projectOfChat = (chatId: string) => {
+    const saved = organization.data?.chats.find((entry) => entry.chat.id === chatId);
+    return (
+      organization.data?.projects.find((project) => project.id === saved?.project_id)?.name ?? null
+    );
+  };
+  // The worktree chip's "Stop these chats": stop the chats working in the folder, then look again.
+  const stopBusy = () => {
+    if (!preview || preview.busy_chats.length === 0) return;
+    folderBusy.stop(preview.busy_chats.map((chat) => chat.id)).then(
+      () => setPreviewRevision((value) => value + 1),
+      (error: unknown) => setPreviewError(errorMessage(error)),
+    );
+  };
   // Only an automatic prefill waits for the retained list (it may name a worktree); a folder the
   // person chose does not, and a failed list ends the wait.
   const canCreate =
@@ -719,14 +741,19 @@ export function NewChat({
         <WorktreeChip
           view={worktree}
           busyChats={preview?.busy_chats.length ?? 0}
+          onStopBusy={stopBusy}
           openRef={openChip}
           onPropose={(change, field) => folderChoice.propose(change, field)}
           onClearError={() => folderChoice.clearError()}
         />
         {preview && busy ? (
-          <div className="new-chat-busy">
-            <strong>This folder has active work</strong>
-            <p>{preview.busy_chats.map((chat) => chat.title ?? chat.agent_name).join(", ")}</p>
+          <FolderBusy
+            className="new-chat-busy"
+            heading="This folder has active work"
+            blockers={blockersFromChats(preview.busy_chats, projectOfChat)}
+            api={folderBusy}
+            onStopped={() => setPreviewRevision((value) => value + 1)}
+          >
             <label>
               <input
                 type="checkbox"
@@ -735,7 +762,7 @@ export function NewChat({
               />
               Start another chat in this folder. Agents may edit the same files.
             </label>
-          </div>
+          </FolderBusy>
         ) : null}
         {note !== null ? <p className="new-chat-note">{note}</p> : null}
         {(previewError ?? createError ?? organization.error) ? (
