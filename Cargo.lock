@@ -620,6 +620,7 @@ dependencies = [
  "cpal",
  "dlopen2",
  "embed-resource",
+ "gtk",
  "keepawake",
  "objc2-foundation",
  "reqwest",

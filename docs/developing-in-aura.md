@@ -212,6 +212,13 @@ not reach for `WEBKIT_DISABLE_DMABUF_RENDERER=1` instead: it also stops the erro
 then paints on the CPU and copies every frame, and a chat scrolls at 21 frames a second where the
 GPU renderer holds 60.
 
+**The browser beside the chat on Wayland.** wry's child webviews are X11 child windows, so the
+browser used to be unavailable on Wayland. There its pages are now GTK widgets: at startup, while
+the window is still hidden, the app's own page moves into a `gtk::Overlay` and a pass-through
+`gtk::Fixed` over it holds one WebKitGTK view per live tab
+(`apps/desktop/src-tauri/src/browser/gtk_layer.rs`). X11 keeps the child windows. The overlay
+costs no frames (60 with and without, two rounds each).
+
 **Measuring frame rate without a window on your screen.** `hyprctl output create headless NAME`
 adds a virtual monitor; set its mode and scale to match the real one
 (`hyprctl eval 'hl.monitor({ output = "NAME", mode = "3840x2160@60", scale = 1.6 })'`) and move the
@@ -297,5 +304,6 @@ from a chat inside the installed AppImage:
 | The memory helper started through the mount's `AppRun` from an env without the image's variables | pass: MCP `initialize` answered in 39 ms |
 | `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass: titled `auracode dev`, its own data folder, same PID after the restart with the NVIDIA switch, the installed app untouched; without the switch the window closes with Wayland error 71 |
 | Frame rate at 2376x1300 on a virtual 4K monitor at 1.6 (GDK scale 2), NVIDIA RTX 5080, same build, GPU renderer against CPU painting | stress view 60 against 12 to 25; a chat with the scripted agent: streaming 56 to 63 against 42, scrolling 60 (worst frame 28 ms) against 21 (153 ms); idle 0 % CPU on both; typing reaches the screen in about 23 ms on both |
+| The browser panel on Wayland (Hyprland), on the virtual monitor | pass: a local page draws in the panel at its rectangle (1040x1202 at 2x), follows a move and resize, hides with the panel and returns; an agent's snapshot reads the page while it is hidden; the chat holds 60 frames a second beside it. Not tested: real pointer and keyboard input into the page (no second seat to drive it) |
 | `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
 | `host-upgrade install`, `--after-exit` and its waiter, health rollback, `rollback --restore-database`, `cancel`, prune | pass against a stand-in install (`appimage-upgrade.test.mjs`); not yet run against the real install |

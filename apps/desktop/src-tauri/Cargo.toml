@@ -97,6 +97,9 @@ windows-sys = { version = "0.61.2", features = [
 # Checks for the AppIndicator library before the tray loads it, since a missing one panics there
 # (native_shell). Already in the tree through tao, at this version.
 dlopen2 = { version = "0.8.2", default-features = false }
+# The browser's pages on Wayland are GTK widgets in the window (src/browser/gtk_layer.rs).
+# Already in the tree through tao and wry, at this version.
+gtk = "0.18.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # "Delete data and move auracode to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.

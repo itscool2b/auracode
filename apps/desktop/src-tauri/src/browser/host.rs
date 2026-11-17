@@ -63,15 +63,18 @@ pub(super) fn probe(app: &tauri::AppHandle) {
 
 #[cfg(target_os = "linux")]
 fn probe_window(app: &tauri::AppHandle) -> Option<String> {
-    use wry::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     let window = app.get_webview_window(MAIN_WINDOW)?;
-    match window.window_handle().map(|handle| handle.as_raw()) {
-        Ok(RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)) => None,
-        Ok(_) => Some(
-            "The browser needs auracode to run on X11 on Linux for now. Start it with GDK_BACKEND=x11."
-                .into(),
-        ),
-        Err(error) => Some(format!("The browser could not reach the window: {error}")),
+    // Asked of GDK, not of the window's handle: the window is still hidden here, and a Wayland
+    // window has no handle to give until it shows.
+    match super::gtk_layer::display_kind().as_deref() {
+        // X11: each page is a child window of the main one.
+        Some("GdkX11Display") => None,
+        // Wayland has no child windows: the pages are widgets in a layer over the app's page.
+        Some("GdkWaylandDisplay") => super::gtk_layer::install(&window)
+            .err()
+            .map(|error| format!("The browser could not join the window: {error}")),
+        Some(other) => Some(format!("The browser does not know this display ({other}).")),
+        None => Some("The browser found no display.".into()),
     }
 }
 
@@ -285,7 +288,7 @@ fn build(
     {
         let _ = passwords;
         with_context(&profile, |context| {
-            configure(
+            let builder = configure(
                 WebViewBuilder::new_with_web_context(context),
                 &weak,
                 tab_id,
@@ -293,11 +296,24 @@ fn build(
                 url,
                 &bounds,
                 &profile,
-            )
-            .build_as_child(&window)
+            );
+            // Wayland: a widget in the layer over the app's page; X11: a child window.
+            #[cfg(target_os = "linux")]
+            if let Some(layer) = super::gtk_layer::layer() {
+                use wry::WebViewBuilderExtUnix;
+                return builder.build_gtk(&layer);
+            }
+            builder.build_as_child(&window)
         })
         .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
     }
+}
+
+/// Moves a page to `at`.
+fn set_bounds(view: &View, at: &BrowserRect) {
+    let _ = view.webview.set_bounds(rect(at));
+    #[cfg(target_os = "linux")]
+    super::gtk_layer::place(&view.webview, at);
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -633,7 +649,7 @@ fn show(tab_id: &str, at: Option<BrowserRect>, visible: bool) {
     let hidden = HOST.with_borrow(|host| host.window_hidden);
     let _ = with_view(tab_id, |view| {
         if let Some(at) = at {
-            let _ = view.webview.set_bounds(rect(&at));
+            set_bounds(view, &at);
         }
         let _ = view.webview.set_visible(visible && !hidden && at.is_some());
     });
@@ -726,7 +742,7 @@ pub(super) fn park(tab_id: &str) {
     }
     let at = parked_rect();
     let _ = with_view(tab_id, |view| {
-        let _ = view.webview.set_bounds(rect(&at));
+        set_bounds(view, &at);
         let _ = view.webview.set_visible(true);
     });
     HOST.with_borrow_mut(|host| {
