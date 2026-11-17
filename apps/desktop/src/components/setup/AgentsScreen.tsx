@@ -1,13 +1,46 @@
 import { ArrowLeft, ChevronDown, RefreshCw } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { AgentEntry } from "../../bindings";
 import { workingChats } from "../../lib/agentUpdates";
 import { realAgents } from "../../lib/chat/agentLineup";
 import type { AppStore } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
-import { AgentRow } from "./AgentRow";
+import { AgentConnect, type ConnectAgent, connectState } from "./AgentConnect";
+import { type AgentPhase, AgentRow } from "./AgentRow";
 import "./agents.css";
 import "./setup.css";
+
+/**
+ * What each agent's row shows, kept by the page for the picture of agents joined to auracode. A
+ * row that has not reported yet is drawn from detection alone.
+ */
+function useConnectAgents(agents: readonly AgentEntry[] | null) {
+  const [phases, setPhases] = useState<ReadonlyMap<string, { phase: AgentPhase; busy: boolean }>>(
+    new Map(),
+  );
+  const onPhase = useCallback((agentId: string, phase: AgentPhase, busy: boolean) => {
+    setPhases((current) => {
+      const before = current.get(agentId);
+      if (before?.phase === phase && before.busy === busy) return current;
+      return new Map(current).set(agentId, { phase, busy });
+    });
+  }, []);
+  const connect: ConnectAgent[] = [];
+  for (const agent of realAgents(agents ?? [])) {
+    const reported = phases.get(agent.id);
+    const detected: AgentPhase =
+      agent.availability.state === "ready"
+        ? "ready"
+        : agent.availability.state === "checking"
+          ? "checking"
+          : agent.availability.state === "broken"
+            ? "broken"
+            : "missing";
+    const state = connectState(reported?.phase ?? detected, reported?.busy ?? false);
+    if (state !== null) connect.push({ id: agent.id, name: agent.name, state });
+  }
+  return { connect, onPhase };
+}
 
 /**
  * Setup's roster: what this computer has first; the agents it lacks fold into one row until
@@ -32,31 +65,36 @@ export function AgentRoster({
   // down among them.
   const present = agents.filter((agent) => !folded.includes(agent));
   const shown = everyAgent ? [...present, ...folded] : present;
+  const { connect, onPhase } = useConnectAgents(agents);
   return (
-    <ul className="agent-list" data-compact="">
-      {shown.map((agent, index) => (
-        <AgentRow
-          key={agent.id}
-          agent={agent}
-          transport={transport}
-          onRefresh={onRefresh}
-          compact
-          index={index}
-        />
-      ))}
-      {folded.length > 0 ? (
-        <li className="agent-list-more">
-          <button
-            type="button"
-            aria-expanded={everyAgent}
-            onClick={() => setEveryAgent(!everyAgent)}
-          >
-            {everyAgent ? "Hide the agents not installed" : `Show ${folded.length} not installed`}
-            <ChevronDown size={14} aria-hidden="true" />
-          </button>
-        </li>
-      ) : null}
-    </ul>
+    <>
+      {connect.length > 0 ? <AgentConnect agents={connect} /> : null}
+      <ul className="agent-list" data-compact="">
+        {shown.map((agent, index) => (
+          <AgentRow
+            key={agent.id}
+            agent={agent}
+            transport={transport}
+            onRefresh={onRefresh}
+            compact
+            index={index}
+            onPhase={onPhase}
+          />
+        ))}
+        {folded.length > 0 ? (
+          <li className="agent-list-more">
+            <button
+              type="button"
+              aria-expanded={everyAgent}
+              onClick={() => setEveryAgent(!everyAgent)}
+            >
+              {everyAgent ? "Hide the agents not installed" : `Show ${folded.length} not installed`}
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+          </li>
+        ) : null}
+      </ul>
+    </>
   );
 }
 
@@ -85,6 +123,7 @@ export function AgentsScreen({
     return () => app.stop();
   }, [app, embedded]);
   const agents = state.agents;
+  const { connect, onPhase } = useConnectAgents(agents);
   // The counts are about this computer, as setup's are: the built-in demo is not installed here.
   const counted = agents === null ? null : realAgents(agents);
   const installed = counted?.filter((agent) => agent.availability.state === "ready").length ?? 0;
@@ -133,6 +172,7 @@ export function AgentsScreen({
             onRefresh={refresh}
             onConnection={(agentId, connection) => app.setAgentConnection(agentId, connection)}
             index={index}
+            onPhase={onPhase}
           />
         ))}
       </ul>
@@ -140,6 +180,7 @@ export function AgentsScreen({
   if (embedded)
     return (
       <div className="agents-page" data-embedded="" data-setting="Agents">
+        {connect.length > 0 ? <AgentConnect agents={connect} /> : null}
         <div className="agents-head">
           {summary}
           {refreshButton}
@@ -166,6 +207,7 @@ export function AgentsScreen({
           </div>
           {refreshButton}
         </div>
+        {connect.length > 0 ? <AgentConnect agents={connect} /> : null}
         {list}
       </div>
     </main>

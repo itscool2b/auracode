@@ -379,6 +379,7 @@ export function AgentRow({
   compact = false,
   index = 0,
   working = 0,
+  onPhase,
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
@@ -391,6 +392,8 @@ export function AgentRow({
   /** Setup's roster: no date or menu on the row; the actions sit in the details. */
   readonly compact?: boolean;
   readonly index?: number;
+  /** Tells the page what this row shows, and whether an action is under way, for its picture. */
+  readonly onPhase?: (agentId: string, phase: AgentPhase, busy: boolean) => void;
 }) {
   const ready = agent.availability.state === "ready";
   const installKey = `${agent.installation?.launch_path ?? ""}:${agent.installation?.version ?? ""}`;
@@ -503,6 +506,9 @@ export function AgentRow({
       setMessage(after !== null && after !== before ? `Updated to ${after}.` : "Update finished.");
     });
   const phase = agentPhase(agent, auth);
+  useEffect(() => {
+    onPhase?.(agent.id, phase, busy !== null);
+  }, [onPhase, agent.id, phase, busy]);
   const guide = INSTALL_GUIDES[agent.id];
   const newer = newerRelease(agent);
   const canUpdate = maintenance?.update_unavailable === null;
