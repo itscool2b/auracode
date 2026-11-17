@@ -46,8 +46,7 @@ The token can only make model requests (the docs say so). On an added account:
 - The accounts: id, name and when each was added.
 - The account new starts use.
 
-It never holds a token. Only local profiles take added accounts: an account profile keeps all of
-its files encrypted, and this file is not encrypted yet.
+It never holds a token.
 
 **Tokens** are in the system's secure storage:
 
@@ -107,8 +106,8 @@ session (5 hours), weekly and per-model weeks; Codex reports its primary and sec
 session records each report in a usage book per agent and account, with when it came, so every
 account's usage shows, not only the one a chat runs on now.
 
-- A local profile keeps the book in `agent-usage.json`: percentages and reset times only, never a
-  token, name or email. An account profile keeps it in memory.
+- The profile keeps the book in `agent-usage.json`: percentages and reset times only, never a
+  token, name or email.
 - A removed account's usage is removed with it.
 - The composer's account rows show one line of shares ("5 hours 42% · 7 days 81%"). The Agents page
   shows each window as a meter with its share and reset, and when it was reported. A full window

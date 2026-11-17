@@ -7,10 +7,10 @@ auracode is a desktop app for macOS and Windows that drives the coding agents yo
 through their real harnesses, rendered in one desktop chat interface. Projects on the left, chats
 inside projects, switch agents and models mid-chat, run several at once.
 
-- No login needed for the app. Agents are detected automatically, with their versions, sign-in status, and
-  available updates.
-- Optional account (auracode.si) to sync projects, chats, and agent config (Claude Code, Codex, Pi) across
-  machines, end-to-end encrypted.
+- No login, and no auracode account: the app is local-only. Agents are detected automatically, with their
+  versions, sign-in status, and available updates.
+- Projects, chats and settings stay on this computer. Nothing is uploaded, and nothing syncs between
+  machines.
 
 ## Status
 
@@ -23,21 +23,24 @@ The [styling review record](docs/design/checkpoint-2026-10-30.md) tracks the ful
 review gallery. Owner visual approval and final verification remain pending. Historical Design Lab studies are not
 the design authority for new product screens.
 
-Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
-and Cloudflare Email Service. The website is published at [auracode.si](https://auracode.si) and its
-isolated preview;
-the Rust API is routed on both hosts. Its current public configuration reports `private_preview=true`;
-public accounts are not enabled and downloads are not published. Real email/device acceptance
-remains pending. Production account storage remains empty.
+The auracode.si account system (sign-in, sync between devices, the account API and its website
+pages) was removed on 16 November 2026 at the owner's request, because Claude Code and Codex sync
+plugins natively. A profile folder an account left in the data folder is never opened, listed or
+deleted.
+
+Backend and cloud services are Rust-first: the website is a Rust Worker serving the prerendered
+pages, published at [auracode.si](https://auracode.si) and its isolated preview, and remote access
+goes through the relay Worker (`apps/relay`). Downloads are not published. The Cloudflare
+resources the account system used are listed in [infra/README.md](infra/README.md); they are
+unused and wait for the owner to remove them.
 React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
 Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
 Public installer signing is deferred at the owner's request. The repository remains private while
 the open-source license and publication audit are being discussed. No license change is implied.
 
 Current source includes native agent drivers, the desktop workspace, onboarding, project and Git
-controls, a per-agent Plugin library, encrypted account sync, local import and readable export. Account
-recovery, explicit passphrase storage, reset sync, device removal and portable folder resolution are
-implemented with focused verification. Final integrated and native acceptance remain pending. The
+controls, a per-agent Plugin library, remote access, readable chat export and portable folder
+resolution, with focused verification. Final integrated and native acceptance remain pending. The
 milestone notes below describe the earlier merged foundation, not the current branch's full
 implementation. Release requirements and the deliberate final verification batch are in
 [docs/releases.md](docs/releases.md).
@@ -105,15 +108,16 @@ docs/                   plan and spike write-ups; spike code sits next to its wr
 .github/scripts/        the scripts those workflows run (smoke run, spike staging, checks) and their tests
 ```
 
-Cloud application components (resource inventory already exists in infra/README.md):
+The rest (the Cloudflare resource inventory is in infra/README.md):
 
 ```
-crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
-crates/aura-config/     M8          per-agent config adapters for the Config Library
-apps/web/               M6          auracode.si (React Router 7 on Cloudflare Workers)
-services/api/           M6          Rust account and sync API (Cloudflare Workers, D1)
-packages/api-types/     M6          TypeScript types generated from aura-protocol for the app, site, API
-infra/                  M5, M6      release scripts, Wrangler configs, D1 migrations
+crates/aura-config/     per-agent config adapters for the Plugin library and Instructions
+crates/aura-remote/     remote access: pairing, devices, bot links and the sealed channel
+crates/aura-release/    offline preparation and verification of release artifacts
+apps/web/               auracode.si (React Router 7, prerendered)
+apps/web-worker/        the Rust Worker that serves the prerendered site
+apps/relay/             the Worker behind remote access
+infra/                  the Cloudflare resource inventory
 ```
 
 ## Development
@@ -214,7 +218,7 @@ bash .github/scripts/run-smoke.sh target/debug/auracode
 
 `.github/workflows/ci.yml` includes Rust and native smoke checks on Windows/macOS, the Windows
 PowerShell suites, frontend tests, compiled Rust Worker tests, and Chromium/WebKit browser gates.
-Enable encrypted-storage verification for the final run. `.github/workflows/build.yml` is an
+`.github/workflows/build.yml` is an
 explicit unsigned Windows/macOS installer qualification workflow. Neither a commit message nor a
 tag publishes a release. Signing, hardware acceptance and distribution follow [docs/releases.md](docs/releases.md).
 

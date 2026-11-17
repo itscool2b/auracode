@@ -79,8 +79,8 @@ decision about who may do what is made in Rust on the computer.
   only to a link made with full control and treats a wider tool as unknown for the others, but
   the computer checks the level itself on every call, whatever the relay listed or let through
   (`host.rs`, and again in `bot::call`).
-- **A device or a bot link reaches one workspace**: the profile that was open when it was made
-  (Local, or an account's). `remote.json` is the installation's, but each record names its
+- **A device or a bot link reaches one workspace**: the profile that was open when it was made.
+  `remote.json` is the installation's, but each record names its
   profile, and the computer accepts a key or a token only while that profile is the open one.
   When another profile opens, browsers are told to start over, the other profile's sessions end,
   an open pairing link closes, and the relay is given only the open profile's bot links, so the
@@ -186,8 +186,8 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
 ## Running and testing it
 
 - **Deploy:** `corepack pnpm --filter @auracode/relay exec wrangler deploy --env production`
-  (and `--env preview`). The route `auracode.si/api/remote/*` is more specific than the API's
-  `auracode.si/api/*`, so those requests reach the relay.
+  (and `--env preview`). The route `auracode.si/api/remote/*` is more specific than the website's
+  `auracode.si/*`, so those requests reach the relay.
 - **Development:** a debug build reads `AURACODE_REMOTE_RELAY` (for example
   `ws://127.0.0.1:8799`) and `AURACODE_REMOTE_SITE` together; release builds reach only
   auracode's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.

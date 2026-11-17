@@ -1,6 +1,13 @@
 # auracode: implementation plan
 
 ## Current authority
+**Accounts were removed on 16 November 2026, at the owner's request, because Claude Code and Codex
+sync plugins natively.** The app is local-only: no sign-in, no sync between devices, no account API
+and no account pages on the website. Everything below about accounts, sync, the cloud API, D1,
+blob storage, sign-in email and Turnstile (the website's sign-up and account pages, M6 to M9, and
+"Sync design") is history, kept as it was written; the code for it is gone. Remote access, the
+website's download and legal pages, and the release bucket are current.
+
 The owner revised the architecture on 2026-10-26: Rust owns backend logic, all application cloud
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
 The proposed full Aura styling pass supersedes the older Graphite, Orbit and Shallows directions. See [visual-language.md](design/visual-language.md) for current authority and review status.

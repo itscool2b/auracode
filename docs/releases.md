@@ -31,8 +31,8 @@ preserved, while CI explicitly selects its ad-hoc identity.
 
 When public distribution resumes, it needs a backed-up Tauri updater key, trusted public key
 configuration, macOS Developer ID signing and notarization, the selected Windows signing mechanism,
-signed updater artifacts, the public release-only R2 route, and an old-build update dry run. The private
-encrypted blob bucket must stay private. No signing key is fabricated or recovered from credentials.
+signed updater artifacts, the public release-only R2 route, and an old-build update dry run. No
+signing key is fabricated or recovered from credentials.
 
 ## Official releases
 
@@ -184,7 +184,7 @@ change to the original build directory cannot change the copied stage. It does n
 platform trust, provenance or authorization to publish. Do not upload a whole scratch directory.
 Only the reviewed public object list above belongs in the release bucket. Upload immutable versioned
 objects first, fetch and verify them, then publish the channel's `latest.json` last. Do not overwrite
-the private encrypted blob bucket or an already published version.
+an already published version.
 
 `cargo run -p aura-release -- publish <stage>` does exactly that.
 - **Dry run by default.** With `AURACODE_UPDATER_PUBLIC_KEY` set, it verifies the stage again, then
@@ -240,8 +240,7 @@ isolated test data directory and owned fixtures, never a real user's profile, fo
 
 These commands are prepared for the final Windows/macOS integration checkpoint. They were not
 dispatched to hosted CI by the release-readiness work. Run with the pinned pnpm and a qualified
-native toolchain. On Windows, vendored OpenSSL needs the selected native Perl from the existing
-build prerequisite process. Do not change platform policy if an executable is denied.
+native toolchain. Do not change platform policy if an executable is denied.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -262,9 +261,6 @@ pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
-pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
-pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
-pnpm --filter @auracode/desktop exec node scripts/check-account-reset.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
@@ -289,14 +285,11 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash .github/scripts/run-smoke.sh target/
 
 The native harness covers real webview, IPC, actor, transcript, restart and quit paths. It does not
 prove vendor compatibility, packaged installation or independent external WebDriver control. Keep
-its result JSON and logs. The settings browser gate also runs Git reviews, setup, account/profile
-controls, configuration sync, explicit steering and missing-transcript recovery in Chromium and
-WebKit. Those use synthetic commands and do not replace native acceptance.
+its result JSON and logs. The settings browser gate also runs Git reviews, setup, profile
+controls, explicit steering and missing-transcript recovery in Chromium and WebKit. Those use synthetic commands and do not replace native acceptance.
 
 The final CI keeps each browser gate bounded and checks that every desktop acceptance script is
-reachable directly or through an aggregator. Enable `encrypted_storage` for the final dispatch:
-desktop tests already enable Account SQLCipher through their dependency features, while this job also
-tests the encrypted libraries in isolation. Leave `refresh_bindings` off for the final gate after
+reachable directly or through an aggregator. Leave `refresh_bindings` off for the final gate after
 committing exact generated output. The unsigned Build workflow separately refuses stale bindings
 before compiling the frontend and does not request updater signing material.
 
@@ -329,7 +322,7 @@ notarization and stapling, then prepare the stage from those final bytes.
 
 | Gate | Required evidence before calling it complete |
 |---|---|
-| macOS universal | Inspect both architecture slices, install and launch on Apple Silicon and Intel; verify configured minimum OS, signature, notarization and staple; retain existing Local and Account data across upgrade |
+| macOS universal | Inspect both architecture slices, install and launch on Apple Silicon and Intel; verify configured minimum OS, signature, notarization and staple; retain existing profile data across upgrade |
 | Windows x64 and ARM64 | Install, launch, upgrade and uninstall on each architecture; verify Authenticode and WebView2 behavior, including missing-runtime behavior; an upgrade retains user data, an uninstall deletes it as [uninstall.md](uninstall.md) describes, and both leave unrelated vendor processes running |
 | Actual updater | Older staging build downloads and installs a newer staged signed package; tampering and wrong-version signatures refuse installation; interrupted download retries; agents, PTYs, setup/Git work and unsaved drafts prevent unsafe install |
 | Release route | Only the dedicated release bucket is public; stable and staging prefixes stay separate; content types, downloads, immutable version objects and short-lived latest manifests behave as reviewed |
@@ -343,9 +336,10 @@ changed to prepare this tooling. Publication and native signed-upgrade acceptanc
 
 The M2-M5 audit's reviewed non-Git initialization, project terminal/editor controls and
 capability-qualified extra folder forwarding are implemented and have focused local verification.
-Account lifecycle recovery, explicit passphrase storage, reset sync, device removal, Keep as Local,
-Local import, readable chat export and portable folder resolution are also implemented with focused
-verification. Their final integrated Windows/macOS and live account qualification remain pending.
+Readable chat export and portable folder resolution are also implemented with focused
+verification; their final integrated Windows/macOS qualification remains pending. The account
+lifecycle that stood here (recovery, passphrase storage, reset sync, device removal, Keep as Local
+and Local import) was removed with auracode's accounts on 16 November 2026.
 Exact older-message native truncation/fork and Pi steering remain unsupported where the recorded
 protocol cannot safely identify the requested boundary; the visible reviewed handoff keeps the source
 conversation intact.
