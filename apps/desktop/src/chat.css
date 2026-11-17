@@ -1515,6 +1515,14 @@
   margin-top: 0;
 }
 
+/*
+ * A request takes focus as it arrives, for screen readers; the dock's own edge already says where
+ * it is, so the programmatic focus draws no ring around the whole card. Its controls keep theirs.
+ */
+.chat-permission-dock:focus-visible {
+  outline: none;
+}
+
 .chat-permission-dock {
   max-height: 50vh;
   overflow: auto;
