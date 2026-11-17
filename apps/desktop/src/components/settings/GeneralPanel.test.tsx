@@ -173,4 +173,50 @@ describe("Settings' General defaults", () => {
       "shows its messages, tools and thinking",
     );
   });
+
+  it("says once why Sounds cannot play where the window makes no sound, and waits", () => {
+    const notice =
+      "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode.";
+    const saved = {
+      cold_start: false,
+      notice: null,
+      preferences: {
+        revision: 1,
+        step: "project",
+        motion: "full",
+        appearance: "system",
+        theme: "claude",
+        text_size: "compact",
+        completed: true,
+        first_project_id: null,
+        general: { ...DEFAULT_GENERAL, sounds: true },
+      },
+    } as const;
+    const prefs: Preferences = {
+      saved,
+      shown: saved.preferences,
+      error: null,
+      change: () => {},
+      reload: () => {},
+    };
+    const lists = {
+      agents: async () => [],
+      models: async () => [],
+      thinking: async () => [],
+      editors: async () => ({ editors: [], opens_in: null }),
+    };
+    const page = (info: AppInfo) =>
+      renderToStaticMarkup(<GeneralPage info={info} prefs={prefs} lists={lists} onSetup={() => {}} />);
+    const silent = page({ os: "linux", data_dir: "/data", media: false, media_notice: notice } as AppInfo);
+    const shown = notice.replaceAll("'", "&#x27;");
+    expect(silent).toContain(shown);
+    expect(silent.split(shown)).toHaveLength(2);
+    expect(silent).not.toContain("A short sound when a chat finishes");
+    expect(silent).toMatch(/aria-label="Sounds"[^>]*disabled=""/);
+    // Every other switch stays usable.
+    expect(silent.match(/disabled=""/g)).toHaveLength(1);
+    const playing = page({ os: "linux", data_dir: "/data", media: true, media_notice: null } as AppInfo);
+    expect(playing).toContain("A short sound when a chat finishes, fails or needs you.");
+    expect(playing).not.toContain('disabled=""');
+  });
 });

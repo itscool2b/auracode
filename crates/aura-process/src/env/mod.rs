@@ -742,11 +742,16 @@ const APPIMAGE_RUNTIME_NAMES: &[&str] = &["APPDIR", "APPIMAGE", "ARGV0", "OWD"];
 
 /// Variables an AppImage's launch hooks set to a fixed value, overwriting the session's, with the
 /// variable whose pointing into the image shows that hook ran: linuxdeploy's GTK hook forces
-/// `GTK_THEME` to Adwaita, its Python hook sets `PYTHONDONTWRITEBYTECODE`.
+/// `GTK_THEME` to Adwaita, its Python hook sets `PYTHONDONTWRITEBYTECODE`, its GStreamer hook
+/// `GST_REGISTRY_REUSE_PLUGIN_SCANNER`.
 #[cfg(unix)]
 const APPIMAGE_HOOK_CONSTANTS: &[(&str, &str)] = &[
     ("GTK_THEME", "GTK_DATA_PREFIX"),
     ("PYTHONDONTWRITEBYTECODE", "PYTHONHOME"),
+    (
+        "GST_REGISTRY_REUSE_PLUGIN_SCANNER",
+        "GST_PLUGIN_SCANNER_1_0",
+    ),
 ];
 
 /// Removes what a Linux AppImage's launcher put in the env, when `APPDIR` names its mount; returns
@@ -1014,6 +1019,76 @@ mod tests {
         assert_eq!(value("PATH"), "/usr/local/bin:/usr/bin");
         assert_eq!(value("XDG_DATA_DIRS"), "/usr/share:/usr/local/share");
         assert_eq!(value("NOT_INSIDE"), "/tmp/.mount_auracoXyZ12-other/lib");
+    }
+
+    /// What an image with GStreamer's plugins adds: its launcher's and its GStreamer hook's
+    /// variables, and the ones auracode's own `main` set for the image, all go.
+    #[cfg(unix)]
+    #[test]
+    fn an_appimages_gstreamer_context_is_stripped() {
+        let mount = "/tmp/.mount_auracoAbC34";
+        let mut vars = map(&[
+            ("APPDIR", mount),
+            (
+                "GST_PLUGIN_SYSTEM_PATH",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer:",
+            ),
+            (
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0:/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0",
+            ),
+            (
+                "GST_PLUGIN_PATH_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0",
+            ),
+            (
+                "GST_PLUGIN_SCANNER_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner",
+            ),
+            (
+                "GST_PTP_HELPER_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer1.0/gstreamer-1.0/gst-ptp-helper",
+            ),
+            ("GST_REGISTRY_REUSE_PLUGIN_SCANNER", "no"),
+            ("AURACODE_LAUNCH_SET", "GST_REGISTRY_1_0"),
+            (
+                "GST_REGISTRY_1_0",
+                "/home/me/.cache/si.auracode.desktop/gstreamer-1.0/image-x86_64.bin",
+            ),
+            ("HOME", "/home/me"),
+        ]);
+        assert_eq!(
+            strip_launch_context(&mut vars),
+            [
+                "APPDIR",
+                "AURACODE_LAUNCH_SET",
+                "GST_PLUGIN_PATH_1_0",
+                "GST_PLUGIN_SCANNER_1_0",
+                "GST_PLUGIN_SYSTEM_PATH",
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                "GST_PTP_HELPER_1_0",
+                "GST_REGISTRY_1_0",
+                "GST_REGISTRY_REUSE_PLUGIN_SCANNER",
+            ]
+        );
+        assert_eq!(names(&vars), ["HOME"]);
+
+        // An image without plugins: auracode pointed GStreamer at the system's folders itself.
+        let mut vars = map(&[
+            ("APPDIR", mount),
+            ("GST_PLUGIN_SYSTEM_PATH_1_0", "/usr/lib/gstreamer-1.0"),
+            (
+                "AURACODE_LAUNCH_SET",
+                "__NV_DISABLE_EXPLICIT_SYNC:GST_REGISTRY_1_0:GST_PLUGIN_SYSTEM_PATH_1_0",
+            ),
+            ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+            ("GST_REGISTRY_1_0", "/home/me/.cache/x/system-x86_64.bin"),
+            // The person's own, without the GStreamer hook's evidence, stays.
+            ("GST_REGISTRY_REUSE_PLUGIN_SCANNER", "no"),
+            ("HOME", "/home/me"),
+        ]);
+        strip_launch_context(&mut vars);
+        assert_eq!(names(&vars), ["GST_REGISTRY_REUSE_PLUGIN_SCANNER", "HOME"]);
     }
 
     /// Without the GTK hook's evidence a `GTK_THEME` is the person's own; without `APPDIR`, or

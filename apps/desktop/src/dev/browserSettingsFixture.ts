@@ -36,6 +36,7 @@ export function createBrowserSettingsFixture(status: Partial<BrowserStatus> = {}
       enabled: true,
       unavailable: null,
       passwords: true,
+      media_notice: null,
       ...status,
     }),
     chat: refuse,

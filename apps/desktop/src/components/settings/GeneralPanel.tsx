@@ -150,6 +150,9 @@ export function GeneralPage({
   const modelChoices = defaultModelChoices(models, general.default_model);
   const levelChoices = defaultLevelChoices(levels, general.default_effort);
   const tray = info.os === "macos" ? "menu bar" : "tray";
+  // The window cannot make a sound here (Linux without GStreamer's plugins): Sounds says why once,
+  // and its switch waits until it can.
+  const silent = info.media === false;
   return (
     <>
       <section className="settings-section" aria-labelledby="settings-new-chats">
@@ -288,12 +291,19 @@ export function GeneralPage({
               onChange={(enabled) => prefs.change({ type: "notifications", enabled })}
             />
           </Row>
-          <Row title="Sounds" detail="A short sound when a chat finishes, fails or needs you.">
+          <Row
+            title="Sounds"
+            detail={
+              silent
+                ? (info.media_notice ?? "Sounds cannot play here.")
+                : "A short sound when a chat finishes, fails or needs you."
+            }
+          >
             <Switch
               label="Sounds"
               testId="settings-sounds"
               checked={general.sounds}
-              disabled={disabled}
+              disabled={disabled || silent}
               onChange={(enabled) => {
                 // Turning them on plays one, so the choice is heard as it is made.
                 if (enabled) playNotice("finished");
