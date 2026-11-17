@@ -9,6 +9,7 @@ checks the format.
 
 ## 2026-11-17
 
+- The website is redesigned after the Grok Bot page, in light and dark. It opens with the app drawn in its new flat look, then six feature cards, every agent in its own colour, the latest changes as cards, and a full-screen menu on phones. ([#141](https://github.com/itscool2b/auracode/pull/141))
 - auracode looks flat, soft and clean, after the Grok Bot app, in every theme. Glass, blur and glow are gone: panes are solid, dark mode uses faint edges instead of shadows, and text is a little heavier where it looked thin. Dropdowns open auracode's own menus instead of the system's, Settings and setup show your agents joining auracode, and an empty Send button no longer disappears in the Claude Code theme. ([#140](https://github.com/itscool2b/auracode/pull/140))
 - Terminals open your own shell, and the keyboard stays where you type. Terminal tabs start your shell with your settings, full colour and your terminal's font, and shortcuts no longer lose your place. The Dashboard drops chats left from earlier days, and any card can be cleared or stopped. On Linux, the browser no longer stops on pages with sound or video, a page that stops can be reloaded, and menus over a page show its picture. ([#139](https://github.com/itscool2b/auracode/pull/139))
 - Behind the scenes: the old account service is switched off. With accounts gone from the app, its servers and storage were removed too. The website and remote access are not affected. ([#138](https://github.com/itscool2b/auracode/pull/138))
