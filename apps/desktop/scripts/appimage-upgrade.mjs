@@ -27,6 +27,7 @@ import {
   readFileSync,
   readlinkSync,
   readSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -157,17 +158,45 @@ export function launchEnv(env) {
   return clean;
 }
 
+/**
+ * Which kept build in `dir` a process runs, or undefined. The AppImage runtime's own executable is
+ * the build file; the app it starts runs from the image's mount (`/tmp/.mount_…`) with `APPIMAGE`
+ * naming the file. Both count: when auracode quits, the runtime can end, and its mount go, while
+ * the app is still shutting down, and a build started then would hand over to that app and exit.
+ * `environ` is the process's NUL-separated environment, read only for executables in a mount.
+ */
+export function buildOf(exe, environ, dir) {
+  const own = (file) => dirname(file) === dir && BUILD.test(basename(file));
+  const file = exe.replace(/ \(deleted\)$/u, "");
+  if (own(file)) return file;
+  if (!file.includes("/.mount_") || !environ) return undefined;
+  const entry = environ
+    .toString("utf8")
+    .split("\0")
+    .find((line) => line.startsWith("APPIMAGE="));
+  if (!entry) return undefined;
+  let image = entry.slice("APPIMAGE=".length);
+  try {
+    image = realpathSync(image);
+  } catch {}
+  return own(image) ? image : undefined;
+}
+
 /** The real system: `/proc`, `systemd-run --user`, timers. Tests pass their own. */
 export const linux = {
-  /** Every running file among the kept builds' folder: the AppImage runtime's own executable. */
+  /**
+   * The kept builds running now, one entry per process ([`buildOf`]): the AppImage runtime, and
+   * the app inside its mount with its WebKit processes.
+   */
   running(dir) {
     const files = [];
     for (const pid of readdirSync("/proc")) {
-      if (!/^\d+$/u.test(pid)) continue;
+      if (!/^\d+$/u.test(pid) || Number(pid) === process.pid) continue;
       try {
         const exe = readlinkSync(`/proc/${pid}/exe`);
-        if (dirname(exe) === dir && BUILD.test(basename(exe)))
-          files.push({ pid: Number(pid), exe });
+        const environ = exe.includes("/.mount_") ? readFileSync(`/proc/${pid}/environ`) : undefined;
+        const build = buildOf(exe, environ, dir);
+        if (build) files.push({ pid: Number(pid), exe: build });
       } catch {}
     }
     return files;

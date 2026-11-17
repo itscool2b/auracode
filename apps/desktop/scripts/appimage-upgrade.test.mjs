@@ -15,6 +15,7 @@ import { basename, dirname, join } from "node:path";
 import { afterEach, test } from "node:test";
 import {
   activate,
+  buildOf,
   cancel,
   folders,
   install,
@@ -351,4 +352,28 @@ test("old builds beyond --keep are pruned, never the previous one", async () => 
       "auracode_new.AppImage",
     ].sort(),
   );
+});
+
+test("a build runs as its runtime or as the app inside its mount", () => {
+  const dir = temp();
+  const file = appImage(join(dir, "auracode_0.1.0_amd64.AppImage"));
+  const env = (image) => Buffer.from(`HOME=/home/me\0APPIMAGE=${image}\0APPDIR=/tmp/.mount_x\0`);
+  assert.equal(buildOf(file, undefined, dir), file);
+  assert.equal(buildOf(`${file} (deleted)`, undefined, dir), file);
+  // The app, still shutting down after its runtime ended.
+  assert.equal(buildOf("/tmp/.mount_auracoAbC/usr/bin/auracode", env(file), dir), file);
+  // Through the link the desktop entry starts.
+  symlinkSync(basename(file), join(dir, "auracode.AppImage"));
+  assert.equal(
+    buildOf("/tmp/.mount_auracoAbC/usr/bin/auracode", env(join(dir, "auracode.AppImage")), dir),
+    file,
+  );
+  // Another image's app, or a mount process without APPIMAGE, is not ours.
+  assert.equal(buildOf("/tmp/.mount_other/usr/bin/x", env("/opt/Other.AppImage"), dir), undefined);
+  assert.equal(
+    buildOf("/tmp/.mount_auracoAbC/usr/bin/auracode", Buffer.from("HOME=/h\0"), dir),
+    undefined,
+  );
+  // A shell that merely inherited APPIMAGE runs from outside any mount.
+  assert.equal(buildOf("/usr/bin/bash", env(file), dir), undefined);
 });
