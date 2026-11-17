@@ -687,6 +687,11 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "INIT_CWD",
 ];
 
+/// Names, separated by `:`, of variables auracode set for itself when it started (the NVIDIA
+/// switch in the desktop's `main`). They and this variable are launch context: the app needs
+/// them, an agent's shell must not inherit them.
+pub const LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
+
 /// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]).
 const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "pnpm_", "TAURI_"];
 
@@ -697,8 +702,8 @@ const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "p
 /// set these names in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must
 /// reach the shell on Windows too.
 ///
-/// On Unix, a Linux AppImage's launch context goes too ([`strip_appimage`]); its names are
-/// reported with the rest.
+/// What auracode set for itself goes too ([`LAUNCH_SET_ENV`]), and on Unix a Linux AppImage's
+/// launch context ([`strip_appimage`]); their names are reported with the rest.
 pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
     let doomed: Vec<EnvKey> = vars
         .keys()
@@ -712,6 +717,18 @@ pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
             Some(key.as_os_str().to_string_lossy().into_owned())
         })
         .collect();
+    if let Some(set) = vars.remove(&EnvKey::from(LAUNCH_SET_ENV)) {
+        removed.push(LAUNCH_SET_ENV.to_owned());
+        for name in set
+            .to_string_lossy()
+            .split(':')
+            .filter(|name| !name.is_empty())
+        {
+            if vars.remove(&EnvKey::from(name)).is_some() {
+                removed.push(name.to_owned());
+            }
+        }
+    }
     #[cfg(unix)]
     removed.extend(strip_appimage(vars));
     removed.sort();
@@ -1030,6 +1047,27 @@ mod tests {
         }
         let mut plain = map(&[("PATH", "/usr/bin"), ("GTK_THEME", "Adwaita:dark")]);
         assert!(strip_launch_context(&mut plain).is_empty());
+    }
+
+    /// What auracode set for itself at launch goes; the same variable set by the person stays.
+    #[test]
+    fn variables_auracode_set_at_launch_are_stripped() {
+        let mut vars = map(&[
+            (
+                "AURACODE_LAUNCH_SET",
+                "__NV_DISABLE_EXPLICIT_SYNC::NOT_PRESENT",
+            ),
+            ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+            ("PATH", "/usr/bin"),
+        ]);
+        assert_eq!(
+            strip_launch_context(&mut vars),
+            ["AURACODE_LAUNCH_SET", "__NV_DISABLE_EXPLICIT_SYNC"]
+        );
+        assert_eq!(names(&vars), ["PATH"]);
+        let mut own = map(&[("__NV_DISABLE_EXPLICIT_SYNC", "1"), ("PATH", "/usr/bin")]);
+        assert!(strip_launch_context(&mut own).is_empty());
+        assert_eq!(names(&own), ["PATH", "__NV_DISABLE_EXPLICIT_SYNC"]);
     }
 
     /// On Windows too: the scrub ignores case there, launch context never does.

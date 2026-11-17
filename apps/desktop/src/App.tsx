@@ -24,6 +24,7 @@ import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
+import { paintsOnCpu } from "./lib/paint";
 import { installProfileEvents, switchProfile, takeSettingsReturn } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import type { StreamStore } from "./lib/session";
@@ -243,7 +244,10 @@ export function App({
   // The platform, for what only one draws differently (Windows' scrollbars, styles.css).
   const os = boot.status === "ready" ? boot.info.os : null;
   useEffect(() => {
-    if (os !== null) document.documentElement.dataset.os = os;
+    if (os === null) return;
+    document.documentElement.dataset.os = os;
+    // Where the page is painted on the CPU, the panes draw more cheaply (ui-tokens.css).
+    if (paintsOnCpu(os)) document.documentElement.dataset.paint = "cpu";
   }, [os]);
 
   // Once real content has painted, show the window; in smoke mode, then run the check. A ref, not

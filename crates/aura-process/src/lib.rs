@@ -43,8 +43,8 @@ use std::time::Duration;
 
 pub use control::{ControlImpl, ExitInfo, ProcessControl};
 pub use env::{
-    DenyReason, EnvKey, EnvMap, EnvResolver, EnvResolverConfig, EnvSource, ResolvedEnv,
-    ResolverStatus, ScrubReport, child_env, deny_reason, expand_env_strings, find_exe,
+    DenyReason, EnvKey, EnvMap, EnvResolver, EnvResolverConfig, EnvSource, LAUNCH_SET_ENV,
+    ResolvedEnv, ResolverStatus, ScrubReport, child_env, deny_reason, expand_env_strings, find_exe,
     find_program, merge_windows_path, node_options_has_debugger_hook, parse_env0, process_env,
     scrub, secret_values, strip_launch_context,
 };
