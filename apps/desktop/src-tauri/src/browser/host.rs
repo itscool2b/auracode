@@ -289,9 +289,12 @@ fn build(
         let _ = passwords;
         // Wayland: a widget in a holder over the app's page, placed by the holder; X11: a child
         // window, placed by its own bounds.
+        #[cfg(target_os = "linux")]
         let holder = super::gtk_layer::installed()
             .then(|| super::gtk_layer::holder((bounds.width, bounds.height)))
             .flatten();
+        #[cfg(not(target_os = "linux"))]
+        let holder: Option<()> = None;
         let inside = BrowserRect {
             x: 0.0,
             y: 0.0,
@@ -307,14 +310,14 @@ fn build(
                 if holder.is_some() { &inside } else { &bounds },
                 &profile,
             );
-            match &holder {
-                Some(holder) => {
-                    use wry::WebViewBuilderExtUnix;
-                    builder.build_gtk(holder)
-                }
-                None => builder.build_as_child(&window),
+            #[cfg(target_os = "linux")]
+            if let Some(holder) = &holder {
+                use wry::WebViewBuilderExtUnix;
+                return builder.build_gtk(holder);
             }
+            builder.build_as_child(&window)
         });
+        #[cfg(target_os = "linux")]
         if let Some(holder) = &holder {
             super::gtk_layer::adopt(holder, built.as_ref().ok());
         }
