@@ -19,15 +19,23 @@ the commands above:
 
 ```sh
 sudo apt-get install -y build-essential clang libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-  librsvg2-dev libasound2-dev libxdo-dev patchelf rpm
+  librsvg2-dev libasound2-dev libxdo-dev patchelf rpm \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-gl gstreamer1.0-alsa \
+  gstreamer1.0-pulseaudio
 ```
 
 `pnpm bundle --bundles deb,rpm,appimage` makes all three packages. A package runs on the
 distribution it was built on and newer ones, since it links that system's glibc: the release
 packages come from Ubuntu 22.04 (`.github/workflows/build.yml`). The deb and rpm require the
-AppIndicator, ALSA and OpenSSL libraries the binary uses.
+AppIndicator, ALSA and OpenSSL libraries the binary uses, and GStreamer's base and good plugins,
+which the browser's pages play sound and video with. The AppImage carries those plugins itself,
+staged from the build machine; the bundle stops and names the packages when they are missing, and
+`--without-media` builds an image without them that uses the system's
+(`docs/developing-in-aura.md`, Linux).
 
 - The window is opaque: Linux has no glass material behind windows.
+- Sound and video: where GStreamer's base and good plugins are missing, pages start with them off
+  rather than crash, and Settings > General > Sounds names the packages to install.
 - The tray is an AppIndicator. Without its library auracode runs without a tray, and closing the
   window quits. A desktop that shows no AppIndicators (Fedora's GNOME without the AppIndicator
   extension) still hides the window on close; opening auracode again brings it back, and turning

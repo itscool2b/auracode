@@ -160,6 +160,11 @@ class FixtureBrowser implements BrowserApi {
     enabled: true,
     unavailable: null,
     passwords: true,
+    // `?media=off`: Linux without GStreamer's plugins.
+    media_notice:
+      new URLSearchParams(location.search).get("media") === "off"
+        ? "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode."
+        : null,
   };
 
   constructor() {
@@ -261,6 +266,7 @@ class FixtureBrowser implements BrowserApi {
       zoom: 1,
       asleep: false,
       annotating: false,
+      media: this.#status.media_notice === null,
     };
     this.#update(chatId, (chat) => ({
       ...chat,

@@ -64,6 +64,9 @@ pub(super) fn probe(app: &tauri::AppHandle) {
 #[cfg(target_os = "linux")]
 fn probe_window(app: &tauri::AppHandle) -> Option<String> {
     let window = app.get_webview_window(MAIN_WINDOW)?;
+    // The window's own page, before its first document and before the overlay moves it: its
+    // sound and its process (`media`).
+    super::media::guard_window(&window);
     // Asked of GDK, not of the window's handle: the window is still hidden here, and a Wayland
     // window has no handle to give until it shows.
     match super::gtk_layer::display_kind().as_deref() {
@@ -256,9 +259,23 @@ fn build(
         let _ = passwords;
         let builder = configure(WebViewBuilder::new(), &weak, tab_id, chat_id, url, &bounds);
         use wry::WebViewBuilderExtDarwin;
+        let ended = weak.clone();
+        let tab = tab_id.to_owned();
         builder
             .with_data_store_identifier(*b"auracode-browser")
             .with_back_forward_navigation_gestures(true)
+            // A page whose content process ended shows Reload, as on Windows and Linux. Never
+            // from inside WebKit's own callback: the page closes on a later turn.
+            .with_on_web_content_process_terminate_handler(move || {
+                let Some(browser) = ended.upgrade() else {
+                    return;
+                };
+                let tab = tab.clone();
+                let app = browser.app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = app.run_on_main_thread(move || crashed(&browser, &tab, false));
+                });
+            })
             .build_as_child(&window)
             .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
     }
@@ -266,42 +283,87 @@ fn build(
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = passwords;
-        // Wayland: a widget in a holder over the app's page, placed by the holder; X11: a child
-        // window, placed by its own bounds.
+        // On Linux the page loads only once its sound and video are settled, so no document of
+        // it plays what this system cannot (`media`).
         #[cfg(target_os = "linux")]
-        let holder = super::gtk_layer::installed()
-            .then(|| super::gtk_layer::holder((bounds.width, bounds.height)))
-            .flatten();
-        #[cfg(not(target_os = "linux"))]
-        let holder: Option<()> = None;
-        let inside = BrowserRect {
-            x: 0.0,
-            y: 0.0,
-            ..bounds
-        };
-        let built = with_context(&profile, |context| {
-            let builder = configure(
-                WebViewBuilder::new_with_web_context(context),
-                &weak,
-                tab_id,
-                chat_id,
-                url,
-                if holder.is_some() { &inside } else { &bounds },
-            );
-            #[cfg(target_os = "linux")]
-            if let Some(holder) = &holder {
-                use wry::WebViewBuilderExtUnix;
-                return builder.build_gtk(holder);
+        let media = super::media::available()
+            && !lock(&browser.inner)
+                .tabs
+                .get(tab_id)
+                .is_some_and(|tab| tab.media_off);
+        let first = if cfg!(target_os = "linux") { None } else { url };
+        let webview = build_in_window(&profile, &window, &weak, tab_id, chat_id, first, &bounds)
+            .map_err(|error| {
+                BrowserError::Unavailable(format!("The page could not open: {error}"))
+            })?;
+        #[cfg(target_os = "linux")]
+        {
+            use wry::WebViewExtUnix;
+            let page = webview.webview();
+            if !media {
+                super::media::turn_off(&page);
             }
-            builder.build_as_child(&window)
-        });
+            let ended = weak.clone();
+            let tab = tab_id.to_owned();
+            super::media::watch(&page, move || {
+                if let Some(browser) = ended.upgrade() {
+                    crashed(&browser, &tab, false);
+                }
+            });
+            if let Some(url) = url {
+                webview.load_url(url).map_err(|error| {
+                    BrowserError::Page(format!("The page could not load: {error}"))
+                })?;
+            }
+        }
+        Ok(webview)
+    }
+}
+
+/// Builds a page in the window off Windows and macOS: on Wayland a widget in a holder over the
+/// app's page, placed by the holder; on X11 a child window, placed by its own bounds.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn build_in_window(
+    profile: &super::Profile,
+    window: &tauri::WebviewWindow,
+    weak: &Weak<Browser>,
+    tab_id: &str,
+    chat_id: &str,
+    url: Option<&str>,
+    bounds: &BrowserRect,
+) -> wry::Result<wry::WebView> {
+    #[cfg(target_os = "linux")]
+    let holder = super::gtk_layer::installed()
+        .then(|| super::gtk_layer::holder((bounds.width, bounds.height)))
+        .flatten();
+    #[cfg(not(target_os = "linux"))]
+    let holder: Option<()> = None;
+    let inside = BrowserRect {
+        x: 0.0,
+        y: 0.0,
+        ..*bounds
+    };
+    let built = with_context(profile, |context| {
+        let builder = configure(
+            WebViewBuilder::new_with_web_context(context),
+            weak,
+            tab_id,
+            chat_id,
+            url,
+            if holder.is_some() { &inside } else { bounds },
+        );
         #[cfg(target_os = "linux")]
         if let Some(holder) = &holder {
-            super::gtk_layer::adopt(holder, built.as_ref().ok());
+            use wry::WebViewBuilderExtUnix;
+            return builder.build_gtk(holder);
         }
-        built
-            .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
+        builder.build_as_child(window)
+    });
+    #[cfg(target_os = "linux")]
+    if let Some(holder) = &holder {
+        super::gtk_layer::adopt(holder, built.as_ref().ok());
     }
+    built
 }
 
 /// Moves a page to `at`.
@@ -941,18 +1003,9 @@ pub(super) fn clear(browser: &Arc<Browser>, data: ClearData) -> Result<(), Brows
                 .with_data_store_identifier(*b"auracode-browser")
                 .build_as_child(&window)
         };
+        // On Wayland a hidden widget in the overlay: Wayland has no child windows.
         #[cfg(not(any(windows, target_os = "macos")))]
-        let built = with_context(&profile, |context| {
-            configure(
-                WebViewBuilder::new_with_web_context(context),
-                &weak,
-                &id,
-                "",
-                None,
-                &bounds,
-            )
-            .build_as_child(&window)
-        });
+        let built = build_in_window(&profile, &window, &weak, &id, "", None, &bounds);
         Some(built.map_err(|error| BrowserError::Unavailable(error.to_string()))?)
     } else {
         None
@@ -984,8 +1037,8 @@ fn clear_with(webview: &wry::WebView, data: ClearData) -> Result<(), BrowserErro
     }
 }
 
-/// A screenshot of a tab's page, base64, where the engine can take one (Windows); `None`
-/// elsewhere.
+/// A screenshot of a tab's page, base64 (JPEG for the view, PNG otherwise), where the engine can
+/// take one (Windows, Linux); `None` elsewhere.
 pub(super) async fn screenshot(
     browser: &Arc<Browser>,
     tab_id: &str,
@@ -997,11 +1050,30 @@ pub(super) async fn screenshot(
             .await
             .map(Some)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        super::snapshot::screenshot(browser, tab_id, shot)
+            .await
+            .map(Some)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (browser, tab_id, shot);
         Ok(None)
     }
+}
+
+/// Asks the engine for a picture of a tab's page (Linux); `sender` gets it.
+#[cfg(target_os = "linux")]
+pub(super) fn snapshot(
+    tab_id: &str,
+    region: super::snapshot::Region,
+    sender: tokio::sync::oneshot::Sender<Result<super::snapshot::Picture, BrowserError>>,
+) -> Result<(), BrowserError> {
+    with_view(tab_id, |view| {
+        use wry::WebViewExtUnix;
+        super::snapshot::take(&view.webview.webview(), region, sender);
+    })
 }
 
 /// Runs a DevTools protocol method in a tab's page (Windows).
@@ -1024,13 +1096,16 @@ pub(super) fn close_requested(browser: &Arc<Browser>, tab_id: &str) {
 }
 
 /// A page's process ended. Its page closes but keeps its place over the panel, so Reload builds
-/// it again where it was; when the whole engine ended (`whole`), every page goes and the next one
-/// starts a new engine.
-#[cfg(windows)]
+/// it again where it was; when the whole engine ended (`whole`, Windows), every page goes and the
+/// next one starts a new engine. On Linux a tab whose page ends again within
+/// [`super::media::CRASH_WINDOW`] loads with sound and video off from then on.
 pub(super) fn crashed(browser: &Arc<Browser>, tab_id: &str, whole: bool) {
     let gone: Vec<(String, View)> = HOST.with_borrow_mut(|host| {
         if whole {
-            host.environment = None;
+            #[cfg(windows)]
+            {
+                host.environment = None;
+            }
             host.views.drain().collect()
         } else {
             host.views
@@ -1045,6 +1120,7 @@ pub(super) fn crashed(browser: &Arc<Browser>, tab_id: &str, whole: bool) {
     let ids: Vec<String> = gone.iter().map(|(id, _)| id.clone()).collect();
     drop(gone);
     for id in ids {
+        #[cfg(windows)]
         super::webview2::forget(&id);
         browser.page_state(&id, |tab| {
             tab.live = false;
@@ -1052,6 +1128,17 @@ pub(super) fn crashed(browser: &Arc<Browser>, tab_id: &str, whole: bool) {
             tab.annotating = false;
             tab.crashed = tab.url.is_some();
             tab.downloads.clear();
+            #[cfg(target_os = "linux")]
+            {
+                let now = std::time::Instant::now();
+                if tab
+                    .ended_at
+                    .is_some_and(|at| now.duration_since(at) < super::media::CRASH_WINDOW)
+                {
+                    tab.media_off = true;
+                }
+                tab.ended_at = Some(now);
+            }
         });
     }
 }

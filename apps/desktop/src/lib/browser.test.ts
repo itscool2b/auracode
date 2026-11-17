@@ -46,6 +46,7 @@ const tab = (change: Partial<BrowserTab>): BrowserTab => ({
   zoom: 1,
   asleep: false,
   annotating: false,
+  media: true,
   ...change,
 });
 

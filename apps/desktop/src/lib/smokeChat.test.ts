@@ -82,6 +82,8 @@ function info(fatal: string | null = null): AppInfo {
     notices: [],
     recovery_notice: null,
     fatal,
+    media: true,
+    media_notice: null,
   };
 }
 

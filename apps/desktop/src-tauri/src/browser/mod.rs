@@ -17,6 +17,10 @@ pub mod commands;
 mod gtk_layer;
 mod history;
 mod host;
+#[cfg(target_os = "linux")]
+pub mod media;
+#[cfg(target_os = "linux")]
+mod snapshot;
 #[cfg(windows)]
 mod webview2;
 
@@ -70,6 +74,9 @@ pub struct BrowserTab {
     pub asleep: bool,
     /// Annotate's picker runs in its page.
     pub annotating: bool,
+    /// Its page may play sound and video. False on Linux where GStreamer's plugins are missing,
+    /// and for a tab whose page process ended twice in a short time (it loads with them off).
+    pub media: bool,
 }
 
 /// A chat's tabs, in their order, and the one in front.
@@ -89,6 +96,9 @@ pub struct BrowserStatus {
     pub unavailable: Option<String>,
     /// The engine offers to save sign-ins (Windows).
     pub passwords: bool,
+    /// Why pages play no sound or video on this system, when they cannot (Linux without
+    /// GStreamer's plugins), naming what to install.
+    pub media_notice: Option<String>,
 }
 
 /// Where the panel's page area is, in the window's CSS pixels.
@@ -379,6 +389,13 @@ struct Tab {
     download_only: bool,
     /// Downloads it started that have not ended: each one's address and the file it saves to.
     downloads: Vec<(String, PathBuf)>,
+    /// When its page's process last ended, to tell a page that keeps ending from a one-off.
+    #[cfg(target_os = "linux")]
+    ended_at: Option<std::time::Instant>,
+    /// Its page loads with sound and video off: its process ended twice within
+    /// [`media::CRASH_WINDOW`].
+    #[cfg(target_os = "linux")]
+    media_off: bool,
 }
 
 impl Tab {
@@ -402,6 +419,22 @@ impl Tab {
             landed: false,
             download_only: false,
             downloads: Vec::new(),
+            #[cfg(target_os = "linux")]
+            ended_at: None,
+            #[cfg(target_os = "linux")]
+            media_off: false,
+        }
+    }
+
+    /// Whether its page may play sound and video (see [`BrowserTab::media`]).
+    fn media(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            !self.media_off && media::available()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            true
         }
     }
 
@@ -418,6 +451,7 @@ impl Tab {
             zoom: self.zoom,
             asleep: !self.live && self.url.is_some(),
             annotating: self.annotating,
+            media: self.media(),
         }
     }
 }
@@ -529,6 +563,10 @@ impl Browser {
             enabled: self.enabled(),
             unavailable: host::unavailable(),
             passwords: cfg!(windows) && self.passwords.load(Ordering::Acquire),
+            #[cfg(target_os = "linux")]
+            media_notice: media::notice(),
+            #[cfg(not(target_os = "linux"))]
+            media_notice: None,
         }
     }
 
@@ -1655,6 +1693,19 @@ pub fn apply_preferences(app: &AppHandle, general: &aura_core::onboarding::Gener
     {
         browser.set_enabled(general.browser);
         browser.set_passwords(general.browser_passwords);
+    }
+}
+
+/// Whether the window's own page may play sound (Settings' Sounds), and why not. Linux decides at
+/// startup ([`media`]); Windows and macOS always can.
+pub fn window_media() -> (bool, Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        media::window()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        (true, None)
     }
 }
 
