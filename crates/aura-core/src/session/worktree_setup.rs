@@ -18,7 +18,7 @@ impl SessionManager {
         token: &str,
     ) -> Result<String, SessionError> {
         let plan = self.prepare_worktree_setup_terminal(chat_id, token).await?;
-        let ticket = match terminals.reserve(owner) {
+        let ticket = match terminals.reserve_setup(owner) {
             Ok(ticket) => ticket,
             Err(error) => {
                 if let Some(completion) = plan.completion {

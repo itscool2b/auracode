@@ -675,7 +675,10 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         .await
         .unwrap();
     let terminals = crate::terminal::Terminals::default();
-    let busy = terminals.reserve("window").unwrap().pending();
+    // Every setup terminal the app allows is taken (a sign-in no longer counts against them).
+    let busy: Vec<String> = (0..crate::terminal::MAX_SETUP_TERMINALS)
+        .map(|_| terminals.reserve_setup("window").unwrap().pending())
+        .collect();
     assert!(
         rig.manager
             .reserve_worktree_setup_terminal(&terminals, "window", chat, &token)
@@ -699,7 +702,9 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         .await
         .unwrap();
     assert!(held.snapshot.queue.iter().all(|row| row.held));
-    terminals.close("window", &busy).unwrap();
+    for id in &busy {
+        terminals.close("window", id).unwrap();
+    }
     let retry = rig
         .manager
         .worktree_setup_command_preview(chat, &created.worktree.id)
@@ -819,6 +824,71 @@ async fn setup_terminal_reservation_and_pending_claim_are_generation_owned_and_h
         held.snapshot.queue.iter().all(|row| row.held),
         "successfully retrying does not auto-send failed messages"
     );
+}
+
+#[tokio::test]
+async fn two_projects_setup_terminals_run_at_once() {
+    let mut rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    enable_worktree_fixture(&mut rig).await;
+    // A second repository, a project of its own.
+    let second = rig._dir.path().join("second project");
+    std::fs::create_dir(&second).unwrap();
+    for args in [
+        vec!["init", "-b", "main"],
+        vec![
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@localhost",
+            "-c",
+            "commit.gpgSign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    ] {
+        super::project_tools::fixture_git(&second, &args).await;
+    }
+    let first_project = project(&rig, &rig.folder).await;
+    let second_project = project(&rig, &second).await;
+    let terminals = crate::terminal::Terminals::default();
+    let mut opened = Vec::new();
+    for project in [&first_project, &second_project] {
+        setup_source(&rig, project).await;
+        let reviewed = plan(&rig, input(project)).await;
+        let created = rig
+            .manager
+            .worktree_chat_apply(&reviewed.token)
+            .await
+            .expect("worktree chat");
+        let token = created.setup.unwrap().command_token.unwrap();
+        // The same window starts the second project's setup while the first one's is open.
+        let id = rig
+            .manager
+            .reserve_worktree_setup_terminal(&terminals, "window", &created.chat.chat.id, &token)
+            .await
+            .expect("each project's setup gets its own terminal");
+        opened.push((created.chat.chat.id, token, id));
+    }
+    assert_ne!(opened[0].2, opened[1].2);
+    for (chat, token, id) in &opened {
+        let (ticket, launch) = terminals
+            .claim_setup("window", id, chat, token)
+            .expect("claim");
+        drop(launch);
+        drop(ticket);
+        assert_eq!(
+            rig.store
+                .read_setup_attempt(chat)
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            aura_protocol::worktree_setup::WorktreeSetupState::Running,
+            "neither attempt was marked failed"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1151,9 +1221,12 @@ async fn a_slow_worktree_creation_does_not_delay_another_folder() {
         .await
         .expect("retained worktrees answer at once")
         .expect("worktrees");
-    let review = tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.chat.id))
-        .await
-        .expect("project tools answer at once");
+    let review = tokio::time::timeout(
+        quick,
+        rig.manager.project_terminal_review(&elsewhere.chat.id),
+    )
+    .await
+    .expect("a new terminal tab's folder check answers at once");
     if let Ok(review) = review
         && let Some(shell) = review.shells.first()
     {
@@ -1161,7 +1234,7 @@ async fn a_slow_worktree_creation_does_not_delay_another_folder() {
             tokio::time::timeout(
                 quick,
                 rig.manager
-                    .prepare_project_terminal(&elsewhere.chat.id, &review.token, shell.id),
+                    .open_project_terminal(&elsewhere.chat.id, Some(shell.id)),
             )
             .await
             .expect("a terminal in another project opens at once"),

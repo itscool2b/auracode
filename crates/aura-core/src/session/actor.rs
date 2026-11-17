@@ -1266,14 +1266,32 @@ impl ChatActor {
                     aura_protocol::worktree_setup::WorktreeSetupState::Failed
                         | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
                 );
+                let failure = failed.then(|| {
+                    attempt.detail.clone().unwrap_or_else(|| {
+                        "Setup did not finish, so the terminal did not open. Retry setup.".into()
+                    })
+                });
                 self.worktree_setup = Some(attempt);
-                if failed {
+                if let Some(detail) = failure {
                     self.hold_queue(HoldCause::Error);
+                    // A terminal waiting for setup gets its answer.
+                    self.refuse_terminal(SessionError::AgentUnavailable(detail));
                 }
                 self.info_dirty = true;
                 self.schedule_flush();
                 if succeeded {
-                    let _ = self.start(false, false);
+                    // A terminal waiting for setup opens now (the start becomes its launch). One
+                    // closed while it waited is forgotten, and the chat starts in Chat as before.
+                    if self
+                        .terminal_request
+                        .as_ref()
+                        .is_some_and(|waiting| waiting.is_closed())
+                    {
+                        self.terminal_request = None;
+                    }
+                    if let Err(error) = self.start(false, false) {
+                        self.refuse_terminal(error);
+                    }
                 }
             }
             ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
@@ -3415,6 +3433,14 @@ impl ChatActor {
         let refuse = |reply: oneshot::Sender<Result<TerminalOpened, SessionError>>, why: &str| {
             drop(reply.send(Err(SessionError::OptionInvalid(why.into()))));
         };
+        // A request whose terminal closed while it waited (for setup, say) no longer counts.
+        if self
+            .terminal_request
+            .as_ref()
+            .is_some_and(|waiting| waiting.is_closed())
+        {
+            self.terminal_request = None;
+        }
         if self.terminal.is_some() || self.terminal_request.is_some() {
             return refuse(reply, "This chat is already open in the terminal.");
         }
@@ -3439,6 +3465,27 @@ impl ChatActor {
                 reply,
                 "Wait for the turn to finish, or stop it, before opening the terminal.",
             );
+        }
+        // A new worktree's setup command runs first: the terminal waits for it and opens once it
+        // succeeds, instead of failing (a failed setup answers it with its reason).
+        if let Some(attempt) = self
+            .worktree_setup
+            .as_ref()
+            .filter(|attempt| attempt.blocks_agent())
+        {
+            if matches!(
+                attempt.state,
+                aura_protocol::worktree_setup::WorktreeSetupState::Failed
+                    | aura_protocol::worktree_setup::WorktreeSetupState::Interrupted
+            ) {
+                let detail = attempt.detail.clone().unwrap_or_else(|| {
+                    "Setup did not finish. Retry setup before opening the terminal.".into()
+                });
+                drop(reply.send(Err(SessionError::AgentUnavailable(detail))));
+                return;
+            }
+            self.terminal_request = Some(reply);
+            return;
         }
         // A new chat starts its agent as it is made. A start still preparing becomes the
         // terminal's (on_prepared); one whose agent is already starting is stopped first, and the

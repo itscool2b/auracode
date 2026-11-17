@@ -27,6 +27,8 @@ export interface PanelTab {
   /** The folder Rust reviewed: the chat's own folder, so a worktree chat opens in its worktree. */
   readonly folder: string | null;
   readonly status: TabStatus;
+  /** Its shell was asked to start (the tab was shown): only then does it hold a Rust slot. */
+  readonly started?: boolean;
   /** A Run tab's address: the worktree's first port on this machine. */
   readonly url?: string;
 }
@@ -94,6 +96,15 @@ export function holdsShell(status: TabStatus): boolean {
   return status.state === "reviewing" || status.state === "starting" || status.state === "running";
 }
 
+/**
+ * Whether a tab counts toward the app's limit: a folder check on its way, or a shell that was
+ * asked to start. A tab never shown (one a resume made for a chat not on screen) starts nothing
+ * until it is, so it holds no slot.
+ */
+export function countsTowardLimit(tab: PanelTab): boolean {
+  return tab.status.state === "reviewing" || (tab.started === true && holdsShell(tab.status));
+}
+
 /** "PowerShell", then "PowerShell 2" and so on: the lowest number no open tab of this chat uses. */
 export function nextTitle(label: string, taken: readonly string[]): string {
   if (!taken.includes(label)) return label;
@@ -105,9 +116,10 @@ export function nextTitle(label: string, taken: readonly string[]): string {
 
 /**
  * The docked terminal panels, one per chat, owned by the chat screen so a chat's shells keep
- * running while another chat is open. Every tab is an explicit user action: a new tab asks Rust to
- * review the chat's folder and shell, then the reviewed shell starts in that folder. Nothing runs
- * a command; closing a tab, reloading or quitting stops its shell.
+ * running while another chat is open. Every tab is an explicit user action: a new tab asks Rust for
+ * the chat's folder and shells, and the chosen shell opens in that folder when the tab first shows
+ * (Rust checks both again then). Nothing runs a command; closing a tab, reloading or quitting
+ * stops its shell.
  */
 export class TerminalPanels {
   #chats = new Map<string, ChatPanel>();
@@ -162,7 +174,7 @@ export class TerminalPanels {
         transport,
         label: "Worktree setup terminal",
         onStatus: (status) => {
-          if (this.#tabs.has(id)) this.#setTab(id, { status });
+          if (this.#tabs.has(id)) this.#setTab(id, { status, started: true });
         },
       }),
     );
@@ -189,8 +201,7 @@ export class TerminalPanels {
       this.#setPanel(chatId, { ...panel, active: running, open: true, focus: panel.focus + 1 });
       return;
     }
-    const open = [...this.#tabs.values()].filter((tab) => holdsShell(tab.status)).length;
-    if (open >= this.limit) {
+    if (this.#openShells() >= this.limit) {
       this.#setPanel(chatId, {
         ...panel,
         open: true,
@@ -216,7 +227,7 @@ export class TerminalPanels {
         transport,
         label: "Run terminal",
         onStatus: (status) => {
-          if (this.#tabs.has(id)) this.#setTab(id, { status });
+          if (this.#tabs.has(id)) this.#setTab(id, { status, started: true });
         },
       }),
     );
@@ -317,8 +328,7 @@ export class TerminalPanels {
    */
   async newTab(chatId: string, shell?: ProjectShell): Promise<string | null> {
     const panel = this.panel(chatId);
-    const open = [...this.#tabs.values()].filter((tab) => holdsShell(tab.status)).length;
-    if (open >= this.limit) {
+    if (this.#openShells() >= this.limit) {
       this.#setPanel(chatId, {
         ...panel,
         open: true,
@@ -347,7 +357,7 @@ export class TerminalPanels {
       focus: panel.focus + 1,
     });
     try {
-      const review = await this.api.review(chatId);
+      const review = await this.api.terminalReview(chatId);
       const tab = this.#tabs.get(id);
       if (!tab) return null;
       const choice = review.shells.find((item) => item.id === shell) ?? review.shells[0];
@@ -363,13 +373,15 @@ export class TerminalPanels {
         .tabs.filter((other) => other !== id)
         .map((other) => this.#tabs.get(other)?.title ?? "");
       const title = nextTitle(choice.label, taken);
+      // The shell opens in one step when the tab first shows (Rust checks the folder and the
+      // shell again then), so a tab shown long after this review still opens.
       this.#runtimes.set(
         id,
         this.factory({
-          transport: this.api.terminal(chatId, review.token, choice.id),
+          transport: this.api.terminal(chatId, choice.id),
           label: `${title} terminal`,
           onStatus: (status) => {
-            if (this.#tabs.has(id)) this.#setTab(id, { status });
+            if (this.#tabs.has(id)) this.#setTab(id, { status, started: true });
           },
         }),
       );
@@ -480,6 +492,11 @@ export class TerminalPanels {
       chatId,
       tabs.length > 0 ? { tabs, open: panel.open, savedAt: Date.now() } : null,
     );
+  }
+
+  /** Shells holding a Rust slot, or about to: what the app's limit counts. */
+  #openShells(): number {
+    return [...this.#tabs.values()].filter(countsTowardLimit).length;
   }
 
   #setTab(tabId: string, change: Partial<PanelTab>): void {

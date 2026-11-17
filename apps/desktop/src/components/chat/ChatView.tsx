@@ -1065,6 +1065,7 @@ export function ChatView({
                 <TerminalChat
                   chatId={chatId}
                   agentName={agent?.name ?? state.chat.agent_name}
+                  setupPending={setup?.state === "awaiting" || setup?.state === "running"}
                   onChat={() => {
                     chatInterfaces.set(chatId, "chat");
                     void terminalChats.close(chatId);

@@ -346,10 +346,21 @@ export const commands = {
 	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
 	/**
 	 *  Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
-	 *  the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+	 *  the app holds at most eight. The shell itself starts only through `project_terminal_open`.
 	 */
 	projectTerminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_reserve")),
-	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
+	/**
+	 *  The chat's folder and the shells this device offers, for a new terminal tab. It holds nothing,
+	 *  so a tab never carries anything that expires; `project_terminal_open` checks both again.
+	 */
+	projectTerminalReview: (chatId: string) => typedError<ProjectTerminalReview, AppError>(__TAURI_INVOKE("project_terminal_review", { chatId })),
+	/**
+	 *  Opens a project shell in a reserved terminal (`project_terminal_reserve`) in one step: Rust
+	 *  checks the chat's folder and the shell, prepares it and starts it, with no review token in
+	 *  between, so a tab first shown long after it was made still opens. `shell: null` takes the
+	 *  first shell this device offers.
+	 */
+	projectTerminalOpen: (chatId: string, shell: ProjectShell | null, terminalId: string, rows: number, cols: number) => typedError<ProjectTerminalOpened, AppError>(__TAURI_INVOKE("project_terminal_open", { chatId, shell, terminalId, rows, cols })),
 	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
 	/**
 	 *  The editors installed in their standard locations, for Settings' Editor, and the one a chat's
@@ -2777,6 +2788,21 @@ export type ProjectSummary = {
 	folders: ProjectFolder[],
 	created_at: number,
 	updated_at: number,
+};
+
+/**  A project shell opened in one step: its terminal, and the shell it runs. */
+export type ProjectTerminalOpened = {
+	terminal_id: string,
+	shell: ProjectShellChoice,
+};
+
+/**
+ *  What a new terminal tab shows before its shell starts: the chat's folder and the shells this
+ *  device offers. It holds nothing: the folder and the shell are checked again as the shell opens.
+ */
+export type ProjectTerminalReview = {
+	folder: string,
+	shells: ProjectShellChoice[],
 };
 
 export type ProjectToolsReview = {

@@ -36,20 +36,22 @@ const transport: TerminalTransport = {
     release?.();
   },
 };
+const fixtureShells = params.has("missing")
+  ? []
+  : [
+      {
+        id: "power_shell" as const,
+        label: "PowerShell",
+        program: "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+        args: ["-NoLogo", "-NoProfile"],
+      },
+    ];
 const api: ProjectToolsApi = {
+  terminalReview: async () => ({ folder: "C:/projects/orbit", shells: fixtureShells }),
   review: async () => ({
     token: `review-${++sequence}`,
     folder: "C:/projects/orbit",
-    shells: params.has("missing")
-      ? []
-      : [
-          {
-            id: "power_shell",
-            label: "PowerShell",
-            program: "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
-            args: ["-NoLogo", "-NoProfile"],
-          },
-        ],
+    shells: fixtureShells,
     editors: params.has("missing")
       ? []
       : ["cursor", "vs_code", "zed", "intellij_idea", "webstorm", "rustrover"],

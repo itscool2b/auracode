@@ -4,7 +4,7 @@ use super::*;
 use aura_process::{LaunchSpec, ProcessCwd, ResolvedEnv, SpawnSpec};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
 use aura_protocol::project_tools::{
-    ProjectEditor, ProjectShell, ProjectShellChoice, ProjectToolsReview,
+    ProjectEditor, ProjectShell, ProjectShellChoice, ProjectTerminalReview, ProjectToolsReview,
 };
 use same_file::Handle;
 use std::{ffi::OsString, time::Instant};
@@ -14,7 +14,6 @@ pub(super) struct PreparedTools {
     folder: PathBuf,
     identity: Handle,
     env: Arc<ResolvedEnv>,
-    shells: Vec<Shell>,
     editors: Vec<PreparedEditor>,
     expires: Instant,
 }
@@ -141,6 +140,21 @@ pub(super) fn display_path(path: &std::path::Path) -> Result<String, SessionErro
         .map(|tail| format!(r"\\{tail}"))
         .unwrap_or_else(|| value.strip_prefix(r"\\?\").unwrap_or(value).to_owned());
     Ok(value.to_owned())
+}
+
+/// The chat's folder for project tools: canonical, a folder, and on this device.
+fn project_folder(chat: &crate::chatstore::ChatRecord) -> Result<PathBuf, SessionError> {
+    if chat.agent_host != aura_protocol::agents::AgentHost::Native {
+        return Err(invalid("Project tools open only for chats on this device."));
+    }
+    let folder = chat
+        .folder
+        .canonicalize()
+        .map_err(|_| invalid("Locate this chat's folder before opening project tools."))?;
+    if !folder.is_dir() {
+        return Err(invalid("This chat's folder is unavailable."));
+    }
+    Ok(folder)
 }
 
 /// Whether two spellings name one folder (their canonical forms are equal).
@@ -289,9 +303,7 @@ impl SessionManager {
             .map_err(|_| invalid("The project folder could not be inspected."))?;
         let folder_key = live::normalize_path(folder.to_path_buf());
         if !self.shared().live.begin_folder_use(folder_key.clone()) {
-            return Err(invalid(
-                "A folder operation or application transition is in progress. Finish it before starting Run.",
-            ));
+            return Err(self.folder_use_refused("start Run"));
         }
         Ok(Box::new(FolderUse {
             shared: self.shared().clone(),
@@ -300,21 +312,48 @@ impl SessionManager {
         }))
     }
 
+    /// Why a terminal could not hold its folder, named: a change rewriting the folder, or the app
+    /// pausing new work for an update, a profile switch or a folder move.
+    fn folder_use_refused(&self, then: &str) -> SessionError {
+        invalid(if self.shared().live.quiescing_now() {
+            format!(
+                "auracode is pausing new work to install an update, switch profile or move a chat's folder. Once that finishes, {then} again."
+            )
+        } else {
+            format!(
+                "This folder is being changed (a worktree removed, moved or restored, or changes reverted). Once that finishes, {then} again."
+            )
+        })
+    }
+
+    /// The chat's folder as project tools use it: canonical, a folder, on this device.
+    async fn tools_folder(&self, chat_id: &str) -> Result<PathBuf, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let chat = self.chat_record(chat_id).await?;
+        project_folder(&chat)
+    }
+
+    /// The chat's folder and the shells this device offers, for a new terminal tab. Nothing is
+    /// held: the shell opens through [`Self::open_project_terminal`], which checks both again.
+    pub async fn project_terminal_review(
+        &self,
+        chat_id: &str,
+    ) -> Result<ProjectTerminalReview, SessionError> {
+        let folder = self.tools_folder(chat_id).await?;
+        let env = self.deps().env.get().await;
+        Ok(ProjectTerminalReview {
+            folder: display_path(&folder)?,
+            shells: shell(&env).into_iter().map(|item| item.choice).collect(),
+        })
+    }
+
     pub async fn project_tools_review(
         &self,
         chat_id: &str,
     ) -> Result<ProjectToolsReview, SessionError> {
-        if self.shared().is_shutting_down() {
-            return Err(SessionError::ShuttingDown);
-        }
-        let chat = self.git_chat(chat_id).await?;
-        let folder = chat
-            .folder
-            .canonicalize()
-            .map_err(|_| invalid("Locate this chat's folder before opening project tools."))?;
-        if !folder.is_dir() {
-            return Err(invalid("This chat's folder is unavailable."));
-        }
+        let folder = self.tools_folder(chat_id).await?;
         let identity = Handle::from_path(&folder)
             .map_err(|_| invalid("The project folder could not be inspected."))?;
         let env = self.deps().env.get().await;
@@ -342,7 +381,6 @@ impl SessionManager {
                 folder,
                 identity,
                 env,
-                shells,
                 editors,
                 expires: Instant::now() + Duration::from_secs(600),
             },
@@ -376,39 +414,62 @@ impl SessionManager {
         Ok(prepared)
     }
 
-    pub async fn prepare_project_terminal(
+    /// Opens a project shell in the chat's folder in one step: the folder and the shell are
+    /// checked as a review would check them, then the shell is prepared at once. Nothing is held
+    /// between the two, so a tab first shown long after it was made still opens. `None` takes the
+    /// first shell this device offers.
+    pub async fn open_project_terminal(
         &self,
         chat_id: &str,
-        token: &str,
-        shell: ProjectShell,
+        shell: Option<ProjectShell>,
+    ) -> Result<(ProjectTerminalPlan, ProjectShellChoice), SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        // Behind changes to this chat's folder only, never another folder's.
+        let (_organization, chat) = self.hold_chat_folder(chat_id, &[]).await?;
+        let folder = project_folder(&chat)?;
+        let identity = Handle::from_path(&folder)
+            .map_err(|_| invalid("The project folder could not be inspected."))?;
+        let env = self.deps().env.get().await;
+        let shells = super::project_tools::shell(&env);
+        let chosen = match shell {
+            Some(wanted) => shells.into_iter().find(|item| item.choice.id == wanted),
+            None => shells.into_iter().next(),
+        }
+        .ok_or_else(|| invalid("No supported native shell was found."))?;
+        let choice = chosen.choice.clone();
+        let plan = self
+            .terminal_plan(chat_id, folder, identity, env, chosen)
+            .await?;
+        Ok((plan, choice))
+    }
+
+    /// A shell's launch in `folder`, holding the folder as every project terminal does.
+    async fn terminal_plan(
+        &self,
+        chat_id: &str,
+        folder: PathBuf,
+        identity: Handle,
+        env: Arc<ResolvedEnv>,
+        shell: Shell,
     ) -> Result<ProjectTerminalPlan, SessionError> {
-        // Behind changes to this chat's folder only; consuming the review checks the folder again.
-        let (_organization, _) = self.hold_chat_folder(chat_id, &[]).await?;
-        let prepared = self.consume_project_tools(chat_id, token).await?;
-        let shell = prepared
-            .shells
-            .into_iter()
-            .find(|item| item.choice.id == shell)
-            .ok_or_else(|| invalid("This shell was not available in the review."))?;
+        // A worktree chat's shell knows the worktree's first port, as its setup and Run do.
+        let set_env = self.worktree_port_env(chat_id, &folder, false).await;
+        // The shell found is the shell started, though the port lookup waited.
         if Handle::from_path(&shell.program).ok().as_ref() != Some(&shell.identity) {
             return Err(invalid(
-                "The shell changed after review. Review project tools again.",
+                "The shell changed while the terminal opened. Open the terminal again.",
             ));
         }
-        // A worktree chat's shell knows the worktree's first port, as its setup and Run do.
-        let set_env = self
-            .worktree_port_env(chat_id, &prepared.folder, false)
-            .await;
-        let folder_key = live::normalize_path(prepared.folder.clone());
+        let folder_key = live::normalize_path(folder.clone());
         if !self.shared().live.begin_folder_use(folder_key.clone()) {
-            return Err(invalid(
-                "A folder operation or application transition is in progress. Finish it before opening the terminal.",
-            ));
+            return Err(self.folder_use_refused("open the terminal"));
         }
         let guard = FolderUse {
             shared: self.shared().clone(),
             folder: folder_key,
-            _identity: prepared.identity,
+            _identity: identity,
         };
         // The review holds canonical paths, which Windows spells verbatim (`\\?\C:\...`). Shells
         // are started with the plain spelling: Windows PowerShell cannot start from a verbatim
@@ -419,13 +480,13 @@ impl SessionManager {
                 label: format!("Project {}", shell.choice.label),
                 program: crate::fsutil::plain_path(&shell.program),
                 args: shell.choice.args.into_iter().map(Into::into).collect(),
-                cwd: ProcessCwd::Fixed(crate::fsutil::plain_path(&prepared.folder)),
+                cwd: ProcessCwd::Fixed(crate::fsutil::plain_path(&folder)),
                 set_env,
                 daemons: Vec::new(),
                 startup_timeout: Duration::from_secs(15),
             },
-            folder: prepared.folder,
-            env: prepared.env,
+            folder,
+            env,
             max_line_bytes: aura_process::MAX_LINE_BYTES,
         };
         Ok(ProjectTerminalPlan {

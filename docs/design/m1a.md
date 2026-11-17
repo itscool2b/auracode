@@ -2391,6 +2391,15 @@ interleave one transcript): checked for the resume id before spawning and again 
 `Ready`, for every driver, the mock included; the second fails with `Internal("this session is already open in
 another chat")`. Two chats in one folder are allowed (the busy-folder warning is M2b).
 
+Terminals count in pools of their own, so one kind never refuses another: project shells (the docked panel, Run)
+several per window and 8 in the app; terminal chats several per window and 8 in the app; worktree setup commands
+several per window and 4 in the app, so two projects' new worktrees set up at once; sign-in and installation one per
+window and 4 in the app. A project shell opens in one step (`project_terminal_open`: the chat's folder and the shell
+are checked and the shell prepared together), so a panel tab carries nothing that expires and one first shown long
+after it was made still opens; the panel counts a tab toward its limit only once its shell was asked to start. A
+terminal chat in a new worktree waits for the worktree's setup to succeed, then opens; a failed setup answers it with
+the setup's reason.
+
 #### 6.5.7 Flush and persistence
 
 Flush every 16 ms while the chat has a subscriber, every 100 ms otherwise, and at once after `TurnStarted`,

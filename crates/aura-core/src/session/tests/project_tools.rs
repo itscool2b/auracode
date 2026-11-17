@@ -33,7 +33,7 @@ impl Drop for Admission {
 }
 
 #[tokio::test]
-async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
+async fn a_project_terminal_opens_in_one_step_and_holds_its_folder_beside_live_agents() {
     let (driver, _) = ScriptedDriver::new(vec![
         ready_step("native-terminal"),
         Step::Expect(CommandMatch::Shutdown),
@@ -51,14 +51,18 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
     });
     let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
     status(&rig, &chat.id, SessionStatus::Ready).await;
-    let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    let review = rig.manager.project_terminal_review(&chat.id).await.unwrap();
     assert!(!review.shells.is_empty());
     let shell = review.shells[0].id;
-    let plan = rig
+    let (plan, opened) = rig
         .manager
-        .prepare_project_terminal(&chat.id, &review.token, shell)
+        .open_project_terminal(&chat.id, Some(shell))
         .await
         .unwrap();
+    assert_eq!(
+        (opened.id, &opened.program),
+        (shell, &review.shells[0].program)
+    );
     assert_eq!(plan.spec.folder, rig.folder.canonicalize().unwrap());
     // Shells start from plain paths: Windows PowerShell fails to start from a verbatim
     // (`\\?\C:\...`) program path, and cmd.exe falls back to the Windows folder from a verbatim
@@ -76,36 +80,48 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
     assert!(rig.manager.shared().live.contains(&chat.id));
     assert_eq!(rig.manager.project_terminal_count(), 1);
     assert_eq!(rig.manager.shared().live.owned_work_count(), 0);
-    assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &review.token, shell)
-            .await
-            .is_err()
-    );
+    // The review held nothing: another shell opens without one, and no choice takes the first.
+    let (second, first) = rig
+        .manager
+        .open_project_terminal(&chat.id, None)
+        .await
+        .unwrap();
+    assert_eq!(first.id, shell);
+    assert_eq!(rig.manager.project_terminal_count(), 2);
+    drop(second);
     rig.manager.stop(&chat.id).await.unwrap();
     eventually("retired", || !rig.manager.shared().live.contains(&chat.id)).await;
     let key = live::normalize_path(rig.folder.clone());
     assert!(!rig.manager.shared().live.reserve_folder(&key));
     drop(plan);
     assert!(rig.manager.shared().live.reserve_folder(&key));
-    let second = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    // While a change rewrites the folder, a terminal is refused, and the refusal says why.
+    let refused = rig
+        .manager
+        .open_project_terminal(&chat.id, Some(shell))
+        .await
+        .err()
+        .expect("refused while the folder changes");
     assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &second.token, shell)
-            .await
-            .is_err()
+        refused.to_string().contains("This folder is being changed"),
+        "{refused}"
     );
+    assert_eq!(rig.manager.project_terminal_count(), 0);
     rig.manager.shared().live.release_folder(&key);
-    let stale = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    // A folder that is gone is named, not opened.
     let moved = rig.folder.with_extension("moved");
     std::fs::rename(&rig.folder, &moved).unwrap();
-    std::fs::create_dir(&rig.folder).unwrap();
+    let gone = rig
+        .manager
+        .open_project_terminal(&chat.id, Some(shell))
+        .await
+        .err()
+        .expect("refused without its folder");
     assert!(
-        rig.manager
-            .prepare_project_terminal(&chat.id, &stale.token, shell)
-            .await
-            .is_err()
+        gone.to_string().contains("Locate this chat's folder"),
+        "{gone}"
     );
+    std::fs::create_dir(&rig.folder).unwrap();
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }
@@ -133,14 +149,12 @@ async fn several_project_terminals_in_one_folder_each_count_until_they_end() {
     status(&rig, &chat.id, SessionStatus::Ready).await;
     let mut plans = Vec::new();
     for _ in 0..3 {
-        let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
-        let shell = review.shells[0].id;
-        plans.push(
-            rig.manager
-                .prepare_project_terminal(&chat.id, &review.token, shell)
-                .await
-                .unwrap(),
-        );
+        let (plan, _) = rig
+            .manager
+            .open_project_terminal(&chat.id, None)
+            .await
+            .unwrap();
+        plans.push(plan);
     }
     assert_eq!(rig.manager.project_terminal_count(), 3);
     let key = live::normalize_path(rig.folder.clone());
@@ -421,15 +435,19 @@ async fn a_terminal_opens_while_another_folder_pushes() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(!push.is_finished(), "the push is under way");
     let quick = Duration::from_secs(5);
-    let review = tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.id))
+    tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.id))
         .await
         .expect("project tools answer at once")
         .expect("review");
+    let review = tokio::time::timeout(quick, rig.manager.project_terminal_review(&elsewhere.id))
+        .await
+        .expect("a new terminal tab's folder check answers at once")
+        .expect("terminal review");
     let shell = review.shells[0].id;
-    let plan = tokio::time::timeout(
+    let (plan, _) = tokio::time::timeout(
         quick,
         rig.manager
-            .prepare_project_terminal(&elsewhere.id, &review.token, shell),
+            .open_project_terminal(&elsewhere.id, Some(shell)),
     )
     .await
     .expect("a terminal in another folder opens at once")

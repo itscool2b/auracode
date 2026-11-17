@@ -51,6 +51,21 @@ pub struct ProjectToolsReview {
     pub expires_at: Millis,
 }
 
+/// A project shell opened in one step: its terminal, and the shell it runs.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ProjectTerminalOpened {
+    pub terminal_id: String,
+    pub shell: ProjectShellChoice,
+}
+
+/// What a new terminal tab shows before its shell starts: the chat's folder and the shells this
+/// device offers. It holds nothing: the folder and the shell are checked again as the shell opens.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ProjectTerminalReview {
+    pub folder: String,
+    pub shells: Vec<ProjectShellChoice>,
+}
+
 /// The editors found in their standard install locations, and the one a chat's files open in:
 /// Settings' choice when it is installed, otherwise the first one found.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

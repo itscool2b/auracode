@@ -8,8 +8,9 @@
  * composer; that the header menu and the command palette offer the same toggle; that New terminal
  * and the shell menu add numbered tabs, arrows move between tabs, F2 renames, Delete and the close
  * button stop a shell; that the top edge resizes on the 4px grid from the keyboard and the
- * pointer; that an exited shell says so; that the eighth live shell is the last; that a refused
- * start shows Rust's words and Try again; and that every state has no axe violations.
+ * pointer; that an exited shell says so; that the eighth started shell is the last (a tab that
+ * never showed holds no shell and does not count); that a refused start shows Rust's words and
+ * Try again; and that every state has no axe violations.
  *
  * Usage: node scripts/check-terminal-panel.mjs [--server URL] [--engines chromium,webkit]
  */
@@ -219,18 +220,20 @@ async function inspect(engine, launcher) {
     await page.keyboard.press("Escape");
     await panel(page).waitFor({ state: "detached" });
 
-    // The eighth live shell is the last; the ninth is refused before Rust is asked. The exited
-    // shell keeps its tab but no longer counts.
+    // The eighth started shell is the last; the ninth is refused before Rust is asked. The exited
+    // shell keeps its tab but no longer counts. Each new tab shows, so its shell starts.
     await page.keyboard.press("Control+Backquote");
     await panel(page).waitFor();
     const reviews = async () => (await calls(page)).filter((call) => call === "review").length;
     const before = await reviews();
+    const started = (await calls(page)).filter((call) => call.startsWith("start:")).length;
     for (let count = 1; count <= 8; count++) {
       await page.getByTestId("terminal-panel-new").click();
       await page.waitForFunction(
         (wanted) =>
-          window.terminalPanelFixture.calls().filter((call) => call === "review").length === wanted,
-        before + count,
+          window.terminalPanelFixture.calls().filter((call) => call.startsWith("start:")).length ===
+          wanted,
+        started + count,
       );
     }
     await page.getByTestId("terminal-panel-new").click();
@@ -242,14 +245,10 @@ async function inspect(engine, launcher) {
     await audit(page, "limit", engine, scans);
 
     // A refused start shows Rust's own words, and Try again reviews again.
-    await page.goto(
-      `${url}/?preview=terminal-panel&tabs=1&refuse=${encodeURIComponent("The chat or folder changed after review. Review project tools again.")}`,
-    );
-    await page
-      .getByText("The chat or folder changed after review. Review project tools again.", {
-        exact: true,
-      })
-      .waitFor();
+    const refusal =
+      "This folder is being changed (a worktree removed, moved or restored, or changes reverted). Once that finishes, open the terminal again.";
+    await page.goto(`${url}/?preview=terminal-panel&tabs=1&refuse=${encodeURIComponent(refusal)}`);
+    await page.getByText(refusal, { exact: true }).waitFor();
     assert.equal(await tabs(page).first().getAttribute("data-state"), "failed");
     await page.getByRole("button", { name: "Try again", exact: true }).click();
     await page.waitForFunction(

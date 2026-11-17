@@ -207,10 +207,15 @@ export function terminalPanelFixture(
         expires_at: Date.now() + 600_000,
       };
     },
+    terminalReview: async () => {
+      calls.push("review");
+      if (options.failReview) throw new Error(options.failReview);
+      return { folder: FOLDER, shells: SHELLS };
+    },
     openEditor: async (_chat, _token, editor) => {
       calls.push(`editor:${editor}`);
     },
-    terminal: (_chat, _token, id) =>
+    terminal: (_chat, id) =>
       fixtureTransport(
         SHELLS.find((shell) => shell.id === id) ?? POWERSHELL,
         options.refuse ?? null,
