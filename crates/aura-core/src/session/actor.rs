@@ -6649,7 +6649,8 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.release_if_idle();
             return;
         }
-        // The start begins again from where it waited.
+        // The start begins again from where it waited. The status is set without telling anyone:
+        // what happens next says where the chat stands.
         self.status = SessionStatus::Stopped;
         if !admitted {
             self.shared.live.cancel_wait(&self.chat_id);
@@ -6658,11 +6659,34 @@ The person continues this conversation here, in your terminal. Reply only that y
             self.start_failed(ErrorKind::SpawnFailed, message.into(), None, false);
             return;
         }
-        if let Err(error) = self.start(room.fresh, false) {
-            self.release_if_idle();
-            self.set_status(SessionStatus::Stopped, None);
-            self.refuse_terminal(error);
+        match self.start(room.fresh, false) {
+            // Held back (behind a quiet change, say), it stays stopped: the chat list hears so,
+            // not the Starting it heard last.
+            Ok(()) if self.status == SessionStatus::Stopped => self.publish_status(),
+            Ok(()) => {}
+            // Quitting, or held by its worktree's setup (which starts it once it succeeds): it
+            // stops, saying so.
+            Err(error)
+                if matches!(error, SessionError::ShuttingDown)
+                    || self
+                        .worktree_setup
+                        .as_ref()
+                        .is_some_and(|attempt| attempt.blocks_agent()) =>
+            {
+                self.release_if_idle();
+                self.refuse_terminal(error);
+                self.publish_status();
+            }
+            // Anything else fails as a start fails: a card the person can act on.
+            Err(error) => self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false),
         }
+    }
+
+    /// Publishes the status as it is now, for a status set without telling anyone.
+    fn publish_status(&mut self) {
+        self.info_dirty = true;
+        self.next_flush = Some(Instant::now());
+        self.publish();
     }
 
     /// A quiet change to the folder begins: refused only while a turn, a start or a stop is
