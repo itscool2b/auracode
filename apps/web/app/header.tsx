@@ -10,9 +10,9 @@ const SECTIONS = [
 ] as const;
 
 /**
- * The bar dot.com has: the wordmark, the page's sections beside it, and the quiet Sign in and the
- * primary Download at right. Under 768px the links fold into a menu built on <details>, so it
- * opens without JavaScript too; Download stays in the bar.
+ * The bar dot.com has: the wordmark, the page's sections beside it, and the primary Download at
+ * right. Under 768px the links fold into a menu built on <details>, so it opens without JavaScript
+ * too; Download stays in the bar.
  */
 export function SiteHeader() {
   const menu = useRef<HTMLDetailsElement>(null);
@@ -59,9 +59,6 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="nav-end">
-          <a className="btn btn-quiet btn-sm nav-signin" href="/signin">
-            Sign in
-          </a>
           <a className="btn btn-primary btn-sm" href="/download">
             Download
           </a>
@@ -79,8 +76,6 @@ export function SiteHeader() {
                   {link.text}
                 </a>
               ))}
-              <a href="/signin">Sign in</a>
-              <a href="/account">Account</a>
             </nav>
           </details>
         </div>

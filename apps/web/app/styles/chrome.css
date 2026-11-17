@@ -1,9 +1,9 @@
 /* ------------------------------------------------------------------------------- header */
 
 /*
- * The bar dot.com has: the wordmark, the page's sections beside it, and two pills at the right
- * (the quiet Sign in and the primary Download). It stays at the top over the page's colour at 85%
- * and a blur, and keeps its place across page navigations (view transitions).
+ * The bar dot.com has: the wordmark, the page's sections beside it, and the primary Download pill
+ * at the right. It stays at the top over the page's colour at 85% and a blur, and keeps its place
+ * across page navigations (view transitions).
  */
 .site-nav {
   position: sticky;
@@ -69,8 +69,7 @@
 }
 
 @media (max-width: 767px) {
-  .nav-links,
-  .nav-signin {
+  .nav-links {
     display: none;
   }
 
@@ -194,7 +193,7 @@
 
 .footer-links {
   display: grid;
-  grid-template-columns: repeat(3, minmax(140px, auto));
+  grid-template-columns: repeat(2, minmax(140px, auto));
   gap: 32px 40px;
   padding-left: 64px;
   border-left: 1px dotted var(--s-line-strong);
@@ -239,9 +238,4 @@
     padding-left: 0;
     border-left: 0;
   }
-}
-
-/* The verification page lives in a 190px frame inside the desktop: no header, footer or skip. */
-body:has(> main.device-verification) > :is(.site-nav, .site-footer, .skip) {
-  display: none;
 }

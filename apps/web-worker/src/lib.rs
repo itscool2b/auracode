@@ -1,4 +1,5 @@
-//! Static website responses only. Account operations belong to the separate Rust API Worker.
+//! Static website responses only. The site has no API of its own; the remote relay is a separate
+//! Worker on the more-specific `/api/remote/*` route.
 
 pub struct Asset {
     pub path: &'static str,
@@ -57,8 +58,9 @@ pub fn respond(
     if !valid_path(path) {
         return error(400, b"Invalid path\n", head, common);
     }
-    // The more-specific /api/* route belongs to auracode-api. Never serve a page or proxy an
-    // account request if this catch-all is invoked without that deployment route installed.
+    // The more-specific /api/remote/* route belongs to the relay Worker (apps/relay). Never serve
+    // a page for an /api path if this catch-all is invoked without that deployment route
+    // installed, or for an /api path no Worker owns.
     if path.eq_ignore_ascii_case("/api")
         || path
             .get(..5)
@@ -172,13 +174,13 @@ mod tests {
             bytes: b"home",
         },
         Asset {
-            path: "/account/index.html",
-            route: Some("/account"),
+            path: "/remote/index.html",
+            route: Some("/remote"),
             mime: "text/html; charset=utf-8",
-            etag: "\"account\"",
+            etag: "\"remote\"",
             immutable: false,
             headers: &[("cache-control", "no-store")],
-            bytes: b"account",
+            bytes: b"remote",
         },
         Asset {
             path: "/assets/app-12345678.js",
@@ -208,11 +210,11 @@ mod tests {
     }
 
     #[test]
-    fn pretty_index_and_trailing_paths_share_auth_no_store() {
-        for path in ["/account", "/account/", "/account/index.html"] {
+    fn pretty_index_and_trailing_paths_share_no_store() {
+        for path in ["/remote", "/remote/", "/remote/index.html"] {
             let response = get("GET", path, Some("*"));
             assert_eq!(response.status, 200);
-            assert_eq!(response.body, b"account");
+            assert_eq!(response.body, b"remote");
             assert_eq!(value(&response, "cache-control"), Some("no-store"));
             assert_eq!(value(&response, "etag"), None);
         }
@@ -228,17 +230,17 @@ mod tests {
             "/_headers",
             "/__spa-fallback.html",
             "/api",
-            "/api/v1/config",
-            "/API/v1/config",
+            "/api/remote/v1/health",
+            "/API/remote/v1/health",
         ] {
             let response = get("GET", path, None);
             assert_eq!(response.status, 404, "{path}");
             assert_eq!(value(&response, "cache-control"), Some("no-store"));
             assert_ne!(response.body, b"home");
         }
-        assert_eq!(get("POST", "/api/v1/auth/start", None).status, 404);
+        assert_eq!(get("POST", "/api/remote/v1/mcp/host", None).status, 404);
         assert_eq!(
-            value(&get("POST", "/account", None), "allow"),
+            value(&get("POST", "/remote", None), "allow"),
             Some("GET, HEAD")
         );
     }
@@ -253,8 +255,8 @@ mod tests {
             "/a\\b",
             "/a\0b",
             "//index.html",
-            "/account?x",
-            "/account#x",
+            "/remote?x",
+            "/remote#x",
         ] {
             assert_eq!(get("GET", path, None).status, 400, "{path}");
         }

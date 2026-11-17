@@ -232,16 +232,32 @@ mod tests {
     }
 
     #[test]
-    fn header_policies_accumulate_and_verify_device_can_be_framed() {
-        let rules = parse_headers("/*\n  X-Frame-Options: DENY\n  Content-Security-Policy: default-src 'self'\n/verify-device\n  ! X-Frame-Options\n  Content-Security-Policy: frame-ancestors tauri://localhost\n  Cache-Control: no-store\n").unwrap();
-        let headers = headers_for(&rules, "/verify-device");
-        assert!(!headers.contains_key("x-frame-options"));
+    fn header_policies_accumulate_by_path_and_removals_apply_only_there() {
+        // The site's own shape: one global policy, then a page that adds to it. No page lifts a
+        // global header today; the last rule is synthetic and keeps `! Name` covered.
+        let rules = parse_headers("/*\n  X-Frame-Options: DENY\n  Content-Security-Policy: default-src 'self'\n/remote*\n  Cache-Control: no-store\n  X-Robots-Tag: noindex, nofollow\n/remote*\n  Content-Security-Policy: frame-ancestors 'none'\n/framed\n  ! X-Frame-Options\n  Content-Security-Policy: frame-ancestors https://example.test\n").unwrap();
+        for path in ["/remote", "/remote/", "/remote/index.html"] {
+            let headers = headers_for(&rules, path);
+            assert_eq!(headers["x-frame-options"], "DENY");
+            assert_eq!(
+                headers["content-security-policy"],
+                "default-src 'self', frame-ancestors 'none'"
+            );
+            assert_eq!(headers["cache-control"], "no-store");
+            assert_eq!(headers["x-robots-tag"], "noindex, nofollow");
+        }
+        let download = headers_for(&rules, "/download");
+        assert_eq!(download["x-frame-options"], "DENY");
+        assert_eq!(download["content-security-policy"], "default-src 'self'");
+        assert!(!download.contains_key("cache-control"));
+        let framed = headers_for(&rules, "/framed");
+        assert!(!framed.contains_key("x-frame-options"));
         assert_eq!(
-            headers["content-security-policy"],
-            "default-src 'self', frame-ancestors tauri://localhost"
+            framed["content-security-policy"],
+            "default-src 'self', frame-ancestors https://example.test"
         );
-        assert_eq!(headers["cache-control"], "no-store");
-        assert_eq!(headers_for(&rules, "/account")["x-frame-options"], "DENY");
+        // An exact pattern covers that path alone.
+        assert_eq!(headers_for(&rules, "/framed/")["x-frame-options"], "DENY");
     }
 
     #[test]

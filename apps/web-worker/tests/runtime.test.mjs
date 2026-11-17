@@ -8,18 +8,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 const root = new URL("../", import.meta.url);
 const publicRoot = new URL("../web/build/client/", root);
-const routes = [
-  "",
-  "download",
-  "signin",
-  "signup",
-  "verify-device",
-  "account",
-  "privacy",
-  "terms",
-  "changelog",
-  "third-party-notices",
-];
+const routes = ["", "download", "privacy", "terms", "changelog", "remote", "third-party-notices"];
 let runtime;
 before(() => {
   runtime = new Miniflare({
@@ -75,24 +64,19 @@ test("prerendered pretty, trailing-slash and index routes serve exact public HTM
       assert.equal(response.headers.get("content-length"), String(expected.length));
       assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected, alias);
       security(response);
-      const noStore = ["account", "signin", "signup", "verify-device"].includes(route);
+      // The remote page holds a session: it is never stored or indexed, and has no ETag.
+      const noStore = route === "remote";
       assert.equal(
         response.headers.get("cache-control"),
         noStore ? "no-store" : "public, max-age=0, must-revalidate",
       );
+      assert.equal(response.headers.get("x-robots-tag"), noStore ? "noindex, nofollow" : null);
+      assert.equal(response.headers.get("etag") === null, noStore);
+      // No page may be framed.
       const csp = response.headers.get("content-security-policy");
-      if (route === "verify-device") {
-        assert.equal(response.headers.get("x-frame-options"), null);
-        assert.match(
-          csp,
-          /frame-ancestors tauri:\/\/localhost http:\/\/tauri.localhost https:\/\/tauri.localhost/,
-        );
-        assert.doesNotMatch(csp, /frame-ancestors 'none'/);
-        assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
-      } else {
-        assert.equal(response.headers.get("x-frame-options"), "DENY");
-        assert.match(csp, /frame-ancestors 'none'/);
-      }
+      assert.equal(response.headers.get("x-frame-options"), "DENY");
+      assert.match(csp, /frame-ancestors 'none'/);
+      assert.match(csp, /frame-src 'none'/);
       for (const script of expected.toString().matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
         if (!/\bsrc\s*=/.test(script[1]) && script[2])
           assert.ok(
@@ -145,7 +129,7 @@ test("every public byte is embedded with its MIME and content-addressed cache po
 });
 
 test("HEAD and conditional requests retain representation headers without response bytes", async () => {
-  for (const path of ["/", "/download", "/account", "/images/desktop-dark.png", "/missing.js"]) {
+  for (const path of ["/", "/download", "/remote", "/images/desktop-dark.png", "/missing.js"]) {
     const get = await request(path);
     const head = await request(path, { method: "HEAD" });
     assert.equal(head.status, get.status);
@@ -167,10 +151,10 @@ test("HEAD and conditional requests retain representation headers without respon
   assert.equal(cached.headers.get("etag"), get.headers.get("etag"));
   assert.equal(cached.headers.get("content-length"), null);
   assert.equal((await cached.arrayBuffer()).byteLength, 0);
-  const account = await request("/account", { headers: { "If-None-Match": "*" } });
-  assert.equal(account.status, 200);
-  assert.equal(account.headers.get("etag"), null);
-  assert.equal(account.headers.get("cache-control"), "no-store");
+  const remote = await request("/remote", { headers: { "If-None-Match": "*" } });
+  assert.equal(remote.status, 200);
+  assert.equal(remote.headers.get("etag"), null);
+  assert.equal(remote.headers.get("cache-control"), "no-store");
 });
 
 test("missing files, internal artifacts, API paths and methods do not get a homepage fallback", async () => {
@@ -182,8 +166,11 @@ test("missing files, internal artifacts, API paths and methods do not get a home
     "/server/index.js",
     "/Cargo.toml",
     "/api",
-    "/api/v1/config",
-    "/API/v1/auth/start",
+    "/api/remote/v1/health",
+    "/API/remote/v1/health",
+    "/signin",
+    "/account",
+    "/verify-device",
   ]) {
     const response = await request(path);
     assert.equal(response.status, 404, path);
@@ -192,11 +179,11 @@ test("missing files, internal artifacts, API paths and methods do not get a home
     assert.equal(await response.text(), "Not found\n");
     security(response);
   }
-  assert.equal((await request("/api/v1/auth/start", { method: "POST", body: "{}" })).status, 404);
-  const post = await request("/signin", {
-    method: "POST",
-    body: "email=synthetic@example.invalid",
-  });
+  assert.equal(
+    (await request("/api/remote/v1/mcp/host", { method: "POST", body: "{}" })).status,
+    404,
+  );
+  const post = await request("/download", { method: "POST", body: "synthetic=1" });
   assert.equal(post.status, 405);
   assert.equal(post.headers.get("allow"), "GET, HEAD");
   assert.equal(post.headers.get("cache-control"), "no-store");
@@ -211,7 +198,7 @@ test("encoded traversal, encoded separators and noncanonical public paths are re
     "/assets%2fmissing.js",
     "/assets%5cmissing.js",
     "/%00",
-    "/%61ccount",
+    "/%64ownload",
     "//index.html",
   ]) {
     const response = await request(path);

@@ -18,23 +18,19 @@ import { SiteHeader } from "./header";
 
 export function Layout({ children }: { children: ReactNode }) {
   // The site follows the system appearance (dark unless the system asks for light), with no
-  // switch and nothing stored. Only the device verification frame, which the desktop shows inside
-  // its own dialog, is pinned light.
+  // switch and nothing stored.
   const path = useLocation().pathname;
-  const pinned = path.startsWith("/verify-device");
   // The remote page is a tool that fills the screen: it has no site header or footer.
   const tool = path === "/remote" || path.startsWith("/remote/");
   return (
-    <html lang="en" data-theme={pinned ? "light" : undefined} className="g-root">
+    <html lang="en" className="g-root">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content={pinned ? "light" : "dark light"} />
+        <meta name="color-scheme" content="dark light" />
         {/* The browser's own bars take the page's colour in each appearance. */}
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        {pinned ? null : (
-          <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
-        )}
+        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

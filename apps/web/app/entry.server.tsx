@@ -1,4 +1,4 @@
-// Build-time React prerendering only. No JavaScript server is deployed or handles account data.
+// Build-time React prerendering only. No JavaScript server is deployed.
 import { renderToReadableStream } from "react-dom/server.browser";
 import { type EntryContext, ServerRouter } from "react-router";
 export default async function render(

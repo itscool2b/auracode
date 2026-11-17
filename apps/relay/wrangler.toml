@@ -24,7 +24,9 @@ enabled = false
 [env.production]
 name = "auracode-relay"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
-# More specific than the API's `auracode.si/api/*`, so these requests reach this Worker.
+# More specific than the website's `auracode.si/*`, and than the retired account API's
+# `auracode.si/api/*` for as long as that route exists (infra/README.md), so these requests reach
+# this Worker.
 routes = [{ pattern = "auracode.si/api/remote/*", zone_name = "auracode.si" }]
 
 [env.production.vars]
