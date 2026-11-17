@@ -177,6 +177,8 @@
 
 .download-cell {
   display: grid;
+  /* One column no wider than the card: a long label wraps rather than pushing it out. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   gap: 24px;
   padding: 32px;
@@ -221,8 +223,14 @@
   color: var(--s-ink);
 }
 
+/* A phone breaks "Download macOS · Apple silicon and Intel" over two lines; it stays one elsewhere. */
 .download-action .btn {
   width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding-block: 10px;
+  white-space: normal;
+  text-align: center;
 }
 
 .download-status {
