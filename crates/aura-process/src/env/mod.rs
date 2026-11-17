@@ -687,6 +687,11 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "INIT_CWD",
 ];
 
+/// Names, separated by `:`, of variables auracode set for itself when it started (the NVIDIA
+/// switch in the desktop's `main`). They and this variable are launch context: the app needs
+/// them, an agent's shell must not inherit them.
+pub const LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
+
 /// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]).
 const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "pnpm_", "TAURI_"];
 
@@ -696,6 +701,9 @@ const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "p
 /// Names and prefixes compare case-sensitively on every OS, unlike the scrub's: npm, pnpm and Tauri
 /// set these names in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must
 /// reach the shell on Windows too.
+///
+/// What auracode set for itself goes too ([`LAUNCH_SET_ENV`]), and on Unix a Linux AppImage's
+/// launch context ([`strip_appimage`]); their names are reported with the rest.
 pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
     let doomed: Vec<EnvKey> = vars
         .keys()
@@ -709,8 +717,107 @@ pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
             Some(key.as_os_str().to_string_lossy().into_owned())
         })
         .collect();
+    if let Some(set) = vars.remove(&EnvKey::from(LAUNCH_SET_ENV)) {
+        removed.push(LAUNCH_SET_ENV.to_owned());
+        for name in set
+            .to_string_lossy()
+            .split(':')
+            .filter(|name| !name.is_empty())
+        {
+            if vars.remove(&EnvKey::from(name)).is_some() {
+                removed.push(name.to_owned());
+            }
+        }
+    }
+    #[cfg(unix)]
+    removed.extend(strip_appimage(vars));
     removed.sort();
+    removed.dedup();
     removed
+}
+
+/// The AppImage runtime's own variables, naming the image and how it was started.
+#[cfg(unix)]
+const APPIMAGE_RUNTIME_NAMES: &[&str] = &["APPDIR", "APPIMAGE", "ARGV0", "OWD"];
+
+/// Variables an AppImage's launch hooks set to a fixed value, overwriting the session's, with the
+/// variable whose pointing into the image shows that hook ran: linuxdeploy's GTK hook forces
+/// `GTK_THEME` to Adwaita, its Python hook sets `PYTHONDONTWRITEBYTECODE`.
+#[cfg(unix)]
+const APPIMAGE_HOOK_CONSTANTS: &[(&str, &str)] = &[
+    ("GTK_THEME", "GTK_DATA_PREFIX"),
+    ("PYTHONDONTWRITEBYTECODE", "PYTHONHOME"),
+];
+
+/// Removes what a Linux AppImage's launcher put in the env, when `APPDIR` names its mount; returns
+/// the names it removed or rewrote. The launcher points `LD_LIBRARY_PATH`, `PATH`,
+/// `XDG_DATA_DIRS`, `PYTHONHOME`, `PERLLIB`, `GIO_MODULE_DIR` and others into the image, so the
+/// user's own `node`, `git` or `python` loads the image's libraries and fails (`node`: "version
+/// `LIBFFI_CALL_PLAN_8.4' not found"). Each path-list entry inside the mount is dropped, with empty
+/// entries and repeats; a variable left with nothing is removed. A value with nothing in the
+/// mount is kept as it is, whatever its name. A user's own `LD_LIBRARY_PATH` from their rc files
+/// comes back through the login shell's output.
+#[cfg(unix)]
+fn strip_appimage(vars: &mut EnvMap) -> Vec<String> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    let Some(appdir) = vars.get(&EnvKey::from("APPDIR")).map(|dir| {
+        let bytes = dir.as_bytes();
+        let end = bytes
+            .iter()
+            .rposition(|byte| *byte != b'/')
+            .map_or(0, |at| at + 1);
+        bytes[..end].to_vec()
+    }) else {
+        return Vec::new();
+    };
+    let mut touched = Vec::new();
+    for name in APPIMAGE_RUNTIME_NAMES {
+        if vars.remove(&EnvKey::from(*name)).is_some() {
+            touched.push((*name).to_owned());
+        }
+    }
+    // `/` or a relative path would match too much: then this is not an AppImage mount.
+    if appdir.first() != Some(&b'/') || appdir.len() < 2 {
+        return touched;
+    }
+    let inside = |entry: &[u8]| {
+        entry.starts_with(&appdir) && matches!(entry.get(appdir.len()), None | Some(b'/'))
+    };
+    for (name, hint) in APPIMAGE_HOOK_CONSTANTS {
+        let hook_ran = vars
+            .get(&EnvKey::from(*hint))
+            .is_some_and(|value| value.as_bytes().split(|b| *b == b':').any(inside));
+        if hook_ran && vars.remove(&EnvKey::from(*name)).is_some() {
+            touched.push((*name).to_owned());
+        }
+    }
+    let names: Vec<EnvKey> = vars.keys().cloned().collect();
+    for name in names {
+        let Some(value) = vars.get(&name) else {
+            continue;
+        };
+        if !value.as_bytes().split(|b| *b == b':').any(inside) {
+            continue;
+        }
+        let mut kept: Vec<&[u8]> = Vec::new();
+        for entry in value.as_bytes().split(|b| *b == b':') {
+            if !entry.is_empty() && !inside(entry) && !kept.contains(&entry) {
+                kept.push(entry);
+            }
+        }
+        let rewritten = (!kept.is_empty()).then(|| OsString::from_vec(kept.join(&b':')));
+        touched.push(name.as_os_str().to_string_lossy().into_owned());
+        match rewritten {
+            Some(value) => {
+                vars.insert(name, value);
+            }
+            None => {
+                vars.remove(&name);
+            }
+        }
+    }
+    touched
 }
 
 fn is_launch_context(name: &OsStr) -> bool {
@@ -838,6 +945,129 @@ mod tests {
             ]
         );
         assert_eq!(names(&vars), ["HOME", "PATH", "SHELL", "TERM"]);
+    }
+
+    /// What linuxdeploy's AppRun and its GTK and Python hooks set, as a real AppImage of auracode
+    /// left it: every entry inside the mount goes, the session's own entries stay in order.
+    #[cfg(unix)]
+    #[test]
+    fn an_appimage_launch_context_is_stripped() {
+        let mount = "/tmp/.mount_auracoXyZ12";
+        let mut vars = map(&[
+            ("APPDIR", mount),
+            (
+                "APPIMAGE",
+                "/home/me/Applications/auracode_0.1.0_amd64.AppImage",
+            ),
+            ("ARGV0", "/home/me/Applications/auracode.AppImage"),
+            ("OWD", "/home/me"),
+            (
+                "PATH",
+                "/tmp/.mount_auracoXyZ12/usr/bin/:/tmp/.mount_auracoXyZ12/bin/:/usr/local/bin:/usr/bin",
+            ),
+            (
+                "LD_LIBRARY_PATH",
+                "/tmp/.mount_auracoXyZ12/usr/lib/:/tmp/.mount_auracoXyZ12/lib64/:",
+            ),
+            (
+                "XDG_DATA_DIRS",
+                "/tmp/.mount_auracoXyZ12/usr/share/:/usr/share:/usr/local/share:/usr/share",
+            ),
+            ("PYTHONHOME", "/tmp/.mount_auracoXyZ12/usr/"),
+            ("PYTHONDONTWRITEBYTECODE", "1"),
+            ("GTK_DATA_PREFIX", mount),
+            ("GTK_EXE_PREFIX", "/tmp/.mount_auracoXyZ12//usr"),
+            ("GTK_THEME", "Adwaita:dark"),
+            (
+                "GIO_MODULE_DIR",
+                "/tmp/.mount_auracoXyZ12//usr/lib/gio/modules",
+            ),
+            ("HOME", "/home/me"),
+            ("SHELL", "/bin/bash"),
+            // Shares the mount's prefix without being inside it.
+            ("NOT_INSIDE", "/tmp/.mount_auracoXyZ12-other/lib"),
+        ]);
+        let removed = strip_launch_context(&mut vars);
+        assert_eq!(
+            removed,
+            [
+                "APPDIR",
+                "APPIMAGE",
+                "ARGV0",
+                "GIO_MODULE_DIR",
+                "GTK_DATA_PREFIX",
+                "GTK_EXE_PREFIX",
+                "GTK_THEME",
+                "LD_LIBRARY_PATH",
+                "OWD",
+                "PATH",
+                "PYTHONDONTWRITEBYTECODE",
+                "PYTHONHOME",
+                "XDG_DATA_DIRS",
+            ]
+        );
+        assert_eq!(
+            names(&vars),
+            ["HOME", "NOT_INSIDE", "PATH", "SHELL", "XDG_DATA_DIRS"]
+        );
+        let value = |name: &str| vars[&EnvKey::from(name)].to_string_lossy().into_owned();
+        assert_eq!(value("PATH"), "/usr/local/bin:/usr/bin");
+        assert_eq!(value("XDG_DATA_DIRS"), "/usr/share:/usr/local/share");
+        assert_eq!(value("NOT_INSIDE"), "/tmp/.mount_auracoXyZ12-other/lib");
+    }
+
+    /// Without the GTK hook's evidence a `GTK_THEME` is the person's own; without `APPDIR`, or
+    /// with one that is not an absolute folder, nothing is taken for an AppImage's.
+    #[cfg(unix)]
+    #[test]
+    fn without_an_appimage_mount_nothing_extra_is_stripped() {
+        let mut vars = map(&[
+            ("APPDIR", "/opt/someapp"),
+            ("GTK_THEME", "Adwaita:dark"),
+            ("PYTHONDONTWRITEBYTECODE", "1"),
+            ("PATH", "/usr/bin"),
+        ]);
+        assert_eq!(strip_launch_context(&mut vars), ["APPDIR"]);
+        assert_eq!(
+            names(&vars),
+            ["GTK_THEME", "PATH", "PYTHONDONTWRITEBYTECODE"]
+        );
+        for appdir in ["/", "relative/dir", ""] {
+            let mut vars = map(&[
+                ("APPDIR", appdir),
+                ("PATH", "/usr/bin:relative/dir/bin"),
+                ("LD_LIBRARY_PATH", "/usr/lib"),
+            ]);
+            assert_eq!(strip_launch_context(&mut vars), ["APPDIR"], "{appdir:?}");
+            assert_eq!(
+                vars[&EnvKey::from("PATH")],
+                OsString::from("/usr/bin:relative/dir/bin")
+            );
+            assert!(vars.contains_key(&EnvKey::from("LD_LIBRARY_PATH")));
+        }
+        let mut plain = map(&[("PATH", "/usr/bin"), ("GTK_THEME", "Adwaita:dark")]);
+        assert!(strip_launch_context(&mut plain).is_empty());
+    }
+
+    /// What auracode set for itself at launch goes; the same variable set by the person stays.
+    #[test]
+    fn variables_auracode_set_at_launch_are_stripped() {
+        let mut vars = map(&[
+            (
+                "AURACODE_LAUNCH_SET",
+                "__NV_DISABLE_EXPLICIT_SYNC::NOT_PRESENT",
+            ),
+            ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+            ("PATH", "/usr/bin"),
+        ]);
+        assert_eq!(
+            strip_launch_context(&mut vars),
+            ["AURACODE_LAUNCH_SET", "__NV_DISABLE_EXPLICIT_SYNC"]
+        );
+        assert_eq!(names(&vars), ["PATH"]);
+        let mut own = map(&[("__NV_DISABLE_EXPLICIT_SYNC", "1"), ("PATH", "/usr/bin")]);
+        assert!(strip_launch_context(&mut own).is_empty());
+        assert_eq!(names(&own), ["PATH", "__NV_DISABLE_EXPLICIT_SYNC"]);
     }
 
     /// On Windows too: the scrub ignores case there, launch context never does.

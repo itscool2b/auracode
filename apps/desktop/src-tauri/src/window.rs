@@ -240,11 +240,39 @@ pub fn create_main(
         builder = builder.additional_browser_args(&arguments);
     }
 
+    // Tells the page when WebKitGTK will paint it on the CPU, where large soft shadows are costly.
+    #[cfg(target_os = "linux")]
+    if paints_on_cpu(|name| std::env::var_os(name)) {
+        builder = builder.initialization_script(CPU_PAINT_SCRIPT);
+    }
+
     let window = builder.build()?;
     if let Ok(theme) = window.theme() {
         paint_appearance(&window, theme, !plan.transparent);
     }
     Ok(window)
+}
+
+/// What the page reads to learn it is painted on the CPU (`paintsOnCpu` in `src/lib/paint.ts`).
+#[cfg(target_os = "linux")]
+const CPU_PAINT_SCRIPT: &str = "window.__AURA_PAINT__ = \"cpu\";";
+
+/// Whether the environment makes WebKitGTK paint on the CPU instead of the GPU: its GPU renderer
+/// or compositing is switched off, or Mesa is told to render in software. On that path the web
+/// process repaints a pane's soft shadow with every change inside the pane and each frame is
+/// copied, so the page draws its panes more cheaply (`ui-tokens.css`). A value of `0` leaves the
+/// switch off, as WebKitGTK and Mesa read it. `get` reads one variable.
+#[cfg(any(target_os = "linux", test))]
+fn paints_on_cpu(get: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
+    [
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+        "WEBKIT_DISABLE_COMPOSITING_MODE",
+        "LIBGL_ALWAYS_SOFTWARE",
+    ]
+    .iter()
+    .any(|name| {
+        get(name).is_some_and(|value| !value.is_empty() && value != "0" && value != "false")
+    })
 }
 
 /// The window colour (`--g-window`) and secondary text as Windows COLORREFs (0x00BBGGRR).
@@ -619,6 +647,30 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn cpu_painting_follows_the_switches_that_turn_the_gpu_renderer_off() {
+        let with = |pairs: &'static [(&'static str, &'static str)]| {
+            paints_on_cpu(|name| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| std::ffi::OsString::from(value))
+            })
+        };
+        assert!(!with(&[]));
+        assert!(with(&[("WEBKIT_DISABLE_DMABUF_RENDERER", "1")]));
+        assert!(with(&[("WEBKIT_DISABLE_COMPOSITING_MODE", "1")]));
+        assert!(with(&[("LIBGL_ALWAYS_SOFTWARE", "true")]));
+        // Off, as WebKitGTK and Mesa read them.
+        assert!(!with(&[("WEBKIT_DISABLE_DMABUF_RENDERER", "0")]));
+        assert!(!with(&[
+            ("LIBGL_ALWAYS_SOFTWARE", "false"),
+            ("WEBKIT_DISABLE_COMPOSITING_MODE", "")
+        ]));
+        // The NVIDIA switch keeps the GPU renderer.
+        assert!(!with(&[("__NV_DISABLE_EXPLICIT_SYNC", "1")]));
+    }
     use std::sync::atomic::AtomicUsize;
 
     fn url(text: &str) -> Url {

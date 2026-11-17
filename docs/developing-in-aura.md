@@ -2,8 +2,9 @@
 
 Chats in auracode often change auracode itself. The installed app runs those chats, its data folder
 holds them and the worktrees being edited, and every agent process runs inside the app's Windows
-job object. So anything that stops, replaces, migrates or uninstalls the installed app ends the
-session doing the work. This page covers what the code guarantees, how to build and test a change
+job object, or on Linux and macOS is stopped with the agent's process tree when the app quits. So
+anything that stops, replaces, migrates or uninstalls the installed app ends the session doing
+the work. This page covers what the code guarantees, how to build and test a change
 next to the running app, how to get the change into the installed app, and how to recover when
 the new build is broken.
 
@@ -90,19 +91,36 @@ named by `OPENSSL_SRC_PERL`.
 ## Changelog
 
 Every pull request merged into `main` adds its line to [CHANGELOG.md](../CHANGELOG.md) in the
-same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, saying in plain
-words what changed for the person using auracode, and ending with its link,
-`([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to learn its
-number, then commit the line. If it merges on a later day than planned, move the line. `pnpm lint`
-runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the links and that
-each pull request appears once.
+same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, and ending with
+its link, `([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to
+learn its number, then commit the line. If it merges on a later day than planned, move the line.
+`pnpm lint` runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the
+links, that each pull request appears once, and that no line runs past 600 characters before its
+link.
+
+Write the line in simple English about what changed for the person using auracode (owner, 16
+November 2026: the changelog is to "speak in English, simple English, about functionality changes
+in auracode"). The reader uses the app and may not be a programmer:
+
+- **Headline first.** The words up to the line's first colon or full stop are the headline: a plain
+  statement of the change, about twelve words at most. Then one to three short sentences of detail,
+  and no more. Most lines stay well under 400 characters.
+- **Short everyday words and short sentences.** Say what the app does differently now: "message
+  box", not "composer"; "the chat shows", not "the transcript renders".
+- **No internal names.** No crates, files, functions, style names, protocol names, test names or
+  build tools. Names the person sees are fine: Claude Code, Codex, Settings, MCP servers, Windows,
+  Mac.
+- **Internal work says so plainly.** A change to the build, the tests, the tooling or the docs
+  opens with "Behind the scenes:" and says what it was for, such as "Behind the scenes: the Mac app
+  builds again." Never invent an effect the person would not see, and never leave a pull request
+  out.
+- **Plain punctuation.** No em dashes, no emoji and no marketing words.
 
 The website's changelog page is built from this file (`apps/web/scripts/changelog.ts`), and every
 push to `main` redeploys the site, so a merged line is public within minutes (owner, 10 November
-2026: every merge adds to the changelog, "which updates on the website as well"). Write each line
-for that reader. The page shows a line's words and its pull request number, never the link: the
-repository is private. The words up to the line's first colon or full stop are set in ink as its
-headline, so open with what changed.
+2026: every merge adds to the changelog, "which updates on the website as well"). The page shows a
+line's words and its pull request number, never the link: the repository is private. The headline
+is set in ink and the rest of the line follows it as the body.
 
 ## Getting a change into the installed app
 
@@ -155,14 +173,113 @@ The snapshots and the log (`%LOCALAPPDATA%\auracode-upgrades\upgrade.log`) are o
 install and the data folder. Neither an upgrade nor an uninstall removes them, and a later session
 can read the log to see what happened.
 
+## Linux
+
+The installed app is an AppImage: `~/Applications/auracode.AppImage`, a link to a versioned file
+beside it (`auracode_0.1.0_amd64.AppImage`), which the desktop entry starts. The development
+build's folder is `~/.local/share/si.auracode.desktop.dev`, by the same rule as elsewhere.
+
+**Toolchain.** Rust through rustup (`rust-toolchain.toml` picks stable with rustfmt and clippy),
+pnpm 12 (`mise use -g pnpm@12`, or corepack), Node from the supported range, CMake (dictation's
+`transcribe-cpp-sys` builds with it; `mise use -g cmake` without root) and Tauri's system
+packages; on Arch: `webkit2gtk-4.1 base-devel curl wget file openssl librsvg`.
+
+**What an agent's shell sees.** The AppImage's launcher points `LD_LIBRARY_PATH`, `PATH`,
+`PYTHONHOME`, `PERLLIB`, `XDG_DATA_DIRS`, `GIO_MODULE_DIR` and others into its mount
+(`/tmp/.mount_auraco…`). auracode strips them before it resolves the agents' environment
+(`strip_launch_context` in `crates/aura-process/src/env/mod.rs`), so an agent's `node`, `git`,
+`python` and `cargo` load the system's libraries, not the image's. auracode's own helpers that
+agents start (project memory, browser) run through the image's `AppRun`, which sets the image's
+library path again for them alone (`helper_program` in `crates/aura-core/src/paths.rs`). An
+installed build from before that fix leaks the launcher's variables: there, `node` fails with
+"version `LIBFFI_CALL_PLAN_8.4' not found", `python3` with "No module named 'encodings'" and `git`
+warns about `libpcre2-8.so.0`. Until such a build is replaced, start each command line with
+`env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH -u PERLLIB` and put the system's folders
+first on `PATH`.
+
+**Testing next to the running app.** `pnpm tauri build --debug --no-bundle` from `apps/desktop`,
+then `target/debug/auracode`. It opens the development folder, is titled `auracode dev` and runs
+beside the installed app. Never stop `auracode` by name (`pkill auracode`): the installed app's
+process has the same name. Stop the PID you started. A plain `cargo build` or `cargo test` writes
+`target/debug/auracode` again without the page built in (it loads the Vite dev server's address
+and shows an empty window when none runs), so build with the Tauri command again before starting
+it.
+
+On NVIDIA's driver under Wayland the window used to close as soon as it opened ("Error 71
+(Protocol error) dispatching to Wayland display"): the driver puts the window's surface under
+explicit sync once WebKitGTK's GPU renderer draws to it, and GTK 3 then commits a frame without an
+acquire point ("Missing acquire timeline"). The app runs itself again with
+`__NV_DISABLE_EXPLICIT_SYNC=1` there, unless that variable or `WEBKIT_DISABLE_DMABUF_RENDERER` is
+already set (`keep_gpu_rendering_on_nvidia_wayland` in `apps/desktop/src-tauri/src/main.rs`). Do
+not reach for `WEBKIT_DISABLE_DMABUF_RENDERER=1` instead: it also stops the error, but WebKitGTK
+then paints on the CPU and copies every frame, and a chat scrolls at 21 frames a second where the
+GPU renderer holds 60.
+
+**The browser beside the chat on Wayland.** wry's child webviews are X11 child windows, so the
+browser used to be unavailable on Wayland. There its pages are now GTK widgets: at startup, while
+the window is still hidden, the app's own page moves into a `gtk::Overlay`, and each live tab's
+WebKitGTK view joins it as an overlay child in a holder of exactly the panel's rectangle
+(`apps/desktop/src-tauri/src/browser/gtk_layer.rs`). X11 keeps the child windows. The holder is
+the page's size on purpose: GDK draws the app's page with OpenGL and uploads, every frame,
+whatever GTK draws over it, so one layer across the whole window cost the main process 75 to 95 %
+of a core for a small animation at 60 frames a second. The empty overlay, and a page in its
+holder, cost nothing over the baseline (about 47 % with and without, three quiet rounds each;
+that baseline is GTK 3 presenting a 4752x2600 frame, and forcing GDK's software path,
+`GDK_GL=software-draw-gl`, takes 100 % and halves the frame rate, so the fast path is in use).
+
+**Measuring frame rate without a window on your screen.** `hyprctl output create headless NAME`
+adds a virtual monitor (give it a position far from the real one, such as `-30000x0`, or the
+pointer can slide onto it, and check the real monitor stayed at `0x0`); set its mode and scale to match the real one
+(`hyprctl eval 'hl.monitor({ output = "NAME", mode = "3840x2160@60", scale = 1.6 })'`) and move the
+test window to the workspace it shows. A window on a workspace no monitor shows gets no frames, so
+`requestAnimationFrame` stalls and every measurement hangs. Start the build with
+`AURACODE_DATA_DIR` on a scratch folder and `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:<port>`, then
+drive the page over the inspector's WebSocket (`Runtime.evaluate`). `AURACODE_STRESS=orbs=24,seconds=0`
+opens the stress view; the scripted Demo agent (`mock`) gives a real chat to type, stream and
+scroll in without spending anything. Remove the monitor with `hyprctl output remove NAME`. Measure
+at the window's real size: at half width the same build drew several times the frames. Other
+work on the machine moves the numbers a great deal (a compile in another worktree doubled the
+main process's CPU and halved frame rates): lower its priority with `renice`, run each pair of
+variants interleaved, three rounds, and distrust a single reading.
+
+**Getting a change into the installed app.** `pnpm --filter @auracode/desktop host-upgrade`
+hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
+
+1. Build the AppImage: `pnpm bundle --bundles appimage`. It lands in
+   `target/release/bundle/appimage/`.
+2. Commit and push the branch.
+3. Arm the install from the chat: `host-upgrade install --after-exit` (the newest AppImage under
+   `target`, or `--appimage <file>`). It copies the AppImage beside the installed one at once,
+   so the worktree may go away, and returns. Its waiter runs under the user's systemd
+   (`systemd-run --user`, unit `auracode-upgrade-<millis>`), which shares no process with the
+   app, so it outlives the agent that armed it. Without user systemd it starts in a new session
+   that is reparented to init.
+4. Quit auracode. The waiter moves the link to the new build in one rename and starts it as its
+   own systemd unit, with the environment the desktop launcher gives. If no process runs the new
+   file 20 seconds later (`--health-seconds`), it moves the link back and starts the previous
+   build. The previous build stays on disk either way; the three newest older builds are kept
+   (`--keep`), and never the one running or the one a rollback would use.
+
+`host-upgrade status` shows the link, what runs, any armed install, the kept builds and the last
+log lines; `host-upgrade cancel` disarms. The log and the install history are in
+`~/.local/state/auracode-upgrades` (`$XDG_STATE_HOME`), outside the data folder. Without an
+agent, quit auracode and run `host-upgrade install` from a terminal: it installs and starts at
+once.
+
+**When the new build is broken.** Quit it and run `host-upgrade rollback` from a terminal: the
+link goes back to the build the last install replaced (or `--to <file>`), and that build starts.
+`--restore-database` also puts back each database the newer build migrated, from aura-core's
+pre-migration backups, as on Windows. With no working auracode at all, run Claude Code or Codex
+in a terminal in the main checkout, fix forward, build an AppImage and run `host-upgrade install`.
+
 ## macOS
 
 A development build's folder is `~/Library/Application Support/si.auracode.desktop.dev`, by the
 same rule. WebKit keeps one website-data store per bundle identifier, so a development build shares
 it with the installed app (`LaunchOptions::webview_data_dir` has no effect there). The app keeps
 nothing in web storage except the stress view's frame log, so this is harmless today. Anything
-that starts keeping state in web storage changes that. `host-upgrade` is Windows-only. On macOS,
-copy `/Applications/auracode.app` aside before replacing it.
+that starts keeping state in web storage changes that. `host-upgrade` covers Windows and Linux.
+On macOS, copy `/Applications/auracode.app` aside before replacing it.
 
 ## Verification
 
@@ -188,3 +305,17 @@ by the machine's signing policy. The previous installed binary remained in place
 was still armed when checked. The helper now records a process-start error before the exit code
 and rollback message, so a blocked installer is distinguishable from an installer that ran and
 failed. This observation does not establish whether a different future build will be accepted.
+
+Linux, run on 16 November 2026 on Omarchy (Hyprland, Wayland, NVIDIA RTX 5080, WebKitGTK 2.54)
+from a chat inside the installed AppImage:
+
+| Check | Result |
+|---|---|
+| An agent's shell in the installed build (before the fix) | fail, as described above: `node`, `python3` and `pacman` do not start, `git` warns |
+| `strip_launch_context` against the variables that AppImage's launcher set | pass (unit tests), including entries outside the mount kept in order and an `APPDIR` that is not a mount |
+| The memory helper started through the mount's `AppRun` from an env without the image's variables | pass: MCP `initialize` answered in 39 ms |
+| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass: titled `auracode dev`, its own data folder, same PID after the restart with the NVIDIA switch, the installed app untouched; without the switch the window closes with Wayland error 71 |
+| Frame rate at 2376x1300 on a virtual 4K monitor at 1.6 (GDK scale 2), NVIDIA RTX 5080, same build, GPU renderer against CPU painting | stress view 60 against 12 to 25; a chat with the scripted agent: streaming 56 to 63 against 42, scrolling 60 (worst frame 28 ms) against 21 (153 ms); idle 0 % CPU on both; typing reaches the screen in about 23 ms on both |
+| The browser panel on Wayland (Hyprland), on the virtual monitor | pass: a local page draws in the panel at its rectangle (1040x1202 at 2x), follows a move and resize, hides with the panel and returns; an agent's snapshot reads the page while it is hidden; the chat holds 60 frames a second beside it. Not tested: real pointer and keyboard input into the page (no second seat to drive it) |
+| `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
+| `host-upgrade install`, `--after-exit` and its waiter, health rollback, `rollback --restore-database`, `cancel`, prune | pass against a stand-in install (`appimage-upgrade.test.mjs`); not yet run against the real install |

@@ -13,6 +13,8 @@
 mod address;
 pub mod agent;
 pub mod commands;
+#[cfg(target_os = "linux")]
+mod gtk_layer;
 mod history;
 mod host;
 #[cfg(windows)]

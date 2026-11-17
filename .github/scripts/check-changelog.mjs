@@ -1,6 +1,7 @@
 // CHANGELOG.md lists every pull request merged into main, newest first: `## YYYY-MM-DD` sections
 // by merge date (UTC), each line `- What changed. ([#N](https://github.com/itscool2b/auracode/pull/N))`.
-// Every pull request adds its own line (docs/developing-in-aura.md, "Changelog").
+// Every pull request adds its own line, in simple English about what changed for the person using
+// auracode and short enough to read at a glance (docs/developing-in-aura.md, "Changelog").
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,6 +11,8 @@ const ENTRY =
 const DATE = /^## (\d{4}-\d{2}-\d{2})$/;
 /** U+2014, written by code point so the character itself never appears in the source. */
 export const EM_DASH = String.fromCharCode(0x2014);
+/** The most characters a line's words may run to, not counting its pull request link. */
+export const MAX_WORDS_LENGTH = 600;
 
 export function checkChangelog(text) {
   const problems = [];
@@ -42,8 +45,12 @@ export function checkChangelog(text) {
       );
       return;
     }
-    const [, , label, linked] = entry;
+    const [, words, label, linked] = entry;
     const number = Number(label);
+    if (words.length > MAX_WORDS_LENGTH)
+      problems.push(
+        `${at}: #${label} runs to ${words.length} characters before its link; keep a line to ${MAX_WORDS_LENGTH} (a headline, then one to three short sentences)`,
+      );
     if (label !== linked) problems.push(`${at}: #${label} links to pull request ${linked}`);
     if (date === null) problems.push(`${at}: #${number} is not under a date`);
     if (seen.has(number))

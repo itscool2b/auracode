@@ -63,15 +63,18 @@ pub(super) fn probe(app: &tauri::AppHandle) {
 
 #[cfg(target_os = "linux")]
 fn probe_window(app: &tauri::AppHandle) -> Option<String> {
-    use wry::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     let window = app.get_webview_window(MAIN_WINDOW)?;
-    match window.window_handle().map(|handle| handle.as_raw()) {
-        Ok(RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)) => None,
-        Ok(_) => Some(
-            "The browser needs auracode to run on X11 on Linux for now. Start it with GDK_BACKEND=x11."
-                .into(),
-        ),
-        Err(error) => Some(format!("The browser could not reach the window: {error}")),
+    // Asked of GDK, not of the window's handle: the window is still hidden here, and a Wayland
+    // window has no handle to give until it shows.
+    match super::gtk_layer::display_kind().as_deref() {
+        // X11: each page is a child window of the main one.
+        Some("GdkX11Display") => None,
+        // Wayland has no child windows: the pages are widgets in a layer over the app's page.
+        Some("GdkWaylandDisplay") => super::gtk_layer::install(&window)
+            .err()
+            .map(|error| format!("The browser could not join the window: {error}")),
+        Some(other) => Some(format!("The browser does not know this display ({other}).")),
+        None => Some("The browser found no display.".into()),
     }
 }
 
@@ -284,20 +287,61 @@ fn build(
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = passwords;
-        with_context(&profile, |context| {
-            configure(
+        // Wayland: a widget in a holder over the app's page, placed by the holder; X11: a child
+        // window, placed by its own bounds.
+        #[cfg(target_os = "linux")]
+        let holder = super::gtk_layer::installed()
+            .then(|| super::gtk_layer::holder((bounds.width, bounds.height)))
+            .flatten();
+        #[cfg(not(target_os = "linux"))]
+        let holder: Option<()> = None;
+        let inside = BrowserRect {
+            x: 0.0,
+            y: 0.0,
+            ..bounds
+        };
+        let built = with_context(&profile, |context| {
+            let builder = configure(
                 WebViewBuilder::new_with_web_context(context),
                 &weak,
                 tab_id,
                 chat_id,
                 url,
-                &bounds,
+                if holder.is_some() { &inside } else { &bounds },
                 &profile,
-            )
-            .build_as_child(&window)
-        })
-        .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
+            );
+            #[cfg(target_os = "linux")]
+            if let Some(holder) = &holder {
+                use wry::WebViewBuilderExtUnix;
+                return builder.build_gtk(holder);
+            }
+            builder.build_as_child(&window)
+        });
+        #[cfg(target_os = "linux")]
+        if let Some(holder) = &holder {
+            super::gtk_layer::adopt(holder, built.as_ref().ok());
+        }
+        built
+            .map_err(|error| BrowserError::Unavailable(format!("The page could not open: {error}")))
     }
+}
+
+/// Moves a page to `at`.
+fn set_bounds(view: &View, at: &BrowserRect) {
+    #[cfg(target_os = "linux")]
+    if super::gtk_layer::place(&view.webview, at) {
+        return;
+    }
+    let _ = view.webview.set_bounds(rect(at));
+}
+
+/// Shows or hides a page.
+fn set_visible(view: &View, visible: bool) {
+    #[cfg(target_os = "linux")]
+    if super::gtk_layer::set_visible(&view.webview, visible) {
+        return;
+    }
+    let _ = view.webview.set_visible(visible);
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -633,9 +677,9 @@ fn show(tab_id: &str, at: Option<BrowserRect>, visible: bool) {
     let hidden = HOST.with_borrow(|host| host.window_hidden);
     let _ = with_view(tab_id, |view| {
         if let Some(at) = at {
-            let _ = view.webview.set_bounds(rect(&at));
+            set_bounds(view, &at);
         }
-        let _ = view.webview.set_visible(visible && !hidden && at.is_some());
+        set_visible(view, visible && !hidden && at.is_some());
     });
 }
 
@@ -704,7 +748,7 @@ fn hide_or_park(browser: &Arc<Browser>, tab_id: &str) {
         park(tab_id);
     } else {
         let _ = with_view(tab_id, |view| {
-            let _ = view.webview.set_visible(false);
+            set_visible(view, false);
         });
         HOST.with_borrow_mut(|host| {
             if let Some(view) = host.views.get_mut(tab_id) {
@@ -726,8 +770,8 @@ pub(super) fn park(tab_id: &str) {
     }
     let at = parked_rect();
     let _ = with_view(tab_id, |view| {
-        let _ = view.webview.set_bounds(rect(&at));
-        let _ = view.webview.set_visible(true);
+        set_bounds(view, &at);
+        set_visible(view, true);
     });
     HOST.with_borrow_mut(|host| {
         if let Some(view) = host.views.get_mut(tab_id) {
@@ -765,6 +809,10 @@ pub(super) fn prepare_for_agent(browser: &Arc<Browser>, tab_id: &str) -> Result<
 /// The window was minimized or restored: the page over the panel follows it.
 pub(crate) fn window_shown(shown: bool) {
     let placed = HOST.with_borrow_mut(|host| {
+        // Windows reports this on every resize and focus change: only a real change moves a page.
+        if host.window_hidden != shown {
+            return None;
+        }
         host.window_hidden = !shown;
         host.placed.clone()
     });

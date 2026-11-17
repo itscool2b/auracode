@@ -1,5 +1,6 @@
 // `pnpm host-upgrade`: replaces the installed auracode on this Windows machine with a local build,
 // and puts the previous build back when the new one does not work.
+// On Linux, `main` hands over to appimage-upgrade.mjs.
 //
 // The installed app is often the one running the agent session that built the new one, so the
 // install cannot happen while it runs, and an agent cannot wait for it to close: everything an
@@ -623,6 +624,11 @@ export function cancel(paths, system, log) {
 }
 
 export async function main(argv, env = process.env, system = windows) {
+  if (process.platform === "linux" && system === windows) {
+    // The Linux install is an AppImage behind a link: its own script (appimage-upgrade.mjs).
+    const linux = await import("./appimage-upgrade.mjs");
+    return linux.main(argv, env);
+  }
   let parsed;
   try {
     parsed = parseArgs({
@@ -653,7 +659,7 @@ export async function main(argv, env = process.env, system = windows) {
     return values.help ? EXIT.done : EXIT.usage;
   }
   if (process.platform !== "win32" && system === windows) {
-    console.error("host-upgrade replaces an NSIS install, so it runs on Windows only.");
+    console.error("host-upgrade replaces an NSIS install on Windows or an AppImage on Linux.");
     return EXIT.usage;
   }
   const number = (text, name) => {
@@ -709,5 +715,9 @@ export async function main(argv, env = process.env, system = windows) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === SCRIPT) {
-  process.exitCode = await main(process.argv.slice(2));
+  // Not a top-level await: on Linux `main` imports appimage-upgrade.mjs, which imports this module,
+  // and that import would wait forever on a module still awaiting.
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }

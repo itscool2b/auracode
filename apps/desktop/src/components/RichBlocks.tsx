@@ -3,7 +3,7 @@ import {
   type ReactNode,
   useEffect,
   useLayoutEffect,
-  useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
@@ -57,6 +57,43 @@ export function highlightNodes(html: string): ReactNode[] {
   return root;
 }
 
+/**
+ * How often a code block that is still streaming is coloured again. Colouring reads the whole
+ * block, so doing it on every streamed frame costs the square of the block's length: a long file
+ * written by an agent would spend most of each frame on it. Between two colourings the new text
+ * shows plain after the coloured part, and the closed block is coloured in full.
+ */
+export const STREAMING_HIGHLIGHT_MS = 200;
+
+/** What a code block shows now: the part coloured last, and the text that arrived since. */
+interface Highlighted {
+  readonly code: string;
+  readonly lang: string;
+  readonly nodes: ReactNode[] | null;
+  readonly at: number;
+}
+
+/**
+ * Whether the last colouring still serves: the block is still streaming, only grew, and was
+ * coloured less than [`STREAMING_HIGHLIGHT_MS`] ago.
+ */
+export function keepsHighlight(
+  last: { readonly code: string; readonly lang: string; readonly at: number } | null,
+  code: string,
+  lang: string,
+  closed: boolean,
+  now: number,
+): boolean {
+  return (
+    last !== null &&
+    !closed &&
+    last.lang === lang &&
+    now - last.at < STREAMING_HIGHLIGHT_MS &&
+    code.length > last.code.length &&
+    code.startsWith(last.code)
+  );
+}
+
 /** A fenced code block, coloured when its language is known. */
 export function CodeBlock({
   lang,
@@ -67,10 +104,25 @@ export function CodeBlock({
   readonly code: string;
   readonly closed: boolean;
 }) {
-  const colored = useMemo(() => {
-    const html = highlightCode(code, lang);
-    return html === null ? null : highlightNodes(html);
-  }, [code, lang]);
+  const last = useRef<Highlighted | null>(null);
+  const [, recolor] = useReducer((count: number) => count + 1, 0);
+  const now = typeof performance === "undefined" ? 0 : performance.now();
+  if (last.current?.code !== code || last.current.lang !== lang) {
+    if (!keepsHighlight(last.current, code, lang, closed, now)) {
+      const html = highlightCode(code, lang);
+      last.current = { code, lang, nodes: html === null ? null : highlightNodes(html), at: now };
+    }
+  }
+  const shown = last.current;
+  const colored = shown?.nodes ?? null;
+  const plain = shown === null ? code : code.slice(shown.code.length);
+  const waiting = plain.length > 0 && shown !== null;
+  // The stream may stop without another frame: colour what arrived last once it has rested.
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(recolor, STREAMING_HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
   return (
     <div className="code-block">
       <div className="code-header">
@@ -78,7 +130,10 @@ export function CodeBlock({
         <CopyButton text={code} label="Copy code" />
       </div>
       <pre data-test-block="code" aria-busy={!closed}>
-        <code className={colored ? "hljs" : undefined}>{colored ?? code}</code>
+        <code className={colored ? "hljs" : undefined}>
+          {colored ?? shown?.code ?? ""}
+          {plain}
+        </code>
       </pre>
     </div>
   );
