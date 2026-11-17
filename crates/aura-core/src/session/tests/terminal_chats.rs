@@ -149,6 +149,48 @@ async fn a_terminal_opened_while_the_new_chats_agent_starts_opens_once_that_agen
     rig.manager.terminal_ended(&chat.id, opened.generation);
 }
 
+/// Stop cannot end a terminal's session, so stopping every chat keeps a chat open in its terminal
+/// at once instead of waiting out its deadline for it; once the terminal ends, the chat gives its
+/// session back by itself.
+#[tokio::test]
+async fn stopping_chats_keeps_one_open_in_its_terminal_instead_of_waiting_for_it() {
+    let (_home, rig) = with_home(claude_rig);
+    let chat = rig
+        .manager
+        .create_chat("claude", &rig.folder)
+        .await
+        .unwrap();
+    let opened = rig.manager.open_terminal(&chat.id).await.unwrap();
+    assert!(rig.manager.shared().live.contains(&chat.id));
+    let report = tokio::time::timeout(
+        std::time::Duration::from_secs(4),
+        rig.manager.stop_all(
+            super::super::stopping::StopScope::Chats(vec![chat.id.clone()]),
+            std::time::Duration::from_secs(3),
+        ),
+    )
+    .await
+    .expect("answers without waiting out its deadline");
+    assert_eq!(report.kept, vec![chat.id.clone()]);
+    assert!(report.stopping.is_empty(), "{report:?}");
+    assert!(report.stopped.is_empty(), "{report:?}");
+    assert!(
+        rig.manager.shared().live.contains(&chat.id),
+        "still the terminal's"
+    );
+    rig.manager.terminal_ended(&chat.id, opened.generation);
+    let report = rig
+        .manager
+        .stop_all(
+            super::super::stopping::StopScope::Chats(vec![chat.id.clone()]),
+            std::time::Duration::from_secs(10),
+        )
+        .await;
+    assert!(report.kept.is_empty(), "{report:?}");
+    assert!(report.stopping.is_empty(), "{report:?}");
+    assert!(!rig.manager.shared().live.contains(&chat.id));
+}
+
 /// A claude chat in a new worktree whose setup command has not run yet.
 async fn claude_chat_awaiting_setup(rig: &Rig) -> String {
     let chat = rig

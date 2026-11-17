@@ -34,6 +34,67 @@ fn card() -> Step {
     })
 }
 
+/// What still stops is named, as the person knows each chat, for a profile switch or an install
+/// that waits on it.
+#[tokio::test]
+async fn chats_still_stopping_are_named() {
+    use super::super::stopping::still_stopping;
+    let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);
+    let project = rig
+        .manager
+        .project_create(aura_protocol::workspace::ProjectCreate {
+            project: aura_protocol::workspace::ProjectInput {
+                name: "auracode".into(),
+                color: None,
+                default_agent: None,
+                default_model: None,
+            },
+            folder: rig.folder.to_string_lossy().into_owned(),
+        })
+        .await
+        .expect("project");
+    let titled = rig
+        .manager
+        .chat_project_create(aura_protocol::workspace::ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: true,
+        })
+        .await
+        .expect("chat")
+        .chat
+        .id;
+    rig.manager
+        .chat_rename(&titled, "Fix the sidebar")
+        .await
+        .expect("rename");
+    let names = rig.manager.chat_names(vec![titled]).await;
+    assert_eq!(names, ["\u{201c}Fix the sidebar\u{201d} in auracode"]);
+    let then = "Switch profiles again in a moment.";
+    assert_eq!(
+        still_stopping(&names, then),
+        "\u{201c}Fix the sidebar\u{201d} in auracode is still stopping. Switch profiles again in a moment."
+    );
+    let many: Vec<String> = ["A", "B", "C", "D", "E"].map(String::from).into();
+    assert_eq!(
+        still_stopping(&many[..2], then),
+        format!("A and B are still stopping. {then}")
+    );
+    assert_eq!(
+        still_stopping(&many[..3], then),
+        format!("A, B and C are still stopping. {then}")
+    );
+    assert_eq!(
+        still_stopping(&many, then),
+        format!("A, B and 3 more chats are still stopping. {then}")
+    );
+    assert_eq!(
+        still_stopping(&[], then),
+        format!("A chat is still stopping. {then}")
+    );
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn stop_idle_leaves_working_waiting_and_queued_chats_and_stop_all_frees_every_slot() {
     let (idle, idle_handle) = ScriptedDriver::new(vec![ready_step("idle")]);

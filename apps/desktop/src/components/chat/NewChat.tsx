@@ -294,6 +294,22 @@ export function NewChat({
     !knownFolder && state.folder ? (answer?.worktree ?? retainedPick) : undefined;
   // A picked folder waits for Rust's answer before it is used or added, so it never joins twice.
   const pickPending = Boolean(workspace && state.folder && !folderId && !answer);
+  const loaded = organization.data !== null;
+  // A picked folder in no project joins the workspace by itself (the effect below). Create waits
+  // for exactly that, from Rust's answer until the folder is in the workspace (and while the
+  // workspace still loads, before the effect can add it), so a click never adds the folder a
+  // second time or reviews one still joining. A failed add ends the wait: Create then tries
+  // itself and says why if it still cannot.
+  const joining = Boolean(
+    workspace &&
+      state.folder &&
+      !folderId &&
+      answer &&
+      answer.matches.length === 0 &&
+      !managedPicked &&
+      !picked &&
+      adding.current !== state.folder,
+  );
   useEffect(() => {
     void previewRevision;
     let current = true;
@@ -315,7 +331,6 @@ export function NewChat({
   }, [knownFolder, workspace, previewRevision]);
   // A picked folder joins the workspace as its own project at once (as a project is added in the
   // Codex app), so its Git state is reviewed before Create. A failure leaves it to Create.
-  const loaded = organization.data !== null;
   useEffect(() => {
     const path = state.folder;
     if (
@@ -424,6 +439,7 @@ export function NewChat({
   const canCreate =
     selected !== null &&
     !pickPending &&
+    !joining &&
     !managedPicked &&
     (state.folder !== null || knownFolder !== "") &&
     !addingFolder &&

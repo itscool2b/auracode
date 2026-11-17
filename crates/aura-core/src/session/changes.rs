@@ -150,8 +150,11 @@ impl SessionManager {
             .await
             .map_err(|_| SessionError::Organization("Resolving the folder failed.".into()))?;
         // Reverting rewrites files: agents there that are not working stop first (this chat's
-        // included), and what still works is named.
-        self.stop_unless_working(super::stopping::StopScope::Folders(vec![folder.clone()]))
+        // included), and what still works is named before anything stops.
+        let holders = self
+            .exclusive_can_go(std::slice::from_ref(&folder), None, &[])
+            .await?;
+        self.stop_unless_working(super::stopping::StopScope::Chats(holders))
             .await;
         if !self.shared().live.reserve_folder(&folder) {
             return Err(self

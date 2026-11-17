@@ -525,6 +525,101 @@ async fn a_commit_beside_an_idle_agent_holds_its_new_turns_until_it_ends() {
     }
 }
 
+/// A quiet change refused by a working agent names that agent only: an idle one beside it may stay,
+/// so "Stop these chats" never stops it for nothing.
+#[tokio::test]
+async fn a_quiet_change_names_only_the_chats_in_its_way() {
+    let (idle, idle_handle) = ScriptedDriver::new(vec![ready_step("idle")]);
+    let (work, work_handle) = working_driver("work");
+    let rig = rig(vec![idle, work], WriterConfig::STANDARD, Knobs::STANDARD);
+    let idle = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("idle chat");
+    status(&rig, &idle.id, SessionStatus::Ready).await;
+    let busy = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("working chat");
+    status(&rig, &busy.id, SessionStatus::Ready).await;
+    rig.manager
+        .send(&busy.id, "keep working".into())
+        .await
+        .expect("send");
+    work_handle.wait_for(CommandMatch::Prompt).await;
+    match rig.manager.hold_quiet(vec![rig.folder.clone()]).await {
+        Err(SessionError::FolderBusy { message, blockers }) => {
+            let named: Vec<_> = blockers.chats.iter().map(|chat| &chat.chat_id).collect();
+            assert_eq!(named, [&busy.id], "only the working chat is in the way");
+            assert_eq!(blockers.terminals, 0);
+            assert!(message.contains("is working in this folder"), "{message}");
+        }
+        Err(other) => panic!("expected the working chat to be named, got {other}"),
+        Ok(_) => panic!("a quiet change must wait for a running turn"),
+    }
+    assert!(idle_handle.commands().is_empty(), "the idle agent runs on");
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+/// A start held back by a quiet change goes only if something still wants it: Stop, or the message
+/// it was for being discarded, leaves the agent stopped when the change ends.
+#[tokio::test]
+async fn a_start_held_by_a_quiet_change_is_dropped_by_stop_or_a_discarded_message() {
+    let (driver, _) = ScriptedDriver::new(vec![ready_step("held")]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .store
+        .create_chat(crate::chatstore::NewChat {
+            agent_host: Default::default(),
+            agent_id: "mock".into(),
+            folder: rig.folder.clone(),
+            device_id: "device".into(),
+            now: now_millis(),
+        })
+        .await
+        .expect("saved chat")
+        .id;
+    let quiet = || rig.manager.hold_quiet(vec![rig.folder.clone()]);
+    // A message sent while the change holds the folder, then discarded.
+    let held = quiet().await.expect("quiet hold");
+    let sent = rig
+        .manager
+        .send(&chat, "start for this".into())
+        .await
+        .expect("send");
+    assert!(sent.queued);
+    rig.manager
+        .cancel_queued(&chat, &sent.prompt_id)
+        .await
+        .expect("discard");
+    drop(held);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !rig.manager.shared().live.contains(&chat),
+        "nothing starts for a discarded message"
+    );
+    // A start asked for while it holds the folder, then stopped.
+    let held = quiet().await.expect("quiet hold");
+    rig.manager.start(&chat, false).await.expect("start");
+    rig.manager.stop(&chat).await.expect("stop");
+    drop(held);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !rig.manager.shared().live.contains(&chat),
+        "a stopped start stays stopped"
+    );
+    // A start asked for while it holds the folder, left alone, goes once it ends.
+    let held = quiet().await.expect("quiet hold");
+    rig.manager.start(&chat, false).await.expect("start");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!rig.manager.shared().live.contains(&chat), "it waits");
+    drop(held);
+    status(&rig, &chat, SessionStatus::Ready).await;
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
     use aura_drivers::driver::LoggedCommand;
@@ -578,9 +673,12 @@ async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
         Err(other) => panic!("expected the working chat to be named, got {other}"),
         Ok(_) => panic!("a working agent's folder cannot be rewritten"),
     }
-    // The idle agent was stopped first; it resumes on its next message.
-    assert!(!rig.manager.shared().live.contains(&idle.id));
-    assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
+    // Refused before anything stopped: the idle agent runs on.
+    assert!(rig.manager.shared().live.contains(&idle.id));
+    assert!(
+        quiet_handle.commands().is_empty(),
+        "nothing was stopped for it"
+    );
     assert!(rig.manager.shared().live.contains(&busy.id));
     rig.manager.stop(&busy.id).await.expect("stop");
     eventually("working agent stopped", || {
@@ -596,4 +694,6 @@ async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
         made.worktree.state,
         aura_protocol::git::WorktreeState::Ready
     );
+    // Then the idle agent was stopped first; it resumes on its next message.
+    assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
 }

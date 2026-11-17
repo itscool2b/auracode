@@ -24,6 +24,44 @@ async fn pending_chat(rig: &Rig) -> String {
     chat.id
 }
 
+/// A start that waited for room and then finds its worktree's setup asked again stops, and the
+/// chat list hears so instead of showing it starting for good.
+#[tokio::test]
+async fn a_start_that_waited_for_room_says_it_stopped_when_setup_holds_it() {
+    let (idle, idle_handle) = ScriptedDriver::new(vec![
+        ready_step("idle"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_millis(500)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let rig = with_limits(
+        ManagerLimits {
+            max_live_agents: 1,
+            ..ManagerLimits::STANDARD
+        },
+        || rig(vec![idle], WriterConfig::STANDARD, Knobs::STANDARD),
+    );
+    let first = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &first.id, SessionStatus::Ready).await;
+    let chat = pending_chat(&rig).await;
+    // Its setup had succeeded, so it may start; there is no room, so it waits.
+    rig.manager
+        .set_setup_attempt(&chat, Some(1), WorktreeSetupState::Succeeded, None)
+        .await
+        .unwrap();
+    rig.manager.start(&chat, false).await.unwrap();
+    idle_handle.wait_for(CommandMatch::Shutdown).await;
+    status(&rig, &chat, SessionStatus::Starting).await;
+    // Setup is asked again meanwhile; once the slot frees, the start cannot go on.
+    rig.manager
+        .set_setup_attempt(&chat, None, WorktreeSetupState::Awaiting, None)
+        .await
+        .unwrap();
+    status(&rig, &chat, SessionStatus::Stopped).await;
+    assert!(!rig.manager.shared().live.contains(&chat));
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn queued_setup_events_report_exact_holds_when_other_messages_are_already_held() {
     for state in [WorktreeSetupState::Failed, WorktreeSetupState::Interrupted] {

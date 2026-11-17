@@ -88,6 +88,20 @@ export async function mountNewChatSelectionFixture(
       return { folder, busy_chats: [] };
     },
     folderMatches: fixtureFolderMatches(() => data),
+    // A folder in no project joins the draft's project a moment later, as Rust adds it.
+    addFolder: async (projectId, path) => {
+      await new Promise((done) => setTimeout(done, 200));
+      const target = data.projects.find((item) => item.id === projectId);
+      if (!target) throw new Error("Unknown synthetic project");
+      const folder: ProjectFolder = {
+        ...source,
+        id: "folder-fresh",
+        path: path.replace(/\/$/, ""),
+        display_name: "fresh",
+      };
+      target.folders.push(folder);
+      return folder;
+    },
   });
   await workspace.refresh();
   const draft = new NewChatDraft(

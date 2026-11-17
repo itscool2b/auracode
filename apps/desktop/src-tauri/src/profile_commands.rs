@@ -185,10 +185,18 @@ async fn activate_serial(
     // Switching closes this profile: its chats' agents stop here, so the switch never asks the
     // person to stop them. Each chat resumes its session when this profile opens again.
     if let Some(chats) = state.chats() {
-        chats
+        let report = chats
             .manager
             .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
             .await;
+        // A chat still on its way out is named, not mistaken for a Git change or an update.
+        if !report.stopping.is_empty() {
+            let names = chats.manager.chat_names(report.stopping).await;
+            return Err(unavailable(&aura_core::session::still_stopping(
+                &names,
+                "Switch profiles again in a moment.",
+            )));
+        }
     }
     activate_one(state, selected, outside).await
 }
