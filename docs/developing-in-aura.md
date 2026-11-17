@@ -200,7 +200,10 @@ first on `PATH`.
 **Testing next to the running app.** `pnpm tauri build --debug --no-bundle` from `apps/desktop`,
 then `target/debug/auracode`. It opens the development folder, is titled `auracode dev` and runs
 beside the installed app. Never stop `auracode` by name (`pkill auracode`): the installed app's
-process has the same name. Stop the PID you started.
+process has the same name. Stop the PID you started. A plain `cargo build` or `cargo test` writes
+`target/debug/auracode` again without the page built in (it loads the Vite dev server's address
+and shows an empty window when none runs), so build with the Tauri command again before starting
+it.
 
 On NVIDIA's driver under Wayland the window used to close as soon as it opened ("Error 71
 (Protocol error) dispatching to Wayland display"): the driver puts the window's surface under
