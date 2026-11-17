@@ -249,14 +249,8 @@ pub struct ChatRuntime {
     /// Sentences that arrive after startup (the sweep's), shown with `app_info`'s notices.
     pub late_notices: Arc<Mutex<Vec<String>>>,
     pub(crate) services: Arc<RuntimeServices>,
-    pub(crate) account_config: Option<Arc<crate::account_config::AccountConfigServices>>,
-    pub(crate) sync_identity: Option<aura_core::sync::SyncIdentity>,
-    pub(crate) sync_engine: std::sync::OnceLock<Arc<aura_core::sync::engine::SyncEngine>>,
-    pub(crate) sync_history_error: std::sync::atomic::AtomicBool,
     /// The profile's folder: the browser keeps its pages' data in `browser` inside it.
     pub profile_dir: PathBuf,
-    /// The profile's files are encrypted (an account profile): the browser keeps nothing on disk.
-    pub private: bool,
 }
 
 /// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
@@ -353,7 +347,7 @@ pub fn start_chats(
     rt: &Handle,
     outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
 ) -> Option<ChatRuntime> {
-    start_profile_chats(booted, app_version, rt, outside, None, None)
+    start_profile_chats(booted, app_version, rt, outside, None)
 }
 
 pub(crate) fn start_profile_chats(
@@ -361,7 +355,6 @@ pub(crate) fn start_profile_chats(
     app_version: &str,
     rt: &Handle,
     outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
-    file_key: Option<Arc<aura_sync::crypto::files::ProfileFileKey>>,
     reuse: Option<Arc<RuntimeServices>>,
 ) -> Option<ChatRuntime> {
     if booted.fatal.is_some() {
@@ -379,18 +372,8 @@ pub(crate) fn start_profile_chats(
         return None;
     };
     let profile = Profile { meta, dir };
-    let started = match &file_key {
-        Some(key) => ChatStore::start_account(
-            store,
-            owner,
-            &profile,
-            device.device_id.clone(),
-            rt.clone(),
-            key.clone(),
-        ),
-        None => ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone()),
-    };
-    let store = match started {
+    let store = match ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone())
+    {
         Ok(store) => store,
         Err(error) => {
             tracing::error!(%error, "the chat store could not start");
@@ -444,46 +427,22 @@ pub(crate) fn start_profile_chats(
         Arc::clone(&redactor),
         rt.clone(),
     );
-    if file_key.is_none() {
-        let pruning = logs.clone();
-        rt.spawn(async move {
-            let report = pruning.prune(RetentionPolicy::STANDARD).await;
-            if report.files_removed > 0 || !report.errors.is_empty() {
-                tracing::info!(
-                    files = report.files_removed,
-                    bytes = report.bytes_removed,
-                    errors = report.errors.len(),
-                    "pruned old protocol logs"
-                );
-            }
-        });
-    }
-    let (worktrees, checkpoints) = if let Some(key) = &file_key {
-        let worktrees = aura_core::gitworkspaces::GitWorkspaces::new_account(
-            &profile,
-            env.clone(),
-            registry.clone(),
-            key.clone(),
-        );
-        let checkpoints = aura_core::checkpoints::Checkpoints::new_account(
-            &profile,
-            env.clone(),
-            registry.clone(),
-            key.clone(),
-        );
-        match (worktrees, checkpoints) {
-            (Ok(worktrees), Ok(checkpoints)) => (worktrees, checkpoints),
-            _ => {
-                booted.fatal = Some("The encrypted profile metadata could not be opened. Existing files were preserved.".into());
-                return None;
-            }
+    let pruning = logs.clone();
+    rt.spawn(async move {
+        let report = pruning.prune(RetentionPolicy::STANDARD).await;
+        if report.files_removed > 0 || !report.errors.is_empty() {
+            tracing::info!(
+                files = report.files_removed,
+                bytes = report.bytes_removed,
+                errors = report.errors.len(),
+                "pruned old protocol logs"
+            );
         }
-    } else {
-        (
-            aura_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone()),
-            aura_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone()),
-        )
-    };
+    });
+    let worktrees =
+        aura_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone());
+    let checkpoints =
+        aura_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone());
     let manager = SessionManager::new(ManagerDeps {
         worktrees: Some(worktrees),
         checkpoints: Some(checkpoints),
@@ -500,18 +459,11 @@ pub(crate) fn start_profile_chats(
         timings: SessionTimings::STANDARD,
         rt: rt.clone(),
     });
-    // Added agent accounts keep their tokens in secure storage and their names in a plain file,
-    // so an account profile, whose files are all encrypted, does not take them yet.
-    let tokens = if file_key.is_some() {
-        Err("Added agent accounts are available in local profiles.".to_owned())
-    } else {
-        crate::agent_account_commands::ProfileTokens::open()
-            .map(|tokens| Arc::new(tokens) as Arc<dyn aura_core::agent_accounts::TokenVault>)
-    };
-    // Usage percentages and reset times only; an account profile keeps them in memory.
-    if file_key.is_none() {
-        manager.persist_agent_usage(&profile.dir.join("agent-usage.json"));
-    }
+    // Added agent accounts keep their tokens in secure storage and their names in a plain file.
+    let tokens = crate::agent_account_commands::ProfileTokens::open()
+        .map(|tokens| Arc::new(tokens) as Arc<dyn aura_core::agent_accounts::TokenVault>);
+    // Usage percentages and reset times only.
+    manager.persist_agent_usage(&profile.dir.join("agent-usage.json"));
     manager.set_agent_accounts(Some(Arc::new(
         aura_core::agent_accounts::AgentAccountsStore::open(&profile.dir, tokens),
     )));
@@ -521,12 +473,7 @@ pub(crate) fn start_profile_chats(
         registry,
         late_notices,
         services,
-        account_config: None,
-        sync_identity: None,
-        sync_engine: std::sync::OnceLock::new(),
-        sync_history_error: std::sync::atomic::AtomicBool::new(false),
         profile_dir: profile.dir.clone(),
-        private: file_key.is_some(),
     })
 }
 
@@ -1075,9 +1022,6 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     async fn stop_sessions(&self, deadline: Duration) -> ShutdownSummary {
-        if let Some(engine) = self.chats.sync_engine.get() {
-            engine.close(Duration::from_secs(2)).await;
-        }
         self.chats.manager.shutdown_all(deadline).await
     }
 
@@ -1175,9 +1119,6 @@ pub fn native_quit_choice(
 /// request). Every recorded agent process is killed at once, and the store closes within 1 s
 /// unless the quit flow closed it. Returns whether this closed the store.
 pub fn exit_last_resort(quit: &Quit, chats: &ChatRuntime) -> bool {
-    if let Some(engine) = chats.sync_engine.get() {
-        engine.stop();
-    }
     chats.manager.kill_all_now();
     if quit.store_closed() {
         return false;

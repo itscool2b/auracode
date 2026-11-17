@@ -8,12 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
-import { checkAccount } from "./check-account.mjs";
-import { checkAccountPreservation } from "./check-account-preservation.mjs";
-import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkAutomaticCheckpoints } from "./check-automatic-checkpoints.mjs";
-import { checkConfigSync } from "./check-config-sync.mjs";
-import { checkDataTransfer } from "./check-data-transfer.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkNotices } from "./check-notices.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
@@ -220,7 +215,6 @@ try {
         sounds: false,
         keep_awake: false,
         close_to_tray: false,
-        config_sync_paused: [],
         copy_instructions_to_worktrees: true,
         agent_memory_writes: true,
         keep_steps_open: false,
@@ -319,14 +313,9 @@ try {
       await checkNotices(page, out, engine);
       await checkGitReview(page, url, out, engine);
       await checkProjectTools(page, url, out, engine);
-      await checkDataTransfer(page, url, out, engine);
-      await checkAccountPreservation(page, url, out, engine);
-      await checkAccountVerification(browser, url, out, engine);
-      await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);
       await checkWorktreeSetup(browser, url, out, engine);
       await checkSetupRecovery(browser, url);
-      await checkConfigSync(browser, url, out, engine);
       await checkSteering(browser, url, out, engine);
       await checkQuestions(browser, url, out, engine);
       await checkSessionFallback(browser, url, out, engine);

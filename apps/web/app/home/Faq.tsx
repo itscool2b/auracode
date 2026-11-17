@@ -10,7 +10,7 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
   {
     question: "Is auracode free?",
     answer:
-      "Yes. The desktop app is free, there is no paid tier and nothing to sign up for. It works without an account.",
+      "Yes. The desktop app is free and there is no paid tier. There is no auracode account and nothing to sign up for.",
   },
   {
     question: "Which agents does it run?",
@@ -28,9 +28,9 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
       "Yes. Projects, chats and sessions are stored on your computer and the app needs no connection. Your agents may still need one for their own services.",
   },
   {
-    question: "How does cloud sync work?",
+    question: "Does auracode sync or upload my work?",
     answer:
-      "Sync is optional and end-to-end encrypted: content is encrypted on your device before upload, and the service stores ciphertext. Accounts are invite-only during the private preview.",
+      "No. Chats, projects and settings stay on your computer. There is no auracode account, so nothing is uploaded by one. Your agents still send what they need to their own services.",
   },
   {
     question: "Which systems are supported?",

@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use aura_core::device::{DeviceIdentity, DeviceLoad};
 use aura_core::owner::ProfileOwner;
 use aura_core::paths::DataRoot;
-use aura_core::profile::{Profile, ProfileKind, ProfileMeta, Profiles};
+use aura_core::profile::{Profile, ProfileMeta, Profiles};
 use aura_core::store::{OpenOutcome, Salvage, Store};
 use serde::Serialize;
 
@@ -88,24 +88,16 @@ pub fn startup() -> Booted {
 
 /// Runs the startup sequence on `root`.
 pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
-    boot_selected(root, None, None)
+    boot_selected(root, None)
 }
 
 /// Prepare an explicit profile without changing state.json. The caller publishes that choice only
-/// after its keyed files, store and runtime are ready. All IO runs on a blocking worker.
-pub(crate) fn boot_profile(
-    root: DataRoot,
-    profile: Profile,
-    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
-) -> Booted {
-    boot_selected(Ok(root), Some(profile), key)
+/// after its store and runtime are ready. All IO runs on a blocking worker.
+pub(crate) fn boot_profile(root: DataRoot, profile: Profile) -> Booted {
+    boot_selected(Ok(root), Some(profile))
 }
 
-fn boot_selected(
-    root: aura_core::Result<DataRoot>,
-    selected: Option<Profile>,
-    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
-) -> Booted {
+fn boot_selected(root: aura_core::Result<DataRoot>, selected: Option<Profile>) -> Booted {
     let preparing = selected.is_some();
     let mut booted = Booted {
         data_dir: None,
@@ -143,25 +135,6 @@ fn boot_selected(
         Err(error) => return booted.fail("load this device's identity", &error),
     }
 
-    let selected = if selected.is_none()
-        && !matches!(aura_core::config_transition::pending(root.root()), Ok(None))
-    {
-        // Never repair an ambiguous active pointer to Local while managed files belong to a
-        // pending switch. The typed recovery state keeps the shell accessible and launches closed.
-        let Ok(id) = aura_core::config_transition::active_profile(root.root()) else {
-            booted.notices.push("The pending configuration switch requires its original profile pointer. Existing state was preserved.".into());
-            return booted;
-        };
-        match Profiles::new(root.clone()).get(&id) {
-            Ok(profile) => Some(profile),
-            Err(_) => {
-                booted.notices.push("The pending configuration switch's profile is unavailable. Existing state was preserved.".into());
-                return booted;
-            }
-        }
-    } else {
-        selected
-    };
     let profile = match selected
         .map(Ok)
         .unwrap_or_else(|| Profiles::new(root).open_active())
@@ -172,22 +145,12 @@ fn boot_selected(
     booted.profile = Some(profile.meta.clone());
     booted.profile_dir = Some(profile.dir.clone());
 
-    // A saved Account selection is an unlock state, never a corrupt plaintext database. Startup
-    // can show the shell before reading auracode's vault and leave Local available explicitly.
-    if profile.meta.kind == ProfileKind::Account && key.is_none() {
-        return booted;
-    }
-
     match ProfileOwner::acquire(&profile) {
         Ok(owner) => booted.owner = Some(owner),
         Err(error) => return booted.fail("take ownership of your profile", &error),
     }
 
-    let opened = match key {
-        Some(key) => Store::open_encrypted(&profile, key),
-        None => Store::open(&profile),
-    };
-    match opened {
+    match Store::open(&profile) {
         Ok((store, info)) => {
             if preparing && info.unclean_shutdown {
                 match store.check_integrity() {

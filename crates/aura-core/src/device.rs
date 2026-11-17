@@ -1,7 +1,7 @@
 //! This machine's identity.
 //!
-//! Every synced row records the `device_id` that wrote it, and the account's device list (M6) shows
-//! `name` and `platform`. The identity lives in `<data root>/device.json`, outside any profile, so all
+//! Rows that depend on this machine (a folder's location, a queued prompt) record the `device_id`
+//! that wrote them. The identity lives in `<data root>/device.json`, outside any profile, so all
 //! profiles on a machine agree on which device they are.
 
 use std::ffi::OsStr;
@@ -70,8 +70,8 @@ impl DeviceIdentity {
     ///
     /// A file that could not be *read* (permission denied, an I/O error, too many open files, a
     /// Windows sharing violation) is an error instead, and stays where it is. Its contents may be
-    /// perfectly good, and every synced row and folder location is tied to this id, so replacing it
-    /// over a passing fault would change the machine's identity for good.
+    /// perfectly good, and every folder location is tied to this id, so replacing it over a
+    /// passing fault would change the machine's identity for good.
     pub fn load_or_create(root: &DataRoot) -> Result<DeviceLoad> {
         root.ensure()?;
         let path = root.device_file();
@@ -118,8 +118,8 @@ impl DeviceIdentity {
 }
 
 /// The platform string stored with the identity. Rust's own OS names are already `"macos"`,
-/// `"windows"`, and `"linux"`, so the website and sync API can switch on them without a translation
-/// table, and any other OS still gets a stable, meaningful value.
+/// `"windows"`, and `"linux"`, so whatever shows the device can switch on them without a
+/// translation table, and any other OS still gets a stable, meaningful value.
 pub fn current_platform() -> &'static str {
     std::env::consts::OS
 }

@@ -1,5 +1,23 @@
 # Auracode implementation progress
 
+## 2026-11-16: auracode accounts removed
+
+The owner decided the app is local-only, because Claude Code and Codex sync plugins natively. The
+account system is gone from the code: sign-in and account profiles in the desktop app, plugin and
+configuration sync between devices, `crates/aura-sync`, the SQLCipher store and aura-core's
+`account-sync` feature, the account API (`apps/api`) with its D1 migrations, and the website's
+sign-in, sign-up, device verification and account pages. Entries below that describe them are
+history and are left as written; the documents they point to (`cloud-api-v1.md`,
+`sync-crypto-v1.md`, `desktop-account-client.md`, `account-*.md`, `config-apply.md`,
+`config-profile-transitions.md`) were deleted with the code.
+
+What stayed: agents' own accounts, remote access, local profiles, the Plugin library on this
+device, shared MCP, project memory, chat export, the updater and the release catalog. A profile
+folder an account left in a data folder is never opened, listed or deleted; when it was the
+last-used profile, Local opens instead. The profile database's migrations were not changed, so the
+tables sync used remain, unused. The Cloudflare resources the account system used were not
+touched and are listed in `infra/README.md` for the owner to remove.
+
 ## 2026-10-29: Native clone folder admission
 
 The native onboarding clone path reserved the selected parent and then rejected its own child

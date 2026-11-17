@@ -477,11 +477,8 @@ impl Session {
             });
             return;
         }
-        let mut request = match crate::attachments::pi_with_reader(
-            parts,
-            self.setup.attachment_dir.as_deref(),
-            self.setup.attachment_reader.as_deref(),
-        ) {
+        let mut request = match crate::attachments::pi(parts, self.setup.attachment_dir.as_deref())
+        {
             Ok(request) => request,
             Err(message) => {
                 let _ = reply.send(SteerResult::Rejected { message });
@@ -969,22 +966,19 @@ impl Session {
                     });
                     return;
                 }
-                let request = match crate::attachments::pi_with_reader(
-                    &parts,
-                    self.setup.attachment_dir.as_deref(),
-                    self.setup.attachment_reader.as_deref(),
-                ) {
-                    Ok(request) => request,
-                    Err(message) => {
-                        self.outbox.push_back(DriverEvent::TurnEnded {
-                            turn_id: turn.turn_id,
-                            stop_reason: StopReason::Error,
-                            usage: None,
-                            error: Some(error(message)),
-                        });
-                        return;
-                    }
-                };
+                let request =
+                    match crate::attachments::pi(&parts, self.setup.attachment_dir.as_deref()) {
+                        Ok(request) => request,
+                        Err(message) => {
+                            self.outbox.push_back(DriverEvent::TurnEnded {
+                                turn_id: turn.turn_id,
+                                stop_reason: StopReason::Error,
+                                usage: None,
+                                error: Some(error(message)),
+                            });
+                            return;
+                        }
+                    };
                 self.translator.begin_turn();
                 self.last_error = None;
                 self.run_failed = false;

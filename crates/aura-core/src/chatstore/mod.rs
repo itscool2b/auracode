@@ -22,8 +22,6 @@
 //! saving is paused, `chats`, `read_blob`, `read_saved_page` and `load_chat` (for a chat with nothing
 //! unsaved and no running turn) are served from saved data at once.
 
-#[cfg(all(test, feature = "account-sync"))]
-mod account_files_tests;
 pub(crate) mod agent_catalogs;
 pub(crate) mod blobs;
 pub(crate) mod compact;
@@ -34,19 +32,13 @@ pub(crate) mod files;
 pub(crate) mod folder_resolution;
 pub(crate) mod history;
 pub(crate) mod image_refs;
-#[cfg(feature = "account-sync")]
-mod journal;
 pub(crate) mod memory;
 pub(crate) mod organization;
-#[cfg(feature = "account-sync")]
-mod preservation;
 pub(crate) mod recover;
 pub(crate) mod rows;
 pub(crate) mod search;
 pub(crate) mod setup_attempt;
 pub(crate) mod steering;
-#[cfg(feature = "account-sync")]
-mod sync;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub(crate) mod workspace_activity;
@@ -91,8 +83,6 @@ pub struct ChatStore {
     rt: Handle,
     db_path: PathBuf,
     attachment_dir: PathBuf,
-    attachments: files::Attachments,
-    encrypted: bool,
     recovered: watch::Receiver<Option<RecoveryReport>>,
 }
 
@@ -276,20 +266,6 @@ impl ChatStore {
         );
         answer.await.map_err(|_| StoreError::Closed)?
     }
-    /// The app's fixed profile layout supplies this authority, never a renderer path. Legacy test
-    /// stores outside that layout have no shared-home transition coordinator.
-    pub(crate) fn config_recovery_pending(&self) -> bool {
-        let Some(profiles) = self.db_path.parent().and_then(std::path::Path::parent) else {
-            return false;
-        };
-        if profiles.file_name() != Some(std::ffi::OsStr::new("profiles")) {
-            return false;
-        }
-        profiles
-            .parent()
-            .is_some_and(|root| !matches!(crate::config_transition::pending(root), Ok(None)))
-    }
-
     pub(crate) async fn search(
         &self,
         query: String,
@@ -487,57 +463,7 @@ impl ChatStore {
         rt: Handle,
         config: WriterConfig,
     ) -> Result<Arc<ChatStore>, CoreError> {
-        if profile.meta.kind == crate::profile::ProfileKind::Account {
-            return Err(CoreError::ProfileLocked {
-                path: profile.db_path(),
-            });
-        }
-        Self::start_files(
-            store,
-            owner,
-            profile,
-            device_id,
-            rt,
-            config,
-            files::Files::local(profile),
-        )
-    }
-
-    /// Opens encrypted external files before moving the unlocked Account store to its writer.
-    #[cfg(feature = "account-sync")]
-    pub fn start_account(
-        store: Store,
-        owner: ProfileOwner,
-        profile: &Profile,
-        device_id: String,
-        rt: Handle,
-        key: Arc<aura_sync::crypto::files::ProfileFileKey>,
-    ) -> Result<Arc<ChatStore>, CoreError> {
-        if profile.meta.kind != crate::profile::ProfileKind::Account || !store.is_encrypted() {
-            return Err(CoreError::ProfileEncryptionMismatch);
-        }
-        let files = files::Files::account(profile, key).map_err(CoreError::io(&profile.dir))?;
-        Self::start_files(
-            store,
-            owner,
-            profile,
-            device_id,
-            rt,
-            WriterConfig::STANDARD,
-            files,
-        )
-    }
-
-    fn start_files(
-        store: Store,
-        owner: ProfileOwner,
-        profile: &Profile,
-        device_id: String,
-        rt: Handle,
-        config: WriterConfig,
-        files: files::Files,
-    ) -> Result<Arc<ChatStore>, CoreError> {
-        let attachments = files.attachments.clone();
+        let files = files::Files::new(profile);
         let shared = Arc::new(Shared::new(config));
         let (recovered, recovered_rx) = watch::channel(None);
         let writer = Writer::new(
@@ -566,8 +492,6 @@ impl ChatStore {
             rt,
             db_path: profile.db_path(),
             attachment_dir: profile.attachments_dir(),
-            attachments,
-            encrypted: profile.meta.kind == crate::profile::ProfileKind::Account,
             recovered: recovered_rx,
         }))
     }
@@ -583,15 +507,6 @@ impl ChatStore {
 
     pub(crate) fn attachment_dir(&self) -> &std::path::Path {
         &self.attachment_dir
-    }
-
-    pub(crate) fn attachment_reader(
-        &self,
-    ) -> Option<Arc<dyn aura_drivers::attachments::AttachmentReader>> {
-        self.attachments.reader()
-    }
-    pub(crate) fn encrypted(&self) -> bool {
-        self.encrypted
     }
 
     /// What startup recovery did, once it finished.

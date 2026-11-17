@@ -13,8 +13,8 @@ such as `result.text` remains subject to the existing bounded logging policy. Th
 loses some ambiguous string diagnostics instead of saving an image prefix.
 
 This applies to new log records and recognized image shapes. It does not rewrite existing logs
-or infer binary data hidden inside arbitrary prose. Account profiles continue to disable raw
-native protocol logging. Saved image attachments follow their separate profile storage policy.
+or infer binary data hidden inside arbitrary prose. Saved image attachments follow their separate
+profile storage policy.
 
 Verification: all 198 `aura-process` library tests and Clippy with warnings denied pass on Windows
 x64. Regression coverage includes reordered object keys, all cut positions within payloads,

@@ -38,16 +38,8 @@ pub struct McpRecord {
 pub struct McpSnapshot {
     pub revision: u32,
     pub servers: Vec<McpRecord>,
-    pub conflicts: Vec<McpConflict>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct McpConflict {
-    pub revision: String,
-    pub id: String,
-    pub project_id: Option<String>,
-    pub incoming: Option<McpDefinition>,
-}
-/// This type never enters UI snapshots, sync or protocol logs.
+/// This type never enters UI snapshots or protocol logs.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct McpCredentials {
     pub env: BTreeMap<String, String>,

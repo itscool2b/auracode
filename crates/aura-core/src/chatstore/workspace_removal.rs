@@ -1,4 +1,4 @@
-//! Reversible parent tombstones, using the profile writer transaction and its sync capture.
+//! Reversible parent tombstones, written in the profile writer's transaction.
 use aura_protocol::workspace_removal::{
     RemovedWorkspace, WorkspaceRemovalAction, WorkspaceRemovalTarget,
 };

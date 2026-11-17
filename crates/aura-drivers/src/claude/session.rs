@@ -872,10 +872,9 @@ impl Session {
                         .push_back((arrived, DriverCommand::Prompt { turn, parts }));
                     return;
                 }
-                let content = match crate::attachments::claude_with_reader(
+                let content = match crate::attachments::claude(
                     &parts,
                     self.setup.attachment_dir.as_deref(),
-                    self.setup.attachment_reader.as_deref(),
                 ) {
                     Ok(content) => content,
                     Err(message) => {

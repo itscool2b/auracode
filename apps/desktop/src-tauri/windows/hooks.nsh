@@ -79,6 +79,15 @@ Var AuracodeCleanupLater
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  ; Earlier versions registered auracode:// links with Windows, for a sign-in page that no longer
+  ; exists; this version's installer registers none, so its uninstaller would leave theirs behind.
+  ; Remove the registration when it still points at this install, as their uninstallers did.
+  ClearErrors
+  ReadRegStr $R9 SHCTX "Software\Classes\auracode\shell\open\command" ""
+  ${If} $R9 == "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+    DeleteRegKey SHCTX "Software\Classes\auracode"
+  ${EndIf}
+  ClearErrors
   ${If} $AuracodeCleanupLater = 1
     !insertmacro AURACODE_CLEANUP "$PLUGINSDIR\auracode-cleanup.exe"
     !insertmacro AURACODE_CLEANUP_RESULT

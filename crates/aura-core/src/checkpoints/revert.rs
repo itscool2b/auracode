@@ -305,7 +305,7 @@ impl Checkpoints {
             replacements.insert(path.clone(), bytes);
         }
         let token = token.to_owned();
-        let keep = self.recovery_store()?;
+        let keep = self.recovery_store();
         tokio::task::spawn_blocking(move || {
             let _guard = guard;
             // Keep both session admission and checkpoint ownership until apply/recovery ends,
@@ -622,88 +622,56 @@ mod tests {
             expires: Instant::now() + Duration::from_secs(60),
         }
     }
-    fn encrypted_variants() -> Vec<bool> {
-        #[cfg(feature = "account-sync")]
-        {
-            vec![false, true]
-        }
-        #[cfg(not(feature = "account-sync"))]
-        {
-            vec![false]
-        }
-    }
-    fn no_plaintext(root: &Path, needle: &[u8]) {
-        for entry in std::fs::read_dir(root).unwrap() {
-            let entry = entry.unwrap();
-            if entry.file_type().unwrap().is_dir() {
-                no_plaintext(&entry.path(), needle)
-            } else {
-                assert!(
-                    !std::fs::read(entry.path())
-                        .unwrap()
-                        .windows(needle.len())
-                        .any(|bytes| bytes == needle)
-                );
-            }
-        }
-    }
-
     #[test]
-    fn durable_originals_precede_mutation_for_local_and_account_success_and_partial_failure() {
-        for encrypted in encrypted_variants() {
-            for partial in [false, true] {
-                let temp = tempfile::tempdir().unwrap();
-                let root = temp.path().join("work");
-                std::fs::create_dir(&root).unwrap();
-                std::fs::write(root.join("a"), "private original a").unwrap();
-                std::fs::write(root.join("b"), "private original b").unwrap();
-                let prepared = prepared(&root);
-                let token = crate::ids::new_id();
-                let store = Store::fixture(temp.path().join("durable"), encrypted);
-                // Removal uses the same verified swap as replacement publication.
-                let result = apply_with(&prepared, &token, BTreeMap::new(), &store, || {
-                    let group = store.group(&token).unwrap();
-                    assert_eq!(group.read("original-0"), b"private original a");
-                    assert_eq!(group.read("original-1"), b"private original b");
-                    assert!(!group.read("recovery.json").is_empty());
-                    assert!(root.join("a").exists());
-                    if partial {
-                        std::fs::write(root.join("b"), "private newer b").unwrap();
-                    }
-                })
-                .unwrap();
-                assert_eq!(result.error.is_some(), partial, "{:?}", result.error);
-                assert_eq!(result.applied.len(), if partial { 1 } else { 2 });
-                assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
-                if partial {
-                    assert_eq!(std::fs::read(root.join("b")).unwrap(), b"private newer b");
-                }
-                assert_eq!(
-                    result.recovery_paths,
-                    vec![store.path(&token).to_string_lossy().into_owned()]
-                );
+    fn durable_originals_precede_mutation_for_success_and_partial_failure() {
+        for partial in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("work");
+            std::fs::create_dir(&root).unwrap();
+            std::fs::write(root.join("a"), "private original a").unwrap();
+            std::fs::write(root.join("b"), "private original b").unwrap();
+            let prepared = prepared(&root);
+            let token = crate::ids::new_id();
+            let store = Store::fixture(temp.path().join("durable"));
+            // Removal uses the same verified swap as replacement publication.
+            let result = apply_with(&prepared, &token, BTreeMap::new(), &store, || {
                 let group = store.group(&token).unwrap();
-                let catalog: serde_json::Value =
-                    serde_json::from_slice(&group.read("saved-recovery.json")).unwrap();
-                let original = catalog
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|item| item["source"] == "original-1")
-                    .unwrap();
-                assert_eq!(
-                    group.read(original["object"].as_str().unwrap()),
-                    if partial {
-                        b"private newer b".as_slice()
-                    } else {
-                        b"private original b".as_slice()
-                    }
-                );
-                if encrypted {
-                    no_plaintext(&store.path(&token), b"private");
-                    no_plaintext(&store.path(&token), b"checkpoint_id");
+                assert_eq!(group.read("original-0"), b"private original a");
+                assert_eq!(group.read("original-1"), b"private original b");
+                assert!(!group.read("recovery.json").is_empty());
+                assert!(root.join("a").exists());
+                if partial {
+                    std::fs::write(root.join("b"), "private newer b").unwrap();
                 }
+            })
+            .unwrap();
+            assert_eq!(result.error.is_some(), partial, "{:?}", result.error);
+            assert_eq!(result.applied.len(), if partial { 1 } else { 2 });
+            assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
+            if partial {
+                assert_eq!(std::fs::read(root.join("b")).unwrap(), b"private newer b");
             }
+            assert_eq!(
+                result.recovery_paths,
+                vec![store.path(&token).to_string_lossy().into_owned()]
+            );
+            let group = store.group(&token).unwrap();
+            let catalog: serde_json::Value =
+                serde_json::from_slice(&group.read("saved-recovery.json")).unwrap();
+            let original = catalog
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["source"] == "original-1")
+                .unwrap();
+            assert_eq!(
+                group.read(original["object"].as_str().unwrap()),
+                if partial {
+                    b"private newer b".as_slice()
+                } else {
+                    b"private original b".as_slice()
+                }
+            );
         }
     }
 
@@ -716,7 +684,7 @@ mod tests {
         let token = crate::ids::new_id();
         let blocked = temp.path().join("blocked");
         std::fs::write(&blocked, "not a storage folder").unwrap();
-        let store = Store::fixture(blocked, false);
+        let store = Store::fixture(blocked);
         let result = apply(&prepared, &token, BTreeMap::new(), &store).unwrap();
         assert!(result.error.is_some());
         assert!(result.applied.is_empty());
@@ -731,28 +699,26 @@ mod tests {
     }
 
     #[test]
-    fn existing_recovery_object_write_failure_never_mutates_local_or_account_work() {
-        for encrypted in encrypted_variants() {
-            let temp = tempfile::tempdir().unwrap();
-            let root = temp.path().join("work");
-            std::fs::create_dir(&root).unwrap();
-            std::fs::write(root.join("a"), "original a").unwrap();
-            std::fs::write(root.join("b"), "original b").unwrap();
-            let prepared = prepared(&root);
-            let token = crate::ids::new_id();
-            let store = Store::fixture(temp.path().join("durable"), encrypted);
-            let group = store.group(&token).unwrap();
-            group
-                .write("original-0", b"immutable different original")
-                .unwrap();
-            let outcome = apply(&prepared, &token, BTreeMap::new(), &store).unwrap();
-            assert!(outcome.error.is_some());
-            assert!(outcome.applied.is_empty());
-            assert_eq!(group.read("original-0"), b"immutable different original");
-            assert_eq!(std::fs::read(root.join("a")).unwrap(), b"original a");
-            assert_eq!(std::fs::read(root.join("b")).unwrap(), b"original b");
-            assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
-        }
+    fn existing_recovery_object_write_failure_never_mutates_work() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("work");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("a"), "original a").unwrap();
+        std::fs::write(root.join("b"), "original b").unwrap();
+        let prepared = prepared(&root);
+        let token = crate::ids::new_id();
+        let store = Store::fixture(temp.path().join("durable"));
+        let group = store.group(&token).unwrap();
+        group
+            .write("original-0", b"immutable different original")
+            .unwrap();
+        let outcome = apply(&prepared, &token, BTreeMap::new(), &store).unwrap();
+        assert!(outcome.error.is_some());
+        assert!(outcome.applied.is_empty());
+        assert_eq!(group.read("original-0"), b"immutable different original");
+        assert_eq!(std::fs::read(root.join("a")).unwrap(), b"original a");
+        assert_eq!(std::fs::read(root.join("b")).unwrap(), b"original b");
+        assert!(!root.join(format!("{STAGING_PREFIX}{token}")).exists());
     }
 
     #[test]
@@ -765,7 +731,7 @@ mod tests {
         std::fs::remove_file(root.join("b")).unwrap();
         let prepared = prepared(root);
         let token = crate::ids::new_id();
-        let store = Store::fixture(root.join("durable"), false);
+        let store = Store::fixture(root.join("durable"));
         let result = apply_with(
             &prepared,
             &token,

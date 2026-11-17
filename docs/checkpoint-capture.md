@@ -96,13 +96,12 @@ when needed, the scratch directory. Cancelling the caller cannot release a works
 or delete scratch files beneath a worker. Scans stop at cooperative boundaries. Revert and recovery
 check cancellation before mutation, then retain ownership through completion or rollback.
 
-## Account capture
+## Formats and the preference
 
-Account capture retains its two-pass scan/read fingerprint comparison and authenticated immutable
-encrypted objects. It creates no plaintext content or manifest scratch copies. It shares the
-workspace coordinator, cancellation rules, and timings, but does not use the Local Git cache.
-Local and Account profiles use the same opt-in policy. Existing checkpoint formats remain readable;
-the preference is stored in setup preferences and requires no database migration.
+Checkpoints are private Git objects in the profile. The encrypted capture that account profiles
+used went with auracode's accounts on 16 November 2026. Existing checkpoints of Local profiles
+remain readable; the opt-in preference is stored in setup preferences and requires no database
+migration.
 
 ## Diagnostics and verification
 
@@ -121,13 +120,12 @@ them in profile logs. A diagnostic launch must capture stderr to retain phase ti
 Run the focused native regression suite with:
 
 ```text
-cargo test -p aura-core checkpoints --no-default-features
-cargo test -p aura-core --features account-sync --lib
+cargo test -p aura-core --lib checkpoints
 ```
 
 The ignored `checkpoint_performance` test creates disposable 1,000, 10,000, and 20,000-file
-workspaces and reports cold, unchanged, and one-file-edit captures. With `account-sync`, it measures
-both storage modes. `AURA_CHECKPOINT_BENCH_COUNTS` selects comma-separated sizes and
+workspaces and reports cold, unchanged, and one-file-edit captures.
+`AURA_CHECKPOINT_BENCH_COUNTS` selects comma-separated sizes and
 `AURA_CHECKPOINT_BENCH_WARM` selects the number of unchanged samples, defaulting to one.
 
 ```text
@@ -143,11 +141,11 @@ model request. Both fixtures are ignored by ordinary test runs.
 
 Compare the same fixture and build profile against the base revision, without concurrent builds
 or filesystem-heavy tests. These timings measure checkpoint completion and exclude provider
-latency. See [verification](verification.md) for the Windows/macOS and encrypted-storage gates.
+latency. See [verification](verification.md) for the Windows/macOS gates.
 
 The manual `CI` workflow accepts `checkpoint_benchmarks: true` for a dedicated comparison run.
-This mode runs encrypted verification and then the identical fixtures against the chosen baseline
-and current source on Windows and macOS. It skips unrelated app/UI jobs and uses a separate
+This mode runs the identical fixtures against the chosen baseline and current source on Windows
+and macOS. It skips unrelated app/UI jobs and uses a separate
 concurrency group, so it does not cancel a normal verification run. Baseline sources, temporary
 profiles, and measurement logs stay outside the measured checkout. Artifacts retain raw logs,
 normalized measurements, source revisions, fixture identities, and toolchain versions.
@@ -159,7 +157,7 @@ checkpoint store; it does not flush the operating system's disk cache. The basel
 The workspace fixture has three unchanged samples, while synthetic fixtures default to one sample
 per scenario. Results describe these runs, not tail latency or statistical significance. The send
 fixture excludes desktop UI/IPC, real harness startup, provider/model latency, and production log
-formatting and writes. It measures Local storage; Account timings come from direct capture.
+formatting and writes.
 
 `AURA_CHECKPOINT_BENCH_DIAGNOSTICS=1` enables a bounded checkpoint-only event collector in the
 ignored core fixtures; CI comparisons enable it. Collection adds small bounded allocations and
@@ -168,5 +166,5 @@ records retain phase/helper timings and durability selection without messages, I
 contents, and remain separate from normalized measurement rows.
 
 Native measurements, source provenance, and interpretation limits are retained in the
-[2026-10-31 benchmark report](benchmarks/checkpoint-latency-2026-10-31/README.md), including the
-Account cold-capture observations alongside the Local improvements.
+[2026-10-31 benchmark report](benchmarks/checkpoint-latency-2026-10-31/README.md). That report
+also records cold-capture observations for the account storage that has since been removed.

@@ -1,7 +1,7 @@
 import { Wordmark } from "@auracode/ui/graphite";
 
 /**
- * The footer on every page: the wordmark with what it stands for, then three columns of links,
+ * The footer on every page: the wordmark with what it stands for, then two columns of links,
  * under the page's last hairline.
  */
 export function SiteFooter() {
@@ -23,17 +23,6 @@ export function SiteFooter() {
               </li>
               <li>
                 <a href="/changelog">Changelog</a>
-              </li>
-            </ul>
-          </div>
-          <div className="footer-col">
-            <p className="footer-heading">Account</p>
-            <ul>
-              <li>
-                <a href="/signin">Sign in</a>
-              </li>
-              <li>
-                <a href="/account">Account</a>
               </li>
             </ul>
           </div>

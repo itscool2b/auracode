@@ -8,15 +8,8 @@ import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
-import { AccountPanel } from "./components/settings/AccountPanel";
-import {
-  ConfigurationRecovery,
-  recoverProfileConfiguration,
-} from "./components/settings/ConfigurationRecovery";
-import { LockedProfile } from "./components/settings/LockedProfile";
 import { type Page as SettingsPage, SettingsScreen } from "./components/settings/SettingsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
-import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
@@ -25,11 +18,10 @@ import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { paintsOnCpu } from "./lib/paint";
-import { installProfileEvents, switchProfile, takeSettingsReturn } from "./lib/profiles";
+import { installProfileEvents, takeSettingsReturn } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import type { StreamStore } from "./lib/session";
 import { setupApi } from "./lib/setup";
-import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
 import { subscribeNoticeSounds } from "./lib/sounds";
@@ -68,18 +60,13 @@ export function App({
   readonly workspace?: WorkspaceStore;
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
-  const bootRef = useRef(boot);
-  bootRef.current = boot;
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
-  const viewRef = useRef(view);
-  viewRef.current = view;
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
   /** Where Settings opens: its page, and the project, chat or revision a page opens on. */
   const [settingsEntry, setSettingsEntry] = useState<{
     id: string;
     page: SettingsPage;
-    email: string;
     target?: InstructionsTarget;
     chatLabel?: string;
     projectId?: string | null;
@@ -87,55 +74,16 @@ export function App({
   }>({
     id: "initial",
     page: "general",
-    email: "",
   });
   /** Opens Settings from the chats on `page`, with what that page should open on. */
   const openSettings = (
     page: SettingsPage,
-    entry: Omit<typeof settingsEntry, "id" | "page" | "email"> = {},
+    entry: Omit<typeof settingsEntry, "id" | "page"> = {},
   ) => {
     setSettingsReturn("chats");
-    setSettingsEntry({ id: String(Date.now()), page, email: "", ...entry });
+    setSettingsEntry({ id: String(Date.now()), page, ...entry });
     setView("settings");
   };
-  useEffect(
-    () =>
-      subscribeSignInLinks((link) => {
-        const current = bootRef.current;
-        if (
-          !signInNavigationReady(
-            current.status === "ready" ? current.info : null,
-            !!document.querySelector(
-              'dialog[open], [role="dialog"], #profile-transition, #root[inert]',
-            ),
-          )
-        )
-          return false;
-        setSettingsReturn((previous) =>
-          viewRef.current === "settings"
-            ? previous
-            : viewRef.current === "setup"
-              ? "setup"
-              : "chats",
-        );
-        setRestartSetup(false);
-        setSettingsEntry({ id: link.id, page: "account", email: link.email ?? "" });
-        setView("settings");
-        return true;
-      }),
-    [],
-  );
-  const activeProfileId = boot.status === "ready" ? (boot.info.profile?.id ?? null) : null;
-  useEffect(
-    () =>
-      subscribeAccountSync(activeProfileId, (status) => {
-        if (status.state === "idle" && status.last_sync_at !== null) {
-          void chats.reloadChats();
-          void workspace?.refresh();
-        }
-      }),
-    [activeProfileId, chats, workspace],
-  );
   useEffect(() => {
     const openSettings = (event: KeyboardEvent) => {
       if (
@@ -151,7 +99,7 @@ export function App({
         if (view === "settings") setView(settingsReturn);
         else {
           setSettingsReturn("chats");
-          setSettingsEntry({ id: "shortcut", page: "general", email: "" });
+          setSettingsEntry({ id: "shortcut", page: "general" });
           setView("settings");
         }
       }
@@ -192,11 +140,11 @@ export function App({
             setView("stress");
           }
           if (info.launch.type === "smoke") setView("chats");
-          // A workspace opened from Settings shows Settings again, on the page that opened it.
-          else if (takeSettingsReturn(sessionStorage) === "account") {
-            // Back leads to setup while this workspace has not finished it, as a launch would.
+          // A profile opened from Settings shows Settings again, on the page that opened it.
+          else if (takeSettingsReturn(sessionStorage) === "privacy") {
+            // Back leads to setup while this profile has not finished it, as a launch would.
             setSettingsReturn("setup");
-            setSettingsEntry({ id: "profile-switch", page: "account", email: "" });
+            setSettingsEntry({ id: "profile-switch", page: "privacy" });
             setView("settings");
             void setupApi.snapshot().then(
               (setup) => {
@@ -318,54 +266,6 @@ export function App({
   }
 
   const { info } = boot;
-  if (info.config_profile_recovery) {
-    const selectedProfile = info.profile?.id;
-    const ownerProfile = info.config_profile_recovery.owner_profile;
-    const access =
-      ownerProfile && info.config_profile_recovery.phase !== "unavailable" ? (
-        <AccountPanel
-          recoveryOnly
-          recoveryProfileId={ownerProfile}
-          recoveryActionLabel={
-            info.profile_locked ? "Unlock selected account" : "Recover configuration"
-          }
-          deviceName={info.device?.name ?? "My computer"}
-          onActivate={async () => {
-            if (info.profile_locked && selectedProfile) {
-              await switchProfile(selectedProfile);
-            } else {
-              const recovered = await recoverProfileConfiguration();
-              if (recovered.config_profile_recovery)
-                throw new Error(recovered.config_profile_recovery.detail);
-              window.location.reload();
-            }
-          }}
-        />
-      ) : null;
-    return (
-      <ConfigurationRecovery recovery={info.config_profile_recovery} locked={info.profile_locked}>
-        {info.notices.map((notice) => (
-          <p className="settings-footnote" key={notice}>
-            {notice}
-          </p>
-        ))}
-        {info.fatal ? (
-          <p role="alert" className="settings-error">
-            {info.fatal}
-          </p>
-        ) : null}
-        {info.profile_locked ? (
-          access
-        ) : access ? (
-          <details>
-            <summary>Restore access to the account used by this switch</summary>
-            {access}
-          </details>
-        ) : null}
-      </ConfigurationRecovery>
-    );
-  }
-  if (info.profile_locked) return <LockedProfile info={info} />;
   if (info.fatal !== null) {
     return (
       <ErrorScreen
@@ -404,12 +304,6 @@ export function App({
           setView("chats");
         }}
         onDemo={() => setView("diagnostics")}
-        onAccount={() => {
-          setRestartSetup(false);
-          setSettingsReturn("setup");
-          setSettingsEntry({ id: "setup", page: "account", email: "" });
-          setView("settings");
-        }}
       />
     );
   // Settings and the Dashboard keep the chats mounted behind them: the open chat and its draft survive
@@ -458,7 +352,6 @@ export function App({
           <SettingsScreen
             navigationId={settingsEntry.id}
             initialPage={settingsEntry.page}
-            initialEmail={settingsEntry.email}
             instructionsTarget={settingsEntry.target}
             chatLabel={settingsEntry.chatLabel}
             workspace={workspace}
@@ -467,9 +360,6 @@ export function App({
             agents={{ app: chats, transport }}
             backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}
-            onImported={async () => {
-              await Promise.all([chats.reloadChats(), workspace?.refresh()]);
-            }}
             onBack={() => setView(settingsReturn)}
             onDiagnostics={() => setView("diagnostics")}
             onSetup={() => {

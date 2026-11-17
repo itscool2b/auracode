@@ -1,7 +1,7 @@
 /**
  * Settings' pages, in the order and groups the navigation shows them (owner's plan, 4 November
- * 2026): the app, then agents and what they use, then the person and their data. The search reads
- * the index below; check-settings.mjs keeps it in step with the rows the pages draw.
+ * 2026): the app, then agents and what they use, then remote access and the person's data. The
+ * search reads the index below; check-settings.mjs keeps it in step with the rows the pages draw.
  */
 export type Page =
   | "general"
@@ -15,14 +15,13 @@ export type Page =
   | "instructions"
   | "memory"
   | "remote"
-  | "account"
   | "privacy"
   | "about";
 
 export const PAGE_GROUPS: readonly (readonly Page[])[] = [
   ["general", "appearance", "chats", "voice", "shortcuts"],
   ["agents", "plugins", "browser", "instructions", "memory"],
-  ["remote", "account", "privacy", "about"],
+  ["remote", "privacy", "about"],
 ];
 
 export const PAGE_LABELS: Readonly<Record<Page, string>> = {
@@ -37,7 +36,6 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
   instructions: "Instructions",
   memory: "Project memory",
   remote: "Remote access",
-  account: "Account & sync",
   privacy: "Data & privacy",
   about: "About",
 };
@@ -138,8 +136,6 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "remote", title: "Devices", words: "paired phone browser remove unpair remote" },
   { page: "remote", title: "Link a bot", words: "grok bot mcp connector assistant remote" },
   { page: "remote", title: "Bots", words: "linked bot remove level full control remote" },
-  { page: "account", title: "Account", words: "sign in email profile log in" },
-  { page: "account", title: "Configuration sync", words: "devices sync settings agents" },
   { page: "privacy", title: "Data folder", words: "files location storage" },
   { page: "privacy", title: "What stays on this device", words: "privacy local audio" },
   {

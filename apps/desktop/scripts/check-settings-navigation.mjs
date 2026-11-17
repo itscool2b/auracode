@@ -12,15 +12,14 @@ const PAGES = [
   "Instructions",
   "Project memory",
   "Remote access",
-  "Account & sync",
   "Data & privacy",
   "About",
 ];
 
 /**
  * One Settings screen (owner's plan, 4 November 2026): every page opens from its section with the
- * heading focused, Customize's pages keep what was typed in them, the search finds every row on
- * every page and opens it, and repeated website links never unmount an account setup.
+ * heading focused, Customize's pages keep what was typed in them, and the search finds every row
+ * on every page and opens it.
  */
 export async function checkSettingsNavigation(page, url) {
   const nextFrames = () =>
@@ -131,25 +130,4 @@ export async function checkSettingsNavigation(page, url) {
   await page.evaluate(() => window.dictationFixture.complete());
   await page.getByRole("status").filter({ hasText: "Heard: Testing one, two, three." }).waitFor();
   await page.getByRole("button", { name: "Test again", exact: true }).waitFor();
-
-  // Repeated website links must not unmount an inline code or key setup.
-  await page.goto(`${url}/?preview=settings&signin=1&signed-out=1`);
-  const email = page.getByRole("textbox", { name: "Email address", exact: true });
-  await email.waitFor();
-  assert.equal(await email.inputValue(), "first@example.com");
-  await email.fill("my-unsent-edit@example.com");
-  const before = await page.evaluate(() => window.settingsFixture.calls());
-  await page.evaluate(() => window.settingsNavigationFixture.open("second@example.com"));
-  assert.equal(await email.inputValue(), "my-unsent-edit@example.com");
-  assert.deepEqual(await page.evaluate(() => window.settingsFixture.calls()), before);
-
-  await page.goto(`${url}/?preview=settings&signin=1`);
-  await page.getByRole("button", { name: "Create recovery key", exact: true }).click();
-  const key = page.getByRole("textbox", { name: "Recovery key", exact: true });
-  await key.waitFor();
-  const calls = await page.evaluate(() => window.settingsFixture.calls());
-  await page.evaluate(() => window.settingsNavigationFixture.open("second@example.com"));
-  assert.equal(await key.inputValue(), "SYNTHETIC-KEY-RETAINED-ACROSS-LINKS");
-  assert.deepEqual(await page.evaluate(() => window.settingsFixture.calls()), calls);
-  await page.getByRole("checkbox", { name: "I saved my recovery key somewhere safe" }).check();
 }

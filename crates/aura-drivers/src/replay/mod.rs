@@ -202,7 +202,6 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     Ok(SessionSetup {
         mcp_servers: Vec::new(),
         attachment_dir: None,
-        attachment_reader: None,
         attachment_writer: None,
         chat_id: "replay".into(),
         launch: replay_launch(if pi {

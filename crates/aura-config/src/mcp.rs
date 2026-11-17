@@ -169,7 +169,7 @@ fn value_json(value: &toml_edit::Value) -> Result<Value> {
 
 /// An agent's MCP server entry as one native `mcpServers` value that auracode's shared MCP can
 /// import for every agent. Wider than [`portable`]: `env` and `headers` are allowed, because the
-/// shared import keeps their values as this device's local credentials (never exported or synced)
+/// shared import keeps their values as this device's local credentials (never exported)
 /// and only their names in the definition. The command, its arguments and the URL are checked as
 /// for a copy, since they become part of the shared definition. Vendor options still refuse.
 pub(crate) fn shareable(value: &Value, from: Provider) -> Result<Value> {

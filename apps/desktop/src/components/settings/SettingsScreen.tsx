@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   BookOpen,
   Bot,
-  CircleUser,
   FileText,
   Globe,
   Info,
@@ -37,6 +36,7 @@ import type { DataCleanupApi } from "../../lib/dataCleanup";
 import { type DictationApi, dictationApi } from "../../lib/dictation";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
+import { type ProfileApi, profileApi } from "../../lib/profiles";
 import { type RemoteApi, remoteApi } from "../../lib/remote";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
@@ -44,12 +44,9 @@ import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { PluginLibraryScreen } from "../library/PluginLibraryScreen";
 import { UniversalPlugins } from "../library/UniversalPlugins";
 import { AgentsScreen } from "../setup/AgentsScreen";
-import { AccountPanel } from "./AccountPanel";
-import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { DeleteDataDialog } from "./DeleteDataDialog";
 import { AppearancePage, ChatsPage, GeneralPage } from "./GeneralPanel";
 import { type InstructionsFolder, InstructionsPanel } from "./InstructionsPanel";
-import { LocalImportPanel } from "./LocalImportPanel";
 import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
 import { ProjectMemoryPanel } from "./ProjectMemoryPanel";
@@ -82,7 +79,6 @@ const ICONS: Readonly<Record<Page, LucideIcon>> = {
   instructions: FileText,
   memory: BookOpen,
   remote: MonitorSmartphone,
-  account: CircleUser,
   privacy: ShieldCheck,
   about: Info,
 };
@@ -130,7 +126,7 @@ const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /**
- * Settings: one screen for the app, the agents and what they use, and the person's account and
+ * Settings: one screen for the app, the agents and what they use, remote access and the person's
  * data, with a search across every page (owner, 4 November 2026: "make the settings more
  * intuitive"). Customize and Agents open here on their pages.
  */
@@ -139,16 +135,15 @@ export function SettingsScreen({
   onBack,
   onSetup,
   onDiagnostics,
-  onImported,
   setup = setupApi,
   general = generalApi,
   updates = updatesApi,
   dictation = dictationApi,
   remote = remoteApi,
+  profiles = profileApi,
   reveal = revealDataDir,
   initialPage = "general",
   navigationId = "settings",
-  initialEmail = "",
   backLabel = "Back to chats",
   instructions = instructionsApi,
   instructionsTarget,
@@ -167,16 +162,16 @@ export function SettingsScreen({
   readonly onBack: () => void;
   readonly onSetup: () => void;
   readonly onDiagnostics: () => void;
-  readonly onImported?: () => Promise<void>;
   readonly setup?: SetupApi;
   readonly general?: GeneralApi;
   readonly updates?: UpdatesApi;
   readonly dictation?: DictationApi;
   readonly remote?: RemoteApi;
+  /** The data folder's profiles, for Data & privacy's list; previews pass a synthetic one. */
+  readonly profiles?: ProfileApi;
   readonly reveal?: () => Promise<void>;
   readonly initialPage?: Page;
   readonly navigationId?: string;
-  readonly initialEmail?: string;
   readonly backLabel?: string;
   readonly instructions?: InstructionsApi;
   /** The scope Instructions opens on: global, a project folder, or a chat's own folder. */
@@ -232,8 +227,8 @@ export function SettingsScreen({
   const [target, setTarget] = useState<InstructionsTarget | null>(instructionsTarget ?? null);
   useEffect(() => {
     void navigationId;
-    // A new entry (a website link, a chat's Instructions) selects its page without destroying an
-    // account code or key setup in progress on another.
+    // A new entry (a chat's Instructions) selects its page; the pages visited before keep what
+    // was typed in them.
     setPage(initialPage);
     setVisited((current) => new Set([...current, initialPage]));
     setTarget(instructionsTarget ?? null);
@@ -539,77 +534,51 @@ export function SettingsScreen({
               initialProjectId={projectId ?? undefined}
             />,
           )}
-          {pane(
-            "account",
-            <>
-              {/* The account comes first: it is what the page is for. Which workspace is open
-                  matters only once there is more than one, so that list follows. */}
-              <div data-setting="Account">
-                <AccountPanel
-                  initialEmail={initialEmail}
-                  deviceName={info.device?.name ?? "My computer"}
-                  activeProfileId={info.profile?.id ?? null}
-                />
-                {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
-                  <LocalImportPanel key={info.profile.id} onImported={onImported} />
-                ) : null}
-                <ProfilePicker activeId={info.profile?.id ?? null} />
-              </div>
-              <section
-                className="settings-section"
-                aria-labelledby="settings-config-sync"
-                data-setting="Configuration sync"
-              >
-                <h2 id="settings-config-sync">Configuration sync</h2>
-                <ConfigSyncPanel
-                  profileId={info.profile?.id ?? null}
-                  active={info.profile?.kind === "account" && !info.profile_locked}
-                  onAccount={() => open("account")}
-                />
-              </section>
-            </>,
-          )}
           {pane("remote", <RemotePanel api={remote} />)}
           {pane(
             "privacy",
-            <div className="settings-group">
-              <Row
-                title="Data folder"
-                detail={
-                  info.data_dir ? (
-                    <span className="settings-mono">{info.data_dir}</span>
-                  ) : (
-                    "Chats stay on this device."
-                  )
-                }
-              >
-                <button
-                  className="g-button g-button-outline g-button-28"
-                  type="button"
-                  disabled={!info.data_dir}
-                  onClick={() => void reveal().catch(() => {})}
+            <>
+              <div className="settings-group">
+                <Row
+                  title="Data folder"
+                  detail={
+                    info.data_dir ? (
+                      <span className="settings-mono">{info.data_dir}</span>
+                    ) : (
+                      "Chats stay on this device."
+                    )
+                  }
                 >
-                  Open folder
-                </button>
-              </Row>
-              <Row
-                title="What stays on this device"
-                detail="Chats, drafts and attachments stay in the data folder. Dictation's audio is never saved or uploaded. Your agents talk to their own services as they always do."
-              />
-              <Row
-                title="Delete all auracode data"
-                detail="As if auracode was never installed. Your agents and repositories stay."
-              >
-                <button
-                  className="g-button g-button-outline g-button-28"
-                  type="button"
-                  data-testid="settings-delete-data"
-                  onClick={() => setDeleting(true)}
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    disabled={!info.data_dir}
+                    onClick={() => void reveal().catch(() => {})}
+                  >
+                    Open folder
+                  </button>
+                </Row>
+                <Row
+                  title="What stays on this device"
+                  detail="Chats, drafts and attachments stay in the data folder. Dictation's audio is never saved or uploaded. Your agents talk to their own services as they always do."
+                />
+                <Row
+                  title="Delete all auracode data"
+                  detail="As if auracode was never installed. Your agents and repositories stay."
                 >
-                  Review
-                </button>
-              </Row>
-            </div>,
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    data-testid="settings-delete-data"
+                    onClick={() => setDeleting(true)}
+                  >
+                    Review
+                  </button>
+                </Row>
+              </div>
+              {/* Which profile is open matters only once the data folder holds more than one. */}
+              <ProfilePicker activeId={info.profile?.id ?? null} api={profiles} />
+            </>,
           )}
           {pane(
             "about",

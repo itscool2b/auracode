@@ -11,13 +11,15 @@ describe("the page a switch made in Settings returns to", () => {
     };
   };
   it("is read once, so a later reload opens the chats", () => {
-    const store = storage("account");
-    expect(takeSettingsReturn(store)).toBe("account");
+    const store = storage("privacy");
+    expect(takeSettingsReturn(store)).toBe("privacy");
     expect(store.held.size).toBe(0);
     expect(takeSettingsReturn(store)).toBeNull();
   });
   it("ignores anything it did not write, and storage that cannot be read", () => {
     expect(takeSettingsReturn(storage("plugins"))).toBeNull();
+    // What an earlier version wrote for its Account page opens the chats.
+    expect(takeSettingsReturn(storage("account"))).toBeNull();
     expect(takeSettingsReturn(storage(null))).toBeNull();
     expect(takeSettingsReturn(null)).toBeNull();
     expect(
@@ -58,7 +60,7 @@ describe("profile publication", () => {
     expect(activate).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
-  it("retains the page when native preparation refuses live work or cannot unlock the target", async () => {
+  it("retains the page when native preparation refuses live work or cannot open the target", async () => {
     const reload = vi.fn();
     await expect(
       performProfileSwitch(

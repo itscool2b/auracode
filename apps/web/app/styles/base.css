@@ -364,63 +364,10 @@ svg {
   transform: translateX(3px);
 }
 
-.text-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--s-ink);
-  font: inherit;
-  font-weight: 500;
-  text-decoration: underline;
-  text-decoration-color: var(--g-fg-4);
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.text-button:disabled {
-  color: var(--g-fg-4);
-  cursor: not-allowed;
-}
-
-.text-button-danger {
-  color: var(--g-red);
-  text-decoration-color: currentColor;
-}
-
 .note {
   color: var(--s-soft);
   font-size: 14px;
   line-height: 22px;
-}
-
-/* A status or alert row: a dot in the row's tone, then the sentence. */
-.notice {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--s-card);
-  color: var(--s-ink);
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.notice-mark {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--s-soft);
-  transform: translateY(-1px);
-}
-
-.notice-error {
-  background: var(--g-red-tint);
-}
-
-.notice-error .notice-mark {
-  background: var(--g-red);
 }
 
 /* -------------------------------------------------------------------------- calls to act */

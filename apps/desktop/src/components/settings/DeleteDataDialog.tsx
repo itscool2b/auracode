@@ -190,9 +190,9 @@ export function DeleteDataBody({
         ))}
         {review.secure_store ? (
           <div>
-            <dt>Keys</dt>
+            <dt>Agent tokens</dt>
             <dd>
-              {`Reviewed entries in ${review.secure_store}. Shared and unverifiable keys are retained.`}
+              {`Sign-in tokens of agent accounts you added in auracode, kept in ${review.secure_store}.`}
             </dd>
           </div>
         ) : null}
@@ -203,23 +203,6 @@ export function DeleteDataBody({
           </div>
         ) : null}
       </dl>
-      {review.keys.length > 0 ? (
-        <ul className="delete-data-note" aria-label="Secure-store entries">
-          {review.keys.map((key) => (
-            <li key={key.target}>
-              <span>
-                {key.remove ? "Remove" : "Retain"} {key.kind}: {key.reason}
-              </span>
-              <span className="delete-data-path">{key.target}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {review.warnings.map((warning) => (
-        <p key={warning} className="settings-alert" role="status">
-          {warning}
-        </p>
-      ))}
       {unsaved.length > 0 ? (
         <section
           className="delete-data-worktrees"
@@ -261,9 +244,8 @@ export function DeleteDataBody({
         {clean > 0
           ? `${clean === 1 ? "1 worktree" : `${clean} worktrees`} with nothing unsaved ${clean === 1 ? "is" : "are"} deleted too; branches stay in your repositories. `
           : ""}
-        Stays: your agents and their folders, files auracode wrote into them at your request, your
-        repositories and branches, and your account in the cloud, where this computer stays listed
-        under Devices until you remove it.
+        Stays: your agents and their folders, files auracode wrote into them at your request, and
+        your repositories and branches.
       </p>
       {review.app_bundle ? (
         <label className="settings-check">

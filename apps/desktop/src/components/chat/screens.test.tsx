@@ -329,26 +329,13 @@ describe("the agent lineup", () => {
 });
 
 describe("the sidebar footer", () => {
-  const local = { id: "local", kind: "local", display_name: "Local", created_at: 1 } as const;
-
   it("is the logo and one Settings button, with no agents or profile row", () => {
-    const html = renderToStaticMarkup(<SidebarFooter profile={local} onSettings={noop} />);
+    const html = renderToStaticMarkup(<SidebarFooter onSettings={noop} />);
     expect(html).toContain("chat-sidebar-footer-logo");
     expect(html).toContain('aria-label="Open settings"');
     expect(html).toContain('aria-keyshortcuts="Control+, Meta+,"');
     expect(html).not.toContain("g-agent-mark");
     expect(html).not.toContain("Stored on this device");
-    expect(html).not.toContain("data-attention");
-  });
-
-  it("shows no sync dot before an account's status arrives", () => {
-    const html = renderToStaticMarkup(
-      <SidebarFooter
-        profile={{ id: "work", kind: "account", display_name: "Work", created_at: 1 }}
-        onSettings={noop}
-      />,
-    );
-    expect(html).toContain('aria-label="Open settings"');
     expect(html).not.toContain("data-attention");
   });
 });

@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { DataCleanupReview } from "../../bindings";
-import { syntheticCleanupKeys } from "../../dev/deleteDataKeys";
 import {
   cleanupChoice,
   confirmed,
@@ -39,8 +38,6 @@ const REVIEW: DataCleanupReview = {
       unsaved: false,
     },
   ],
-  keys: [],
-  warnings: [],
   secure_store: "Windows Credential Manager",
   app_bundle: null,
 };
@@ -74,50 +71,16 @@ function render(
 }
 
 describe("Delete all auracode data", () => {
-  it("lists exactly what Rust reviewed, with sizes and the keys", () => {
+  it("lists exactly what Rust reviewed, with sizes and the agent tokens", () => {
     const html = render(REVIEW);
     expect(html).toContain("<dt>Chats and settings</dt>");
     expect(html).toContain("C:\\Users\\you\\AppData\\Local\\si.auracode.desktop");
     expect(html).toContain("1.2 GB");
     expect(html).toContain("<dt>Window and web data</dt>");
     expect(html).toContain(
-      "Reviewed entries in Windows Credential Manager. Shared and unverifiable keys are retained.",
+      "Sign-in tokens of agent accounts you added in auracode, kept in Windows Credential Manager.",
     );
     expect(html).toContain("Your agents, their settings and your repositories are not touched.");
-  });
-
-  it("shows removal only for this root's index, exclusive accounts and eligible orphans", () => {
-    const keys = syntheticCleanupKeys();
-    const html = render({ ...REVIEW, ...keys });
-    expect(html).toContain("Remove Index: Index belongs to a deleted root");
-    expect(html).toContain("Remove Account: Exclusively referenced by deleted roots");
-    expect(html).toContain("Remove Account: Unreferenced account bundle; default root is deleted");
-    expect(html).toContain("Retain Index: Index belongs to another data root");
-    expect(html).toContain("Retain Account: Referenced by another data root");
-    expect(keys.keys.filter((key) => key.remove)).toHaveLength(3);
-    expect(keys.warnings).toEqual([]);
-    for (const key of keys.keys) {
-      expect(key.target).toMatch(/^auracode\.sync\.v1:[A-Za-z0-9_-]{43}$/);
-      expect(html).toContain(key.target);
-    }
-  });
-
-  it("retains every key and the retry index when the synthetic review has unknown payloads", () => {
-    const keys = syntheticCleanupKeys(true);
-    const html = render({ ...REVIEW, ...keys });
-    expect(keys.keys).toHaveLength(6);
-    expect(keys.keys.every((key) => !key.remove)).toBe(true);
-    expect(html).not.toMatch(/Remove (?:Account|Index|Unknown):/);
-    expect(html).toContain(
-      "Retain Index: Reference discovery is uncertain; retain index for retry",
-    );
-    expect(html).toContain("Retain Index: Index belongs to another data root");
-    expect(html).toContain("Retain Account: Reference discovery is uncertain");
-    expect(html).toContain("Retain Unknown: Unreadable, malformed or unsupported payload");
-    expect(html).toContain('role="status"');
-    expect(html).toContain(
-      "Some secure-store entries or root identities could not be verified. All account keys and retry indexes are retained.",
-    );
   });
 
   it("warns about worktrees with unsaved work and keeps them by default", () => {
@@ -166,11 +129,18 @@ describe("Delete all auracode data", () => {
     expect(cleanupChoice(REVIEW, false, true).move_app_to_trash).toBe(false);
   });
 
-  it("says a data folder of its own preserves shared keys and the installed app's data", () => {
+  it("says a data folder of its own leaves the installed app's data alone", () => {
     const html = render({ ...REVIEW, scope: "data_folder", worktrees: [] });
     expect(html).toContain("the installed app&#x27;s data");
-    expect(html).toContain("Shared and unverifiable keys are retained.");
     expect(html).not.toContain("worktree has work");
+  });
+
+  it("says what stays, and names no account in the cloud", () => {
+    const html = render(REVIEW);
+    expect(html).toContain("Stays: your agents and their folders");
+    expect(html).toContain("your repositories and branches.");
+    expect(html).not.toContain("cloud");
+    expect(html).not.toContain("Devices");
   });
 
   it("shows loading, a failed review with a retry, and quitting", () => {

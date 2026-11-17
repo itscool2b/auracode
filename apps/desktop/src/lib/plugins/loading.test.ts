@@ -16,7 +16,6 @@ function pending() {
       update = onUpdate ?? (() => {});
       return result;
     },
-    setSync: async () => [],
     update: async () => {},
   };
   return { api, resolve, reject, progress: (value: PluginLibrary) => update(value) };

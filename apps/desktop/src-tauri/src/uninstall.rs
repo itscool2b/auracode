@@ -20,7 +20,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use aura_core::uninstall::{
-    self, AppVault, GitTool, Os, Plan, PlatformDirs, Report, Retry, Targets, WorktreeChoice,
+    self, GitTool, Os, Plan, PlatformDirs, Report, Retry, Targets, WorktreeChoice,
 };
 
 /// The first argument that selects this mode.
@@ -68,8 +68,6 @@ pub struct Options {
     pub trash_app: Option<PathBuf>,
     /// Print what would go and change nothing.
     pub dry_run: bool,
-    /// Reviewed opaque secure-store candidates from Settings. Execution can only narrow them.
-    pub vault_review: Option<Vec<uninstall::VaultApproval>>,
 }
 
 /// Reads the arguments after [`CLEANUP_FLAG`].
@@ -85,13 +83,6 @@ pub fn parse(args: &[OsString]) -> Result<Options, String> {
         };
         match arg.to_str() {
             Some("--dry-run") => options.dry_run = true,
-            Some("--vault-review") => {
-                let text = value("--vault-review")?;
-                options.vault_review = Some(
-                    serde_json::from_str(&text.to_string_lossy())
-                        .map_err(|_| "The secure-store review is invalid.".to_owned())?,
-                );
-            }
             Some("--interactive") => options.interactive = true,
             Some("--report-failures") => options.report_failures = true,
             Some("--remove-unsaved-worktrees") => options.remove_unsaved = true,
@@ -164,8 +155,9 @@ fn scoped_for_build(
 }
 
 /// Whether a second launch's arguments (the single-instance plugin's, the executable first) ask
-/// this copy to quit for a cleanup. Only exactly that one argument counts: a deep link arrives as
-/// one `auracode://` argument and can never add another.
+/// this copy to quit for a cleanup. Only exactly that one argument counts: a link (earlier
+/// versions registered `auracode://` links with the system) arrives as one argument and can never
+/// add another.
 pub fn is_quit_request(args: &[String]) -> bool {
     matches!(args, [_, flag] if flag == QUIT_FLAG)
 }
@@ -197,13 +189,7 @@ fn dispatch(
 
 fn preview(targets: &Targets) -> i32 {
     let git = GitTool::from_path();
-    let mut plan = uninstall::plan(targets, &git);
-    // An existing shared lease only: do not create even an empty lock file during dry-run.
-    let native = aura_sync::vault::NativeStore::for_review();
-    plan.vault = match native.as_ref() {
-        Ok(store) => uninstall::review_vault(store, &plan.data_roots, plan.default_root.as_deref()),
-        Err(_) => uninstall::VaultPlan::unavailable(),
-    };
+    let plan = uninstall::plan(targets, &git);
     print!("{}", describe_plan(&plan));
     exit::DONE
 }
@@ -224,29 +210,15 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
         return exit::RUNNING;
     }
     let git = GitTool::from_path();
-    let mut plan = uninstall::plan(targets, &git);
+    let plan = uninstall::plan(targets, &git);
     let choice = choose(&plan, options);
-    // Never wait for a root lock while holding this exclusive lease.
-    let native = aura_sync::vault::NativeStore::for_cleanup();
-    plan.vault = match native.as_ref() {
-        Ok(store) => uninstall::review_vault(store, &plan.data_roots, plan.default_root.as_deref()),
-        Err(_) => uninstall::VaultPlan::unavailable(),
-    };
-    if let Some(approved) = &options.vault_review {
-        plan.vault.approvals = approved.clone();
-    }
-    let vault = native.as_ref().ok().map(|store| store as &dyn AppVault);
     // Added agent accounts' tokens go with the profiles that list them, read before those go.
     let kept_tokens = remove_agent_tokens(&uninstall::agent_account_ids(&plan));
-    let mut report = uninstall::execute(&plan, &choice, vault, &git, &Retry::PATIENT);
+    let mut report = uninstall::execute(&plan, &choice, &git, &Retry::PATIENT);
     if kept_tokens > 0 {
         report.notes.push(format!(
             "{kept_tokens} agent account token(s) could not be removed from secure storage. Remove the entries named auracode.agents.v1 in Credential Manager or Keychain Access."
         ));
-    }
-    if native.is_err() && cfg!(any(windows, target_os = "macos")) {
-        report.vault.warnings = uninstall::VaultPlan::unavailable().warnings;
-        report.vault.error = Some(report.vault.warnings.join(" "));
     }
     let mut trash_error = None;
     if let Some(bundle) = &options.trash_app {
@@ -278,7 +250,7 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
 /// Removes each account's token from secure storage; answers how many stayed. With no secure
 /// storage there were never any tokens to remove.
 fn remove_agent_tokens(ids: &[String]) -> usize {
-    use aura_sync::vault::{NativeTokens, TokenEntry, TokenStore};
+    use crate::agent_tokens::{NativeTokens, TokenEntry};
     if ids.is_empty() {
         return 0;
     }
@@ -367,9 +339,6 @@ pub fn failure_text(report: &Report, trash: Option<&str>) -> String {
     if report.failed.len() > LISTED {
         text.push_str(&format!("and {} more\n", report.failed.len() - LISTED));
     }
-    if let Some(error) = &report.vault.error {
-        text.push_str(&format!("auracode's keys in secure storage: {error}\n"));
-    }
     if let Some(error) = trash {
         text.push_str(&format!(
             "The app itself was not moved to the Trash: {error}\n"
@@ -401,20 +370,6 @@ fn describe_plan(plan: &Plan) -> String {
             worktree.summary()
         ));
     }
-    for row in &plan.vault.rows {
-        let action = if row.remove {
-            "Would remove"
-        } else {
-            "Would retain"
-        };
-        text.push_str(&format!(
-            "{action} {:?} {}: {}\n",
-            row.kind, row.target, row.reason
-        ));
-    }
-    for warning in &plan.vault.warnings {
-        text.push_str(&format!("Secure store: {warning}\n"));
-    }
     text
 }
 
@@ -437,24 +392,6 @@ fn describe_report(report: &Report) -> String {
             failure.attempts,
             failure.error
         ));
-    }
-    let vault = &report.vault;
-    text.push_str(&format!(
-        "Secure store: {} data folder indexes, {} account keys and {} unreferenced account bundles removed.\n",
-        vault.indexes, vault.accounts, vault.swept
-    ));
-    for row in &vault.rows {
-        let action = if row.remove { "Removed" } else { "Retained" };
-        text.push_str(&format!(
-            "{action} {:?} {}: {}\n",
-            row.kind, row.target, row.reason
-        ));
-    }
-    for warning in &vault.warnings {
-        text.push_str(&format!("Secure store: {warning}\n"));
-    }
-    if let Some(error) = &vault.error {
-        text.push_str(&format!("Secure store: {error}\n"));
     }
     for note in &report.notes {
         text.push_str(&format!("{note}\n"));
@@ -739,22 +676,8 @@ mod tests {
         let result = dispatch(
             &options,
             || {
-                let mut reviewed = plan(Vec::new());
-                reviewed.vault.rows.push(uninstall::VaultRow {
-                    target: "auracode.sync.v1:opaque".into(),
-                    kind: uninstall::VaultKind::Account,
-                    remove: false,
-                    reason: "Shared account".into(),
-                });
-                reviewed
-                    .vault
-                    .warnings
-                    .push("Unknown entries retained".into());
-                let text = describe_plan(&reviewed);
-                assert!(
-                    text.contains("Would retain Account auracode.sync.v1:opaque: Shared account")
-                );
-                assert!(text.contains("Unknown entries retained"));
+                let text = describe_plan(&plan(vec![worktree("kept", 2, 0)]));
+                assert!(text.contains("Would keep worktree kept"), "{text}");
                 exit::DONE
             },
             || {
@@ -797,7 +720,6 @@ mod tests {
                 ],
                 trash_app: Some("/Applications/auracode.app".into()),
                 dry_run: true,
-                vault_review: None,
             }
         );
         assert_eq!(parse(&[]).unwrap(), Options::default());
@@ -872,8 +794,6 @@ mod tests {
 
     fn plan(worktrees: Vec<Worktree>) -> Plan {
         Plan {
-            default_root: None,
-            vault: uninstall::VaultPlan::default(),
             scope: uninstall::Scope::Machine,
             items: Vec::new(),
             worktrees,

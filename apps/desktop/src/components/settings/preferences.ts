@@ -28,7 +28,7 @@ export interface Preferences {
 
 /** One waiting change per setting: a later choice for it replaces the earlier one. */
 function slot(action: SetupAction): string {
-  return action.type === "config_sync_agent" ? `${action.type}:${action.agent_id}` : action.type;
+  return action.type;
 }
 
 /** The preferences as they will be once `action` saves, as the backend applies it. */
@@ -94,14 +94,6 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       return { ...preferences, general: { ...general, browser: action.enabled } };
     case "browser_passwords":
       return { ...preferences, general: { ...general, browser_passwords: action.enabled } };
-    case "config_sync_agent": {
-      const paused = general.config_sync_paused.filter((agent) => agent !== action.agent_id);
-      if (!action.enabled) paused.push(action.agent_id);
-      return {
-        ...preferences,
-        general: { ...general, config_sync_paused: paused.sort() },
-      };
-    }
     default:
       return preferences;
   }

@@ -16,19 +16,19 @@ prompt is triggered by opening setup or Agents. Explicit status and maintenance 
 existing Rust vendor commands; Sign in opens the existing terminal sheet whose Start action is
 separately explicit.
 
-Setup is four steps (Welcome, Your agents, Account, First project) in one calm, centred column
+Setup is three steps (Welcome, Your agents, First project) in one calm, centred column
 after Grok's start screen, on one card over window-wide lit water with seals and turtles passing
 behind it, as on the website hero (docs/design/visual-language.md, 4.16 and 6.17). Every step is
 skippable: Continue never requires anything, the progress bars visit any step and Skip setup
 finishes from anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
 step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
-the retired motion step resumes at First project. Keyboard focus moves to each step's heading.
+the retired motion step resumes at First project. So does one saved at the sign-in step setup
+had while auracode had accounts (removed on 16 November 2026). Keyboard focus moves to each step's heading.
 Enter advances except inside controls, editable content, menus and dialogs. Motion preferences
 also stop the shared frame clock, rather than merely hiding its animation with CSS.
 
-The Account step says it plainly: "Accounts are optional." / "And invite-only for now." auracode
-needs no account and no network; chats, projects and agents stay on this computer, and an account
-with an invitation only adds sync between devices. Open Account is there for someone who has one.
+Welcome says it plainly: auracode itself needs no account or network, and each agent keeps its
+own sign-in. Setup offers no account and no sign-in of auracode's own.
 
 First project offers a folder (chosen or dropped), an existing project, or Clone a repository,
 which replaces the step's content in place, X Money style: "Clone a repository." / "Git copies it
@@ -69,8 +69,8 @@ docs/setup-actions.md:
   [Hermes](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
 
 Still open for acceptance: native macOS/Windows folder-drop and terminal walks through the built
-app, a real clone and a real sign-in through the built app, and the enabled account flow. No real
-account was used in development checks.
+app, and a real clone and a real agent sign-in through the built app. No real agent account was
+used in development checks.
 
 `node apps/desktop/scripts/check-setup.mjs` runs the production React components in Chromium and
 WebKit against synthetic command responses. It covers the centred layout at two window sizes,

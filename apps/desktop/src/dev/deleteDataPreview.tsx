@@ -6,7 +6,6 @@
  *   ?preview=delete-data-worktrees   Windows, two worktrees with unsaved work
  *   ?preview=delete-data-macos       macOS, with "Also move auracode to the Trash"
  *   &case=fail                       applying fails (the review is used up)
- *   &case=unknown                    unknown payload retains account keys and retry indexes
  */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -26,14 +25,14 @@ import {
 import type { DataCleanupApi } from "../lib/dataCleanup";
 import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
-import { syntheticCleanupKeys } from "./deleteDataKeys";
+import { oneProfile } from "./profilesFixture";
 
 type Mode = "delete-data" | "delete-data-worktrees" | "delete-data-macos";
 
 const WINDOWS_ROOT = "C:\\Users\\you\\AppData\\Local\\si.auracode.desktop";
 const MAC_ROOT = "/Users/you/Library/Application Support/si.auracode.desktop";
 
-function review(mode: Mode, uncertain: boolean): DataCleanupReview {
+function review(mode: Mode): DataCleanupReview {
   const mac = mode === "delete-data-macos";
   const root = mac ? MAC_ROOT : WINDOWS_ROOT;
   const sep = mac ? "/" : "\\";
@@ -94,7 +93,6 @@ function review(mode: Mode, uncertain: boolean): DataCleanupReview {
         unsaved: false,
       },
     ],
-    ...syntheticCleanupKeys(uncertain),
     secure_store: mac ? "the macOS keychain" : "Windows Credential Manager",
     app_bundle: mac ? "/Applications/auracode.app" : null,
   };
@@ -107,7 +105,7 @@ function api(mode: Mode): DataCleanupApi {
   return {
     review: async () => {
       calls.push("review");
-      return review(mode, params.get("case") === "unknown");
+      return review(mode);
     },
     apply: async (token: string, choice: DataCleanupChoice) => {
       calls.push(`apply:${token}:${JSON.stringify(choice)}`);
@@ -127,9 +125,7 @@ const info = (mode: Mode): AppInfo => ({
   data_dir: mode === "delete-data-macos" ? MAC_ROOT : WINDOWS_ROOT,
   device: null,
   profile: null,
-  profile_locked: false,
   profile_switching: false,
-  config_profile_recovery: null,
   db: null,
   glass: "none",
   launch: { type: "normal" },
@@ -191,6 +187,7 @@ function Preview({ mode }: { readonly mode: Mode }) {
     );
   return (
     <SettingsScreen
+      profiles={oneProfile}
       info={info(mode)}
       initialPage="privacy"
       setup={setup}

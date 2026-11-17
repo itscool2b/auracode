@@ -234,26 +234,27 @@ describe("memory change events", () => {
     native.available = true;
     native.listen.mockReset();
   });
-  it("forwards memory changes and finished syncs, and stops on disposal", async () => {
+  it("forwards memory changes, missed ones included, and stops on disposal", async () => {
     const handlers = new Map<string, (event: { payload: unknown }) => void>();
-    const stops = [vi.fn(), vi.fn()];
+    const unlisten = vi.fn();
     native.listen.mockImplementation(async (name: string, handler) => {
       handlers.set(name, handler);
-      return stops[handlers.size - 1];
+      return unlisten;
     });
     const changed = vi.fn();
     const stop = subscribeProjectMemory(changed);
     await Promise.resolve();
     await Promise.resolve();
+    expect([...handlers.keys()]).toEqual([PROJECT_MEMORY_CHANGED]);
     const change = edit("r2", "r1");
     handlers.get(PROJECT_MEMORY_CHANGED)?.({ payload: change });
-    handlers.get("account-sync-changed")?.({ payload: ["profile", { state: "syncing" }] });
-    handlers.get("account-sync-changed")?.({ payload: ["profile", { state: "idle" }] });
+    // What Rust sends when its own listener fell behind: every open project reads again.
+    handlers.get(PROJECT_MEMORY_CHANGED)?.({ payload: MEMORY_CHANGED_ANYWHERE });
     expect(changed.mock.calls).toEqual([[change], [MEMORY_CHANGED_ANYWHERE]]);
     stop();
     handlers.get(PROJECT_MEMORY_CHANGED)?.({ payload: change });
     expect(changed).toHaveBeenCalledTimes(2);
-    for (const unlisten of stops) expect(unlisten).toHaveBeenCalledOnce();
+    expect(unlisten).toHaveBeenCalledOnce();
   });
   it("releases a listener that registers after the page left, and needs the native app", async () => {
     let finish: (stop: () => void) => void = () => {};

@@ -1,6 +1,6 @@
 //! The Plugin library, one section per agent: what that agent supports, read from its own CLI
 //! where it has a reviewed machine-readable listing (aura-agents) and from its files otherwise
-//! (aura-config), with the harness status detection computed and the device's sync switch.
+//! (aura-config), with the harness status detection computed.
 //! Assembly is pure; [`SessionManager::plugin_library`] gathers the facts.
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -10,8 +10,8 @@ use aura_agents::plugins::AgentListings;
 use aura_config::{Inventory, Item, Kind, Provider, extensions::Extensions};
 use aura_process::EnvKey;
 use aura_protocol::plugins::{
-    AgentPlugins, AgentSync, FeatureListing, HarnessStatus, ListingState, PluginEntry,
-    PluginFeature, PluginLibrary, PluginLibraryRef, PluginSystem,
+    AgentPlugins, FeatureListing, HarnessStatus, ListingState, PluginEntry, PluginFeature,
+    PluginLibrary, PluginLibraryRef, PluginSystem,
 };
 use aura_protocol::session::{AgentEntry, Availability};
 
@@ -47,9 +47,6 @@ pub struct PluginFacts {
     pub inventory: Inventory,
     /// Per provider namespace, including `opencode`.
     pub extensions: BTreeMap<String, Extensions>,
-    /// The Account workspace is open, so configuration sync can run.
-    pub sync_available: bool,
-    pub paused: Vec<String>,
 }
 
 const SKILLS: &str = "From the agent's skills folder.";
@@ -179,24 +176,6 @@ fn live_or_files(
     listing
 }
 
-fn sync(facts: &PluginFacts, agent: &str, supported: bool) -> AgentSync {
-    if !supported {
-        return AgentSync::Unsupported {
-            reason: "Configuration sync covers Claude Code, Codex and Pi.".into(),
-        };
-    }
-    if !facts.sync_available {
-        return AgentSync::Unsupported {
-            reason: "Open your Account workspace to sync across devices.".into(),
-        };
-    }
-    if facts.paused.iter().any(|paused| paused == agent) {
-        AgentSync::Off
-    } else {
-        AgentSync::On
-    }
-}
-
 pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
     let entry = |id: &str| facts.agents.iter().find(|agent| agent.id == id);
     let ext = |id: &str| facts.extensions.get(id).cloned().unwrap_or_default();
@@ -238,7 +217,7 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
             } else {
                 "Not installed on this device. These come from its folder, if any."
             };
-        let (system, summary, features, supported) = match id {
+        let (system, summary, features) = match id {
             "claude" => (
                 PluginSystem::Marketplace,
                 "Plugins from marketplaces, plus skills, MCP servers, slash commands, subagents and hooks.",
@@ -289,7 +268,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                         extensions.hooks.iter().map(|name| named(name)).collect(),
                     ),
                 ],
-                true,
             ),
             "codex" => (
                 PluginSystem::Marketplace,
@@ -341,7 +319,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                         extensions.hooks.iter().map(|name| named(name)).collect(),
                     ),
                 ],
-                true,
             ),
             "pi" => (
                 PluginSystem::Packages,
@@ -369,7 +346,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                         extensions.commands.iter().map(|name| named(name)).collect(),
                     ),
                 ],
-                true,
             ),
             "opencode" => {
                 const OPENCODE: &str = "OpenCode installs its plugins and checks its servers whenever it runs, so auracode reads ~/.config/opencode instead.";
@@ -413,7 +389,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                                 .collect(),
                         ),
                     ],
-                    false,
                 )
             }
             // Grok Build lists its plugins and marketplace sources as JSON; Hermes lists its
@@ -458,7 +433,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                         files(PluginFeature::McpServers, reason, servers),
                         files(PluginFeature::Skills, reason, skills),
                     ],
-                    false,
                 )
             }
             _ => {
@@ -499,7 +473,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                     PluginSystem::Declared,
                     "Native customization capabilities vary by agent and installed version. Reviewed file inventory and named native routes are shown where available.",
                     features,
-                    false,
                 )
             }
         };
@@ -515,7 +488,6 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
             harness,
             updated_at: listings.map(|listings| listings.updated_at),
             version_change: listings.and_then(|listings| listings.version_change.clone()),
-            sync: sync(facts, id, supported),
             notices: extensions.notices.clone(),
         });
     }
@@ -548,14 +520,8 @@ pub(super) fn opencode_root(env: &aura_process::EnvMap) -> Option<PathBuf> {
 impl SessionManager {
     /// The Plugin library. `refresh` probes the agents again and reruns every listing; otherwise
     /// a listing is reused unless its agent's installed version changed since it was read.
-    pub async fn plugin_library(
-        &self,
-        refresh: bool,
-        sync_available: bool,
-        paused: Vec<String>,
-    ) -> Result<PluginLibrary, SessionError> {
-        self.plugin_library_progressive(refresh, sync_available, paused, |_| true)
-            .await
+    pub async fn plugin_library(&self, refresh: bool) -> Result<PluginLibrary, SessionError> {
+        self.plugin_library_progressive(refresh, |_| true).await
     }
 
     /// Cancels the current read so profile switches can drain their admitted commands.
@@ -581,8 +547,6 @@ impl SessionManager {
     pub async fn plugin_library_progressive(
         &self,
         refresh: bool,
-        sync_available: bool,
-        paused: Vec<String>,
         mut publish: impl FnMut(PluginLibrary) -> bool + Send,
     ) -> Result<PluginLibrary, SessionError> {
         if self.shared().is_shutting_down() {
@@ -615,15 +579,13 @@ impl SessionManager {
         tokio::select! {
             biased;
             _ = cancelled.changed() => Err(SessionError::Internal("The Plugins & MCP refresh was replaced.".into())),
-            result = self.plugin_library_read(refresh, sync_available, paused, &mut publish_current) => result,
+            result = self.plugin_library_read(refresh, &mut publish_current) => result,
         }
     }
 
     async fn plugin_library_read(
         &self,
         refresh: bool,
-        sync_available: bool,
-        paused: Vec<String>,
         publish: &mut (impl FnMut(PluginLibrary) -> bool + Send),
     ) -> Result<PluginLibrary, SessionError> {
         let agents = self.deps().detector.cached();
@@ -691,8 +653,6 @@ impl SessionManager {
             listings,
             inventory,
             extensions,
-            sync_available,
-            paused,
         };
         let mut library = assemble(&facts);
         if !publish(library.clone()) {
@@ -854,7 +814,6 @@ mod tests {
                 availability: Availability::Checking,
                 ..agent("claude", None, None)
             }],
-            sync_available: true,
             ..Default::default()
         };
         let initial = assemble(&facts);
@@ -863,10 +822,6 @@ mod tests {
         assert!(!initial.agents[0].installed);
         assert!(matches!(&initial.agents[0].features[0].state,
             ListingState::Files { reason } if reason.contains("Detection is still running")));
-        assert!(matches!(
-            initial.agents[3].sync,
-            AgentSync::Unsupported { .. }
-        ));
     }
 
     #[test]
@@ -964,8 +919,6 @@ mod tests {
                 agent("codex", Some("0.162.1"), None),
                 agent("pi", None, Some(HarnessStatus::NotInstalled)),
             ],
-            sync_available: true,
-            paused: vec!["codex".into()],
             ..Default::default()
         };
         facts.listings.insert(
@@ -1024,7 +977,6 @@ mod tests {
             claude.harness,
             HarnessStatus::UpdateAvailable { .. }
         ));
-        assert_eq!(claude.sync, AgentSync::On);
         let feature = |agent: &AgentPlugins, feature| {
             agent
                 .features
@@ -1050,7 +1002,6 @@ mod tests {
             "PreToolUse"
         );
         let codex = &library.agents[1];
-        assert_eq!(codex.sync, AgentSync::Off);
         assert_eq!(codex.harness, HarnessStatus::Checking);
         let pi = &library.agents[2];
         assert_eq!(pi.system, PluginSystem::Packages);
@@ -1063,14 +1014,5 @@ mod tests {
         );
         let opencode = &library.agents[3];
         assert_eq!(opencode.harness, HarnessStatus::NotInstalled);
-        assert!(matches!(opencode.sync, AgentSync::Unsupported { .. }));
-        // Without an Account workspace no agent offers a sync switch.
-        facts.sync_available = false;
-        assert!(
-            assemble(&facts)
-                .agents
-                .iter()
-                .all(|agent| matches!(agent.sync, AgentSync::Unsupported { .. }))
-        );
     }
 }

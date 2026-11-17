@@ -1,14 +1,9 @@
-//! The cleanup on temporary folders with real Git and a fake secure store. Nothing here touches
-//! the real data folder, the real secure store or any real agent home.
+//! The cleanup on temporary folders with real Git. Nothing here touches the real data folder or
+//! any real agent home.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use std::time::Duration;
-
-use aura_sync::vault::{VaultEntry, VaultError};
-use zeroize::Zeroizing;
 
 use super::*;
 
@@ -16,43 +11,6 @@ const FAST: Retry = Retry {
     attempts: 3,
     step: Duration::from_millis(10),
 };
-
-/// A secure store in memory. No platform credentials are accessed.
-#[derive(Default)]
-struct FakeVault {
-    entries: Mutex<HashMap<VaultEntry, Vec<u8>>>,
-}
-
-impl FakeVault {
-    fn put(&self, entry: VaultEntry, bytes: &[u8]) {
-        self.entries.lock().unwrap().insert(entry, bytes.to_vec());
-    }
-    fn has(&self, entry: &VaultEntry) -> bool {
-        self.entries.lock().unwrap().contains_key(entry)
-    }
-    fn len(&self) -> usize {
-        self.entries.lock().unwrap().len()
-    }
-}
-
-impl AppVault for FakeVault {
-    fn load(&self, entry: &VaultEntry) -> Result<Option<Zeroizing<Vec<u8>>>, VaultError> {
-        Ok(self
-            .entries
-            .lock()
-            .unwrap()
-            .get(entry)
-            .cloned()
-            .map(Zeroizing::new))
-    }
-    fn remove(&self, entry: &VaultEntry) -> Result<(), VaultError> {
-        self.entries.lock().unwrap().remove(entry);
-        Ok(())
-    }
-    fn entries(&self) -> Result<Vec<VaultEntry>, VaultError> {
-        Ok(self.entries.lock().unwrap().keys().cloned().collect())
-    }
-}
 
 /// Git for building fixtures, with no global or system configuration of the person's.
 fn fixture_git(dir: &Path, args: &[&str]) -> String {
@@ -222,21 +180,8 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
     let repo = repository(&m.home.join("code"));
     let clean = auracode_worktree(&repo, &root, "clean0000001", "aura/clean");
 
-    let vault = FakeVault::default();
-    let index = crate::accounts::profile_index_entry(ORIGINS[0], &root).unwrap();
-    vault.put(
-        index.clone(),
-        br#"{"version":2,"accounts":{"acct-one":null,"acct-two":"7f2c1e9a-1111-4222-8333-944455556666"}}"#,
-    );
-    let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), &bundle());
-    vault.put(VaultEntry::new(ORIGINS[0], "acct-two").unwrap(), &bundle());
-    // A valid orphan account is removable when the default root is included.
-    vault.put(VaultEntry::new(ORIGINS[1], "orphan").unwrap(), &bundle());
-
     let git = GitTool::from_path();
-    let mut plan = plan(&targets, &git);
-    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
+    let plan = plan(&targets, &git);
     assert_eq!(plan.worktrees.len(), 1);
     assert!(!plan.worktrees[0].unsaved(), "{:?}", plan.worktrees[0]);
     let kinds: Vec<_> = plan.items.iter().map(|item| item.kind).collect();
@@ -249,13 +194,7 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
             ItemKind::Temporary
         ]
     );
-    let report = execute(
-        &plan,
-        &WorktreeChoice::KeepUnsaved,
-        Some(&vault),
-        &git,
-        &FAST,
-    );
+    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, &git, &FAST);
 
     assert!(report.complete(), "{:?}", report.failed);
     assert!(!root.exists());
@@ -291,25 +230,12 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
     );
     let registered = fixture_git(&repo, &["worktree", "list", "--porcelain"]);
     assert_eq!(registered.matches("worktree ").count(), 1, "{registered}");
-    assert!(!vault.has(&index) && !vault.has(&account));
-    assert_eq!(vault.len(), 0);
-    assert_eq!(report.vault.indexes, 1);
-    assert_eq!(report.vault.accounts, 2);
-    assert_eq!(report.vault.swept, 1);
 
     // A second run finds nothing and changes nothing.
-    let mut again = super::plan(&targets, &git);
-    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
+    let again = super::plan(&targets, &git);
     assert!(again.is_empty(), "{:?}", again.items);
-    let second = execute(
-        &again,
-        &WorktreeChoice::KeepUnsaved,
-        Some(&vault),
-        &git,
-        &FAST,
-    );
+    let second = execute(&again, &WorktreeChoice::KeepUnsaved, &git, &FAST);
     assert!(second.complete() && second.removed.is_empty() && second.kept.is_empty());
-    assert_eq!(second.vault.swept, 0);
 }
 
 #[test]
@@ -362,7 +288,7 @@ fn worktrees_with_unsaved_work_are_reported_and_kept_unless_chosen() {
     assert_eq!(plan.unsaved().count(), 3);
 
     // The default keeps every unsaved worktree, in place and registered, and unlocked.
-    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, None, &git_tool, &FAST);
+    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, &git_tool, &FAST);
     assert!(report.complete(), "{:?}", report.failed);
     assert_eq!(report.kept.len(), 3);
     assert_eq!(
@@ -380,7 +306,7 @@ fn worktrees_with_unsaved_work_are_reported_and_kept_unless_chosen() {
     // Choosing to delete one of them deletes that one only; its branch and commits stay.
     let again = super::plan(&targets, &git_tool);
     let chosen = WorktreeChoice::Remove(vec![ahead.clone()]);
-    let report = execute(&again, &chosen, None, &git_tool, &FAST);
+    let report = execute(&again, &chosen, &git_tool, &FAST);
     assert!(report.complete(), "{:?}", report.failed);
     assert!(!ahead.exists());
     assert!(dirty.exists() && detached.exists());
@@ -401,33 +327,11 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     write(&folder.join(".state.json.tmp-1a2b"), "{");
     write(&folder.join("my-notes.txt"), "the person's own");
     write(&folder.join("project/README.md"), "the person's own");
-    let vault = FakeVault::default();
-    let index = crate::accounts::profile_index_entry(ORIGINS[0], &folder).unwrap();
-    vault.put(
-        index.clone(),
-        br#"{"version":2,"accounts":{"acct-one":null}}"#,
-    );
-    let account = VaultEntry::new(ORIGINS[0], "acct-one").unwrap();
-    vault.put(account.clone(), &bundle());
-
-    let mut targets = Targets::data_folder(folder.clone());
-    // Keep even default-root canonicalization inside this fixture's temporary home.
-    targets.default_root = m
-        .dirs
-        .local_data
-        .as_ref()
-        .map(|dir| dir.join(crate::paths::APP_IDENTIFIER));
+    let targets = Targets::data_folder(folder.clone());
     let git = GitTool::from_path();
-    let mut plan = plan(&targets, &git);
-    plan.vault = review_vault(&vault, &plan.data_roots, plan.default_root.as_deref());
+    let plan = plan(&targets, &git);
     assert!(plan.items.iter().all(|item| item.kind == ItemKind::Entry));
-    let report = execute(
-        &plan,
-        &WorktreeChoice::KeepUnsaved,
-        Some(&vault),
-        &git,
-        &FAST,
-    );
+    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, &git, &FAST);
     assert!(report.complete(), "{:?}", report.failed);
     for gone in [
         "device.json",
@@ -441,15 +345,12 @@ fn a_data_folder_from_the_environment_loses_only_what_auracode_made_in_it() {
     assert!(!folder.join("device.json.corrupt-1792840000000").exists());
     assert!(!folder.join(".state.json.tmp-1a2b").exists());
     assert!(folder.join("my-notes.txt").exists() && folder.join("project/README.md").exists());
-    // This folder's index and exclusive account go after checking every other index.
-    assert!(!vault.has(&index));
-    assert!(!vault.has(&account));
 
     // An emptied data folder of its own goes as well.
     let lone = m.home.join("lone");
     data_folder(&lone);
     let plan = super::plan(&Targets::data_folder(lone.clone()), &git);
-    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, None, &git, &FAST);
+    let report = execute(&plan, &WorktreeChoice::KeepUnsaved, &git, &FAST);
     assert!(report.complete());
     assert!(!lone.exists());
 }
@@ -535,31 +436,15 @@ async fn custom_root_cleanup_removes_clone_journals_and_preserves_destination_re
     }
     drop(clones);
     assert_eq!(std::fs::read_dir(folder.join("clones")).unwrap().count(), 2);
-    let vault = FakeVault::default();
-    let index = crate::accounts::profile_index_entry(ORIGINS[0], &folder).unwrap();
-    vault.put(index.clone(), br#"{"version":2,"accounts":{}}"#);
-    let mut targets = Targets::data_folder(folder.clone());
-    targets.default_root = Some(m.home.join("unused-default-root"));
+    let targets = Targets::data_folder(folder.clone());
     let git = GitTool::from_path();
-    let mut reviewed = plan(&targets, &git);
-    reviewed.vault = review_vault(
-        &vault,
-        &reviewed.data_roots,
-        reviewed.default_root.as_deref(),
-    );
-    let report = execute(
-        &reviewed,
-        &WorktreeChoice::KeepUnsaved,
-        Some(&vault),
-        &git,
-        &FAST,
-    );
+    let reviewed = plan(&targets, &git);
+    let report = execute(&reviewed, &WorktreeChoice::KeepUnsaved, &git, &FAST);
     assert!(report.complete(), "{report:?}");
     assert!(
         !folder.join("clones").exists(),
         "app-owned clone recovery journals must be removed"
     );
-    assert!(!vault.has(&index));
     assert_eq!(
         std::fs::read_to_string(folder.join("my-notes.txt")).unwrap(),
         "unrelated custom-root file"
@@ -576,16 +461,9 @@ async fn custom_root_cleanup_removes_clone_journals_and_preserves_destination_re
         );
         assert!(destination.join(".git").is_dir());
     }
-    let mut again = plan(&targets, &git);
-    again.vault = review_vault(&vault, &again.data_roots, again.default_root.as_deref());
+    let again = plan(&targets, &git);
     assert!(again.is_empty());
-    let second = execute(
-        &again,
-        &WorktreeChoice::KeepUnsaved,
-        Some(&vault),
-        &git,
-        &FAST,
-    );
+    let second = execute(&again, &WorktreeChoice::KeepUnsaved, &git, &FAST);
     assert!(second.complete() && second.removed.is_empty());
     for (destination, head) in &destinations {
         assert_eq!(fixture_git(destination, &["rev-parse", "HEAD"]), *head);
@@ -657,7 +535,6 @@ fn links_inside_the_data_folder_are_removed_as_links() {
     let report = execute(
         &plan(&targets, &git),
         &WorktreeChoice::KeepUnsaved,
-        None,
         &git,
         &FAST,
     );
@@ -693,7 +570,6 @@ fn a_locked_file_is_retried_and_then_reported() {
     let report = execute(
         &plan(&targets, &git),
         &WorktreeChoice::KeepUnsaved,
-        None,
         &git,
         &FAST,
     );
@@ -710,7 +586,6 @@ fn a_locked_file_is_retried_and_then_reported() {
     let report = execute(
         &plan(&targets, &git),
         &WorktreeChoice::KeepUnsaved,
-        None,
         &git,
         &FAST,
     );
@@ -738,7 +613,6 @@ fn a_file_freed_while_retrying_is_removed() {
     let report = execute(
         &plan(&targets, &git),
         &WorktreeChoice::KeepUnsaved,
-        None,
         &git,
         &patient,
     );
@@ -760,7 +634,6 @@ fn a_locked_file_is_retried_and_then_reported() {
     let report = execute(
         &plan(&Targets::data_folder(folder.clone()), &git),
         &WorktreeChoice::KeepUnsaved,
-        None,
         &git,
         &FAST,
     );
@@ -788,7 +661,6 @@ fn without_git_every_worktree_counts_as_unsaved() {
     let report = execute(
         &plan,
         &WorktreeChoice::KeepUnsaved,
-        None,
         &GitTool::missing(),
         &FAST,
     );
@@ -816,12 +688,4 @@ fn a_running_profile_is_detected_without_creating_locks() {
     assert_eq!(busy, [root.join("profiles").join("local")]);
     drop(lock);
     assert!(in_use(std::slice::from_ref(&root)).is_empty());
-}
-
-fn bundle() -> Vec<u8> {
-    let mut bytes = b"AURA-ACCOUNT".to_vec();
-    bytes.push(1);
-    bytes.extend([7; 32]);
-    bytes.extend([0, 0, 0]);
-    bytes
 }

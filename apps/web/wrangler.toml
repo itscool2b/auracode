@@ -1,4 +1,5 @@
-# Static assets only. All application API behavior is the separate Rust Worker on /api/*.
+# Static assets only. The site has no application API; the remote relay is its own Worker on
+# /api/remote/*.
 name = "auracode-web-local"
 compatibility_date = "2026-10-26"
 workers_dev = false

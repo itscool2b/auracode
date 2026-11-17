@@ -45,7 +45,7 @@ pub(crate) fn initialize(
 }
 
 /// Applies the active profile's saved preferences, or the defaults when there is no readable
-/// profile (a locked account profile, a failed startup). Smoke launches keep the defaults.
+/// profile (a failed startup). Smoke launches keep the defaults.
 pub fn refresh(app: &AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;

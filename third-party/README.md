@@ -11,10 +11,9 @@ Unlicense section comes from its installed README. This is a conservative manife
 tree shaking and native linking can remove components from a particular binary.
 
 Rust traversal follows normal dependency edges and excludes build-only dependencies, test
-dependencies and procedural macro executables. SQLCipher and Windows vendored OpenSSL are explicit
-exceptions because their native code is compiled into the product through build dependencies.
-Playwright, Biome, Sharp, Cargo build helpers and the test-only Codex schema are not added to runtime
-notices. The schema instead has its own pinned upstream `LICENSE` and `NOTICE` beside the fixture.
+dependencies and procedural macro executables. Playwright, Biome, Sharp, Cargo build helpers and
+the test-only Codex schema are not added to runtime notices. The schema instead has its own pinned
+upstream `LICENSE` and `NOTICE` beside the fixture.
 
 Dictation's speech engine, transcribe.cpp, vendors ggml, miniz and Silero VAD's segmentation code;
 each gets its own record from the text in the locked `transcribe-cpp-sys` archive. The speech models
@@ -65,8 +64,8 @@ because the desktop CSP allows no same-origin fetches.
   downloaded WebView2 runtime/bootstrapper also needs its installer review.
 - Inspect actual Windows and macOS release artifacts for other bundled native SDK files, linked
   libraries, installer components and system-vs-bundled crypto. This inventory is not a completed
-  binary-level compliance certification. In particular, a custom macOS OpenSSL override needs its
-  own matched notice rather than assuming the Windows vendored version.
+  binary-level compliance certification. In particular, a custom OpenSSL override on any platform
+  needs its own matched notice: no OpenSSL is vendored into the product.
 - Keep unmodified third-party source archives available at the listed source locations when
   distributing MPL-covered binaries. Modified dependencies would require a new source review.
 

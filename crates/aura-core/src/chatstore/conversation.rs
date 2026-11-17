@@ -440,17 +440,13 @@ fn apply_change(
 #[cfg(test)]
 mod image_tests {
     use super::*;
-    use crate::{
-        paths::DataRoot,
-        profile::{ProfileKind, Profiles},
-        store::Store,
-    };
+    use crate::{paths::DataRoot, profile::Profiles, store::Store};
 
     #[test]
     fn fork_retains_owned_inline_images_without_adopting_guessed_hashes() {
         let scratch = tempfile::tempdir().unwrap();
         let profile = Profiles::new(DataRoot::at(scratch.path()))
-            .create(ProfileKind::Local, "Local")
+            .create("Local")
             .unwrap();
         let (store, _) = Store::open(&profile).unwrap();
         let create = |folder: &str| {

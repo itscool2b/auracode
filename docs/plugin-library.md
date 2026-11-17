@@ -4,15 +4,15 @@ Customize, below Search and New chat, opens Settings on Plugins & MCP, which Set
 beside its other pages. MCP servers come first and are what the page opens on (owner, 10 November 2026), then one section per agent, each led by that agent's own MCP servers. Browser use, the universal plugin, has its own page: Settings > Browser. Each agent section shows
 what that agent supports, read from the agent's own CLI where the CLI has a reviewed,
 machine-readable listing, and from the agent's files where it does not. It also shows the
-harness's update status and the device's sync switch for that agent. Every change runs the
+harness's update status. Every change runs the
 agent's own reviewed command in a terminal after the person reads it (see
 [vendor-integrations.md](vendor-integrations.md)). Instruction files (`CLAUDE.md`, `AGENTS.md`)
 left this surface for the separate Instructions surface. aura-config keeps their inventory and copy
-code, which configuration sync and other callers still use, but the Plugin library does not list
-them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
+code for its other callers, but the Plugin library does not list them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
 
 Plugins stay with their agent. Shared MCP applies to every compatible agent, or the ones a server is for, in the selected scope.
-Server definitions can sync; authentication stays on each device.
+Everything here is this device's: nothing syncs between devices (auracode's accounts and their sync
+were removed on 16 November 2026; Claude Code and Codex sync plugins natively).
 
 ## Universal plugins
 
@@ -51,8 +51,8 @@ only the servers its agent is for, a connection such as Claude Code's ACP adapte
 so a server's name only has to be unique among the agents it loads into. Agents are stored as sorted
 agent IDs, once each; changing them keeps the server's local credentials, and importing native servers
 again keeps the agents chosen for them. A connection test from a chat whose agent the server is not for
-says so. A definition for every agent omits the field and syncs exactly as before; one limited to some
-agents carries it, and a device on an older build cannot read that definition until it updates.
+says so. A definition for every agent omits the field; one limited to some agents carries it, and an
+older build cannot read that definition from an export.
 
 An agent's own MCP server can be shared with every agent from its preview (Preview and copy, then Share
 with every agent): its entry, checked against the reviewed revision, goes through the native import
@@ -63,12 +63,10 @@ arguments or addresses that look like they carry a secret, and vendor options, a
 CRUD, explicit Aura/native JSON import, portable export, local credential setup, enable/disable,
 connection tests, session status, supported OAuth and idle restart are available from Shared MCP.
 Native imports reject unknown vendor options rather than silently dropping behavior. Definition edits
-use revision preconditions. Concurrent synced edits retain both versions for explicit acceptance or
-keeping the current definition, and the reviewed resolution syncs as an immutable revision too.
+use revision preconditions.
 
-Account definitions and local credentials inherit the profile database's encryption. Only portable
-definitions and credential field names enter the existing encrypted account sync pipeline. Actual
-credential values and OAuth tokens stay local. Changing the executable, arguments, endpoint or credential
+Definitions and local credentials are kept in the profile database. Credential values and OAuth
+tokens never leave this device. Changing the executable, arguments, endpoint or credential
 requirements clears previous local values. Export never contains credential values.
 
 Each native generation receives an immutable effective snapshot. Codex uses `thread/start` and
@@ -134,8 +132,7 @@ operations in that response. Claude, Codex, Pi, Grok Build (1.0.70 or later) and
 supported plugin, package, marketplace or skill-source operations. Installed OpenCode, Hermes, Cursor
 and Grok also have named native customization routes, using a reviewed interactive terminal rather than
 invented common management flags. The available native screens remain
-agent-specific. Native configuration sync continues to cover Claude, Codex and Pi only; shared Aura MCP
-definition sync is separate.
+agent-specific.
 
 Sources, checked on 2026-10-28 against the installed CLIs' `--help` (Claude Code 2.1.312, Codex
 0.162.1, Pi 1.0.2) run with every config home pointed at a temporary folder, and against the vendors'
@@ -220,35 +217,13 @@ Agents page, both with the existing reviewed Update); unknown (offline, no relea
 installation's channel, or release checks off; the installed version is still shown); and failed
 (the binary did not pass its version check, with the reason). Volt marks only an available update.
 
-## Sync per agent
-
-Each of Claude Code, Codex and Pi has a sync switch for this device, saved in the profile's General
-preferences (`config_sync_paused`). A paused agent's items are neither published nor applied; they
-wait unchanged. The sync review groups items by agent, with the switch and Apply all (each ready item
-is its own transaction) on the group's heading. Every held item names its reason:
-
-| Case | Behaviour | Test |
-|---|---|---|
-| The agent is not installed on this device | The item waits, shown as "Waiting for the agent". Nothing is written. | `sync_agents::an_agent_missing_here_keeps_its_items_pending_and_shown` |
-| Sync is off for the agent here | Nothing of it is published or applied. | `sync_agents::a_paused_agent_neither_publishes_nor_applies` |
-| The agent here is too old for plugins | Held with the version it needs (the reviewed installer floors: Claude Code 2.1.310, Codex 0.162.1, Pi 1.0.2). | `sync_agents::an_older_agent_holds_a_plugin_with_its_reason` |
-| A plugin's marketplace is not added here | Held; the review offers "Add the marketplace" from the GitHub source the other device synced, then "Install". A local-folder marketplace offers no source. | `sync_agents::a_missing_marketplace_is_offered_in_the_review_from_the_synced_source` |
-| A plugin install fails | That declaration is put back to its reviewed value through the apply journal, the item keeps its base and is marked with the exit code; other items are unchanged. | `sync_agents::a_failed_plugin_install_restores_that_item_and_keeps_the_others` |
-| OS-specific MCP commands or paths | Items with another system's paths stay with that system. A command path that does not exist here is held; it is never written. | `sync_agents::os_specific_commands_and_missing_paths_are_never_applied` |
-| A synced MCP command is a network, device or relative path | Classified before any filesystem access (UNC, `\\?\`, `\\.\`, mixed separators, `..`, `~` remainders that are rooted or prefixed, drive-relative, URLs) and held as "Kept on its own device" without a lookup. Bare names are resolved only through this device's PATH. | `sync_agents::commands_from_another_device_are_classified_before_any_filesystem_access`, `sync_agents::network_paths_are_held_unprobed_and_bare_names_use_the_path_lookup` |
-| Secrets in MCP env or headers | Only their names travel; values never leave the device, from files or from `codex mcp list --json`. | `sync_agents::secrets_in_mcp_env_and_headers_never_leave_the_device`, `plugins::tests::codex_mcp_keeps_only_the_names_of_secret_fields` |
-| Both devices changed the item | The existing conflict review. | `sync_agents::conflicts_removals_and_offline_have_defined_states` |
-| The item was removed on another device | Shown as "Removed on another device"; the removal needs its confirmed review. | same |
-| Offline | Local items are listed, held as offline, and nothing is written. | same |
-| A partial apply across several items | Each item is atomic with its own journal; one failure is that item's outcome and the others apply. | `sync_agents::applying_one_agent_is_atomic_per_item_and_a_failure_keeps_the_others` |
-
 ## Checks
 
 - Rust: `cargo test -p aura-agents --lib`, `cargo test -p aura-agents --test plugins`
   (fake CLIs that answer only from `fake-listing.json` in the temporary home named by
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`), `cargo test -p aura-config --test
-  sync_agents --test extensions`, `cargo test -p aura-core --features account-sync --lib
-  plugin_library`, `cargo test -p aura-core --test plugin_library -- --nocapture` (controlled delayed
+  extensions`, `cargo test -p aura-core --lib plugin_library`, `cargo test -p aura-core --test
+  plugin_library -- --nocapture` (controlled delayed
   fake CLIs measure cold/warm first usable and all finished latency, initial sections before any
   CLI listing, fast providers before blocked ones, refresh detection, cancellation and explicit
   unsupported inventory). `aura-agents --test plugins` also verifies the two-provider limit,
@@ -256,8 +231,8 @@ is its own transaction) on the group's heading. Every held item names its reason
 - Vitest: `src/components/library/PluginLibraryScreen.test.tsx`, `src/lib/plugins/format.test.ts`,
   `src/lib/plugins/loading.test.ts` (progressive updates and request/unmount lifetime).
 - Browser: `node apps/desktop/scripts/check-plugin-library.mjs` (Chromium and WebKit, axe) and the
-  layout probe's `plugins`, `plugins-pi`, `plugins-update`, `plugins-failed`, `plugins#plugin-menu`,
-  `plugins#plugin-item`, `plugin-sync` and `plugin-sync#plugin-steps` views.
+  layout probe's `plugins`, `plugins-pi`, `plugins-update`, `plugins-failed`, `plugins#plugin-menu`
+  and `plugins#plugin-item` views.
   The progressive fixture holds completion until the browser releases each provider, then sends
   callbacks after unmount. The menu probe waits for the actual menu's first item to receive focus.
   These checks run in the existing manually dispatched CI workflow; Rust integration tests are

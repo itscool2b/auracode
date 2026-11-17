@@ -2,8 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentPlugins } from "../../bindings";
 import { pluginFixture } from "../../dev/pluginLibraryPreview";
-import type { ConfigSyncItem } from "../../lib/config-sync/bindings";
-import { AgentGroup, groups } from "../settings/ConfigSyncPanel";
 import { AgentSection } from "./PluginLibraryScreen";
 
 const NOW = Date.UTC(2026, 9, 28, 12, 0);
@@ -18,7 +16,6 @@ function section(mode: string, agentId: string, override: Partial<AgentPlugins> 
       busy={null}
       now={() => NOW}
       onUpdate={noop}
-      onSync={noop}
       onVendor={noop}
       onOpen={noop}
       onHistory={noop}
@@ -103,100 +100,13 @@ describe("Plugin library", () => {
     expect(html).toContain("Packages");
     expect(html).toContain("Prompt templates");
     expect(html).toContain("Add package");
-    expect(html).toContain("Off on this device.");
-    const opencode = section("plugins", "opencode");
-    expect(opencode).toContain("Configuration sync covers Claude Code, Codex and Pi.");
-    expect(opencode).not.toContain('role="switch"');
-  });
-});
-
-describe("Configuration sync by agent", () => {
-  const item = (
-    id: string,
-    provider: ConfigSyncItem["provider"],
-    extra: Partial<ConfigSyncItem> = {},
-  ) =>
-    ({
-      id,
-      label: id,
-      provider,
-      scope: "portable",
-      operation: "apply",
-      first_link: false,
-      device_only: false,
-      skipped: false,
-      detail: null,
-      hold: null,
-      removed_upstream: false,
-      ...extra,
-    }) as ConfigSyncItem;
-
-  it("groups items by agent and counts only ready ones for Apply all", () => {
-    const grouped = groups([
-      item("a", "pi"),
-      item("b", "claude"),
-      item("c", null),
-      item("d", "claude", {
-        operation: "wait",
-        hold: { kind: "missing_path", path: "~/bin/tool" },
-        detail: "The command ~/bin/tool does not exist on this device.",
-      }),
-    ]);
-    expect(grouped.map(([provider]) => provider)).toEqual(["claude", "pi", "shared"]);
-    const [, claude] = grouped[0] ?? ["claude", []];
-    const html = renderToStaticMarkup(
-      <AgentGroup
-        provider="claude"
-        items={claude}
-        paused={false}
-        busy={false}
-        onSync={noop}
-        onApplyAll={noop}
-        onDeviceOnly={noop}
-        onReview={noop}
-      />,
-    );
-    expect(html).toContain("Claude Code");
-    expect(html).toContain("Apply all 1");
-    expect(html).toContain("Command not on this device");
-    expect(html).toContain("Sync Claude Code on this device");
   });
 
-  it("names every hold and a removal from another device", () => {
-    const held = [
-      item("missing", "codex", { operation: "wait", hold: { kind: "agent_missing" } }),
-      item("removed", "codex", { removed_upstream: true }),
-      item("share", "codex", {
-        operation: "wait",
-        hold: { kind: "foreign_path", path: "\\\\server\\share\\x" },
-      }),
-      item("old", "codex", {
-        operation: "wait",
-        hold: { kind: "needs_version", feature: "plugins", minimum: "0.162.1", found: "0.150.0" },
-      }),
-      item("offline", "codex", { operation: "wait", hold: { kind: "offline" } }),
-    ];
-    const html = renderToStaticMarkup(
-      <AgentGroup
-        provider="codex"
-        items={held}
-        paused
-        busy={false}
-        onSync={noop}
-        onApplyAll={noop}
-        onDeviceOnly={noop}
-        onReview={noop}
-      />,
-    );
-    for (const text of [
-      "Waiting for the agent",
-      "Removed on another device",
-      "Kept on its own device",
-      "Needs a newer agent",
-      "Offline",
-      "Sync is off on this device",
-    ])
-      expect(html).toContain(text);
-    expect(html).toContain("Apply all 1");
+  it("offers no switch to sync an agent's plugins between devices", () => {
+    for (const agent of ["claude", "codex", "opencode"]) {
+      const html = section("plugins", agent);
+      expect(html).not.toContain('role="switch"');
+      expect(html).not.toContain("across devices");
+    }
   });
 });

@@ -3,7 +3,8 @@
 //! auracode creates every worktree inside its data folder (`profiles/<id>/worktrees/<name>`, and
 //! `worktrees/retired/<id>` once a chat is done), registered with the person's repository and
 //! locked with the reason `auracode <id>`. They are found by walking the data folder for a `.git`
-//! file rather than through auracode's records, which an Account profile keeps encrypted.
+//! file rather than through auracode's records, so a profile whose records cannot be read (a
+//! damaged one, or one left by a removed auracode account) is covered too.
 //!
 //! A worktree has unsaved work when its folder holds changes Git has not committed (untracked
 //! files included, ignored files not), or when its HEAD has commits no other branch, tag or remote
@@ -92,7 +93,8 @@ const NOT_WORKTREES: &[&str] = &[
     "node_modules",
 ];
 
-/// At most this deep below `profiles/`: `.account-removals/<token>/data/worktrees/retired/<id>`.
+/// At most this deep below `profiles/`: `.account-removals/<token>/data/worktrees/retired/<id>`,
+/// where an earlier version staged an account's removal.
 const MAX_DEPTH: usize = 6;
 /// A bound on the folders visited, so a strange tree cannot stall the plan.
 const MAX_VISITS: usize = 20_000;

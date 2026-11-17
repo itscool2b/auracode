@@ -406,7 +406,7 @@ fn global_universal_imports_for_claude_and_copies_for_agents_without_imports() {
     assert_eq!(agent(&after, "claude").status, AgentStatus::Import);
     assert_eq!(agent(&after, "pi").status, AgentStatus::Copy);
     assert!(file(&after, "pi:AGENTS.md").managed.is_some());
-    // Config sync sees ordinary files: nothing else lands in the agents' folders.
+    // The agents' folders hold ordinary files only: nothing else lands in them.
     for folder in [".claude", ".codex", ".pi/agent", ".config/opencode"] {
         let names = std::fs::read_dir(fixture.home_file(folder))
             .unwrap()

@@ -89,8 +89,6 @@ pub struct BrowserStatus {
     pub unavailable: Option<String>,
     /// The engine offers to save sign-ins (Windows).
     pub passwords: bool,
-    /// This profile keeps no browser data on disk (an encrypted account profile).
-    pub private: bool,
 }
 
 /// Where the panel's page area is, in the window's CSS pixels.
@@ -459,8 +457,6 @@ struct ChatTabs {
 struct Profile {
     /// `<profile>/browser`.
     dir: PathBuf,
-    /// Nothing of the browser is kept on disk (an encrypted account profile).
-    private: bool,
 }
 
 #[derive(Default)]
@@ -529,15 +525,10 @@ impl Browser {
     }
 
     pub fn status(&self) -> BrowserStatus {
-        let private = lock(&self.inner)
-            .profile
-            .as_ref()
-            .is_some_and(|profile| profile.private);
         BrowserStatus {
             enabled: self.enabled(),
             unavailable: host::unavailable(),
             passwords: cfg!(windows) && self.passwords.load(Ordering::Acquire),
-            private,
         }
     }
 
@@ -577,11 +568,10 @@ impl Browser {
     }
 
     /// The profile changed (startup, a switch): every page closes, and the new profile's tabs and
-    /// history are read. `dir` is the profile's folder; `private` keeps nothing on disk.
-    pub fn set_profile(self: &Arc<Self>, dir: Option<&Path>, private: bool) {
+    /// history are read. `dir` is the profile's folder.
+    pub fn set_profile(self: &Arc<Self>, dir: Option<&Path>) {
         let next = dir.map(|dir| Profile {
             dir: dir.join("browser"),
-            private,
         });
         {
             let inner = lock(&self.inner);
@@ -597,9 +587,7 @@ impl Browser {
             profile: next.clone(),
             ..Inner::default()
         };
-        if let Some(profile) = &next
-            && !profile.private
-        {
+        if let Some(profile) = &next {
             fresh.history = history::History::load(&profile.dir.join("history.json"));
             let sessions: Sessions = std::fs::read(profile.dir.join("sessions.json"))
                 .ok()
@@ -639,16 +627,13 @@ impl Browser {
         });
     }
 
-    /// Writes history and the tab lists when they changed (never for a private profile).
+    /// Writes history and the tab lists when they changed.
     pub fn save(&self) {
         let (dir, history, sessions) = {
             let mut inner = lock(&self.inner);
             let Some(profile) = inner.profile.clone() else {
                 return;
             };
-            if profile.private {
-                return;
-            }
             let history = inner.history.take_changes();
             let sessions = if inner.sessions_dirty {
                 inner.sessions_dirty = false;
@@ -1651,12 +1636,12 @@ pub fn sync(app: &AppHandle) {
         .and_then(|state| state.chats());
     match chats {
         Some(chats) => {
-            browser.set_profile(Some(&chats.profile_dir), chats.private);
+            browser.set_profile(Some(&chats.profile_dir));
             chats
                 .manager
                 .set_browser_bridge(Some(Arc::new(AgentBridge(Arc::downgrade(&browser)))));
         }
-        None => browser.set_profile(None, false),
+        None => browser.set_profile(None),
     }
 }
 

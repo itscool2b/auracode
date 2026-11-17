@@ -23,8 +23,6 @@ mod controls;
 mod options;
 mod rewind;
 mod steering;
-#[cfg(feature = "account-sync")]
-mod sync_history;
 
 use aura_agents::{AgentSpec, LaunchError, Recipe};
 use aura_drivers::batch::{FrameBatcher, TurnTag};
@@ -106,10 +104,6 @@ pub(crate) enum ChatMsg {
     SetupChanged(aura_protocol::worktree_setup::WorktreeSetupAttempt),
     FolderContext {
         reply: oneshot::Sender<Result<FolderContextReply, SessionError>>,
-    },
-    #[cfg(feature = "account-sync")]
-    ImportSync {
-        reply: oneshot::Sender<Result<bool, SessionError>>,
     },
     ReserveWorkspace {
         id: String,
@@ -296,8 +290,6 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
-            #[cfg(feature = "account-sync")]
-            ChatMsg::ImportSync { reply } => drop(reply.send(Err(error))),
             ChatMsg::ReserveWorkspace { reply, .. } | ChatMsg::ReserveGit { reply, .. } => {
                 drop(reply.send(Err(error)))
             }
@@ -582,11 +574,6 @@ enum Done {
             tokio::time::error::Elapsed,
         >,
     },
-    #[cfg(feature = "account-sync")]
-    SyncImported {
-        result: Result<Option<crate::sync::transcript::Imported>, SessionError>,
-        reply: oneshot::Sender<Result<bool, SessionError>>,
-    },
     Steering(Box<steering::Completion>),
     Rewind(Box<rewind::Completion>),
     Conversation {
@@ -774,8 +761,6 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     organizing: bool,
-    #[cfg(feature = "account-sync")]
-    sync_importing: bool,
     steering_pending: bool,
     git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
@@ -921,8 +906,6 @@ impl ChatActor {
                 .is_some_and(|value| value.force_fresh || value.native_start.fork)
         });
         ChatActor {
-            #[cfg(feature = "account-sync")]
-            sync_importing: false,
             remote_history,
             continuation,
             batcher: FrameBatcher::new(chat_id.clone()).starting_at(next_seq),
@@ -1168,21 +1151,6 @@ impl ChatActor {
                 }
             }
         }
-        #[cfg(feature = "account-sync")]
-        if self.sync_importing {
-            match msg {
-                ChatMsg::Shutdown { reply, .. } => {
-                    self.quitting = true;
-                    self.shutdown_reply = Some(reply);
-                    return;
-                }
-                ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } => {}
-                _ => {
-                    msg.refuse(SessionError::SessionNotReady);
-                    return;
-                }
-            }
-        }
         match msg {
             ChatMsg::SetupChanged(attempt) => {
                 if self.worktree_setup.as_ref().is_some_and(|current| {
@@ -1209,8 +1177,6 @@ impl ChatActor {
                     let _ = self.start(false, false);
                 }
             }
-            #[cfg(feature = "account-sync")]
-            ChatMsg::ImportSync { reply } => self.import_sync(reply),
             ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
             ChatMsg::ReserveSetup { id, reply } => {
                 self.reserve_workspace(id.clone(), true, reply);
@@ -3073,12 +3039,6 @@ impl ChatActor {
             ));
         }
         self.require_workspace()?;
-        if self.shared.deps.store.config_recovery_pending() {
-            return Err(SessionError::Organization(
-                "Recover the interrupted profile configuration switch before starting agents."
-                    .into(),
-            ));
-        }
         self.require_remote_handoff()?;
         if self.steering_pending {
             return Err(SessionError::OptionInvalid(
@@ -4035,19 +3995,16 @@ The person continues this conversation here, in your terminal. Reply only that y
         let deps = &self.shared.deps;
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
-        let spawner = Arc::new(
-            SessionSpawner::new(
-                aura_process::HostSpawner::new(
-                    Arc::clone(&deps.spawner),
-                    aura_agents::hosts::execution(&self.chat.agent_host),
-                ),
-                deps.logs.clone(),
-                self.chat_id.clone(),
-                Arc::clone(&self.book),
-                generation,
-            )
-            .with_protocol_logging(!deps.store.encrypted()),
-        );
+        let spawner = Arc::new(SessionSpawner::new(
+            aura_process::HostSpawner::new(
+                Arc::clone(&deps.spawner),
+                aura_agents::hosts::execution(&self.chat.agent_host),
+            ),
+            deps.logs.clone(),
+            self.chat_id.clone(),
+            Arc::clone(&self.book),
+            generation,
+        ));
         // The Browser plugin's tools (docs/superpowers/plans/2026-11-09-browser.md): for a native
         // Chat session whose agent takes Aura's own MCP servers, while the plugin is on.
         self.browser_grant = match self.shared.browser_bridge() {
@@ -4097,7 +4054,6 @@ The person continues this conversation here, in your terminal. Reply only that y
                 servers
             },
             attachment_dir: Some(deps.store.attachment_dir().to_path_buf()),
-            attachment_reader: deps.store.attachment_reader(),
             attachment_writer: Some(Arc::new(super::images::StoredImages {
                 store: Arc::clone(&deps.store),
                 chat_id: self.chat_id.clone(),
@@ -4544,8 +4500,6 @@ The person continues this conversation here, in your terminal. Reply only that y
 
     fn on_done(&mut self, done: Done) {
         match done {
-            #[cfg(feature = "account-sync")]
-            Done::SyncImported { result, reply } => self.sync_imported(result, reply),
             Done::Steering(completion) => self.steering_done(*completion),
             Done::Rewind(completion) => self.rewind_done(*completion),
             Done::Conversation { result, reply } => {

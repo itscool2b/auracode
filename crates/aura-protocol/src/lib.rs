@@ -1,7 +1,7 @@
 //! The shared vocabulary of auracode.
 //!
 //! Every agent driver (Claude Code, Codex, Pi, any ACP agent) translates its native stream into
-//! [`AuraEvent`]s, the UI renders only `AuraEvent`s, and the sync layer stores them. The shape follows
+//! [`AuraEvent`]s, the UI renders only `AuraEvent`s, and the chat store saves them. The shape follows
 //! the Agent Client Protocol's `session/update` vocabulary because that is already the cross-agent
 //! standard; native-only extras (rate-limit windows, effort levels) are additive. [`session`] holds
 //! the IPC and session-state types the desktop commands exchange.
@@ -13,8 +13,6 @@
 //! an `Option` with `#[serde(default)]`, and the enums that reach storage or come from agents read a
 //! name they do not know as their fallback (`lenient.rs`).
 
-pub mod account;
-pub mod account_preservation;
 pub mod agents;
 pub mod changes;
 pub mod composer;
@@ -24,7 +22,6 @@ pub mod folder_resolution;
 pub mod forms;
 pub mod git;
 mod lenient;
-pub mod local_import;
 pub mod mcp;
 pub mod memory;
 pub mod plugins;

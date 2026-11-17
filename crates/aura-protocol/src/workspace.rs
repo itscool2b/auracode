@@ -20,7 +20,7 @@ pub struct WorkspaceSnapshot {
     pub chats: Vec<WorkspaceChat>,
 }
 
-/// Device-local launch context. This is never part of a stored transcript or sync record.
+/// Device-local launch context. This is never part of a stored transcript.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ChatFolderContext {
     pub primary: String,

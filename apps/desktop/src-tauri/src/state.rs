@@ -40,12 +40,8 @@ pub struct AppInfo {
     pub device: Option<DeviceIdentity>,
     /// The active profile; `null` when startup failed before opening it.
     pub profile: Option<ProfileMeta>,
-    /// The selected Account profile is waiting for its app-owned local key.
-    pub profile_locked: bool,
     /// Profile commands are temporarily unavailable while a reviewed switch is prepared.
     pub profile_switching: bool,
-    /// Managed configuration is blocked until this explicit recovery is confirmed.
-    pub config_profile_recovery: Option<crate::profile_config::ConfigProfileRecovery>,
     /// The profile database; `null` when startup failed before opening it.
     pub db: Option<DbInfo>,
     /// The native material behind the window. `none` means the UI must paint an opaque background.
@@ -65,8 +61,6 @@ pub struct AppInfo {
 
 /// State managed by Tauri for the whole app.
 pub struct AppState {
-    /// Lazy app-owned credential access. Local startup never opens an account vault.
-    pub accounts: crate::accounts::AccountService,
     pub(crate) runtime: Mutex<ProfileRuntime>,
     pub(crate) transition: Arc<tokio::sync::Mutex<()>>,
     access: Arc<ProfileAccess>,
@@ -111,8 +105,8 @@ struct ProfileAccess {
     changed: tokio::sync::Notify,
     generation: AtomicU64,
 }
-/// A cached operation is valid only for the profile generation that admitted it. This carries no
-/// account identity or key. A lease, rather than this token alone, prevents an in-flight switch.
+/// A cached operation is valid only for the profile generation that admitted it. A lease, rather
+/// than this token alone, prevents an in-flight switch.
 #[derive(Clone)]
 pub struct ProfileGeneration {
     access: Arc<ProfileAccess>,
@@ -190,14 +184,7 @@ impl AppState {
                 .as_ref()
                 .map(|dir| dir.display().to_string()),
             device: booted.device,
-            profile_locked: booted
-                .profile
-                .as_ref()
-                .is_some_and(|meta| meta.kind == aura_core::profile::ProfileKind::Account)
-                && chats.is_none()
-                && booted.fatal.is_none(),
             profile_switching: false,
-            config_profile_recovery: None,
             profile: booted.profile,
             db: booted.db,
             glass,
@@ -208,7 +195,6 @@ impl AppState {
             fatal: booted.fatal,
         };
         AppState {
-            accounts: crate::accounts::AccountService::new(booted.data_dir.clone()),
             runtime: Mutex::new(ProfileRuntime {
                 info,
                 chats: chats.map(Arc::new),
@@ -244,12 +230,6 @@ impl AppState {
                     &root.join("instructions"),
                 ));
         }
-        info.config_profile_recovery = self.data_dir.as_ref().and_then(|root| {
-            crate::profile_config::status(
-                root,
-                info.profile.as_ref().map(|profile| profile.id.as_str()),
-            )
-        });
         if let Some(chats) = &runtime.chats {
             info.notices
                 .extend(lock(&chats.late_notices).iter().cloned());
@@ -334,48 +314,13 @@ impl AppState {
         let service = runtime.onboarding.clone().ok_or_else(|| {
             AppError::new(
                 AppErrorCode::StorageUnavailable,
-                "Unlock or select a profile before changing setup.",
+                "Select a profile before changing setup.",
             )
         })?;
         Ok(self.lease(service))
     }
-    pub fn account_config(
-        &self,
-    ) -> Result<ProfileLease<Arc<crate::account_config::AccountConfigServices>>, AppError> {
-        if self.quit.is_quitting() {
-            return Err(AppError::new(
-                AppErrorCode::ShuttingDown,
-                "auracode is closing.",
-            ));
-        }
-        let runtime = lock(&self.runtime);
-        self.check_profile_access(&runtime)?;
-        let service = runtime
-            .chats
-            .as_ref()
-            .and_then(|chats| chats.account_config.clone())
-            .ok_or_else(|| {
-                AppError::new(
-                    AppErrorCode::StorageUnavailable,
-                    "Open an unlocked Account profile to sync configuration.",
-                )
-            })?;
-        Ok(self.lease(service))
-    }
     fn check_profile_access(&self, runtime: &ProfileRuntime) -> Result<(), AppError> {
-        if self.data_dir.as_ref().is_some_and(|root| {
-            crate::profile_config::status(
-                root,
-                runtime
-                    .info
-                    .profile
-                    .as_ref()
-                    .map(|profile| profile.id.as_str()),
-            )
-            .is_some()
-        }) {
-            Err(crate::profile_config::error())
-        } else if runtime.info.profile_switching {
+        if runtime.info.profile_switching {
             Err(AppError::new(
                 AppErrorCode::StorageUnavailable,
                 "Wait for the profile switch to finish.",
@@ -419,7 +364,6 @@ impl AppState {
         self.dictation.cancel_all();
         runtime.info.profile = booted.profile;
         runtime.info.db = booted.db;
-        runtime.info.profile_locked = false;
         runtime.info.fatal = None;
         runtime.info.notices = booted.notices;
         runtime.info.notices.extend(self.launch.notices());
@@ -568,7 +512,7 @@ mod tests {
     #[tokio::test]
     async fn checkpoint_policy_is_initialized_before_publishing_each_profile() {
         use aura_core::onboarding::{OnboardingStore, SetupAction};
-        use aura_core::profile::{ProfileKind, Profiles};
+        use aura_core::profile::Profiles;
 
         let dir = tempfile::tempdir().unwrap();
         let root = DataRoot::at(dir.path().join("data"));
@@ -581,11 +525,9 @@ mod tests {
         let previous = state.chats().unwrap();
         assert!(previous.manager.automatic_checkpoints());
 
-        let next = Profiles::new(root.clone())
-            .create(ProfileKind::Local, "Other profile")
-            .unwrap();
+        let next = Profiles::new(root.clone()).create("Other profile").unwrap();
         let onboarding = Arc::new(crate::onboarding::SetupService::new(next.dir.clone()));
-        let mut booted = crate::boot::boot_profile(root, next, None);
+        let mut booted = crate::boot::boot_profile(root, next);
         let chats = Arc::new(sessions::testing::start(&mut booted).unwrap());
         // Make the new runtime disagree with its saved preference to prove installation reads
         // that profile, rather than keeping either manager's previous policy.

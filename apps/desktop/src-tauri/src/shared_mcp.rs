@@ -94,23 +94,6 @@ pub async fn shared_mcp_export(state: State<'_, AppState>) -> Result<String, App
 }
 #[tauri::command]
 #[specta::specta]
-pub async fn shared_mcp_conflict(
-    state: State<'_, AppState>,
-    expected: u32,
-    revision: String,
-    accept: bool,
-) -> Result<McpSnapshot, AppError> {
-    Ok(state
-        .sessions()?
-        .shared_mcp(Command::ResolveConflict {
-            expected,
-            revision,
-            accept,
-        })
-        .await?)
-}
-#[tauri::command]
-#[specta::specta]
 pub async fn shared_mcp_test(
     state: State<'_, AppState>,
     expected: u32,

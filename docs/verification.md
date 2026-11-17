@@ -5,20 +5,15 @@ the final run for a coherent source checkpoint, then rerun affected gates when f
 Linux runs the same Rust, binding and smoke checks on Ubuntu 22.04, the release packages' build
 system, with Xvfb as its display. WSL agent hosts stay unavailable.
 
-The separate `encrypted_storage` boolean enables the SQLCipher/account-sync test and Clippy matrix
-on all three platforms. Enable it for the integrated M7 checkpoint and final verification. It is separate
-from the default workspace build because SQLCipher is an optional Cargo feature. These tests use
-synthetic keys and temporary profiles; they never query the real keychain or account credentials.
-On Windows, the workflow selects an installed native Perl reporting `MSWin32` for vendored OpenSSL.
-It fails explicitly if none exists, rather than falling back to Git/MSYS Perl or changing host policy.
-The hosted [Windows runner inventory](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)
-lists Perl; macOS uses the existing CommonCrypto SQLCipher backend.
+There is no separate encrypted-storage run any more: auracode's accounts, their SQLCipher store
+and the vendored OpenSSL build were removed on 16 November 2026, so the default workspace build is
+the whole product and Windows needs no Perl.
 
 ## Checkpoint performance comparisons
 
-Set `checkpoint_benchmarks: true` when manually dispatching `CI` to run encrypted core verification
-and checkpoint comparisons on Windows and macOS (the default baseline predates the Linux port, so
-Linux runs the encrypted checks without the comparison). This mode skips the app/UI jobs and has its own
+Set `checkpoint_benchmarks: true` when manually dispatching `CI` to run the checkpoint
+comparisons on Windows and macOS (the default baseline predates the Linux port, so Linux has no
+comparison). This mode skips the app/UI jobs and has its own
 concurrency group, so it can run alongside normal final verification. It does not replace that
 verification. The baseline ref, synthetic fixture sizes, and number of unchanged samples are
 explicit workflow inputs.
@@ -27,9 +22,9 @@ The runner builds both revisions from source and gives them identical benchmark 
 read the same checkout for the workspace comparison; baseline sources and evidence remain outside
 it. Separate Cargo target directories prevent one revision from replacing the other's executable;
 the runner checks and retains each executable's test list before timing. It also measures cold,
-unchanged, and one-file-edit captures for Local and Account storage and
-the real actor's send path through a scripted driver. Each runner executes its measurements
-sequentially after builds finish. No real agent or account credentials are needed.
+unchanged, and one-file-edit captures and the real actor's send path through a scripted driver.
+Each runner executes its measurements sequentially after builds finish. No real agent or
+credentials are needed.
 
 Download `checkpoint-performance-<OS>-<SHA>` for source/toolchain metadata, raw logs, and normalized
 timings. Distinguish hosted-runner measurements from measurements on a user's computer. Do not

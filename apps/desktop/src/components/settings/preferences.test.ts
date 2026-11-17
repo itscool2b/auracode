@@ -18,7 +18,6 @@ const base: SetupPreferences = {
     default_agent: "codex",
     default_model: "gpt-5.5-codex",
     default_effort: "high",
-    config_sync_paused: ["pi"],
   },
 };
 
@@ -57,8 +56,6 @@ describe("a waiting preference shows as the backend will save it", () => {
       { type: "agent_memory_writes", enabled: false },
       { type: "browser", enabled: false },
       { type: "browser_passwords", enabled: false },
-      { type: "config_sync_agent", agent_id: "codex", enabled: false },
-      { type: "config_sync_agent", agent_id: "pi", enabled: true },
     ] as const;
     const shown = changed.reduce(withAction, base);
     expect(shown).toMatchObject({
@@ -80,9 +77,8 @@ describe("a waiting preference shows as the backend will save it", () => {
       agent_memory_writes: false,
       browser: false,
       browser_passwords: false,
-      config_sync_paused: ["codex"],
     });
-    expect(base.general.config_sync_paused).toEqual(["pi"]);
+    expect(base.general.browser_passwords).toBe(true);
     expect(base.theme).toBe("claude");
   });
 });

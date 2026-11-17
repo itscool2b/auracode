@@ -159,18 +159,8 @@ try {
         [],
         `${engine} discovery accessibility`,
       );
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
-      // The account step says plainly that accounts are optional and invite-only, and that
-      // auracode needs neither an account nor the network.
-      await page
-        .getByRole("heading", { name: /^Accounts are optional\.\s*And invite-only for now\.$/ })
-        .waitFor();
-      await page.getByText("auracode needs no account and no network.", { exact: false }).waitFor();
-      await page.getByRole("button", { name: "Open Account", exact: true }).click();
-      await page.getByRole("heading", { name: "Account settings" }).waitFor();
-      await assertNoVendorCalls();
-      await page.getByRole("button", { name: "Back to setup" }).click();
-      await page.getByRole("button", { name: "Open Account", exact: true }).waitFor();
+      // Setup offers no account and no sign-in: the first project follows the agents.
+      assert.equal(await page.getByRole("button", { name: "Open Account" }).count(), 0);
       await page.getByRole("button", { name: "Continue", exact: true }).click();
       // The step survives a restart, and a setup saved at the retired motion step resumes at the
       // step that followed it.

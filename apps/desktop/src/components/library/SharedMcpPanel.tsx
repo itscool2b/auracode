@@ -327,34 +327,6 @@ export function SharedMcpPanel({
           ))}
         </ul>
       )}
-      {snapshot?.conflicts.map((conflict) => (
-        <section className="shared-mcp-conflict" key={conflict.revision}>
-          <h3>Definition conflict</h3>
-          <p>
-            {conflict.incoming?.name ?? conflict.id} changed on another device. Review the complete
-            incoming definition before replacing your current definition.
-          </p>
-          <pre>{JSON.stringify(conflict.incoming, null, 2)}</pre>
-          <button
-            type="button"
-            className="g-button g-button-outline"
-            disabled={busy}
-            onClick={() => void run(() => api.conflict(snapshot.revision, conflict.revision, true))}
-          >
-            Accept incoming
-          </button>
-          <button
-            type="button"
-            className="g-button g-button-ghost"
-            disabled={busy}
-            onClick={() =>
-              void run(() => api.conflict(snapshot.revision, conflict.revision, false))
-            }
-          >
-            Keep current
-          </button>
-        </section>
-      ))}
       <details className="plugins-more">
         <summary>How shared servers work</summary>
         <ul>
@@ -367,9 +339,7 @@ export function SharedMcpPanel({
             for review, never overwritten.
           </li>
           <li>Changes apply when an idle chat restarts.</li>
-          <li>
-            Definitions sync with your Aura account. Sign-ins and tokens do not leave this device.
-          </li>
+          <li>Sign-ins and tokens stay on this device and are never exported.</li>
           <li>
             Test checks that the server starts. Which tools an agent then sees, and its own sign-in,
             show in that agent's chat.
@@ -581,7 +551,7 @@ function McpEditor({
           </label>
           <p className="plugins-note">
             The <code>mcpServers</code> block a server's README gives you. Every server in it is
-            added for every agent. Secret values in it stay on this device and are not synced.
+            added for every agent. Secret values in it stay on this device.
           </p>
           <button
             type="submit"
@@ -851,8 +821,8 @@ function CredentialEditor({
   return (
     <Modal title={`Authentication: ${definition.name}`} onClose={onClose}>
       <p>
-        Saved values are never displayed, exported or synced. Supply all required values when
-        replacing authentication. OAuth is controlled by each agent's native MCP session.
+        Saved values are never displayed or exported. Supply all required values when replacing
+        authentication. OAuth is controlled by each agent's native MCP session.
       </p>
       <form
         className="shared-mcp-form"

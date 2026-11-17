@@ -127,15 +127,6 @@ pub struct VersionChange {
     pub to: String,
 }
 
-/// Configuration sync for this agent on this device.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum AgentSync {
-    On,
-    Off,
-    Unsupported { reason: String },
-}
-
 /// One agent's section of the Plugin library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentPlugins {
@@ -154,7 +145,6 @@ pub struct AgentPlugins {
     /// When the listing was last read. None: never on this run.
     pub updated_at: Option<crate::Millis>,
     pub version_change: Option<VersionChange>,
-    pub sync: AgentSync,
     pub notices: Vec<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

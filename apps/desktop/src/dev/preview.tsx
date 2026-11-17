@@ -1397,7 +1397,6 @@ function Preview() {
           }}
         />
         <SidebarFooter
-          profile={{ id: "local", kind: "local", display_name: "Local", created_at: 1 }}
           onSettings={() =>
             alert("This is a development-only protocol fixture. No agents run here.")
           }

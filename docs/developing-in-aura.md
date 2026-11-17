@@ -21,8 +21,8 @@ behave exactly like the installed app.
   rule. `AURACODE_DATA_DIR` still points a development build anywhere, the installed app's folder
   included, so using real data is a deliberate choice.
 - **It is always its own instance** (`LaunchOptions::single_instance` in
-  `apps/desktop/src-tauri/src/launch.rs`). It never hands over to the installed app or receives
-  its sign-in links. Its WebView2 profile is inside its data folder, and it does not share the
+  `apps/desktop/src-tauri/src/launch.rs`). It never hands over to the installed app. Its
+  WebView2 profile is inside its data folder, and it does not share the
   window position.
 - **Its cleanup stays in its folder.** Settings' "Delete all auracode data" and
   `--uninstall-cleanup` clean only the development build's own data folder. They never take the
@@ -66,8 +66,7 @@ Get-ChildItem $target -Recurse -Depth 2 -Directory -Filter .fingerprint |
 ```
 
 `tauri build` calls bare `pnpm`. Where pnpm only runs through corepack, put a `pnpm.cmd` that runs
-`corepack pnpm %*` first on `PATH`. The vendored OpenSSL needs a native Windows Perl, not Git's,
-named by `OPENSSL_SRC_PERL`.
+`corepack pnpm %*` first on `PATH`.
 
 ## Testing a change next to the running app
 
@@ -290,7 +289,7 @@ The development build was built from this branch against the main checkout's war
 |---|---|
 | A development build launched beside the running installed app stays up as its own instance, opens `si.auracode.desktop.dev` with its WebView2 profile inside, is titled `auracode dev`, and leaves the installed app's processes alone | pass |
 | A smoke run without `AURACODE_DATA_DIR` prints a failing result naming the reason, exits 1 and opens no store | pass |
-| `--uninstall-cleanup --dry-run` from a development build plans only the development folder and keeps the installed app's account keys | pass |
+| `--uninstall-cleanup --dry-run` from a development build plans only the development folder | pass |
 | Smoke checks with the development build in scratch folders: stream, chat (30 of 30), chat-reopen (8 of 8) | pass |
 | An agent's own processes are in the app's job; a process started through WMI is not (its parent is `WmiPrvSE.exe`) | pass |
 | `host-upgrade` against the real install while it runs: `status` reports it, `install` refuses, `rollback` finds no snapshot, nothing changes | pass |

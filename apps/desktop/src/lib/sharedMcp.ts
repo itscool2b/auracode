@@ -40,8 +40,6 @@ export const sharedMcpApi = {
   sessionAction: (chatId: string, serverName: string, action: McpSessionAction) =>
     call<McpActionResult>("shared_mcp_session_action", { chatId, serverName, action }),
   export: () => call<string>("shared_mcp_export"),
-  conflict: (expected: number, revision: string, accept: boolean) =>
-    call<McpSnapshot>("shared_mcp_conflict", { expected, revision, accept }),
   test: (expected: number, definition: McpDefinition, chatId?: string | null) =>
     call<McpTestResult>("shared_mcp_test", {
       expected,

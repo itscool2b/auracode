@@ -1,8 +1,8 @@
 /**
- * The Plugins & MCP and per-agent configuration sync in Chromium and WebKit, on synthetic
- * fixtures (?preview=plugins, plugins-update, plugins-failed, plugins-pi, plugin-sync). No agent,
- * CLI or vendor command runs, and no real configuration is read. Every view's axe audit must be
- * clean. Usage: node scripts/check-plugin-library.mjs [--server URL]
+ * Plugins & MCP in Chromium and WebKit, on synthetic fixtures (?preview=plugins, plugins-update,
+ * plugins-failed, plugins-pi). No agent, CLI or vendor command runs, and no real configuration is
+ * read. Every view's axe audit must be clean.
+ * Usage: node scripts/check-plugin-library.mjs [--server URL]
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -30,7 +30,6 @@ async function audit(page, what) {
 }
 
 const calls = (page) => page.evaluate(() => window.pluginsFixture.calls);
-const syncCalls = (page) => page.evaluate(() => window.configSyncCalls);
 
 async function checkProgressive(page, engine) {
   await page.goto(`${url}/?preview=plugins-progressive`);
@@ -150,15 +149,15 @@ async function checkLibrary(page, engine) {
     "security-review@anthropic-plugin-directory",
   );
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  // Codex: one feature's CLI listing failed and says so; its sync switch is per agent.
+  // Codex: one feature's CLI listing failed and says so. No agent has a switch: plugins are
+  // listed and changed on this device only.
   await agents.getByRole("button", { name: "Codex", exact: true }).click();
   await page.getByText("marketplace cache is corrupt", { exact: false }).waitFor();
-  await page.getByRole("switch", { name: "Sync Codex across devices" }).click();
-  await page.waitForFunction(() => window.pluginsFixture.calls.includes("sync:codex:false"));
+  assert.equal(await page.getByRole("switch").count(), 0);
   await agents.getByRole("button", { name: "Pi", exact: true }).click();
   await page.getByText("Pi has no plugin marketplace.", { exact: false }).waitFor();
   await agents.getByRole("button", { name: "OpenCode", exact: true }).click();
-  await page.getByText("Configuration sync covers Claude Code, Codex and Pi.").waitFor();
+  await page.getByText("OpenCode loads npm plugins", { exact: false }).waitFor();
   assert.equal(await page.getByRole("switch").count(), 0);
   // Grok Build lists its plugins and marketplaces, and adds a marketplace where its list is.
   await agents.getByRole("button", { name: "Grok Build", exact: true }).click();
@@ -218,56 +217,6 @@ async function checkLibrary(page, engine) {
   }
 }
 
-async function checkSync(page, engine) {
-  await page.goto(`${url}/?preview=plugin-sync`);
-  for (const name of ["Claude Code", "Codex", "Pi"])
-    await page.locator(".config-sync-agent-head").getByText(name, { exact: true }).waitFor();
-  for (const text of [
-    "Marketplace not added",
-    "Needs a newer agent",
-    "Another system only",
-    "Kept on its own device",
-    "Command not on this device",
-    "Removed on another device",
-    "Previous change needs review",
-    "Sync is off",
-    "Needs a decision",
-  ])
-    await page.getByText(text, { exact: true }).first().waitFor();
-  await audit(page, `${engine} sync by agent`);
-  await page.screenshot({ path: resolve(out, `${engine}-plugin-sync.png`), fullPage: true });
-  await page.getByRole("switch", { name: "Sync Pi on this device" }).click();
-  await page.waitForFunction(() => window.configSyncCalls.includes("sync:pi:true"));
-  await page.getByRole("button", { name: "Apply all 1" }).first().click();
-  await page.getByRole("status").filter({ hasText: "1 of 2 applied." }).waitFor();
-  // A plugin whose marketplace is missing: the review offers the installer steps in order, and a
-  // failed install restores that declaration only.
-  await page.getByRole("button", { name: /Review settings.json · enabledPlugins/ }).click();
-  const steps = page.getByLabel("Installer steps");
-  await steps.waitFor();
-  await steps.getByText("owner/plugins").waitFor();
-  await audit(page, `${engine} installer steps`);
-  await page.screenshot({ path: resolve(out, `${engine}-plugin-sync-steps.png`) });
-  assert.equal(
-    (await syncCalls(page)).some((call) => call.startsWith("apply:")),
-    false,
-  );
-  await steps.getByRole("button", { name: "Install…" }).click();
-  await page.getByRole("button", { name: "Review command", exact: true }).click();
-  await page.getByRole("button", { name: "Start setup", exact: true }).click();
-  await page.waitForFunction(() =>
-    window.configSyncCalls.some((call) => call.startsWith("vendor-finish:")),
-  );
-  // The terminal stays readable until it is closed; then the review reports the outcome.
-  await page.getByRole("button", { name: "Close setup terminal", exact: true }).click();
-  await page.getByRole("status").filter({ hasText: "exited with code 1" }).waitFor();
-  assert.ok(
-    (await syncCalls(page)).some(
-      (call) => call.startsWith("vendor-finish:") && call.endsWith(":false:1"),
-    ),
-  );
-}
-
 let server;
 let output = "";
 try {
@@ -316,10 +265,9 @@ try {
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await checkLibrary(page, engine);
-      await checkSync(page, engine);
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: per-agent sections, CLI and file sources, update alert, failed listing, sync switches, holds, installer steps and a failed install passed with clean axe audits`,
+        `${engine}: per-agent sections, CLI and file sources, update alert and failed listing passed with clean axe audits`,
       );
     } finally {
       await browser.close();

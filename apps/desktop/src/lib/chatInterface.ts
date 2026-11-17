@@ -1,8 +1,8 @@
 /**
  * Whether a chat shows as Chat (auracode's interface) or Terminal (its agent's own interface in
  * auracode's terminal; docs/superpowers/plans/2026-11-06-terminal-chats.md). The choice is this
- * device's: a terminal needs the agent's CLI here, and the chat's synced record stays as it was,
- * so a chat synced to another device opens there as Chat. New chats take the default saved here.
+ * device's: a terminal needs the agent's CLI here, and the chat's saved record stays as it was.
+ * New chats take the default saved here.
  */
 export type ChatInterface = "chat" | "terminal";
 

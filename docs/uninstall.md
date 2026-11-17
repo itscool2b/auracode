@@ -1,9 +1,9 @@
 # Uninstalling auracode and deleting its data
 
-Uninstalling auracode deletes its local files and reviewed, exclusively owned account keys.
-Shared keys and entries that cannot be verified are retained and reported. Your coding agents, their settings and your repositories are not
-touched. Settings has the same deletion without uninstalling, on Windows, macOS and Linux (macOS
-and Linux have no uninstaller of auracode's own).
+Uninstalling auracode deletes its local files and the sign-in tokens of the agent accounts you
+added in it. Your coding agents, their settings and your repositories are not touched. Settings
+has the same deletion without uninstalling, on Windows, macOS and Linux (macOS and Linux have no
+uninstaller of auracode's own).
 
 One piece of Rust decides what goes everywhere: aura-core's `uninstall` module, run by the app
 binary's `--uninstall-cleanup` mode (`apps/desktop/src-tauri/src/uninstall.rs`). The Windows
@@ -15,21 +15,23 @@ uninstaller, Settings and a person in a terminal all run that mode.
 
 - `%LOCALAPPDATA%\si.auracode.desktop`, the data folder. It holds:
   - the device identity;
-  - every profile, with its chats, attachments, checkpoints, logs, backups and account files;
+  - every profile, with its chats, attachments, checkpoints, logs and backups, and with them
+    anything an earlier version kept there for an auracode account (see
+    [Secure storage](#secure-storage));
   - auracode's worktrees (see [Worktrees](#worktrees));
   - the ACP adapters auracode downloaded for itself;
-  - Instructions backups and the passphrase vault;
+  - Instructions backups;
   - clone recovery journals, including those in a custom data root;
   - the WebView2 profile (`EBWebView`).
 - `%APPDATA%\si.auracode.desktop`: the window position.
 - In `%TEMP%`: the updater's downloads (`auracode-<version>-updater-*`) and the CLI's probe
   folders (`aura-cli-*`).
-- In Windows Credential Manager, the reviewed entries under `auracode.sync.v1:` that belong
-  exclusively to deleted data roots. Credential Manager lists names for that prefix only; other
-  apps' credentials are never read. See [Secure-store scope](#secure-store-scope).
+- In Windows Credential Manager, the entries named `auracode.agents.v1:` that hold the tokens of
+  agent accounts added in the deleted profiles. Other apps' credentials are never read. See
+  [Secure storage](#secure-storage).
 - The uninstaller's own records:
   - the shortcuts, the jump list and the uninstall entry;
-  - the `auracode://` link registration, when it points at this install;
+  - an `auracode://` link registration an earlier version made, when it points at this install;
   - `HKCU\Software\auracode\auracode`;
   - Windows' notification settings for auracode
     (`HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\si.auracode.desktop`).
@@ -48,10 +50,10 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - `~/Library/Preferences/si.auracode.desktop.plist`;
   - a leftover single-instance socket, `/tmp/si_auracode_desktop_si.sock`.
 - In `$TMPDIR`: the updater's downloads and the CLI's probe folders.
-- Reviewed, exclusively owned keychain items with the service `auracode.sync.v1`. The keychain
-  is searched for that service only, using the same scope rules as Windows.
-- With "Also move auracode to the Trash": the app bundle. Launch Services then forgets the
-  `auracode://` link.
+- Keychain items with the service `auracode.agents.v1`, for the agent accounts added in the
+  deleted profiles.
+- With "Also move auracode to the Trash": the app bundle. Launch Services then forgets an
+  `auracode://` link an earlier version registered.
 
 ### Linux
 
@@ -60,8 +62,8 @@ uninstaller, Settings and a person in a terminal all run that mode.
 - `~/.config/si.auracode.desktop`: the window position.
 - `~/.cache/si.auracode.desktop`.
 - In `/tmp` (or `$TMPDIR`): the CLI's probe folders.
-- Reviewed, exclusively owned Secret Service items with the service `auracode.sync.v1`, found by
-  that attribute only, using the same scope rules as Windows.
+- Secret Service items with the service `auracode.agents.v1`, for the agent accounts added in the
+  deleted profiles.
 
 Removing the package (`sudo apt remove auracode`, `sudo dnf remove auracode`, or deleting the
 AppImage) removes the app and leaves all of this, so delete the data from Settings first.
@@ -78,8 +80,7 @@ auracode adds no login item, Run key, launch agent or autostart entry, so there 
   `~/.codex`, `~/.pi`, `~/.agents` or OpenCode's folders.
   - Their logins stay, since auracode never stored them.
   - Files auracode wrote there at your request stay, because they are valid files of yours:
-    instruction files, Plugin library items, MCP servers and synced settings. The agents keep
-    using them.
+    instruction files, Plugin library items and MCP servers. The agents keep using them.
   - Sessions you ran through auracode stay in each agent's own history, so `claude --resume` and
     `codex resume` still find them.
 - **Plugin library undo folders.** `.auracode-library` sits inside agent folders, in `~` (for
@@ -91,9 +92,9 @@ auracode adds no login item, Run key, launch agent or autostart entry, so there 
   commits on them; delete one with `git branch -d aura/<name>`.
 - **Worktrees with unsaved work.** They stay unless you choose otherwise (see
   [Worktrees](#worktrees)).
-- **Your account.** The account and its end-to-end encrypted data stay on auracode.si. This
-  computer stays listed under Devices until you remove it there or from another device. After a
-  fresh install, sign in and use your recovery key.
+- **Keys of a removed auracode account.** auracode has no accounts any more. If you signed in
+  with an earlier version, its keys are still in secure storage under `auracode.sync.v1`; this
+  version neither reads nor removes them (see [Secure storage](#secure-storage)).
 - **Shared system components.** The WebView2 runtime, Git, Node.js and npm stay, because other
   apps use them.
 - **Developer files.** A development build's data folder (`si.auracode.desktop.dev` next to the
@@ -101,37 +102,27 @@ auracode adds no login item, Run key, launch agent or autostart entry, so there 
   made by tools for working on auracode, not by the installed app. Delete them by hand; see
   [developing-in-aura.md](developing-in-aura.md).
 
-## Secure-store scope
+## Secure storage
 
-Cleanup reads complete, validated account indexes and account bundles. An opaque target hash
-cannot identify a payload's kind or service origin. Indexes for other data roots stay, including
-empty indexes. Their account references, including pending removal receipts, protect keys for
-both production and preview. Unknown, malformed, unsupported or unreadable values retain all
-account keys and the deleted roots' indexes for retry.
+auracode keeps one kind of secret: the sign-in token of each agent account added in it
+([agent accounts](agent-accounts.md)), one entry per account in Windows Credential Manager, the
+macOS login keychain or the Linux Secret Service, under the service `auracode.agents.v1`. An
+entry's name is a digest of the account's id and names no account, email or folder. Before the
+profiles go, the cleanup reads the ids they list and removes those entries; it never lists or
+reads another entry. When the store is locked or missing, the files still go and the cleanup says
+how many tokens stayed.
 
-Only canonical indexes of deleted roots and their exclusive account keys are removed. Shared
-account retention alone does not retain the deleted root's index. Orphan account bundles can be
-removed only when the canonical default root is among the deleted targets, never during a
-custom-only cleanup. Account keys are deleted before their indexes. If an account deletion fails,
-its owning index stays so a later cleanup can retry, even when the root is already missing.
-Missing roots are resolved from the nearest canonical existing ancestor; ambiguous paths retain
-keys instead of guessing.
+Earlier versions had auracode accounts, removed on 16 November 2026. What one left on this
+computer is treated like this:
 
-Settings and `--dry-run` list opaque targets, kind, remove/retain decisions and reasons, with no
-account IDs or secrets. Execution immediately replans and can only narrow the approved set.
-New references, changed payloads and newly discovered unknown entries retain affected keys.
-
-Every native store holds a shared lifetime lease. Cleanup takes an exclusive lease after target
-apps exit, before reading or deleting keys, and never waits for a root lock while holding it.
-Another running copy, a locked store or any lease failure preserves keys with a busy explanation.
-Close all older auracode binaries before the first cleanup with this version: older binaries do
-not participate in this lease.
-
-The permanent empty file `si.auracode.sync.v1.lock` in the platform's local application data
-folder is kept after uninstall. It contains no credentials or user data. Do not delete or replace
-it: keeping one inode prevents another process from bypassing an existing lock. The file is
-opened without following links or truncating it, checked as a regular file, and created with
-mode 0600 on Unix. Ownership locks are nonblocking and explicitly unlocked when their owner ends.
+- Its profile folder (`profiles/<id>`, with an encrypted database) is never opened by this
+  version. It goes with the data folder, like every profile.
+- Its keys in secure storage (`auracode.sync.v1:` in Credential Manager, the service
+  `auracode.sync.v1` in the keychain or the Secret Service) are not read and not removed. Delete
+  them by hand once you no longer want that data: without them, a copy of the account's profile
+  folder cannot be decrypted.
+- The empty file `si.auracode.sync.v1.lock` in the platform's local application data folder stays.
+  It holds no credentials or user data, and you can delete it.
 
 ## Worktrees
 
@@ -191,8 +182,7 @@ The bundle builds the NSIS installer only. An MSI would uninstall without the cl
 In Settings, open About, then Delete all auracode data under This device. The review lists:
 
 - every folder and file that would go, with its size;
-- each reviewed secure-store entry, whether it goes or stays, and why;
-- warnings when references or secure storage cannot be verified;
+- the secure store whose agent account tokens go too;
 - the worktrees with unsaved work, which are kept unless you tick to delete them too;
 - what stays.
 
@@ -221,7 +211,7 @@ auracode --uninstall-cleanup --dry-run
 
 | Option | Effect |
 |---|---|
-| `--dry-run` | Prints decisions and warnings; never requests quit, waits for exit, deletes files or keys, creates a lock file, or moves the app to Trash |
+| `--dry-run` | Prints what would go and what would stay; never requests quit, waits for exit, deletes files or tokens, or moves the app to Trash |
 | `--interactive` | Asks about worktrees with unsaved work, and says what could not be deleted |
 | `--report-failures` | Only says what could not be deleted |
 | `--remove-unsaved-worktrees` | Deletes worktrees with unsaved work too |
@@ -260,11 +250,9 @@ Use these steps when the app is already gone.
      ```sh
      rm -rf ~/.local/share/si.auracode.desktop ~/.config/si.auracode.desktop ~/.cache/si.auracode.desktop
      ```
-3. **Review the keys with a current auracode binary.** Run the scoped cleanup even if its data
-   folder was already removed. Do not blanket-delete every `auracode.sync.v1` credential or
-   repeatedly run `security delete-generic-password -s auracode.sync.v1`: another custom data
-   root or preview install may still depend on those account keys. If cleanup cannot establish
-   their ownership, leave them in place until the affected roots can be reviewed.
+3. **Delete the agent account tokens.** In Credential Manager, Keychain Access or your keyring,
+   delete the entries named `auracode.agents.v1`. They belong to auracode alone; your agents' own
+   sign-ins are not kept there.
 
 ## Edge cases
 
@@ -272,21 +260,19 @@ Use these steps when the app is already gone.
 |---|---|
 | auracode is running | It is asked to quit and stops only its own agents and terminals. If it is still running, nothing is deleted (exit 3). The Windows uninstaller then offers to close it and runs the cleanup after removing the app, from a copy of the program. |
 | A file is in use (a webview helper, an editor) | Retried for about ten seconds, then listed. Everything else goes. Running the cleanup again finishes once the file is free. |
-| The secure store is locked or unavailable | The files go, the keys are reported as not removed, and a later run removes them. |
+| The secure store is locked or unavailable | The files go, and the cleanup says how many agent account tokens it could not remove and where to delete them by hand. |
 | Git is missing, or a repository is gone | Its worktrees count as unsaved and stay unless chosen. A registration Git could not prune is reported, with the command to run. |
 | A link or junction inside the data folder | Removed as a link; what it points to is never touched. |
 | Read-only files (Git objects in checkpoints) | The read-only attribute is cleared, then the file is removed. |
-| A data folder from `AURACODE_DATA_DIR` | Only what auracode made there goes, and the folder goes only if it ends up empty. Its canonical index and exclusive accounts go; shared accounts, orphans and uncertain entries stay. |
-| A second run | Retries retained keys using missing-root identity; a completed cleanup removes nothing further. |
+| A data folder from `AURACODE_DATA_DIR` | Only what auracode made there goes, and the folder goes only if it ends up empty. |
+| A second run | A completed cleanup removes nothing further. |
 | An upgrade through the installer | Keeps everything (see the Windows uninstaller). |
 | macOS app run from a disk image or a translocated copy | "Move to the Trash" is not offered; drag the app to the Trash yourself. |
 | The cleanup cannot start (in Settings) | auracode stays open, says why, and asks for a fresh review. |
 
 Covered by tests:
 
-- `cargo test -p aura-core --features account-sync --lib uninstall`, with a temporary data folder,
-  real Git and a fake secure store;
-- `cargo test -p aura-sync --lib vault`;
+- `cargo test -p aura-core --lib uninstall`, with a temporary data folder and real Git;
 - `cargo test -p auracode-desktop --lib`;
 - `apps/desktop/scripts/uninstaller-hooks.test.mjs`, which checks the hooks against the pinned
   Tauri CLI's embedded installer template;
@@ -294,4 +280,5 @@ Covered by tests:
 - `apps/desktop/scripts/check-delete-data.mjs`, in Chromium and WebKit.
 
 Covered only by hand, on real machines: the uninstaller itself, the macOS Trash move and the
-native secure-store integration. Automated cleanup tests use only fake stores and temporary lock files.
+removal of agent account tokens from the real secure store. Automated cleanup tests use temporary
+folders only.

@@ -85,7 +85,7 @@ export AURA_CHECKPOINT_BENCH_WARM=$warm
 {
   printf 'baseline_commit=%s\ncurrent_commit=%s\n' "$baseline_commit" "$current_commit"
   printf 'baseline_target=%s\ncurrent_target=%s\n' "$baseline_target" "$current_target"
-  printf 'counts=%s\nwarm_samples=%s\nbuild_profile=test\nfeatures=account-sync\n' "$counts" "$warm"
+  printf 'counts=%s\nwarm_samples=%s\nbuild_profile=test\nfeatures=default\n' "$counts" "$warm"
   printf 'started_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf 'core_fixture_blob=%s\n' "$(git hash-object "$core/benchmarks.rs")"
   printf 'native_fixture_blob=%s\n' "$(git hash-object "$session/checkpoint_benchmarks.rs")"
@@ -108,7 +108,7 @@ verify_binary() {
   fi
   (
     cd "$directory"
-    cargo test -p aura-core --features account-sync --lib --locked -- --list
+    cargo test -p aura-core --lib --locked -- --list
   ) 2>&1 | tee "$log"
   tr -d '\r' < "$log" > "$list"
   for fixture in \
@@ -129,16 +129,12 @@ measure() {
   local log="$evidence/$revision-$fixture.log"
   (
     cd "$directory"
-    cargo test -p aura-core --features account-sync --lib --locked "$fixture" -- \
+    cargo test -p aura-core --lib --locked "$fixture" -- \
       --ignored --nocapture --test-threads=1
   ) 2>&1 | tee "$log"
   grep -Eq 'test result: ok[.] 1 passed; 0 failed;' "$log" ||
     die "$revision did not run exactly one successful $fixture test"
   grep -Fq "$marker" "$log" || die "$revision produced no $fixture measurements"
-  if [[ $fixture == checkpoint_performance ]]; then
-    grep -Fq 'CHECKPOINT_BENCH storage=account' "$log" ||
-      die "$revision did not measure encrypted Account capture"
-  fi
   awk -v revision="$revision" '/CHECKPOINT_/ { sub(/^.*CHECKPOINT_/, "CHECKPOINT_"); print revision " " $0 }' \
     "$log" >> "$evidence/measurements.txt"
 }

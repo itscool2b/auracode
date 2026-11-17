@@ -17,13 +17,9 @@
 //! store commits and closes, and the registry file goes; then the app exits with the code it was
 //! asked for. `RunEvent::Exit` is the synchronous last resort ([`state::AppState::at_exit`]).
 
-pub mod account_config;
-pub mod account_preservation_commands;
-mod account_removal;
-pub mod account_sync;
-pub mod accounts;
 pub mod agent_account_commands;
 pub mod agent_installation_commands;
+mod agent_tokens;
 pub mod appearance;
 pub mod bindings;
 pub mod boot;
@@ -35,11 +31,9 @@ pub mod clone_commands;
 pub mod commands;
 pub mod composer_commands;
 pub mod config_library;
-pub mod config_sync;
 pub mod config_vendor;
 pub mod conversation_commands;
 pub mod data_cleanup_commands;
-pub mod deep_links;
 pub mod demo;
 pub mod dictation;
 pub mod error;
@@ -50,7 +44,6 @@ pub mod glass;
 pub mod instructions_commands;
 pub mod integrity;
 pub mod launch;
-pub mod local_import_commands;
 pub mod memory_commands;
 pub mod native_shell;
 pub mod onboarding;
@@ -58,7 +51,6 @@ pub mod os;
 pub mod plugin_library;
 pub mod processes;
 pub mod profile_commands;
-pub mod profile_config;
 pub mod project_tools;
 pub mod remote;
 pub mod repository_publication_commands;
@@ -156,8 +148,6 @@ pub fn run() {
     }
     let app = builder
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_deep_link::init())
-        .manage(deep_links::SignInLinks::default())
         // The folder picker and the quit question, called from Rust only: the page has no dialog
         // permission (capabilities/default.json).
         .plugin(tauri_plugin_dialog::init())
@@ -237,7 +227,6 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     // Tauri's setup hook runs outside any Tokio context, so everything that spawns gets the handle.
     let rt = tauri::async_runtime::handle().inner().clone();
     let chats = sessions::start_chats(&mut booted, &version, &rt, sessions::Outside::real);
-    let accept_sign_in_links = launch.single_instance();
     let state = AppState::new(booted, chats, &os, glass, launch, version);
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
@@ -252,7 +241,6 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
         instructions_commands::InstructionsService::default(),
     ));
     app.manage(Arc::new(config_vendor::VendorService::default()));
-    app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(clones));
     browser::setup(app.handle());
     native_shell::setup(app.handle());
@@ -260,13 +248,6 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     general_preferences::refresh(app.handle());
     appearance::refresh(app.handle());
     memory_commands::forward_changes(app.handle());
-    if accept_sign_in_links {
-        deep_links::setup(app.handle());
-    }
-    let account_app = app.handle().clone();
-    rt.spawn(async move {
-        profile_commands::restore_selected(account_app);
-    });
 
     #[cfg(unix)]
     {
@@ -393,7 +374,6 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             ..
         } if label == window::MAIN_WINDOW => {
             window::sync_webview_visibility(app);
-            account_sync::trigger(app);
             catalog_refresh::on_focus(app);
         }
         RunEvent::WindowEvent {

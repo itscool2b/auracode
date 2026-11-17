@@ -61,9 +61,7 @@ test("locked catalogue includes complete font notices and explicit native source
     [
       "ggml (transcribe-cpp-sys source)",
       "miniz (transcribe-cpp-sys source)",
-      "OpenSSL (openssl-src source)",
       "Silero VAD segmentation code (transcribe-cpp-sys source)",
-      "SQLCipher (libsqlite3-sys source)",
     ],
   );
   for (const name of [
@@ -131,7 +129,7 @@ test("website output contains frontend notices, not desktop native dependencies"
   assert.match(text, /@fontsource-variable\/geist/);
   assert.doesNotMatch(text, /@fontsource-variable\/fraunces/);
   assert.match(text, /react-router/);
-  assert.doesNotMatch(text, /SQLCipher|openssl-src|tauri-plugin|@xterm|transcribe-cpp|Parakeet/);
+  assert.doesNotMatch(text, /libsqlite3-sys|tauri-plugin|@xterm|transcribe-cpp|Parakeet/);
 });
 
 test("packaging emits readable plain text and escaped script-free HTML", () => {
@@ -141,7 +139,7 @@ test("packaging emits readable plain text and escaped script-free HTML", () => {
     assets.map((asset) => asset.fileName),
     ["third-party-notices.txt", "third-party-notices/index.html"],
   );
-  assert.match(assets[0].source, /SQLCipher/);
+  assert.match(assets[0].source, /transcribe-cpp-sys/);
   assert.match(assets[1].source, /color-scheme:light dark/);
   const html = renderHtml('<script>alert("bad")</script>&');
   assert.doesNotMatch(html, /<script>/);
@@ -157,7 +155,7 @@ test("desktop imports the notice text as a virtual module without fetching", () 
   assert.equal(plugin.load("react"), null);
   const source = plugin.load(id);
   assert.match(source, /^export default "Third-party software notices/);
-  assert.match(source, /SQLCipher/);
+  assert.match(source, /transcribe-cpp-sys/);
 });
 
 test("website and desktop notices follow System, each in its own colours", () => {

@@ -26,13 +26,12 @@ import { type IntroMode, SetupIntro } from "./SetupIntro";
 import "./setup.css";
 
 /**
- * Four steps, each skippable: Continue never requires anything. Motion is not one of them: Full
+ * Three steps, each skippable: Continue never requires anything. Motion is not one of them: Full
  * already follows the system's reduced motion, and Settings changes it.
  */
 const STEPS: readonly { id: SetupStep; label: string }[] = [
   { id: "welcome", label: "Welcome" },
   { id: "agents", label: "Your agents" },
-  { id: "account", label: "Account" },
   { id: "project", label: "First project" },
 ];
 
@@ -54,7 +53,6 @@ export function Onboarding({
   restart = false,
   onDone,
   onDemo,
-  onAccount,
   api = setupApi,
   clone,
 }: {
@@ -64,7 +62,6 @@ export function Onboarding({
   readonly restart?: boolean;
   readonly onDone: () => void;
   readonly onDemo: () => void;
-  readonly onAccount: () => void;
   readonly api?: SetupApi;
   /** The clone's commands, and a form to open the project step on (previews). */
   readonly clone?: { readonly api?: CloneApi; readonly draft?: CloneDraft };
@@ -319,7 +316,6 @@ export function Onboarding({
   const headings: Record<SetupStep, [string, string]> = {
     welcome: ["Welcome to auracode.", "Your agents, one window."],
     agents: agentsHeading,
-    account: ["Accounts are optional.", "And invite-only for now."],
     motion: ["Add a first project.", "Any folder works."],
     project: ["Add a first project.", "Any folder works."],
   };
@@ -406,17 +402,6 @@ export function Onboarding({
                     {agentsState.agentsRefreshing ? "Refreshing…" : "Refresh"}
                   </button>
                 </div>
-              </>
-            ) : null}
-            {step === "account" ? (
-              <>
-                <p className="setup-lead">
-                  auracode needs no account and no network. Your chats, projects and agents stay on
-                  this computer. With an invitation, an account adds sync between your devices.
-                </p>
-                <button type="button" className="g-button g-button-outline" onClick={onAccount}>
-                  Open Account
-                </button>
               </>
             ) : null}
             {step === "project" ? (

@@ -5,9 +5,10 @@ import { ProfilePicker } from "../components/settings/ProfilePicker";
 import { type ProfileApi, performProfileSwitch } from "../lib/profiles";
 import "../components/settings/settings.css";
 
+/** A data folder with a second profile, as an earlier version could leave one. */
 const profiles: ProfileMeta[] = [
   { id: "local", kind: "local", display_name: "Local", created_at: 0 },
-  { id: "account", kind: "account", display_name: "Account", created_at: 0 },
+  { id: "kept", kind: "local", display_name: "Kept workspace", created_at: 1 },
 ];
 const api = { list: async () => profiles } as ProfileApi;
 function Preview() {
@@ -17,10 +18,9 @@ function Preview() {
   return (
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="settings-content">
-        <h1>{mode === "locked" ? "Your account workspace is locked" : "Account"}</h1>
+        <h1>Data & privacy</h1>
         <ProfilePicker
-          activeId={mode === "locked" ? "account" : "local"}
-          locked={mode === "locked"}
+          activeId="local"
           api={api}
           onSwitch={(id) =>
             performProfileSwitch(
@@ -36,7 +36,7 @@ function Preview() {
           }
         />
         <p className="settings-footnote" role="status">
-          {result || "Current workspace preserved"}
+          {result || "Current profile preserved"}
         </p>
         <output aria-label="Activation count" hidden>
           {activationCount}

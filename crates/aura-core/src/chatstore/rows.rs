@@ -2,7 +2,7 @@
 //!
 //! Every function takes a [`Connection`] (a transaction derefs to one) and runs on the writer thread;
 //! the caller owns the transaction, so each [`Op`](super::Op) stays atomic. Ids are new UUIDv7 strings,
-//! times are Unix ms, and every synced row carries the device that wrote it.
+//! times are Unix ms, and rows that depend on the machine carry the device that wrote them.
 
 use std::path::{Path, PathBuf};
 
@@ -66,8 +66,8 @@ fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
         title: row.get(1)?,
         title_source: title_source.as_deref().and_then(parse_title_source),
         // A chat names its agent. One saved before agents had one entry each may name a
-        // connection (`claude-acp`), and so may a row synced from an older build: it reads as
-        // its agent. Its saved sessions keep their connections.
+        // connection (`claude-acp`): it reads as its agent. Its saved sessions keep their
+        // connections.
         agent_id: aura_agents::agent_of(&row.get::<_, Option<String>>(3)?.unwrap_or_default())
             .to_owned(),
         agent_host: serde_json::from_str(&row.get::<_, String>(7)?)

@@ -6,8 +6,8 @@
 //!
 //! A device or a bot link belongs to the workspace (profile) that was open when it was made, and
 //! reaches that workspace only. The file is the installation's, but nothing in it opens another
-//! workspace's chats: a phone paired in Local does not reach an account's encrypted workspace, nor
-//! the other way round. With no workspace open, nothing is accepted.
+//! workspace's chats: a phone paired in one profile does not reach another profile's chats. With
+//! no workspace open, nothing is accepted.
 
 use std::{
     io::Write,
@@ -485,8 +485,8 @@ mod tests {
         let bot = registry.add_bot("Grok", false, 1).expect("bot");
         let open = registry.start_pairing(2).expect("pairing");
 
-        // The account's workspace opens: Local's phone, bot and open link are not its own.
-        registry.set_scope("account");
+        // Another workspace opens: Local's phone, bot and open link are not its own.
+        registry.set_scope("other");
         assert_eq!(registry.device_key(&phone.id), None);
         assert!(registry.device_elsewhere(&phone.id));
         assert!(!registry.device_elsewhere("no-such-one"));
@@ -506,7 +506,7 @@ mod tests {
             .pair(&pairing.id, "Tablet", 5)
             .expect("pair")
             .expect("device");
-        assert_eq!(tablet.profile, "account");
+        assert_eq!(tablet.profile, "other");
         assert_eq!(registry.devices().len(), 1);
 
         // Back in Local, and after a restart: each workspace has its own again.
@@ -530,7 +530,7 @@ mod tests {
         )
         .expect("write");
         let mut legacy = Registry::load(&path).expect("reload");
-        for scope in ["local", "account", ""] {
+        for scope in ["local", "other", ""] {
             legacy.set_scope(scope);
             assert_eq!(legacy.device_key(&phone.id), None, "{scope}");
             assert!(!legacy.verify_bot(&bot.id, &bot.token, 7), "{scope}");

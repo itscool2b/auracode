@@ -197,18 +197,12 @@ impl SessionManager {
             }
         };
         let dir = self.deps().store.attachment_dir().to_path_buf();
-        let reader = self.deps().store.attachment_reader();
         self.deps()
             .rt
             .spawn_blocking(move || {
                 let _permit = permit;
-                let bytes = aura_drivers::attachments::read_from(
-                    Some(&dir),
-                    reader.as_deref(),
-                    &blob,
-                    MAX_SOURCE_BYTES,
-                )
-                .map_err(invalid)?;
+                let bytes = aura_drivers::attachments::read(&dir, &blob, MAX_SOURCE_BYTES)
+                    .map_err(invalid)?;
                 preview(&bytes, full)
             })
             .await
@@ -379,13 +373,9 @@ mod tests {
                 .await
                 .is_err()
         );
-        let saved = aura_drivers::attachments::read_from(
-            Some(store.attachment_dir()),
-            store.attachment_reader().as_deref(),
-            &hash,
-            MAX_SOURCE_BYTES,
-        )
-        .unwrap();
+        let saved =
+            aura_drivers::attachments::read(store.attachment_dir(), &hash, MAX_SOURCE_BYTES)
+                .unwrap();
         assert!(saved.starts_with(b"\x89PNG\r\n\x1a\n"));
         drop(writer);
         assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
@@ -409,107 +399,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resolved[0].sha256, hash);
-        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
-    }
-
-    #[cfg(feature = "account-sync")]
-    #[tokio::test]
-    async fn agent_images_use_encrypted_profile_storage_without_plaintext_fallback() {
-        use crate::{
-            owner::ProfileOwner,
-            profile::{Profile, ProfileKind, ProfileMeta},
-            store::Store,
-        };
-        use aura_drivers::incoming_images::AttachmentWriter;
-        let dir = tempfile::tempdir().unwrap();
-        let profile = Profile {
-            meta: ProfileMeta {
-                id: "profile".into(),
-                kind: ProfileKind::Account,
-                display_name: "Account".into(),
-                created_at: 0,
-            },
-            dir: dir.path().join("profile"),
-        };
-        std::fs::create_dir_all(&profile.dir).unwrap();
-        let key = aura_sync::crypto::AccountKey::generate().unwrap();
-        let database_key = Arc::new(key.database_key("account", "profile").unwrap());
-        let file_key = Arc::new(key.profile_file_key("account", "profile").unwrap());
-        let owner = ProfileOwner::acquire(&profile).unwrap();
-        let (store, _) = Store::open_encrypted(&profile, database_key.clone()).unwrap();
-        let store = crate::chatstore::ChatStore::start_account(
-            store,
-            owner,
-            &profile,
-            "dev".into(),
-            tokio::runtime::Handle::current(),
-            file_key.clone(),
-        )
-        .unwrap();
-        store.recovered().await;
-        let chat = store
-            .create_chat(crate::chatstore::NewChat {
-                agent_host: Default::default(),
-                agent_id: "mock".into(),
-                folder: dir.path().to_path_buf(),
-                device_id: "dev".into(),
-                now: 1,
-            })
-            .await
-            .unwrap();
-        let mut bytes = Cursor::new(Vec::new());
-        image::DynamicImage::new_rgba8(16, 12)
-            .write_to(&mut bytes, image::ImageFormat::Png)
-            .unwrap();
-        let writer = StoredImages {
-            store: store.clone(),
-            chat_id: chat.id.clone(),
-            rt: tokio::runtime::Handle::current(),
-        };
-        let hash = writer.write(bytes.into_inner()).await.unwrap();
-        let saved = aura_drivers::attachments::read_from(
-            Some(store.attachment_dir()),
-            store.attachment_reader().as_deref(),
-            &hash,
-            MAX_SOURCE_BYTES,
-        )
-        .unwrap();
-        assert!(saved.starts_with(b"\x89PNG\r\n\x1a\n"));
-        assert!(!profile.attachments_dir().join(&hash).exists());
-        drop(writer);
-        assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
-        drop(store);
-        let owner = ProfileOwner::acquire(&profile).unwrap();
-        let (store, _) = Store::open_encrypted(&profile, database_key).unwrap();
-        let store = crate::chatstore::ChatStore::start_account(
-            store,
-            owner,
-            &profile,
-            "dev".into(),
-            tokio::runtime::Handle::current(),
-            file_key,
-        )
-        .unwrap();
-        store.recovered().await;
-        assert_eq!(
-            store
-                .composer(ComposerCommand::ResolveImage {
-                    chat_id: chat.id,
-                    sha256: hash.clone()
-                })
-                .await
-                .unwrap()[0]
-                .sha256,
-            hash
-        );
-        assert_eq!(
-            store
-                .attachment_reader()
-                .unwrap()
-                .read(&hash, MAX_SOURCE_BYTES)
-                .unwrap(),
-            saved
-        );
         assert!(store.shutdown(std::time::Duration::from_secs(5)).await);
     }
 

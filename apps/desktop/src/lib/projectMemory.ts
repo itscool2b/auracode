@@ -25,34 +25,29 @@ export interface ProjectMemoryApi {
 
 /** The window event Rust sends after each committed memory change (memory_commands.rs). */
 export const PROJECT_MEMORY_CHANGED = "auracode-project-memory-changed";
-/** Read every open project again: changes were missed, or may have arrived with sync. */
+/** Read every open project again: changes were missed. */
 export const MEMORY_CHANGED_ANYWHERE: ProjectMemoryChanged = { project_id: null, agent_edit: null };
 
-/** Native memory changes, and finished sync exchanges, which can bring other devices' revisions. */
+/** Native memory changes, the editor's and agents'. */
 export function subscribeProjectMemory(
   changed: (change: ProjectMemoryChanged) => void,
 ): () => void {
   if (!inTauri()) return () => {};
   let disposed = false;
-  const stops: UnlistenFn[] = [];
-  const keep = (stop: UnlistenFn) => {
-    if (disposed) stop();
-    else stops.push(stop);
-  };
+  let stop: UnlistenFn | null = null;
   // Without native events, focus and Refresh still read memory again.
   void listen<ProjectMemoryChanged>(PROJECT_MEMORY_CHANGED, ({ payload }) => {
     if (!disposed) changed(payload);
   })
-    .then(keep)
-    .catch(() => {});
-  void listen<[string, { readonly state: string }]>("account-sync-changed", ({ payload }) => {
-    if (!disposed && payload[1]?.state === "idle") changed(MEMORY_CHANGED_ANYWHERE);
-  })
-    .then(keep)
+    .then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    })
     .catch(() => {});
   return () => {
     disposed = true;
-    for (const stop of stops.splice(0)) stop();
+    stop?.();
+    stop = null;
   };
 }
 

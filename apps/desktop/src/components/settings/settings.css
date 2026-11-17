@@ -210,8 +210,40 @@ h1 + .settings-group {
   --settings-indent: calc(var(--g-space-16) + var(--g-space-12));
 }
 
-.settings-row:has(> .settings-row-text > .account-badge) {
+.settings-row:has(> .settings-row-text > .settings-badge) {
   --settings-indent: calc(var(--g-space-32) + var(--g-space-12));
+}
+
+/* Avatar circle: what leads a profile's row. */
+.settings-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control-hover);
+  box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  color: var(--g-fg-1);
+}
+
+/*
+ * lib/profiles.ts covers the window with this while drafts save and a profile opens: frosted
+ * glass, heavy enough that the app under it never reads through.
+ */
+.profile-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background-color: var(--ui-pane-fill);
+  -webkit-backdrop-filter: var(--g-blur-pop);
+  backdrop-filter: var(--g-blur-pop);
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
 }
 
 /* Hairlines between rows, inset 16px on both sides (X Money). */
@@ -287,58 +319,6 @@ h1 + .settings-group {
 .settings-agent-mark {
   display: inline-flex;
   flex: none;
-}
-
-/* A whole row that opens something (X Money's chevron rows). */
-.settings-link {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-12);
-  width: 100%;
-  min-height: 60px;
-  padding: var(--g-space-12) var(--g-space-16);
-  border: 0;
-  background-color: transparent;
-  color: var(--g-fg-1);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--g-dur-micro) var(--g-ease);
-}
-
-.settings-link > span {
-  flex: 1;
-  min-width: 0;
-}
-
-.settings-link > svg {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
-@media (hover: hover) {
-  .settings-link:hover:not(:disabled) {
-    background-color: var(--g-surface-3);
-  }
-}
-
-.settings-link:active:not(:disabled) {
-  background-color: var(--g-glass-control-active);
-  transition-duration: 0ms;
-}
-
-.settings-link:focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: -2px;
-  border-radius: var(--g-radius-12);
-}
-
-.settings-link:disabled {
-  color: var(--g-fg-4);
-  cursor: not-allowed;
 }
 
 .settings-mono {
@@ -660,21 +640,6 @@ h1 + .settings-group {
   font-weight: 500;
 }
 
-.settings-form {
-  display: grid;
-  gap: var(--g-space-16);
-  justify-items: start;
-}
-
-.settings-form > *,
-.settings-form > .settings-field {
-  margin: 0;
-}
-
-.settings-form > :is(.settings-field, .g-input, .g-select, .g-textarea, label, .settings-well) {
-  justify-self: stretch;
-}
-
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -683,7 +648,7 @@ h1 + .settings-group {
 }
 
 /* Square white checkboxes with a black check, as in the chat (shell.css draws the same). */
-:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]) {
+.settings-shell input[type="checkbox"]:not([role="switch"]) {
   flex: none;
   box-sizing: border-box;
   width: 16px;
@@ -701,24 +666,22 @@ h1 + .settings-group {
     border-color var(--g-dur-fast) var(--g-ease);
 }
 
-:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):checked {
+.settings-shell input[type="checkbox"]:not([role="switch"]):checked {
   border-color: var(--g-primary);
   background-color: var(--g-primary);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
-:root[data-theme="light"]
-  :is(.settings-shell, .locked-profile)
-  input[type="checkbox"]:not([role="switch"]):checked {
+:root[data-theme="light"] .settings-shell input[type="checkbox"]:not([role="switch"]):checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='white' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
-:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):disabled {
+.settings-shell input[type="checkbox"]:not([role="switch"]):disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):focus-visible {
+.settings-shell input[type="checkbox"]:not([role="switch"]):focus-visible {
   outline: 2px solid var(--g-focus);
   outline-offset: 2px;
 }
@@ -738,24 +701,6 @@ h1 + .settings-group {
 /* The shell draws dialog checkboxes with no margin; keep the box on the sentence's first line. */
 .g-dialog .settings-check > input[type="checkbox"]:not([role="switch"]) {
   margin-top: var(--g-space-2);
-}
-
-/* Machine data the person compares or keeps: a well one step below the row. */
-.settings-well {
-  display: block;
-  box-sizing: border-box;
-  margin: 0;
-  padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-glass-control);
-  box-shadow: inset 0 0 0 1px var(--g-glass-rim);
-  color: var(--g-fg-1);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-code);
-  line-height: var(--g-leading-code);
-  font-variant-ligatures: none;
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 
 /* Quiet disclosures inside a row; shell.css draws their turning chevron. */
@@ -926,15 +871,6 @@ h1 + .settings-group {
 .settings-row .settings-error > .g-button,
 .g-dialog .settings-error > .g-button {
   margin-top: var(--g-space-8);
-}
-
-/* The reason under an invalid field, in 12/16 red (4.2). */
-.settings-field-error {
-  margin: 0;
-  color: var(--g-red);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  overflow-wrap: anywhere;
 }
 
 .settings-alert {

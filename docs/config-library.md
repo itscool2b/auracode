@@ -84,7 +84,7 @@ They preserve unselected JSON spans and TOML tables/comments, and reject unknown
 or incompatible selected entries. Persistent recovery metadata contains only the selected safe
 before/after values. Full documents are staged privately in the same approved configuration realm
 for checked publication, then removed after success. An interrupted or uncertain transaction retains
-them locally for recovery and never includes them in inventory, previews or sync. Metadata is saved
+them locally for recovery and never includes them in inventory or previews. Metadata is saved
 before staging, so an interrupted transaction is discoverable. Restoring a server applies its inverse
 entry change to the current document, preserving unrelated edits made after the original copy. An
 edited selected entry or a later whole-file deletion is refused. Agent enable/approval state remains

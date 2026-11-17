@@ -86,6 +86,21 @@ test("the hooks run the Rust cleanup and keep Tauri from deleting the data folde
   has(hooks, `\${ElseIf} $R9 == "4"`);
 });
 
+test("a link registration an earlier version left is removed only when it is this install's", () => {
+  // tauri.conf.json registers no scheme any more, so Tauri's template no longer removes one.
+  assert.equal(config.plugins?.["deep-link"], undefined);
+  const key = `Software${SEP}Classes${SEP}auracode`;
+  has(hooks, `ReadRegStr $R9 SHCTX "${key}${SEP}shell${SEP}open${SEP}command" ""`);
+  has(
+    hooks,
+    `\${If} $R9 == "$${SEP}"$INSTDIR${SEP}${BIN}.exe$${SEP}" $${SEP}"%1$${SEP}""\n    DeleteRegKey SHCTX "${key}"`,
+  );
+  // It runs before the cleanup reads its own result from the same register.
+  assert.ok(
+    hooks.indexOf(`DeleteRegKey SHCTX "${key}"`) < hooks.indexOf("$AuracodeCleanupLater = 1"),
+  );
+});
+
 test("the checkbox keeps the data, and every other string is Tauri's", () => {
   has(english, `LangString deleteAppData \${LANG_ENGLISH} "Keep my auracode data`);
   assert.ok(keys(english).length >= 20);

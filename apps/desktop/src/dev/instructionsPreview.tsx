@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { AppInfo } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
 import { createInstructionsFixture, type InstructionsScenario } from "./instructionsFixture";
+import { oneProfile } from "./profilesFixture";
 import { createSetupFixture } from "./setupFixture";
 
 const info: AppInfo = {
@@ -15,9 +16,7 @@ const info: AppInfo = {
   data_dir: "C:/fixture/auracode",
   device: null,
   profile: null,
-  profile_locked: false,
   profile_switching: false,
-  config_profile_recovery: null,
   db: null,
   glass: "none",
   launch: { type: "normal" },
@@ -51,6 +50,7 @@ export function mountInstructionsPreview(container: HTMLElement, mode: string): 
   createRoot(container).render(
     <StrictMode>
       <SettingsScreen
+        profiles={oneProfile}
         info={info}
         initialPage="instructions"
         instructions={fixture.api}

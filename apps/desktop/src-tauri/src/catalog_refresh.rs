@@ -44,7 +44,7 @@ pub fn on_focus(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    if state.launch.is_smoke() || state.quit.is_quitting() || state.app_info().profile_locked {
+    if state.launch.is_smoke() || state.quit.is_quitting() {
         return;
     }
     let Some(lease) = state.catalog_refresh.claim(Instant::now()) else {

@@ -1868,10 +1868,9 @@ impl Session {
             });
             return;
         }
-        let blocks = match crate::attachments::acp_with_reader(
+        let blocks = match crate::attachments::acp(
             parts,
             self.setup.attachment_dir.as_deref(),
-            self.setup.attachment_reader.as_deref(),
             self.init.image,
         ) {
             Ok(blocks) => blocks,

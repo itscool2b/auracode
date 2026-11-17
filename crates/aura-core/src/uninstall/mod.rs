@@ -5,13 +5,14 @@
 //! piece of Rust decides what goes on every platform. [`plan`] looks without changing anything;
 //! [`execute`] deletes what the plan found, in this order:
 //!
-//! 1. auracode's secure-store entries ([`vault`]): the index of each data folder and the account
-//!    keys used exclusively by deleted roots, retaining shared and uncertain entries;
-//! 2. auracode's worktrees ([`worktrees`]): clean ones, and those with unsaved work the person chose
+//! 1. auracode's worktrees ([`worktrees`]): clean ones, and those with unsaved work the person chose
 //!    to delete, go with their Git registration; the rest stay where they are, unlocked;
-//! 3. the folders and files auracode names after itself ([`Targets`]), around kept worktrees;
-//! 4. in a data folder chosen with `AURACODE_DATA_DIR`, only the entries auracode made in it;
-//! 5. the updater's leftovers in the temporary folder.
+//! 2. the folders and files auracode names after itself ([`Targets`]), around kept worktrees;
+//! 3. in a data folder chosen with `AURACODE_DATA_DIR`, only the entries auracode made in it;
+//! 4. the updater's leftovers in the temporary folder.
+//!
+//! The desktop removes the added agent accounts' tokens from secure storage beside this, from
+//! [`agent_account_ids`].
 //!
 //! What stays, and why, is in `docs/uninstall.md`: the person's agents and every agent home
 //! (`~/.claude`, `~/.codex`, `~/.pi` and the rest are never read), their repositories, branches
@@ -24,26 +25,21 @@ mod remove;
 mod targets;
 #[cfg(test)]
 mod tests;
-mod vault;
 mod worktrees;
 
 use std::path::{Path, PathBuf};
 
 pub use remove::Retry;
 pub use targets::{Os, PlatformDirs, Targets};
-pub use vault::{
-    AppVault, ORIGINS, VaultApproval, VaultKind, VaultPlan, VaultReport, VaultRow, review_vault,
-};
 pub use worktrees::{GitTool, Worktree};
 
 /// How far a cleanup reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
     /// Everything for this user on this device: the default data folder, the platform's folders
-    /// for auracode, the updater's leftovers and exclusively owned secure-store entries.
+    /// for auracode and the updater's leftovers.
     Machine,
-    /// One data folder chosen with `AURACODE_DATA_DIR`: only what auracode made in it and its own
-    /// index entry and exclusive account keys. Shared and orphan account keys stay.
+    /// One data folder chosen with `AURACODE_DATA_DIR`: only what auracode made in it.
     DataFolder,
 }
 
@@ -74,8 +70,6 @@ pub struct Item {
 /// What a cleanup would remove, read without changing anything.
 #[derive(Debug, Clone)]
 pub struct Plan {
-    pub default_root: Option<PathBuf>,
-    pub vault: VaultPlan,
     pub scope: Scope,
     pub items: Vec<Item>,
     /// Every auracode worktree found in the data folders, clean or not.
@@ -92,10 +86,7 @@ impl Plan {
 
     /// Nothing left to remove (a second run, or a machine auracode never ran on).
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-            && self.worktrees.is_empty()
-            && self.vault.rows.is_empty()
-            && self.vault.warnings.is_empty()
+        self.items.is_empty() && self.worktrees.is_empty()
     }
 }
 
@@ -127,20 +118,20 @@ pub struct Report {
     pub kept: Vec<Worktree>,
     /// Everything that could not be removed. Empty means the cleanup is complete.
     pub failed: Vec<Failure>,
-    pub vault: VaultReport,
     /// Things worth saying that are not failures (a registration Git could not prune).
     pub notes: Vec<String>,
 }
 
 impl Report {
     pub fn complete(&self) -> bool {
-        self.failed.is_empty() && self.vault.error.is_none()
+        self.failed.is_empty()
     }
 }
 
-/// Names auracode creates directly in a data folder. In a folder chosen with
-/// `AURACODE_DATA_DIR` only these go (with their `.corrupt-*` copies and `.<name>.tmp-*` debris),
-/// since that folder may hold other things.
+/// Names auracode creates directly in a data folder, by this version or an earlier one (the
+/// account and configuration-switch files are from when auracode had accounts). In a folder
+/// chosen with `AURACODE_DATA_DIR` only these go (with their `.corrupt-*` copies and
+/// `.<name>.tmp-*` debris), since that folder may hold other things.
 pub const DATA_ENTRIES: &[&str] = &[
     "device.json",
     "state.json",
@@ -199,8 +190,6 @@ pub fn plan(targets: &Targets, git: &GitTool) -> Plan {
         .map(|path| git.inspect(&path))
         .collect();
     Plan {
-        default_root: targets.default_root.clone(),
-        vault: VaultPlan::default(),
         scope: targets.scope,
         items,
         worktrees,
@@ -209,14 +198,7 @@ pub fn plan(targets: &Targets, git: &GitTool) -> Plan {
 }
 
 /// Removes what `plan` found. Worktrees with unsaved work stay unless `choice` names them.
-/// `vault` is the secure store (`None` skips it, for a machine without one).
-pub fn execute(
-    plan: &Plan,
-    choice: &WorktreeChoice,
-    vault: Option<&dyn AppVault>,
-    git: &GitTool,
-    retry: &Retry,
-) -> Report {
+pub fn execute(plan: &Plan, choice: &WorktreeChoice, git: &GitTool, retry: &Retry) -> Report {
     let mut report = Report::default();
     let removing = |worktree: &Worktree| {
         !worktree.unsaved()
@@ -227,15 +209,6 @@ pub fn execute(
                 }
             }
     };
-    // Replan under the native exclusive lease and never expand the reviewed candidates.
-    if let Some(vault) = vault {
-        report.vault = vault::clean(
-            vault,
-            &plan.data_roots,
-            plan.default_root.as_deref(),
-            &plan.vault.approvals,
-        );
-    }
     let mut kept = Vec::new();
     for worktree in &plan.worktrees {
         if removing(worktree) {
@@ -339,7 +312,8 @@ pub fn temporary_leftovers(temp: &Path) -> Vec<PathBuf> {
 }
 
 /// Profiles another auracode process holds right now (`<profile>/owner.lock`), and data folders
-/// whose account lock is held: the cleanup waits until this is empty. Never creates a lock file.
+/// whose `accounts.lock` an earlier version, still running, holds: the cleanup waits until this is
+/// empty. Never creates a lock file.
 pub fn in_use(data_roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut busy = Vec::new();
     for root in data_roots {

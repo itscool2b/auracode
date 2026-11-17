@@ -93,9 +93,8 @@ kept; unresolved journals are never pruned), stages new bytes next to each file,
 no-overwrite hard link (a file created meanwhile is never overwritten; file systems without hard
 links fall back to a checked rename). If any file fails, every file already changed is put back; if
 one cannot be put back, its backup is kept and the result says so. Writes share the configuration
-mutation gate with Library copies and config sync, run inside the maintenance owner so quit and
-update wait for them, and only touch the instruction files themselves: config sync (M9) sees
-ordinary edits to `CLAUDE.md`, `AGENTS.md` and the other synced files and merges them as usual.
+mutation gate with Library copies, run inside the maintenance owner so quit and update wait for
+them, and only touch the instruction files themselves.
 
 Agents read instructions when a session starts; every review and the page say that running chats
 keep what they started with and new sessions read the new files.

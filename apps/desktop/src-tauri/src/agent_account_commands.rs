@@ -1,13 +1,13 @@
 //! The Agents page's added accounts and the chat's account switch, over aura-core's accounts
 //! (docs/agent-accounts.md). A token goes from the page straight into secure storage: no command
 //! returns one, and errors never carry one.
+use crate::agent_tokens::{NativeTokens, TokenEntry, TokenError};
 use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
 use aura_core::agent_accounts::TokenVault;
 use aura_protocol::agents::{AgentAccounts, AgentUsage};
-use aura_sync::vault::{NativeTokens, TokenEntry, TokenStore, VaultError};
 use tauri::{State, Webview};
 
 /// Credential Manager or the keychain: one entry per added account.
@@ -37,7 +37,7 @@ impl TokenVault for ProfileTokens {
         };
         String::from_utf8(secret.to_vec())
             .map(Some)
-            .map_err(|_| damaged())
+            .map_err(|_| TokenError::Corrupt.to_string())
     }
 
     fn save(&self, account: &str, token: &str) -> Result<(), String> {
@@ -53,18 +53,8 @@ impl TokenVault for ProfileTokens {
     }
 }
 
-fn damaged() -> String {
-    "The stored token is damaged. Remove the account and add it again.".to_owned()
-}
-
-fn vault_message(error: VaultError) -> String {
-    match error {
-        VaultError::Corrupt => damaged(),
-        VaultError::Unavailable | VaultError::Busy => {
-            "Secure storage is unavailable or locked. Unlock it and try again.".to_owned()
-        }
-        other => other.to_string(),
-    }
+fn vault_message(error: TokenError) -> String {
+    error.to_string()
 }
 
 fn current(view: &Webview, state: &AppState) -> Result<(), AppError> {
@@ -185,17 +175,21 @@ mod tests {
     #[test]
     fn storage_errors_read_as_sentences_and_never_name_a_token() {
         for error in [
-            VaultError::Unavailable,
-            VaultError::Busy,
-            VaultError::Invalid,
-            VaultError::Corrupt,
-            VaultError::Unlock,
-            VaultError::Write,
+            TokenError::Unavailable,
+            TokenError::Invalid,
+            TokenError::Corrupt,
         ] {
             let message = vault_message(error);
             assert!(message.ends_with('.'), "{message}");
             assert!(!message.contains("sk-ant"), "{message}");
         }
-        assert_eq!(vault_message(VaultError::Corrupt), damaged());
+        assert_eq!(
+            vault_message(TokenError::Corrupt),
+            "The stored token is damaged. Remove the account and add it again."
+        );
+        assert_eq!(
+            vault_message(TokenError::Unavailable),
+            "Secure storage is unavailable or locked. Unlock it and try again."
+        );
     }
 }

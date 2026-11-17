@@ -27,7 +27,7 @@ test("every built file is one the website Worker accepts", async () => {
       `${path}: no part of a path may start with "." or "_"`,
     );
     assert.match(path, /^[A-Za-z0-9/_.-]+$/, `${path}: unsupported character`);
-    assert.ok(path !== "api" && !path.startsWith("api/"), `${path}: reserved for the API`);
+    assert.ok(path !== "api" && !path.startsWith("api/"), `${path}: reserved for the relay`);
     assert.match(path, served, `${path}: unsupported file type`);
   }
 });
@@ -40,9 +40,6 @@ test("public pages are prerendered to follow the system appearance without JavaS
     assert.match(html, /<main/);
     assert.match(html, /<h1/);
   }
-  // The frame the desktop shows inside its own dialog stays light.
-  const frame = await readFile(new URL("verify-device/index.html", root), "utf8");
-  assert.match(frame, /<html[^>]*data-theme="light"/);
   const downloads = await readFile(new URL("download/index.html", root), "utf8");
   assert.match(downloads, /macOS/);
   assert.match(downloads, /Windows/);
@@ -92,22 +89,19 @@ test("static CSP authorizes only the emitted inline framework scripts", async ()
   const headers = await readFile(new URL("_headers", root), "utf8");
   assert.match(headers, /frame-ancestors 'none'/);
   assert.doesNotMatch(headers, /script-src[^;]*'unsafe-inline'/);
-  assert.match(
-    headers,
-    /\/verify-device\n {2}! X-Frame-Options\n {2}Content-Security-Policy: frame-ancestors tauri:\/\/localhost http:\/\/tauri.localhost https:\/\/tauri.localhost/,
-  );
+  // No page may be framed, by anything: no rule lifts the global X-Frame-Options, and every
+  // frame-ancestors is 'none'.
+  assert.match(headers, /^\/\*\n(?: {2}.*\n)* {2}X-Frame-Options: DENY\n/);
+  assert.doesNotMatch(headers, /^ {2}! /m);
+  for (const [, ancestors] of headers.matchAll(/frame-ancestors ([^;\n]*)/g))
+    assert.equal(ancestors, "'none'");
+  // The site loads no third-party script or frame, and frames nothing itself.
+  const policy = /^ {2}Content-Security-Policy: (default-src [^\n]*)$/m.exec(headers)?.[1];
+  assert.match(policy, /; frame-src 'none';/);
+  assert.match(policy, /script-src 'self'(?: 'sha256-[A-Za-z0-9+/]+=*')*;/);
+  assert.doesNotMatch(headers, /https?:\/\//);
   assert.ok(headers.split("\n").every((line) => line.length <= 2000));
-  for (const path of [
-    "",
-    "download/",
-    "signin/",
-    "signup/",
-    "verify-device/",
-    "account/",
-    "privacy/",
-    "terms/",
-    "changelog/",
-  ]) {
+  for (const path of ["", "download/", "privacy/", "terms/", "changelog/", "remote/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
     for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
       if (!/\bsrc\s*=/.test(match[1]) && match[2])
@@ -119,14 +113,24 @@ test("static CSP authorizes only the emitted inline framework scripts", async ()
   }
 });
 
-test("cloud entry pages explain invitation access while Local remains free", async () => {
-  for (const path of ["", "signin/", "signup/"]) {
+test("the site is for a local app: no account pages, and no page offers one", async () => {
+  // The account pages are not built. Sign-in, sync and the account service were removed.
+  for (const path of ["signin", "signup", "account", "verify-device"])
+    await assert.rejects(access(new URL(`${path}/index.html`, root)), path);
+  for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
     const html = await readFile(new URL(`${path}index.html`, root), "utf8");
-    assert.match(html, /invite-only|INVITE-ONLY/);
-    assert.match(html, /free/);
-    assert.doesNotMatch(html, /Create (?:your |an )?account/);
-    assert.doesNotMatch(html, /open.source|Choose a plan|Subscribe now/i);
+    assert.doesNotMatch(html, /href="\/(?:signin|signup|account|verify-device)\b/, path);
+    assert.doesNotMatch(html, /href="auracode:/, path);
+    // The changelog is the project's history, so only its own chrome is held to the wording.
+    const text = path === "changelog/" ? html.replace(/<main[\s\S]*<\/main>/, "") : html;
+    assert.doesNotMatch(text, /Sign in|Sign up|Create (?:your |an )?account|[Ii]nvit/, path);
+    assert.doesNotMatch(text, /open.source|Choose a plan|Subscribe now/i, path);
   }
+  const home = await readFile(new URL("index.html", root), "utf8");
+  assert.match(home, /free/);
+  assert.match(home, /There is no auracode account/);
+  const privacy = await readFile(new URL("privacy/index.html", root), "utf8");
+  assert.match(privacy, /There is no auracode account, no sign-in and no sync/);
 });
 test("third-party notices are emitted and linked from every page footer", async () => {
   const text = await readFile(new URL("third-party-notices.txt", root), "utf8");
@@ -164,8 +168,5 @@ test("the remote page is a tool of its own, never cached, framed or indexed", as
   assert.match(headers, /\n\/remote\*\n {2}Content-Security-Policy: frame-ancestors 'none'\n/);
   // The page talks to the relay on this site and nowhere else.
   const connect = /connect-src ([^;]*);/.exec(headers)?.[1];
-  assert.equal(
-    connect,
-    "'self' wss://auracode.si wss://preview.auracode.si https://challenges.cloudflare.com",
-  );
+  assert.equal(connect, "'self' wss://auracode.si wss://preview.auracode.si");
 });

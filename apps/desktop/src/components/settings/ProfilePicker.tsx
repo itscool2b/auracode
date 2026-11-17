@@ -1,20 +1,21 @@
-import { Cloud, HardDrive, LockKeyhole } from "lucide-react";
+import { HardDrive } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ProfileMeta } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import { type ProfileApi, profileApi, switchProfile } from "../../lib/profiles";
 import "./settings.css";
-import "./account.css";
 
-/** Profiles as X Money rows: an icon, the name, where it lives, and Open or Current. */
+/**
+ * Profiles as X Money rows: an icon, the name, where it lives, and Open or Current. Every profile
+ * is on this computer. Most people have one, and then there is nothing to choose: the list shows
+ * once the data folder holds a second (an earlier version could keep a workspace as one).
+ */
 export function ProfilePicker({
   activeId,
-  locked = false,
   api = profileApi,
-  onSwitch = (id: string) => switchProfile(id, "account"),
+  onSwitch = (id: string) => switchProfile(id, "privacy"),
 }: {
   readonly activeId: string | null;
-  readonly locked?: boolean;
   readonly api?: ProfileApi;
   readonly onSwitch?: (id: string) => Promise<void>;
 }) {
@@ -53,9 +54,8 @@ export function ProfilePicker({
       setPending(null);
     }
   };
-  // One profile is not a choice: the list appears once there is a second one to open, or the
-  // only one is locked and has to be opened.
-  if (!error && (!profiles || (profiles.length < 2 && !locked))) return null;
+  // One profile is not a choice.
+  if (!error && (!profiles || profiles.length < 2)) return null;
   return (
     <section className="settings-section" aria-labelledby="profile-title">
       <h2 id="profile-title">Profiles</h2>
@@ -63,29 +63,24 @@ export function ProfilePicker({
       <ul className="settings-group">
         {profiles?.map((profile) => {
           const current = profile.id === activeId;
-          const Icon =
-            current && locked ? LockKeyhole : profile.kind === "local" ? HardDrive : Cloud;
           return (
             <li className="settings-row" key={profile.id}>
               <div className="settings-row-text">
-                <span className="account-badge" aria-hidden="true">
-                  <Icon size={16} />
+                <span className="settings-badge" aria-hidden="true">
+                  <HardDrive size={16} />
                 </span>
                 <div>
                   <strong>{profile.display_name}</strong>
-                  <p>
-                    {profile.kind === "local" ? "On this computer" : "Encrypted account workspace"}
-                    {current ? (locked ? " · Locked" : " · Open") : ""}
-                  </p>
+                  <p>On this computer{current ? " · Open" : ""}</p>
                 </div>
               </div>
               <button
                 className="g-button g-button-outline g-button-28"
                 type="button"
-                disabled={pending !== null || (current && !locked)}
+                disabled={pending !== null || current}
                 onClick={() => void choose(profile.id)}
               >
-                {pending === profile.id ? "Opening…" : current && !locked ? "Current" : "Open"}
+                {pending === profile.id ? "Opening…" : current ? "Current" : "Open"}
                 <span className="sr-only"> {profile.display_name}</span>
               </button>
             </li>

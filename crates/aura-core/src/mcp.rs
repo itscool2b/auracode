@@ -1,5 +1,5 @@
 //! Shared MCP persistence, called inside the profile writer transaction.
-//! Account profiles inherit SQLCipher encryption. Local credential values never enter exports.
+//! Local credential values never enter exports.
 use crate::chatstore::StoreError;
 use aura_protocol::mcp::*;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -43,11 +43,6 @@ pub enum Command {
         chat_id: String,
         agent: Option<String>,
         native_names: Vec<String>,
-    },
-    ResolveConflict {
-        expected: u32,
-        revision: String,
-        accept: bool,
     },
     TestFolder {
         project_id: String,
@@ -277,7 +272,6 @@ fn missing(def: &McpDefinition, local: &McpCredentials) -> Vec<String> {
         .collect()
 }
 fn snapshot(conn: &Connection) -> Result<McpSnapshot, StoreError> {
-    let conflicts=conn.prepare("SELECT id,server_id,scope,definition_json FROM shared_mcp_revisions WHERE conflict=1 ORDER BY id").map_err(db)?.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?))).map_err(db)?.map(|row|{let(revision,id,scope,def)=row.map_err(db)?;Ok(McpConflict{revision,id,project_id:(!scope.is_empty()).then_some(scope),incoming:def.map(|j|serde_json::from_str(&j).map_err(|_|invalid("A synced MCP conflict is damaged."))).transpose()?})}).collect::<Result<Vec<_>,StoreError>>()?;
     Ok(McpSnapshot {
         revision: revision(conn)?,
         servers: rows(conn)?
@@ -288,10 +282,9 @@ fn snapshot(conn: &Connection) -> Result<McpSnapshot, StoreError> {
                 revision,
             })
             .collect(),
-        conflicts,
     })
 }
-pub(crate) fn apply_definition(conn: &Connection, def: &McpDefinition) -> Result<(), StoreError> {
+fn apply_definition(conn: &Connection, def: &McpDefinition) -> Result<(), StoreError> {
     validate(def)?;
     if let Some(project) = &def.project_id
         && !conn
@@ -321,55 +314,6 @@ pub(crate) fn apply_definition(conn: &Connection, def: &McpDefinition) -> Result
                 && old.header_keys == def.header_keys
         });
     conn.execute("INSERT INTO shared_mcp(scope,server_id,revision,definition_json,local_json) VALUES(?1,?2,1,?3,?4) ON CONFLICT(scope,server_id) DO UPDATE SET revision=revision+1,definition_json=excluded.definition_json,local_json=CASE WHEN ?5 THEN local_json ELSE excluded.local_json END",params![scope(def.project_id.as_deref()),def.id,json(def)?,json(&McpCredentials::default())?,preserve]).map_err(db)?;
-    Ok(())
-}
-#[cfg(feature = "account-sync")]
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct Revision {
-    pub id: String,
-    pub parent: Option<String>,
-    pub scope: String,
-    pub server_id: String,
-    pub definition: Option<McpDefinition>,
-    #[serde(default)]
-    pub resolved: Vec<String>,
-}
-fn record(
-    conn: &Connection,
-    server_id: &str,
-    project_id: Option<&str>,
-    definition: Option<&McpDefinition>,
-) -> Result<(), StoreError> {
-    record_resolved(conn, server_id, project_id, definition, &[])
-}
-fn record_resolved(
-    conn: &Connection,
-    server_id: &str,
-    project_id: Option<&str>,
-    definition: Option<&McpDefinition>,
-    resolved: &[String],
-) -> Result<(), StoreError> {
-    let scope = scope(project_id);
-    let parent = conn
-        .query_row(
-            "SELECT head FROM shared_mcp_heads WHERE scope=?1 AND server_id=?2",
-            params![scope, server_id],
-            |r| r.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(db)?;
-    let id = uuid::Uuid::now_v7().to_string();
-    conn.execute("INSERT INTO shared_mcp_revisions(id,parent,scope,server_id,definition_json,resolved_json) VALUES(?1,?2,?3,?4,?5,?6)",params![id,parent,scope,server_id,definition.map(json).transpose()?,json(&resolved)?]).map_err(db)?;
-    conn.execute("INSERT INTO shared_mcp_heads(scope,server_id,head) VALUES(?1,?2,?3) ON CONFLICT(scope,server_id) DO UPDATE SET head=excluded.head",params![scope,server_id,id]).map_err(db)?;
-    Ok(())
-}
-fn save(conn: &Connection, def: &McpDefinition) -> Result<(), StoreError> {
-    apply_definition(conn, def)?;
-    record(conn, &def.id, def.project_id.as_deref(), Some(def))
-}
-pub(crate) fn clear_conflicts(conn: &Connection, revision: &str) -> rusqlite::Result<()> {
-    conn.execute("WITH RECURSIVE ancestry(id) AS (SELECT ?1 UNION SELECT r.parent FROM shared_mcp_revisions r JOIN ancestry a ON r.id=a.id WHERE r.parent IS NOT NULL) UPDATE shared_mcp_revisions SET conflict=0 WHERE id IN (SELECT id FROM ancestry)",[revision])?;
     Ok(())
 }
 pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, StoreError> {
@@ -413,7 +357,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
             definition,
         } => {
             check(conn, expected)?;
-            save(conn, &normalized(definition))?;
+            apply_definition(conn, &normalized(definition))?;
             bump(conn)?;
         }
         Command::Delete {
@@ -430,46 +374,6 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                 params![scope(project_id.as_deref()), id],
             )
             .map_err(db)?;
-            record(conn, &id, project_id.as_deref(), None)?;
-            bump(conn)?;
-        }
-        Command::ResolveConflict {
-            expected,
-            revision,
-            accept,
-        } => {
-            check(conn, expected)?;
-            let (id,scope_name,definition)=conn.query_row("SELECT server_id,scope,definition_json FROM shared_mcp_revisions WHERE id=?1 AND conflict=1",[&revision],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?))).optional().map_err(db)?.ok_or_else(||invalid("This MCP conflict was already reviewed."))?;
-            let definition = if accept {
-                definition
-                    .map(|definition| {
-                        serde_json::from_str::<McpDefinition>(&definition)
-                            .map_err(|_| invalid("The incoming MCP definition is damaged."))
-                    })
-                    .transpose()?
-            } else {
-                rows(conn)?
-                    .into_iter()
-                    .find(|(d, _, _)| d.id == id && scope(d.project_id.as_deref()) == scope_name)
-                    .map(|(d, _, _)| d)
-            };
-            if let Some(def) = &definition {
-                apply_definition(conn, def)?;
-            } else {
-                conn.execute(
-                    "DELETE FROM shared_mcp WHERE scope=?1 AND server_id=?2",
-                    params![scope_name, id],
-                )
-                .map_err(db)?;
-            }
-            record_resolved(
-                conn,
-                &id,
-                (!scope_name.is_empty()).then_some(scope_name.as_str()),
-                definition.as_ref(),
-                std::slice::from_ref(&revision),
-            )?;
-            clear_conflicts(conn, &revision).map_err(db)?;
             bump(conn)?;
         }
         Command::Credentials {
@@ -523,7 +427,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                 }
             }
             for def in definitions {
-                save(conn, &def)?;
+                apply_definition(conn, &def)?;
             }
             bump(conn)?;
         }
@@ -645,7 +549,7 @@ pub(crate) fn execute(conn: &Connection, command: Command) -> Result<Reply, Stor
                         "Native credentials must be bounded single-line values.",
                     ));
                 }
-                save(conn, &definition)?;
+                apply_definition(conn, &definition)?;
                 conn.execute(
                     "UPDATE shared_mcp SET local_json=?3 WHERE scope=?1 AND server_id=?2",
                     params![scope(project_id.as_deref()), definition.id, json(&local)?],
@@ -854,14 +758,6 @@ pub(crate) mod tests {
                 .contains("local-only")
         );
         assert!(!format!("{local:?}").contains("local-only"));
-        let history: String = conn
-            .query_row(
-                "SELECT GROUP_CONCAT(definition_json) FROM shared_mcp_revisions",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert!(!history.contains("local-only"));
         def.transport = McpTransport::Stdio {
             command: "other".into(),
             args: vec![],
@@ -1129,7 +1025,7 @@ pub(crate) mod tests {
             vec!["".into()],
         ] {
             def.agents = Some(bad.clone());
-            // Unsorted lists only arrive from elsewhere (sync); saving normalizes its own.
+            // Saving normalizes its own lists, so an unsorted one was written by something else.
             assert!(validate(&def).is_err(), "{bad:?}");
         }
         // An agent ID this device does not know yet (a newer device added it) is kept.
