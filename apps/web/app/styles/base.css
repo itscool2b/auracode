@@ -1,113 +1,143 @@
 /*
- * auracode.si, after dot.com (owner, 10 November 2026: "pretty much just copy dot.com"): a plain
- * page that follows the system appearance, black in dark and white in light, with rounded cards a
- * step off the page, centred statements at calm sizes, pills for actions and the product as the
- * picture. No glow anywhere: "aura" is the product's name, not a colour scheme. Shared Graphite
- * tokens (--g-*) carry type and the inner pages' controls; the site's own palette and layout are
- * here (--s-*), with the illustrated app's (--m-*). docs/design/visual-language.md is the spec.
+ * auracode.si, after dot.com (x.ai/bot, measured 17 November 2026 in dark and light at 1440, 1024,
+ * 768 and 390; docs/design/reference-audit.md): a plain page that follows the system appearance,
+ * near-black in dark and white in light, with flat cards a step off the page, centred statements
+ * at calm sizes, pills for actions and the product as the picture. No glow anywhere: "aura" is the
+ * product's name, not a colour scheme. Shared Graphite tokens (--g-*) carry the faces and the
+ * illustrated app's text; the site's own palette and layout are here (--s-*), with the illustrated
+ * app's (--m-*). docs/design/visual-language.md is the spec.
  *
  * Appearance: dark is the default and light applies under a light system preference, exactly as
  * Graphite's tokens do, so the page needs no script to match the system. A page can pin light with
- * data-theme="light" on the root (the device verification frame does).
+ * data-theme="light" on the root.
  */
 
 :root {
+  /* dot.com's own steps: jet page, charcoal cards, ink at 3% and 8% over a card for quiet pills. */
   --s-bg: #0a0a0a;
   --s-ink: #ffffff;
-  /* Secondary text: the grey leads and captions step back to. */
-  --s-soft: #8d9199;
-  /* A card: one step off the page, with no rim and no shadow. */
+  /* Secondary text. dot.com's #7d8187, a hair lighter so it holds 4.5:1 on a card too. */
+  --s-soft: #80848a;
   --s-card: #1a1a1a;
-  /* What sits on a card: a tile, a field. */
-  --s-tile: #242425;
-  /* The quiet pill beside the primary one, and its hover. */
-  --s-quiet: #232324;
-  --s-quiet-hover: #2e2e30;
+  /* The small quiet pill (the header's, a section's), and its hover. */
+  --s-quiet: #202020;
+  --s-quiet-hover: #2a2a2a;
+  /* The large quiet pill beside a primary one, a row under the hand. */
+  --s-quiet-strong: #2c2c2c;
+  --s-quiet-strong-hover: #363636;
+  /* The large quiet pill's words: dot.com's dove grey in dark, the ink in light. */
+  --s-quiet-ink: #d5d9e2;
+  /* Hairlines: the FAQ's rules, the footer's top, a chip's ring. */
   --s-line: #1f2228;
-  --s-line-strong: #33363d;
+  /* The logo drawn in one line at the page's foot. */
+  --s-art: #2c2c2c;
   /* The primary pill is the page's ink. */
   --s-primary: #ffffff;
-  --s-primary-hover: #e8e8ea;
+  --s-primary-hover: #f9f8f6;
   --s-on-primary: #0a0a0a;
   --s-nav: rgb(10 10 10 / 0.85);
-  /* Ink as channels, for hairlines and fills at an alpha. */
+  /* An agent chip's words at rest. */
+  --s-chip: rgb(213 217 226 / 0.7);
+  /* Ink as channels, for rings and fills at an alpha. */
   --s-k: 255 255 255;
-  --s-surface: var(--s-card);
-  --s-sheen: transparent;
-  --s-on-ink: #0a0a0a;
   /* The terminal's own surface, dark in both appearances. */
-  --s-night: #0d0d0e;
-  --s-night-fg-1: #f5f5f6;
-  --s-night-fg-2: #a9a9b3;
-  --s-night-fg-3: #93939e;
-  /* The illustrated app. */
-  --m-k: 255 255 255;
-  --m-ink: #f4f4f5;
-  --m-on-ink: #0a0a0a;
-  --m-surface: #1f1f20;
-  --m-window: #141415;
-  --m-sunk: #1a1a1b;
-  --m-sheen: rgb(255 255 255 / 0.05);
-  --m-line: rgb(255 255 255 / 0.08);
-  --m-fill: rgb(255 255 255 / 0.06);
-  --m-fill-hover: rgb(255 255 255 / 0.09);
-  --m-green: #4ade80;
-  --m-red: #f87171;
-  --m-add-bg: rgb(34 197 94 / 0.14);
-  --m-del-bg: rgb(239 68 68 / 0.14);
-  --m-amber: #f0a04b;
-  --m-amber-text: #f0a04b;
-  --m-amber-bg: rgb(240 160 75 / 0.12);
-  /* Layout. */
-  --s-max: 1280px;
-  --s-inner: 1080px;
+  --s-night: #0e0e0e;
+  --s-night-fg-1: #f5f5f5;
+  --s-night-fg-2: #ababab;
+  --s-night-fg-3: #959595;
+  /*
+   * The illustrated app, in the desktop's flat look (owner, 17 November 2026: the Grok Bot app's
+   * solid layers and one ink): the window, the panes a step off it, what floats over a pane, and
+   * one ink at set strengths. No glass and no glow.
+   */
+  --m-k: 245 245 245;
+  --m-ink: #f5f5f5;
+  --m-on-ink: #161616;
+  --m-window: #0e0e0e;
+  --m-surface: #161616;
+  --m-raised: #1f1f1f;
+  --m-code: #1b1b1b;
+  --m-line: #2c2c2c;
+  --m-rim: rgb(245 245 245 / 0.08);
+  --m-rim-strong: rgb(245 245 245 / 0.14);
+  --m-ring: rgb(255 255 255 / 0.04);
+  --m-fill: rgb(245 245 245 / 0.06);
+  --m-fill-hover: rgb(245 245 245 / 0.1);
+  --m-card: rgb(245 245 245 / 0.04);
+  --m-selected: rgb(245 245 245 / 0.08);
+  /* The sent message: the ink a step toward the pane, with the ink on it. */
+  --m-paper: #3a3a3a;
+  --m-paper-ink: #f5f5f5;
+  --m-float: 0 1px 2px rgb(0 0 0 / 0.3);
+  --m-pop: 0 0 0 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.55);
+  --m-green: #3dd68c;
+  --m-red: #ff5c5c;
+  --m-add-bg: rgb(61 214 140 / 0.1);
+  --m-del-bg: rgb(255 92 92 / 0.1);
+  --m-amber: #e6cc6e;
+  --m-amber-bg: #2a2517;
+  /* Layout: dot.com's two columns (1232 and 976 between 24px gutters) and its section rhythm. */
+  --s-max: 1232px;
+  --s-inner: 976px;
   --s-gutter: 24px;
-  --s-section: 176px;
+  --s-section: 112px;
   --s-nav-h: 64px;
   --s-radius: 24px;
   /* Arrive fast, land softly. */
   --s-expo: cubic-bezier(0.16, 1, 0.3, 1);
   /* Travel and settle without a bounce. */
   --s-glide: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Symmetric, for things that leave as they arrived. */
-  --s-swift: cubic-bezier(0.65, 0, 0.35, 1);
+  /* dot.com's own colour change under the hand. */
+  --s-swift: cubic-bezier(0.4, 0, 0.2, 1);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
   --s-bg: #ffffff;
   --s-ink: #0a0a0a;
-  --s-soft: #63666d;
-  --s-card: #f4f4f5;
-  --s-tile: #ffffff;
-  --s-quiet: #ececee;
-  --s-quiet-hover: #e2e2e5;
-  --s-line: #e7e8eb;
-  --s-line-strong: #d2d4d9;
+  /* dot.com's grey falls under 4.5:1 on white; this one holds it on the page and on a card. */
+  --s-soft: #6e7278;
+  --s-card: #f9f8f6;
+  --s-quiet: #f2f1ef;
+  --s-quiet-hover: #eae9e6;
+  --s-quiet-strong: #edecea;
+  --s-quiet-strong-hover: #e4e3e0;
+  --s-quiet-ink: #0a0a0a;
+  --s-line: #d5d9e2;
+  --s-art: #dcdcdc;
   --s-primary: #0a0a0a;
-  --s-primary-hover: #2a2a2e;
+  --s-primary-hover: #1f2228;
   --s-on-primary: #ffffff;
   --s-nav: rgb(255 255 255 / 0.85);
-  --s-k: 10 10 11;
-  --s-sheen: #ffffff;
-  --s-on-ink: #ffffff;
-  --m-k: 10 10 11;
-  --m-ink: #18181b;
+  --s-chip: rgb(10 10 10 / 0.7);
+  --s-k: 10 10 10;
+  --m-k: 28 28 28;
+  --m-ink: #1c1c1c;
   --m-on-ink: #ffffff;
+  --m-window: #f5f5f5;
   --m-surface: #ffffff;
-  --m-window: #ececee;
-  --m-sunk: #f7f7f8;
-  --m-sheen: #ffffff;
-  --m-line: rgb(10 10 11 / 0.07);
-  --m-fill: rgb(10 10 11 / 0.045);
-  --m-fill-hover: rgb(10 10 11 / 0.07);
-  --m-green: #15803d;
+  --m-raised: #ffffff;
+  --m-code: #ffffff;
+  --m-line: #e5e5e5;
+  --m-rim: rgb(28 28 28 / 0.08);
+  --m-rim-strong: rgb(28 28 28 / 0.14);
+  --m-ring: rgb(28 28 28 / 0.06);
+  --m-fill: rgb(28 28 28 / 0.05);
+  --m-fill-hover: rgb(28 28 28 / 0.08);
+  --m-card: rgb(28 28 28 / 0.035);
+  --m-selected: rgb(28 28 28 / 0.06);
+  --m-paper: #1c1c1c;
+  --m-paper-ink: #ffffff;
+  --m-float: 0 1px 3px rgb(28 28 28 / 0.12);
+  --m-pop:
+    0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
+    0 4px 6px -4px rgb(28 28 28 / 0.1);
+  --m-green: #166534;
   --m-red: #b91c1c;
-  --m-add-bg: #ecf7ef;
-  --m-del-bg: #fdf0f0;
-  --m-amber: #d97706;
-  --m-amber-text: #9c4307;
-  --m-amber-bg: rgb(217 119 6 / 0.08);
+  --m-add-bg: #edf7ef;
+  --m-del-bg: #fef0f0;
+  --m-amber: #92400e;
+  --m-amber-bg: #fff7e6;
   color-scheme: light;
 }
 
@@ -116,53 +146,64 @@
   :root:not([data-theme="dark"]) {
     --s-bg: #ffffff;
     --s-ink: #0a0a0a;
-    --s-soft: #63666d;
-    --s-card: #f4f4f5;
-    --s-tile: #ffffff;
-    --s-quiet: #ececee;
-    --s-quiet-hover: #e2e2e5;
-    --s-line: #e7e8eb;
-    --s-line-strong: #d2d4d9;
+    --s-soft: #6e7278;
+    --s-card: #f9f8f6;
+    --s-quiet: #f2f1ef;
+    --s-quiet-hover: #eae9e6;
+    --s-quiet-strong: #edecea;
+    --s-quiet-strong-hover: #e4e3e0;
+    --s-quiet-ink: #0a0a0a;
+    --s-line: #d5d9e2;
+    --s-art: #dcdcdc;
     --s-primary: #0a0a0a;
-    --s-primary-hover: #2a2a2e;
+    --s-primary-hover: #1f2228;
     --s-on-primary: #ffffff;
     --s-nav: rgb(255 255 255 / 0.85);
-    --s-k: 10 10 11;
-    --s-sheen: #ffffff;
-    --s-on-ink: #ffffff;
-    --m-k: 10 10 11;
-    --m-ink: #18181b;
+    --s-chip: rgb(10 10 10 / 0.7);
+    --s-k: 10 10 10;
+    --m-k: 28 28 28;
+    --m-ink: #1c1c1c;
     --m-on-ink: #ffffff;
+    --m-window: #f5f5f5;
     --m-surface: #ffffff;
-    --m-window: #ececee;
-    --m-sunk: #f7f7f8;
-    --m-sheen: #ffffff;
-    --m-line: rgb(10 10 11 / 0.07);
-    --m-fill: rgb(10 10 11 / 0.045);
-    --m-fill-hover: rgb(10 10 11 / 0.07);
-    --m-green: #15803d;
+    --m-raised: #ffffff;
+    --m-code: #ffffff;
+    --m-line: #e5e5e5;
+    --m-rim: rgb(28 28 28 / 0.08);
+    --m-rim-strong: rgb(28 28 28 / 0.14);
+    --m-ring: rgb(28 28 28 / 0.06);
+    --m-fill: rgb(28 28 28 / 0.05);
+    --m-fill-hover: rgb(28 28 28 / 0.08);
+    --m-card: rgb(28 28 28 / 0.035);
+    --m-selected: rgb(28 28 28 / 0.06);
+    --m-paper: #1c1c1c;
+    --m-paper-ink: #ffffff;
+    --m-float: 0 1px 3px rgb(28 28 28 / 0.12);
+    --m-pop:
+      0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
+      0 4px 6px -4px rgb(28 28 28 / 0.1);
+    --m-green: #166534;
     --m-red: #b91c1c;
-    --m-add-bg: #ecf7ef;
-    --m-del-bg: #fdf0f0;
-    --m-amber: #d97706;
-    --m-amber-text: #9c4307;
-    --m-amber-bg: rgb(217 119 6 / 0.08);
+    --m-add-bg: #edf7ef;
+    --m-del-bg: #fef0f0;
+    --m-amber: #92400e;
+    --m-amber-bg: #fff7e6;
     color-scheme: light;
   }
 }
 
+/* Below 1024px the header grows to 80px around its menu button, as dot.com's does. */
 @media (max-width: 1023px) {
   :root {
-    --s-section: 128px;
+    --s-nav-h: 80px;
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 639px) {
   :root {
     --s-gutter: 16px;
-    --s-section: 96px;
-    --s-nav-h: 56px;
-    --s-radius: 20px;
+    --s-section: 80px;
+    --s-nav-h: 84px;
   }
 }
 
@@ -269,7 +310,8 @@ svg {
   outline-offset: 3px;
 }
 
-/* The page's column, and the narrower one statements and two-column sections keep to. */
+/* dot.com's two columns: the wide one (the header, the film, the cards, the footer) and the one
+   its centred and two-column sections keep to. */
 .wrap {
   box-sizing: border-box;
   width: min(100% - 2 * var(--s-gutter), var(--s-max));
@@ -278,14 +320,8 @@ svg {
 
 .inner {
   box-sizing: border-box;
-  width: min(100% - 2 * var(--s-gutter) - 48px, var(--s-inner));
+  width: min(100% - 2 * var(--s-gutter), var(--s-inner));
   margin: 0 auto;
-}
-
-@media (max-width: 767px) {
-  .inner {
-    width: calc(100% - 2 * var(--s-gutter) - 8px);
-  }
 }
 
 .mono {
@@ -295,16 +331,17 @@ svg {
 
 /* --------------------------------------------------------------------------- typography */
 
-/* A section's title, as dot.com sets its own: 36px, medium, barely tracked. */
+/* A section's title, as dot.com sets its own: 36 on 40, medium, a hair tight; 30 on 36 on phones. */
 .title {
   color: var(--s-ink);
-  font-size: clamp(28px, 3.2vw, 36px);
-  line-height: 1.12;
+  font-size: 36px;
+  line-height: 40px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
+/* A grey line under a title, 18 on 29. */
 .lead {
   color: var(--s-soft);
   font-size: 18px;
@@ -312,17 +349,31 @@ svg {
   text-wrap: pretty;
 }
 
-.section {
-  position: relative;
-  padding: calc(var(--s-section) / 2) 0;
+@media (max-width: 639px) {
+  .title {
+    font-size: 30px;
+    line-height: 36px;
+  }
+
+  .lead {
+    font-size: 16px;
+    line-height: 26px;
+  }
 }
 
-/* A title and one line under it, centred over what they introduce. */
+/* Sections are divided by space alone: 112px above and below each, 80 on phones. */
+.section {
+  position: relative;
+  padding: var(--s-section) 0;
+}
+
+/* A title and one line under it, centred over what they introduce; the line is in ink. */
 .center-head {
   display: grid;
   gap: 16px;
   justify-items: center;
-  max-width: 672px;
+  box-sizing: border-box;
+  width: min(100% - 2 * var(--s-gutter), 672px);
   margin: 0 auto;
   text-align: center;
 }
@@ -331,7 +382,7 @@ svg {
   color: var(--s-ink);
 }
 
-/* A card: the page's one surface. */
+/* A card: the page's one surface, flat. */
 .card {
   box-sizing: border-box;
   border-radius: var(--s-radius);
@@ -373,14 +424,15 @@ svg {
 /* -------------------------------------------------------------------------- calls to act */
 
 /*
- * Pills, as dot.com's: the primary one is the page's ink with the page's colour on it, the quiet
- * one a grey a step off the page. 44px in a statement, 40px elsewhere, 36px in the header.
+ * Pills, as dot.com's. In a statement: 44px, 16px words, the primary in the page's ink and the
+ * quiet one a grey a step off a card (36px and 14px on phones). In a section or the header: 40px
+ * (36 for the header's own) with 14px medium words, the quiet one a quieter grey.
  */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   box-sizing: border-box;
   height: 40px;
   padding: 0 18px;
@@ -394,12 +446,22 @@ svg {
   text-decoration: none;
   cursor: pointer;
   transition:
-    background-color 200ms var(--s-swift),
+    color 150ms var(--s-swift),
+    background-color 150ms var(--s-swift),
     scale 120ms var(--s-swift);
 }
 
 .btn:active {
   scale: 0.97;
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.btn:disabled:active {
+  scale: none;
 }
 
 .btn-lg {
@@ -420,7 +482,7 @@ svg {
   color: var(--s-on-primary);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background-color: var(--s-primary-hover);
 }
 
@@ -429,43 +491,50 @@ svg {
   color: var(--s-ink);
 }
 
-.btn-quiet:hover {
+.btn-quiet:hover:not(:disabled) {
   background-color: var(--s-quiet-hover);
 }
 
+.btn-lg.btn-quiet {
+  background-color: var(--s-quiet-strong);
+  color: var(--s-quiet-ink);
+}
+
+.btn-lg.btn-quiet:hover:not(:disabled) {
+  background-color: var(--s-quiet-strong-hover);
+}
+
 .btn:hover .arrow {
-  transform: translateY(2px);
+  transform: translateX(2px);
+}
+
+@media (max-width: 639px) {
+  .btn-lg {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+
+  .btn:active {
+    scale: none;
+  }
 }
 
 /* -------------------------------------------------------------------------------- reveals */
 
 /*
- * Blocks arrive once as they enter (enhance.tsx marks them). The start state applies only once
- * scripts are in (html.js, set by the hashed boot script), so the page is whole without them.
- * data-reveal="" rises; "trigger" only marks the moment.
+ * dot.com's sections do not move as they scroll in; only the product pictures play. A block marked
+ * data-reveal="trigger" is told when it arrives (enhance.tsx), so its picture can start then. The
+ * mark applies only once scripts are in (html.js, set by the hashed boot script), so the page is
+ * whole without them.
  */
-html.js [data-reveal=""]:not([data-revealed]) {
-  opacity: 0;
-  transform: translateY(16px);
-}
-
-html.js [data-reveal=""] {
-  transition:
-    opacity 900ms var(--s-expo),
-    transform 1000ms var(--s-expo);
-  transition-delay: calc(var(--i, 0) * 80ms);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.js [data-reveal=""] {
-    transition: none;
-  }
-
-  html.js [data-reveal=""]:not([data-revealed]) {
-    opacity: 1;
-    transform: none;
-  }
-}
 
 /* Offscreen zones, and the whole page in a hidden tab, hold their ambient loops (enhance.tsx). */
 :is([data-off], [data-hidden]) :is(.m-loader rect, .m-caret, .m-shimmer, .m-steer, .tm-cursor) {
