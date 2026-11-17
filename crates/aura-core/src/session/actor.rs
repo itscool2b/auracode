@@ -2124,6 +2124,11 @@ impl ChatActor {
             self.status,
             SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
         ) {
+            // Behind a quiet change the queue starts the agent once the change ends (release_quiet
+            // advances it), so a message discarded meanwhile starts nothing.
+            if !self.quiet_holds.is_empty() {
+                return;
+            }
             let _ = self.start(false, false);
         }
     }
@@ -3047,8 +3052,9 @@ impl ChatActor {
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
         self.hold_queue(HoldCause::Stop);
         // A start waiting for room ends here, whatever the status says (a continuation may have
-        // set it Stopped meanwhile).
+        // set it Stopped meanwhile), and so does one held back by a quiet change.
         self.end_room_wait();
+        self.start_after_hold = None;
         match self.status {
             SessionStatus::Stopped
             | SessionStatus::Failed
@@ -6732,7 +6738,8 @@ The person continues this conversation here, in your terminal. Reply only that y
         {
             self.refuse_terminal(error);
         }
-        self.dispatch_next();
+        // What is queued goes now, starting the agent if it is stopped.
+        self.advance();
     }
 
     /// Ends a wait for room (a Stop, a quit).

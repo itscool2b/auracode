@@ -525,6 +525,63 @@ async fn a_commit_beside_an_idle_agent_holds_its_new_turns_until_it_ends() {
     }
 }
 
+/// A start held back by a quiet change goes only if something still wants it: Stop, or the message
+/// it was for being discarded, leaves the agent stopped when the change ends.
+#[tokio::test]
+async fn a_start_held_by_a_quiet_change_is_dropped_by_stop_or_a_discarded_message() {
+    let (driver, _) = ScriptedDriver::new(vec![ready_step("held")]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .store
+        .create_chat(crate::chatstore::NewChat {
+            agent_host: Default::default(),
+            agent_id: "mock".into(),
+            folder: rig.folder.clone(),
+            device_id: "device".into(),
+            now: now_millis(),
+        })
+        .await
+        .expect("saved chat")
+        .id;
+    let quiet = || rig.manager.hold_quiet(vec![rig.folder.clone()]);
+    // A message sent while the change holds the folder, then discarded.
+    let held = quiet().await.expect("quiet hold");
+    let sent = rig
+        .manager
+        .send(&chat, "start for this".into())
+        .await
+        .expect("send");
+    assert!(sent.queued);
+    rig.manager
+        .cancel_queued(&chat, &sent.prompt_id)
+        .await
+        .expect("discard");
+    drop(held);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !rig.manager.shared().live.contains(&chat),
+        "nothing starts for a discarded message"
+    );
+    // A start asked for while it holds the folder, then stopped.
+    let held = quiet().await.expect("quiet hold");
+    rig.manager.start(&chat, false).await.expect("start");
+    rig.manager.stop(&chat).await.expect("stop");
+    drop(held);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !rig.manager.shared().live.contains(&chat),
+        "a stopped start stays stopped"
+    );
+    // A start asked for while it holds the folder, left alone, goes once it ends.
+    let held = quiet().await.expect("quiet hold");
+    rig.manager.start(&chat, false).await.expect("start");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!rig.manager.shared().live.contains(&chat), "it waits");
+    drop(held);
+    status(&rig, &chat, SessionStatus::Ready).await;
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
     use aura_drivers::driver::LoggedCommand;
