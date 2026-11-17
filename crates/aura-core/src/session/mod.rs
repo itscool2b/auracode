@@ -57,7 +57,7 @@ pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
 pub use plugin_library::{PluginFacts, PluginRefreshPause, assemble as assemble_plugin_library};
 pub use project_tools::{EditorLaunch, EditorOpen, UrlTarget};
-pub use stopping::{StopReport, StopScope};
+pub use stopping::{StopReport, StopScope, still_stopping};
 pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::{HashMap, HashSet};

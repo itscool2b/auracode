@@ -33,6 +33,24 @@ pub struct StopReport {
 /// `stop_idle` waits this long for the idle agents it stopped; a stop is forced well before.
 const IDLE_STOP_WAIT: Duration = Duration::from_secs(30);
 
+/// The sentence for chats still stopping when something waited on them, by `names`
+/// ([`SessionManager::chat_names`]), then `then` (what to do).
+pub fn still_stopping(names: &[String], then: &str) -> String {
+    let who = match names {
+        [] => return format!("A chat is still stopping. {then}"),
+        [one] => format!("{one} is still stopping."),
+        [first, second] => format!("{first} and {second} are still stopping."),
+        [first, second, third] => format!("{first}, {second} and {third} are still stopping."),
+        [first, second, rest @ ..] => {
+            format!(
+                "{first}, {second} and {} more chats are still stopping.",
+                rest.len()
+            )
+        }
+    };
+    format!("{who} {then}")
+}
+
 impl SessionManager {
     /// The chats `scope` names that have a live agent or a start waiting for one.
     async fn stop_targets(&self, scope: StopScope) -> Vec<String> {

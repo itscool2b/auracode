@@ -229,6 +229,24 @@ impl SessionManager {
         SessionError::FolderBusy { message, blockers }
     }
 
+    /// `chats` as the person knows them, for a sentence: each one's title (or its agent's chat),
+    /// quoted, and its project.
+    pub async fn chat_names(&self, chats: Vec<String>) -> Vec<String> {
+        self.blockers(chats)
+            .await
+            .into_iter()
+            .map(|blocker| {
+                let name = blocker
+                    .title
+                    .unwrap_or_else(|| format!("{} chat", blocker.agent_name));
+                match blocker.project {
+                    Some(project) => format!("\u{201c}{name}\u{201d} in {project}"),
+                    None => format!("\u{201c}{name}\u{201d}"),
+                }
+            })
+            .collect()
+    }
+
     /// Each of `chats` as the person knows it: its title or agent, its project, what it does.
     async fn blockers(&self, chats: Vec<String>) -> Vec<FolderBlocker> {
         if chats.is_empty() {

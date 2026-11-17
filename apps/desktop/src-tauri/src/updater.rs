@@ -461,11 +461,8 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         let reason = if report.stopping.is_empty() {
             "Wait for Git changes and agent updates to finish, then retry installation.".to_owned()
         } else {
-            let count = report.stopping.len();
-            format!(
-                "{count} {} still stopping. Retry installation in a moment.",
-                if count == 1 { "chat is" } else { "chats are" }
-            )
+            let names = chats.manager.chat_names(report.stopping).await;
+            aura_core::session::still_stopping(&names, "Retry installation in a moment.")
         };
         updates.phase(UpdatePhase::WaitingForIdle, Some(reason));
         return Ok(updates.snapshot());
