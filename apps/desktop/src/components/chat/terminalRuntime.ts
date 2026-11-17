@@ -20,8 +20,11 @@ export function isPanelToggle(
 
 /**
  * Which keys xterm handles (true) and which it leaves to the page (false). The toggle always goes
- * to the page. On Windows, Ctrl+C with a selection copies it and Ctrl+V pastes, as in Windows
- * Terminal; without a selection Ctrl+C still interrupts. macOS keeps Cmd+C and Cmd+V native.
+ * to the page, and so does Ctrl+1 to Ctrl+9 (Cmd on macOS), which open the sidebar's chats: xterm
+ * sent some of them as old control codes and not others, so the same shortcut worked in one
+ * terminal and not the next. On Windows and Linux, Ctrl+C with a selection copies it and Ctrl+V
+ * pastes, as in Windows Terminal; without a selection Ctrl+C still interrupts. macOS keeps Cmd+C
+ * and Cmd+V native.
  */
 export function shellKeys(
   event: Pick<
@@ -32,6 +35,13 @@ export function shellKeys(
   mac = isMac(),
 ): boolean {
   if (isPanelToggle(event)) return false;
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    /^Digit[1-9]$/.test(event.code)
+  )
+    return false;
   if (mac || event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey)
     return true;
   const key = event.key.toLowerCase();
@@ -68,6 +78,7 @@ export const createXtermRuntime: RuntimeFactory = ({ transport, label, onStatus 
     const opened = createXterm(modules, host, {
       inputLabel: `${label} input`,
       keys: (event) => shellKeys(event, () => opened.term.hasSelection()),
+      variant: "shell",
     });
     view = opened;
     const term = opened.term;

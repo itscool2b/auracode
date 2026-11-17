@@ -767,6 +767,12 @@ impl SessionManager {
         self.env_status()
     }
 
+    /// The person's resolved environment (their login shell's), waiting for the resolution. For
+    /// reading settings only: what starts a process takes [`child_env`] of it.
+    pub async fn resolved_env(&self) -> Arc<aura_process::ResolvedEnv> {
+        self.deps().env.get().await
+    }
+
     /// Every chat for the list, the most recently updated first, with its live state and whether
     /// its folder can be used here (checked by `metadata` only, so listing never triggers a macOS
     /// privacy prompt; a start's deeper check is remembered).

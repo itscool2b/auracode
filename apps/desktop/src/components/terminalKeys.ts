@@ -29,6 +29,20 @@ export function actsOutsideText(event: Pick<KeyboardEvent, "type" | "key">): boo
 }
 
 /**
+ * Whether the page must cancel a key's default once the terminal sent it to its program: every
+ * key but typed text (owner, 17 November 2026: after a key in the terminal, typing stopped until a
+ * click). A key the page leaves uncancelled can act outside the terminal: Tab, PageUp, PageDown
+ * and the F-keys above, and on Linux WebKitGTK hands a key the page did not use back to GTK, whose
+ * own key bindings move the window's focus. Typed text keeps its default, so a screen reader still
+ * echoes it.
+ */
+export function cancelsDefault(
+  event: Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "metaKey" | "altKey" | "isComposing">,
+): boolean {
+  return event.type === "keydown" && (actsOutsideText(event) || !typesText(event));
+}
+
+/**
  * Keys that type text, which xterm may send only later (capitals and AltGr characters on
  * keypress, IME and dead keys by composition): they are the program's from the start.
  */

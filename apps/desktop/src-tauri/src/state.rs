@@ -57,6 +57,11 @@ pub struct AppInfo {
     pub recovery_notice: Option<String>,
     /// Why startup could not complete, as a sentence to show on the error screen.
     pub fatal: Option<String>,
+    /// The window's page may play sound (Settings' Sounds). False on Linux where GStreamer's
+    /// plugins are missing, and after the page stopped working once.
+    pub media: bool,
+    /// Why it may not, as a sentence for Settings and the browser.
+    pub media_notice: Option<String>,
 }
 
 /// State managed by Tauri for the whole app.
@@ -193,6 +198,9 @@ impl AppState {
             // Filled in live by `app_info`, since dismissing it changes it.
             recovery_notice: None,
             fatal: booted.fatal,
+            // Filled in live by `app_info`: the window's page can lose its sound.
+            media: true,
+            media_notice: None,
         };
         AppState {
             runtime: Mutex::new(ProfileRuntime {
@@ -237,6 +245,7 @@ impl AppState {
         info.recovery_notice = lock(&self.recovery)
             .as_ref()
             .map(|recovery| recovery.notice.clone());
+        (info.media, info.media_notice) = crate::browser::window_media();
         info
     }
 
@@ -569,6 +578,14 @@ mod tests {
         assert_eq!(info.launch, LaunchMode::Normal);
         assert_eq!(info.fatal, None);
         assert_eq!(info.recovery_notice, None);
+        // Linux decides by the plugins this machine has; elsewhere the window always plays sound.
+        assert_eq!(
+            (info.media, info.media_notice.clone()),
+            crate::browser::window_media()
+        );
+        if !cfg!(target_os = "linux") {
+            assert!(info.media && info.media_notice.is_none());
+        }
         assert!(info.device.is_some() && info.profile.is_some());
         assert_eq!(
             info.db.as_ref().map(|db| db.schema_version),

@@ -33,16 +33,14 @@ fn work_limit() -> CheckpointError {
 }
 
 fn is_link(metadata: &Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
-    {
+    let reparse = {
         use cap_std::fs::MetadataExt;
         metadata.file_attributes() & 0x400 != 0
-    }
+    };
     #[cfg(not(windows))]
-    false
+    let reparse = false;
+    metadata.file_type().is_symlink() || reparse
 }
 
 /// The selected objects root may itself be intentionally relocated. Every descent from that

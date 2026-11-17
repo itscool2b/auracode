@@ -114,4 +114,25 @@ describe("keys inside a panel terminal", () => {
     // macOS keeps Cmd+C and Cmd+V native; Ctrl+V reaches the shell.
     expect(shellKeys(key({ ctrlKey: true, key: "v" }), () => true, true)).toBe(true);
   });
+
+  it("leaves Ctrl+1 to Ctrl+9 to the sidebar's chats in every terminal", () => {
+    for (const digit of [1, 2, 3, 5, 8, 9]) {
+      const code = `Digit${digit}`;
+      expect(shellKeys(key({ ctrlKey: true, key: String(digit), code }), () => false, false)).toBe(
+        false,
+      );
+      expect(shellKeys(key({ metaKey: true, key: String(digit), code }), () => false, true)).toBe(
+        false,
+      );
+    }
+    // Shift and Alt chords and the bare digits are the program's.
+    expect(
+      shellKeys(
+        key({ ctrlKey: true, shiftKey: true, key: "#", code: "Digit3" }),
+        () => false,
+        false,
+      ),
+    ).toBe(true);
+    expect(shellKeys(key({ key: "3", code: "Digit3" }), () => false, false)).toBe(true);
+  });
 });

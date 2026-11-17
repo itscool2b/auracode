@@ -151,16 +151,14 @@ fn is_linked_worktree(path: &Path) -> bool {
 }
 
 fn is_link(meta: &std::fs::Metadata) -> bool {
-    if meta.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
-    {
+    let reparse = {
         use std::os::windows::fs::MetadataExt;
         meta.file_attributes() & 0x400 != 0
-    }
+    };
     #[cfg(not(windows))]
-    false
+    let reparse = false;
+    meta.file_type().is_symlink() || reparse
 }
 
 /// Git for the cleanup: read-only questions about auracode's worktrees, and the unlock and prune

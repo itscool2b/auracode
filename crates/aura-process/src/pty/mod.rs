@@ -133,8 +133,7 @@ pub(crate) async fn spawn(
         ProcessCwd::Fixed(path) => path,
     };
     let (mut vars, _) = child_env(&spec.env, &spec.launch.set_env);
-    vars.entry("TERM".into())
-        .or_insert_with(|| "xterm-256color".into());
+    terminal_identity(&mut vars, &spec.launch.set_env);
     crate::spawn::check(&rt, cwd, &spec.launch.program, &vars).await?;
     #[cfg(windows)]
     let prepared = windows::prepare(&spec.launch.program, &spec.launch.args, cwd, &vars, size)
@@ -228,5 +227,61 @@ async fn deadline_reached(deadline: Option<tokio::time::Instant>) {
     match deadline {
         Some(deadline) => tokio::time::sleep_until(deadline).await,
         None => std::future::pending().await,
+    }
+}
+
+/// What every terminal inside auracode says it is, whatever the environment it came from: xterm.js
+/// speaks xterm's codes with 24-bit colour. A `TERM` inherited from the terminal auracode was
+/// started from (`xterm-kitty`, `xterm-ghostty`) would make programs send codes this terminal
+/// does not draw, and without `COLORTERM` agents fall back to 256 colours. A launch's own
+/// `set_env` still wins.
+const TERMINAL_IDENTITY: &[(&str, &str)] = &[
+    ("TERM", "xterm-256color"),
+    ("COLORTERM", "truecolor"),
+    ("TERM_PROGRAM", "auracode"),
+];
+
+fn terminal_identity(
+    vars: &mut crate::EnvMap,
+    set_env: &[(std::ffi::OsString, std::ffi::OsString)],
+) {
+    for (name, value) in TERMINAL_IDENTITY {
+        let key = crate::EnvKey::from(*name);
+        if set_env
+            .iter()
+            .any(|(set, _)| crate::EnvKey::from(set.as_os_str()) == key)
+        {
+            continue;
+        }
+        vars.insert(key, (*value).into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{EnvKey, EnvMap};
+
+    fn value(vars: &EnvMap, name: &str) -> Option<String> {
+        vars.get(&EnvKey::from(name))
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn a_terminal_says_what_it_is_unless_its_launch_does() {
+        let mut vars = EnvMap::new();
+        vars.insert(EnvKey::from("TERM"), "xterm-kitty".into());
+        vars.insert(EnvKey::from("PATH"), "/usr/bin".into());
+        terminal_identity(&mut vars, &[]);
+        assert_eq!(value(&vars, "TERM").as_deref(), Some("xterm-256color"));
+        assert_eq!(value(&vars, "COLORTERM").as_deref(), Some("truecolor"));
+        assert_eq!(value(&vars, "TERM_PROGRAM").as_deref(), Some("auracode"));
+        assert_eq!(value(&vars, "PATH").as_deref(), Some("/usr/bin"));
+
+        let mut vars = EnvMap::new();
+        vars.insert(EnvKey::from("TERM"), "dumb".into());
+        terminal_identity(&mut vars, &[("TERM".into(), "dumb".into())]);
+        assert_eq!(value(&vars, "TERM").as_deref(), Some("dumb"));
+        assert_eq!(value(&vars, "COLORTERM").as_deref(), Some("truecolor"));
     }
 }

@@ -10,6 +10,7 @@ import {
   projectChatContext,
 } from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
+import { restoreFocusSoon } from "../../lib/focusReturn";
 import { navigationTarget } from "../../lib/nativeNavigation";
 import {
   agentEditText,
@@ -142,6 +143,11 @@ export function ChatsScreen({
   const [dismissedNotices, setDismissedNotices] = useState<ReadonlySet<string>>(new Set());
   const [failedUpdates, setFailedUpdates] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  // A chat switch by keyboard (Ctrl+1 to 9) takes the focused terminal or composer away with the
+  // old chat: focus returns to what held it last and is on screen (lib/focusReturn.ts).
+  useEffect(() => {
+    if (selected !== null) restoreFocusSoon();
+  }, [selected]);
   // Launch shows the start screen's aircraft; New chat, a project's New chat and Ctrl+N open the
   // composer, which then stays whenever no chat is open.
   const [composing, setComposing] = useState(false);

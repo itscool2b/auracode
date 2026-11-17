@@ -178,6 +178,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            crate::terminal_font::terminal_system_font,
             commands::env_status,
             commands::env_refresh,
             commands::pick_folder,

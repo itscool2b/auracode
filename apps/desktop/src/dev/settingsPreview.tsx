@@ -24,11 +24,13 @@ import { createCustomizeFixture } from "./customizePreview";
 import { oneProfile } from "./profilesFixture";
 import { remoteFixture } from "./remoteFixture";
 
+// `?media=off`: Linux without GStreamer's plugins, where the window makes no sound.
+const mediaOff = new URLSearchParams(location.search).get("media") === "off";
 const info: AppInfo = {
   app_version: "0.1.0",
   tauri_version: "2.12.5",
-  os: "windows",
-  os_version: "11",
+  os: mediaOff ? "linux" : "windows",
+  os_version: mediaOff ? "Omarchy" : "11",
   arch: "x86_64",
   data_dir: "C:/fixture/auracode",
   device: null,
@@ -40,6 +42,10 @@ const info: AppInfo = {
   notices: [],
   recovery_notice: null,
   fatal: null,
+  media: !mediaOff,
+  media_notice: mediaOff
+    ? "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode."
+    : null,
 };
 const calls: string[] = [];
 const preferences: SetupSnapshot = {

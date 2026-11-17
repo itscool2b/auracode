@@ -62,6 +62,7 @@ pub mod smoke;
 pub mod state;
 mod sync;
 pub mod terminal;
+pub mod terminal_font;
 pub mod uninstall;
 pub mod updater;
 pub mod window;

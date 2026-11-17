@@ -230,6 +230,138 @@ export async function checkBrowser(browser, url, out, engine) {
       await context.close();
     }
   }
+  await checkBrowserMedia(browser, url, out, engine);
+}
+
+/**
+ * Linux without GStreamer's plugins (`?media=off`): the panel says once, calmly, why pages play no
+ * sound or video, and not again on this device. A page that stopped working twice says it reloads
+ * without them.
+ */
+export async function checkBrowserMedia(browser, url, out, engine) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    reducedMotion: "reduce",
+  });
+  try {
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(`${url}/?preview=browser&media=off`);
+    const notice = page.getByTestId("browser-media-notice");
+    await notice.waitFor();
+    assert.match(
+      await notice.textContent(),
+      /^Audio and video are off here: GStreamer's base and good plugins are missing\. Install gst-plugins-base and gst-plugins-good, then restart auracode\.$/,
+      `${engine}: the notice names the packages`,
+    );
+    assert.equal(await notice.getAttribute("role"), "status", `${engine}: calm, not an alert`);
+    await axe(page, `${engine} media notice`);
+    await page.screenshot({ path: resolve(out, `${engine}-media-notice.png`) });
+    await notice.getByRole("button", { name: "Dismiss" }).click();
+    await notice.waitFor({ state: "detached" });
+    await page.reload();
+    await page.getByTestId("browser-panel").waitFor();
+    await until(() => frameShown(page), `${engine}: the page shows again`);
+    assert.equal(await notice.count(), 0, `${engine}: said once on this device`);
+
+    // A page whose process ended: Reload, and when it ended twice, that media goes off.
+    const crash = async (media) => {
+      const chat = await page.evaluate(() => {
+        const frame = document.querySelector("iframe[data-fixture-page]");
+        return frame?.dataset.fixturePage ?? null;
+      });
+      await page.evaluate(
+        ({ tabId, media }) =>
+          window.browserFixture.emit({
+            type: "chat",
+            browser: {
+              chat_id: "browser-chat",
+              active: tabId,
+              tabs: [
+                {
+                  id: tabId,
+                  url: "http://localhost:3104/",
+                  title: "Acme dev",
+                  loading: false,
+                  can_go_back: false,
+                  can_go_forward: false,
+                  crashed: true,
+                  error: null,
+                  zoom: 1,
+                  asleep: true,
+                  annotating: false,
+                  media,
+                },
+              ],
+            },
+          }),
+        { tabId: chat, media },
+      );
+      const card = page.getByRole("alert").filter({ hasText: "This page stopped working." });
+      await card.waitFor();
+      return card;
+    };
+    const twice = await crash(false);
+    // This system has no media at all: the panel's own line said why, the card adds nothing.
+    assert.equal(await twice.getByText("It stopped twice", { exact: false }).count(), 0);
+    assert.deepEqual(errors, [], `${engine}: no page errors with media off`);
+  } finally {
+    await context.close();
+  }
+
+  const playing = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const page = await playing.newPage();
+    await page.goto(`${url}/?preview=browser`);
+    await page.getByTestId("browser-panel").waitFor();
+    await until(() => frameShown(page), `${engine}: the page shows`);
+    assert.equal(await page.getByTestId("browser-media-notice").count(), 0, `${engine}: no notice`);
+    const tabId = await page.evaluate(
+      () => document.querySelector("iframe[data-fixture-page]")?.dataset.fixturePage,
+    );
+    for (const media of [true, false]) {
+      await page.evaluate(
+        ({ tabId, media }) =>
+          window.browserFixture.emit({
+            type: "chat",
+            browser: {
+              chat_id: "browser-chat",
+              active: tabId,
+              tabs: [
+                {
+                  id: tabId,
+                  url: "http://localhost:3104/",
+                  title: "Acme dev",
+                  loading: false,
+                  can_go_back: false,
+                  can_go_forward: false,
+                  crashed: true,
+                  error: null,
+                  zoom: 1,
+                  asleep: true,
+                  annotating: false,
+                  media,
+                },
+              ],
+            },
+          }),
+        { tabId, media },
+      );
+      const card = page.getByRole("alert").filter({ hasText: "This page stopped working." });
+      await card.waitFor();
+      const second = card.getByText(
+        "It stopped twice in a short time, so it reloads with audio and video off.",
+      );
+      if (media) assert.equal(await second.count(), 0, `${engine}: one end says nothing more`);
+      else await second.waitFor();
+      await card.getByRole("button", { name: "Reload" }).waitFor();
+    }
+    await axe(page, `${engine} crashed page`);
+    await page.screenshot({ path: resolve(out, `${engine}-crashed-twice.png`) });
+  } finally {
+    await playing.close();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

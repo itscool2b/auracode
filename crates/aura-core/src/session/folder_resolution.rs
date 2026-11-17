@@ -333,17 +333,14 @@ async fn checked_directory(value: &str) -> Result<PathBuf, SessionError> {
     .map_err(|_| invalid("The folder could not be checked."))?
 }
 fn linked(metadata: &std::fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
-    {
+    let reparse = {
         use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & 0x400 != 0 {
-            return true;
-        }
-    }
-    false
+        metadata.file_attributes() & 0x400 != 0
+    };
+    #[cfg(not(windows))]
+    let reparse = false;
+    metadata.file_type().is_symlink() || reparse
 }
 fn plain_directory(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir() && !linked(&metadata))

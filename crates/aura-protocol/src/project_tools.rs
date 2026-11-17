@@ -6,6 +6,9 @@ use specta::Type;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectShell {
+    /// The person's own login shell (`$SHELL`, else the passwd entry) with their startup files,
+    /// as their terminal app starts it. macOS and Linux.
+    Login,
     PowerShell,
     CommandPrompt,
     Zsh,

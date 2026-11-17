@@ -105,6 +105,16 @@ export function countsTowardLimit(tab: PanelTab): boolean {
   return tab.status.state === "reviewing" || (tab.started === true && holdsShell(tab.status));
 }
 
+/**
+ * What a shell's tab is called: the person's own shell by its program's name ("bash", "fish"), as
+ * their terminal app names it, and the others by their label ("Plain Bash", "PowerShell").
+ */
+export function shellTitle(shell: Pick<ProjectShellChoice, "id" | "label" | "program">): string {
+  if (shell.id !== "login") return shell.label;
+  const name = shell.program.split(/[\\/]/).pop()?.trim();
+  return name ? name : shell.label;
+}
+
 /** "PowerShell", then "PowerShell 2" and so on: the lowest number no open tab of this chat uses. */
 export function nextTitle(label: string, taken: readonly string[]): string {
   if (!taken.includes(label)) return label;
@@ -372,7 +382,7 @@ export class TerminalPanels {
       const taken = this.panel(chatId)
         .tabs.filter((other) => other !== id)
         .map((other) => this.#tabs.get(other)?.title ?? "");
-      const title = nextTitle(choice.label, taken);
+      const title = nextTitle(shellTitle(choice), taken);
       // The shell opens in one step when the tab first shows (Rust checks the folder and the
       // shell again then), so a tab shown long after this review still opens.
       this.#runtimes.set(
@@ -444,7 +454,7 @@ export class TerminalPanels {
       .map((other) => this.#tabs.get(other)?.title ?? "");
     this.#setTab(tabId, {
       title: tab.shell
-        ? nextTitle(tab.shell.label, taken)
+        ? nextTitle(shellTitle(tab.shell), taken)
         : tab.purpose === "setup"
           ? "Setup"
           : tab.purpose === "run"

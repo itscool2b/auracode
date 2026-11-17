@@ -13,6 +13,7 @@ import { Onboarding } from "./components/setup/Onboarding";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
+import { installFocusReturn, restoreFocusSoon } from "./lib/focusReturn";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
@@ -24,7 +25,7 @@ import type { StreamStore } from "./lib/session";
 import { setupApi } from "./lib/setup";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
-import { subscribeNoticeSounds } from "./lib/sounds";
+import { setNoticeSoundsAvailable, subscribeNoticeSounds } from "./lib/sounds";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
 import type { WorkspaceStore } from "./lib/workspace";
@@ -61,6 +62,14 @@ export function App({
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
   const [view, setView] = useState<View>("setup");
+  // Keyboard focus never falls to nothing: back from Settings or the Dashboard, the terminal or
+  // control that held it takes it again (lib/focusReturn.ts).
+  useEffect(() => {
+    installFocusReturn();
+  }, []);
+  useEffect(() => {
+    if (view === "chats") restoreFocusSoon();
+  }, [view]);
   const [restartSetup, setRestartSetup] = useState(false);
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
   /** Where Settings opens: its page, and the project, chat or revision a page opens on. */
@@ -188,6 +197,11 @@ export function App({
   useEffect(() => {
     if (glass !== null) document.documentElement.dataset.glass = glass;
   }, [glass]);
+
+  // Sounds stay silent until the app info says this window may make them (Linux without
+  // GStreamer's plugins may not).
+  const media = boot.status === "ready" && boot.info.media;
+  useEffect(() => setNoticeSoundsAvailable(media), [media]);
 
   // The platform, for what only one draws differently (Windows' scrollbars, styles.css).
   const os = boot.status === "ready" ? boot.info.os : null;

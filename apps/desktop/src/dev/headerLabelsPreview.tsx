@@ -100,6 +100,8 @@ const info: AppInfo = {
   notices: [],
   recovery_notice: null,
   fatal: null,
+  media: true,
+  media_notice: null,
 };
 const unavailable = async (): Promise<never> => {
   throw new Error("This fixture only displays existing chats.");

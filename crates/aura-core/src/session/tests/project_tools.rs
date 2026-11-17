@@ -126,6 +126,64 @@ async fn a_project_terminal_opens_in_one_step_and_holds_its_folder_beside_live_a
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }
 
+/// The person's own shell is offered first, started as their terminal app starts it (interactive,
+/// with their startup files; a login shell on macOS), and the plain shells follow it.
+#[cfg(unix)]
+#[tokio::test]
+async fn the_persons_own_shell_comes_first() {
+    let (driver, _) = ScriptedDriver::new(vec![
+        ready_step("own-shell"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let mut vars = aura_process::process_env();
+    vars.insert("SHELL".into(), "/bin/sh".into());
+    let inner = Arc::get_mut(&mut rig.manager.inner).unwrap();
+    Arc::get_mut(&mut inner.shared).unwrap().deps.env = EnvResolver::fixed(ResolvedEnv {
+        vars,
+        source: EnvSource::Fallback {
+            reason: "own shell fixture".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    let first = &review.shells[0];
+    assert_eq!(first.id, aura_protocol::project_tools::ProjectShell::Login);
+    assert_eq!(first.label, "Your shell (sh)");
+    let expected: &[&str] = if cfg!(target_os = "macos") {
+        &["-l", "-i"]
+    } else {
+        &["-i"]
+    };
+    assert_eq!(first.args, expected);
+    assert!(
+        review.shells[1..]
+            .iter()
+            .all(|shell| shell.label.starts_with("Plain ")),
+        "{:?}",
+        review.shells
+    );
+    let plan = rig
+        .manager
+        .prepare_project_terminal(&chat.id, &review.token, first.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.spec.launch.args,
+        expected
+            .iter()
+            .map(std::ffi::OsString::from)
+            .collect::<Vec<_>>()
+    );
+    drop(plan);
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert!(rig.store.shutdown(Duration::from_secs(5)).await);
+}
+
 /// The docked panel opens several shells in one chat's folder. Each holds its own folder use, so
 /// the quit question counts every shell and the folder stays protected until the last one ends.
 #[tokio::test]

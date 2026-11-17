@@ -33,7 +33,9 @@ use crate::log::Redactor;
 use crate::registry::LeftoverRegistry;
 
 pub use scrub::{DenyReason, ScrubReport, deny_reason, node_options_has_debugger_hook, scrub};
-pub use shell::parse_env0;
+#[cfg(unix)]
+pub use shell::user_shell;
+pub use shell::{parse_env0, terminal_args};
 #[cfg(unix)]
 pub(crate) use which::is_program;
 #[cfg(windows)]
@@ -680,11 +682,28 @@ pub enum ResolverStatus {
 /// inherit: a dev launch from Apple Terminal would replay its session restore against the user's
 /// tab history, and a `pnpm dev` launch would leak `npm_config_*` into every agent. Whatever the
 /// user's own rc files export comes back through the shell's output.
+///
+/// The terminal app auracode was started from names itself too, and none of it is true for an
+/// agent: auracode's own terminal is not kitty, so a child that read `KITTY_WINDOW_ID` or
+/// `KITTY_LISTEN_ON` would send kitty remote-control commands to the person's other window, and
+/// `GHOSTTY_SHELL_FEATURES` or `VTE_VERSION` would load shell integration that writes another
+/// terminal's escape codes. A terminal inside auracode says what it is itself (`pty::spawn`).
 const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",
     "TERM_SESSION_ID",
     "INIT_CWD",
+    // The launching terminal and multiplexer.
+    "VTE_VERSION",
+    "WINDOWID",
+    "WT_SESSION",
+    "WT_PROFILE_ID",
+    "LC_TERMINAL",
+    "LC_TERMINAL_VERSION",
+    "COLORFGBG",
+    "TMUX",
+    "TMUX_PANE",
+    "STY",
 ];
 
 /// Names, separated by `:`, of variables auracode set for itself when it started (the NVIDIA
@@ -692,8 +711,23 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
 /// them, an agent's shell must not inherit them.
 pub const LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
 
-/// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]).
-const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "pnpm_", "TAURI_"];
+/// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]), the terminal apps'
+/// own families among them.
+const LAUNCH_CONTEXT_PREFIXES: &[&str] = &[
+    "SHELL_SESSION_",
+    "npm_",
+    "PNPM_",
+    "pnpm_",
+    "TAURI_",
+    "KITTY_",
+    "GHOSTTY_",
+    "ALACRITTY_",
+    "WEZTERM_",
+    "KONSOLE_",
+    "ITERM_",
+    "TERMINATOR_",
+    "ZELLIJ",
+];
 
 /// Removes the variables that describe how auracode itself was launched; returns their names,
 /// sorted. Applies to the resolver shell's input and to the fallback.
@@ -742,11 +776,16 @@ const APPIMAGE_RUNTIME_NAMES: &[&str] = &["APPDIR", "APPIMAGE", "ARGV0", "OWD"];
 
 /// Variables an AppImage's launch hooks set to a fixed value, overwriting the session's, with the
 /// variable whose pointing into the image shows that hook ran: linuxdeploy's GTK hook forces
-/// `GTK_THEME` to Adwaita, its Python hook sets `PYTHONDONTWRITEBYTECODE`.
+/// `GTK_THEME` to Adwaita, its Python hook sets `PYTHONDONTWRITEBYTECODE`, its GStreamer hook
+/// `GST_REGISTRY_REUSE_PLUGIN_SCANNER`.
 #[cfg(unix)]
 const APPIMAGE_HOOK_CONSTANTS: &[(&str, &str)] = &[
     ("GTK_THEME", "GTK_DATA_PREFIX"),
     ("PYTHONDONTWRITEBYTECODE", "PYTHONHOME"),
+    (
+        "GST_REGISTRY_REUSE_PLUGIN_SCANNER",
+        "GST_PLUGIN_SCANNER_1_0",
+    ),
 ];
 
 /// Removes what a Linux AppImage's launcher put in the env, when `APPDIR` names its mount; returns
@@ -947,6 +986,53 @@ mod tests {
         assert_eq!(names(&vars), ["HOME", "PATH", "SHELL", "TERM"]);
     }
 
+    /// A launch from kitty, Ghostty, Windows Terminal or tmux: none of their names reach an agent,
+    /// while the person's own settings that only look alike stay.
+    #[test]
+    fn the_launching_terminal_is_launch_context() {
+        let mut vars = map(&[
+            ("PATH", "/usr/bin"),
+            ("KITTY_WINDOW_ID", "1"),
+            ("KITTY_LISTEN_ON", "unix:/tmp/kitty-1234"),
+            ("KITTY_PUBLIC_KEY", "1:abc"),
+            ("GHOSTTY_RESOURCES_DIR", "/usr/share/ghostty"),
+            ("GHOSTTY_SHELL_FEATURES", "cursor,title"),
+            ("ALACRITTY_SOCKET", "/run/user/1000/Alacritty.sock"),
+            ("WEZTERM_PANE", "0"),
+            ("VTE_VERSION", "7600"),
+            ("WINDOWID", "4194316"),
+            ("WT_SESSION", "f3a1"),
+            ("LC_TERMINAL", "iTerm2"),
+            ("TMUX", "/tmp/tmux-1000/default,1,0"),
+            ("TMUX_PANE", "%0"),
+            ("ZELLIJ_SESSION_NAME", "dev"),
+            ("EDITOR", "nvim"),
+            ("TERMINAL", "kitty"),
+            ("LC_ALL", "en_US.UTF-8"),
+        ]);
+        let removed = strip_launch_context(&mut vars);
+        assert_eq!(
+            removed,
+            [
+                "ALACRITTY_SOCKET",
+                "GHOSTTY_RESOURCES_DIR",
+                "GHOSTTY_SHELL_FEATURES",
+                "KITTY_LISTEN_ON",
+                "KITTY_PUBLIC_KEY",
+                "KITTY_WINDOW_ID",
+                "LC_TERMINAL",
+                "TMUX",
+                "TMUX_PANE",
+                "VTE_VERSION",
+                "WEZTERM_PANE",
+                "WINDOWID",
+                "WT_SESSION",
+                "ZELLIJ_SESSION_NAME",
+            ]
+        );
+        assert_eq!(names(&vars), ["EDITOR", "LC_ALL", "PATH", "TERMINAL"]);
+    }
+
     /// What linuxdeploy's AppRun and its GTK and Python hooks set, as a real AppImage of auracode
     /// left it: every entry inside the mount goes, the session's own entries stay in order.
     #[cfg(unix)]
@@ -1014,6 +1100,76 @@ mod tests {
         assert_eq!(value("PATH"), "/usr/local/bin:/usr/bin");
         assert_eq!(value("XDG_DATA_DIRS"), "/usr/share:/usr/local/share");
         assert_eq!(value("NOT_INSIDE"), "/tmp/.mount_auracoXyZ12-other/lib");
+    }
+
+    /// What an image with GStreamer's plugins adds: its launcher's and its GStreamer hook's
+    /// variables, and the ones auracode's own `main` set for the image, all go.
+    #[cfg(unix)]
+    #[test]
+    fn an_appimages_gstreamer_context_is_stripped() {
+        let mount = "/tmp/.mount_auracoAbC34";
+        let mut vars = map(&[
+            ("APPDIR", mount),
+            (
+                "GST_PLUGIN_SYSTEM_PATH",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer:",
+            ),
+            (
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0:/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0",
+            ),
+            (
+                "GST_PLUGIN_PATH_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer-1.0",
+            ),
+            (
+                "GST_PLUGIN_SCANNER_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner",
+            ),
+            (
+                "GST_PTP_HELPER_1_0",
+                "/tmp/.mount_auracoAbC34/usr/lib/gstreamer1.0/gstreamer-1.0/gst-ptp-helper",
+            ),
+            ("GST_REGISTRY_REUSE_PLUGIN_SCANNER", "no"),
+            ("AURACODE_LAUNCH_SET", "GST_REGISTRY_1_0"),
+            (
+                "GST_REGISTRY_1_0",
+                "/home/me/.cache/si.auracode.desktop/gstreamer-1.0/image-x86_64.bin",
+            ),
+            ("HOME", "/home/me"),
+        ]);
+        assert_eq!(
+            strip_launch_context(&mut vars),
+            [
+                "APPDIR",
+                "AURACODE_LAUNCH_SET",
+                "GST_PLUGIN_PATH_1_0",
+                "GST_PLUGIN_SCANNER_1_0",
+                "GST_PLUGIN_SYSTEM_PATH",
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                "GST_PTP_HELPER_1_0",
+                "GST_REGISTRY_1_0",
+                "GST_REGISTRY_REUSE_PLUGIN_SCANNER",
+            ]
+        );
+        assert_eq!(names(&vars), ["HOME"]);
+
+        // An image without plugins: auracode pointed GStreamer at the system's folders itself.
+        let mut vars = map(&[
+            ("APPDIR", mount),
+            ("GST_PLUGIN_SYSTEM_PATH_1_0", "/usr/lib/gstreamer-1.0"),
+            (
+                "AURACODE_LAUNCH_SET",
+                "__NV_DISABLE_EXPLICIT_SYNC:GST_REGISTRY_1_0:GST_PLUGIN_SYSTEM_PATH_1_0",
+            ),
+            ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+            ("GST_REGISTRY_1_0", "/home/me/.cache/x/system-x86_64.bin"),
+            // The person's own, without the GStreamer hook's evidence, stays.
+            ("GST_REGISTRY_REUSE_PLUGIN_SCANNER", "no"),
+            ("HOME", "/home/me"),
+        ]);
+        strip_launch_context(&mut vars);
+        assert_eq!(names(&vars), ["GST_REGISTRY_REUSE_PLUGIN_SCANNER", "HOME"]);
     }
 
     /// Without the GTK hook's evidence a `GTK_THEME` is the person's own; without `APPDIR`, or
