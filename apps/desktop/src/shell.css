@@ -285,24 +285,11 @@
 
 /*
  * Buttons are Graphite's .g-button everywhere (soft, primary, outline, ghost, danger; 24, 28, 32,
- * 36; .g-button-icon for icons). Two app rules only: icons never shrink, and on a raised surface
- * (surface-2: dialogs, popovers, the dock, the composer, settings groups and setup cards) a disabled
- * pill steps up one surface so it keeps its shape.
+ * 36; .g-button-icon for icons). One app rule only: icons never shrink. A disabled button keeps its
+ * shape on any layer by itself, since its fill is a step of ink, not a surface colour.
  */
 .g-button > svg {
   flex: none;
-}
-
-:is(
-    .g-dialog,
-    .chat-popover-panel,
-    .chat-permission-dock,
-    .chat-composer,
-    .settings-group,
-    .setup-agent-detail
-  )
-  .g-button:disabled:not(.g-button-ghost) {
-  background-color: var(--g-surface-3);
 }
 
 /*

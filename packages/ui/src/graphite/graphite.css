@@ -319,6 +319,11 @@
   transform: none;
 }
 
+/* A primary that cannot act yet keeps its shape as a firmer step of ink on any layer. */
+.g-button-primary:where(:disabled, [aria-disabled="true"]) {
+  background-color: var(--g-fill-primary-disabled);
+}
+
 /* A ghost has no fill to grey out, so disabled only dims its label. */
 .g-button-ghost:where(:disabled, [aria-disabled="true"]) {
   background-color: transparent;
@@ -1218,8 +1223,6 @@
   border: 0;
   border-radius: var(--g-radius-16);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1283,8 +1286,6 @@
   border: 0;
   border-radius: var(--g-radius-6);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1302,8 +1303,6 @@
   border: 0;
   border-radius: var(--g-radius-18);
   background-color: var(--g-glass-pop);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   box-shadow:
     var(--g-shadow-pop),
     inset 0 0 0 1px var(--g-glass-rim);
@@ -1347,18 +1346,14 @@
 
 .g-dialog::backdrop {
   background-color: var(--g-scrim);
-  -webkit-backdrop-filter: var(--g-blur-scrim);
-  backdrop-filter: var(--g-blur-scrim);
 }
 
-/* Reduce transparency: glass becomes the solid overlay surface. */
+/* Reduce transparency: overlays take the solid overlay surface. */
 @media (prefers-reduced-transparency: reduce) {
   .g-menu,
   .g-tooltip,
   .g-dialog {
     background-color: var(--g-overlay);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
 }
 

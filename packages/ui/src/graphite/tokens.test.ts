@@ -300,24 +300,16 @@ describe("Graphite stylesheet rules", () => {
     }
   });
 
-  it("blurs and shadows only through the Halo glass tokens", () => {
+  it("never blurs what is behind, and shadows only through the shadow tokens", () => {
     // The one filter blur is depth: a far swimmer is softened once, at raster time (4.16).
     const depth =
       /\.g-swimmer:where\(\[data-far\]\) > \.g-creature \{\s*filter: blur\(calc\(var\(--g-swimmer-depth\) \* [\d.]+px\)\);\s*\}/;
     expect(graphiteCss).toMatch(depth);
     const rest = graphiteCss.replace(depth, "");
     expect(rest).not.toMatch(/[^-]filter:\s*blur|drop-shadow|text-shadow/);
-    const blurs = [...rest.matchAll(/(-webkit-)?backdrop-filter:([^;]+);/g)];
-    expect(blurs.length).toBeGreaterThan(0);
-    for (const [, prefix, value] of blurs) {
-      expect(value?.trim(), `${prefix ?? ""}backdrop-filter`).toMatch(
-        /^(var\(--g-blur-[\w-]+\)|none)$/,
-      );
-    }
-    // Safari 16.4, the oldest WebKit the app supports, needs the prefixed property alongside.
-    expect(blurs.filter(([, prefix]) => prefix).length).toBe(
-      blurs.filter(([, prefix]) => !prefix).length,
-    );
+    // Flat layers, as the Grok Bot app draws them (owner, 17 November 2026): no surface blurs
+    // what is behind it.
+    expect(rest).not.toMatch(/backdrop-filter/);
     const part = /^(var\(--g-shadow(-[\w-]+)?\)|inset 0 0 0 1px [^,]+|inset 0 1px 0 [^,]+|none)$/;
     for (const match of rest.matchAll(/box-shadow:([^;]+);/g)) {
       for (const layer of (match[1] ?? "").split(/,(?![^(]*\))/)) {

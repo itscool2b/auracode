@@ -21,6 +21,8 @@
   --g-primary: #f5f5f5;
   --g-primary-hover: #e0e0e0;
   --g-primary-active: #cccccc;
+  /* A primary that cannot act yet, as the Grok Bot app greys one: its ink at 13% in dark, 15% in light. */
+  --g-fill-primary-disabled: rgb(245 245 245 / 0.13);
   --g-volt: #d4d4d4;
   --g-green: #3dd68c;
   --g-red: #ff5c5c;
@@ -111,15 +113,17 @@
   --g-glass-rim-strong: rgb(245 245 245 / 0.14);
   --g-glass-highlight: rgb(255 255 255 / 0.04);
   --g-switch-knob: #ffffff;
-  --g-blur-bar: none;
-  --g-blur-pop: none;
-  --g-blur-scrim: none;
   --g-shadow-control: 0 1px 2px rgb(0 0 0 / 0.3);
   --g-shadow-primary: none;
   --g-shadow-layer: 0 0 0 1px rgb(255 255 255 / 0.04);
   /* The layer shadow's hairline alone, for an outline where a shadow is too costly. */
   --g-ring-layer: rgb(255 255 255 / 0.04);
   --g-shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.55);
+  /*
+   * What lifts an inline surface (the message box) off its pane: nothing in dark, where the edge
+   * alone does it, as in the Grok Bot app; a list entry, so it can follow an edge in one shadow.
+   */
+  --g-shadow-inline: 0 0 #0000;
 
   /*
    * Type. Three weights, set through these tokens only, so each platform can take the weight that
@@ -296,6 +300,7 @@
   --g-primary: #1c1c1c;
   --g-primary-hover: #363636;
   --g-primary-active: #000000;
+  --g-fill-primary-disabled: rgb(28 28 28 / 0.15);
   --g-volt: #3f3f3f;
   --g-green: #166534;
   --g-red: #b91c1c;
@@ -386,6 +391,7 @@
   --g-shadow-pop:
     0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
     0 4px 6px -4px rgb(28 28 28 / 0.1);
+  --g-shadow-inline: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
 }
 
 /* No JavaScript is needed to follow the system appearance. */
@@ -407,6 +413,7 @@
     --g-primary: #1c1c1c;
     --g-primary-hover: #363636;
     --g-primary-active: #000000;
+    --g-fill-primary-disabled: rgb(28 28 28 / 0.15);
     --g-volt: #3f3f3f;
     --g-green: #166534;
     --g-red: #b91c1c;
@@ -497,6 +504,7 @@
     --g-shadow-pop:
       0 0 0 1px rgb(28 28 28 / 0.06), 0 10px 20px -3px rgb(28 28 28 / 0.1),
       0 4px 6px -4px rgb(28 28 28 / 0.1);
+    --g-shadow-inline: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
   }
 }
 

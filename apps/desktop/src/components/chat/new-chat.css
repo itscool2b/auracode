@@ -77,7 +77,6 @@
   flex-direction: column;
   border-radius: var(--ui-card-radius);
   background-color: var(--ui-composer-fill);
-  background-image: var(--ui-composer-sheen);
   box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }

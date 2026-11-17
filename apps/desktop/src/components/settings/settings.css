@@ -50,8 +50,6 @@
   padding: 0 var(--g-space-32);
   border-bottom: 1px solid var(--g-glass-rim);
   background-color: var(--g-glass-bar);
-  -webkit-backdrop-filter: var(--g-blur-bar);
-  backdrop-filter: var(--g-blur-bar);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
 }
@@ -234,8 +232,6 @@ h1 + .settings-group {
   display: grid;
   place-items: center;
   background-color: var(--ui-pane-fill);
-  -webkit-backdrop-filter: var(--g-blur-pop);
-  backdrop-filter: var(--g-blur-pop);
   color: var(--g-fg-2);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
