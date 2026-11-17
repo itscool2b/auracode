@@ -241,6 +241,10 @@ pub(crate) enum ChatMsg {
     Stop {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// Stops the agent only while it idles (see `idles`); answers whether it began stopping.
+    StopIfIdle {
+        reply: oneshot::Sender<Result<bool, SessionError>>,
+    },
     /// The account switch: the agent of `agent` starts again on the account it starts on now,
     /// resuming the same session, and the held prompts go once it is ready.
     RestartOnAccount {
@@ -334,6 +338,7 @@ impl ChatMsg {
                 let _ = reply.send(());
             }
             ChatMsg::OpenTerminal { reply } => drop(reply.send(Err(error))),
+            ChatMsg::StopIfIdle { reply } => drop(reply.send(Err(error))),
             ChatMsg::Detach { .. }
             | ChatMsg::DropOwner { .. }
             | ChatMsg::SetupChanged(_)
@@ -374,6 +379,32 @@ pub(crate) fn storage_error(error: &StoreError) -> SessionError {
         StoreError::BlobMissing(message) => SessionError::BlobMissing(message.clone()),
         other => SessionError::StorageUnavailable(other.to_string()),
     }
+}
+
+/// Why a start found no room: every slot is taken and no agent idles, so it says what they do.
+fn too_many_agents(limit: usize, occupancy: super::live::Occupancy) -> SessionError {
+    let parts: Vec<String> = [
+        (occupancy.working, "working"),
+        (occupancy.waiting, "waiting for your answer"),
+        (occupancy.terminals, "open in a terminal"),
+        (occupancy.shown, "open on screen"),
+        (occupancy.stopping, "stopping"),
+    ]
+    .into_iter()
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, what)| format!("{count} {what}"))
+    .collect();
+    let list = match parts.as_slice() {
+        [] => String::new(),
+        [one] => format!(": {one}"),
+        [rest @ .., last] => format!(": {} and {last}", rest.join(", ")),
+    };
+    let message = if limit == 1 {
+        format!("1 agent is running and it is not idle{list}. Stop it, then try again.")
+    } else {
+        format!("{limit} agents are running and none is idle{list}. Stop one, then try again.")
+    };
+    SessionError::TooManyAgents { limit, message }
 }
 
 /// `SessionError` is not `Clone` (it is a public frozen type); the variants a refusal uses are.
@@ -658,6 +689,11 @@ enum Done {
     /// A FORCE chain on a process of a retired generation ended.
     Retired(u64),
     Abort(AbortHandle),
+    /// A start waiting for room got a slot (`admitted`), or gave up waiting.
+    Room {
+        id: u64,
+        admitted: bool,
+    },
     Nothing,
 }
 
@@ -855,7 +891,37 @@ pub(crate) struct ChatActor {
     /// The native session the agent returned at `Ready` is open in another chat: the start fails
     /// once the driver stopped.
     conflict: bool,
+    /// A start waiting for another chat's idle agent to stop and give it its slot.
+    room: Option<RoomWait>,
+    /// Counts this chat's waits for room, so a finished one is told from the current one.
+    rooms: u64,
+    /// How a start at the limit asks this chat's agent to stop when it is the idle one.
+    make_room: Arc<tokio::sync::Notify>,
+    /// What this chat last reported to the live-agent table, so it reports only changes.
+    reported: Option<Reported>,
 }
+
+/// A start waiting for room.
+struct RoomWait {
+    id: u64,
+    fresh: bool,
+    abort: AbortHandle,
+}
+
+/// What an actor last told the live-agent table it was doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reported {
+    Idle(Instant),
+    Working,
+    Waiting,
+    Terminal,
+    Shown,
+    Stopping,
+}
+
+/// A start waits this long for an idle agent to stop: a stop that has not ended by then is forced
+/// well before.
+const ROOM_WAIT: Duration = Duration::from_secs(60);
 
 impl ChatActor {
     fn new(
@@ -995,6 +1061,10 @@ impl ChatActor {
             terminal_import: None,
             starting_fresh: false,
             conflict: false,
+            room: None,
+            rooms: 0,
+            make_room: Arc::new(tokio::sync::Notify::new()),
+            reported: None,
             shared,
             chat,
         }
@@ -1015,6 +1085,7 @@ impl ChatActor {
             let timer_at = self.next_timer();
             let reading = self.reading_events();
             let head = self.outbox.front().map(op_bytes);
+            let make_room = Arc::clone(&self.make_room);
             tokio::select! {
                 biased;
                 changed = workspace_changes.changed() => {
@@ -1029,6 +1100,7 @@ impl ChatActor {
                     Some(msg) => self.on_msg(msg),
                     None => break,
                 },
+                () = make_room.notified() => self.make_room(),
                 Some(done) = self.in_flight.next(), if !self.in_flight.is_empty() => self.on_done(done),
                 () = sleep_until(flush_at), if flush_at.is_some() => self.flush(),
                 () = sleep_until(timer_at), if timer_at.is_some() => self.on_timer(),
@@ -1399,6 +1471,14 @@ impl ChatActor {
                 self.pending_start = None;
                 self.stop();
                 drop(reply.send(Ok(())));
+            }
+            ChatMsg::StopIfIdle { reply } => {
+                let idle = self.idles();
+                if idle {
+                    self.pending_start = None;
+                    self.stop();
+                }
+                drop(reply.send(Ok(idle)));
             }
             ChatMsg::RespondPermission {
                 request_id,
@@ -2906,6 +2986,7 @@ impl ChatActor {
             _ => {}
         }
         if self.driver.is_none() {
+            self.end_room_wait();
             if let Some(preparing) = self.preparing.take() {
                 preparing.abort.abort();
                 self.progress = None;
@@ -3059,6 +3140,11 @@ impl ChatActor {
             return Err(SessionError::ShuttingDown);
         }
         match self.status {
+            SessionStatus::Starting if self.room.is_some() => {
+                // Still waiting for room: it starts fresh once it has some, if asked now.
+                self.wait_for_room(fresh);
+                return Ok(());
+            }
             SessionStatus::Starting => {
                 if fresh && !self.starting_fresh {
                     // Start fresh instead: drop this start and begin again.
@@ -3137,16 +3223,23 @@ impl ChatActor {
             self.start_failed(ErrorKind::AgentUnavailable, "The saved session belongs to a different execution host. Start a fresh session to use this host.".into(), None, false);
             return Ok(());
         }
-        if !self.shared.live.acquire(&self.chat_id) {
-            if self.shared.live.quiescing() {
-                return Err(SessionError::ShuttingDown);
+        // At the limit, the agent idle longest stops to make room and this start waits for its
+        // slot; only when none idles is the start refused, saying what the others are doing.
+        match self.shared.live.admit(&self.chat_id, &self.chat.folder) {
+            super::live::Admission::Admitted => {}
+            super::live::Admission::Closed => return Err(SessionError::ShuttingDown),
+            super::live::Admission::Waiting => {
+                self.wait_for_room(fresh);
+                return Ok(());
             }
-            let error = SessionError::TooManyAgents(self.shared.live.max());
-            if explicit {
-                return Err(error);
+            super::live::Admission::Full(occupancy) => {
+                let error = too_many_agents(self.shared.live.max(), occupancy);
+                if explicit {
+                    return Err(error);
+                }
+                self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
+                return Ok(());
             }
-            self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
-            return Ok(());
         }
         if self.workspace_turn.is_none() {
             self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
@@ -4435,6 +4528,11 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
+        if self.room.is_some() {
+            self.end_room_wait();
+            self.release_if_idle();
+            self.set_status(SessionStatus::Stopped, None);
+        }
         if let Some(preparing) = self.preparing.take() {
             preparing.abort.abort();
             self.progress = None;
@@ -4893,6 +4991,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             Done::DriverJoined { generation, result } => self.on_driver_joined(generation, result),
             Done::Retired(generation) => self.retired_one(generation),
             Done::Abort(abort) => abort.abort(),
+            Done::Room { id, admitted } => self.room_done(id, admitted),
             Done::Nothing => {}
             Done::TerminalRead { generation, read } => self.finish_terminal(generation, Some(read)),
         }
@@ -6273,21 +6372,159 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.refresh_run_status();
     }
 
-    /// Idle eviction: `Ready`, nobody viewing, nothing open or waiting, idle long enough. An agent
-    /// that only counts as idle after the idle grace still works, so it is not evicted.
-    fn update_idle(&mut self) {
-        let idle = self.status == SessionStatus::Ready
+    /// Whether the agent idles: `Ready`, nobody viewing (a remote view counts), nothing open or
+    /// waiting to go, no work in the background. Such an agent stops after the idle time, or
+    /// sooner to make room for another chat's start. An agent that only counts as idle after the
+    /// idle grace still works, so it is never stopped.
+    fn idles(&self) -> bool {
+        self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.subscribers.is_empty()
             && !self.normalizer.has_open_requests()
             && !self.queue.first().is_some_and(|row| !row.held)
             && !self.quitting
+            && self.terminal.is_none()
             && self
                 .driver
                 .as_ref()
-                .is_none_or(|driver| driver.run_idle != Some(false));
+                .is_none_or(|driver| driver.run_idle != Some(false))
+    }
+
+    /// Idle eviction: idle long enough, by [`Self::idles`]. The live-agent table learns what the
+    /// agent does whenever that changes, so a start at the limit can stop the one idle longest.
+    fn update_idle(&mut self) {
+        let idle = self.idles();
         self.idle_deadline =
             idle.then(|| self.last_activity + self.shared.deps.limits.idle_eviction);
+        let now = if idle {
+            Reported::Idle(self.last_activity)
+        } else if self.terminal.is_some() {
+            Reported::Terminal
+        } else if matches!(
+            self.status,
+            SessionStatus::Stopping
+                | SessionStatus::Stopped
+                | SessionStatus::Failed
+                | SessionStatus::AuthRequired
+        ) {
+            Reported::Stopping
+        } else if self.normalizer.has_open_requests() {
+            Reported::Waiting
+        } else if self.status == SessionStatus::Ready && !self.subscribers.is_empty() {
+            Reported::Shown
+        } else {
+            Reported::Working
+        };
+        if self.reported == Some(now) {
+            return;
+        }
+        self.reported = Some(now);
+        let activity = match now {
+            Reported::Idle(since) => super::live::Activity::Idle {
+                since,
+                notify: Arc::clone(&self.make_room),
+            },
+            Reported::Working => super::live::Activity::Working,
+            Reported::Waiting => super::live::Activity::Waiting,
+            Reported::Terminal => super::live::Activity::Terminal,
+            Reported::Shown => super::live::Activity::Shown,
+            Reported::Stopping => super::live::Activity::Stopping,
+        };
+        if self.shared.live.report(&self.chat_id, activity) {
+            // A start waits for room and no agent was idle to give it: this one is now.
+            tracing::info!(chat_id = %self.chat_id, "stopping an idle agent to make room for a chat waiting to start");
+            self.stop();
+        }
+    }
+
+    /// A start at the limit chose this agent, idle longest, to make room. It stops if it still
+    /// idles; one already on its way out keeps its turn; otherwise another idle agent is asked.
+    fn make_room(&mut self) {
+        if self.idles() {
+            tracing::info!(chat_id = %self.chat_id, "stopping an idle agent to make room for another chat");
+            self.stop();
+            return;
+        }
+        let leaving = self.terminal.is_none()
+            && self.preparing.is_none()
+            && self.pending_start.is_none()
+            && matches!(
+                self.status,
+                SessionStatus::Stopping
+                    | SessionStatus::Stopped
+                    | SessionStatus::Failed
+                    | SessionStatus::AuthRequired
+            );
+        if !leaving {
+            self.shared.live.decline_stop(&self.chat_id);
+        }
+    }
+
+    /// Every slot is taken and an idle agent is stopping for this chat: its slot passes here,
+    /// then the start goes on.
+    fn wait_for_room(&mut self, fresh: bool) {
+        if let Some(room) = &mut self.room {
+            room.fresh |= fresh;
+            return;
+        }
+        self.rooms = self.rooms.wrapping_add(1);
+        let id = self.rooms;
+        let shared = Arc::clone(&self.shared);
+        let chat_id = self.chat_id.clone();
+        let task = self.shared.deps.rt.spawn(async move {
+            let mut released = shared.live.released();
+            tokio::time::timeout(ROOM_WAIT, async {
+                while !shared.live.contains(&chat_id) {
+                    let _ = released.changed().await;
+                }
+            })
+            .await
+            .is_ok()
+        });
+        let abort = task.abort_handle();
+        self.in_flight.push(
+            async move {
+                Done::Room {
+                    id,
+                    admitted: task.await.unwrap_or(false),
+                }
+            }
+            .boxed(),
+        );
+        self.room = Some(RoomWait { id, fresh, abort });
+        self.set_status(
+            SessionStatus::Starting,
+            Some("Waiting for an idle chat to stop and make room".into()),
+        );
+    }
+
+    /// The wait for room ended: the start goes on in the slot it was given, or fails.
+    fn room_done(&mut self, id: u64, admitted: bool) {
+        let Some(room) = self.room.take_if(|room| room.id == id) else {
+            return;
+        };
+        // The start begins again from where it waited.
+        self.status = SessionStatus::Stopped;
+        if !admitted {
+            self.shared.live.cancel_wait(&self.chat_id);
+            self.release_if_idle();
+            let message = "No idle agent stopped in time to make room. Stop a chat you are not using, then try again.";
+            self.start_failed(ErrorKind::SpawnFailed, message.into(), None, false);
+            return;
+        }
+        if let Err(error) = self.start(room.fresh, false) {
+            self.release_if_idle();
+            self.set_status(SessionStatus::Stopped, None);
+            self.refuse_terminal(error);
+        }
+    }
+
+    /// Ends a wait for room (a Stop, a quit).
+    fn end_room_wait(&mut self) {
+        if let Some(room) = self.room.take() {
+            room.abort.abort();
+            self.shared.live.cancel_wait(&self.chat_id);
+        }
     }
 
     // ---- Frames, flushing and persistence -----------------------------------------------------

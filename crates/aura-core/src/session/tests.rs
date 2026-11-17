@@ -14,6 +14,7 @@ mod project_tools;
 mod queue_changes;
 mod rewind;
 mod steering;
+mod stop_many;
 mod terminal_chats;
 mod workspace;
 mod workspace_removal;

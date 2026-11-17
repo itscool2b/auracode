@@ -235,7 +235,11 @@ impl SessionManager {
             .chats
             .into_iter()
             .map(|chat| chat.chat)
-            .filter(|chat| self.shared().live.contains(&chat.id))
+            .filter(|chat| {
+                // A start waiting for room is about to work here too.
+                let live = &self.shared().live;
+                live.contains(&chat.id) || live.is_waiting(&chat.id)
+            })
             .collect();
         let path = folder.path.clone();
         let busy_chats = tokio::task::spawn_blocking(move || {

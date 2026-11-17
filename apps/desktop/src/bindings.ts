@@ -778,7 +778,10 @@ export type AppErrorCode =
 "option_invalid" | 
 /**  The agent isn't running in the chat. */
 "session_not_ready" | 
-/**  The most agents that may run at once already run. */
+/**
+ *  The most agents that may run at once already run and none is idle to make room; the
+ *  message says what they are doing.
+ */
 "too_many_agents" | 
 /**  Too many views are open for the chat, or the webview. */
 "too_many_subscriptions" | 

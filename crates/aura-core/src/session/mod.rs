@@ -41,6 +41,7 @@ mod repository_publication;
 mod search;
 mod shared_mcp;
 mod spawner;
+mod stopping;
 mod terminal_import;
 #[cfg(test)]
 mod tests;
@@ -55,6 +56,7 @@ pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
 pub use plugin_library::{PluginFacts, PluginRefreshPause, assemble as assemble_plugin_library};
 pub use project_tools::{EditorLaunch, EditorOpen, UrlTarget};
+pub use stopping::{StopReport, StopScope};
 pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;
@@ -194,7 +196,8 @@ impl NewChatDefaults {
 /// How much the manager allows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ManagerLimits {
-    /// A start beyond this fails; nothing is evicted to make room.
+    /// A start beyond this stops the agent idle longest to make room, and fails only when no
+    /// agent is idle.
     pub max_live_agents: usize,
     pub max_queue: usize,
     pub max_prompt_bytes: usize,
@@ -205,10 +208,10 @@ pub struct ManagerLimits {
 }
 
 impl ManagerLimits {
-    /// 12 live agents, 20 queued prompts, 1 MiB per prompt, 10 minutes idle, 4 views per chat, 16
+    /// 16 live agents, 20 queued prompts, 1 MiB per prompt, 10 minutes idle, 4 views per chat, 16
     /// per webview.
     pub const STANDARD: ManagerLimits = ManagerLimits {
-        max_live_agents: 12,
+        max_live_agents: 16,
         max_queue: 20,
         max_prompt_bytes: 1024 * 1024,
         idle_eviction: Duration::from_secs(10 * 60),
@@ -1768,8 +1771,10 @@ pub enum SessionError {
     OptionInvalid(String),
     #[error("The agent isn't running in this chat. Start it, then try again.")]
     SessionNotReady,
-    #[error("{0} agents are already running. Stop one, then try again.")]
-    TooManyAgents(usize),
+    /// Every live-agent slot is taken and no agent is idle to make room; the message says what
+    /// the running agents are doing.
+    #[error("{message}")]
+    TooManyAgents { limit: usize, message: String },
     #[error("Too many views are open for this chat.")]
     TooManySubscriptions,
     #[error("auracode's database is not available: {0}")]

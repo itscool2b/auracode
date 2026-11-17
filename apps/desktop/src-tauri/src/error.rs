@@ -46,7 +46,8 @@ pub enum AppErrorCode {
     OptionInvalid,
     /// The agent isn't running in the chat.
     SessionNotReady,
-    /// The most agents that may run at once already run.
+    /// The most agents that may run at once already run and none is idle to make room; the
+    /// message says what they are doing.
     TooManyAgents,
     /// Too many views are open for the chat, or the webview.
     TooManySubscriptions,
@@ -98,7 +99,7 @@ impl From<SessionError> for AppError {
             SessionError::RequestNotPending => AppErrorCode::RequestNotPending,
             SessionError::OptionInvalid(_) => AppErrorCode::OptionInvalid,
             SessionError::SessionNotReady => AppErrorCode::SessionNotReady,
-            SessionError::TooManyAgents(_) => AppErrorCode::TooManyAgents,
+            SessionError::TooManyAgents { .. } => AppErrorCode::TooManyAgents,
             SessionError::TooManySubscriptions => AppErrorCode::TooManySubscriptions,
             SessionError::StorageUnavailable(_) => AppErrorCode::StorageUnavailable,
             SessionError::BlobMissing(_) => AppErrorCode::BlobMissing,
@@ -155,7 +156,13 @@ mod tests {
             (SessionError::RequestNotPending, "request_not_pending"),
             (SessionError::OptionInvalid("no".into()), "option_invalid"),
             (SessionError::SessionNotReady, "session_not_ready"),
-            (SessionError::TooManyAgents(12), "too_many_agents"),
+            (
+                SessionError::TooManyAgents {
+                    limit: 16,
+                    message: "16 agents are running and none is idle: 16 working. Stop one, then try again.".into(),
+                },
+                "too_many_agents",
+            ),
             (SessionError::TooManySubscriptions, "too_many_subscriptions"),
             (
                 SessionError::StorageUnavailable("busy".into()),
