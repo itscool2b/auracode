@@ -31,19 +31,27 @@
   padding: 32px 24px;
 }
 
+/* The page's title at the site's section size, a hair tight; its lines in the site's grey. */
 .remote-centered h1 {
-  font-size: clamp(30px, 8vw, 44px);
-  line-height: 1.06;
+  font-size: 36px;
+  line-height: 40px;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
 .remote-centered p {
   max-width: 44ch;
   color: var(--s-soft);
-  font-size: 17px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 26px;
+}
+
+@media (max-width: 639px) {
+  .remote-centered h1 {
+    font-size: 30px;
+    line-height: 36px;
+  }
 }
 
 .remote-mark {
@@ -80,7 +88,7 @@
   font-size: 17px;
   line-height: 22px;
   font-weight: 500;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -108,7 +116,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--s-line-strong);
+  background-color: var(--s-soft);
 }
 
 .remote-link[data-tone="ok"]::before {
@@ -192,7 +200,7 @@
   display: grid;
   margin: 0;
   padding: 0;
-  border-radius: 20px;
+  border-radius: 24px;
   background-color: var(--s-card);
   list-style: none;
 }
@@ -240,15 +248,15 @@
 }
 
 .remote-chats > li:first-child > .remote-chat-row {
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
 }
 
 .remote-chats > li:last-child > .remote-chat-row {
-  border-radius: 0 0 20px 20px;
+  border-radius: 0 0 24px 24px;
 }
 
 .remote-chats > li:only-child > .remote-chat-row {
-  border-radius: 20px;
+  border-radius: 24px;
 }
 
 .remote-chat-row:active {
@@ -293,7 +301,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--s-line-strong);
+  background-color: var(--s-soft);
 }
 
 .remote-dot[data-tone="working"] {
@@ -403,7 +411,7 @@
   gap: 8px;
   margin: 0;
   padding-left: 14px;
-  border-left: 2px solid var(--s-line-strong);
+  border-left: 2px solid var(--s-line);
   color: var(--s-soft);
 }
 
@@ -476,7 +484,7 @@
   display: grid;
   gap: 12px;
   padding: 16px;
-  border-radius: 20px;
+  border-radius: 24px;
   background-color: var(--s-card);
 }
 
@@ -599,7 +607,7 @@
   background-color: var(--s-bg);
   color: var(--s-ink);
   box-shadow:
-    inset 0 0 0 1px var(--s-line-strong),
+    inset 0 0 0 1px var(--s-line),
     0 24px 60px -20px rgb(0 0 0 / 0.5);
 }
 
@@ -664,8 +672,8 @@
 }
 
 .remote .g-button-outline {
-  background-color: var(--s-quiet);
-  color: var(--s-ink);
+  background-color: var(--s-quiet-strong);
+  color: var(--s-quiet-ink);
 }
 
 @media (hover: hover) {
@@ -674,7 +682,7 @@
   }
 
   .remote .g-button-outline:hover:not(:disabled) {
-    background-color: var(--s-quiet-hover);
+    background-color: var(--s-quiet-strong-hover);
   }
 }
 

@@ -2,8 +2,10 @@ import { Logo } from "@auracode/ui/graphite";
 import type { ReactNode } from "react";
 
 /**
- * An inner page: a two-tone title (the first clause in ink, the rest in grey on its own line)
- * inside the framed content column. No eyebrow above it; an optional picture stands beside it.
+ * An inner page, in the home page's language: a two-tone title at the statement's size (the first
+ * clause in ink, the rest in grey on its own line) and a grey line, then flat cards. Wide pages
+ * take the page's column; documents keep a narrower one. No eyebrow above the title; an optional
+ * picture stands beside it.
  */
 export function Page({
   title,
@@ -23,37 +25,35 @@ export function Page({
 }) {
   return (
     <main id="main" className="page">
-      <div className="frame page-frame">
-        <div className={wide ? "page-column page-column-wide" : "page-column"}>
-          <header className={art ? "page-head page-head-art" : "page-head"} data-reveal="">
-            <div className="page-head-text">
-              <h1 className="page-title">
-                {title}
-                {tone ? (
-                  <>
-                    {" "}
-                    <span>{tone}</span>
-                  </>
-                ) : null}
-              </h1>
-              {lead ? <p className="page-lead">{lead}</p> : null}
+      <div className={wide ? "wrap page-column page-column-wide" : "wrap page-column"}>
+        <header className={art ? "page-head page-head-art" : "page-head"}>
+          <div className="page-head-text">
+            <h1 className="page-title">
+              {title}
+              {tone ? (
+                <>
+                  {" "}
+                  <span>{tone}</span>
+                </>
+              ) : null}
+            </h1>
+            {lead ? <p className="page-lead">{lead}</p> : null}
+          </div>
+          {art ? (
+            <div className="page-art" aria-hidden="true">
+              {art}
             </div>
-            {art ? (
-              <div className="page-art" aria-hidden="true">
-                {art}
-              </div>
-            ) : null}
-          </header>
-          {children}
-        </div>
+          ) : null}
+        </header>
+        {children}
       </div>
     </main>
   );
 }
 
 /**
- * The app as an object: the auracode logo on a raised white tile with a hairline rim, the way the
- * desktop app's icon sits on a dock. Decorative; the page around it names the app.
+ * The app as an object: the auracode logo on a disc of the page's ink, the mark the home page sets
+ * into its headline. Decorative; the page around it names the app.
  */
 export function AppTile({ small = false }: { small?: boolean }) {
   return (
