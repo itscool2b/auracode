@@ -493,6 +493,54 @@ function probe({ strictGrid = false } = {}) {
     return right - left > 1 && bottom - top > 1 ? { left, top, right, bottom } : null;
   };
 
+  // 0. Paint (owner, 17 November 2026: flat, as the Grok Bot app): nothing blurs what is behind it,
+  // no box over 40% of the window casts a soft shadow (WebKitGTK repaints it on every change inside
+  // it when it paints on the CPU), and nothing positioned with a fill lies over the whole window
+  // but a dialog's own scrim.
+  const windowArea = view.width * view.height;
+  const filled = (color) => {
+    const parts = color
+      .match(/rgba?\(([^)]+)\)/)?.[1]
+      .split(/[\s,/]+/)
+      .filter(Boolean);
+    return parts ? parts.length < 4 || Number(parts[3]) > 0 : color !== "transparent";
+  };
+  for (const element of document.body.querySelectorAll("*")) {
+    if (hidden(element)) continue;
+    const style = getComputedStyle(element);
+    for (const property of ["backdrop-filter", "-webkit-backdrop-filter"]) {
+      const value = style.getPropertyValue(property);
+      if (value && value !== "none")
+        findings.push({ kind: "paint", target: path(element), detail: `${property}: ${value}` });
+    }
+    const box = element.getBoundingClientRect();
+    const area = Math.max(0, box.width) * Math.max(0, box.height);
+    if (style.boxShadow !== "none" && area > windowArea * 0.4) {
+      // A layer's lengths after its colour: x, y, blur, spread. Rings (blur 0) and insets are edges.
+      const soft = style.boxShadow
+        .split(/,(?![^(]*\))/)
+        .filter((layer) => !/\binset\b/.test(layer))
+        .some((layer) => Number((layer.match(/-?[\d.]+px/g) ?? [])[2]?.replace("px", "") ?? 0) > 0);
+      if (soft)
+        findings.push({
+          kind: "paint",
+          target: path(element),
+          detail: `soft shadow on ${Math.round((area / windowArea) * 100)}% of the window`,
+        });
+    }
+    if (
+      (style.position === "fixed" || style.position === "absolute") &&
+      area >= windowArea * 0.9 &&
+      !element.closest("dialog") &&
+      (filled(style.backgroundColor) || style.backgroundImage !== "none")
+    )
+      findings.push({
+        kind: "paint",
+        target: path(element),
+        detail: `a filled ${style.position} layer over ${Math.round((area / windowArea) * 100)}% of the window`,
+      });
+  }
+
   // 1. Horizontal overflow.
   if (document.documentElement.scrollWidth > view.width + 1)
     findings.push({

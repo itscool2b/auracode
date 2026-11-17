@@ -123,7 +123,7 @@
   --g-glass-rim: color-mix(in srgb, var(--ui-paper-ink) 14%, transparent);
   --g-glass-rim-strong: color-mix(in srgb, var(--ui-paper-ink) 22%, transparent);
   padding: var(--g-space-8) var(--g-space-12);
-  border-radius: var(--g-radius-16);
+  border-radius: var(--g-radius-18);
   background-color: var(--ui-paper);
   color: var(--ui-paper-ink);
   font-size: var(--g-text-chat);
