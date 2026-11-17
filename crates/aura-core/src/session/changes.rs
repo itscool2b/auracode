@@ -142,13 +142,7 @@ impl SessionManager {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
-        let _organization = self.shared().organization.lock().await;
-        let (chat, _) = self
-            .deps()
-            .store
-            .checkpoint_context(chat_id, None)
-            .await
-            .map_err(|error| storage_error(&error))?;
+        let (_organization, chat) = self.hold_chat_folder(chat_id, &[]).await?;
         folder_id(&chat)?;
         self.checkpoint_service()?;
         let path = chat.folder.clone();

@@ -177,7 +177,12 @@ impl SessionManager {
         if !Path::new(&source).join(path).is_file() {
             return Err(missing());
         }
-        let _organization = self.shared().organization.lock().await;
+        // Saving the folder's setup orders behind other changes to this folder only.
+        let _organization = self
+            .shared()
+            .organization
+            .scoped(vec![PathBuf::from(&source)])
+            .await;
         let read = |save| crate::chatstore::worktree_setup::Command {
             chat_id: String::new(),
             source: source.clone(),

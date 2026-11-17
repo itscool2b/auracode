@@ -382,7 +382,8 @@ impl SessionManager {
         token: &str,
         shell: ProjectShell,
     ) -> Result<ProjectTerminalPlan, SessionError> {
-        let _organization = self.shared().organization.lock().await;
+        // Behind changes to this chat's folder only; consuming the review checks the folder again.
+        let (_organization, _) = self.hold_chat_folder(chat_id, &[]).await?;
         let prepared = self.consume_project_tools(chat_id, token).await?;
         let shell = prepared
             .shells
@@ -441,7 +442,7 @@ impl SessionManager {
         token: &str,
         editor: ProjectEditor,
     ) -> Result<EditorOpen, SessionError> {
-        let _organization = self.shared().organization.lock().await;
+        // Opening an editor changes nothing, so it waits for no other change.
         let prepared = self.consume_project_tools(chat_id, token).await?;
         let gone = || {
             invalid("This editor is no longer detected. Install it or open the folder manually.")
@@ -497,7 +498,7 @@ impl SessionManager {
             .rt
             .spawn(async move {
                 let _admission = admission;
-                let _organization = manager.shared().organization.lock().await;
+                let (_organization, _) = manager.hold_chat_folder(&chat_id, &[]).await?;
                 let chat = manager.git_chat(&chat_id).await?;
                 let _reservation = manager
                     .reserve_git_folders(vec![chat.folder.clone()])

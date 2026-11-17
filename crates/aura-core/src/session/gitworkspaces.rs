@@ -37,6 +37,16 @@ fn invalid(message: impl Into<String>) -> SessionError {
     SessionError::Organization(message.into())
 }
 
+/// `chat`, when it runs on this device: Git worktrees are local.
+fn native_git(chat: ChatRecord) -> Result<ChatRecord, SessionError> {
+    if chat.agent_host != aura_protocol::agents::AgentHost::Native {
+        return Err(invalid(
+            "Git worktrees are supported only on this device's native host.",
+        ));
+    }
+    Ok(chat)
+}
+
 impl SessionManager {
     pub async fn profile_worktrees(
         &self,
@@ -133,10 +143,16 @@ impl SessionManager {
         let id = id.to_owned();
         let token = token.to_owned();
         self.deps().rt.spawn(async move {
-            let _organization=manager.shared().organization.lock().await;
             let service=manager.worktrees()?;
-            let record=service.profile_record(&id).await.map_err(|error|invalid(error.to_string()))?;
-            let folders=if recreate {service.recreate_folders(&record.chat_id,&id).await}else{service.recovery_folders(&record.chat_id,&id).await}.map_err(|error|invalid(error.to_string()))?;
+            let read = (Arc::clone(&service), id.clone());
+            let (_organization, (record, folders)) = manager.hold_folders(move || {
+                let (service, id) = read.clone();
+                Box::pin(async move {
+                    let record=service.profile_record(&id).await.map_err(|error|invalid(error.to_string()))?;
+                    let folders=if recreate {service.recreate_folders(&record.chat_id,&id).await}else{service.recovery_folders(&record.chat_id,&id).await}.map_err(|error|invalid(error.to_string()))?;
+                    Ok((folders.clone(), (record, folders)))
+                })
+            }).await?;
             let _reservations=manager.reserve_git_folders(folders).await?;
             let result=if recreate {service.recreate_apply(&record.chat_id,&id,&token).await}else{service.recovery_apply(&record.chat_id,&id,&token).await}.map_err(|error|invalid(error.to_string()))?;
             if recreate && result.error.is_none() {
@@ -207,12 +223,9 @@ impl SessionManager {
         let chat_id = chat_id.to_owned();
         let token = token.to_owned();
         self.deps().rt.spawn(async move {
-            let _organization = manager.shared().organization.lock().await;
             manager.git_chat(&chat_id).await?;
             let service = manager.worktrees()?;
-            let records = service.list(&chat_id).await.map_err(|error|invalid(error.to_string()))?;
-            let folders = records.into_iter().filter(|record|record.state == aura_protocol::git::WorktreeState::Ready)
-                .flat_map(|record|[PathBuf::from(record.source), PathBuf::from(record.path)]).collect();
+            let (_organization, folders) = manager.hold_ready_worktrees(&service, &chat_id).await?;
             let _reservations = manager.reserve_git_folders(folders).await?;
             service.pull_request_apply(&chat_id, &token).await.map_err(|error|invalid(error.to_string()))
         }).await.map_err(|_| invalid("The publishing task ended unexpectedly. Refresh GitHub to check the branch and pull request before retrying."))?
@@ -228,18 +241,41 @@ impl SessionManager {
     }
 
     pub(super) async fn git_chat(&self, chat_id: &str) -> Result<ChatRecord, SessionError> {
-        let (chat, _) = self
-            .deps()
-            .store
-            .checkpoint_context(chat_id, None)
-            .await
-            .map_err(|error| storage_error(&error))?;
-        if chat.agent_host != aura_protocol::agents::AgentHost::Native {
-            return Err(invalid(
-                "Git worktrees are supported only on this device's native host.",
-            ));
-        }
-        Ok(chat)
+        native_git(self.chat_record(chat_id).await?)
+    }
+
+    /// Holds the chat's folder for a Git change, with the chat as it is once held.
+    async fn hold_git_chat(
+        &self,
+        chat_id: &str,
+    ) -> Result<(super::folder_locks::FolderGuard, ChatRecord), SessionError> {
+        let (guard, chat) = self.hold_chat_folder(chat_id, &[]).await?;
+        Ok((guard, native_git(chat)?))
+    }
+
+    /// Holds the source and folder of every ready worktree the chat owns, which its worktree
+    /// actions reserve, conservatively, though each binds to one record.
+    async fn hold_ready_worktrees(
+        &self,
+        service: &Arc<crate::gitworkspaces::GitWorkspaces>,
+        chat_id: &str,
+    ) -> Result<(super::folder_locks::FolderGuard, Vec<PathBuf>), SessionError> {
+        let read = (Arc::clone(service), chat_id.to_owned());
+        self.hold_folders(move || {
+            let (service, chat_id) = read.clone();
+            Box::pin(async move {
+                let folders: Vec<PathBuf> = service
+                    .list(&chat_id)
+                    .await
+                    .map_err(|error| invalid(error.to_string()))?
+                    .into_iter()
+                    .filter(|record| record.state == aura_protocol::git::WorktreeState::Ready)
+                    .flat_map(|record| [PathBuf::from(record.source), PathBuf::from(record.path)])
+                    .collect();
+                Ok((folders.clone(), folders))
+            })
+        })
+        .await
     }
 
     /// Reviews committing chosen files of the chat's folder as they are now.
@@ -267,8 +303,7 @@ impl SessionManager {
         self.deps()
             .rt
             .spawn(async move {
-                let _organization = manager.shared().organization.lock().await;
-                let chat = manager.git_chat(&chat_id).await?;
+                let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
                 let _reservations = manager
                     .reserve_git_folders(vec![chat.folder.clone()])
                     .await?;
@@ -308,8 +343,7 @@ impl SessionManager {
         self.deps()
             .rt
             .spawn(async move {
-                let _organization = manager.shared().organization.lock().await;
-                let chat = manager.git_chat(&chat_id).await?;
+                let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
                 let _reservations = manager.reserve_git_folders(vec![chat.folder.clone()]).await?;
                 manager
                     .worktrees()?
@@ -363,8 +397,7 @@ impl SessionManager {
         self.deps()
             .rt
             .spawn(async move {
-                let _organization = manager.shared().organization.lock().await;
-                let chat = manager.git_chat(&chat_id).await?;
+                let (_organization, chat) = manager.hold_git_chat(&chat_id).await?;
                 let _reservations = manager.reserve_git_folders(vec![chat.folder]).await?;
                 let mut result = manager
                     .worktrees()?
@@ -409,16 +442,11 @@ impl SessionManager {
         // A dropped IPC reply does not release reservations while the owned Git command runs.
         // The task finishes journaling success or recovery before releasing actors and folders.
         self.deps().rt.spawn(async move {
-            let _organization=manager.shared().organization.lock().await;
             manager.git_chat(&chat_id).await?;
             let service=manager.worktrees()?;
-            let records=service.list(&chat_id).await.map_err(|error|invalid(error.to_string()))?;
-            let mut folders=Vec::new();
             // Conservatively reserve every active worktree owned by this chat as well as sources.
             // The service still binds the token to one exact record before mutation.
-            for record in records.into_iter().filter(|record|record.state==aura_protocol::git::WorktreeState::Ready) {
-                folders.push(PathBuf::from(record.source));folders.push(PathBuf::from(record.path));
-            }
+            let (_organization, folders) = manager.hold_ready_worktrees(&service, &chat_id).await?;
             let _reservations=manager.reserve_git_folders(folders).await?;
             service.action_apply(&chat_id,&token).await.map_err(|error|invalid(error.to_string()))
         }).await.map_err(|_|invalid("The Git task ended unexpectedly. Review its recovery record before trying again."))?
@@ -548,11 +576,17 @@ impl SessionManager {
         let worktree_id = worktree_id.to_owned();
         let token = token.to_owned();
         self.deps().rt.spawn(async move {
-            let _organization = manager.shared().organization.lock().await;
             manager.git_chat(&chat_id).await?;
             let service = manager.worktrees()?;
-            let folders = service.recovery_folders(&chat_id, &worktree_id).await
-                .map_err(|error| invalid(error.to_string()))?;
+            let read = (Arc::clone(&service), chat_id.clone(), worktree_id.clone());
+            let (_organization, folders) = manager.hold_folders(move || {
+                let (service, chat_id, worktree_id) = read.clone();
+                Box::pin(async move {
+                    let folders = service.recovery_folders(&chat_id, &worktree_id).await
+                        .map_err(|error| invalid(error.to_string()))?;
+                    Ok((folders.clone(), folders))
+                })
+            }).await?;
             let _reservations = manager.reserve_git_folders(folders).await?;
             service.recovery_apply(&chat_id, &worktree_id, &token).await
                 .map_err(|error| invalid(error.to_string()))
@@ -585,11 +619,17 @@ impl SessionManager {
         let worktree_id = worktree_id.to_owned();
         let token = token.to_owned();
         self.deps().rt.spawn(async move {
-            let _organization = manager.shared().organization.lock().await;
             manager.git_chat(&chat_id).await?;
             let service = manager.worktrees()?;
-            let folders = service.recreate_folders(&chat_id, &worktree_id).await
-                .map_err(|error| invalid(error.to_string()))?;
+            let read = (Arc::clone(&service), chat_id.clone(), worktree_id.clone());
+            let (_organization, folders) = manager.hold_folders(move || {
+                let (service, chat_id, worktree_id) = read.clone();
+                Box::pin(async move {
+                    let folders = service.recreate_folders(&chat_id, &worktree_id).await
+                        .map_err(|error| invalid(error.to_string()))?;
+                    Ok((folders.clone(), folders))
+                })
+            }).await?;
             let _reservations = manager.reserve_git_folders(folders).await?;
             let result = service.recreate_apply(&chat_id, &worktree_id, &token).await
                 .map_err(|error| invalid(error.to_string()))?;
@@ -661,16 +701,18 @@ impl SessionManager {
         let chat_id = chat_id.to_owned();
         let token = token.to_owned();
         self.deps().rt.spawn(async move {
-            let _organization = manager.shared().organization.lock().await;
             let prepared = lock(&manager.shared().continuations).remove(&token)
                 .ok_or_else(|| invalid("This relocation preview expired or was already used."))?;
             if prepared.expires <= Instant::now() || prepared.apply.source_chat != chat_id {
                 return Err(invalid("This relocation preview no longer belongs to the selected chat."));
             }
             let relocation = prepared.relocation.as_ref().ok_or_else(|| invalid("This preview is not a worktree relocation."))?;
+            let (_organization, _) = manager.hold_chat_folder(
+                &chat_id, &[relocation.from.clone(), relocation.to.clone()],
+            ).await?;
             let (record, destination) = manager.worktrees()?.relocation_target(&chat_id, &relocation.record.id, relocation.destination)
                 .await.map_err(|error| invalid(error.to_string()))?;
-            if record != relocation.record || destination != relocation.to {
+            if !crate::gitworkspaces::unchanged_since_review(&record, &relocation.record) || destination != relocation.to {
                 return Err(invalid("The worktree changed after relocation preview. Review it again."));
             }
             // Other chats are reserved here. Continue serializes the moving chat's own admission

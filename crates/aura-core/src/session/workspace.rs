@@ -156,40 +156,39 @@ impl SessionManager {
         request: ChatMove,
     ) -> Result<WorkspaceChat, SessionError> {
         bounded(&request.project_id, "Project ID", 128)?;
-        let _guard = self.shared().organization.lock().await;
+        bounded(chat_id, "Chat ID", 128)?;
+        // The chat's folder and the destination, each read again once held: a busy check made
+        // under them stays true until the move is saved.
+        let read = (self.clone(), chat_id.to_owned(), request.folder_id.clone());
+        let (_organization, (current, destination)) = self
+            .hold_folders(move || {
+                let (manager, chat_id, folder_id) = read.clone();
+                Box::pin(async move {
+                    let current = manager
+                        .chat_record(&chat_id)
+                        .await
+                        .map_err(|_| missing())?
+                        .folder;
+                    let destination = match &folder_id {
+                        Some(folder_id) => Some(manager.chat_create_preview(folder_id).await?),
+                        None => None,
+                    };
+                    let mut folders = vec![current.clone()];
+                    if let Some(preview) = &destination {
+                        folders.push(PathBuf::from(usable(&preview.folder)?));
+                    }
+                    Ok((folders, (current, destination)))
+                })
+            })
+            .await?;
         let mut preserves_folder = true;
-        if let Some(folder_id) = &request.folder_id {
-            let preview = self.chat_create_preview(folder_id).await?;
+        if let Some(preview) = destination {
             if preview.folder.project_id != request.project_id {
                 return Err(invalid(
                     "The folder does not belong to the destination project.",
                 ));
             }
             let destination = PathBuf::from(usable(&preview.folder)?);
-            let current = self
-                .deps()
-                .store
-                .chats()
-                .await
-                .map_err(|error| storage_error(&error))?
-                .into_iter()
-                .find(|chat| chat.id == chat_id)
-                .map(|chat| chat.folder);
-            // Archived chats are absent from the legacy list, so consult the complete workspace.
-            let current = match current {
-                Some(path) => path,
-                None => self
-                    .workspace_snapshot(WorkspaceFilter {
-                        include_archived: true,
-                        project_id: None,
-                    })
-                    .await?
-                    .chats
-                    .into_iter()
-                    .find(|chat| chat.chat.id == chat_id)
-                    .map(|chat| PathBuf::from(chat.chat.folder))
-                    .ok_or_else(missing)?,
-            };
             preserves_folder = tokio::task::spawn_blocking(move || {
                 live::normalize_path(current) == live::normalize_path(destination)
             })
@@ -263,8 +262,18 @@ impl SessionManager {
         if self.deps().detector.agent(&request.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(request.agent_id));
         }
-        let _guard = self.shared().organization.lock().await;
-        let preview = self.chat_create_preview(&request.folder_id).await?;
+        // Creates in one folder go one at a time, so a second cannot pass the busy check before
+        // the first one's agent counts; other folders' creates go at once.
+        let read = (self.clone(), request.folder_id.clone());
+        let (_organization, preview) = self
+            .hold_folders(move || {
+                let (manager, folder_id) = read.clone();
+                Box::pin(async move {
+                    let preview = manager.chat_create_preview(&folder_id).await?;
+                    Ok((vec![PathBuf::from(usable(&preview.folder)?)], preview))
+                })
+            })
+            .await?;
         let path = usable(&preview.folder)?;
         checked_folder(path).await?;
         if !request.allow_busy_folder && !preview.busy_chats.is_empty() {

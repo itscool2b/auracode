@@ -54,6 +54,7 @@ pub mod time;
 pub mod uninstall;
 
 mod fsutil;
+mod keyed_lock;
 
 pub use error::{CoreError, InUseReason, LinkProblem, Result};
 

@@ -140,6 +140,22 @@ pub(super) async fn inspect(git: &Git, folder: &Path) -> Result<Inspection> {
     })
 }
 
+/// The canonical Git common directory of the repository `folder` is in: one name for a repository
+/// and every worktree of it. `None` when Git cannot say (no repository, a missing folder).
+pub(super) async fn common_dir(git: &Git, folder: &Path) -> Option<PathBuf> {
+    let folder = folder.canonicalize().ok()?;
+    let output = git
+        .output(&folder, args(&["rev-parse", "--git-common-dir"]), 8192)
+        .await
+        .ok()?;
+    if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) {
+        return None;
+    }
+    absolute(&folder, text(&output.stdout).ok()?)
+        .canonicalize()
+        .ok()
+}
+
 fn absolute(root: &Path, value: String) -> PathBuf {
     let path = PathBuf::from(value);
     if path.is_absolute() {

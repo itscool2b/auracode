@@ -45,7 +45,7 @@ impl SessionManager {
                     "Save a Run command in this folder's setup first.".into(),
                 )
             })?;
-        let _organization = self.shared().organization.lock().await;
+        let (_organization, _) = self.hold_chat_folder(chat_id, &[]).await?;
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }

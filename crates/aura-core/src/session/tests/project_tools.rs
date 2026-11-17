@@ -305,3 +305,134 @@ async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_thro
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }
+
+/// Runs Git in `cwd` for a fixture.
+async fn fixture_git(cwd: &Path, args: &[&str]) {
+    use aura_process::{HelperEnv, HelperSpec, LeftoverRegistry, find_exe, run_helper};
+    let vars = aura_process::process_env();
+    let git = find_exe("git", &vars).expect("Git is required for this fixture");
+    let output = run_helper(
+        &LeftoverRegistry::disabled(),
+        HelperSpec {
+            program: git,
+            args: args.iter().map(Into::into).collect(),
+            cwd: cwd.to_path_buf(),
+            env: HelperEnv::Resolved(Arc::new(ResolvedEnv {
+                vars,
+                source: EnvSource::Fallback {
+                    reason: "push fixture".into(),
+                },
+                warnings: vec![],
+                resolved_at_ms: 0,
+            })),
+            set: vec![],
+            new_session: true,
+            timeout: Duration::from_secs(15),
+            max_stdout: 8192,
+        },
+    )
+    .await
+    .expect("fixture Git");
+    assert_eq!(
+        output.exit.and_then(|exit| exit.code),
+        Some(0),
+        "{}",
+        output.stderr_tail
+    );
+}
+
+#[tokio::test]
+async fn a_terminal_opens_while_another_folder_pushes() {
+    let driver = |native: &str| {
+        ScriptedDriver::new(vec![
+            ready_step(native),
+            Step::Expect(CommandMatch::Shutdown),
+            Step::Exit(DriverExit::Closed),
+        ])
+        .0
+    };
+    let mut rig = rig(
+        vec![driver("pushing"), driver("elsewhere")],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    super::worktree_guards::enable_worktree_fixture(&mut rig).await;
+    let inner = Arc::get_mut(&mut rig.manager.inner).unwrap();
+    Arc::get_mut(&mut inner.shared).unwrap().deps.env = EnvResolver::fixed(ResolvedEnv {
+        vars: aura_process::process_env(),
+        source: EnvSource::Fallback {
+            reason: "metadata-only terminal fixture".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let remote = rig._dir.path().join("remote.git");
+    fixture_git(
+        rig._dir.path(),
+        &["init", "--bare", "-b", "main", remote.to_str().unwrap()],
+    )
+    .await;
+    fixture_git(
+        &rig.folder,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    )
+    .await;
+    let other_folder = rig._dir.path().join("other");
+    std::fs::create_dir(&other_folder).unwrap();
+    let pushing = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    let elsewhere = rig
+        .manager
+        .create_chat("mock", &other_folder)
+        .await
+        .unwrap();
+    status(&rig, &pushing.id, SessionStatus::Ready).await;
+    status(&rig, &elsewhere.id, SessionStatus::Ready).await;
+    rig.manager.stop(&pushing.id).await.unwrap();
+    eventually("stopped", || {
+        !rig.manager.shared().live.contains(&pushing.id)
+    })
+    .await;
+    let preview = rig
+        .manager
+        .git_push_preview(&pushing.id)
+        .await
+        .expect("push review");
+    // The push is slow (a large upload, a slow network): it holds its repository meanwhile.
+    let slow = rig
+        .manager
+        .worktrees()
+        .unwrap()
+        .hold_repository_for_test(&rig.folder)
+        .await;
+    let push = tokio::spawn({
+        let manager = rig.manager.clone();
+        let (chat, token) = (pushing.id.clone(), preview.token.clone());
+        async move { manager.git_push_apply(&chat, &token).await }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!push.is_finished(), "the push is under way");
+    let quick = Duration::from_secs(5);
+    let review = tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.id))
+        .await
+        .expect("project tools answer at once")
+        .expect("review");
+    let shell = review.shells[0].id;
+    let plan = tokio::time::timeout(
+        quick,
+        rig.manager
+            .prepare_project_terminal(&elsewhere.id, &review.token, shell),
+    )
+    .await
+    .expect("a terminal in another folder opens at once")
+    .expect("terminal");
+    assert_eq!(plan.spec.folder, other_folder.canonicalize().unwrap());
+    drop(plan);
+    drop(slow);
+    tokio::time::timeout(quick, push)
+        .await
+        .expect("the push finishes")
+        .unwrap()
+        .expect("pushed");
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert!(rig.store.shutdown(Duration::from_secs(5)).await);
+}

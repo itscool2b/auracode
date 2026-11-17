@@ -1079,3 +1079,109 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
         None
     );
 }
+
+#[tokio::test]
+async fn a_slow_worktree_creation_does_not_delay_another_folder() {
+    let mut rig = rig(
+        vec![
+            idle_driver("elsewhere"),
+            idle_driver("worktree"),
+            idle_driver("same-folder"),
+        ],
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    enable_worktree_fixture(&mut rig).await;
+    let source = project(&rig, &rig.folder).await;
+    let other_folder = rig._dir.path().join("other project");
+    std::fs::create_dir(&other_folder).unwrap();
+    let other = project(&rig, &other_folder).await;
+    let preview = plan(&rig, input(&source)).await;
+    // `git worktree add` is slow (a large repository, a slow disk): it holds the repository.
+    let service = rig.manager.worktrees().unwrap();
+    let slow = service.hold_repository_for_test(&rig.folder).await;
+    let creating = tokio::spawn({
+        let manager = rig.manager.clone();
+        let token = preview.token.clone();
+        async move { manager.worktree_chat_apply(&token).await }
+    });
+    // A chat in the same folder waits its turn: busy-folder checks stay in arrival order.
+    let same_folder = tokio::spawn({
+        let manager = rig.manager.clone();
+        let folder_id = source.folders[0].id.clone();
+        async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            manager
+                .chat_project_create(ProjectChatCreate {
+                    agent_id: "mock".into(),
+                    folder_id,
+                    allow_busy_folder: false,
+                })
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(!creating.is_finished(), "the creation waits on Git");
+    // Everything about another folder goes on meanwhile.
+    let quick = Duration::from_secs(5);
+    let elsewhere = tokio::time::timeout(
+        quick,
+        rig.manager.chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: other.folders[0].id.clone(),
+            allow_busy_folder: false,
+        }),
+    )
+    .await
+    .expect("a chat in another project starts at once")
+    .expect("created");
+    status(&rig, &elsewhere.chat.id, SessionStatus::Ready).await;
+    tokio::time::timeout(quick, rig.manager.workspace_snapshot(Default::default()))
+        .await
+        .expect("the sidebar answers at once")
+        .expect("snapshot");
+    tokio::time::timeout(quick, rig.manager.chat_create_preview(&other.folders[0].id))
+        .await
+        .expect("New chat's folder check answers at once")
+        .expect("preview");
+    tokio::time::timeout(quick, rig.manager.profile_worktrees(None))
+        .await
+        .expect("retained worktrees answer at once")
+        .expect("worktrees");
+    let review = tokio::time::timeout(quick, rig.manager.project_tools_review(&elsewhere.chat.id))
+        .await
+        .expect("project tools answer at once");
+    if let Ok(review) = review
+        && let Some(shell) = review.shells.first()
+    {
+        drop(
+            tokio::time::timeout(
+                quick,
+                rig.manager
+                    .prepare_project_terminal(&elsewhere.chat.id, &review.token, shell.id),
+            )
+            .await
+            .expect("a terminal in another project opens at once"),
+        );
+    }
+    assert!(
+        !same_folder.is_finished(),
+        "the same folder's chat waits its turn"
+    );
+    drop(slow);
+    let made = tokio::time::timeout(quick, creating)
+        .await
+        .expect("the creation finishes once Git does")
+        .unwrap()
+        .expect("worktree chat");
+    assert_eq!(made.worktree.state, WorktreeState::Ready);
+    let direct = tokio::time::timeout(quick, same_folder)
+        .await
+        .expect("the waiting chat follows")
+        .unwrap()
+        .expect("direct chat");
+    assert_ne!(
+        canonical(&direct.chat.folder),
+        canonical(&made.chat.chat.folder)
+    );
+}

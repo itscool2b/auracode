@@ -24,6 +24,7 @@ mod config_vendor;
 mod conversation;
 mod editors;
 mod file_open;
+mod folder_locks;
 mod folder_resolution;
 mod gitworkspaces;
 mod images;
@@ -329,8 +330,9 @@ pub(crate) struct Shared {
     pub(crate) lost_writes: AtomicU64,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
-    /// Serializes busy-folder preflight and project chat creation/moves.
-    organization: tokio::sync::Mutex<()>,
+    /// Orders busy-folder preflight, chat creation and moves, and Git and folder changes: per
+    /// folder, so one folder's slow change never holds up another's (`folder_locks.rs`).
+    organization: folder_locks::FolderLocks,
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
     removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
@@ -495,7 +497,7 @@ impl SessionManager {
                     plugin_refresh: tokio::sync::watch::channel(Default::default()).0,
                     lost_writes: AtomicU64::new(0),
                     folders: Mutex::new(HashMap::new()),
-                    organization: tokio::sync::Mutex::new(()),
+                    organization: folder_locks::FolderLocks::new(),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     removals: Mutex::new(HashMap::new()),

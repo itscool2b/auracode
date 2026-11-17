@@ -126,7 +126,8 @@ impl SessionManager {
             .rt
             .spawn(async move {
                 let _lifetime = lifetime;
-                let _organization = manager.shared().organization.lock().await;
+                // Removal can touch any folder, so it waits for every change in flight.
+                let _organization = manager.shared().organization.exclusive().await;
                 let _maintenance = manager
                     .shared()
                     .live
