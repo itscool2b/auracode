@@ -525,6 +525,44 @@ async fn a_commit_beside_an_idle_agent_holds_its_new_turns_until_it_ends() {
     }
 }
 
+/// A quiet change refused by a working agent names that agent only: an idle one beside it may stay,
+/// so "Stop these chats" never stops it for nothing.
+#[tokio::test]
+async fn a_quiet_change_names_only_the_chats_in_its_way() {
+    let (idle, idle_handle) = ScriptedDriver::new(vec![ready_step("idle")]);
+    let (work, work_handle) = working_driver("work");
+    let rig = rig(vec![idle, work], WriterConfig::STANDARD, Knobs::STANDARD);
+    let idle = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("idle chat");
+    status(&rig, &idle.id, SessionStatus::Ready).await;
+    let busy = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("working chat");
+    status(&rig, &busy.id, SessionStatus::Ready).await;
+    rig.manager
+        .send(&busy.id, "keep working".into())
+        .await
+        .expect("send");
+    work_handle.wait_for(CommandMatch::Prompt).await;
+    match rig.manager.hold_quiet(vec![rig.folder.clone()]).await {
+        Err(SessionError::FolderBusy { message, blockers }) => {
+            let named: Vec<_> = blockers.chats.iter().map(|chat| &chat.chat_id).collect();
+            assert_eq!(named, [&busy.id], "only the working chat is in the way");
+            assert_eq!(blockers.terminals, 0);
+            assert!(message.contains("is working in this folder"), "{message}");
+        }
+        Err(other) => panic!("expected the working chat to be named, got {other}"),
+        Ok(_) => panic!("a quiet change must wait for a running turn"),
+    }
+    assert!(idle_handle.commands().is_empty(), "the idle agent runs on");
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 /// A start held back by a quiet change goes only if something still wants it: Stop, or the message
 /// it was for being discarded, leaves the agent stopped when the change ends.
 #[tokio::test]

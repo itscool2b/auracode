@@ -57,7 +57,8 @@ impl SessionManager {
             if self.shared().live.quiescing_now() {
                 return Err(SessionError::ShuttingDown);
             }
-            return Err(self.folder_busy(&folders, Vec::new(), None).await);
+            // Only a change that rewrites the folder keeps a quiet one out.
+            return Err(self.quiet_busy(Vec::new(), true).await);
         }
         held.folders.clone_from(&folders);
         chats.extend(
@@ -89,9 +90,24 @@ impl SessionManager {
         }
         if !working.is_empty() {
             drop(held);
-            return Err(self.folder_busy(&folders, working, None).await);
+            return Err(self.quiet_busy(working, false).await);
         }
         Ok(held)
+    }
+
+    /// The refusal of a quiet change, naming only what blocks it: the chats working there
+    /// (`working`), or another change rewriting the folders (`changing`). Idle agents and
+    /// project terminals may stay beside a quiet change, so they are not named: "Stop these
+    /// chats" stops only what is in its way.
+    async fn quiet_busy(&self, mut working: Vec<String>, changing: bool) -> SessionError {
+        working.sort();
+        working.dedup();
+        let blockers = FolderBlockers {
+            chats: self.blockers(working).await,
+            terminals: 0,
+        };
+        let message = busy_message(&blockers, changing);
+        SessionError::FolderBusy { message, blockers }
     }
 
     /// Holds `folders` for an exclusive change: the agents there that are not working are
