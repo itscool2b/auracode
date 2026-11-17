@@ -809,6 +809,10 @@ pub(super) fn prepare_for_agent(browser: &Arc<Browser>, tab_id: &str) -> Result<
 /// The window was minimized or restored: the page over the panel follows it.
 pub(crate) fn window_shown(shown: bool) {
     let placed = HOST.with_borrow_mut(|host| {
+        // Windows reports this on every resize and focus change: only a real change moves a page.
+        if host.window_hidden != shown {
+            return None;
+        }
         host.window_hidden = !shown;
         host.placed.clone()
     });

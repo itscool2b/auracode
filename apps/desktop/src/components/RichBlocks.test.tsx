@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { highlightCode, languageOf } from "../lib/highlight";
 import { parseBlock, parseInline, plainText } from "../lib/markdown";
-import { CodeBlock, highlightNodes } from "./RichBlocks";
+import { CodeBlock, highlightNodes, keepsHighlight, STREAMING_HIGHLIGHT_MS } from "./RichBlocks";
 
 describe("math in answers", () => {
   it("reads $…$ and \\(…\\) as inline math, by Pandoc's rule for dollars", () => {
@@ -76,5 +76,22 @@ describe("code colours", () => {
     const plain = renderToStaticMarkup(<CodeBlock lang="" code="just text" closed />);
     expect(plain).not.toContain("hljs");
     expect(plain).toContain("just text");
+  });
+  it("colours a streaming block at most every 200 ms, and a closed one at once", () => {
+    const last = { code: "fn main() {", lang: "rust", at: 1000 };
+    const grown = "fn main() {\n    println!";
+    // Still streaming, only grew, coloured a moment ago: the new text shows plain for now.
+    expect(keepsHighlight(last, grown, "rust", false, 1000 + STREAMING_HIGHLIGHT_MS - 1)).toBe(
+      true,
+    );
+    // Rested long enough, closed, another language, or rewritten: colour it again.
+    expect(keepsHighlight(last, grown, "rust", false, 1000 + STREAMING_HIGHLIGHT_MS)).toBe(false);
+    expect(keepsHighlight(last, grown, "rust", true, 1001)).toBe(false);
+    expect(keepsHighlight(last, grown, "python", false, 1001)).toBe(false);
+    expect(keepsHighlight(last, "fn other() {", "rust", false, 1001)).toBe(false);
+    expect(keepsHighlight(null, grown, "rust", false, 1001)).toBe(false);
+    // A first render colours everything, streaming or not.
+    const open = renderToStaticMarkup(<CodeBlock lang="rust" code="fn main() {" closed={false} />);
+    expect(open).toContain("hljs-keyword");
   });
 });
