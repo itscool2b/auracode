@@ -89,6 +89,7 @@ export function ChatsScreen({
   active = true,
   workspace,
   openChatRequest,
+  newChatRequest,
   setup = setupApi,
   memory = projectMemoryApi,
   onOpenMemory,
@@ -109,6 +110,8 @@ export function ChatsScreen({
   readonly active?: boolean;
   readonly workspace?: WorkspaceStore;
   readonly openChatRequest?: { id: string };
+  /** Opens New chat with this agent chosen (setup's "Explore the local demo" asks for the Demo agent). */
+  readonly newChatRequest?: { id: string; agent: string };
   /** Settings' saved preferences: New chat starts with the default agent selected. */
   readonly setup?: SetupApi;
   /** Project memory: an agent's direct edit shows a banner with Review and Undo. */
@@ -241,6 +244,17 @@ export function ChatsScreen({
     preselected.current.add(draft);
     if (agent !== null) draft.chooseAgent(agent);
   }, [selected, draft, defaultAgent, snapshot.agents]);
+  // Setup's demo: New chat opens with the Demo agent chosen, which the default never replaces.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only a new request opens New chat.
+  useEffect(() => {
+    if (!newChatRequest) return;
+    const next = new NewChatDraft(transport);
+    preselected.current.add(next);
+    next.chooseAgent(newChatRequest.agent);
+    setSelected(null);
+    setComposing(true);
+    setDraft(next);
+  }, [newChatRequest]);
   // A notification's chat opens only once the lists confirm this profile has it (docs/native-shell.md).
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   useEffect(() => {

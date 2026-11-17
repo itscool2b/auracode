@@ -466,6 +466,16 @@ export function AgentRow({
       setAuth(status);
       setMessage(authText(status));
     });
+  // Sign-in is checked by itself once the agent says it can be (owner, 17 November 2026: setup's
+  // agents did not show they needed a sign-in until "Check sign-in" was found in a menu). The
+  // check runs the agent's own status command: no prompt, nothing spent.
+  const autoChecked = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: One check per installation.
+  useEffect(() => {
+    if (!maintenance?.auth_status || auth !== null || autoChecked.current === installKey) return;
+    autoChecked.current = installKey;
+    checkSignIn();
+  }, [maintenance, auth, installKey]);
   const update = () =>
     void run("update", async () => {
       setUpdateFailed(false);
@@ -648,7 +658,12 @@ export function AgentRow({
             </span>
           )}
         </button>
-        {compact ? null : (
+        {compact ? (
+          // Setup's rows keep their one action in reach: Install or Sign in without opening them.
+          primaryButton ? (
+            <div className="agent-row-actions">{primaryButton}</div>
+          ) : null
+        ) : (
           <div className="agent-row-actions">
             {primaryButton}
             {items.length ? (
@@ -715,9 +730,8 @@ export function AgentRow({
           onConnection={onConnection}
           onError={setError}
         >
-          {compact && (primaryButton || items.length) ? (
+          {compact && items.length ? (
             <div className="agent-detail-actions">
-              {primaryButton}
               {items
                 .filter((item) => !item.separator)
                 .map((item) =>
@@ -775,8 +789,10 @@ export function AgentRow({
           onClose={() => {
             setSignIn(false);
             onRefresh();
+            // Whether the sign-in took: checked at once, not left to a menu.
+            if (maintenance?.auth_status) checkSignIn();
           }}
-          onFinished={() => setMessage("Sign-in finished. Check sign-in to confirm access.")}
+          onFinished={() => setMessage("Sign-in finished.")}
         />
       ) : null}
     </li>

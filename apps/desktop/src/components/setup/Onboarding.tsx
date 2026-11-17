@@ -388,7 +388,17 @@ export function Onboarding({
                 />
                 <div className="setup-inline">
                   {installed === 0 && agentsState.agents !== null && looking === 0 ? (
-                    <button type="button" className="g-button g-button-outline" onClick={onDemo}>
+                    <button
+                      type="button"
+                      className="g-button g-button-outline"
+                      disabled={busy}
+                      onClick={() => {
+                        // Setup ends and New chat opens with the scripted Demo agent chosen.
+                        onDemo();
+                        if (saved) void run(() => apply({ type: "finish" }));
+                        else onDone();
+                      }}
+                    >
                       Explore the local demo <ArrowRight size={14} aria-hidden="true" />
                     </button>
                   ) : null}

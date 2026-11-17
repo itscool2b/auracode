@@ -117,6 +117,7 @@ export function App({
     return () => document.removeEventListener("keydown", openSettings);
   }, [view, settingsReturn]);
   const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
+  const [newChatRequest, setNewChatRequest] = useState<{ id: string; agent: string }>();
   useEffect(
     () =>
       subscribeNativeNavigation((id) => {
@@ -312,7 +313,7 @@ export function App({
           setRestartSetup(false);
           setView("chats");
         }}
-        onDemo={() => setView("diagnostics")}
+        onDemo={() => setNewChatRequest({ id: String(Date.now()), agent: "mock" })}
       />
     );
   // Settings and the Dashboard keep the chats mounted behind them: the open chat and its draft survive
@@ -325,6 +326,7 @@ export function App({
             active={view === "chats"}
             workspace={workspace}
             openChatRequest={openChatRequest}
+            newChatRequest={newChatRequest}
             app={chats}
             transport={transport}
             info={info}

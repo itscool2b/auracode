@@ -1,5 +1,5 @@
 /** Synthetic UI harness. This module is loaded only by the development preview entry point. */
-import { StrictMode, useState } from "react";
+import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentEntry, ProjectSummary, SetupSnapshot } from "../bindings";
 import { ProjectDialog } from "../components/chat/ProjectDialog";
@@ -334,6 +334,7 @@ Object.assign(window, {
 });
 
 function Preview() {
+  const demo = useRef(false);
   const [view, setView] = useState(
     mode === "agents" || mode === "agents-installing"
       ? "agents"
@@ -382,7 +383,7 @@ function Preview() {
     return (
       <main className="setup-shell">
         <h1>Local demo</h1>
-        <p>No agent process or prompt was started.</p>
+        <p>Setup finished. In the app, New chat opens with the Demo agent chosen.</p>
       </main>
     );
   return (
@@ -393,8 +394,11 @@ function Preview() {
       workspace={workspace}
       restart={restart}
       clone={clone}
-      onDone={() => setView("done")}
-      onDemo={() => setView("demo")}
+      // The demo finishes setup like Skip, so its view follows setup's own end.
+      onDone={() => setView(demo.current ? "demo" : "done")}
+      onDemo={() => {
+        demo.current = true;
+      }}
     />
   );
 }

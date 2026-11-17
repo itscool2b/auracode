@@ -611,7 +611,9 @@ export function SettingsScreen({
                 <h2 id="settings-this-device">This device</h2>
                 <div className="settings-group">
                   <Row
-                    title={info.os === "macos" ? "macOS" : "Windows"}
+                    title={
+                      info.os === "macos" ? "macOS" : info.os === "linux" ? "Linux" : "Windows"
+                    }
                     setting="This device"
                     detail={
                       <>
