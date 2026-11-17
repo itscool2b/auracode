@@ -178,6 +178,8 @@ const RESTART_INPUT = "/echo restarted by a prompt";
 
 /** The displayed prompts, including the native attachment label where one is sent. */
 export const PROMPTS = {
+  /** Typed on New chat before Create (type first): the new chat sends it as it opens. */
+  fromNewChat: "/echo Sent from New chat",
   echo: "/echo Hello from the smoke run",
   demo: "Tidy up src/main.rs",
   autoApproved: "/permission while in Full auto",
@@ -243,6 +245,7 @@ function demoTurn(prompt: string): SegmentShape {
 
 /** What each step of the chat scenario leaves in the transcript. */
 export const SEGMENTS = {
+  fromNewChat: echoTurn(PROMPTS.fromNewChat),
   echo: echoTurn(PROMPTS.echo),
   demo: demoTurn(PROMPTS.demo),
   autoApproved: turn(PROMPTS.autoApproved, "end_turn", [
@@ -292,6 +295,7 @@ export const SEGMENTS = {
  * live at its end, and what the reopened history must show again.
  */
 export const CHAT_TRANSCRIPT: readonly SegmentShape[] = [
+  SEGMENTS.fromNewChat,
   SEGMENTS.echo,
   SEGMENTS.demo,
   SEGMENTS.autoApproved,
@@ -915,10 +919,23 @@ async function chatScenario(
 
   await checks.run("create-chat", async () => {
     const started = Date.now();
+    // Type first: the words written on New chat go to the chat it makes.
+    const box = await waitFor(
+      "New chat's message box",
+      () => one("new-chat-message") as HTMLTextAreaElement | null,
+    );
+    setValue(box, PROMPTS.fromNewChat);
     chatId = await createChat();
     await waitFor("the chat list to list the chat", () => row(chatId));
     await waitStatus("ready", START_TIMEOUT_MS);
     return `chat ${chatId} opened, and its agent was ready after ${Date.now() - started} ms`;
+  });
+
+  await checks.run("first-message", async () => {
+    const ended = await waitTurnEnded(PROMPTS.fromNewChat, START_TIMEOUT_MS);
+    expectSegment(ended, echoTurn(PROMPTS.fromNewChat));
+    expectReply(ended, echoed(PROMPTS.fromNewChat));
+    return `the words typed on New chat were the new chat's first message, and the reply read "${echoed(PROMPTS.fromNewChat)}"`;
   });
 
   await checks.run("pickers", async () => {

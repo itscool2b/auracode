@@ -21,6 +21,7 @@ import { takesAccounts } from "../../lib/agentAccounts";
 import { browserPanels } from "../../lib/browser";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { FileLinkContext, type FileLinks, FileResolver } from "../../lib/chat/fileLinks";
+import { takeFirstMessage } from "../../lib/chat/firstMessage";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { queueWaitView } from "../../lib/chat/queueWait";
 import { useReviewComments } from "../../lib/chat/review";
@@ -28,6 +29,7 @@ import { newestTurnKey, shownTasks, taskDisplay, tasksByToolCall } from "../../l
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { chatInterfaces, terminalSupported } from "../../lib/chatInterface";
+import { composerDraft } from "../../lib/composerDraft";
 import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { useMediaQuery } from "../../lib/hooks";
@@ -121,6 +123,15 @@ export function ChatView({
   readonly onManageAccounts?: () => void;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
+  // New chat's first message (type first): sent once as the chat opens, as its message box would
+  // send it. Words that cannot go wait in the message box instead of being lost.
+  useEffect(() => {
+    const first = takeFirstMessage(chatId);
+    if (first === null) return;
+    void store.send(first).then((sent) => {
+      if (!sent) composerDraft(chatId, transport.composer).update({ text: first });
+    });
+  }, [chatId, store, transport]);
   const terminalOpen = useSyncExternalStore(
     terminals?.subscribe ?? noSubscribe,
     () => terminals?.panel(chatId).open ?? false,

@@ -60,10 +60,11 @@ pub fn watchdog(scenario: SmokeScenario) -> Duration {
 }
 
 /// The checks of the chat scenario, in the order it makes them (`lib/smokeChat.ts`).
-pub const CHAT_CHECKS: [&str; 33] = [
+pub const CHAT_CHECKS: [&str; 34] = [
     "chats-screen",
     "pick-folder",
     "create-chat",
+    "first-message",
     "pickers",
     "slash-menu",
     "echo-turn",
@@ -493,13 +494,13 @@ mod tests {
     #[test]
     fn a_failed_check_fails_the_chat_run_whatever_the_ui_says() {
         let mut report = chat_passing(SmokeScenario::Chat);
-        report.checks[5].ok = false;
-        report.checks[9].ok = false;
+        report.checks[6].ok = false;
+        report.checks[10].ok = false;
         let report = finalize(report, SmokeScenario::Chat);
         assert!(!report.ok);
         assert_eq!(
             report.errors,
-            vec!["2 of 33 checks failed: echo-turn, autonomy-ask".to_string()]
+            vec!["2 of 34 checks failed: echo-turn, autonomy-ask".to_string()]
         );
     }
 
@@ -512,7 +513,7 @@ mod tests {
         assert!(!report.ok);
         assert_eq!(
             report.errors,
-            vec!["2 of 33 checks never reported: transcript, quit-with-turn".to_string()]
+            vec!["2 of 34 checks never reported: transcript, quit-with-turn".to_string()]
         );
     }
 
@@ -611,7 +612,7 @@ mod tests {
             report.errors,
             vec![
                 "the UI did not report a smoke result within 300 seconds".to_string(),
-                "none of the 33 checks ran".to_string(),
+                "none of the 34 checks ran".to_string(),
             ]
         );
     }

@@ -561,7 +561,7 @@ export const commands = {
 /* Constants */
 export const SMOKE_AGENT_CHECKS = ["agent-available","agent-starts","agent-replies"] as const;
 
-export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pickers","slash-menu","echo-turn","demo-turn","option-change","auto-approved","autonomy-ask","permission-allow","permission-reject","permission-withdrawn","question-answer","question-dismiss","big-output","background-output","cancel-turn","queue-after-turn","queue-held-at-stop","error-card","queue-held-at-error","crash-card","queue-held-at-crash","auth-card","auth-retry","force-stop","send-starts-agent","settings-customize-light","settings-customize-dark","customize-instructions-scopes","transcript","quit-with-turn"] as const;
+export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","first-message","pickers","slash-menu","echo-turn","demo-turn","option-change","auto-approved","autonomy-ask","permission-allow","permission-reject","permission-withdrawn","question-answer","question-dismiss","big-output","background-output","cancel-turn","queue-after-turn","queue-held-at-stop","error-card","queue-held-at-error","crash-card","queue-held-at-crash","auth-card","auth-retry","force-stop","send-starts-agent","settings-customize-light","settings-customize-dark","customize-instructions-scopes","transcript","quit-with-turn"] as const;
 
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
