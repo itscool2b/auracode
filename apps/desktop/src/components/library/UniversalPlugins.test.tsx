@@ -74,10 +74,15 @@ describe("Universal plugins", () => {
     expect(html).not.toMatch(/>(Add|Remove|Install|Uninstall)/);
   });
 
-  it("keeps saved passwords to Windows, where the engine keeps them", () => {
-    const html = render({ prefs: prefs(), os: "macos", browser: store({ passwords: false }) });
-    expect(html).not.toContain("Save passwords");
-    expect(html).toContain("Browsing history");
+  it("says saved passwords are Windows only, where the engine keeps them, with no switch elsewhere", () => {
+    for (const os of ["macos", "linux"] as const) {
+      const html = render({ prefs: prefs(), os, browser: store({ passwords: false }) });
+      // The row stays, so Settings search for passwords lands on it.
+      expect(html).toContain("Save passwords");
+      expect(html).toContain("Windows only. Here the browser does not offer to save sign-ins.");
+      expect(html).not.toContain('aria-label="Save passwords"');
+      expect(html).toContain("Browsing history");
+    }
   });
 
   it("says what turning it off does, and hides its settings while off", () => {
