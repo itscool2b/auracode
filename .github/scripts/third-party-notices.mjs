@@ -318,7 +318,7 @@ export function renderText(catalogue, distribution) {
     "",
     ...(distribution === "desktop"
       ? [
-          "Start screen aircraft: the aircraft the desktop app opens on are ASCII renderings of public-domain photographs and one drawing from Wikimedia Commons (U.S. Air Force, U.S. Navy, U.S. Army Air Forces and the San Diego Air & Space Museum archive). Their sources and photographers are listed in third-party/ascii-art.md.",
+          "Start screen aircraft: the pictures of aircraft the desktop app opens on were supplied by auracode's owner. They are not covered by these notices or by any license for auracode. The files and how they were prepared are listed in third-party/ascii-art.md.",
           "",
         ]
       : []),

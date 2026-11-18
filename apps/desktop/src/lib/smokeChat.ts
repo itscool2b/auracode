@@ -699,6 +699,27 @@ async function createChat(): Promise<string> {
 }
 
 /**
+ * The start screen's picture is a file the build must carry and the WebView must decode (#143): a
+ * build without it would show only the aircraft's name.
+ */
+async function startScreenPicture(figure: HTMLElement): Promise<void> {
+  await waitFor("the start screen's picture to load", () =>
+    figure.hasAttribute("data-loaded") ? figure : null,
+  );
+  const address = figure.querySelector("image")?.getAttribute("href");
+  if (!address) throw new StepError("the start screen has no picture");
+  const picture = new Image();
+  picture.src = address;
+  try {
+    await picture.decode();
+  } catch {
+    throw new StepError(`the start screen's picture did not load: ${address}`);
+  }
+  if (picture.naturalWidth === 0 || picture.naturalHeight === 0)
+    throw new StepError(`the start screen's picture is empty: ${address}`);
+}
+
+/**
  * How New chat lists `agentId` once the agents are listed: a choice inside `new-chat-agent`, or,
  * for an agent that cannot run here, its row under Other agents with the reason.
  */
@@ -708,8 +729,10 @@ async function agentOption(agentId: string): Promise<{ disabled: boolean; text: 
     "the start screen or New chat",
     () => one("new-chat") ?? one("launch-art"),
   );
-  if (opening.dataset.testid === "launch-art")
+  if (opening.dataset.testid === "launch-art") {
+    await startScreenPicture(opening);
     await clickWhenEnabled("the sidebar's New chat", () => one("new-chat-button"));
+  }
   const form = await waitFor("the New chat screen", () => one("new-chat"));
   const value = CSS.escape(agentId);
   return waitFor(`New chat to list the agent ${agentId}`, () => {
