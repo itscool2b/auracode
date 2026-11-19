@@ -19,7 +19,7 @@ use aura_protocol::{
     workspace::WorkspaceChat,
 };
 use aura_remote::{
-    Action, Backend, BackendError, BoxFuture, ChatOptions, Choice, Config, Frames, Outcome,
+    Action, Backend, BackendError, BoxFuture, ChatOptions, Choice, Config, Frames, Look, Outcome,
     Overview, RemoteAgent, Service, Statuses,
     crypto::{self, Channel, Side},
 };
@@ -265,8 +265,12 @@ impl Backend for App {
         frames: Frames,
     ) -> BoxFuture<'a, Result<ChatAttach, BackendError>> {
         Box::pin(async move {
-            if chat_id != "c1" && chat_id != "big" {
+            if chat_id != "c1" && chat_id != "big" && chat_id != "slow" {
                 return Err(missing());
+            }
+            if chat_id == "slow" {
+                // A chat whose history takes a while to read.
+                tokio::time::sleep(Duration::from_millis(300)).await;
             }
             self.frames
                 .lock()
@@ -290,6 +294,13 @@ impl Backend for App {
                 "history": page(chat_id, items),
             }))
             .expect("attach"))
+        })
+    }
+
+    fn look(&self) -> Option<Look> {
+        Some(Look {
+            theme: "claude".into(),
+            appearance: "dark".into(),
         })
     }
 
@@ -573,8 +584,8 @@ impl Browser {
         serde_json::from_slice(&self.channel.open(sealed).expect("opens in order")).expect("json")
     }
 
-    /// Sends a request and returns its reply, setting aside events that arrive first.
-    async fn request(&mut self, relay: &mut Relay, mut body: Value) -> Value {
+    /// Sends a request without waiting for its reply, and returns its id.
+    async fn send(&mut self, relay: &mut Relay, mut body: Value) -> u32 {
         let id = self.next;
         self.next += 1;
         body["id"] = json!(id);
@@ -583,6 +594,24 @@ impl Browser {
             .seal(body.to_string().as_bytes())
             .expect("seal");
         relay.send(format!("m{} E{sealed}", self.cid)).await;
+        id
+    }
+
+    /// Sends a request and returns its reply, setting aside events that arrive first.
+    async fn request(&mut self, relay: &mut Relay, body: Value) -> Value {
+        let id = self.send(relay, body).await;
+        self.reply(relay, id).await
+    }
+
+    /// The reply to request `id`, setting aside events that arrive first.
+    async fn reply(&mut self, relay: &mut Relay, id: u32) -> Value {
+        if let Some(at) = self
+            .events
+            .iter()
+            .position(|event| event["re"] == json!(id))
+        {
+            return self.events.remove(at);
+        }
         loop {
             let frame = relay.next().await;
             if frame == format!("a{}", self.cid) {
@@ -752,7 +781,10 @@ async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
         Browser::hello(&mut relay, "aaaaaaaaaaaaaaaa", "pair", &id, &key).await;
     assert_eq!(
         ready,
-        json!({ "ev": "ready", "host_name": "Studio", "paired": false, "features": ["pickers"] })
+        json!({
+            "ev": "ready", "host_name": "Studio", "paired": false, "features": ["pickers"],
+            "look": { "theme": "claude", "appearance": "dark" },
+        })
     );
     // A pairing link opens nothing but pairing.
     let early = phone.request(&mut relay, json!({ "op": "overview" })).await;
@@ -1003,6 +1035,72 @@ async fn a_pairing_link_makes_one_device_which_then_drives_chats() {
             .expect("released")
             .contains(&owner.to_owned())
     );
+}
+
+#[tokio::test]
+async fn only_the_newest_open_or_close_decides_what_is_followed() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (mut phone, _, _) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    let owner = "auracode-remote:aaaaaaaaaaaaaaaa";
+    let following = |rig: &Rig| rig.app.frames.lock().expect("frames").contains_key(owner);
+
+    // A slow chat, then a quick one, then back to the list, without waiting in between.
+    let slow = phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "slow" }))
+        .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let quick = phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "c1" }))
+        .await;
+    let close = phone.send(&mut relay, json!({ "op": "close" })).await;
+    // The slow open had begun: it finishes. The quick one was overtaken before its turn.
+    assert_eq!(phone.reply(&mut relay, slow).await["ok"], true);
+    let overtaken = phone.reply(&mut relay, quick).await;
+    assert_eq!(overtaken["error"]["code"], "superseded", "{overtaken}");
+    assert_eq!(phone.reply(&mut relay, close).await["ok"], true);
+    // The list is what the browser shows, so nothing is followed: not the slow chat that
+    // finished opening after the close was asked for.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !following(&rig),
+        "a chat is followed after the browser closed it"
+    );
+
+    // Two opens in a row: the second one is followed, whichever finishes reading first.
+    let first = phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "slow" }))
+        .await;
+    let second = phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "c1" }))
+        .await;
+    let first = phone.reply(&mut relay, first).await;
+    assert!(
+        first["ok"] == true || first["error"]["code"] == "superseded",
+        "{first}"
+    );
+    let second = phone.reply(&mut relay, second).await;
+    assert_eq!(second["ok"], true, "{second}");
+    assert_eq!(second["data"]["snapshot"]["chat"]["id"], "c1");
+    let frames = rig
+        .app
+        .frames
+        .lock()
+        .expect("frames")
+        .get(owner)
+        .cloned()
+        .expect("following");
+    assert!(frames(&EventBatch {
+        chat_id: "c1".into(),
+        seq_start: 5,
+        events: vec![AuraEvent::MessageDelta {
+            message_id: "m9".into(),
+            text: "Live".into()
+        }],
+    }));
+    let live = phone.event(&mut relay).await;
+    assert_eq!(live["ev"], "frame");
+    assert_eq!(live["batch"]["chat_id"], "c1");
 }
 
 #[tokio::test]

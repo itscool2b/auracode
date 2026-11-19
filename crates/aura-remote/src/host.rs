@@ -812,3 +812,122 @@ impl Serving {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use aura_protocol::{AuraEvent, EventBatch};
+
+    use super::{MERGED_FRAME, Out, merge};
+
+    fn frame(cid: &str, chat: &str, seq_start: u32, texts: &[&str], backlog: usize) -> Out {
+        Out::Frame {
+            cid: cid.into(),
+            batch: EventBatch {
+                chat_id: chat.into(),
+                seq_start,
+                events: texts
+                    .iter()
+                    .map(|text| AuraEvent::MessageDelta {
+                        message_id: "m1".into(),
+                        text: (*text).into(),
+                    })
+                    .collect(),
+            },
+            json: Some("alone".into()),
+            backlog,
+        }
+    }
+
+    /// Each item as (browser, chat, first seq, texts, written alone) or a marker for the rest.
+    fn read(items: &[Out]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| match item {
+                Out::Frame {
+                    cid,
+                    batch,
+                    json,
+                    backlog,
+                } => {
+                    let texts: Vec<String> = batch
+                        .events
+                        .iter()
+                        .map(|event| match event {
+                            AuraEvent::MessageDelta { text, .. } => text.clone(),
+                            _ => "?".into(),
+                        })
+                        .collect();
+                    format!(
+                        "{cid} {} {} {} {backlog}{}",
+                        batch.chat_id,
+                        batch.seq_start,
+                        texts.join(""),
+                        if json.is_some() { " alone" } else { "" }
+                    )
+                }
+                Out::Sealed { cid, json, .. } => format!("sealed {cid} {json}"),
+                Out::Drop { cid } => format!("drop {cid}"),
+                _ => "other".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_burst_of_frames_reads_as_one_in_order() {
+        let merged = merge(vec![
+            frame("a", "c1", 5, &["Hel"], 10),
+            frame("a", "c1", 6, &["lo", " th"], 10),
+            frame("a", "c1", 8, &["ere"], 10),
+        ]);
+        assert_eq!(read(&merged), ["a c1 5 Hello there 30"]);
+    }
+
+    #[test]
+    fn anything_between_frames_keeps_them_apart_and_in_order() {
+        let merged = merge(vec![
+            frame("a", "c1", 5, &["one"], 10),
+            Out::Sealed {
+                cid: "a".into(),
+                json: "reply".into(),
+                backlog: 0,
+            },
+            frame("a", "c1", 6, &["two"], 10),
+            // Another browser, another chat, a gap in the events: none of these join.
+            frame("b", "c1", 7, &["three"], 10),
+            frame("b", "c2", 8, &["four"], 10),
+            frame("b", "c2", 10, &["five"], 10),
+            Out::Drop { cid: "b".into() },
+        ]);
+        assert_eq!(
+            read(&merged),
+            [
+                "a c1 5 one 10 alone",
+                "sealed a reply",
+                "a c1 6 two 10 alone",
+                "b c1 7 three 10 alone",
+                "b c2 8 four 10 alone",
+                "b c2 10 five 10 alone",
+                "drop b",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_merged_frame_stays_under_its_size() {
+        let half = MERGED_FRAME / 2;
+        let merged = merge(vec![
+            frame("a", "c1", 1, &["x"], half),
+            frame("a", "c1", 2, &["y"], half),
+            frame("a", "c1", 3, &["z"], 1),
+        ]);
+        assert_eq!(
+            read(&merged),
+            [
+                format!("a c1 1 xy {MERGED_FRAME}"),
+                "a c1 3 z 1 alone".into()
+            ]
+        );
+    }
+}
