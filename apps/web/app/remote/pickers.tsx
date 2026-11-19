@@ -54,15 +54,20 @@ export function ChatPickers({
     };
   }, [client, chatId]);
 
-  /** Applies one choice, then reads the chat's choices again: the computer has the last word. */
-  const choose = async (work: Promise<void>, done: string) => {
+  /**
+   * Applies one choice, shown at once, then reads the chat's choices again: the computer has the
+   * last word, and the choice is announced once it has given it.
+   */
+  const choose = async (work: Promise<void>, done: string, shown: Partial<Choices>) => {
     setBusy(true);
     setError("");
     setSaid("");
+    setChoices((current) => (current ? { ...current, ...shown } : current));
+    let failed = false;
     try {
       await work;
-      setSaid(done);
     } catch (failure) {
+      failed = true;
       setError(words(failure));
     }
     try {
@@ -70,6 +75,7 @@ export function ChatPickers({
     } catch {
       // What is shown stays; the next choice says what is wrong.
     }
+    if (!failed) setSaid(done);
     setBusy(false);
   };
   const handOff = async () => {
@@ -120,6 +126,7 @@ export function ChatPickers({
                 void choose(
                   client.setModel(chatId, value),
                   `Model set to ${name(choices.models, value)}.`,
+                  { model: value },
                 );
               }}
             >
@@ -145,6 +152,7 @@ export function ChatPickers({
                 void choose(
                   client.setThinking(chatId, value),
                   `Thinking set to ${name(choices.thinking, value)}.`,
+                  { thinking_level: value },
                 );
               }}
             >
