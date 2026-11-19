@@ -740,6 +740,9 @@ export function ChatView({
    * planner is stopped, the chat is handed over with the app's own handoff, and the builder is
    * sent the plan as written.
    */
+  // A hand-over to another agent outlives the plan card, which closes when the planner stops: its
+  // progress and any failure show above the composer.
+  const [handover, setHandover] = useState<{ label: string; error: string | null } | null>(null);
   const buildPlan = useCallback(
     async (requestId: string, approval: PlanApproval) => {
       const now = buildOffer(roles, chatAgentId, store.getSnapshot().lists, agents);
@@ -753,27 +756,38 @@ export function ChatView({
         return;
       }
       if (!conversation) throw new Error("This chat cannot be handed to another agent.");
-      await store.stop();
-      // The hand-over waits for the planner to have stopped.
-      let token: string | null = null;
-      for (let attempt = 0; token === null; attempt++) {
-        try {
-          token = (
-            await conversation.preview(chatId, { type: "switch_agent", agent_id: now.role.agent })
-          ).token;
-        } catch (failure) {
-          if (attempt >= 24) throw failure;
+      setHandover({ label: now.label, error: null });
+      try {
+        await store.stop();
+        // The hand-over waits for the planner to have stopped, which closes its request.
+        for (
+          let waited = 0;
+          hasProcess(store.getSnapshot().session?.status ?? "stopped");
+          waited++
+        ) {
+          if (waited >= 240)
+            throw new Error(
+              "The planner did not stop within a minute. Stop it, then switch the agent from the model picker.",
+            );
           await new Promise((done) => setTimeout(done, 250));
         }
+        const preview = await conversation.preview(chatId, {
+          type: "switch_agent",
+          agent_id: now.role.agent,
+        });
+        const result = await conversation.apply(chatId, preview.token);
+        if (result.chat_id === chatId) {
+          await store.reattach();
+          setHandoffRevision((value) => value + 1);
+        }
+        onOpenChat?.(result.chat_id);
+        await applyRole(now.role);
+        await store.send(buildPrompt(approval.plan, chatAgentName));
+        setHandover(null);
+      } catch (failure) {
+        setHandover({ label: now.label, error: errorMessage(failure) });
+        throw failure;
       }
-      const result = await conversation.apply(chatId, token);
-      if (result.chat_id === chatId) {
-        await store.reattach();
-        setHandoffRevision((value) => value + 1);
-      }
-      onOpenChat?.(result.chat_id);
-      await applyRole(now.role);
-      await store.send(buildPrompt(approval.plan, chatAgentName));
     },
     [roles, chatAgentId, chatAgentName, agents, store, applyRole, conversation, chatId, onOpenChat],
   );
@@ -1201,6 +1215,26 @@ export function ChatView({
                     </TaskLinkContext.Provider>
                   )}
                   <div className="chat-dock">
+                    {handover ? (
+                      <p
+                        className="conversation-notice"
+                        role={handover.error ? "alert" : "status"}
+                        data-testid="plan-handover"
+                      >
+                        {handover.error
+                          ? `The plan was not handed to ${handover.label}: ${handover.error}`
+                          : `Handing the plan to ${handover.label}…`}
+                        {handover.error ? (
+                          <button
+                            type="button"
+                            className="g-button g-button-ghost g-button-24"
+                            onClick={() => setHandover(null)}
+                          >
+                            Dismiss
+                          </button>
+                        ) : null}
+                      </p>
+                    ) : null}
                     {fileNote ? (
                       <p
                         className="conversation-notice"
