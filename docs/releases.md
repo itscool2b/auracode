@@ -34,6 +34,41 @@ configuration, macOS Developer ID signing and notarization, the selected Windows
 signed updater artifacts, the public release-only R2 route, and an old-build update dry run. No
 signing key is fabricated or recovered from credentials.
 
+## Preview builds on the website
+
+Until signed releases exist, the download page offers the `Build` workflow's unsigned installers.
+They are the files of a GitHub release on this repository, and the page lists them from
+`apps/web/app/release-catalog.json`. Owner's rule (18 November 2026): whenever a new build is
+made, and for every merge that changes the app, the installers on the website are updated.
+
+1. Build every target from main: `gh workflow run build.yml --ref main`. First run
+   `cargo check --release -p auracode-desktop --locked`, since every other build is a debug build.
+2. Download the run into a new, empty folder: `gh run download <run id> --dir <folder>`.
+3. Gather it (on Linux or in WSL, from the commit that was built):
+
+   ```sh
+   cargo run --locked -p aura-release -- preview <folder> <new folder> build-YYYY-MM-DD \
+     YYYY-MM-DDTHH:MM:SSZ "Preview build of main through #N."
+   ```
+
+   The tag's day and the date are the same UTC day; a later build that day is
+   `build-YYYY-MM-DD.2`. The command finds the six installers, refuses a missing or doubled one, a
+   link, or a filename that does not carry the workspace version, copies them to `assets/` with
+   their `SHA256SUMS`, and writes `downloads.json` last. It checks no signature, because there is
+   none: the catalog says `signed: false`, and the page then says the builds are unsigned, that
+   they do not update themselves, and how each system treats one.
+4. Publish the files: `gh release create build-YYYY-MM-DD <new folder>/assets/* --target <commit>
+   --title "auracode <version>, preview build of D Month YYYY" --notes-file <notes>`. The notes
+   say what the page says: unsigned, not notarized, no updates, and which builds have been run.
+5. Check one link from the catalog downloads with the checksum it lists, then replace
+   `apps/web/app/release-catalog.json` with `downloads.json` in a pull request. The site deploys
+   from main, so the page changes within minutes of the merge. `pnpm --filter @auracode/web test`
+   and `test:browser` read the committed catalog and check the page against it.
+
+The release's links only work while the repository is public: a private repository's release
+files need a sign-in. `{ "release": null }` puts the page back to "Installers are on the way".
+An older preview release can be deleted once the page no longer points at it.
+
 ## Official releases
 
 The manual `Release` workflow (`.github/workflows/release.yml`) builds every target signed, runs

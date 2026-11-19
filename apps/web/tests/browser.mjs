@@ -325,7 +325,35 @@ try {
         "the changelog page",
       );
       await page.goto(`${base}/download`);
-      assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 3);
+      // The download page follows the committed catalog: its installers once one is published,
+      // and three disabled buttons until then.
+      const { release } = JSON.parse(
+        await readFile(new URL("../app/release-catalog.json", import.meta.url), "utf8"),
+      );
+      const waiting = page.getByRole("button", { name: "Installer coming soon" });
+      if (release) {
+        for (const download of release.downloads)
+          assert.equal(
+            await page
+              .getByRole("link", { name: `Download ${download.label}`, exact: true })
+              .getAttribute("href"),
+            download.url,
+          );
+        assert.equal(await waiting.count(), 0);
+        assert.ok(
+          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          "the download page scrolls sideways at 320px",
+        );
+        await settled(page);
+        axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+        assert.deepEqual(
+          axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+          [],
+          "the download page",
+        );
+      } else {
+        assert.equal(await waiting.count(), 3);
+      }
       // The stored value is left as it was: the site keeps no appearance of its own.
       assert.equal(await page.evaluate(() => localStorage.getItem("auracode-appearance")), "dark");
       assert.deepEqual(failures, []);
@@ -417,9 +445,19 @@ try {
         assertWall(await agentWall(staticPage), `${width}px without scripts`);
       }
       await staticPage.goto(`${base}/download`);
-      await staticPage.getByRole("heading", { name: "Windows", exact: true }).waitFor();
-      await staticPage.getByRole("heading", { name: "macOS", exact: true }).waitFor();
-      await staticPage.getByRole("heading", { name: "Linux", exact: true }).waitFor();
+      // Without scripts the page names every system, and every installer once one is published.
+      for (const name of release
+        ? release.downloads.map((download) => download.label)
+        : ["Windows", "macOS", "Linux"])
+        await staticPage.getByRole("heading", { name, exact: true }).waitFor();
+      if (release)
+        for (const download of release.downloads)
+          assert.equal(
+            await staticPage
+              .getByRole("link", { name: `Download ${download.label}`, exact: true })
+              .getAttribute("href"),
+            download.url,
+          );
       // The appearance needs no script: dark under a dark system.
       assert.equal(
         await staticPage.evaluate(() => getComputedStyle(document.body).backgroundColor),
