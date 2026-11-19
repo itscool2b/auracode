@@ -313,6 +313,66 @@ test("tells browsers when the desktop goes and comes back", async () => {
   again.close();
 });
 
+test("a desktop that stops answering is away, not connected", async () => {
+  // A room of its own, where a desktop may stay silent for less than a second.
+  const quick = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: [
+        {
+          type: "ESModule",
+          path: "index.js",
+          contents: await readFile(
+            fileURLToPath(new URL("../build/index.js", import.meta.url)),
+            "utf8",
+          ),
+        },
+      ],
+      compatibilityDate: "2026-10-26",
+      durableObjects: { ROOMS: { className: "Room", useSQLite: true } },
+      bindings: { APP_ORIGIN: ORIGIN, HOST_SILENT_MS: "800" },
+    }),
+  );
+  try {
+    await quick.ready;
+    const open = async (path, headers) => {
+      const response = await quick.dispatchFetch(`${BASE}/${path}`, {
+        headers: { Upgrade: "websocket", ...headers },
+      });
+      assert.equal(response.status, 101);
+      return reader(response.webSocket);
+    };
+    const key = id(32);
+    const hostId = idOf(key);
+    const desk = await open(`host/${hostId}`, { Authorization: `Bearer ${key}` });
+    const phone = await open(`client/${hostId}`, { Origin: ORIGIN });
+    assert.equal(await phone.message(), "h1");
+    const cid = (await desk.message()).slice(1);
+    // The desktop keeps saying "ping": it stays.
+    for (let beat = 0; beat < 3; beat += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      desk.send("ping");
+      assert.equal(await desk.message(), "pong");
+    }
+    phone.send("mEstill here");
+    assert.equal(await desk.message(), `m${cid} Estill here`);
+    // Silent for longer than allowed: the next browser message finds it gone, and is told so.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    phone.send("mEhello?");
+    assert.equal(await phone.message(), "h0");
+    assert.equal(await desk.message(), "x");
+    // A browser that opens now waits for the desktop rather than talking into its old socket.
+    const late = await open(`client/${hostId}`, { Origin: ORIGIN });
+    assert.equal(await late.message(), "h0");
+    // The desktop connects again: both browsers start over with it.
+    const back = await open(`host/${hostId}`, { Authorization: `Bearer ${key}` });
+    assert.equal(await phone.message(), "h1");
+    assert.equal(await late.message(), "h1");
+    back.close();
+  } finally {
+    await quick.dispose();
+  }
+});
+
 test("refuses what a browser should not send", async () => {
   const hostKey = id(32);
   const hostId = idOf(hostKey);

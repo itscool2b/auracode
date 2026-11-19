@@ -275,6 +275,14 @@ impl Backend for Shared {
         self
     }
 
+    // It looks as a new auracode does: Claude Code's theme, following the system.
+    fn look(&self) -> Option<aura_remote::Look> {
+        Some(aura_remote::Look {
+            theme: "claude".into(),
+            appearance: "system".into(),
+        })
+    }
+
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>> {
         Box::pin(async move {
             let mut chats: Vec<WorkspaceChat> = self

@@ -9,12 +9,13 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex, MutexGuard, PoisonError,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use aura_protocol::{
+    EventBatch,
     remote::{RemoteBot, RemoteBotLink, RemoteDevice, RemoteLink, RemotePairing, RemoteStatus},
     session::{ChatStatusUpdate, HistoryPage},
 };
@@ -52,6 +53,11 @@ const MAX_BOT_CALLS: usize = 8;
 const MAX_BACKLOG: usize = 4 * 1024 * 1024;
 /// The most one sealed message carries: under the relay's limit once sealed and encoded.
 const MAX_PLAINTEXT: usize = 600 * 1024;
+/// The most one merged frame carries. Frames queued for one browser while the socket is busy go
+/// out together, so a fast stream costs a phone a few messages a second, not one per word.
+const MERGED_FRAME: usize = 256 * 1024;
+/// Finished work taken at once before writing: enough to merge a burst, never a whole backlog.
+const DRAIN: usize = 256;
 const MAX_TEXT: usize = 64 * 1024;
 const PING_EVERY: Duration = Duration::from_secs(25);
 const SWEEP_EVERY: Duration = Duration::from_secs(5);
@@ -264,6 +270,11 @@ struct Session {
     proven: bool,
     calls: Arc<AtomicUsize>,
     backlog: Arc<AtomicUsize>,
+    /// Which chat this browser follows is decided by its newest `open` or `close`. Each takes the
+    /// next number and runs under `following`; one that finds a newer number has been overtaken
+    /// and does nothing, so a slow open can never replace the chat asked for after it.
+    follow: Arc<AtomicU64>,
+    following: Arc<tokio::sync::Mutex<()>>,
 }
 
 struct Connection {
@@ -277,6 +288,15 @@ enum Out {
     Sealed {
         cid: String,
         json: String,
+        backlog: usize,
+    },
+    /// Live events of the chat a browser follows: `json` is the frame as it would be sent alone
+    /// (`None` once merged), and frames that follow each other are merged before they are sealed
+    /// ([`merge`]). `backlog` is also the frame's size.
+    Frame {
+        cid: String,
+        batch: EventBatch,
+        json: Option<String>,
         backlog: usize,
     },
     /// End this browser's session, after what was queued before it.
@@ -390,10 +410,18 @@ async fn serve(
     let ended = loop {
         // Everything a step decided to say goes out before the next step is taken.
         let mut failed = None;
-        for frame in state.outbox.drain(..) {
-            if let Err(error) = sink.send(Message::text(frame)).await {
+        if !state.outbox.is_empty() {
+            for frame in state.outbox.drain(..) {
+                if let Err(error) = sink.feed(Message::text(frame)).await {
+                    failed = Some(error.to_string());
+                    break;
+                }
+            }
+            // One flush for the step's messages, not one per message.
+            if failed.is_none()
+                && let Err(error) = sink.flush().await
+            {
                 failed = Some(error.to_string());
-                break;
             }
         }
         if let Some(reason) = failed {
@@ -412,7 +440,17 @@ async fn serve(
                 Some(Err(error)) => Some(Ended::Lost(error.to_string())),
             },
             Some(done) = finished.recv() => {
-                state.finished(done);
+                // Whatever else finished meanwhile goes out in this step, frames merged.
+                let mut batch = vec![done];
+                while batch.len() < DRAIN {
+                    match finished.try_recv() {
+                        Ok(more) => batch.push(more),
+                        Err(_) => break,
+                    }
+                }
+                for done in merge(batch) {
+                    state.finished(done);
+                }
                 None
             }
             message = control.recv() => match message {
@@ -450,6 +488,48 @@ async fn serve(
     backend.release(WATCHER);
     let _ = sink.close().await;
     ended
+}
+
+/// Merges frames that follow each other for the same browser and chat into one, in order: the
+/// events of a burst read the same as they would one frame at a time. Anything else between two
+/// frames keeps them apart, so nothing is reordered. A merged frame is written once, when sealed.
+fn merge(items: Vec<Out>) -> Vec<Out> {
+    let mut merged: Vec<Out> = Vec::with_capacity(items.len());
+    for item in items {
+        if let Out::Frame {
+            cid,
+            batch,
+            json,
+            backlog,
+        } = item
+        {
+            if let Some(Out::Frame {
+                cid: last_cid,
+                batch: last,
+                json: last_json,
+                backlog: last_backlog,
+            }) = merged.last_mut()
+                && *last_cid == cid
+                && last.chat_id == batch.chat_id
+                && last.seq_start as usize + last.events.len() == batch.seq_start as usize
+                && *last_backlog + backlog <= MERGED_FRAME
+            {
+                last.events.extend(batch.events);
+                *last_backlog += backlog;
+                *last_json = None;
+                continue;
+            }
+            merged.push(Out::Frame {
+                cid,
+                batch,
+                json,
+                backlog,
+            });
+        } else {
+            merged.push(item);
+        }
+    }
+    merged
 }
 
 /// The state of one connection to the relay. Each method is one step: it never waits, and it
@@ -603,6 +683,23 @@ impl Serving {
                     Ok(sealed) => self.outbox.push(format!("m{cid} E{sealed}")),
                     Err(_) => self.drop_connection(&cid),
                 }
+            }
+            Out::Frame {
+                cid,
+                batch,
+                json,
+                backlog,
+            } => {
+                let json =
+                    json.or_else(|| serde_json::to_string(&Event::Frame { batch: &batch }).ok());
+                // A frame that cannot be written is a gap: the browser reads the chat again.
+                let json = json.unwrap_or_else(|| {
+                    serde_json::to_string(&Event::Lost {
+                        chat_id: &batch.chat_id,
+                    })
+                    .unwrap_or_default()
+                });
+                self.finished(Out::Sealed { cid, json, backlog });
             }
             Out::Drop { cid } => {
                 if self.connections.contains_key(&cid) {

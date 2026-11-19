@@ -24,6 +24,8 @@ export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
   /** The website's origin: the only origin a browser socket may come from. */
   readonly APP_ORIGIN: string;
+  /** Tests only: how long a desktop may go without a keep-alive, in ms (`HOST_SILENT_MS`). */
+  readonly HOST_SILENT_MS?: string;
 }
 
 const PREFIX = "/api/remote/v1/";
@@ -64,6 +66,12 @@ const UNPROVEN_MESSAGES = 4;
 const IDLE_ROOM_MS = 30 * 24 * 60 * 60 * 1000;
 const HOST_ID_LABEL = "auracode remote v1 host id";
 const MAX_BOT_CALLS = 8;
+/**
+ * The desktop says "ping" every 25 seconds. A socket that has said nothing for three of those
+ * belongs to a computer that slept or lost its network without closing it: it is treated as gone,
+ * so a browser is told its computer is away instead of waiting on a socket nobody reads.
+ */
+const HOST_SILENT_MS = 75_000;
 const BOT_CALL_MS = 55_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -165,7 +173,13 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 type Attachment =
-  | { readonly role: "host" }
+  | {
+      readonly role: "host";
+      /** When the socket opened: its keep-alives are counted from then. */
+      readonly since?: number;
+      /** Ended for going silent; browsers were already told, so its close says nothing more. */
+      readonly silent?: boolean;
+    }
   | {
       readonly role: "client";
       readonly cid: string;
@@ -245,10 +259,23 @@ export class Room extends DurableObject<Env> {
     return notFound();
   }
 
-  #host(): WebSocket | null {
-    return (
-      this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null
-    );
+  /**
+   * The desktop's socket, while it is open and its keep-alives still arrive. When it has gone
+   * silent, every browser but `asking` is told it is away; the caller answers `asking` itself.
+   */
+  #host(asking?: WebSocket): WebSocket | null {
+    const host =
+      this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null;
+    if (!host) return null;
+    const heard =
+      this.ctx.getWebSocketAutoResponseTimestamp(host)?.getTime() ??
+      (host.deserializeAttachment() as { since?: number } | null)?.since;
+    const silent = Number(this.env.HOST_SILENT_MS) || HOST_SILENT_MS;
+    if (heard === undefined || Date.now() - heard <= silent) return host;
+    host.serializeAttachment({ role: "host", silent: true } satisfies Attachment);
+    end(host, 4004, "silent");
+    this.#hostGone(host, asking);
+    return null;
   }
 
   #clients(): WebSocket[] {
@@ -267,9 +294,16 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
 
     const earlier = this.ctx.getWebSockets("host");
+    // Browsers that still had a session with the desktop start over; a socket that went silent
+    // already told them it was gone.
+    const replacing = earlier.some(
+      (socket) =>
+        socket.readyState === WebSocket.OPEN &&
+        !(socket.deserializeAttachment() as { silent?: boolean } | null)?.silent,
+    );
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], ["host"]);
-    pair[1].serializeAttachment({ role: "host" } satisfies Attachment);
+    pair[1].serializeAttachment({ role: "host", since: Date.now() } satisfies Attachment);
     for (const socket of earlier) end(socket, 4000, "replaced");
     // The new socket knows none of the open browsers: each starts its session again.
     for (const client of this.#clients()) {
@@ -282,7 +316,7 @@ export class Room extends DurableObject<Env> {
           ...attachment,
           until: Date.now() + REPROVE_MS,
         } satisfies Attachment);
-      if (earlier.length > 0) client.send("h0");
+      if (replacing) client.send("h0");
       client.send("h1");
       pair[1].send(`o${attachment.cid}`);
     }
@@ -318,7 +352,7 @@ export class Room extends DurableObject<Env> {
       from,
       proven: false,
     } satisfies Attachment);
-    const host = this.#host();
+    const host = this.#host(pair[1]);
     pair[1].send(host ? "h1" : "h0");
     host?.send(`o${cid}`);
     return new Response(null, { status: 101, webSocket: pair[0] });
@@ -337,7 +371,7 @@ export class Room extends DurableObject<Env> {
         return socket.close(1008, "prove a key first");
     }
     if (!this.#allowed(attachment.cid)) return socket.close(1008, "too many messages");
-    const host = this.#host();
+    const host = this.#host(socket);
     if (host) host.send(`m${attachment.cid} ${message.slice(1)}`);
     else socket.send("h0");
   }
@@ -462,6 +496,12 @@ export class Room extends DurableObject<Env> {
       if (!attachment.told) this.#host()?.send(`c${attachment.cid}`);
       return;
     }
+    if ((attachment as { silent?: boolean } | null)?.silent) return;
+    this.#hostGone(socket);
+  }
+
+  /** The desktop's socket `socket` closed or went silent. */
+  #hostGone(socket: WebSocket, except?: WebSocket) {
     // A replaced host socket closes after its successor opened: the desktop is still here.
     const successor = this.ctx
       .getWebSockets("host")
@@ -469,7 +509,7 @@ export class Room extends DurableObject<Env> {
     if (successor) return;
     // The desktop is gone: if it stays gone, what the room stored for it goes too.
     void this.ctx.storage.setAlarm(Date.now() + IDLE_ROOM_MS);
-    for (const client of this.#clients()) client.send("h0");
+    for (const client of this.#clients()) if (client !== except) client.send("h0");
     for (const finish of [...this.#calls.values()]) finish({ text: OFFLINE, error: true });
   }
 

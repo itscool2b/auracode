@@ -19,4 +19,4 @@ pub use backend::{
 };
 pub use host::{Config, Service};
 pub use registry::RegistryError;
-pub use wire::{Overview, RemoteAgent};
+pub use wire::{Look, Overview, RemoteAgent};

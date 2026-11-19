@@ -324,6 +324,16 @@ impl AppBackend {
     }
 }
 
+/// The open profile's theme and appearance, by their saved names, for a paired page to wear.
+fn look(state: &AppState) -> Option<aura_remote::Look> {
+    let preferences = state.setup_service()?.preferences().ok()?;
+    let name = |value: serde_json::Value| value.as_str().map(str::to_owned);
+    Some(aura_remote::Look {
+        theme: name(serde_json::to_value(preferences.theme).ok()?)?,
+        appearance: name(serde_json::to_value(preferences.appearance).ok()?)?,
+    })
+}
+
 fn default_agent(state: &AppState) -> Option<String> {
     state
         .setup_service()
@@ -432,6 +442,10 @@ impl Backend for AppBackend {
             app: self.app.clone(),
             profile: profile.to_owned(),
         })
+    }
+
+    fn look(&self) -> Option<aura_remote::Look> {
+        look(&self.state())
     }
 
     /// A full-control link's actions, each the call the window itself makes, under the same
