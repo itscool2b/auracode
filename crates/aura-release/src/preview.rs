@@ -100,11 +100,7 @@ fn installer_kind(name: &str) -> Result<Option<ArtifactKind>> {
 
 /// Finds the installers under `root`, which must be canonical. Links are refused, not followed,
 /// so every path found stays inside the folder the operator named.
-fn installers(
-    root: &Path,
-    depth: u8,
-    found: &mut BTreeMap<ArtifactKind, PathBuf>,
-) -> Result<()> {
+fn installers(root: &Path, depth: u8, found: &mut BTreeMap<ArtifactKind, PathBuf>) -> Result<()> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
