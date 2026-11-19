@@ -145,6 +145,31 @@ async fn a_coordinator_starts_a_worker_and_is_sent_its_report() {
         )
         .await;
     assert_eq!((task.error, task.text.as_str()), (false, "Added T-1."));
+    // This rig has no Git: a worker asks for its own worktree unless told otherwise, and when
+    // one cannot be made the coordinator is told why and how to go on. Nothing is started.
+    let no_worktree = rig
+        .manager
+        .coordinator_tool(
+            &coordinator_chat,
+            "project_worker_start",
+            &json!({"name": "API tests", "assignment": "Write contract tests."}),
+        )
+        .await;
+    assert!(no_worktree.error);
+    assert!(
+        no_worktree
+            .text
+            .starts_with("A worktree could not be made for this worker: ")
+    );
+    assert!(no_worktree.text.contains("Pass isolated as false"));
+    assert!(
+        rig.manager
+            .coordinator_snapshot(&project_id)
+            .await
+            .unwrap()
+            .workers
+            .is_empty()
+    );
     let started = rig
         .manager
         .coordinator_tool(
@@ -154,6 +179,7 @@ async fn a_coordinator_starts_a_worker_and_is_sent_its_report() {
                 "name": "API tests",
                 "assignment": "Write contract tests for every producer.",
                 "task": "T-1",
+                "isolated": false,
                 // What a call names is never who it is from.
                 "chat_id": chat.id,
             }),

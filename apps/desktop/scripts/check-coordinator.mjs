@@ -74,6 +74,15 @@ const tasksIn = (page, status) =>
     .getByTestId("project-task")
     .evaluateAll((cards) => cards.map((card) => Number(card.dataset.testTask)));
 
+/** Waits until a column shows exactly these tasks, in order: the page follows the saved state. */
+const shows = async (page, status, numbers) => {
+  for (let i = 0; i < 100; i++) {
+    if (JSON.stringify(await tasksIn(page, status)) === JSON.stringify(numbers)) return;
+    await page.waitForTimeout(50);
+  }
+  assert.deepEqual(await tasksIn(page, status), numbers, `the ${status} column`);
+};
+
 try {
   await mkdir(out, { recursive: true });
   let ready = false;
@@ -140,7 +149,7 @@ try {
         );
         assert.deepEqual(await tasksIn(page, "todo"), [4, 5]);
         assert.deepEqual(await tasksIn(page, "doing"), [2]);
-        assert.deepEqual(await tasksIn(page, "review"), [3]);
+        await shows(page, "review", [3]);
         assert.deepEqual(await tasksIn(page, "done"), [1]);
         // A link shows as its site and opens in the browser, never in the window.
         const link = lane(page, "review").locator(".project-task-link");
@@ -168,7 +177,7 @@ try {
         await axe(page, `${engine} ${scheme}: the task dialog`);
         await save.click();
         await form.waitFor({ state: "detached" });
-        assert.deepEqual(await tasksIn(page, "todo"), [4, 5, 6]);
+        await shows(page, "todo", [4, 5, 6]);
         await lane(page, "todo")
           .getByRole("button", { name: /Load test the new queue/ })
           .click();
@@ -176,7 +185,7 @@ try {
         await choose(form.getByLabel("Column"), "doing");
         await save.click();
         await form.waitFor({ state: "detached" });
-        assert.deepEqual(await tasksIn(page, "doing"), [2, 6]);
+        await shows(page, "doing", [2, 6]);
 
         // Dragging a card to another column moves it there, before the card it is dropped on.
         const dragged = lane(page, "doing").locator('[data-test-task="6"]');
@@ -186,9 +195,7 @@ try {
             window.coordinatorFixture.snapshot().tasks.find((t) => t.number === 6)?.status ===
             "review",
         );
-        // Chromium drops on the card under the pointer; WebKit's scripted drag drops on the column,
-        // so there the card lands at the column's end.
-        assert.deepEqual(await tasksIn(page, "review"), engine === "chromium" ? [6, 3] : [3, 6]);
+        await shows(page, "review", [6, 3]);
         assert.ok((await calls(page)).includes("task_move"));
         // Deleting asks nothing more: the dialog's Delete is the confirmation.
         await lane(page, "review")
@@ -320,6 +327,7 @@ try {
         await page.waitForFunction(
           () => window.coordinatorFixture.snapshot().decisions.length === 4,
         );
+        await decisions.filter({ hasText: "Ship behind the flag" }).waitFor();
         assert.match(await decisions.first().textContent(), /D-4.*Ship behind the flag.*You/s);
         await page.getByRole("button", { name: "Take back D-3" }).click();
         await page.locator('[data-testid="project-decision"][data-retracted]').waitFor();
@@ -356,7 +364,7 @@ try {
         await page.waitForFunction(
           () => window.coordinatorFixture.snapshot().routines[1].enabled === false,
         );
-        assert.match(await routines.nth(1).textContent(), /every day · off/);
+        await routines.nth(1).getByText(/every day · off/).waitFor();
         await routines.nth(1).getByRole("button", { name: "Edit" }).click();
         await routine.getByRole("button", { name: "Remove" }).click();
         await routine.waitFor({ state: "detached" });

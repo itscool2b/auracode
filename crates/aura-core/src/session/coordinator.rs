@@ -986,6 +986,13 @@ impl SessionManager {
             folder_id: folder.id.clone(),
             allow_busy_folder: true,
         };
+        // A worktree that cannot be made is said, with the way on: the coordinator chooses whether
+        // this work may share the project folder, auracode never chooses it for it.
+        let no_worktree = |error: SessionError| {
+            format!(
+                "A worktree could not be made for this worker: {error} Pass isolated as false to start it in the project folder itself, which it then shares with other workers and the person."
+            )
+        };
         let (chat, place) = if isolated {
             match self
                 .worktree_chat_preview(WorktreeChatInput {
@@ -998,14 +1005,14 @@ impl SessionManager {
                     run_setup: false,
                 })
                 .await
-                .map_err(said)?
+                .map_err(no_worktree)?
             {
                 WorktreeChatPreview::Worktree { plan } => {
                     let branch = plan.branch.clone();
                     let result = self
                         .worktree_chat_apply_stopped(&plan.token)
                         .await
-                        .map_err(said)?;
+                        .map_err(no_worktree)?;
                     (
                         result.chat,
                         format!(
