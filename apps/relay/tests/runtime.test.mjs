@@ -379,6 +379,14 @@ test("a desktop that stops answering is away, not connected", async () => {
     }
     phone.send("mEstill here");
     assert.equal(await desk.message(), `m${cid} Estill here`);
+    // No keep-alive for longer than allowed, but the desktop keeps sending: it is plainly there.
+    for (let beat = 0; beat < 3; beat += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      desk.send(`m${cid} Ebusy ${beat}`);
+      assert.equal(await phone.message(), `mEbusy ${beat}`);
+    }
+    phone.send("mEand still here");
+    assert.equal(await desk.message(), `m${cid} Eand still here`);
     // Silent for longer than allowed: the next browser message finds it gone, and is told so.
     await new Promise((resolve) => setTimeout(resolve, 1000));
     phone.send("mEhello?");

@@ -251,6 +251,12 @@ export class Room extends DurableObject<Env> {
   readonly #calls = new Map<string, (reply: BotReply) => void>();
   /** Messages each browser sent in the current window. Lost on hibernation, which only helps. */
   readonly #rates = new Map<string, { since: number; count: number }>();
+  /**
+   * When the desktop last sent anything but a keep-alive. A computer pushing a long history up a
+   * slow line may have its next keep-alive waiting behind that data: it is plainly there. Lost on
+   * hibernation, when the keep-alive's own time is all there is, as it should be.
+   */
+  #heard = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -274,11 +280,13 @@ export class Room extends DurableObject<Env> {
     const host =
       this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null;
     if (!host) return null;
-    const heard =
+    const since =
       this.ctx.getWebSocketAutoResponseTimestamp(host)?.getTime() ??
       (host.deserializeAttachment() as { since?: number } | null)?.since;
+    // A socket from before this was counted has no time at all: it is left alone.
+    if (since === undefined) return host;
     const silent = Number(this.env.HOST_SILENT_MS) || HOST_SILENT_MS;
-    if (heard === undefined || Date.now() - heard <= silent) return host;
+    if (Date.now() - Math.max(since, this.#heard) <= silent) return host;
     host.serializeAttachment({ role: "host", silent: true } satisfies Attachment);
     end(host, 4004, "silent");
     this.#hostGone(host, asking);
@@ -401,6 +409,7 @@ export class Room extends DurableObject<Env> {
 
   async #fromHost(socket: WebSocket, message: string) {
     if (message.length > HOST_MESSAGE_BYTES) return socket.close(1009, "too large");
+    this.#heard = Date.now();
     const kind = message[0];
     if (kind === "m" || kind === "c" || kind === "a") {
       const cid = message.slice(1, 1 + CID_LENGTH);
