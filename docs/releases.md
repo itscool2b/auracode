@@ -48,11 +48,14 @@ made, and for every merge that changes the app, the installers on the website ar
 
    ```sh
    cargo run --locked -p aura-release -- preview <folder> <new folder> build-YYYY-MM-DD \
-     YYYY-MM-DDTHH:MM:SSZ "Preview build of main through #N."
+     YYYY-MM-DDTHH:MM:SS-05:00 "Preview build of main through #N."
    ```
 
-   The tag's day and the date are the same UTC day; a later build that day is
-   `build-YYYY-MM-DD.2`. The command finds the six installers, refuses a missing or doubled one, a
+   The tag's day and the date are the same day in US Eastern time, the clock every date in this
+   project uses: write the date with Eastern's offset (`-05:00`, or `-04:00` in daylight time), so
+   the day the page shows is the day it was built there. A later build that day is
+   `build-YYYY-MM-DD.2`. (The first two releases, `build-2026-11-19` and `build-2026-11-19.2`, were
+   named by the UTC day; both were built on the evening of 18 November Eastern.) The command finds the six installers, refuses a missing or doubled one, a
    link, or a filename that does not carry the workspace version, copies them to `assets/` with
    their `SHA256SUMS`, and writes `downloads.json` last. It checks no signature, because there is
    none: the catalog says `signed: false`, and the page then says the builds are unsigned, that

@@ -5,7 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { checkChangelog, EM_DASH, MAX_WORDS_LENGTH } from "./check-changelog.mjs";
+import {
+  checkChangelog,
+  checkDates,
+  EM_DASH,
+  easternDay,
+  MAX_WORDS_LENGTH,
+} from "./check-changelog.mjs";
 
 const script = fileURLToPath(new URL("./check-changelog.mjs", import.meta.url));
 const pr = (n) => `([#${n}](https://github.com/itscool2b/auracode/pull/${n}))`;
@@ -84,4 +90,41 @@ test("the command reads CHANGELOG.md from the given folder and sets the exit cod
   const bad = spawnSync(process.execPath, [script, root], { encoding: "utf8" });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /already listed/);
+});
+
+test("a day is the US Eastern day of the moment, in winter and in summer", () => {
+  // The evening merge that showed under tomorrow: 11:34pm on the 18th in New York.
+  assert.equal(easternDay("2026-11-19T04:34:28Z"), "2026-11-18");
+  assert.equal(easternDay("2026-11-19T05:00:00Z"), "2026-11-19");
+  // Daylight time is four hours behind UTC, not five.
+  assert.equal(easternDay("2026-07-01T03:59:59Z"), "2026-06-30");
+  assert.equal(easternDay("2026-07-01T04:00:00Z"), "2026-07-01");
+});
+
+test("each entry must be under the Eastern day its pull request merged", () => {
+  const merged = new Map([
+    [68, "2026-11-03T22:10:00Z"],
+    [66, "2026-11-03T15:00:00Z"],
+    [61, "2026-11-03T01:56:55Z"],
+  ]);
+  assert.deepEqual(checkDates(valid, merged), []);
+  const wrong = checkDates(valid, new Map([...merged, [61, "2026-11-03T05:30:00Z"]]));
+  assert.equal(wrong.length, 1);
+  assert.match(wrong[0], /#61 is under 2026-11-02, but it merged on 2026-11-03 Eastern/);
+});
+
+test("a pull request that has not merged belongs under today's Eastern day", () => {
+  const merged = new Map([
+    [66, "2026-11-03T15:00:00Z"],
+    [61, "2026-11-03T01:56:55Z"],
+  ]);
+  // #68 is still open. Late on the 3rd in New York it is under the right day.
+  assert.deepEqual(checkDates(valid, merged, new Date("2026-11-04T03:00:00Z")), []);
+  // After midnight there, it has to move to the 4th before it merges.
+  const next = checkDates(valid, merged, new Date("2026-11-04T05:30:00Z"));
+  assert.equal(next.length, 1);
+  assert.match(
+    next[0],
+    /#68 has not merged, so it belongs under today, 2026-11-04, not 2026-11-03/,
+  );
 });

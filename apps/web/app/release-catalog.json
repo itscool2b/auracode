@@ -3,7 +3,7 @@
     "channel": "stable",
     "signed": false,
     "version": "0.1.0",
-    "pub_date": "2026-11-19T04:03:00Z",
+    "pub_date": "2026-11-18T23:03:00-05:00",
     "notes": "Preview build of main through #145.",
     "checksums_url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/SHA256SUMS",
     "downloads": [
