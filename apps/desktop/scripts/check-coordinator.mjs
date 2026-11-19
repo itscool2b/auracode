@@ -364,7 +364,10 @@ try {
         await page.waitForFunction(
           () => window.coordinatorFixture.snapshot().routines[1].enabled === false,
         );
-        await routines.nth(1).getByText(/every day · off/).waitFor();
+        await routines
+          .nth(1)
+          .getByText(/every day · off/)
+          .waitFor();
         await routines.nth(1).getByRole("button", { name: "Edit" }).click();
         await routine.getByRole("button", { name: "Remove" }).click();
         await routine.waitFor({ state: "detached" });
