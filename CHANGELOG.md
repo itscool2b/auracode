@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-19
 
+- auracode updates itself. When a newer version is out, an Update button shows at the foot of the sidebar: one press downloads it, checks it and restarts. auracode looks for a new version a few times a day, and you can turn that off in Settings. Every update is checked against a signature before it installs. ([#148](https://github.com/itscool2b/auracode/pull/148))
 - The dates on this page are right now. Each change is listed under the day it shipped in US Eastern time. Before, the days were counted in UTC, so anything shipped in the evening showed under the next day; 51 changes moved back to their real day. ([#147](https://github.com/itscool2b/auracode/pull/147))
 
 ## 2026-11-18
