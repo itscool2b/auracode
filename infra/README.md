@@ -341,16 +341,20 @@ What auracode.si still does, and only until copies of the app from before the mo
 To finish the move, once nobody runs a copy from before it: delete the two auracode.si routes
 from `apps/relay/wrangler.toml` and `apps/web-worker/wrangler.toml`, `FORMER_ORIGIN` from the
 relay, `FORMER_HOSTS` from `apps/web-worker/src/lib.rs` and `wss://auracode.si` from the page's
-`connect-src` (`apps/web/scripts/headers.mjs`), then deploy both. A phone paired at the old
-address pairs once more at the new one.
+`connect-src` (`apps/web/scripts/headers.mjs`), then deploy both.
 
-**Do not let auracode.si lapse while any copy from before the move is still in use.** Whoever
-registers it next would answer that copy's relay socket and serve whatever page they like at
-`/remote`. A pairing link carries its key in the part of the address only the page reads, so a
-page of theirs opened from an old copy's link would hold that key, with the relay in between
-theirs too: enough to pair as a device and steer that computer's chats. Sealing protects a
-session from the relay; it does not protect a link from the page it opens. Keep the registration
-until the old copies are gone.
+A copy of the app from after the move removes, the first time it starts, every device and bot
+link that was issued under auracode.si (docs/remote-sessions.md, "Credentials belong to the site
+they were issued under"). So an updated computer has nothing left that the old address could be
+used against: its phone pairs once more and its bot is linked once more, at o7.codes.
+
+**Do not let auracode.si lapse while any copy from before the move is still in use.** That copy
+has not removed anything. Whoever registers the domain next would answer its relay socket,
+receive the tokens of its bot links (they are part of the address a bot posts to), be able to
+use the device keys its phones keep under that origin, and serve whatever page they like at
+`/remote`, where a pairing link hands its key to the page. Any of those is enough to steer that
+computer's chats. Sealing protects a session from the relay; it does not protect a credential
+from the address it was issued for. Keep the registration until the old copies are gone.
 
 The app's identifier stays `si.auracode.desktop`. It names the data folder and the installed
 app, not a web address; changing it would leave every chat and setting behind.

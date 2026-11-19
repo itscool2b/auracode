@@ -269,8 +269,16 @@ Security, from the review of 10 November 2026 (each is a known limit, not a surp
   into the same rooms, and lets in a browser from either origin (`FORMER_ORIGIN`); the website
   Worker serves only `/remote` and its files at the old address and sends every other page to
   o7.codes. Remove the old routes, `FORMER_ORIGIN`, `FORMER_HOSTS` and the old entry in the
-  page's `connect-src` once those copies have updated; a phone paired at the old address pairs
-  once more at the new one.
+  page's `connect-src` once those copies have updated.
+- **Credentials belong to the site they were issued under.** A browser keeps a device's key
+  under the site's origin, and a bot's token is part of an address at the site, so whoever holds
+  that address later holds a page that can use the key and receives the token. Each device and
+  bot link therefore records the site it was issued under (`site` in `remote.json`), and a copy
+  of the app removes, when it starts, every one issued under a site other than its own, in every
+  workspace (`Registry::set_site`). A record from before sites were recorded counts as the old
+  address. So the first start after the move ends every pairing and bot link made at
+  auracode.si: the phone pairs once more and the bot is linked once more, at o7.codes, and
+  nothing that still works is tied to the address being given up.
 - **Per-room rate limits** at Cloudflare's edge for new sockets and host claims. Since 19 November
   2026 the zone has one rule per address instead: more than 60 requests to `/api/remote/*` in ten
   seconds from one address are refused for ten seconds (infra/README.md). It blunts a flood from
