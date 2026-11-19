@@ -18,7 +18,9 @@ import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
-const { values } = parseArgs({ options: { engines: { type: "string", default: "chromium,webkit" } } });
+const { values } = parseArgs({
+  options: { engines: { type: "string", default: "chromium,webkit" } },
+});
 
 // Panels rise in and controls settle their colours; audit only once every finite animation ends.
 const settled = (page) =>

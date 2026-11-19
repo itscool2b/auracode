@@ -60,7 +60,11 @@ function UnsignedSteps({ downloads }: { downloads: readonly { kind: string; file
 
 export default function Download() {
   const release = catalog.release;
-  const unsigned = release !== null && !release.signed;
+  // Two different signatures. An updater signature lets an installed copy update itself, and
+  // every published build has one. A publisher's signature is what an operating system trusts;
+  // without it each system warns before the installer runs, and the page says how to open it.
+  const updates = release?.signed === true;
+  const warned = release !== null && release.publisher_signed !== true;
   return (
     <Page
       wide
@@ -78,9 +82,11 @@ export default function Download() {
           Staging preview. These builds are for release qualification.
         </p>
       ) : null}
-      {unsigned ? (
+      {warned ? (
         <p className="note download-status" role="status">
-          Preview build. These installers are unsigned and do not update themselves.
+          {updates
+            ? "No publisher has signed these installers yet, so your system warns before one runs. Once installed, auracode updates itself."
+            : "Preview build. These installers are unsigned and do not update themselves."}
         </p>
       ) : null}
       <div className="download-grid">
@@ -166,19 +172,21 @@ export default function Download() {
         <section className="prose prose-section" aria-labelledby="before-you-install">
           <h2 id="before-you-install">Before you install</h2>
           <p>
-            {unsigned
-              ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. It is the only check these builds have."
-              : release
-                ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. Platform trust and updater signatures are separate checks."
-                : "Installers, checksums, and versioned release notes will appear here together. There is no public download to verify yet."}
+            {!release
+              ? "Installers, checksums, and versioned release notes will appear here together. There is no public download to verify yet."
+              : updates
+                ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. After that, auracode checks every update itself against a signature before it installs one."
+                : "Compare the downloaded file's SHA-256 checksum with the value above before installing. It is the only check these builds have."}
           </p>
-          {unsigned && release ? (
+          {warned && release ? (
             <>
               <p>
                 No publisher has signed these builds and Apple has not notarized them, so your
                 system warns you before one runs. Each is built from{" "}
-                <a href={SOURCE}>the public source</a> by its Build workflow. They do not update
-                themselves: come back here for a newer one.
+                <a href={SOURCE}>the public source</a> by its own workflow.{" "}
+                {updates
+                  ? "You install once: after that auracode shows Update when a newer version is out."
+                  : "They do not update themselves: come back here for a newer one."}
               </p>
               <UnsignedSteps downloads={release.downloads} />
             </>

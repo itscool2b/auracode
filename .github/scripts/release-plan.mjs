@@ -5,7 +5,9 @@
 //
 // Usage: node .github/scripts/release-plan.mjs <artifact-directory> <plan.json>
 // Environment: RELEASE_CHANNEL (staging or stable), RELEASE_NOTES, AURACODE_UPDATER_PUBLIC_KEY,
-// and optionally RELEASE_DATE (RFC 3339; now by default).
+// and optionally RELEASE_VERSION (the version the packages were built as, when the build was
+// given one; the workspace's by default), RELEASE_PUBLISHER_SIGNED (`true` only when a publisher
+// signed the packages for the operating systems) and RELEASE_DATE (RFC 3339; now by default).
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,19 +62,41 @@ export function workspaceVersion(cargoToml) {
   return version[1];
 }
 
-export function plan({ names, cargoToml, channel, notes, publicKey, date }) {
+export function plan({
+  names,
+  cargoToml,
+  channel,
+  notes,
+  publicKey,
+  date,
+  version,
+  publisherSigned = false,
+}) {
   if (channel !== "staging" && channel !== "stable") {
     throw new Error(`The channel must be staging or stable, not ${JSON.stringify(channel)}`);
   }
   if (!notes?.trim()) throw new Error("Release notes are required");
   if (!publicKey?.trim()) throw new Error("AURACODE_UPDATER_PUBLIC_KEY is required");
+  const built = version?.trim() || workspaceVersion(cargoToml);
+  if (!/^\d+\.\d+\.\d+$/u.test(built)) {
+    throw new Error(`The version must be three plain numbers, not ${JSON.stringify(built)}`);
+  }
+  const found = artifacts(names);
+  // A package built as another version is another build's: every named file carries the version,
+  // except the macOS updater archive, whose name is fixed.
+  for (const { kind, file } of found) {
+    if (kind !== "macos_universal_updater" && !file.includes(built)) {
+      throw new Error(`${file} was not built as version ${built}`);
+    }
+  }
   return {
     channel,
-    version: workspaceVersion(cargoToml),
+    version: built,
     pub_date: date,
     notes: notes.trim(),
     public_key: publicKey.trim(),
-    artifacts: artifacts(names),
+    publisher_signed: publisherSigned === true,
+    artifacts: found,
   };
 }
 
@@ -89,6 +113,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     channel: process.env.RELEASE_CHANNEL,
     notes: process.env.RELEASE_NOTES,
     publicKey: process.env.AURACODE_UPDATER_PUBLIC_KEY,
+    version: process.env.RELEASE_VERSION,
+    publisherSigned: process.env.RELEASE_PUBLISHER_SIGNED === "true",
     date: process.env.RELEASE_DATE || new Date().toISOString().replace(/\.\d+Z$/u, "Z"),
   });
   writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`);

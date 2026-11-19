@@ -1,7 +1,10 @@
 # Windows, macOS and Linux packaging
 
-The owner deferred public signing on 2026-10-26 and resumed it with the plan of 2026-11-04: the
-`Release` workflow below builds signed releases once the owner's signing credentials are set up.
+Two workflows build installers. `Publish` runs on every merge that changes the app and puts a
+version in front of people: see [Published builds and in-app updates](#published-builds-and-in-app-updates).
+`Build` is the manual one below, for trying a branch: its installers are never published and do
+not update themselves. No publisher signs either kind for the operating systems (the owner chose
+to stay unsigned on 2026-11-06).
 
 The manual `Build` workflow produces unsigned acceptance artifacts for four explicit targets:
 
@@ -29,250 +32,165 @@ and uses encoded arguments so Windows paths containing spaces remain intact. Thi
 runtime update and release validation logic remain Rust. Existing macOS local-signing behavior is
 preserved, while CI explicitly selects its ad-hoc identity.
 
-When public distribution resumes, it needs a backed-up Tauri updater key, trusted public key
-configuration, macOS Developer ID signing and notarization, the selected Windows signing mechanism,
-signed updater artifacts, the public release-only R2 route, and an old-build update dry run. No
-signing key is fabricated or recovered from credentials.
+## Published builds and in-app updates
 
-## Preview builds on the website
+Since 19 November 2026 every merge that changes the app becomes a version people can install, and
+the one every installed copy offers as an update (owner, 18 November 2026: "an update button pops
+up for every merge, and if u click it updates").
 
-Until signed releases exist, the download page offers the `Build` workflow's unsigned installers.
-They are the files of a GitHub release on this repository, and the page lists them from
-`apps/web/app/release-catalog.json`. Owner's rule (18 November 2026): whenever a new build is
-made, and for every merge that changes the app, the installers on the website are updated.
+### How a merge reaches people
 
-1. Build every target from main: `gh workflow run build.yml --ref main`. First run
-   `cargo check --release -p auracode-desktop --locked`, since every other build is a debug build.
-2. Download the run into a new, empty folder: `gh run download <run id> --dir <folder>`.
-3. Gather it (on Linux or in WSL, from the commit that was built):
+1. **A push to main starts `Publish`** (`.github/workflows/publish.yml`) when it touches what ends
+   up in the app: `apps/desktop`, `crates`, `packages/ui`, the lockfiles and toolchain files. A
+   merge of the website, docs or tests alone publishes nothing. It can also be started by hand.
+   One run at a time; a newer merge waits for the one building.
+2. **The build gets a number**: `0.1.N`, N the number of commits on main. It is higher with every
+   merge and the same for the same commit, so a rerun never makes a second version. The workspace
+   version in `Cargo.toml` stays as it is; `pnpm bundle --app-version` gives the number to Tauri.
+3. **Four targets build with their updater signatures** (`pnpm bundle --signed-updater`): the
+   universal macOS app and DMG, Windows x64 and ARM64 NSIS installers, and the Linux AppImage, deb
+   and rpm. macOS is signed ad hoc. No publisher signs the installers for the operating systems.
+4. **`aura-release prepare` and `verify` check every byte.** They refuse a missing or doubled
+   package, a package without its signature, a signature that does not verify against the trusted
+   public key or is bound to another version, and a package built as another version. They write
+   `latest.json` (what installed copies read), `downloads.json` (what the download page reads)
+   and `SHA256SUMS`.
+5. **The files become the GitHub release `v0.1.N`**, marked the latest. The workflow then fetches
+   `releases/latest/download/latest.json`, the address compiled into the app, and requires it to
+   be this version's manifest byte for byte.
+6. **The download page follows**: the workflow commits `downloads.json` as
+   `apps/web/app/release-catalog.json` to main, and the site redeploys. A push made with the
+   workflow's own token starts no workflow, so it cannot publish again.
+7. **The newest fifteen versions are kept.** Older `v` releases and their tags are deleted; a copy
+   that old updates straight to the newest. Hand-made releases (`build-…`) are left alone.
 
-   ```sh
-   cargo run --locked -p aura-release -- preview <folder> <new folder> build-YYYY-MM-DD \
-     YYYY-MM-DDTHH:MM:SS-05:00 "Preview build of main through #N."
-   ```
+What is new in a version is taken from `CHANGELOG.md`: the headlines of the lines added since the
+last published version (`.github/scripts/release-notes.mjs`). The date people see is the day it
+was built in US Eastern time.
 
-   The tag's day and the date are the same day in US Eastern time, the clock every date in this
-   project uses: write the date with Eastern's offset (`-05:00`, or `-04:00` in daylight time), so
-   the day the page shows is the day it was built there. A later build that day is
-   `build-YYYY-MM-DD.2`. (The first two releases, `build-2026-11-19` and `build-2026-11-19.2`, were
-   named by the UTC day; both were built on the evening of 18 November Eastern.) The command finds the six installers, refuses a missing or doubled one, a
-   link, or a filename that does not carry the workspace version, copies them to `assets/` with
-   their `SHA256SUMS`, and writes `downloads.json` last. It checks no signature, because there is
-   none: the catalog says `signed: false`, and the page then says the builds are unsigned, that
-   they do not update themselves, and how each system treats one.
-4. Publish the files: `gh release create build-YYYY-MM-DD <new folder>/assets/* --target <commit>
-   --title "auracode <version>, preview build of D Month YYYY" --notes-file <notes>`. The notes
-   say what the page says: unsigned, not notarized, no updates, and which builds have been run.
-5. Check one link from the catalog downloads with the checksum it lists, then replace
-   `apps/web/app/release-catalog.json` with `downloads.json` in a pull request. The site deploys
-   from main, so the page changes within minutes of the merge. `pnpm --filter @auracode/web test`
-   and `test:browser` read the committed catalog and check the page against it.
+### Who is trusted with what
 
-The release's links only work while the repository is public: a private repository's release
-files need a sign-in. `{ "release": null }` puts the page back to "Installers are on the way".
-An older preview release can be deleted once the page no longer points at it.
+- **The updater signature decides what gets installed.** It is made in the workflow's build step
+  with the private key in the repository's secrets, and checked by each installed copy against
+  the public key compiled into it, over the exact bytes downloaded and bound to the version the
+  manifest named. GitHub, a network in between, or anyone who could edit a release cannot make an
+  installed copy accept other bytes, an older version, or another product's package.
+- **Whoever holds the private key can sign an update**, and whoever can also publish a release in
+  this repository can deliver it. So the key lives only in GitHub's secret store and in the
+  owner's own backup; it is never in the repository, a log or a command line. The workflow runs
+  only for pushes to main and manual runs by people with write access. A pull request, from a
+  fork or not, never runs it.
+- **The build runs third-party code** (crates, npm packages, pinned actions) in the step that
+  holds the key. A malicious dependency could read it there. Dependencies are locked, actions are
+  pinned to commits, and the cache is written only by main.
+- **No publisher vouches for the installers to the operating system.** Windows and macOS warn
+  before a downloaded installer runs, and the download page says so and how to open it. An update
+  the app downloads itself is not stopped by those warnings; Smart App Control, where it is on,
+  can still block an unsigned installer.
+- **Losing the private key ends updates** for every installed copy: a new key means a new public
+  key, which old copies do not trust. They would have to be reinstalled by hand.
 
-## Official releases
+### One-time setup (done 19 November 2026)
 
-The manual `Release` workflow (`.github/workflows/release.yml`) builds every target signed, runs
-the stage through `aura-release`, and publishes it. It runs from main only.
+| Where | Name | What |
+|---|---|---|
+| Repository variable | `AURACODE_UPDATER_PUBLIC_KEY` | The updater's public key, as `tauri signer generate` wrote it |
+| Repository secret | `TAURI_SIGNING_PRIVATE_KEY` | The updater's private key |
+| Repository secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password |
 
-1. **preflight** stops at once when the run is not on main or any signing input below is missing,
-   and when `APPLE_SIGNING_IDENTITY` is not a Developer ID Application identity.
-2. **bundle** builds the four targets with `--signed-updater` and the chosen channel compiled in.
-   It never uses a build cache.
-   - macOS is signed with the Developer ID certificate, notarized with the App Store Connect key and
-     stapled, then checked with `codesign`, `spctl` and `stapler`.
-   - Windows is signed through Azure Artifact Signing (`artifact-signing-cli` as Tauri's
-     `signCommand`). Each installer's Authenticode signature must read Valid.
-   - Linux packages carry only their updater signatures.
-3. **publish** collects the packages and writes the plan (`.github/scripts/release-plan.mjs`: the
-   role of each file, the workspace version). It then runs `aura-release prepare` and `verify`, and
-   keeps the manifests as an artifact.
-   - With `publish` on, it uploads through `aura-release publish --upload`.
-   - For a stable release it then commits the stage's `downloads.json` as
-     `apps/web/app/release-catalog.json` to main. The site deploys from main, so the download page
-     updates itself.
+A publisher's signature can be added later in the same workflow (Developer ID and notarization on
+macOS, Authenticode on Windows) and the plan's `publisher_signed` set, which drops the download
+page's warnings. The workflow that did both for a manual release was removed with this change; it
+is in the history (`.github/workflows/release.yml` before #148).
 
-### One-time setup
+### What the app does
 
-Repository variables (Settings > Secrets and variables > Actions > Variables), public values:
+`apps/desktop/src-tauri/src/updater.rs`. Builds without a compiled-in public key (a development
+build, an old preview build) report `disabled` and say to install from the download page.
 
-| Variable | Value |
-|---|---|
-| `AURACODE_UPDATER_PUBLIC_KEY` | The Tauri updater public key: the contents of the `.pub` file `tauri signer generate` writes |
-| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: <name> (<team ID>)`, as `security find-identity -v -p codesigning` lists it |
-| `AZURE_SIGNING_ENDPOINT` | The Artifact Signing account's endpoint, such as `https://eus.codesigning.azure.net` |
-| `AZURE_SIGNING_ACCOUNT` | The Artifact Signing account name |
-| `AZURE_SIGNING_PROFILE` | Its certificate profile name |
-| `CLOUDFLARE_ACCOUNT_ID` | `5feb14f2fe605875bcf1472f348cb7ed` (infra/README.md) |
+- **Checking is automatic.** 45 seconds after start and every four hours, the app reads
+  `https://github.com/itscool2b/auracode/releases/latest/download/latest.json`: at most 64 KiB,
+  HTTPS only. Settings, General, "Check for updates" turns this off; "Check for updates" in
+  Settings, About still works then. A check the app made by itself that fails leaves no trace, and
+  none runs over a download or an installation.
+- **Redirects are followed only to GitHub's own asset hosts** (`github.com`,
+  `objects.githubusercontent.com`, `release-assets.githubusercontent.com`), over HTTPS, five at
+  most. A package address in the manifest must be
+  `https://github.com/itscool2b/auracode/releases/download/v<version>/<file>` with plain names and
+  nothing else: no other repository, no query, no encoded path.
+- **Update shows at the foot of the sidebar** when a newer version is found. Its panel has the
+  version, what is new, what the restart does to work under way, and one button, Update and
+  restart: it downloads at most 512 MiB, verifies the signature and the signed version, and
+  installs.
+- **Installing** stops every chat's agent and closes terminals, saves drafts, confirms the store
+  is closed, then verifies again and installs. It never offers to discard unsaved work. It waits,
+  and says so, while a Git change or an agent's own update runs. Windows exits into the installer;
+  macOS and Linux restart. On Linux an AppImage replaces its own file and a deb or rpm installs
+  through `pkexec`.
+- **No updater permission is granted to the webview.** Every decision, request, bound and check is
+  in Rust.
 
-Repository secrets:
+### Trying it without installing anything
 
-| Secret | Value |
-|---|---|
-| `TAURI_SIGNING_PRIVATE_KEY` | The updater private key (the file `tauri signer generate` writes). Keep a backup: losing it ends updates for every installed copy |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password, if it has one |
-| `APPLE_CERTIFICATE` | The Developer ID Application certificate and its private key, exported as `.p12`, in base64 (`openssl base64 -A -in cert.p12`) |
-| `APPLE_CERTIFICATE_PASSWORD` | The `.p12` export password |
-| `APPLE_API_ISSUER`, `APPLE_API_KEY` | The App Store Connect API key's issuer ID and key ID (Developer access) |
-| `APPLE_API_PRIVATE_KEY` | The contents of its `AuthKey_<key ID>.p8` |
-| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | The Entra app registration that holds the Artifact Signing Certificate Profile Signer role |
-| `CLOUDFLARE_API_TOKEN` | An API token with Workers R2 Storage edit on the account, used only to write `auracode-releases` |
+A development build never installs an update. Started with both
+`AURACODE_UPDATE_TEST_MANIFEST=http://127.0.0.1:<port>/latest.json` and
+`AURACODE_UPDATE_TEST_PUBLIC_KEY=<a test key>`, it reads that loopback server instead of GitHub,
+downloads the package it names from the same port, and verifies it against that key; Update and
+restart then says the package was verified and not installed. Any other address, or either
+variable alone, leaves updates off. A released build ignores both variables.
 
-Before the first publish, connect `download.auracode.si` as the `auracode-releases` bucket's custom
-domain (R2 > auracode-releases > Settings > Custom Domains). The bucket stays private until then,
-and `auracode-blobs` must never get a public domain.
+`apps/desktop/scripts/check-app-update.mjs` checks the button and its panel in Chromium and WebKit
+against a synthetic updater.
 
-### Releasing
+### Staging
 
-1. Bump `[workspace.package] version` in `Cargo.toml` in a pull request (the lockfile follows). Every
-   signature carries the version, and a published version never changes.
-2. Run `Release` with `channel: staging`, the notes, and `publish` on. Install the staging build.
-   Release the next version to staging as well, and check that the installed build updates to it.
-3. Run `Release` with `channel: stable` and `publish` on. Stable builds read only
-   `/latest.json`, so nothing reaches users before this step.
+A build made with `AURACODE_UPDATER_CHANNEL=staging` reads
+`releases/download/staging/latest.json` and accepts packages only from `staging-v…` releases; a
+stable build accepts only `v…` ones. Nothing publishes to staging today.
 
-A run with `publish` off builds, signs and verifies everything and uploads nothing. Use it to test
-the signing setup.
+## The release tool
 
-## Signed updater preparation
-
-`pnpm bundle --signed-updater --target <target> --bundles <format>` adds the checked-in updater
-artifact configuration. It refuses to start without both `AURACODE_UPDATER_PUBLIC_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY`. Supply these through the release environment, with optional
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; never put private material on a command line or in source.
-The public key is embedded at compile time. Key creation, safe backup and deployment are explicit
-release prerequisites, not operations performed by this command. Platform code signing and
-notarization remain separate from the Tauri updater signature.
-
-The pinned CLI binds updater signatures to the app version automatically during `tauri build`.
-Manual artifact signing must use its `--app-version` option. The client rejects a valid signature
-for a different advertised version, as well as modified bytes and older release versions.
-
-## Rust application update contract
-
-- `app_update_status` reads in-memory state without network access. Builds with no embedded public
-  key report `disabled`. There are no startup update requests.
-- `app_update_check` explicitly reads the fixed HTTPS manifest at `download.auracode.si/latest.json`.
-  Metadata is limited to 64 KiB. Target and newer-version selection use the pinned Tauri updater.
-- `app_update_download` explicitly downloads at most 512 MiB from the same host under `/releases/`,
-  with no redirects, URL credentials, query parameters or plaintext transport. It verifies the
-  package and signed version before retaining bytes in memory. Interrupted downloads can be retried.
-- `app_update_install` requires a verified download and reserves idle admission atomically. It
-  returns `waiting_for_idle` while any agent process, terminal reservation, owned folder mutation or
-  vendor update runs. Stop agents and close terminals, then retry; parked prompts stay persisted.
-  The command never stops active work merely to create an update opportunity.
-- Installation flushes drafts and confirms store shutdown through the existing quit machinery.
-  Updates refuse the ordinary quit option to discard unsaved work. The task survives a lost IPC
-  caller. Only after confirmed cleanup does Tauri verify again and install; Windows then exits
-  itself, while macOS restarts. A cleanup or installer failure after closing storage reports
-  `restart_required` and asks the user to restart before retrying. On Linux an AppImage replaces
-  its own file and a deb or rpm installs through `pkexec` (an administrator prompt); auracode then
-  restarts.
-
-No updater plugin permissions are granted to the webview. All decisions, network traffic, bounds,
-verification and cleanup run in Rust. The thin interface should poll status while an explicit
-operation runs, show returned errors, and require an Install action. A signed staging upgrade and
-signature-mismatch fixture using the actual installer remain required before public distribution.
-
-## Offline artifact preparation
-
-`aura-release` is a Rust release tool, not a publisher or a signer. It accepts an explicit plan and
-directory containing exactly the seven named package roles: a universal DMG, a universal
-`.app.tar.gz` updater, Windows x64 NSIS, Windows ARM64 NSIS, and the Linux x64 AppImage, deb and
-rpm. The six updater packages (all but the DMG) need their Tauri `.sig` files. The DMG checksum does not establish its code-signing or notarization status.
-The tool cannot determine whether a file's declared architecture matches the executable inside it;
-native package inspection and installation remain separate gates.
-
-Copy [the example plan](../crates/aura-release/release-plan.example.json) into an owned scratch
-directory. Replace its public key, filenames, version, date and release notes with the reviewed
-build metadata. The example deliberately contains no valid release key. Never include a private key
-in the plan. Run from the repository root:
+`aura-release` (`crates/aura-release`) is offline and fail-closed: no network, no private key, no
+platform signing. It accepts an explicit plan and a directory containing exactly the seven named
+package roles: a universal DMG, a universal `.app.tar.gz` updater, Windows x64 NSIS, Windows ARM64
+NSIS, and the Linux x64 AppImage, deb and rpm. The six updater packages (all but the DMG) need
+their Tauri `.sig` files. The tool cannot tell whether a file's declared architecture matches the
+executable inside it; installing each package remains a separate check.
 
 ```sh
 cargo run --locked -p aura-release -- prepare path/to/release-plan.json path/to/artifacts path/to/new-stage
 cargo run --locked -p aura-release -- verify path/to/new-stage
 ```
 
+`.github/scripts/release-plan.mjs` writes the plan from a directory of packages;
+[the example plan](../crates/aura-release/release-plan.example.json) shows its shape. Never
+include a private key in a plan.
+
 Preparation refuses existing output directories. It bounds each artifact at 512 MiB and metadata at
 64 KiB, rejects leaf links and filenames outside the explicit directory, verifies prehashed Minisign
 signatures using the supplied public key, and requires the signed version to equal the advertised
 version. It streams the exact verified bytes into the new stage. Missing or invalid artifacts leave
-`PREPARATION_INCOMPLETE` and no public manifests. Partial output is retained for inspection, never
-deleted automatically. A valid stage contains:
+`PREPARATION_INCOMPLETE` and no public manifests. A valid stage contains:
 
 - `latest.json`, with both macOS architectures pointing to the universal updater, distinct Windows
   architecture entries including the NSIS-specific target keys, and Linux entries for the AppImage
   (`linux-x86_64-appimage` and the plain `linux-x86_64`, which the updater reads for an AppImage),
   the deb (`linux-x86_64-deb`) and the rpm (`linux-x86_64-rpm`).
-- `downloads.json`, the website's version, notes, requirements, architecture links and per-file hashes.
+- `downloads.json`, the website's catalog: the version, notes, each installer's link, size and
+  hash, `signed` (the packages carry updater signatures) and `publisher_signed`.
 - `SHA256SUMS` and `releases/<version>/SHA256SUMS`, covering package and detached-signature bytes.
-- `releases/<version>/`, with copied packages and signatures.
+- `releases/<version>/`, with copied packages and signatures: the files of the GitHub release.
 - `release-plan.json` and `COMPLETE`, local preparation records that are not public release objects.
 
-Before verification, set `AURACODE_UPDATER_PUBLIC_KEY` from the independently trusted release
-configuration, using the same public key embedded in the application. Never derive that trust input
-from the stage being checked. Missing or mismatched pins fail verification. The website build uses
-this same environment variable when verifying `AURACODE_RELEASE_STAGE`.
+`verify` needs `AURACODE_UPDATER_PUBLIC_KEY` from the independently trusted release configuration,
+the same public key embedded in the application, never one read from the stage being checked. It
+reads the staged bytes again and compares every generated manifest and checksum. Artifact opens
+refuse leaf symlinks atomically.
 
-`verify` reads the staged bytes again and compares every generated manifest and checksum. Artifact
-opens refuse leaf symlinks atomically, including a link substituted after the initial path checks. A later
-change to the original build directory cannot change the copied stage. It does not establish
-platform trust, provenance or authorization to publish. Do not upload a whole scratch directory.
-Only the reviewed public object list above belongs in the release bucket. Upload immutable versioned
-objects first, fetch and verify them, then publish the channel's `latest.json` last. Do not overwrite
-an already published version.
-
-`cargo run -p aura-release -- publish <stage>` does exactly that.
-- **Dry run by default.** With `AURACODE_UPDATER_PUBLIC_KEY` set, it verifies the stage again, then
-  prints the public object list with each object's content type and cache policy. It uploads
-  nothing.
-- **Upload order.** With `--upload`, it writes to `AURACODE_RELEASE_BUCKET` (default
-  `auracode-releases`) through the repository's pinned Wrangler and the operator's own Cloudflare
-  sign-in. The order is: the versioned files under `releases/<version>/` (cached as immutable), then
-  `SHA256SUMS` and `downloads.json`, then `latest.json`. The manifests revalidate after 60 seconds.
-- **Uploads exactly what verification accepted.** Expected hashes come only from the
-  verification pass: manifests regenerated from the exact artifact bytes read. Before the first
-  upload, every versioned file is read once more through the same no-follow helper and must match.
-  Manifests upload from the regenerated bytes, and every object streams to Wrangler over stdin from
-  memory. A file swapped or relinked after verification therefore fails before anything is written
-  and can never be uploaded.
-- **No overwrites.** Before writing anything, every versioned key is checked. A key that already
-  holds identical bytes is skipped, so an interrupted run can be resumed. Different bytes stop the
-  run untouched.
-- **Read-back.** Each upload is read back and compared before the next, so a failure always stops
-  before `latest.json`.
-- **Staging.** Staging stages publish only under `staging/`.
-- **Limits.** Each object must fit one 300 MiB Wrangler upload, and the whole release is held in
-  memory during publication. Anything larger is refused before the first write.
-- **Bucket guard.** `AURACODE_RELEASE_BUCKET` must be `auracode-releases` or an
-  `auracode-releases-*` test bucket, so a mistyped override can never publish into the private
-  blob bucket.
-
-The website remains honestly unpublished by default through `app/release-catalog.json`. For a
-qualified build, set `AURACODE_RELEASE_STAGE` to the absolute stage directory and run
-`pnpm --filter @auracode/web build`. Vite invokes Rust `verify` before reading the generated catalog;
-invalid bytes stop the build. The resulting `/download` is prerendered with all architecture links,
-checksums and notes, so it works without JavaScript. No runtime browser request activates downloads.
-The public catalog types are generated by `cargo run -p aura-release -- export-types`; a Rust parity
-test checks the committed TypeScript contract.
-
-## Separate staging qualification
-
-Build the old and candidate qualification applications with `AURACODE_UPDATER_CHANNEL=staging`,
-alongside the explicitly supplied updater signing environment described above. Other nonempty
-channel values are rejected at build time. These applications read only
-`https://download.auracode.si/staging/latest.json`, accept package URLs only below
-`/staging/releases/`, and show a staging label in update settings and startup version diagnostics.
-Normal builds default to `stable`, read `/latest.json`, and reject staging package URLs. Neither
-channel accepts arbitrary runtime endpoints, redirects, credentials, query strings or fragments.
-
-Use `"channel": "staging"` in the corresponding release plan. Its local stage has the same layout,
-but every public URL has the `/staging` prefix. The generated website also labels this catalog as a
-staging preview. Publish only to that prefix for the old-build upgrade test. A stable application
-cannot use that manifest; do not temporarily replace the production manifest for a test. Use an
-isolated test data directory and owned fixtures, never a real user's profile, for installer trials.
+The public catalog types are generated by `cargo run -p aura-release -- export-types`; a Rust
+parity test checks the committed TypeScript contract. The website reads the committed
+`app/release-catalog.json`; with `AURACODE_RELEASE_STAGE` set to a stage directory its build
+verifies that stage and reads its catalog instead (`apps/web/tests/release.test.mjs`).
 
 ## Final verification commands and evidence
 
@@ -362,15 +280,16 @@ notarization and stapling, then prepare the stage from those final bytes.
 |---|---|
 | macOS universal | Inspect both architecture slices, install and launch on Apple Silicon and Intel; verify configured minimum OS, signature, notarization and staple; retain existing profile data across upgrade |
 | Windows x64 and ARM64 | Install, launch, upgrade and uninstall on each architecture; verify Authenticode and WebView2 behavior, including missing-runtime behavior; an upgrade retains user data, an uninstall deletes it as [uninstall.md](uninstall.md) describes, and both leave unrelated vendor processes running |
-| Actual updater | Older staging build downloads and installs a newer staged signed package; tampering and wrong-version signatures refuse installation; interrupted download retries; agents, PTYs, setup/Git work and unsaved drafts prevent unsafe install |
-| Release route | Only the dedicated release bucket is public; stable and staging prefixes stay separate; content types, downloads, immutable version objects and short-lived latest manifests behave as reviewed |
+| Actual updater | An older published build finds, downloads and installs a newer one on each system; tampering and wrong-version signatures refuse installation; interrupted download retries; agents, PTYs, setup/Git work and unsaved drafts prevent unsafe install |
+| Release route | `releases/latest/download/latest.json` serves the newest version's manifest; stable and staging tags stay separate; each package's bytes match its published checksum |
 | Final visuals and power | Real Windows/macOS screenshots, accessibility and keyboard review against the chosen references; unlocked native visible/minimized/background power measurements and warm-launch timing |
 
-The true external prerequisites are protected updater-key creation and backup, the owner's platform
-signing identities and chosen Windows signing service, permissions for the dedicated release route,
-qualified Windows ARM64 and both Mac architecture environments, and an unlocked visible desktop for
-manual performance/privacy checks. No credential, certificate or account configuration was read or
-changed to prepare this tooling. Publication and native signed-upgrade acceptance remain pending.
+What still needs things outside this repository: the owner's backup of the updater key, a
+publisher's signing identities if the warnings are ever to go, Windows ARM64 and both Mac
+architectures to install on, and an unlocked visible desktop for manual performance and privacy
+checks. An update installed by a published build on a real machine, on each system, is still to be
+seen: the checks so far cover the app's side against a loopback server and the published files
+against their checksums.
 
 The M2-M5 audit's reviewed non-Git initialization, project terminal/editor controls and
 capability-qualified extra folder forwarding are implemented and have focused local verification.

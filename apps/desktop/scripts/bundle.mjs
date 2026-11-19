@@ -10,6 +10,10 @@
 // them. A Linux AppImage carries GStreamer's base and good plugins, staged from this machine and
 // checked in the image afterwards, unless `--without-media` says otherwise
 // (scripts/appimage-media.mjs).
+//
+// `--app-version <x.y.z>` builds the app as that version instead of the workspace's: the Publish
+// workflow numbers every build (0.1.N, N the number of commits on main), because an installed copy
+// offers an update only when the published version is higher than its own.
 
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -17,12 +21,23 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { builtImages, checkImage, imageDir, prepareMedia } from "./appimage-media.mjs";
-import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
+import { appVersion, releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
 import { ensureModels } from "./dictation-models.mjs";
 
 const signingScript = fileURLToPath(new URL("./macos-signing.sh", import.meta.url));
 const tauriCli = createRequire(import.meta.url).resolve("@tauri-apps/cli/tauri.js");
 const args = process.argv.slice(2);
+const versioned = args.indexOf("--app-version");
+if (versioned >= 0) {
+  let version;
+  try {
+    version = appVersion(args[versioned + 1]);
+  } catch (error) {
+    console.error(`auracode: ${error.message}`);
+    process.exit(1);
+  }
+  args.splice(versioned, 2, "--config", JSON.stringify({ version }));
+}
 const signed = args.indexOf("--signed-updater");
 if (signed >= 0) {
   requireUpdaterSigning(process.env);

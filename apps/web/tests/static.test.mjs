@@ -61,11 +61,17 @@ test("public pages are prerendered to follow the system appearance without JavaS
     }
     assert.ok(downloads.includes(`href="${release.checksums_url}"`));
     assert.doesNotMatch(downloads, /Not published|Installer coming soon/);
-    // An unsigned build says so and says how each system treats it; a signed one says neither.
-    const warned = /These installers are unsigned and do not update themselves/;
-    if (release.signed) assert.doesNotMatch(downloads, warned);
-    else {
-      assert.match(downloads, warned);
+    // A build without an updater signature says it never updates itself; one with it says it
+    // does. Either way, without a publisher's signature the page says how each system treats it.
+    const never = /These installers are unsigned and do not update themselves/;
+    const itself = /Once installed, auracode updates itself/;
+    if (release.signed) assert.doesNotMatch(downloads, never);
+    else assert.match(downloads, never);
+    if (release.publisher_signed === true) {
+      assert.doesNotMatch(downloads, /Run anyway/);
+      assert.doesNotMatch(downloads, itself);
+    } else {
+      if (release.signed) assert.match(downloads, itself);
       assert.match(downloads, /Run anyway/);
       assert.match(downloads, /Open Anyway/);
       assert.match(downloads, /sudo apt install/);
@@ -74,6 +80,7 @@ test("public pages are prerendered to follow the system appearance without JavaS
     assert.match(downloads, /Not published/);
     assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
     assert.doesNotMatch(downloads, /These installers are unsigned/);
+    assert.doesNotMatch(downloads, /auracode updates itself/);
   }
   await access(new URL("images/desktop-light.png", root));
   for (const theme of ["light", "dark"])

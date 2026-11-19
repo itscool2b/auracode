@@ -1,0 +1,334 @@
+# Publish: every merge that changes the app becomes a version people can install, and the one
+# every installed copy offers as an update. It builds each target with its updater signature,
+# checks every byte and signature with aura-release, publishes them as a GitHub release, and points
+# the download page at it. docs/releases.md has the whole design and the one-time setup.
+#
+# Who can run it: a push to main (only people who can write to the repository) or a manual run.
+# A pull request never runs it, so a fork never sees the signing key. The key signs updater
+# packages only; no publisher signs the installers for the operating systems yet.
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    # What ends up in the app. A merge of the website, docs or tests alone publishes nothing.
+    paths:
+      - apps/desktop/**
+      - crates/**
+      - packages/ui/**
+      - Cargo.toml
+      - Cargo.lock
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - rust-toolchain.toml
+      - .cargo/**
+      - .github/workflows/publish.yml
+      - .github/scripts/release-plan.mjs
+      - .github/scripts/release-notes.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time. While one builds, a newer merge waits (GitHub keeps only the newest waiting run),
+# so versions are published in order and a release is never cut off halfway.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    name: number the build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
+      notes: ${{ steps.plan.outputs.notes }}
+    steps:
+      - name: Check out, with history and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require main and the updater key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          AURACODE_UPDATER_PUBLIC_KEY: ${{ vars.AURACODE_UPDATER_PUBLIC_KEY }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Builds are published from main only, not $GITHUB_REF."
+            exit 1
+          fi
+          missing=()
+          for name in TAURI_SIGNING_PRIVATE_KEY AURACODE_UPDATER_PUBLIC_KEY; do
+            if [ -z "${!name}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing release configuration (see docs/releases.md): ${missing[*]}"
+            exit 1
+          fi
+      - name: Number the build and write what is new
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 0.1.N, N the number of commits on main: higher with every merge, and the same for the
+          # same commit however often this runs.
+          version="0.1.$(git rev-list --count HEAD)"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          if gh release view "v$version" --json tagName >/dev/null 2>&1; then
+            echo "::notice::v$version is already published; nothing to do."
+            echo "publish=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >>"$GITHUB_OUTPUT"
+          previous=$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || true)
+          {
+            echo "notes<<AURACODE_NOTES_END"
+            node .github/scripts/release-notes.mjs "$previous"
+            echo "AURACODE_NOTES_END"
+          } >>"$GITHUB_OUTPUT"
+          echo "Publishing v$version (after ${previous:-nothing})."
+
+  bundle:
+    name: bundle (${{ matrix.target }})
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-26
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            bundles: app,dmg
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
+            bundles: nsis
+          - os: windows-2025
+            target: aarch64-pc-windows-msvc
+            rust-targets: aarch64-pc-windows-msvc
+            bundles: nsis
+          # Ubuntu 22.04: packages built against its glibc run on it and every newer distribution.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            rust-targets: x86_64-unknown-linux-gnu
+            bundles: deb,rpm,appimage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    env:
+      BUNDLE_TARGET: ${{ matrix.target }}
+      BUNDLE_FORMATS: ${{ matrix.bundles }}
+      BUILD_VERSION: ${{ needs.plan.outputs.version }}
+      AURACODE_UPDATER_CHANNEL: stable
+      AURACODE_UPDATER_PUBLIC_KEY: ${{ vars.AURACODE_UPDATER_PUBLIC_KEY }}
+    steps:
+      - name: Keep LF line endings (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.rust-targets }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libxdo-dev patchelf rpm
+          # The AppImage carries GStreamer's base and good plugins (scripts/appimage-media.mjs).
+          sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-gl gstreamer1.0-alsa gstreamer1.0-pulseaudio
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main writes it, and only this workflow reads this key.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+          key: publish-${{ matrix.target }}
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check committed Rust bindings before building the frontend
+        run: bash .github/scripts/export-bindings.sh check "$RUNNER_TEMP/bindings-build"
+      - name: Use an ad-hoc signature (macOS)
+        if: runner.os == 'macOS'
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+      - name: Select Clang for the Windows ARM64 speech engine
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          Get-Command ninja.exe, clang-cl.exe -ErrorAction Stop | Out-Null
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          $toolchain = Join-Path $env:GITHUB_WORKSPACE '.github/cmake/windows-arm64-clang.cmake'
+          "CMAKE_TOOLCHAIN_FILE=$($toolchain.Replace('\', '/'))" >> $env:GITHUB_ENV
+
+      - name: Build the bundles with their updater signatures
+        env:
+          # The one step that holds the updater's private key.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The AppImage tools run from their own extraction instead of needing FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: pnpm --filter @auracode/desktop bundle --signed-updater --app-version "$BUILD_VERSION" --target "$BUNDLE_TARGET" --bundles "$BUNDLE_FORMATS"
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: publish-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
+            target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+            target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe.sig
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/deb/*.deb.sig
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm.sig
+            target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.sig
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true
+      - name: Keep a cancelled build out of the cache
+        if: cancelled()
+        run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
+
+  publish:
+    name: verify and publish
+    needs: [plan, bundle]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # Creating the release and committing the download page's catalog.
+      contents: write
+    env:
+      AURACODE_UPDATER_PUBLIC_KEY: ${{ vars.AURACODE_UPDATER_PUBLIC_KEY }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: publish-release-tool
+      - name: Download the packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: publish-*-${{ github.sha }}
+          path: ${{ runner.temp }}/downloaded
+          merge-multiple: true
+      - name: Write the release plan
+        env:
+          RELEASE_CHANNEL: stable
+          RELEASE_NOTES: ${{ needs.plan.outputs.notes }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          mkdir "$RUNNER_TEMP/artifacts"
+          find "$RUNNER_TEMP/downloaded" -type f -exec mv -n {} "$RUNNER_TEMP/artifacts/" \;
+          # The day people see is the day it was built in US Eastern time (docs/releases.md).
+          RELEASE_DATE=$(TZ=America/New_York date +%Y-%m-%dT%H:%M:%S%:z)
+          export RELEASE_DATE
+          node .github/scripts/release-plan.mjs "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/plan.json"
+      - name: Prepare and verify the release
+        run: |
+          cargo run --locked -p aura-release -- prepare "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/stage"
+          cargo run --locked -p aura-release -- verify "$RUNNER_TEMP/stage"
+      - name: Publish the release
+        env:
+          RELEASE_NOTES: ${{ needs.plan.outputs.notes }}
+        run: |
+          payload="$RUNNER_TEMP/stage/releases/$VERSION"
+          {
+            printf '%s\n\n' "$RELEASE_NOTES"
+            echo "Installed copies show **Update** for this version by themselves. To install from scratch, use [auracode.si/download](https://auracode.si/download)."
+            echo
+            echo "No publisher has signed these installers yet, so Windows and macOS warn before one runs; the download page says how to open it. Every package carries an updater signature, which auracode checks before it installs an update."
+            echo
+            echo '```'
+            cat "$payload/SHA256SUMS"
+            echo '```'
+          } >"$RUNNER_TEMP/notes.md"
+          # latest.json goes up with the packages: once this release is the newest, it is the
+          # manifest every installed copy reads.
+          gh release create "v$VERSION" "$payload"/* "$RUNNER_TEMP/stage/latest.json" \
+            --target "$GITHUB_SHA" --title "auracode $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
+      - name: Check what installed copies will read
+        run: |
+          # The address is the one compiled into the app. It must answer with this version's
+          # manifest, byte for byte, and one package must match its published checksum.
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL -o "$RUNNER_TEMP/served.json" "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json" &&
+              cmp -s "$RUNNER_TEMP/served.json" "$RUNNER_TEMP/stage/latest.json"; then
+              served=yes
+              break
+            fi
+            sleep 10
+          done
+          if [ "${served:-}" != yes ]; then
+            echo "::error::The newest release does not serve this version's manifest."
+            exit 1
+          fi
+          curl -fsSL -o "$RUNNER_TEMP/SHA256SUMS" "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/SHA256SUMS"
+          cmp "$RUNNER_TEMP/SHA256SUMS" "$RUNNER_TEMP/stage/SHA256SUMS"
+      - name: Point the download page at this version
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # Main may have moved during the builds: commit on top of it as it is now.
+          git fetch --depth 1 "$remote" main
+          git checkout -B release-catalog FETCH_HEAD
+          cp "$RUNNER_TEMP/stage/downloads.json" apps/web/app/release-catalog.json
+          if git diff --quiet -- apps/web/app/release-catalog.json; then
+            echo "The download page already lists $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/app/release-catalog.json
+          git commit -m "Download page: version $VERSION"
+          # The site deploys from main, so this push publishes the new download page. A push made
+          # with this token starts no workflow, so it cannot publish again.
+          git push "$remote" HEAD:main
+      - name: Keep the newest fifteen versions
+        run: |
+          # Only releases this workflow made (v and three numbers). Hand-made ones are left alone.
+          gh release list --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(.createdAt) | reverse | .[15:] | .[].tagName' |
+            while read -r tag; do
+              echo "Removing $tag"
+              gh release delete "$tag" --cleanup-tag --yes
+            done
