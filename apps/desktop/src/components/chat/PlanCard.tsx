@@ -3,6 +3,7 @@ import type { PermissionOption, PermissionRequest } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { permissionResolutionLabel } from "../../lib/chat/present";
 import type { PermissionItem } from "../../lib/chat/transcript";
+import { errorMessage } from "../../lib/errors";
 import { Answer } from "../Markdown";
 
 /** The plan an agent asks to leave plan mode with, and the options that accept or decline it. */
@@ -46,6 +47,7 @@ export function PlanCard({
   agentName,
   onRespond,
   onAddToPlan,
+  build,
 }: {
   readonly item: PermissionItem;
   readonly approval: PlanApproval;
@@ -54,14 +56,33 @@ export function PlanCard({
   readonly onRespond: (optionId: string | null) => void;
   /** Declines the plan with a note for the agent; resolves once the note is on its way. */
   readonly onAddToPlan?: (declineOptionId: string, note: string) => Promise<void>;
+  /**
+   * Settings' Building role, when accepting can hand the plan to it (lib/roles.ts): its name,
+   * and the hand-over, which resolves once the builder has the plan.
+   */
+  readonly build?: { readonly label: string; readonly onBuild: () => Promise<void> };
 }) {
   const noteId = useId();
+  const [handing, setHanding] = useState(false);
+  const [handFailure, setHandFailure] = useState<string | null>(null);
+  const hand = async () => {
+    if (!build) return;
+    setHanding(true);
+    setHandFailure(null);
+    try {
+      await build.onBuild();
+    } catch (failure) {
+      setHandFailure(errorMessage(failure));
+    } finally {
+      setHanding(false);
+    }
+  };
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const { request: ask, resolution } = item;
   const closed = resolution !== null || request?.gone === true;
-  const busy = request?.busy === true || sending;
+  const busy = request?.busy === true || sending || handing;
   const send = async () => {
     if (!onAddToPlan || !note.trim()) return;
     setSending(true);
@@ -163,9 +184,20 @@ export function PlanCard({
       ) : (
         <div className="chat-plan-actions">
           <div className="ui-row">
+            {build ? (
+              <button
+                type="button"
+                className="g-button g-button-primary"
+                data-testid="plan-build"
+                disabled={busy}
+                onClick={() => void hand()}
+              >
+                {handing ? "Handing over…" : `Accept and build with ${build.label}`}
+              </button>
+            ) : null}
             <button
               type="button"
-              className="g-button g-button-primary"
+              className={build ? "g-button" : "g-button g-button-primary"}
               data-testid="permission-option"
               data-test-option-id={approval.accept.option_id}
               data-test-option-kind={approval.accept.kind}
@@ -199,7 +231,9 @@ export function PlanCard({
             )}
           </div>
           <p className="chat-plan-hint">
-            Accepting lets {agentName} start implementing.
+            {build
+              ? `Accept and build hands the plan to ${build.label}, your Building model. Accept plan lets ${agentName} implement it.`
+              : `Accepting lets ${agentName} start implementing.`}
             {onAddToPlan ? " Adding sends your note, and it keeps planning with it." : ""}
           </p>
         </div>
@@ -207,6 +241,11 @@ export function PlanCard({
       {request?.error ? (
         <span role="alert" className="ui-error" data-testid="permission-error">
           {request.error}
+        </span>
+      ) : null}
+      {handFailure ? (
+        <span role="alert" className="ui-error" data-testid="plan-build-error">
+          {handFailure}
         </span>
       ) : null}
     </div>

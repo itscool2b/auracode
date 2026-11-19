@@ -2083,6 +2083,12 @@ export type GeneralPreferences = {
 	 *  project tools at once and keeps what the projects hold.
 	 */
 	coordinated_projects: boolean,
+	/**
+	 *  Which agent and model does which kind of work (owner, 19 November 2026: "different models
+	 *  for different things like fable for planning, gpt 6 astra for implementation or mixing
+	 *  and matching"). Each is unset until chosen, and an unset one changes nothing.
+	 */
+	roles?: RoleModels,
 };
 
 export type GitFileState = {
@@ -2711,6 +2717,17 @@ export type MemoryRevision = {
 	created_at: number,
 };
 
+/**  The kinds of work a model can be chosen for. */
+export type ModelRole = 
+/**  Planning: applied when Plan is turned on in a chat of this agent. */
+"plan" | 
+/**  Building: offered when a plan is accepted, as "Accept and build with". */
+"build" | 
+/**  A coordinated project's coordinator. */
+"coordinator" | 
+/**  A coordinated project's workers, unless the coordinator names another. */
+"worker";
+
 export type MotionPreference = 
 /**  Full motion still honors the operating system's reduced-motion setting. */
 "full" | "reduced" | "off";
@@ -3310,6 +3327,22 @@ export type RevertResult = {
 	recovery_paths: string[],
 };
 
+/**  An agent, and optionally its model and thinking level, chosen for one kind of work. */
+export type RoleModel = {
+	agent: string,
+	/**  `None` leaves the agent's own choice. */
+	model: string | null,
+	effort: string | null,
+};
+
+/**  The choice for each kind of work. `None`: nothing is chosen, and nothing changes. */
+export type RoleModels = {
+	plan?: RoleModel | null,
+	build?: RoleModel | null,
+	coordinator?: RoleModel | null,
+	worker?: RoleModel | null,
+};
+
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 
 /**
@@ -3485,7 +3518,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns on or off looking for a newer auracode by itself. */
 { type: "automatic_updates"; enabled: boolean } | 
 /**  Turns the coordinated projects experiment on or off. */
-{ type: "coordinated_projects"; enabled: boolean };
+{ type: "coordinated_projects"; enabled: boolean } | 
+/**  Chooses the agent, model and thinking level for one kind of work, or clears the choice. */
+{ type: "role_model"; role: ModelRole; choice: RoleModel | null };
 
 export type SetupCommand = {
 	program: string,

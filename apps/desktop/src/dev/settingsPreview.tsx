@@ -108,6 +108,8 @@ const setup: SetupApi = {
     if (action.type === "browser_passwords") general.browser_passwords = action.enabled;
     if (action.type === "automatic_updates") general.automatic_updates = action.enabled;
     if (action.type === "coordinated_projects") general.coordinated_projects = action.enabled;
+    if (action.type === "role_model")
+      general.roles = { ...general.roles, [action.role]: action.choice };
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },

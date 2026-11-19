@@ -43,6 +43,11 @@ export function createSetupFixture(): SetupApi & { readonly general: () => Gener
         snapshot.preferences.general.automatic_updates = action.enabled;
       if (action.type === "coordinated_projects")
         snapshot.preferences.general.coordinated_projects = action.enabled;
+      if (action.type === "role_model")
+        snapshot.preferences.general.roles = {
+          ...snapshot.preferences.general.roles,
+          [action.role]: action.choice,
+        };
       snapshot.preferences.revision++;
       return structuredClone(snapshot);
     },

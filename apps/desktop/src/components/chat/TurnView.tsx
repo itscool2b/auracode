@@ -9,7 +9,7 @@ import { Answer } from "../Markdown";
 import type { ConversationIntent } from "./ConversationDialog";
 import { CopyAction } from "./CopyAction";
 import { ErrorCard } from "./ErrorCard";
-import { PermissionCard } from "./PermissionCard";
+import { PermissionCard, type PlanBuild } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
 import { UserMessage } from "./UserMessage";
@@ -26,6 +26,8 @@ export interface TurnActions extends BlobProps {
     declineOptionId: string,
     note: string,
   ) => Promise<void>;
+  /** A plan card's Accept and build with, when Settings' Building role can take the plan. */
+  readonly planBuild?: PlanBuild;
   /** The chat's agent, as plan cards name it. */
   readonly agentName?: string;
   readonly onRespondUi: (requestId: string, answer: UiAnswer | null) => void;
@@ -176,6 +178,7 @@ export const TurnView = memo(function TurnView({
                   }
                   agentName={actions.agentName}
                   onAddToPlan={actions.onAddToPlan}
+                  planBuild={actions.planBuild}
                   blobs={actions.blobs}
                   onLoadBlob={actions.onLoadBlob}
                 />

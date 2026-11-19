@@ -229,7 +229,54 @@ try {
         browser_passwords: true,
         automatic_updates: false,
         coordinated_projects: false,
+        roles: { plan: null, build: null, coordinator: null, worker: null },
       });
+      // Models by role: a row left alone changes nothing. Building takes an agent, then that
+      // agent's model, then that model's thinking level, each shown once the one before is chosen.
+      const buildAgent = page.getByLabel("Building: agent");
+      assert.equal(await chosen(buildAgent), "");
+      assert.equal(await page.getByLabel("Building: model").count(), 0);
+      await choose(buildAgent, "codex");
+      await page.getByLabel("Building: model").waitFor();
+      await choose(page.getByLabel("Building: model"), "gpt-5.5-mini");
+      await page.getByLabel("Building: thinking").waitFor();
+      await choose(page.getByLabel("Building: thinking"), "high");
+      await page.waitForFunction(
+        () => window.settingsFixture.general().roles.build?.effort === "high",
+      );
+      assert.deepEqual((await general()).roles, {
+        plan: null,
+        build: { agent: "codex", model: "gpt-5.5-mini", effort: "high" },
+        coordinator: null,
+        worker: null,
+      });
+      // Another model clears the thinking level, which was chosen for the old one.
+      await choose(page.getByLabel("Building: model"), "gpt-5.5-codex");
+      await page.waitForFunction(
+        () => window.settingsFixture.general().roles.build?.model === "gpt-5.5-codex",
+      );
+      assert.equal((await general()).roles.build.effort, null);
+      // Codex has not run that model here, so its thinking levels are not offered yet.
+      assert.equal(await page.getByLabel("Building: thinking").count(), 0);
+      // An agent that has not listed its models yet still takes a role, and its row says why it
+      // offers no model.
+      await choose(page.getByLabel("Planning: agent"), "claude");
+      await page.waitForFunction(
+        () => window.settingsFixture.general().roles.plan?.agent === "claude",
+      );
+      assert.equal(await page.getByLabel("Planning: model").count(), 0);
+      assert.match(
+        await page.locator('[data-setting="Planning"]').textContent(),
+        /Claude Code lists its models once one of its chats starts./,
+      );
+      // The first entry clears a role.
+      await choose(page.getByLabel("Planning: agent"), "");
+      await choose(buildAgent, "");
+      await page.waitForFunction(() => {
+        const roles = window.settingsFixture.general().roles;
+        return roles.plan === null && roles.build === null;
+      });
+      assert.equal(await page.getByLabel("Building: model").count(), 0);
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();
       await page.waitForFunction(() => window.settingsFixture.general().sounds);
