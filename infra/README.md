@@ -22,6 +22,13 @@ marked. The relay Workers, the release bucket and the website Workers are curren
 | Worker | `auracode-relay`, route `auracode.si/api/remote/*` | Remote sessions relay: one Durable Object (`Room`, SQLite-backed) per computer. Stores key and token hashes only | Current |
 | Preview Worker | `auracode-relay-preview`, route `preview.auracode.si/api/remote/*` | The same relay for the preview site | Current |
 
+The zone has one rate limiting rule, added on 2026-11-19 before the repository was opened (ruleset
+`e81ea7c28dcc4e47b6d412e383c4a1b4`, phase `http_ratelimit`): a path starting `/api/remote/` gets at
+most 60 requests in 10 seconds from one address and Cloudflare location, then a 429 for 10 seconds.
+It covers the relay on the site and on the preview. The free plan allows this one rule, with this
+period and this timeout. A burst of 120 requests at the preview relay was refused partway while
+the website kept answering.
+
 In the paragraphs below, everything about D1, the blob buckets, Email Sending, Turnstile,
 `auracode-api`, `auracode-api-preview`, the `/api/*` route, sign-in and invitations describes the
 removed account service. The longer runs are marked where they start.

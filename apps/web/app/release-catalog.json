@@ -1,1 +1,66 @@
-{ "release": null }
+{
+  "release": {
+    "channel": "stable",
+    "signed": false,
+    "version": "0.1.0",
+    "pub_date": "2026-11-19T04:03:00Z",
+    "notes": "Preview build of main through #145.",
+    "checksums_url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/SHA256SUMS",
+    "downloads": [
+      {
+        "kind": "macos_universal_dmg",
+        "label": "macOS · Apple silicon and Intel",
+        "requirements": "macOS 13.3 or newer",
+        "file": "auracode_0.1.0_universal.dmg",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode_0.1.0_universal.dmg",
+        "sha256": "93e930b12cf20423011798714ab8090eae32592334535c7e9f2a2e487db3f6bd",
+        "bytes": 165230250
+      },
+      {
+        "kind": "windows_x64_nsis",
+        "label": "Windows · x64",
+        "requirements": "Windows 10 or newer, with Microsoft Edge WebView2",
+        "file": "auracode_0.1.0_x64-setup.exe",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode_0.1.0_x64-setup.exe",
+        "sha256": "965cdd14ca6cac2065cda0c626c6002cb9c443860063b71bf3716b93ba6955d5",
+        "bytes": 130579944
+      },
+      {
+        "kind": "windows_arm64_nsis",
+        "label": "Windows · ARM64",
+        "requirements": "Windows 10 or newer, with Microsoft Edge WebView2",
+        "file": "auracode_0.1.0_arm64-setup.exe",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode_0.1.0_arm64-setup.exe",
+        "sha256": "e9c78d4d565a49bbbdb82b7c67f062e488b5fd83b9e61770de7c7ed11a0a9746",
+        "bytes": 128497252
+      },
+      {
+        "kind": "linux_x64_appimage",
+        "label": "Linux · AppImage",
+        "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
+        "file": "auracode_0.1.0_amd64.AppImage",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode_0.1.0_amd64.AppImage",
+        "sha256": "b28a52aa6be84b7731bf664176058cf09b763a53c73e4b56cc30fefb257fc95a",
+        "bytes": 222685688
+      },
+      {
+        "kind": "linux_x64_deb",
+        "label": "Linux · Debian and Ubuntu",
+        "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
+        "file": "auracode_0.1.0_amd64.deb",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode_0.1.0_amd64.deb",
+        "sha256": "b74d057f395936283eb69413f5039f605b82917412423225bcd9cde117f86e04",
+        "bytes": 140224072
+      },
+      {
+        "kind": "linux_x64_rpm",
+        "label": "Linux · Fedora and other RPM systems",
+        "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
+        "file": "auracode-0.1.0-1.x86_64.rpm",
+        "url": "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19.2/auracode-0.1.0-1.x86_64.rpm",
+        "sha256": "7f577dea53c32be0038332ca8bc0191bf153a480bb3f738cb14f6cd122401c78",
+        "bytes": 140232284
+      }
+    ]
+  }
+}

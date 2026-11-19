@@ -118,7 +118,8 @@ in auracode"). The reader uses the app and may not be a programmer:
 The website's changelog page is built from this file (`apps/web/scripts/changelog.ts`), and every
 push to `main` redeploys the site, so a merged line is public within minutes (owner, 10 November
 2026: every merge adds to the changelog, "which updates on the website as well"). The page shows a
-line's words and its pull request number, never the link: the repository is private. The headline
+line's words and its pull request number, not the link (the page was built while the
+repository was private; it has been public since 19 November 2026). The headline
 is set in ink and the rest of the line follows it as the body.
 
 ## Getting a change into the installed app

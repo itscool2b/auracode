@@ -224,7 +224,10 @@ Security, from the review of 10 November 2026 (each is a known limit, not a surp
 - **A bot link that is sealed end to end**, and one that expires when idle: the first would need
   the bot to run a program of ours.
 - **The relay on an origin of its own.** It answers under `auracode.si`, the page's origin.
-- **Per-room rate limits** at Cloudflare's edge for new sockets and host claims.
+- **Per-room rate limits** at Cloudflare's edge for new sockets and host claims. Since 19 November
+  2026 the zone has one rule per address instead: more than 60 requests to `/api/remote/*` in ten
+  seconds from one address are refused for ten seconds (infra/README.md). It blunts a flood from
+  one place; it does not tell rooms apart, and a flood from many addresses passes it.
 
 Features:
 
