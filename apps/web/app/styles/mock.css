@@ -11,6 +11,8 @@
 .m-window,
 .m-pane,
 .hw {
+  --g-fg-3: var(--m-fg-3);
+
   position: relative;
   box-sizing: border-box;
   color: var(--g-fg-1);
@@ -552,8 +554,9 @@
 /* ------------------------------------------------------------------- the hero window */
 
 /*
- * dot.com's frame: 24px corners and a hairline of the page's ink at 10% around the window, which
- * is the desktop's own: the sidebar on the window's colour and the open chat on its pane.
+ * dot.com's frame: 24px corners, with a hairline of the page's ink at 10% around the window in
+ * light and none in dark, where the window's grey stands off the page by itself. The window is the
+ * desktop's own: the sidebar on the window's colour and the open chat on its pane.
  */
 .hw {
   display: flex;
@@ -562,7 +565,7 @@
   overflow: hidden;
   border-radius: var(--s-radius);
   background-color: var(--m-window);
-  box-shadow: 0 0 0 1px rgb(var(--s-k) / 0.1);
+  box-shadow: 0 0 0 1px var(--m-frame);
 }
 
 .hw-body {

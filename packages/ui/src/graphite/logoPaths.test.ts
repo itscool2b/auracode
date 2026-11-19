@@ -16,7 +16,7 @@ describe("the logo", () => {
   ])("%s path is one even-odd shape of closed subpaths inside its view box", (_, d) => {
     expect(d).toMatch(/^M[\d.]/);
     expect(d).toMatch(/^[MCLZ\d. -]+$/);
-    // The outline plus holes: two eyes and the gaps between the animals.
+    // The outline plus its holes, the two eyes.
     const subpaths = d.match(/M/g)?.length ?? 0;
     expect(subpaths).toBeGreaterThanOrEqual(3);
     expect(d.match(/Z/g)?.length).toBe(subpaths);

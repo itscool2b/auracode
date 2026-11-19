@@ -207,7 +207,7 @@ export function rgbPng(width: number, height: number, pixels: Uint8Array): Buffe
 export function socialPng(): Buffer {
   const width = 1200;
   const height = 630;
-  const logo = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.36, width, height));
+  const logo = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.72, width, height));
   const pixels = new Uint8Array(width * height * 3);
   for (let i = 0; i < width * height; i++) {
     const mark = Math.min(1, logo[i] ?? 0);

@@ -12,6 +12,8 @@ export { CopyButton, type CopyButtonProps } from "./CopyButton";
 export { Keycap, type KeycapProps } from "./Keycap";
 export { Logo, type LogoProps, Wordmark, type WordmarkProps } from "./Logo";
 export {
+  LOGO_EYE_PATHS,
+  LOGO_OUTLINE_PATH,
   LOGO_PATH,
   LOGO_SMALL_MAX,
   LOGO_SMALL_PATH,

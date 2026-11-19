@@ -35,7 +35,7 @@ export function NewChatView({ chosen }: { chosen: AgentBrandId }) {
   return (
     <div className="m-window m-new">
       <div className="m-new-column">
-        <Logo size={30} className="m-new-logo" />
+        <Logo size={52} className="m-new-logo" />
         <p className="m-new-title">What are we working on?</p>
         <div className="m-card">
           <div className="m-card-row">

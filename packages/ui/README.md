@@ -24,6 +24,6 @@ import { AgentMark, Keycap, Wordmark } from "@auracode/ui/graphite";
 - **Themes.** `graphite/themes.ts` is the source of every agent's palette; `themes.css` is generated from it with `node packages/ui/scripts/write-themes.mts`, and `themes.test.ts` fails on drift or on contrast.
 - `Keycap` sets one key in Geist Mono and draws the key symbols Geist Mono lacks (⌘ ⇧ ↵ ⌥ ⌃ ← → ↑ ↓ ⌫) as strokes in its own ink, named for screen readers.
 - `AgentMark` replaces `OrbitMark` with the same props. Idle, it shows the agent's own published logo (`agent-logos/`, sources and terms in `third-party/brand-marks.md`), or its two-letter code where the maker allows no logo use; `AgentLogo` draws a mark alone. The marks are their owners' trademarks and are not covered by auracode's license. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
-- `LOGO_PATH`, `LOGO_SMALL_PATH` and `logoSvg()` are the source of the logo, the app icons and the favicons.
-- The water, its swimmers and the dither field are gone (no animal or water motifs; the logo is the only place its sea lion and turtle appear).
+- `LOGO_PATH`, `LOGO_SMALL_PATH` and `logoSvg()` are the source of the logo, the app icons and the favicons. `LOGO_OUTLINE_PATH` and `LOGO_EYE_PATHS` are the same wing in parts, for a picture whose eyes move.
+- The water, its swimmers and the dither field are gone (no animal or water motifs; the logo has been a flying wing since 19 November 2026).
 - Checks: `pnpm --filter @auracode/ui test`, `pnpm --filter @auracode/ui typecheck`, `pnpm exec biome check packages/ui`.

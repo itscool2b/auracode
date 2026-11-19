@@ -189,7 +189,7 @@ function Centered({ title, children }: { readonly title: string; readonly childr
   return (
     <div className="remote-centered">
       <a className="remote-mark" href="/" aria-label="auracode">
-        <Logo size={36} />
+        <Logo size={56} />
       </a>
       <h1>{title}</h1>
       {children}
@@ -273,7 +273,7 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
     <div className="remote-screen">
       <header className="remote-bar">
         <a className="remote-mark" href="/" aria-label="auracode">
-          <Logo size={24} />
+          <Logo size={34} />
         </a>
         <div className="remote-bar-title">
           <h1>{state.host?.name || overview?.host_name || "Your computer"}</h1>

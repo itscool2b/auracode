@@ -71,7 +71,7 @@ export function ThemeGallery({
           <span className="settings-theme-name">
             {/* The name alone labels the choice; the mark would read "Claude Code, Idle". */}
             <span className="settings-theme-mark" aria-hidden="true">
-              {choice.agent ? <AgentMark agent={choice.agent} size={16} /> : <Logo size={16} />}
+              {choice.agent ? <AgentMark agent={choice.agent} size={16} /> : <Logo size={20} />}
             </span>
             <span className="settings-theme-label">{choice.name}</span>
           </span>

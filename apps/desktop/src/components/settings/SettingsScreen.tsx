@@ -347,7 +347,7 @@ export function SettingsScreen({
     <div className="settings-shell g-root" data-os={info.os}>
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="settings-drag" data-tauri-drag-region="" />
-        <Logo size={24} className="settings-logo" />
+        <Logo size={32} className="settings-logo" />
         <button type="button" className="settings-back" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </button>
@@ -435,7 +435,7 @@ export function SettingsScreen({
         <div className="settings-content" data-wide={WIDE.has(page) ? "" : undefined}>
           {page === "about" ? (
             <header className="settings-identity">
-              <Logo size={40} />
+              <Logo size={64} />
               <div>
                 <h1 ref={heading} tabIndex={-1}>
                   <span className="sr-only">About </span>auracode

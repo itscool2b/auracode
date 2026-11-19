@@ -1,7 +1,7 @@
-import { Logo } from "@auracode/ui/graphite";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import catalog from "#release-catalog";
 import { HeroWindow, useHandoffLoop } from "./HeroWindow";
+import { Wing } from "./Wing";
 
 /**
  * Whether installers are published. Until they are, the action does not name the visitor's system:
@@ -28,8 +28,10 @@ const word = (i: number) => ({ "--w": i }) as CSSProperties;
 /**
  * The page's opening, composed as dot.com's is: the name with its mark set into the line, two
  * grey lines saying what it is, the two pills, and the app itself under them. The headline's words
- * flip up one after another, the lines and the pills settle down out of a blur, and the window
- * follows. The window is live: one session replayed, handed from agent to agent.
+ * flip up one after another while the wing flies up into its place between them and levels out,
+ * the lines and the pills settle down out of a blur, and the window follows. The wing stays alive
+ * there, as dot.com's mascot does: it hovers, blinks, and looks toward the pointer. The window is
+ * live: one session replayed, handed from agent to agent.
  */
 export function Hero() {
   const stage = useRef<HTMLDivElement>(null);
@@ -43,8 +45,10 @@ export function Hero() {
           <span className="hero-word" aria-hidden="true" style={word(0)}>
             Meet
           </span>{" "}
-          <span className="hero-word hero-mark" aria-hidden="true" style={word(1)}>
-            <Logo size={40} />
+          <span className="hero-wing" aria-hidden="true">
+            <span className="hero-wing-float">
+              <Wing look />
+            </span>
           </span>{" "}
           <span className="hero-word" aria-hidden="true" style={word(2)}>
             auracode

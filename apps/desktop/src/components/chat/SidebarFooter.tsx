@@ -17,7 +17,7 @@ export function SidebarFooter({
 }) {
   return (
     <div className="chat-sidebar-footer">
-      <Logo size={24} className="chat-sidebar-footer-logo" />
+      <Logo size={30} className="chat-sidebar-footer-logo" />
       <div className="chat-sidebar-footer-actions">
         {notifications}
         {onSettings ? (

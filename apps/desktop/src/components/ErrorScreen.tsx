@@ -23,7 +23,7 @@ export function ErrorScreen({
     <main className="error-screen g-root">
       <div className="error-drag" data-tauri-drag-region="" />
       <section className="error-panel">
-        <Logo className="error-logo" size={32} label="auracode" />
+        <Logo className="error-logo" size={56} label="auracode" />
         <div className="error-message">
           <h1>{title}</h1>
           <p role="alert">{message}</p>

@@ -1,7 +1,7 @@
 import { LOGO_PATH, LOGO_SMALL_MAX, LOGO_SMALL_PATH, LOGO_VIEWBOX } from "./logoPaths";
 
 export interface LogoProps {
-  /** Width and height of the square box in px. Default 20. */
+  /** Width of the logo in px; its height follows from the logo's shape. Default 20. */
   readonly size?: number;
   readonly className?: string;
   /** Accessible name; without one the logo is decorative. */
@@ -9,8 +9,9 @@ export interface LogoProps {
 }
 
 /**
- * The auracode logo (a sea lion and a sea turtle) in `currentColor`. At 24px and below it draws
- * the small variant, whose wider gaps stay open at that size.
+ * The auracode logo (a flying wing with two eyes) in `currentColor`. It is far wider than tall,
+ * so `size` is its width and the box is as tall as the shape needs. At `LOGO_SMALL_MAX` px and
+ * below it draws the small variant, whose larger eyes stay open at that size.
  */
 export function Logo({ size = 20, className, label }: LogoProps) {
   const box = Number.isFinite(size) ? Math.max(8, Math.min(1024, Math.round(size))) : 20;
@@ -19,7 +20,7 @@ export function Logo({ size = 20, className, label }: LogoProps) {
     <svg
       className={className ? `g-logo ${className}` : "g-logo"}
       width={box}
-      height={box}
+      height={Math.max(4, Math.round((box * height) / width))}
       viewBox={`0 0 ${width} ${height}`}
       fill="currentColor"
       role={label ? "img" : undefined}
@@ -42,8 +43,8 @@ export interface WordmarkProps {
 
 /**
  * "auracode" in Geist 600 with tight tracking, after the logo. The word is real text, so a
- * wordmark inside a link names the link. The logo is a quarter taller than the type and centred
- * on it, so the animals sit level with the letters.
+ * wordmark inside a link names the link. The logo is not quite twice as wide as the type is
+ * tall, which makes the wing about as tall as a lowercase letter, and is centred on the type.
  */
 export function Wordmark({ size = 16, mark = true, className }: WordmarkProps) {
   const fontSize = Number.isFinite(size) ? Math.max(10, Math.min(320, size)) : 16;
@@ -52,7 +53,7 @@ export function Wordmark({ size = 16, mark = true, className }: WordmarkProps) {
       className={className ? `g-wordmark ${className}` : "g-wordmark"}
       style={{ fontSize: `${fontSize}px` }}
     >
-      {mark ? <Logo size={Math.round(fontSize * 1.25)} /> : null}
+      {mark ? <Logo size={Math.round(fontSize * 1.9)} /> : null}
       <span className="g-wordmark-text">auracode</span>
     </span>
   );

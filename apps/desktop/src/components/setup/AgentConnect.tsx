@@ -126,7 +126,7 @@ export function AgentConnect({ agents }: { readonly agents: readonly ConnectAgen
         })}
       </svg>
       <div className="agent-connect-hub">
-        <Logo size={34} />
+        <Logo size={44} />
       </div>
       {shown.map((agent, index) => {
         const place = places[index] ?? HUB;

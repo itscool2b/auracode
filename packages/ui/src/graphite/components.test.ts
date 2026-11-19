@@ -18,25 +18,27 @@ import { StatusDot } from "./StatusDot";
  * and no document. These run in Node, where touching either throws.
  */
 describe("server rendering", () => {
-  it("renders the logo in currentColor, decorative unless named, small variant at 24px and below", () => {
+  it("renders the logo in currentColor, decorative unless named, small variant at 40px and below", () => {
     const html = renderToString(createElement(Logo, { size: 16 }));
     expect(html).toContain('fill="currentColor"');
     expect(html).toContain('fill-rule="evenodd"');
     expect(html).toContain('aria-hidden="true"');
-    expect(html).toContain('width="16"');
+    // The logo is far wider than tall: the size is its width, and the height follows.
+    expect(html).toContain('width="16" height="7"');
     expect(html).toContain(LOGO_SMALL_PATH);
-    const named = renderToString(createElement(Logo, { size: 32, label: "auracode" }));
+    const named = renderToString(createElement(Logo, { size: 64, label: "auracode" }));
+    expect(named).toContain('width="64" height="27"');
     expect(named).toContain('role="img"');
     expect(named).toContain('aria-label="auracode"');
     expect(named).toContain(LOGO_PATH);
   });
 
-  it("sets the wordmark as real text after a logo a quarter taller than the type", () => {
+  it("sets the wordmark as real text after a logo not quite twice as wide as the type is tall", () => {
     const html = renderToString(createElement(Wordmark, { size: 16 }));
     expect(html).toContain('<span class="g-wordmark-text">auracode</span>');
     expect(html).toContain("font-size:16px");
-    expect(html).toContain('width="20"');
-    expect(renderToString(createElement(Wordmark, { size: 32 }))).toContain('width="40"');
+    expect(html).toContain('width="30"');
+    expect(renderToString(createElement(Wordmark, { size: 32 }))).toContain('width="61"');
     expect(renderToString(createElement(Wordmark, { mark: false }))).not.toContain("<svg");
   });
 
