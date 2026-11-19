@@ -908,10 +908,7 @@ export class RemoteClient {
 
   /** Answers a question; no answer dismisses it. */
   async answer(chatId: string, requestId: string, answer: UiAnswer | null): Promise<void> {
-    await this.#request(
-      { op: "answer", chat_id: chatId, request_id: requestId, answer },
-      ACT_MS,
-    );
+    await this.#request({ op: "answer", chat_id: chatId, request_id: requestId, answer }, ACT_MS);
   }
 
   /** Starts a chat in a project's folder with its first message, and opens it. */
