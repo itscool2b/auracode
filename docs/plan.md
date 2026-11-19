@@ -22,7 +22,7 @@ The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi
 OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS, Windows and Linux)
 with a ChatGPT-style interface: projects on the left, chats inside projects, any installed agent driving a
 chat through its real harness (headless, rendered in our UI, never a terminal). The base app needs no login.
-A website at auracode.si lets people create an account and download the app; the same account signs into
+A website at o7.codes lets people create an account and download the app; the same account signs into
 the app and syncs projects, chats, and agent config (Claude Code, Codex, Pi) across machines. The bar: the
 most beautiful app of its kind, a killer onboarding, dead simple, every edge case handled.
 
@@ -46,7 +46,9 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 - **Sync scope:** projects + chats + config; config only for Claude Code, Codex, Pi.
 - **Domain:** stays registered at Namecheap; nameservers moved to Cloudflare on Day 1. The auracode.si
   zone uses `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com` (the pair all the user's Cloudflare zones
-  share) and has been active since 2026-10-24 09:03 UTC.
+  share) and has been active since 2026-10-24 09:03 UTC. The site moved to o7.codes, a zone on
+  the same account, on 2026-11-19; auracode.si is kept only until copies of the app from before
+  the move have updated (infra/README.md).
 - **End-to-end encrypted sync.** Chats contain code and secrets. Cost:
   a new machine is approved from a signed-in one or uses a recovery key.
 - **Trust:** never read, store, or proxy agent credentials; auracode never injects hidden prompts.
@@ -101,7 +103,7 @@ first project by folder/drop/gh clone. No agents means installation suggestions 
 The account step stays disabled until M6; encrypted device approval/recovery and restore activate
 with M7. No screen promises sync before it works.
 
-## UX spec: website (auracode.si)
+## UX spec: website (o7.codes)
 Share semantic tokens and components with the app; use Geist on the website and Inter in desktop chrome. React/TypeScript renders interfaces;
 prerender public pages and serve static assets through Cloudflare. Rust owns API behavior.
 
@@ -156,7 +158,7 @@ auracode/                        Cargo workspace + pnpm workspace
   apps/
     desktop/src-tauri/           Tauri shell: thin commands/channels over aura-core, window glass, plugins
     desktop/src/                 React UI
-    web/                         (M6) auracode.si: React Router 7 on Cloudflare Workers
+    web/                         (M6) o7.codes: React Router 7 on Cloudflare Workers
   services/api/                  (M6) Rust Cloudflare Worker: accounts, devices, sync, email delivery
   packages/ui/                   TS Aura design system shared by app + site: tokens, marks, motion
   packages/api-types/            TS types generated from aura-protocol (shared by app, site, API)
@@ -187,7 +189,7 @@ auracode/                        Cargo workspace + pnpm workspace
 - **Web stack.** React + TypeScript, Tailwind, Motion, `packages/ui`, Turnstile. Public pages
   prerendered, account screens call the Rust API. Any framework server glue handles rendering only.
 - **Cloud layout.**
-  - auracode.si and www (redirect): Cloudflare-hosted website assets. /api/v1/* reaches the Rust API
+  - o7.codes and www (redirect): Cloudflare-hosted website assets. /api/v1/* reaches the Rust API
     Worker by service binding or a same-origin Worker route; no separate cross-origin login service.
   - Rust API: email-code auth, sessions, devices, sync, scoped blob access, quotas and rate limits.
     Use Workers bindings for D1, R2, Turnstile verification and Cloudflare Email Service delivery.
@@ -415,7 +417,7 @@ or reduced motion (static, still beautiful); tiny windows and multiple monitors 
 **Day 1 (done 2026-10-24):** the `auracode.si` zone was created in Cloudflare and Namecheap now delegates
 to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The zone has been active since
 09:03 UTC, and public resolvers serve the delegation. No records are needed until M5
-(`download.auracode.si`) and M6 (the site and mail).
+(`download.o7.codes`) and M6 (the site and mail).
 
 **Foundation (the app)**
 - **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/Biome,
@@ -468,7 +470,7 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
 - **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64); `tauri-plugin-updater`
   (Tauri signing key generated and backed up; losing it ends updates). Deliberately dispatched CI builds
   acceptance artifacts. Qualified signed installers, `latest.json` and checksums are prepared and verified
-  before publication to R2 (`download.auracode.si`); a tag alone does not authorize publication.
+  before publication to R2 (`download.o7.codes`); a tag alone does not authorize publication.
   App updates wait for idle. Distributed binaries use `--remap-path-prefix` to remove build-machine
   paths. Signing, installation and old-build update qualification follow `docs/releases.md`.
 

@@ -192,6 +192,16 @@ pub enum Op {
 /// model, thinking level and agent ([`Op::Options`] and the three requests after it).
 pub const FEATURES: &[&str] = &["pickers"];
 
+/// How the desktop looks, so a paired page wears the same theme: the theme's saved name (one of
+/// `aura_core::onboarding::ThemePreference`'s, such as `claude` or `oh_my_pi`) and the
+/// appearance (`system`, `light` or `dark`). A page checks both against the names it knows and
+/// falls back to its own default for anything else.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Look {
+    pub theme: String,
+    pub appearance: String,
+}
+
 /// What an [`Op`] returns.
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -280,6 +290,10 @@ pub enum Event<'a> {
         host_name: &'a str,
         paired: bool,
         features: &'a [&'a str],
+        /// The desktop's theme and appearance; absent from older desktops and from a backend that
+        /// does not say.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        look: Option<&'a Look>,
     },
     /// A chat's status, title or attention changed.
     Chat { update: &'a ChatStatusUpdate },
@@ -425,9 +439,24 @@ mod tests {
                 host_name: "Studio",
                 paired: true,
                 features: FEATURES,
+                look: None,
             })
             .expect("event"),
             r#"{"ev":"ready","host_name":"Studio","paired":true,"features":["pickers"]}"#
+        );
+        let look = Look {
+            theme: "claude".into(),
+            appearance: "system".into(),
+        };
+        assert_eq!(
+            serde_json::to_string(&Event::Ready {
+                host_name: "Studio",
+                paired: true,
+                features: FEATURES,
+                look: Some(&look),
+            })
+            .expect("event"),
+            r#"{"ev":"ready","host_name":"Studio","paired":true,"features":["pickers"],"look":{"theme":"claude","appearance":"system"}}"#
         );
         assert_eq!(
             serde_json::to_string(&Event::Reset).expect("event"),

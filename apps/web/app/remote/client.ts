@@ -4,7 +4,17 @@
  *
  * The chat itself is folded by the desktop app's own reducer, from the same events its window
  * gets, so a turn reads the same here as there.
+ *
+ * Staying live on a phone:
+ * - A phone that slept can hold a socket that still says it is open and carries nothing. When the
+ *   page comes back to the front (`wake`), it asks the relay for a quick answer and starts a new
+ *   session at once when none comes, rather than waiting out the keep-alive.
+ * - A request with no answer in time means the same: the session is checked, and replaced if dead.
+ * - A chat tapped while the session is starting opens as soon as it is up.
+ * - Live events are folded as they arrive, and drawn at most once a frame.
  */
+
+import { THEME_IDS } from "@auracode/ui/graphite";
 import type {
   ChatAttach,
   ChatSnapshot,
@@ -18,13 +28,16 @@ import type {
 } from "../../../desktop/src/bindings";
 import {
   applyEntries,
+  compactToolUpdates,
   type Entry,
   emptyTranscript,
   type Transcript,
   withTasks,
 } from "../../../desktop/src/lib/chat/transcript";
 import { Channel, decode, encode, importSecret, randomBytes } from "./channel";
-import { deleteHost, loadHosts, type SavedHost, saveHost } from "./storage";
+import { deleteHost, type Look, loadHosts, type SavedHost, saveHost } from "./storage";
+
+export type { Look } from "./storage";
 
 export interface RemoteAgent {
   readonly id: string;
@@ -91,6 +104,8 @@ export interface State {
    * older auracode does not know ends the session.
    */
   readonly features: readonly string[];
+  /** How the computer looks: its theme and appearance, as it said, or as it last said. */
+  readonly look: Look | null;
 }
 
 /** A request the computer refused, in its own words. */
@@ -114,7 +129,25 @@ interface Pending {
 const VERSION = 1;
 const PING_MS = 25_000;
 const PONG_MS = 10_000;
-const REQUEST_MS = 30_000;
+/** After the page was away: how long the relay has to answer before the session is replaced. */
+const PROBE_MS = 3_000;
+/** Most requests; starting a chat or handing it over waits on an agent and gets longer. */
+const REQUEST_MS = 15_000;
+/**
+ * A message, a stop or an answer acts on the computer: giving up early invites sending it twice,
+ * so these wait as long as they always did.
+ */
+const ACT_MS = 30_000;
+const SLOW_REQUEST_MS = 45_000;
+
+/** A look as the computer sent it, kept only when its names are known. */
+export function lookOf(value: unknown): Look | null {
+  if (value === null || typeof value !== "object") return null;
+  const { theme, appearance } = value as { theme?: unknown; appearance?: unknown };
+  if (typeof theme !== "string" || !(THEME_IDS as readonly string[]).includes(theme)) return null;
+  if (appearance !== "system" && appearance !== "light" && appearance !== "dark") return null;
+  return { theme, appearance };
+}
 
 /** This browser in a few words, as the computer's Settings will list it. */
 export function deviceName(agent: string): string {
@@ -154,6 +187,16 @@ export function parsePairing(
   return { hostId, id, key: bytes };
 }
 
+/** Draws on the next frame while the page is shown, and soon after while it is hidden. */
+function nextPaint(work: () => void): () => void {
+  if (typeof document !== "undefined" && document.visibilityState === "visible") {
+    const frame = requestAnimationFrame(work);
+    return () => cancelAnimationFrame(frame);
+  }
+  const timer = setTimeout(work, 120);
+  return () => clearTimeout(timer);
+}
+
 export class RemoteClient {
   #state: State = {
     phase: { name: "connecting" },
@@ -163,6 +206,7 @@ export class RemoteClient {
     opening: null,
     chat: null,
     features: [],
+    look: null,
   };
   readonly #listeners = new Set<() => void>();
   readonly #origin: string;
@@ -190,6 +234,11 @@ export class RemoteClient {
   /** Live frames that arrived while the chat's history was still on its way. */
   #early: EventBatch[] = [];
   #refetch: ReturnType<typeof setTimeout> | null = null;
+  /** The open being asked for, so a second tap waits on the same one. */
+  #opening: { readonly chatId: string; readonly done: Promise<void> } | null = null;
+  /** Live entries folded into `#entries` and not drawn yet, and the session state they bring. */
+  #fresh: { readonly chatId: string; entries: Entry[]; snapshot: ChatSnapshot } | null = null;
+  #paint: (() => void) | null = null;
 
   /** `origin` is the relay's WebSocket origin, the page's own unless a test says otherwise. */
   constructor(origin: string) {
@@ -214,7 +263,7 @@ export class RemoteClient {
    */
   async start(fragment: string): Promise<void> {
     const hosts = await loadHosts();
-    this.#set({ hosts });
+    this.#set({ hosts, look: lookOf(hosts[0]?.look) });
     const pairing = parsePairing(fragment);
     if (pairing) {
       this.#credential = {
@@ -241,7 +290,8 @@ export class RemoteClient {
     const host = this.#state.hosts.find((entry) => entry.hostId === hostId);
     if (!host) return;
     this.#credential = { kind: "device", host };
-    this.#set({ host: null, overview: null, chat: null, opening: null });
+    this.#forgetChat();
+    this.#set({ host: null, overview: null, chat: null, opening: null, look: lookOf(host.look) });
     this.#connect();
   }
 
@@ -250,12 +300,37 @@ export class RemoteClient {
     this.#close();
   }
 
-  /** The page came back to the front: do not wait out a backoff. */
+  /**
+   * The page came back to the front, or the network came back: a socket that says it is open
+   * may be dead, so the relay is asked for a quick answer, and a new session starts at once when
+   * it gives none.
+   */
   wake() {
     if (this.#stopped || !this.#credential) return;
-    if (this.#socket && this.#socket.readyState <= WebSocket.OPEN) return;
-    this.#retries = 0;
-    this.#connect();
+    const socket = this.#socket;
+    if (!socket || socket.readyState > WebSocket.OPEN) {
+      this.#retries = 0;
+      this.#connect();
+      return;
+    }
+    this.#probe(socket);
+  }
+
+  /** Asks the relay to answer within a moment; a new session starts when it does not. */
+  #probe(socket: WebSocket) {
+    if (socket.readyState !== WebSocket.OPEN) return;
+    if (this.#pong !== null) clearTimeout(this.#pong);
+    this.#pong = setTimeout(() => {
+      if (socket !== this.#socket) return;
+      this.#retries = 0;
+      this.#connect();
+    }, PROBE_MS);
+    try {
+      socket.send("ping");
+    } catch {
+      this.#retries = 0;
+      this.#connect();
+    }
   }
 
   #close() {
@@ -267,7 +342,11 @@ export class RemoteClient {
     this.#socket = null;
     if (socket) {
       socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
-      socket.close();
+      try {
+        socket.close();
+      } catch {
+        // Already closing.
+      }
     }
     this.#sessionOver("The connection closed.");
   }
@@ -300,8 +379,9 @@ export class RemoteClient {
       this.#sessionOver("The connection closed.");
       if (this.#state.phase.name === "ended" || this.#stopped) return;
       if (this.#state.phase.name === "ready") this.#set({ phase: { name: "connecting" } });
-      // 1, 2, 4, 8, then every 15 seconds.
-      const wait = Math.min(15_000, 1000 * 2 ** Math.min(this.#retries, 4));
+      // At once, then 1, 2, 4, 8, then every 15 seconds.
+      const wait =
+        this.#retries === 0 ? 0 : Math.min(15_000, 1000 * 2 ** Math.min(this.#retries - 1, 4));
       this.#retries += 1;
       this.#retry = setTimeout(() => this.#connect(), wait);
     };
@@ -413,6 +493,7 @@ export class RemoteClient {
 
   #end(reason: string, refused?: string) {
     this.#credential = null;
+    this.#forgetChat();
     this.#set({
       phase: refused ? { name: "ended", reason, refused } : { name: "ended", reason },
       host: null,
@@ -445,16 +526,19 @@ export class RemoteClient {
       return;
     }
     switch (message.ev) {
-      case "ready":
+      case "ready": {
         // Opening this proved the computer holds the key. Now this side proves the same.
         this.#ready = true;
+        const look = lookOf(message.look);
         this.#set({
           features: Array.isArray(message.features)
             ? message.features.filter((name): name is string => typeof name === "string")
             : [],
+          ...(look ? { look } : {}),
         });
-        void this.#begin(String(message.host_name ?? "")).catch(() => this.#socket?.close());
+        void this.#begin(String(message.host_name ?? ""), look).catch(() => this.#socket?.close());
         break;
+      }
       case "chat":
         this.#status(message.update as ChatStatusUpdate);
         break;
@@ -463,18 +547,19 @@ export class RemoteClient {
         break;
       case "lost": {
         const open = this.#state.chat;
-        if (open && open.id === message.chat_id) void this.open(open.id).catch(() => {});
+        if (open && open.id === message.chat_id) void this.#reopen(open.id);
         break;
       }
       case "reset":
+        this.#forgetChat();
         this.#set({ chat: null, opening: null });
-        void this.refresh();
+        void this.refresh().catch(() => {});
         break;
     }
   }
 
   /** The session is up: pair if this was a pairing link, then show the computer's chats. */
-  async #begin(hostName: string) {
+  async #begin(hostName: string, look: Look | null) {
     const credential = this.#credential;
     if (!credential) return;
     this.#retries = 0;
@@ -492,6 +577,7 @@ export class RemoteClient {
         deviceId: paired.device_id,
         key: await importSecret(raw),
         pairedAt: Date.now(),
+        ...(look ? { look } : {}),
       };
       raw.fill(0);
       await saveHost(host);
@@ -501,30 +587,53 @@ export class RemoteClient {
       this.#set({
         hosts: [added, ...this.#state.hosts.filter((entry) => entry.hostId !== added.hostId)],
       });
-    } else if (credential.host.hostName !== hostName && hostName) {
-      // The computer was renamed: the list of paired computers follows.
-      const renamed = { ...credential.host, hostName };
-      host = renamed;
-      this.#credential = { kind: "device", host };
-      void saveHost(host);
-      this.#set({
-        hosts: this.#state.hosts.map((entry) =>
-          entry.hostId === renamed.hostId ? renamed : entry,
-        ),
-      });
     } else {
-      host = credential.host;
+      // The computer was renamed, or changed its look: the saved record follows.
+      const renamed = hostName && credential.host.hostName !== hostName;
+      const restyled =
+        look &&
+        (credential.host.look?.theme !== look.theme ||
+          credential.host.look?.appearance !== look.appearance);
+      host = {
+        ...credential.host,
+        ...(renamed ? { hostName } : {}),
+        ...(restyled ? { look } : {}),
+      };
+      if (renamed || restyled) {
+        this.#credential = { kind: "device", host };
+        void saveHost(host);
+        const changed = host;
+        this.#set({
+          hosts: this.#state.hosts.map((entry) =>
+            entry.hostId === changed.hostId ? changed : entry,
+          ),
+        });
+      }
     }
     this.#set({
       phase: { name: "ready" },
       host: { id: host.hostId, name: host.hostName },
     });
     await this.refresh();
-    const following = this.#state.chat?.id ?? this.#state.opening;
-    if (following) await this.open(following).catch(() => this.#set({ chat: null, opening: null }));
+    // The chat that was open, or tapped while this session started, opens again.
+    const following = this.#state.opening ?? this.#state.chat?.id;
+    if (following) await this.#reopen(following);
   }
 
-  #request(body: Record<string, unknown>): Promise<unknown> {
+  /** Opens a chat again after the session changed; a failure leaves it for the list. */
+  async #reopen(chatId: string) {
+    this.#opening = null;
+    try {
+      await this.open(chatId);
+    } catch {
+      if (this.#state.opening === chatId || this.#state.chat?.id === chatId) {
+        this.#forgetChat();
+        this.#set({ chat: null, opening: null });
+      }
+    }
+  }
+
+  #request(body: Record<string, unknown>, timeout = REQUEST_MS): Promise<unknown> {
     const channel = this.#channel;
     const socket = this.#socket;
     if (!channel || !socket || !this.#ready || socket.readyState !== WebSocket.OPEN)
@@ -535,7 +644,9 @@ export class RemoteClient {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error("The computer did not answer in time."));
-      }, REQUEST_MS);
+        // An answer that never came may mean a dead socket: check it, and start over if so.
+        if (socket === this.#socket) this.#probe(socket);
+      }, timeout);
       this.#pending.set(id, {
         resolve: (data) => {
           clearTimeout(timer);
@@ -593,6 +704,7 @@ export class RemoteClient {
     const chats = overview.chats
       .map((entry) => ({ ...entry, chat: merge(entry.chat) }))
       .sort((a, b) => b.chat.updated_at - a.chat.updated_at);
+    this.#paintNow();
     const open = this.#state.chat;
     this.#set({
       overview: { ...overview, chats },
@@ -603,22 +715,47 @@ export class RemoteClient {
     });
   }
 
-  /** Follows a chat: its newest history, then its live events. */
-  async open(chatId: string): Promise<void> {
+  /**
+   * Follows a chat: its newest history, then its live events. Tapped while the session is still
+   * starting, it opens as soon as the session is up. A second tap on the same chat waits on the
+   * first; one overtaken by a later tap ends quietly.
+   */
+  open(chatId: string): Promise<void> {
+    if (this.#opening?.chatId === chatId) return this.#opening.done;
     this.#early = [];
+    if (this.#state.chat?.id !== chatId) this.#forgetChat();
     this.#set({ opening: chatId, chat: this.#state.chat?.id === chatId ? this.#state.chat : null });
+    if (!this.#ready) {
+      // `#begin` opens it once the computer answers.
+      this.#opening = null;
+      return Promise.resolve();
+    }
+    const done = this.#attach(chatId).finally(() => {
+      if (this.#opening?.chatId === chatId) this.#opening = null;
+    });
+    this.#opening = { chatId, done };
+    return done;
+  }
+
+  async #attach(chatId: string): Promise<void> {
     let attach: ChatAttach;
     try {
       attach = (await this.#request({ op: "open", chat_id: chatId })) as ChatAttach;
     } catch (error) {
-      if (this.#state.opening === chatId) this.#set({ opening: null });
+      // Overtaken by another chat, or by going back: nothing to say.
+      if (this.#state.opening !== chatId) return;
+      if (error instanceof RemoteError && error.code === "superseded") return;
+      // The session ended while it waited: it opens again with the next one.
+      if (!this.#ready) return;
+      this.#set({ opening: null });
       throw error;
     }
     if (this.#state.opening !== chatId) return;
-    this.#entries = entriesOf(attach.history);
+    this.#entries = compactToolUpdates(entriesOf(attach.history));
     this.#cut = attach.history.cut_turn_id;
     this.#before = attach.history.has_more ? attach.history.before_seq : null;
     this.#expected = attach.next_seq;
+    this.#fresh = null;
     const transcript = withTasks(
       applyEntries(emptyTranscript(this.#cut), this.#entries),
       attach.snapshot.tasks ?? [],
@@ -640,9 +777,19 @@ export class RemoteClient {
 
   /** Stops following and returns to the list. */
   close() {
+    this.#forgetChat();
+    this.#opening = null;
     this.#set({ chat: null, opening: null });
+    if (this.#ready) void this.#request({ op: "close" }).catch(() => {});
+  }
+
+  /** Drops what was kept of the open chat. */
+  #forgetChat() {
+    this.#paint?.();
+    this.#paint = null;
+    this.#fresh = null;
     this.#entries = [];
-    void this.#request({ op: "close" }).catch(() => {});
+    this.#early = [];
   }
 
   #frame(batch: EventBatch) {
@@ -654,11 +801,11 @@ export class RemoteClient {
     if (!chat || chat.id !== batch.chat_id) return;
     if (batch.seq_start > this.#expected) {
       // Events were missed: the chat is read again from the computer.
-      void this.open(chat.id).catch(() => {});
+      void this.#reopen(chat.id);
       return;
     }
     const fresh: Entry[] = [];
-    let snapshot = chat.snapshot;
+    let snapshot = this.#fresh?.snapshot ?? chat.snapshot;
     batch.events.forEach((event, index) => {
       const seq = batch.seq_start + index;
       if (seq < this.#expected) return;
@@ -674,8 +821,37 @@ export class RemoteClient {
     this.#expected = Math.max(this.#expected, batch.seq_start + batch.events.length);
     if (fresh.length === 0) return;
     this.#entries.push(...fresh);
+    // Folded now, drawn on the next frame with whatever else arrived before it.
+    if (this.#fresh && this.#fresh.chatId === chat.id) {
+      this.#fresh.entries.push(...fresh);
+      this.#fresh.snapshot = snapshot;
+    } else {
+      this.#fresh = { chatId: chat.id, entries: fresh, snapshot };
+    }
+    this.#paint ??= nextPaint(() => {
+      this.#paint = null;
+      this.#paintNow();
+    });
+  }
+
+  /** Draws the live entries not drawn yet. */
+  #paintNow() {
+    const fresh = this.#fresh;
+    this.#fresh = null;
+    this.#paint?.();
+    this.#paint = null;
+    const chat = this.#state.chat;
+    if (!fresh || !chat || chat.id !== fresh.chatId) return;
     this.#set({
-      chat: { ...chat, snapshot, transcript: applyEntries(chat.transcript, fresh) },
+      chat: {
+        ...chat,
+        snapshot: {
+          ...fresh.snapshot,
+          // A status update may have arrived since: the chat's summary keeps the newer one.
+          chat: { ...chat.snapshot.chat, status: fresh.snapshot.chat.status },
+        },
+        transcript: applyEntries(chat.transcript, fresh.entries),
+      },
     });
   }
 
@@ -690,9 +866,10 @@ export class RemoteClient {
         chat_id: chat.id,
         before_seq: this.#before,
       })) as HistoryPage;
+      this.#paintNow();
       const current = this.#state.chat;
       if (!current || current.id !== chat.id) return;
-      this.#entries = [...entriesOf(page), ...this.#entries];
+      this.#entries = compactToolUpdates([...entriesOf(page), ...this.#entries]);
       this.#cut = page.cut_turn_id;
       this.#before = page.has_more ? page.before_seq : null;
       this.#set({
@@ -714,36 +891,37 @@ export class RemoteClient {
   }
 
   send(chatId: string, text: string): Promise<PromptAck> {
-    return this.#request({ op: "send", chat_id: chatId, text }) as Promise<PromptAck>;
+    return this.#request({ op: "send", chat_id: chatId, text }, ACT_MS) as Promise<PromptAck>;
   }
 
   async interrupt(chatId: string): Promise<void> {
-    await this.#request({ op: "interrupt", chat_id: chatId });
+    await this.#request({ op: "interrupt", chat_id: chatId }, ACT_MS);
   }
 
   /** Answers a permission request; no option declines it. */
   async permission(chatId: string, requestId: string, optionId: string | null): Promise<void> {
-    await this.#request({
-      op: "permission",
-      chat_id: chatId,
-      request_id: requestId,
-      option_id: optionId,
-    });
+    await this.#request(
+      { op: "permission", chat_id: chatId, request_id: requestId, option_id: optionId },
+      ACT_MS,
+    );
   }
 
   /** Answers a question; no answer dismisses it. */
   async answer(chatId: string, requestId: string, answer: UiAnswer | null): Promise<void> {
-    await this.#request({ op: "answer", chat_id: chatId, request_id: requestId, answer });
+    await this.#request({ op: "answer", chat_id: chatId, request_id: requestId, answer }, ACT_MS);
   }
 
   /** Starts a chat in a project's folder with its first message, and opens it. */
   async create(folderId: string, agentId: string | null, text: string): Promise<void> {
-    const created = (await this.#request({
-      op: "create",
-      folder_id: folderId,
-      agent_id: agentId,
-      text,
-    })) as { chat: WorkspaceChat };
+    const created = (await this.#request(
+      {
+        op: "create",
+        folder_id: folderId,
+        agent_id: agentId,
+        text,
+      },
+      SLOW_REQUEST_MS,
+    )) as { chat: WorkspaceChat };
     await this.refresh().catch(() => {});
     await this.open(created.chat.chat.id);
   }
@@ -766,12 +944,16 @@ export class RemoteClient {
    * continues in.
    */
   async switchAgent(chatId: string, agentId: string): Promise<void> {
-    const switched = (await this.#request({
-      op: "switch_agent",
-      chat_id: chatId,
-      agent_id: agentId,
-    })) as { chat_id: string };
+    const switched = (await this.#request(
+      {
+        op: "switch_agent",
+        chat_id: chatId,
+        agent_id: agentId,
+      },
+      SLOW_REQUEST_MS,
+    )) as { chat_id: string };
     await this.refresh().catch(() => {});
+    this.#opening = null;
     await this.open(switched.chat_id);
   }
 
@@ -797,6 +979,7 @@ export class RemoteClient {
     if (hosts[0]) this.use(hosts[0].hostId);
     else {
       this.#credential = null;
+      this.#forgetChat();
       this.#close();
       this.#set({
         phase: { name: "empty" },

@@ -179,7 +179,7 @@ describe("parseInline", () => {
   it("reads code, strong, emphasis and links", () => {
     expect(
       parseInline(
-        "Parse **thousands of deltas**, re-render the _last_ block; see [notes](https://auracode.si/docs).",
+        "Parse **thousands of deltas**, re-render the _last_ block; see [notes](https://o7.codes/docs).",
       ),
     ).toEqual([
       { kind: "text", text: "Parse " },
@@ -189,7 +189,7 @@ describe("parseInline", () => {
       { kind: "text", text: " block; see " },
       {
         kind: "link",
-        href: "https://auracode.si/docs",
+        href: "https://o7.codes/docs",
         children: [{ kind: "text", text: "notes" }],
       },
       { kind: "text", text: "." },

@@ -1,6 +1,6 @@
 # @auracode/ui
 
-The auracode design system, shared by the desktop app and auracode.si. It ships as TypeScript source (no build step), with React 19 as a peer dependency.
+The auracode design system, shared by the desktop app and o7.codes. It ships as TypeScript source (no build step), with React 19 as a peer dependency.
 
 **Graphite** (`@auracode/ui/graphite`) is the current visual language: the Grok Bot app's flat look (owner, 17 November 2026), four solid layers and one ink at set strengths, with no blur and no shadows in dark, cut into a palette for every supported agent. The spec is `docs/design/visual-language.md` and the measured reference is `docs/design/reference-audit.md`. The older **Aura** (`@auracode/ui`: Orb, AuraField, GlassPanel) and **Orbit** (`@auracode/ui/orbit`) modules stay for the Design Lab; new work uses Graphite.
 

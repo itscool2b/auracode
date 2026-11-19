@@ -10,7 +10,7 @@ use aura_protocol::{
 };
 pub use futures::future::BoxFuture;
 
-use crate::wire::Overview;
+use crate::wire::{Look, Overview};
 
 /// Why a call failed, in words the person at the other end can act on.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -168,6 +168,11 @@ pub trait Backend: Send + Sync + 'static {
     /// a bot's token was accepted under. So however a switch of workspace and the service's own
     /// rescoping interleave, what was accepted for one workspace is never served another's chats.
     fn bound(self: Arc<Self>, profile: &str) -> Arc<dyn Backend>;
+    /// How the desktop looks now, for a page to wear the same theme. It carries no chat or
+    /// workspace content, so it is read once per session, before the browser has proved anything.
+    fn look(&self) -> Option<Look> {
+        None
+    }
     /// Projects, their chats and the agents installed here.
     fn overview(&self) -> BoxFuture<'_, Result<Overview, BackendError>>;
     /// Sends every chat's status changes to `statuses` until `owner` is released. A second call

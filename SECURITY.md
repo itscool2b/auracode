@@ -23,7 +23,7 @@ as the problem is understood. You will be credited in the changelog unless you a
   phone page. [docs/remote-sessions.md](docs/remote-sessions.md) says who is trusted with what and
   lists the limits that are already known under "Not done"; a report about one of those is still
   welcome when it shows more than the list says.
-- **The website** at auracode.si and its Worker (`apps/web`, `apps/web-worker`).
+- **The website** at o7.codes and its Worker (`apps/web`, `apps/web-worker`).
 - **The build and release tooling** (`.github/`, `crates/aura-release`).
 
 The coding agents auracode drives (Claude Code, Codex and the others) are their vendors' software:

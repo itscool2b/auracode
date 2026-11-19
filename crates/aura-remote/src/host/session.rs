@@ -50,6 +50,11 @@ pub(super) fn seal(
 
 /// A browser is gone: nothing follows a chat on its behalf any more.
 pub(super) fn closed(shared: &Shared, backend: &dyn Backend, cid: &str, connection: Connection) {
+    // First the mark, then the release: an open that finishes attaching after this sees the
+    // mark and releases what it attached.
+    if let Some(session) = &connection.session {
+        session.ended.store(true, Ordering::SeqCst);
+    }
     backend.release(&owner(cid));
     let Some(session) = connection.session else {
         return;
@@ -82,7 +87,7 @@ pub(super) fn receive(
         return Received::Refuse(None);
     };
     match (kind, connection.session.as_mut()) {
-        ("H", None) => hello(shared, cid, connection, body),
+        ("H", None) => hello(shared, backend, cid, connection, body),
         ("E", Some(session)) => {
             let Ok(message) = session.channel.open(body) else {
                 // Not sealed with this session's key, or out of order: the session is over.
@@ -115,7 +120,13 @@ pub(super) fn receive(
 
 /// A browser's hello: find the key it claims to hold and answer with this side's nonce and a
 /// first sealed message, which only the holder of that key can open.
-fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &str) -> Received {
+fn hello(
+    shared: &Arc<Shared>,
+    backend: &Arc<dyn Backend>,
+    cid: &str,
+    connection: &mut Connection,
+    body: &str,
+) -> Received {
     let refuse = |reason| Received::Refuse(Some(format!("m{cid} R{}", refusal(reason))));
     let Ok(hello) = serde_json::from_str::<Hello>(body) else {
         return Received::Refuse(None);
@@ -153,12 +164,14 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
         return Received::Refuse(None);
     };
     let paired = hello.kind == CredentialKind::Device;
+    let look = backend.look();
     let Ok(ready) = seal(
         &mut channel,
         &Event::Ready {
             host_name: &shared.config.host_name,
             paired,
             features: wire::FEATURES,
+            look: look.as_ref(),
         },
     ) else {
         return Received::Refuse(None);
@@ -176,6 +189,9 @@ fn hello(shared: &Arc<Shared>, cid: &str, connection: &mut Connection, body: &st
         proven: false,
         calls: Arc::new(AtomicUsize::new(0)),
         backlog: Arc::new(AtomicUsize::new(0)),
+        follow: Arc::new(AtomicU64::new(0)),
+        following: Arc::new(tokio::sync::Mutex::new(())),
+        ended: Arc::new(AtomicBool::new(false)),
     });
     Received::Send(vec![
         format!("m{cid} W{welcome}"),
@@ -346,9 +362,18 @@ fn start(
         );
         return Ok(());
     }
-    if matches!(request.op, Op::Open { .. } | Op::Close) {
+    // An open or a close takes the next number: only the newest one decides what is followed.
+    let turn = if matches!(request.op, Op::Open { .. } | Op::Close) {
         session.backlog.store(0, Ordering::Relaxed);
-    }
+        Some(Turn {
+            mine: session.follow.fetch_add(1, Ordering::SeqCst) + 1,
+            newest: session.follow.clone(),
+            order: session.following.clone(),
+            ended: session.ended.clone(),
+        })
+    } else {
+        None
+    };
     session.calls.fetch_add(1, Ordering::Relaxed);
     let (calls, backlog) = (session.calls.clone(), session.backlog.clone());
     let (shared, backend, out, cid) = (
@@ -358,7 +383,29 @@ fn start(
         cid.to_owned(),
     );
     tokio::spawn(async move {
-        let result = perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await;
+        let result = match turn {
+            Some(turn) => {
+                // In the order they were asked for, and only while still the newest.
+                let _held = turn.order.lock().await;
+                if turn.ended.load(Ordering::SeqCst) {
+                    Err(BackendError::new("closed", "This session is over."))
+                } else if turn.newest.load(Ordering::SeqCst) == turn.mine {
+                    let result =
+                        perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await;
+                    // The browser left while this ran: nothing may go on following for it.
+                    if turn.ended.load(Ordering::SeqCst) {
+                        backend.release(&owner(&cid));
+                    }
+                    result
+                } else {
+                    Err(BackendError::new(
+                        "superseded",
+                        "Another chat was opened after this one.",
+                    ))
+                }
+            }
+            None => perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await,
+        };
         calls.fetch_sub(1, Ordering::Relaxed);
         let forgot = matches!(result, Ok(Performed::Forgot));
         reply(&out, &cid, id, result.map(Performed::data));
@@ -367,6 +414,14 @@ fn start(
         }
     });
     Ok(())
+}
+
+/// An open's or a close's place among the ones this browser asked for.
+struct Turn {
+    mine: u64,
+    newest: Arc<AtomicU64>,
+    order: Arc<tokio::sync::Mutex<()>>,
+    ended: Arc<AtomicBool>,
 }
 
 enum Performed {
@@ -421,9 +476,10 @@ async fn perform(
                     return false;
                 }
                 sender
-                    .send(Out::Sealed {
+                    .send(Out::Frame {
                         cid: to.clone(),
-                        json,
+                        batch: batch.clone(),
+                        json: Some(json),
                         backlog: size,
                     })
                     .is_ok()

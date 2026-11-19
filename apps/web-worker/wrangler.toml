@@ -15,9 +15,15 @@ enabled = false
 [env.production]
 name = "auracode-web"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
-routes = [{ pattern = "auracode.si/*", zone_name = "auracode.si" }]
+# The second route is the address the site had until 19 November 2026: there the Worker serves
+# only the remote page and sends every other page to o7.codes (FORMER_HOSTS in src/lib.rs). It
+# goes once installed copies from before the move have updated.
+routes = [
+  { pattern = "o7.codes/*", zone_name = "o7.codes" },
+  { pattern = "auracode.si/*", zone_name = "auracode.si" },
+]
 
 [env.preview]
 name = "auracode-web-preview"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
-routes = [{ pattern = "preview.auracode.si/*", zone_name = "auracode.si" }]
+routes = [{ pattern = "preview.o7.codes/*", zone_name = "o7.codes" }]

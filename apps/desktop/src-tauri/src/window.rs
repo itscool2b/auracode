@@ -771,7 +771,7 @@ mod tests {
     fn everything_else_is_blocked() {
         let dev = url("http://localhost:1420");
         for blocked in [
-            "https://auracode.si/docs",
+            "https://o7.codes/docs",
             "http://localhost:1421/",
             "https://localhost:1420/",
             "http://evil.tauri.localhost.example/",

@@ -276,7 +276,7 @@ jobs:
           payload="$RUNNER_TEMP/stage/releases/$VERSION"
           {
             printf '%s\n\n' "$RELEASE_NOTES"
-            echo "Installed copies show **Update** for this version by themselves. To install from scratch, use [auracode.si/download](https://auracode.si/download)."
+            echo "Installed copies show **Update** for this version by themselves. To install from scratch, use [o7.codes/download](https://o7.codes/download)."
             echo
             echo "No publisher has signed these installers yet, so Windows and macOS warn before one runs; the download page says how to open it. Every package carries an updater signature, which auracode checks before it installs an update."
             echo

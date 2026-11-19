@@ -1,13 +1,13 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 
 /**
  * An agent's answer as the remote page shows it: headings, lists, quotes, code and the usual
  * inline marks. It builds elements and never HTML, so nothing an agent writes can run here, and a
  * link opens only when it is http or https. Anything it does not know stays as the text it was.
  */
-export function Markdown({ text }: { readonly text: string }) {
+export const Markdown = memo(function Markdown({ text }: { readonly text: string }) {
   return <div className="remote-markdown">{blocks(text)}</div>;
-}
+});
 
 const FENCE = /^ {0,3}(```|~~~)/;
 const HEADING = /^ {0,3}(#{1,6})\s+(.*)$/;

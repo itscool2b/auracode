@@ -12,7 +12,7 @@ including in the tray.
 
 1. **Settings > Remote access > Pair a device.** A dialog shows a code to scan and the same link as text.
    The link opens once, within ten minutes. Asking for it turns remote access on.
-2. **Open the link on the other device and tap Pair this browser.** `auracode.si/remote` takes
+2. **Open the link on the other device and tap Pair this browser.** `o7.codes/remote` takes
    the key out of the address bar and asks first: opening the link pairs nothing by itself, so a
    program that only opens links (a mail or chat scanner) cannot spend it. After the tap it pairs
    and lists the computer's chats by project. From then on that browser opens the
@@ -48,7 +48,7 @@ bot sends messages to agents and answers their permission requests, and agents r
 
 | Part | Where | What it does |
 |---|---|---|
-| Relay | `apps/relay` (Worker `auracode-relay`, route `auracode.si/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
+| Relay | `apps/relay` (Worker `auracode-relay`, route `o7.codes/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
 | Service | `crates/aura-remote` | Pairing links, devices and bot links (`registry.rs`), the sealed channel (`crypto.rs`), one session per browser (`host.rs`, `host/session.rs`), bot tools (`bot.rs`, `render.rs`), the socket (`relay.rs`). |
 | App | `apps/desktop/src-tauri/src/remote.rs` | Starts the service, gives it the open profile's chats through the same lease a window's commands take, and exposes the commands Settings uses. |
 | Settings page | `apps/desktop/src/components/settings/RemotePanel.tsx` | The switch, devices, bots, and the two dialogs that show a secret once. |
@@ -99,7 +99,7 @@ decision about who may do what is made in Rust on the computer.
 
 ### Pairing and keys
 
-A pairing link is `https://auracode.si/remote#<computer id>.<pairing id>.<key>`: 16, 8 and 32
+A pairing link is `https://o7.codes/remote#<computer id>.<pairing id>.<key>`: 16, 8 and 32
 random bytes, base64url. The key is in the fragment, which browsers never send to a server; the
 page reads it once and removes it from the address bar and history before connecting. The pairing
 lives in the computer's memory only, opens once, expires after ten minutes, is replaced by the
@@ -161,6 +161,42 @@ The computer also ends any connection that has not proved a key within twenty se
 most 32 connections, 16 running calls per browser and 8 running bot calls, and stops sending live
 events to a browser that falls 4 MiB behind (the page then opens the chat again).
 
+## Staying connected and keeping up
+
+What made the page feel broken before 19 November 2026, and what each part does about it:
+
+- **A socket that died without closing.** A phone that slept, or changed networks, keeps a socket
+  that says it is open while nothing crosses it; taps then did nothing until a reload. When the
+  page comes back to the front, regains focus or the network returns, it sends the relay `ping`
+  and starts a new session at once if no `pong` comes within three seconds
+  (`RemoteClient.wake`). A request that gets no reply in fifteen seconds asks the same question
+  instead of only failing. The first reconnect is immediate; later ones back off.
+- **A computer that is gone but looks connected.** The desktop says `ping` every 25 seconds. A
+  host socket silent for 75 seconds belongs to a computer that slept or lost its network: the
+  relay ends it, tells the browsers `h0` ("Computer is away") and tells a browser that opens
+  then the same, instead of forwarding into a socket nobody reads. Three missed pings, so one
+  late ping never drops a working computer.
+- **Opening a chat while the link is still coming up.** The page keeps the chat that was asked
+  for and opens it when the session is ready, instead of refusing the tap.
+- **The wrong chat streaming.** Opens and closes used to run side by side on the computer, so a
+  slow open could finish after the close that followed it and leave a chat followed that the
+  page no longer showed. Each open or close now takes a number; they run in the order asked,
+  and one that is no longer the newest when its turn comes answers `superseded` and changes
+  nothing (`host/session.rs`).
+- **Lag while an agent writes.** The computer merges live frames that follow each other for the
+  same browser and chat into one sealed message (up to 256 KiB, never across anything else in
+  the queue, so order holds) and writes a burst to the socket with one flush. The page folds
+  frames as they arrive but draws at most once per animation frame, keeps finished turns from
+  drawing again, and folds repeated tool updates in history as the desktop does.
+- **A send that seemed to do nothing.** The message shows at once as "Sending" (or "Queued until
+  this turn ends"), the box empties, and a refused send puts the text back with the reason.
+
+The page wears the computer's theme: `ready` carries `look` (the theme's id and Light, Dark or
+System from Settings > Appearance), the page checks the id against the themes it ships and keeps
+it with the paired device, so the next visit is themed before the computer answers. A copy of
+the app that sends no `look` gets the default theme. The theme's name is all it says about the
+computer, and it reaches only a browser that already proved a key.
+
 ## Operations a browser can ask for
 
 `pair`, `overview`, `open`, `close`, `history`, `send`, `interrupt`, `permission`, `answer`,
@@ -186,8 +222,8 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
 ## Running and testing it
 
 - **Deploy:** `corepack pnpm --filter @auracode/relay exec wrangler deploy --env production`
-  (and `--env preview`). The route `auracode.si/api/remote/*` is more specific than the website's
-  `auracode.si/*`, so those requests reach the relay.
+  (and `--env preview`). The route `o7.codes/api/remote/*` is more specific than the website's
+  `o7.codes/*`, so those requests reach the relay.
 - **Development:** a debug build reads `AURACODE_REMOTE_RELAY` (for example
   `ws://127.0.0.1:8799`) and `AURACODE_REMOTE_SITE` together; release builds reach only
   auracode's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.
@@ -200,7 +236,9 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
   - `apps/desktop/scripts/check-remote.mjs` (part of `check:settings`): the Settings page.
   - `corepack pnpm --filter @auracode/relay worker:e2e`: everything together on this machine.
     It needs the website built and `cargo build -p aura-remote --example demo_host`, a stand-in
-    computer with a scripted agent.
+    computer with a scripted agent. `--engines chromium,webkit` runs it in both, `--scheme dark`
+    reports a dark system, and `--shots <folder>` keeps screenshots. Midway it silences the
+    phone's socket without closing it and expects the page back on a new one.
   - `node apps/relay/tests/native.mjs <auracode.exe> [--prompt]`: the real debug app in a data
     folder of its own, paired from a separate browser and called by an MCP client. `--prompt`
     also runs a turn through the development build's scripted agent.
@@ -223,7 +261,24 @@ Security, from the review of 10 November 2026 (each is a known limit, not a surp
   device; Settings shows the new device at once and Remove ends it.
 - **A bot link that is sealed end to end**, and one that expires when idle: the first would need
   the bot to run a program of ours.
-- **The relay on an origin of its own.** It answers under `auracode.si`, the page's origin.
+- **The relay on an origin of its own.** It answers under `o7.codes`, the page's origin.
+- **The address before the move.** Until 19 November 2026 the site was auracode.si. A copy of the
+  app from before the move connects to the relay there and makes pairing links to its `/remote`,
+  and a phone paired there keeps its key under that origin (a key cannot be moved between
+  origins: it is stored so that no script can read it). So the relay answers on both addresses,
+  into the same rooms, and lets in a browser from either origin (`FORMER_ORIGIN`); the website
+  Worker serves only `/remote` and its files at the old address and sends every other page to
+  o7.codes. Remove the old routes, `FORMER_ORIGIN`, `FORMER_HOSTS` and the old entry in the
+  page's `connect-src` once those copies have updated.
+- **Credentials belong to the site they were issued under.** A browser keeps a device's key
+  under the site's origin, and a bot's token is part of an address at the site, so whoever holds
+  that address later holds a page that can use the key and receives the token. Each device and
+  bot link therefore records the site it was issued under (`site` in `remote.json`), and a copy
+  of the app removes, when it starts, every one issued under a site other than its own, in every
+  workspace (`Registry::set_site`). A record from before sites were recorded counts as the old
+  address. So the first start after the move ends every pairing and bot link made at
+  auracode.si: the phone pairs once more and the bot is linked once more, at o7.codes, and
+  nothing that still works is tied to the address being given up.
 - **Per-room rate limits** at Cloudflare's edge for new sockets and host claims. Since 19 November
   2026 the zone has one rule per address instead: more than 60 requests to `/api/remote/*` in ten
   seconds from one address are refused for ten seconds (infra/README.md). It blunts a flood from

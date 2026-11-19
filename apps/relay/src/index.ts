@@ -22,8 +22,15 @@ const FULL_TOOLS = listed(ALL_TOOLS as readonly Tool[]);
 
 export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
-  /** The website's origin: the only origin a browser socket may come from. */
+  /** The website's origin: the origin a browser socket comes from. */
   readonly APP_ORIGIN: string;
+  /**
+   * An origin the website had before, still let in while the remote page is served there for
+   * browsers paired before the move. Unset once that page is gone.
+   */
+  readonly FORMER_ORIGIN?: string;
+  /** Tests only: how long a desktop may go without a keep-alive, in ms (`HOST_SILENT_MS`). */
+  readonly HOST_SILENT_MS?: string;
 }
 
 const PREFIX = "/api/remote/v1/";
@@ -64,6 +71,14 @@ const UNPROVEN_MESSAGES = 4;
 const IDLE_ROOM_MS = 30 * 24 * 60 * 60 * 1000;
 const HOST_ID_LABEL = "auracode remote v1 host id";
 const MAX_BOT_CALLS = 8;
+/**
+ * The desktop says "ping" every 25 seconds. A socket that has said nothing for three of those
+ * belongs to a computer that slept or lost its network without closing it: it is treated as gone,
+ * so a browser is told its computer is away instead of waiting on a socket nobody reads.
+ */
+const HOST_SILENT_MS = 75_000;
+/** How often, at most, the time the desktop was last heard is written beside its socket. */
+const HEARD_NOTE_MS = 5_000;
 const BOT_CALL_MS = 55_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -154,7 +169,9 @@ export default {
       if (own === null || !same(own, hostId)) return json(401, { error: "unauthorized" });
     } else if (kind === "client") {
       if (!isUpgrade(request)) return json(400, { error: "invalid_request" });
-      if (origin !== env.APP_ORIGIN) return json(403, { error: "forbidden" });
+      // An exact match against the one or two origins this deployment names, never a pattern.
+      const known = !!origin && (origin === env.APP_ORIGIN || origin === env.FORMER_ORIGIN);
+      if (!known) return json(403, { error: "forbidden" });
     } else if (kind === "mcp") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     } else {
@@ -165,7 +182,13 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 type Attachment =
-  | { readonly role: "host" }
+  | {
+      readonly role: "host";
+      /** When the socket opened, then when it last sent something, to within a few seconds. */
+      readonly since?: number;
+      /** Ended for going silent; browsers were already told, so its close says nothing more. */
+      readonly silent?: boolean;
+    }
   | {
       readonly role: "client";
       readonly cid: string;
@@ -230,6 +253,12 @@ export class Room extends DurableObject<Env> {
   readonly #calls = new Map<string, (reply: BotReply) => void>();
   /** Messages each browser sent in the current window. Lost on hibernation, which only helps. */
   readonly #rates = new Map<string, { since: number; count: number }>();
+  /**
+   * When the desktop last sent anything but a keep-alive. A computer pushing a long history up a
+   * slow line may have its next keep-alive waiting behind that data: it is plainly there. Also
+   * written to the socket's attachment, at most every few seconds, so it outlives hibernation.
+   */
+  #heard = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -245,10 +274,24 @@ export class Room extends DurableObject<Env> {
     return notFound();
   }
 
-  #host(): WebSocket | null {
-    return (
-      this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null
-    );
+  /**
+   * The desktop's socket, while it is open and its keep-alives still arrive. When it has gone
+   * silent, every browser but `asking` is told it is away; the caller answers `asking` itself.
+   */
+  #host(asking?: WebSocket): WebSocket | null {
+    const host =
+      this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null;
+    if (!host) return null;
+    const noted = (host.deserializeAttachment() as { since?: number } | null)?.since;
+    const pinged = this.ctx.getWebSocketAutoResponseTimestamp(host)?.getTime();
+    // A socket from before this was counted has no time at all: it is left alone.
+    if (noted === undefined && pinged === undefined) return host;
+    const silent = Number(this.env.HOST_SILENT_MS) || HOST_SILENT_MS;
+    if (Date.now() - Math.max(noted ?? 0, pinged ?? 0, this.#heard) <= silent) return host;
+    host.serializeAttachment({ role: "host", silent: true } satisfies Attachment);
+    end(host, 4004, "silent");
+    this.#hostGone(host, asking);
+    return null;
   }
 
   #clients(): WebSocket[] {
@@ -267,9 +310,16 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
 
     const earlier = this.ctx.getWebSockets("host");
+    // Browsers that still had a session with the desktop start over; a socket that went silent
+    // already told them it was gone.
+    const replacing = earlier.some(
+      (socket) =>
+        socket.readyState === WebSocket.OPEN &&
+        !(socket.deserializeAttachment() as { silent?: boolean } | null)?.silent,
+    );
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], ["host"]);
-    pair[1].serializeAttachment({ role: "host" } satisfies Attachment);
+    pair[1].serializeAttachment({ role: "host", since: Date.now() } satisfies Attachment);
     for (const socket of earlier) end(socket, 4000, "replaced");
     // The new socket knows none of the open browsers: each starts its session again.
     for (const client of this.#clients()) {
@@ -282,7 +332,7 @@ export class Room extends DurableObject<Env> {
           ...attachment,
           until: Date.now() + REPROVE_MS,
         } satisfies Attachment);
-      if (earlier.length > 0) client.send("h0");
+      if (replacing) client.send("h0");
       client.send("h1");
       pair[1].send(`o${attachment.cid}`);
     }
@@ -318,7 +368,7 @@ export class Room extends DurableObject<Env> {
       from,
       proven: false,
     } satisfies Attachment);
-    const host = this.#host();
+    const host = this.#host(pair[1]);
     pair[1].send(host ? "h1" : "h0");
     host?.send(`o${cid}`);
     return new Response(null, { status: 101, webSocket: pair[0] });
@@ -337,7 +387,7 @@ export class Room extends DurableObject<Env> {
         return socket.close(1008, "prove a key first");
     }
     if (!this.#allowed(attachment.cid)) return socket.close(1008, "too many messages");
-    const host = this.#host();
+    const host = this.#host(socket);
     if (host) host.send(`m${attachment.cid} ${message.slice(1)}`);
     else socket.send("h0");
   }
@@ -360,6 +410,10 @@ export class Room extends DurableObject<Env> {
 
   async #fromHost(socket: WebSocket, message: string) {
     if (message.length > HOST_MESSAGE_BYTES) return socket.close(1009, "too large");
+    const now = Date.now();
+    if (now - this.#heard > HEARD_NOTE_MS)
+      socket.serializeAttachment({ role: "host", since: now } satisfies Attachment);
+    this.#heard = now;
     const kind = message[0];
     if (kind === "m" || kind === "c" || kind === "a") {
       const cid = message.slice(1, 1 + CID_LENGTH);
@@ -462,6 +516,12 @@ export class Room extends DurableObject<Env> {
       if (!attachment.told) this.#host()?.send(`c${attachment.cid}`);
       return;
     }
+    if ((attachment as { silent?: boolean } | null)?.silent) return;
+    this.#hostGone(socket);
+  }
+
+  /** The desktop's socket `socket` closed or went silent. */
+  #hostGone(socket: WebSocket, except?: WebSocket) {
     // A replaced host socket closes after its successor opened: the desktop is still here.
     const successor = this.ctx
       .getWebSockets("host")
@@ -469,7 +529,7 @@ export class Room extends DurableObject<Env> {
     if (successor) return;
     // The desktop is gone: if it stays gone, what the room stored for it goes too.
     void this.ctx.storage.setAlarm(Date.now() + IDLE_ROOM_MS);
-    for (const client of this.#clients()) client.send("h0");
+    for (const client of this.#clients()) if (client !== except) client.send("h0");
     for (const finish of [...this.#calls.values()]) finish({ text: OFFLINE, error: true });
   }
 

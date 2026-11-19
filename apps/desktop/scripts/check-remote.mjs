@@ -69,7 +69,7 @@ export async function checkRemote(browser, url, out, engine) {
     assert.equal(await code.locator("rect").getAttribute("fill"), "white");
     assert.equal(await code.locator("path").getAttribute("fill"), "black");
     const link = dialog.getByRole("textbox", { name: "Pairing link" });
-    assert.match(await link.inputValue(), /^https:\/\/auracode\.si\/remote#h{22}\.p{11}\.k{43}$/);
+    assert.match(await link.inputValue(), /^https:\/\/o7\.codes\/remote#h{22}\.p{11}\.k{43}$/);
     assert.equal(await link.getAttribute("readonly"), "");
     assert.match(
       await dialog.getByTestId("remote-pairing-time").textContent(),
@@ -137,7 +137,7 @@ export async function checkRemote(browser, url, out, engine) {
     const address = bot.getByRole("textbox", { name: "Bot address" });
     assert.match(
       await address.inputValue(),
-      /^https:\/\/auracode\.si\/api\/remote\/v1\/mcp\/h{22}\/b{11}\.t{43}$/,
+      /^https:\/\/o7\.codes\/api\/remote\/v1\/mcp\/h{22}\/b{11}\.t{43}$/,
     );
     await bot.getByText("grok.com/connectors").waitFor();
     await bot.getByText("works like a password").waitFor();

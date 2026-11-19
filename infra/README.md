@@ -3,6 +3,10 @@
 Created and verified on 2026-10-26 in Cloudflare account `5feb14f2fe605875bcf1472f348cb7ed`.
 These identifiers are not credentials.
 
+**The site moved to o7.codes on 19 November 2026.** [The last section](#the-site-moves-to-o7codes-2026-11-19)
+says what is where now. Everything above it was written while the site was at auracode.si and is
+kept as written, so an address in it is the address of its day.
+
 **Accounts were removed from the code on 16 November 2026, at the owner's request, and their
 cloud resources were deleted on 17 November 2026.** Claude Code and Codex sync plugins natively, so
 the app is local-only: no sign-in, no sync, nothing uploaded by an account. The account API
@@ -19,8 +23,8 @@ marked. The relay Workers, the release bucket and the website Workers are curren
 | Email Sending domain | `auracode.si`, `84273eb1ef3c4b108b774bc0e0a000ed` | Passwordless sign-in sender | Deleted 2026-11-17 |
 | Preview D1 database | `auracode-preview`, `11d6fa29-5c39-49c5-a85b-1ecc7645dbd5` | Isolated acceptance data, US jurisdiction | Deleted 2026-11-17 |
 | Preview R2 bucket | `auracode-preview-blobs` | Private acceptance ciphertext | Deleted 2026-11-17 |
-| Worker | `auracode-relay`, route `auracode.si/api/remote/*` | Remote sessions relay: one Durable Object (`Room`, SQLite-backed) per computer. Stores key and token hashes only | Current |
-| Preview Worker | `auracode-relay-preview`, route `preview.auracode.si/api/remote/*` | The same relay for the preview site | Current |
+| Worker | `auracode-relay`, routes `o7.codes/api/remote/*` and, for copies of the app from before the move, `auracode.si/api/remote/*` | Remote sessions relay: one Durable Object (`Room`, SQLite-backed) per computer. Stores key and token hashes only | Current |
+| Preview Worker | `auracode-relay-preview`, route `preview.o7.codes/api/remote/*` | The same relay for the preview site | Current |
 
 The zone has one rate limiting rule, added on 2026-11-19 before the repository was opened (ruleset
 `e81ea7c28dcc4e47b6d412e383c4a1b4`, phase `http_ratelimit`): a path starting `/api/remote/` gets at
@@ -295,3 +299,62 @@ reach its account; its account profile stays on that computer's disk, untouched.
 Still current: the relay Workers `auracode-relay` and `auracode-relay-preview`, the release bucket
 `auracode-releases`, the website Workers `auracode-web` and `auracode-web-preview` with their
 routes and Workers Builds triggers, the analytics rule, and the zone's TLS and HTTPS settings.
+
+## The site moves to o7.codes (2026-11-19)
+
+The owner bought o7.codes and asked for everything to be wired to it. The zone
+(`97dbe68f305979048e80226f5c860992`) is on the same account and nameservers and went active on
+2026-11-19 at 19:21 UTC. auracode.si is being abandoned; until it goes it does one job, below.
+
+What o7.codes has, each made to match what auracode.si had:
+
+- **DNS.** Originless proxied A records to the documentation-only `192.0.2.1` for `o7.codes`
+  (`12053ef335051c5d230d824800bc5023`) and `preview.o7.codes`
+  (`747609af64ae6f4d15fccadaea83d39c`): a Worker route answers, no origin server exists. The
+  domain sends no mail and says so, so nobody can send as it: `_dmarc` is `v=DMARC1; p=reject;`
+  and the apex SPF is `v=spf1 -all`.
+- **TLS.** Universal SSL, a Let's Encrypt certificate for `o7.codes` and `*.o7.codes` that
+  Cloudflare renews. Always Use HTTPS is on.
+- **The relay's rate limit.** The zone's one rule (ruleset `1a75616aa8c94871b3fddf7512710cad`,
+  phase `http_ratelimit`): a path starting `/api/remote/` gets at most 60 requests in 10 seconds
+  from one address and Cloudflare location, then is refused for 10 seconds.
+- **No injected analytics.** Ruleset `3c21907a548242fd9959cea75eb490f1`, phase
+  `http_config_settings`, turns Cloudflare's own page analytics off for `o7.codes` and
+  `preview.o7.codes`.
+- **Routes**, all written in the checked-in `wrangler.toml` files and applied by a deploy:
+  `o7.codes/*` to `auracode-web` and `preview.o7.codes/*` to `auracode-web-preview` (Workers
+  Builds, on a push), `o7.codes/api/remote/*` to `auracode-relay` and
+  `preview.o7.codes/api/remote/*` to `auracode-relay-preview` (by hand, docs/remote-sessions.md).
+
+What auracode.si still does, and only until copies of the app from before the move have updated:
+
+- `auracode.si/api/remote/*` still reaches `auracode-relay`. A copy from before the move keeps
+  its one socket to the relay there, and bot addresses made by it name that address. Both
+  addresses reach the same rooms, so a new copy and an old page, or the other way round, meet.
+- `auracode.si/*` still reaches `auracode-web`, which serves only `/remote` and the files that
+  page loads there, because a phone paired before the move keeps its key under that origin and
+  an older copy's pairing links open there. Every other page answers 308 to the same page on
+  o7.codes. The relay lets a browser in from that origin as well (`FORMER_ORIGIN`).
+- `preview.auracode.si` has no routes any more: the preview moved outright. Its DNS record and
+  the old zone's own rate-limit and analytics rules stay while the zone has routes.
+
+To finish the move, once nobody runs a copy from before it: delete the two auracode.si routes
+from `apps/relay/wrangler.toml` and `apps/web-worker/wrangler.toml`, `FORMER_ORIGIN` from the
+relay, `FORMER_HOSTS` from `apps/web-worker/src/lib.rs` and `wss://auracode.si` from the page's
+`connect-src` (`apps/web/scripts/headers.mjs`), then deploy both.
+
+A copy of the app from after the move removes, the first time it starts, every device and bot
+link that was issued under auracode.si (docs/remote-sessions.md, "Credentials belong to the site
+they were issued under"). So an updated computer has nothing left that the old address could be
+used against: its phone pairs once more and its bot is linked once more, at o7.codes.
+
+**Do not let auracode.si lapse while any copy from before the move is still in use.** That copy
+has not removed anything. Whoever registers the domain next would answer its relay socket,
+receive the tokens of its bot links (they are part of the address a bot posts to), be able to
+use the device keys its phones keep under that origin, and serve whatever page they like at
+`/remote`, where a pairing link hands its key to the page. Any of those is enough to steer that
+computer's chats. Sealing protects a session from the relay; it does not protect a credential
+from the address it was issued for. Keep the registration until the old copies are gone.
+
+The app's identifier stays `si.auracode.desktop`. It names the data folder and the installed
+app, not a web address; changing it would leave every chat and setting behind.

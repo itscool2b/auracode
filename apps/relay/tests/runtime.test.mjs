@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 const ORIGIN = "https://auracode.test";
+/** The address the site had before: its remote page is still let in. */
+const FORMER = "https://former.test";
 const BASE = `${ORIGIN}/api/remote/v1`;
 const id = (bytes) => randomBytes(bytes).toString("base64url");
 /** A computer's id is the start of a hash of its key. */
@@ -35,7 +37,7 @@ before(async () => {
       ],
       compatibilityDate: "2026-10-26",
       durableObjects: { ROOMS: { className: "Room", useSQLite: true } },
-      bindings: { APP_ORIGIN: ORIGIN },
+      bindings: { APP_ORIGIN: ORIGIN, FORMER_ORIGIN: FORMER },
     }),
   );
   await runtime.ready;
@@ -223,7 +225,29 @@ test("a browser socket needs the website's origin", async () => {
   const hostId = idOf(hostKey);
   (await host(hostId, hostKey)).close();
   assert.equal((await upgrade(`client/${hostId}`)).status, 403);
-  assert.equal((await upgrade(`client/${hostId}`, { Origin: "https://evil.test" })).status, 403);
+  // Only the site's origin and the one it had before, each exactly: no other site, no name
+  // that contains one of them, no missing or empty origin.
+  for (const origin of [
+    "https://evil.test",
+    `${ORIGIN}.evil.test`,
+    `${FORMER}.evil.test`,
+    ORIGIN.replace("https://", "http://"),
+    `${FORMER}/`,
+    "null",
+    "",
+    "undefined",
+  ]) {
+    assert.equal((await upgrade(`client/${hostId}`, { Origin: origin })).status, 403, origin);
+  }
+  // The origin the site had before is let in, to the same room: its desktop hears of it.
+  const desk = await host(hostId, hostKey);
+  const former = await upgrade(`client/${hostId}`, { Origin: FORMER });
+  assert.equal(former.status, 101);
+  const phone = reader(former.webSocket);
+  assert.equal(await phone.message(), "h1");
+  assert.match(await desk.message(), /^o[A-Za-z0-9_-]{16}$/);
+  phone.close();
+  desk.close();
   assert.equal(
     (await runtime.dispatchFetch(`${BASE}/client/${hostId}`, { headers: { Origin: ORIGIN } }))
       .status,
@@ -311,6 +335,74 @@ test("tells browsers when the desktop goes and comes back", async () => {
   assert.equal(await late.message(), "h1");
   assert.equal(await phone.message(), "h1");
   again.close();
+});
+
+test("a desktop that stops answering is away, not connected", async () => {
+  // A room of its own, where a desktop may stay silent for less than a second.
+  const quick = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: [
+        {
+          type: "ESModule",
+          path: "index.js",
+          contents: await readFile(
+            fileURLToPath(new URL("../build/index.js", import.meta.url)),
+            "utf8",
+          ),
+        },
+      ],
+      compatibilityDate: "2026-10-26",
+      durableObjects: { ROOMS: { className: "Room", useSQLite: true } },
+      bindings: { APP_ORIGIN: ORIGIN, HOST_SILENT_MS: "800" },
+    }),
+  );
+  try {
+    await quick.ready;
+    const open = async (path, headers) => {
+      const response = await quick.dispatchFetch(`${BASE}/${path}`, {
+        headers: { Upgrade: "websocket", ...headers },
+      });
+      assert.equal(response.status, 101);
+      return reader(response.webSocket);
+    };
+    const key = id(32);
+    const hostId = idOf(key);
+    const desk = await open(`host/${hostId}`, { Authorization: `Bearer ${key}` });
+    const phone = await open(`client/${hostId}`, { Origin: ORIGIN });
+    assert.equal(await phone.message(), "h1");
+    const cid = (await desk.message()).slice(1);
+    // The desktop keeps saying "ping": it stays.
+    for (let beat = 0; beat < 3; beat += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      desk.send("ping");
+      assert.equal(await desk.message(), "pong");
+    }
+    phone.send("mEstill here");
+    assert.equal(await desk.message(), `m${cid} Estill here`);
+    // No keep-alive for longer than allowed, but the desktop keeps sending: it is plainly there.
+    for (let beat = 0; beat < 3; beat += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      desk.send(`m${cid} Ebusy ${beat}`);
+      assert.equal(await phone.message(), `mEbusy ${beat}`);
+    }
+    phone.send("mEand still here");
+    assert.equal(await desk.message(), `m${cid} Eand still here`);
+    // Silent for longer than allowed: the next browser message finds it gone, and is told so.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    phone.send("mEhello?");
+    assert.equal(await phone.message(), "h0");
+    assert.equal(await desk.message(), "x");
+    // A browser that opens now waits for the desktop rather than talking into its old socket.
+    const late = await open(`client/${hostId}`, { Origin: ORIGIN });
+    assert.equal(await late.message(), "h0");
+    // The desktop connects again: both browsers start over with it.
+    const back = await open(`host/${hostId}`, { Authorization: `Bearer ${key}` });
+    assert.equal(await phone.message(), "h1");
+    assert.equal(await late.message(), "h1");
+    back.close();
+  } finally {
+    await quick.dispose();
+  }
 });
 
 test("refuses what a browser should not send", async () => {

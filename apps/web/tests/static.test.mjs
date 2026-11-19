@@ -56,7 +56,7 @@ test("public pages are prerendered to follow the system appearance without JavaS
       assert.ok(downloads.includes(download.sha256), download.file);
       assert.match(
         download.url,
-        /^https:\/\/(github\.com\/itscool2b\/auracode\/releases\/download|download\.auracode\.si)\//,
+        /^https:\/\/(github\.com\/itscool2b\/auracode\/releases\/download|download\.o7\.codes)\//,
       );
     }
     assert.ok(downloads.includes(`href="${release.checksums_url}"`));
@@ -221,5 +221,5 @@ test("the remote page is a tool of its own, never cached, framed or indexed", as
   assert.match(headers, /\n\/remote\*\n {2}Content-Security-Policy: frame-ancestors 'none'\n/);
   // The page talks to the relay on this site and nowhere else.
   const connect = /connect-src ([^;]*);/.exec(headers)?.[1];
-  assert.equal(connect, "'self' wss://auracode.si wss://preview.auracode.si");
+  assert.equal(connect, "'self' wss://o7.codes wss://preview.o7.codes wss://auracode.si");
 });

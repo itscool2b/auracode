@@ -207,3 +207,37 @@ test("encoded traversal, encoded separators and noncanonical public paths are re
     assert.equal(await response.text(), "Invalid path\n");
   }
 });
+
+test("the former address keeps the remote page and sends every other page to the site", async () => {
+  // auracode.si was the site's address until 19 November 2026. Nothing here leaves the machine:
+  // the request is dispatched to the Worker under that name.
+  const former = (path, init = {}) =>
+    runtime.dispatchFetch(`https://auracode.si${path}`, {
+      redirect: "manual",
+      ...init,
+      headers: { "Accept-Encoding": "identity", ...init.headers },
+    });
+  for (const path of ["/", "/download", "/changelog/", "/privacy/index.html", "/missing"]) {
+    const response = await former(`${path}?source=synthetic`);
+    assert.equal(response.status, 308, path);
+    assert.equal(response.headers.get("location"), `https://o7.codes${path}`);
+    assert.equal(await response.text(), "");
+    security(response);
+  }
+  // The remote page a paired phone opens there, and the files it loads, are the site's own.
+  const expected = await readFile(new URL("remote/index.html", publicRoot));
+  const page = await former("/remote");
+  assert.equal(page.status, 200);
+  assert.deepEqual(Buffer.from(await page.arrayBuffer()), expected);
+  assert.equal(page.headers.get("cache-control"), "no-store");
+  assert.match(
+    page.headers.get("content-security-policy"),
+    /connect-src 'self' [^;]*wss:\/\/auracode\.si/,
+  );
+  security(page);
+  const asset = /\/assets\/[\w.-]+\.js/.exec(expected.toString())?.[0];
+  assert.ok(asset, "the remote page loads a script");
+  assert.equal((await former(asset)).status, 200);
+  // The relay's path is never a page, there or anywhere.
+  assert.equal((await former("/api/remote/v1/health")).status, 404);
+});

@@ -4,12 +4,23 @@
  * and none can read it. A browser without IndexedDB (some private windows) pairs for the visit
  * only.
  */
+/**
+ * How a computer looks: its theme (one of the desktop's, by its saved name) and appearance. Kept
+ * with the pairing, so the page wears it before the computer answers.
+ */
+export interface Look {
+  readonly theme: string;
+  readonly appearance: "system" | "light" | "dark";
+}
+
 export interface SavedHost {
   readonly hostId: string;
   readonly hostName: string;
   readonly deviceId: string;
   readonly key: CryptoKey;
   readonly pairedAt: number;
+  /** As the computer last said; absent until it says. */
+  readonly look?: Look;
 }
 
 const NAME = "auracode-remote";

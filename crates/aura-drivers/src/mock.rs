@@ -800,7 +800,7 @@ const STRESS_SECTIONS: &[(&str, &str)] = &[
         "Where the time goes",
         "Streaming a long answer touches every layer at once: the driver parses **thousands of deltas**, the \
 batcher packs them into frames under 8 KiB, and the UI re-renders only the _last_ block on each frame. Keep \
-`requestAnimationFrame` work under 4 ms; [the rendering notes](https://auracode.si/docs/rendering) explain the \
+`requestAnimationFrame` work under 4 ms; [the rendering notes](https://o7.codes/docs/rendering) explain the \
 budget.",
     ),
     (
