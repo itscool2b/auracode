@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-18
 
+- The dates on this page are right now. Each change is listed under the day it shipped in US Eastern time. Before, the days were counted in UTC, so anything shipped in the evening showed under the next day; 51 changes moved back to their real day. ([#147](https://github.com/itscool2b/auracode/pull/147))
 - You can download auracode. The download page now has installers for Windows, macOS and Linux, each with its size and checksum. They are preview builds: nobody has signed them, so your system warns you before one runs, and the page says what to do. The code is public too, under the MIT license. ([#146](https://github.com/itscool2b/auracode/pull/146))
 - auracode has a new logo: a flying wing with two eyes. It is on the app, its icons, the taskbar and the website. The website also moves now: the wing flies into the headline, blinks and looks toward your pointer, and cards rise into place as you scroll. The app window pictured on the site is a softer grey that stands off the black page. ([#145](https://github.com/itscool2b/auracode/pull/145))
 - auracode is getting ready to open its code. The code is now under the MIT license, with a guide for people who want to help and a private way to report security problems. The download page can now list installers for Windows, macOS and Linux with their checksums, and it says plainly when a build is unsigned. ([#144](https://github.com/itscool2b/auracode/pull/144))
