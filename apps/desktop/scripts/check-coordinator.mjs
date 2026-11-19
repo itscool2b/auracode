@@ -186,16 +186,9 @@ try {
             window.coordinatorFixture.snapshot().tasks.find((t) => t.number === 6)?.status ===
             "review",
         );
-        // Chromium drops on the card under the pointer; WebKit's scripted drag drops on the column.
-        assert.deepEqual(
-          await tasksIn(page, "review"),
-          engine === "chromium"
-            ? [6, 3]
-            : (await tasksIn(page, "review")).includes(6)
-              ? await tasksIn(page, "review")
-              : [6, 3],
-        );
-        assert.equal((await tasksIn(page, "review")).length, 2);
+        // Chromium drops on the card under the pointer; WebKit's scripted drag drops on the column,
+        // so there the card lands at the column's end.
+        assert.deepEqual(await tasksIn(page, "review"), engine === "chromium" ? [6, 3] : [3, 6]);
         assert.ok((await calls(page)).includes("task_move"));
         // Deleting asks nothing more: the dialog's Delete is the confirmation.
         await lane(page, "review")
