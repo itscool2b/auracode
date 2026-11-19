@@ -161,6 +161,42 @@ The computer also ends any connection that has not proved a key within twenty se
 most 32 connections, 16 running calls per browser and 8 running bot calls, and stops sending live
 events to a browser that falls 4 MiB behind (the page then opens the chat again).
 
+## Staying connected and keeping up
+
+What made the page feel broken before 19 November 2026, and what each part does about it:
+
+- **A socket that died without closing.** A phone that slept, or changed networks, keeps a socket
+  that says it is open while nothing crosses it; taps then did nothing until a reload. When the
+  page comes back to the front, regains focus or the network returns, it sends the relay `ping`
+  and starts a new session at once if no `pong` comes within three seconds
+  (`RemoteClient.wake`). A request that gets no reply in fifteen seconds asks the same question
+  instead of only failing. The first reconnect is immediate; later ones back off.
+- **A computer that is gone but looks connected.** The desktop says `ping` every 25 seconds. A
+  host socket silent for 75 seconds belongs to a computer that slept or lost its network: the
+  relay ends it, tells the browsers `h0` ("Computer is away") and tells a browser that opens
+  then the same, instead of forwarding into a socket nobody reads. Three missed pings, so one
+  late ping never drops a working computer.
+- **Opening a chat while the link is still coming up.** The page keeps the chat that was asked
+  for and opens it when the session is ready, instead of refusing the tap.
+- **The wrong chat streaming.** Opens and closes used to run side by side on the computer, so a
+  slow open could finish after the close that followed it and leave a chat followed that the
+  page no longer showed. Each open or close now takes a number; they run in the order asked,
+  and one that is no longer the newest when its turn comes answers `superseded` and changes
+  nothing (`host/session.rs`).
+- **Lag while an agent writes.** The computer merges live frames that follow each other for the
+  same browser and chat into one sealed message (up to 256 KiB, never across anything else in
+  the queue, so order holds) and writes a burst to the socket with one flush. The page folds
+  frames as they arrive but draws at most once per animation frame, keeps finished turns from
+  drawing again, and folds repeated tool updates in history as the desktop does.
+- **A send that seemed to do nothing.** The message shows at once as "Sending" (or "Queued until
+  this turn ends"), the box empties, and a refused send puts the text back with the reason.
+
+The page wears the computer's theme: `ready` carries `look` (the theme's id and Light, Dark or
+System from Settings > Appearance), the page checks the id against the themes it ships and keeps
+it with the paired device, so the next visit is themed before the computer answers. A copy of
+the app that sends no `look` gets the default theme. The theme's name is all it says about the
+computer, and it reaches only a browser that already proved a key.
+
 ## Operations a browser can ask for
 
 `pair`, `overview`, `open`, `close`, `history`, `send`, `interrupt`, `permission`, `answer`,
@@ -200,7 +236,9 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
   - `apps/desktop/scripts/check-remote.mjs` (part of `check:settings`): the Settings page.
   - `corepack pnpm --filter @auracode/relay worker:e2e`: everything together on this machine.
     It needs the website built and `cargo build -p aura-remote --example demo_host`, a stand-in
-    computer with a scripted agent.
+    computer with a scripted agent. `--engines chromium,webkit` runs it in both, `--scheme dark`
+    reports a dark system, and `--shots <folder>` keeps screenshots. Midway it silences the
+    phone's socket without closing it and expects the page back on a new one.
   - `node apps/relay/tests/native.mjs <auracode.exe> [--prompt]`: the real debug app in a data
     folder of its own, paired from a separate browser and called by an MCP client. `--prompt`
     also runs a turn through the development build's scripted agent.
