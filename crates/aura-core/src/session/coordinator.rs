@@ -21,6 +21,8 @@ use crate::coordinator_service::{
     Bridge, BridgeFuture, COORDINATOR_INSTRUCTIONS, NO_PART, TURNED_OFF, ToolReply,
     WORKER_INSTRUCTIONS,
 };
+use super::workspace::bounded;
+use aura_protocol::AuraEvent;
 use aura_protocol::coordinator::*;
 use aura_protocol::git::{WorktreeChatInput, WorktreeChatPreview};
 use aura_protocol::session::{Availability, ConfigCategory, ConfigKind, ConfigValue};
