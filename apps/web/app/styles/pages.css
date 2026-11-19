@@ -136,7 +136,9 @@
   font-weight: 500;
 }
 
+/* A command or a file name breaks where it must: on a phone it is wider than its card. */
 .prose code {
+  overflow-wrap: anywhere;
   padding: 1px 6px;
   border-radius: 6px;
   background-color: var(--s-quiet);

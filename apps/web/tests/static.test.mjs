@@ -6,6 +6,10 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("../build/client/", import.meta.url);
+/** The committed catalog: `{ release: null }` until installers are published, then one release. */
+const { release } = JSON.parse(
+  await readFile(new URL("../app/release-catalog.json", import.meta.url), "utf8"),
+);
 
 /**
  * The Worker that serves the site embeds this folder and refuses a build it cannot plan
@@ -44,8 +48,33 @@ test("public pages are prerendered to follow the system appearance without JavaS
   assert.match(downloads, /macOS/);
   assert.match(downloads, /Windows/);
   assert.match(downloads, /Linux/);
-  assert.match(downloads, /Not published/);
-  assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
+  if (release) {
+    // Published: every installer is linked beside its checksum, and nothing says otherwise.
+    assert.equal(release.downloads.length, 6);
+    for (const download of release.downloads) {
+      assert.ok(downloads.includes(`href="${download.url}"`), download.file);
+      assert.ok(downloads.includes(download.sha256), download.file);
+      assert.match(
+        download.url,
+        /^https:\/\/(github\.com\/itscool2b\/auracode\/releases\/download|download\.auracode\.si)\//,
+      );
+    }
+    assert.ok(downloads.includes(`href="${release.checksums_url}"`));
+    assert.doesNotMatch(downloads, /Not published|Installer coming soon/);
+    // An unsigned build says so and says how each system treats it; a signed one says neither.
+    const warned = /These installers are unsigned and do not update themselves/;
+    if (release.signed) assert.doesNotMatch(downloads, warned);
+    else {
+      assert.match(downloads, warned);
+      assert.match(downloads, /Run anyway/);
+      assert.match(downloads, /Open Anyway/);
+      assert.match(downloads, /sudo apt install/);
+    }
+  } else {
+    assert.match(downloads, /Not published/);
+    assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
+    assert.doesNotMatch(downloads, /These installers are unsigned/);
+  }
   await access(new URL("images/desktop-light.png", root));
   for (const theme of ["light", "dark"])
     for (const width of [480, 960, 1440, 2240])

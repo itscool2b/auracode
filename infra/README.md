@@ -31,9 +31,6 @@ America location hint, which is not a data-residency guarantee. Both buckets sta
 distribution is enabled only with the release pipeline. The production database remains empty.
 Preview deployment status is recorded below.
 
-The owner authorized permanent deletion of `mijonion-media` and its contents. All 65 objects and
-the bucket were deleted on 2026-10-26. `wps-service-cache` and unrelated KV resources were untouched.
-
 Application code goes in Rust Workers. Use checked-in Wrangler configuration and SQL migrations,
 separate local/preview data from production, and store credentials only in Cloudflare/GitHub secrets.
 Cloudflare Email Sending provisioned the return path `cf-bounce.auracode.si`, SPF, DKIM and DMARC

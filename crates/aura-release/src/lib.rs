@@ -1,5 +1,6 @@
 //! Offline, fail-closed release assembly. No network, private keys or platform signing operations.
-//! Signatures follow the pinned tauri-plugin-updater 2.14.0 version-binding contract.
+//! Signatures follow the pinned tauri-plugin-updater 2.14.0 version-binding contract. Unsigned
+//! preview builds go through [`preview`] instead, which checks no signature and says so.
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
@@ -14,6 +15,7 @@ use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod preview;
 pub mod publish;
 
 const MAX_PLAN: u64 = 64 * 1024;
@@ -145,6 +147,9 @@ struct Download {
 #[derive(Serialize, specta::Type)]
 struct CatalogRelease<'a> {
     channel: Channel,
+    /// Whether the packages carry verified updater signatures. Preview builds do not: they are
+    /// unsigned and never update themselves, and the download page says so.
+    signed: bool,
     version: &'a str,
     pub_date: &'a str,
     notes: &'a str,
@@ -185,22 +190,24 @@ fn portable_name(name: &str) -> bool {
         && !numbered_device
 }
 
-fn validate(plan: &ReleasePlan) -> Result<PublicKey> {
-    let version =
-        semver::Version::parse(&plan.version).context("Release version must be SemVer")?;
+/// The checks every catalog shares, signed or not: its version, date and notes.
+fn validate_description(version: &str, pub_date: &str, notes: &str) -> Result<()> {
+    let parsed = semver::Version::parse(version).context("Release version must be SemVer")?;
     ensure!(
-        version.to_string() == plan.version && version.build.is_empty(),
+        parsed.to_string() == version && parsed.build.is_empty(),
         "Use canonical SemVer without build metadata"
     );
-    time::OffsetDateTime::parse(
-        &plan.pub_date,
-        &time::format_description::well_known::Rfc3339,
-    )
-    .context("Release date must be RFC3339")?;
+    time::OffsetDateTime::parse(pub_date, &time::format_description::well_known::Rfc3339)
+        .context("Release date must be RFC3339")?;
     ensure!(
-        !plan.notes.trim().is_empty() && plan.notes.len() <= 16 * 1024,
+        !notes.trim().is_empty() && notes.len() <= 16 * 1024,
         "Release notes must contain 1 to 16384 bytes"
     );
+    Ok(())
+}
+
+fn validate(plan: &ReleasePlan) -> Result<PublicKey> {
+    validate_description(&plan.version, &plan.pub_date, &plan.notes)?;
     ensure!(
         plan.artifacts.len() == 7,
         "Exactly seven artifacts are required: universal DMG and updater, x64 NSIS, ARM64 NSIS, and the Linux AppImage, deb and rpm"
@@ -447,6 +454,7 @@ fn assemble(
             json(&Catalog {
                 release: Some(CatalogRelease {
                     channel: plan.channel,
+                    signed: true,
                     version: &plan.version,
                     pub_date: &plan.pub_date,
                     notes: &plan.notes,

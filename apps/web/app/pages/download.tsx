@@ -25,8 +25,42 @@ const PLATFORMS = [
   },
 ] as const;
 
+/** The public source every preview build is made from. */
+const SOURCE = "https://github.com/itscool2b/auracode";
+
+/**
+ * How to open a build nobody has signed, system by system. Shown only for such a build: a signed
+ * release opens without any of this.
+ */
+function UnsignedSteps({ downloads }: { downloads: readonly { kind: string; file: string }[] }) {
+  const file = (kind: string) => downloads.find((download) => download.kind === kind)?.file;
+  const deb = file("linux_x64_deb");
+  const rpm = file("linux_x64_rpm");
+  const appimage = file("linux_x64_appimage");
+  return (
+    <ul>
+      <li>
+        <strong>Windows.</strong> SmartScreen says "Windows protected your PC". Choose More info,
+        then Run anyway. Where Smart App Control is on, it may block the installer outright; do not
+        turn it off for auracode.
+      </li>
+      <li>
+        <strong>macOS.</strong> The first time you open auracode, macOS refuses. Open System
+        Settings, then Privacy &amp; Security, and choose Open Anyway beside the message about
+        auracode.
+      </li>
+      <li>
+        <strong>Linux.</strong> On Debian and Ubuntu, <code>sudo apt install ./{deb}</code>. On
+        Fedora, <code>sudo dnf install ./{rpm}</code>. Anywhere else,{" "}
+        <code>chmod +x {appimage}</code> and run it.
+      </li>
+    </ul>
+  );
+}
+
 export default function Download() {
   const release = catalog.release;
+  const unsigned = release !== null && !release.signed;
   return (
     <Page
       wide
@@ -42,6 +76,11 @@ export default function Download() {
       {release?.channel === "staging" ? (
         <p className="note download-status" role="status">
           Staging preview. These builds are for release qualification.
+        </p>
+      ) : null}
+      {unsigned ? (
+        <p className="note download-status" role="status">
+          Preview build. These installers are unsigned and do not update themselves.
         </p>
       ) : null}
       <div className="download-grid">
@@ -127,15 +166,29 @@ export default function Download() {
         <section className="prose prose-section" aria-labelledby="before-you-install">
           <h2 id="before-you-install">Before you install</h2>
           <p>
-            {release
-              ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. Platform trust and updater signatures are separate checks."
-              : "Installers, checksums, and versioned release notes will appear here together. There is no public download to verify yet."}
+            {unsigned
+              ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. It is the only check these builds have."
+              : release
+                ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. Platform trust and updater signatures are separate checks."
+                : "Installers, checksums, and versioned release notes will appear here together. There is no public download to verify yet."}
           </p>
-          <p>
-            Preview builds may be unsigned. Review the source and build provenance before running
-            one. If your system blocks a build, stop and report the exact warning. Do not disable
-            operating-system security protections.
-          </p>
+          {unsigned && release ? (
+            <>
+              <p>
+                No publisher has signed these builds and Apple has not notarized them, so your
+                system warns you before one runs. Each is built from{" "}
+                <a href={SOURCE}>the public source</a> by its Build workflow. They do not update
+                themselves: come back here for a newer one.
+              </p>
+              <UnsignedSteps downloads={release.downloads} />
+            </>
+          ) : (
+            <p>
+              Preview builds may be unsigned. Review the source and build provenance before running
+              one. If your system blocks a build, stop and report the exact warning. Do not disable
+              operating-system security protections.
+            </p>
+          )}
         </section>
       </div>
     </Page>

@@ -1,7 +1,7 @@
 # Third-party notices
 
-These files preserve third-party terms. They do not select, grant or change a license for auracode.
-The project license remains a separate owner decision. Nothing here publishes the repository.
+These files preserve third-party terms. They do not select, grant or change a license for auracode,
+whose own license is the [MIT License](../LICENSE) at the repository root.
 
 `catalogue.json` contains the locked production dependency closure of the desktop and website,
 source archive links and SHA-256 hashes. `texts.json` preserves the original license texts. The desktop set covers Windows
@@ -69,4 +69,4 @@ because the desktop CSP allows no same-origin fetches.
 - Keep unmodified third-party source archives available at the listed source locations when
   distributing MPL-covered binaries. Modified dependencies would require a new source review.
 
-These gaps do not authorize publication, signing, a new project license, or an unreviewed release.
+These gaps do not authorize signing or an unreviewed release.

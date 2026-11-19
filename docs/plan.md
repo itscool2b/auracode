@@ -64,7 +64,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 - The user's code lives under `~/Desktop` (macOS privacy-protected).
 - Claude Code syncs account-level skills/plugins itself (`~/.claude/{skills,plugins}/synced/`): never touch.
   Shared cross-agent skills live in `~/.agents/skills`.
-- Cloudflare: account `megagrb16@gmail.com`. The auracode.si zone is active (since 2026-10-24 09:03 UTC,
+- Cloudflare: the owner's account. The auracode.si zone is active (since 2026-10-24 09:03 UTC,
   on `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com`, delegation served by public resolvers), next to
   three unrelated free zones on the same account. Resend and Neon MCPs connected.
 
@@ -562,12 +562,12 @@ Settings Sync's model).
   every apply, dry-run preview, one-click rollback.
 
 ## Repo + git workflow
-- **One private monorepo** (`gh repo create itscool2b/auracode --private`) holding the app, the website,
+- **One monorepo** (private until it was opened in November 2026) holding the app, the website,
   the API, and the shared packages. Not one long-lived branch per product (they drift apart), and not two
   repos (the app, site, and API share the design system, the generated API types, and the API contract, so
   one PR must be able to change them together). If the app is ever open-sourced, the API can be split out
   then with history intact (`git filter-repo`).
-- Repo-local `user.name itscool2b`, `user.email megagrb16@gmail.com` (global config untouched).
+- Repo-local `user.name` and `user.email` (global config untouched).
 - `main` gets the initial scaffold commit. Every piece of work happens on a short-lived feature branch
   named after its milestone (`m0-scaffold`, `m1a-core-acp`, ..., `m6-website`), merged through one PR when
   finished and tested. No drafts, review fixes pushed to the same PR, no co-author or generated-by lines.
@@ -575,8 +575,8 @@ Settings Sync's model).
 - Deploys are separate even though the repo is shared. Batch source validation before the final
   Windows/macOS CI checkpoint. Use isolated Cloudflare preview resources for web and API acceptance.
   A merge or version tag does not publish an unqualified desktop release; follow `docs/releases.md`.
-- Cloud changes stay within the owner's authorized scope. The auracode database/storage creation and
-  exact mijonion-media deletion were authorized on 2026-10-26; do not request that permission again.
+- Cloud changes stay within the owner's authorized scope. The auracode database/storage creation was
+  authorized on 2026-10-26; do not request that permission again.
   New consequential actions outside that scope are confirmed before execution; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
 
 ## Verification

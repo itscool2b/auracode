@@ -9,6 +9,11 @@ export type Catalog = {
 
 export type CatalogRelease = {
 	channel: Channel,
+	/**
+	 *  Whether the packages carry verified updater signatures. Preview builds do not: they are
+	 *  unsigned and never update themselves, and the download page says so.
+	 */
+	signed: boolean,
 	version: string,
 	pub_date: string,
 	notes: string,

@@ -2,7 +2,7 @@
 
 One beautiful home for all your coding agents.
 
-auracode is a desktop app for macOS and Windows that drives the coding agents you already use
+auracode is a desktop app for Windows, macOS and Linux that drives the coding agents you already use
 (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes, and any ACP-compatible agent)
 through their real harnesses, rendered in one desktop chat interface. Projects on the left, chats
 inside projects, switch agents and models mid-chat, run several at once.
@@ -30,13 +30,15 @@ deleted.
 
 Backend and cloud services are Rust-first: the website is a Rust Worker serving the prerendered
 pages, published at [auracode.si](https://auracode.si) and its isolated preview, and remote access
-goes through the relay Worker (`apps/relay`). Downloads are not published. The Cloudflare
-resources the account system used are listed in [infra/README.md](infra/README.md); they are
-unused and wait for the owner to remove them.
+goes through the relay Worker (`apps/relay`). The Cloudflare resources are listed in
+[infra/README.md](infra/README.md), with a record of the ones the account system used, which were
+deleted with it.
 React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
 Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
-Public installer signing is deferred at the owner's request. The repository remains private while
-the open-source license and publication audit are being discussed. No license change is implied.
+Installers are unsigned preview builds: publisher signing is deferred at the owner's request. They
+are published on this repository's Releases page and listed with their checksums at
+[auracode.si/download](https://auracode.si/download); [docs/releases.md](docs/releases.md) says
+how. auracode is open source under the [MIT License](LICENSE).
 
 Current source includes native agent drivers, the desktop workspace, onboarding, project and Git
 controls, a per-agent Plugin library, remote access, readable chat export and portable folder
@@ -257,3 +259,12 @@ For development and automation; the app reads them once at startup. On/off switc
 
 For example `AURACODE_STRESS=orbs=24,rate=200 pnpm dev`. In PowerShell, run
 `$env:AURACODE_STRESS = "orbs=24,rate=200"` first.
+
+## Contributing, security and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) says how to send a change and which checks to run first.
+- [SECURITY.md](SECURITY.md) says how to report a vulnerability privately. Please do not open a
+  public issue for one.
+- auracode is released under the [MIT License](LICENSE). The software it includes keeps its own
+  terms, preserved in [third-party/](third-party/README.md) and shown in the app under Settings,
+  About. The names and logos of the agents auracode drives belong to their owners.

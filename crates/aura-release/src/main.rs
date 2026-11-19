@@ -26,6 +26,32 @@ fn main() -> anyhow::Result<()> {
             aura_release::verify(Path::new(destination), &expected_key)?;
             println!("Staged artifacts, signatures, version bindings and manifests match.");
         }
+        [command, build, destination, tag, pub_date, notes] if command == "preview" => {
+            let text = |value: &std::ffi::OsString, what: &str| {
+                value
+                    .to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow::anyhow!("{what} must be valid UTF-8"))
+            };
+            let (tag, pub_date, notes) = (
+                text(tag, "The tag")?,
+                text(pub_date, "The date")?,
+                text(notes, "The notes")?,
+            );
+            aura_release::preview::preview(
+                &aura_release::preview::Preview {
+                    tag: &tag,
+                    version: env!("CARGO_PKG_VERSION"),
+                    pub_date: &pub_date,
+                    notes: &notes,
+                },
+                Path::new(build),
+                Path::new(destination),
+            )?;
+            println!(
+                "Gathered an unsigned preview build. Nothing was published: upload assets/ as release {tag}, then commit downloads.json as the website's catalog."
+            );
+        }
         [command, stage, rest @ ..] if command == "publish" => {
             let upload = match rest {
                 [] => false,
@@ -65,7 +91,7 @@ fn main() -> anyhow::Result<()> {
             );
         }
         _ => anyhow::bail!(
-            "Usage: aura-release prepare <release-plan.json> <artifact-directory> <new-stage-directory>\n       aura-release verify <stage-directory>\n       aura-release publish <stage-directory> [--upload]\n       aura-release export-types"
+            "Usage: aura-release prepare <release-plan.json> <artifact-directory> <new-stage-directory>\n       aura-release verify <stage-directory>\n       aura-release publish <stage-directory> [--upload]\n       aura-release preview <build-directory> <new-directory> <build-YYYY-MM-DD> <RFC3339 date> <notes>\n       aura-release export-types"
         ),
     }
     Ok(())

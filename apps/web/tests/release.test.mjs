@@ -78,6 +78,9 @@ try {
   const catalog = JSON.parse(await readFile(join(stage, "downloads.json"), "utf8"));
   assert.match(html, /Staging preview/);
   assert.doesNotMatch(html, /Installer coming soon|Not published/);
+  // A signed stage is never described as an unsigned preview build.
+  assert.equal(catalog.release.signed, true);
+  assert.doesNotMatch(html, /These installers are unsigned/);
   assert.match(html, /&lt;script&gt;not executable&lt;\/script&gt;/);
   for (const download of catalog.release.downloads) {
     assert.ok(html.includes(`href="${download.url}"`));
