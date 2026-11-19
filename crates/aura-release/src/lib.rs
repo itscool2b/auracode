@@ -1,6 +1,10 @@
 //! Offline, fail-closed release assembly. No network, private keys or platform signing operations.
-//! Signatures follow the pinned tauri-plugin-updater 2.14.0 version-binding contract. Unsigned
-//! preview builds go through [`preview`] instead, which checks no signature and says so.
+//! Signatures follow the pinned tauri-plugin-updater 2.14.0 version-binding contract.
+//!
+//! A release is the files of one GitHub release on the repository: the installers, the updater
+//! packages with their signatures, `SHA256SUMS` and `latest.json`, the manifest every installed
+//! copy reads to learn of a newer version. This crate checks every byte and signature and writes
+//! the manifests; the Publish workflow uploads what it wrote.
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
@@ -15,13 +19,12 @@ use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub mod preview;
-pub mod publish;
-
 const MAX_PLAN: u64 = 64 * 1024;
 const MAX_SIGNATURE: u64 = 4096;
 const MAX_ARTIFACT: u64 = 512 * 1024 * 1024;
-const ORIGIN: &str = "https://download.auracode.si";
+/// Where a GitHub release serves its files: `<this>/<tag>/<file>`. The desktop accepts update
+/// packages from this prefix alone (`apps/desktop/src-tauri/src/updater.rs`).
+const RELEASES: &str = "https://github.com/itscool2b/auracode/releases/download";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +35,11 @@ pub struct ReleasePlan {
     pub notes: String,
     /// Tauri's base64-encoded public key, never a private signing key.
     pub public_key: String,
+    /// Whether a publisher signed the packages for the operating systems (Authenticode,
+    /// Developer ID and notarization), which is separate from the updater signatures checked here.
+    /// False unless the plan says so: the download page then says each system will warn.
+    #[serde(default)]
+    pub publisher_signed: bool,
     pub artifacts: Vec<Artifact>,
 }
 
@@ -42,10 +50,13 @@ pub enum Channel {
     Staging,
 }
 impl Channel {
-    fn origin(self) -> &'static str {
+    /// The release's tag. Stable copies read the newest `v` release; a staging copy reads the
+    /// `staging` release's manifest, whose packages sit under `staging-v` tags, so neither can be
+    /// handed the other's packages.
+    pub fn tag(self, version: &str) -> String {
         match self {
-            Self::Stable => ORIGIN,
-            Self::Staging => "https://download.auracode.si/staging",
+            Self::Stable => format!("v{version}"),
+            Self::Staging => format!("staging-v{version}"),
         }
     }
 }
@@ -147,9 +158,12 @@ struct Download {
 #[derive(Serialize, specta::Type)]
 struct CatalogRelease<'a> {
     channel: Channel,
-    /// Whether the packages carry verified updater signatures. Preview builds do not: they are
-    /// unsigned and never update themselves, and the download page says so.
+    /// Whether the packages carry verified updater signatures, so an installed copy updates
+    /// itself. Every release this crate prepares does.
     signed: bool,
+    /// Whether a publisher signed the packages for the operating systems. When not, the download
+    /// page says each system warns before one runs, and how to open it.
+    publisher_signed: bool,
     version: &'a str,
     pub_date: &'a str,
     notes: &'a str,
@@ -390,9 +404,8 @@ fn assemble(
             output.sync_all()?;
         }
         let url = format!(
-            "{}/releases/{}/{}",
-            plan.channel.origin(),
-            plan.version,
+            "{RELEASES}/{}/{}",
+            plan.channel.tag(&plan.version),
             artifact.file
         );
         let digest = format!("{:x}", hash.finalize());
@@ -455,13 +468,13 @@ fn assemble(
                 release: Some(CatalogRelease {
                     channel: plan.channel,
                     signed: true,
+                    publisher_signed: plan.publisher_signed,
                     version: &plan.version,
                     pub_date: &plan.pub_date,
                     notes: &plan.notes,
                     checksums_url: format!(
-                        "{}/releases/{}/SHA256SUMS",
-                        plan.channel.origin(),
-                        plan.version
+                        "{RELEASES}/{}/SHA256SUMS",
+                        plan.channel.tag(&plan.version)
                     ),
                     downloads,
                 }),
@@ -500,18 +513,6 @@ pub fn prepare(plan: &ReleasePlan, artifacts: &Path, destination: &Path) -> Resu
 
 /// Re-verifies staged bytes and every generated manifest before any external publication step.
 pub fn verify(destination: &Path, expected_public_key: &str) -> Result<()> {
-    verify_stage(destination, expected_public_key).map(|_| ())
-}
-
-/// A stage as `verify` checked it: the manifests regenerated from the exact artifact bytes read,
-/// so publication can trust these values instead of reading the files a second time.
-pub(crate) struct VerifiedStage {
-    pub(crate) plan: ReleasePlan,
-    pub(crate) payload: std::path::PathBuf,
-    pub(crate) manifests: BTreeMap<String, Vec<u8>>,
-}
-
-pub(crate) fn verify_stage(destination: &Path, expected_public_key: &str) -> Result<VerifiedStage> {
     ensure!(
         !expected_public_key.trim().is_empty(),
         "An independently pinned updater public key is required"
@@ -545,9 +546,5 @@ pub(crate) fn verify_stage(destination: &Path, expected_public_key: &str) -> Res
             );
         }
     }
-    Ok(VerifiedStage {
-        plan,
-        payload,
-        manifests,
-    })
+    Ok(())
 }

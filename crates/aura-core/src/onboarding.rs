@@ -157,6 +157,11 @@ pub struct GeneralPreferences {
     /// The browser offers to save sign-ins and fills them in (WebView2's own password manager, on
     /// Windows). On by default.
     pub browser_passwords: bool,
+    /// Look for a newer auracode shortly after start and a few times a day, and show Update when
+    /// there is one (owner, 18 November 2026: "an update button pops up for every merge"). It
+    /// reads one public file from the project's GitHub releases; downloading and installing still
+    /// wait for the button. On unless the person turns it off in Settings > General.
+    pub automatic_updates: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -177,6 +182,7 @@ impl Default for GeneralPreferences {
             editor: None,
             browser: true,
             browser_passwords: true,
+            automatic_updates: true,
         }
     }
 }
@@ -263,6 +269,10 @@ pub enum SetupAction {
     },
     /// Turns on or off the browser's offer to save sign-ins.
     BrowserPasswords {
+        enabled: bool,
+    },
+    /// Turns on or off looking for a newer auracode by itself.
+    AutomaticUpdates {
         enabled: bool,
     },
 }
@@ -478,6 +488,9 @@ impl OnboardingStore {
             SetupAction::Browser { enabled } => next.preferences.general.browser = enabled,
             SetupAction::BrowserPasswords { enabled } => {
                 next.preferences.general.browser_passwords = enabled;
+            }
+            SetupAction::AutomaticUpdates { enabled } => {
+                next.preferences.general.automatic_updates = enabled;
             }
         }
         next.preferences.revision = revision
@@ -1126,6 +1139,7 @@ mod tests {
                 editor: Some(ProjectEditor::Zed),
                 browser: true,
                 browser_passwords: true,
+                automatic_updates: true,
             }
         );
     }

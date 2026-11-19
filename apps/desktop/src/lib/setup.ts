@@ -77,4 +77,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   editor: null,
   browser: true,
   browser_passwords: true,
+  automatic_updates: true,
 };
