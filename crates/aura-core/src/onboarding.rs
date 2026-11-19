@@ -167,6 +167,67 @@ pub struct GeneralPreferences {
     /// routines. Off until the person turns it on in Settings > Experiments; off again stops the
     /// project tools at once and keeps what the projects hold.
     pub coordinated_projects: bool,
+    /// Which agent and model does which kind of work (owner, 19 November 2026: "different models
+    /// for different things like fable for planning, gpt 6 astra for implementation or mixing
+    /// and matching"). Each is unset until chosen, and an unset one changes nothing.
+    #[serde(default)]
+    pub roles: RoleModels,
+}
+
+/// An agent, and optionally its model and thinking level, chosen for one kind of work.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct RoleModel {
+    pub agent: String,
+    /// `None` leaves the agent's own choice.
+    pub model: Option<String>,
+    pub effort: Option<String>,
+}
+
+/// The kinds of work a model can be chosen for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelRole {
+    /// Planning: applied when Plan is turned on in a chat of this agent.
+    Plan,
+    /// Building: offered when a plan is accepted, as "Accept and build with".
+    Build,
+    /// A coordinated project's coordinator.
+    Coordinator,
+    /// A coordinated project's workers, unless the coordinator names another.
+    Worker,
+}
+
+/// The choice for each kind of work. `None`: nothing is chosen, and nothing changes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct RoleModels {
+    #[serde(default)]
+    pub plan: Option<RoleModel>,
+    #[serde(default)]
+    pub build: Option<RoleModel>,
+    #[serde(default)]
+    pub coordinator: Option<RoleModel>,
+    #[serde(default)]
+    pub worker: Option<RoleModel>,
+}
+
+impl RoleModels {
+    pub fn get(&self, role: ModelRole) -> Option<&RoleModel> {
+        match role {
+            ModelRole::Plan => self.plan.as_ref(),
+            ModelRole::Build => self.build.as_ref(),
+            ModelRole::Coordinator => self.coordinator.as_ref(),
+            ModelRole::Worker => self.worker.as_ref(),
+        }
+    }
+
+    fn set(&mut self, role: ModelRole, choice: Option<RoleModel>) {
+        match role {
+            ModelRole::Plan => self.plan = choice,
+            ModelRole::Build => self.build = choice,
+            ModelRole::Coordinator => self.coordinator = choice,
+            ModelRole::Worker => self.worker = choice,
+        }
+    }
 }
 
 impl Default for GeneralPreferences {
@@ -189,6 +250,7 @@ impl Default for GeneralPreferences {
             browser_passwords: true,
             automatic_updates: true,
             coordinated_projects: false,
+            roles: RoleModels::default(),
         }
     }
 }
@@ -284,6 +346,11 @@ pub enum SetupAction {
     /// Turns the coordinated projects experiment on or off.
     CoordinatedProjects {
         enabled: bool,
+    },
+    /// Chooses the agent, model and thinking level for one kind of work, or clears the choice.
+    RoleModel {
+        role: ModelRole,
+        choice: Option<RoleModel>,
     },
 }
 
@@ -504,6 +571,25 @@ impl OnboardingStore {
             }
             SetupAction::CoordinatedProjects { enabled } => {
                 next.preferences.general.coordinated_projects = enabled;
+            }
+            SetupAction::RoleModel { role, choice } => {
+                let choice = match choice {
+                    None => None,
+                    Some(choice) => {
+                        identifier(&choice.agent, 128, "The agent identifier is invalid.")?;
+                        if let Some(model) = &choice.model {
+                            identifier(model, 256, "The model identifier is invalid.")?;
+                        }
+                        if let Some(effort) = &choice.effort {
+                            identifier(effort, 128, "The thinking level is invalid.")?;
+                        }
+                        Some(RoleModel {
+                            agent: aura_agents::agent_of(&choice.agent).to_owned(),
+                            ..choice
+                        })
+                    }
+                };
+                next.preferences.general.roles.set(role, choice);
             }
         }
         next.preferences.revision = revision
@@ -1105,6 +1191,128 @@ mod tests {
     }
 
     #[test]
+    fn a_role_keeps_its_agent_model_and_thinking_and_old_profiles_read_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert_eq!(store.preferences().general.roles, RoleModels::default());
+        let fable = RoleModel {
+            agent: "claude-acp".into(),
+            model: Some("claude-fable-5-2".into()),
+            effort: Some("high".into()),
+        };
+        let next = store
+            .apply(
+                0,
+                SetupAction::RoleModel {
+                    role: ModelRole::Plan,
+                    choice: Some(fable),
+                },
+            )
+            .unwrap();
+        // A connection is saved as its agent, as the default agent is.
+        let plan = next.preferences.general.roles.plan.clone().unwrap();
+        assert_eq!(
+            (
+                plan.agent.as_str(),
+                plan.model.as_deref(),
+                plan.effort.as_deref()
+            ),
+            ("claude", Some("claude-fable-5-2"), Some("high"))
+        );
+        let codex = RoleModel {
+            agent: "codex".into(),
+            model: None,
+            effort: None,
+        };
+        let next = store
+            .apply(
+                1,
+                SetupAction::RoleModel {
+                    role: ModelRole::Build,
+                    choice: Some(codex.clone()),
+                },
+            )
+            .unwrap();
+        // One role's choice leaves the others as they were.
+        assert_eq!(next.preferences.general.roles.build, Some(codex));
+        assert_eq!(next.preferences.general.roles.plan, Some(plan.clone()));
+        assert_eq!(next.preferences.general.roles.worker, None);
+        // What is not an identifier is refused, and nothing changes.
+        for bad in [
+            RoleModel {
+                agent: String::new(),
+                model: None,
+                effort: None,
+            },
+            RoleModel {
+                agent: "a".repeat(129),
+                model: None,
+                effort: None,
+            },
+            RoleModel {
+                agent: "claude".into(),
+                model: Some(
+                    "x
+y"
+                    .into(),
+                ),
+                effort: None,
+            },
+            RoleModel {
+                agent: "claude".into(),
+                model: None,
+                effort: Some(String::new()),
+            },
+        ] {
+            assert!(
+                store
+                    .apply(
+                        2,
+                        SetupAction::RoleModel {
+                            role: ModelRole::Worker,
+                            choice: Some(bad)
+                        }
+                    )
+                    .is_err()
+            );
+        }
+        assert_eq!(store.preferences().general.roles.worker, None);
+        let cleared = store
+            .apply(
+                2,
+                SetupAction::RoleModel {
+                    role: ModelRole::Plan,
+                    choice: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(cleared.preferences.general.roles.plan, None);
+        drop(store);
+        let reopened = OnboardingStore::open(dir.path())
+            .unwrap()
+            .preferences()
+            .general
+            .roles;
+        assert_eq!(
+            (reopened.plan, reopened.build.map(|role| role.agent)),
+            (None, Some("codex".into()))
+        );
+        // A profile saved before roles existed has none.
+        let older = tempfile::tempdir().unwrap();
+        std::fs::write(
+            older.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":2,"step":"project","motion":"full","appearance":"light","completed":true,"first_project_id":null,"general":{"default_agent":null,"default_model":null,"default_effort":null,"default_autonomy":"full_auto","automatic_checkpoints":false,"notifications":true,"keep_awake":true,"close_to_tray":true,"config_sync_paused":[],"copy_instructions_to_worktrees":true,"agent_memory_writes":true}}}"#,
+        )
+        .unwrap();
+        let general = OnboardingStore::open(older.path())
+            .unwrap()
+            .preferences()
+            .general;
+        assert_eq!(general.roles, RoleModels::default());
+        assert!(!general.coordinated_projects);
+    }
+
+    #[test]
     fn general_preferences_are_saved_and_reopen() {
         let dir = tempfile::tempdir().unwrap();
         let store = OnboardingStore::open(dir.path()).unwrap();
@@ -1154,6 +1362,7 @@ mod tests {
                 browser_passwords: true,
                 automatic_updates: true,
                 coordinated_projects: false,
+                roles: RoleModels::default(),
             }
         );
     }

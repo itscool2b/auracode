@@ -431,9 +431,15 @@ impl SessionManager {
         {
             return Err(failed("Choose one of this project's own folders."));
         }
+        let ready = self.ready_agents().await;
+        let role = self.role_for(crate::onboarding::ModelRole::Coordinator, &ready);
         let agent_id = match input.agent_id {
             Some(agent_id) => agent_id,
-            None => match project.default_agent.clone() {
+            None => match role
+                .as_ref()
+                .map(|role| role.agent.clone())
+                .or(project.default_agent.clone())
+            {
                 Some(agent_id) => agent_id,
                 None => self
                     .ready_agents()
@@ -446,6 +452,7 @@ impl SessionManager {
                     })?,
             },
         };
+        let agent_of_chat = aura_agents::agent_of(&agent_id).to_owned();
         let chat = self
             .create_project_chat(
                 ProjectChatCreate {
@@ -470,6 +477,11 @@ impl SessionManager {
             return Err(failed(error));
         }
         let _ = self.chat_rename(&chat_id, "Coordinator").await;
+        // Settings' Coordinator role names a model for its agent. A model that cannot be set
+        // (an agent that has never run reports none yet) leaves the agent's own.
+        if let Some(role) = role.filter(|role| role.agent == agent_of_chat) {
+            let _ = self.apply_role(&chat_id, &role).await;
+        }
         let prompt = format!(
             "{EVENT_PREFIX}Project started\n\n{COORDINATOR_INSTRUCTIONS}\n\nThe person's brief:\n{}\n\nStart now: call project_overview, then say in a few lines how you will split the work, record the plan as tasks, and start the workers that can go. Ask the person only what the brief leaves open and would be costly to get wrong.",
             input.brief.trim()
@@ -830,16 +842,64 @@ impl SessionManager {
         Ok(text)
     }
 
+    /// Settings' choice for a kind of work, when its agent is ready here.
+    fn role_for(
+        &self,
+        role: crate::onboarding::ModelRole,
+        ready: &[aura_protocol::session::AgentEntry],
+    ) -> Option<crate::onboarding::RoleModel> {
+        lock(&self.shared().role_models)
+            .get(role)
+            .filter(|choice| {
+                ready
+                    .iter()
+                    .any(|agent| aura_agents::agent_of(&agent.id) == choice.agent)
+            })
+            .cloned()
+    }
+
+    /// Sets a role's model and thinking level on a chat of the role's agent.
+    async fn apply_role(
+        &self,
+        chat_id: &str,
+        role: &crate::onboarding::RoleModel,
+    ) -> Result<(), String> {
+        if let Some(model) = &role.model {
+            self.choose_model(chat_id, model).await?;
+        }
+        if let Some(effort) = &role.effort {
+            self.choose_option(chat_id, ConfigCategory::Effort, effort)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Sets a chat's model by its value or name, as the model picker does.
     pub(crate) async fn choose_model(&self, chat_id: &str, asked: &str) -> Result<(), String> {
+        self.choose_option(chat_id, ConfigCategory::Model, asked)
+            .await
+    }
+
+    /// Sets a chat's model or thinking level by a choice's value or name.
+    async fn choose_option(
+        &self,
+        chat_id: &str,
+        category: ConfigCategory,
+        asked: &str,
+    ) -> Result<(), String> {
+        let what = if category == ConfigCategory::Model {
+            "model"
+        } else {
+            "thinking level"
+        };
         let lists = self.lists(chat_id).await.map_err(said)?;
         let option = lists
             .options
             .iter()
-            .find(|option| option.category == ConfigCategory::Model)
-            .ok_or("This agent has not reported its models yet.")?;
+            .find(|option| option.category == category)
+            .ok_or_else(|| format!("This agent has not reported its {what}s yet."))?;
         let ConfigKind::Select { choices, .. } = &option.kind else {
-            return Err("This agent does not offer a choice of model.".into());
+            return Err(format!("This agent does not offer a choice of {what}."));
         };
         let asked = asked.trim();
         let choice = choices
@@ -849,7 +909,7 @@ impl SessionManager {
             })
             .ok_or_else(|| {
                 format!(
-                    "It has no model called {asked}. Its models: {}.",
+                    "It has no {what} called {asked}. Its {what}s: {}.",
                     choices
                         .iter()
                         .take(20)
@@ -957,6 +1017,7 @@ impl SessionManager {
             )
         })?;
         let ready = self.ready_agents().await;
+        let worker_role = self.role_for(crate::onboarding::ModelRole::Worker, &ready);
         let agent_id = match optional_text(arguments, "agent")? {
             Some(asked) => ready
                 .iter()
@@ -976,8 +1037,13 @@ impl SessionManager {
                             .join(", ")
                     )
                 })?,
-            None => own.chat.agent_id.clone(),
+            None => worker_role
+                .as_ref()
+                .map(|role| role.agent.clone())
+                .unwrap_or_else(|| own.chat.agent_id.clone()),
         };
+        // The role's model and thinking level go with the role's agent, not with another one.
+        let worker_role = worker_role.filter(|role| role.agent == aura_agents::agent_of(&agent_id));
         let model = optional_text(arguments, "model")?;
         let title = crate::chatstore::coordinator::worker_name(&name);
         let isolated = arguments["isolated"].as_bool().unwrap_or(true);
@@ -1051,10 +1117,18 @@ impl SessionManager {
         };
         let _ = self.chat_rename(&chat_id, &name).await;
         let mut notes = String::new();
-        if let Some(model) = model
+        // The model the coordinator named, else the Worker role's, with the role's thinking level.
+        let role_effort = worker_role.as_ref().and_then(|role| role.effort.clone());
+        let asked = model.is_some();
+        if let Some(model) = model.or(worker_role.and_then(|role| role.model))
             && let Err(error) = self.choose_model(&chat_id, &model).await
         {
             notes = format!(" Its model was left at the agent's default: {error}");
+        }
+        if !asked && let Some(effort) = role_effort {
+            let _ = self
+                .choose_option(&chat_id, ConfigCategory::Effort, &effort)
+                .await;
         }
         let digest = self
             .coordination_text(Command::Digest {

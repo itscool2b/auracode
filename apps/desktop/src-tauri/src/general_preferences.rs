@@ -32,6 +32,7 @@ pub(crate) fn apply_to_manager(
     manager.set_agent_memory_writes(general.agent_memory_writes);
     manager.set_browser_tools(general.browser);
     manager.set_coordination(general.coordinated_projects);
+    manager.set_role_models(general.roles.clone());
 }
 
 /// Initialize before publishing a runtime, so its first actor sees the saved profile policy.
