@@ -77,6 +77,8 @@ const MAX_BOT_CALLS = 8;
  * so a browser is told its computer is away instead of waiting on a socket nobody reads.
  */
 const HOST_SILENT_MS = 75_000;
+/** How often, at most, the time the desktop was last heard is written beside its socket. */
+const HEARD_NOTE_MS = 5_000;
 const BOT_CALL_MS = 55_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -182,7 +184,7 @@ export default {
 type Attachment =
   | {
       readonly role: "host";
-      /** When the socket opened: its keep-alives are counted from then. */
+      /** When the socket opened, then when it last sent something, to within a few seconds. */
       readonly since?: number;
       /** Ended for going silent; browsers were already told, so its close says nothing more. */
       readonly silent?: boolean;
@@ -253,8 +255,8 @@ export class Room extends DurableObject<Env> {
   readonly #rates = new Map<string, { since: number; count: number }>();
   /**
    * When the desktop last sent anything but a keep-alive. A computer pushing a long history up a
-   * slow line may have its next keep-alive waiting behind that data: it is plainly there. Lost on
-   * hibernation, when the keep-alive's own time is all there is, as it should be.
+   * slow line may have its next keep-alive waiting behind that data: it is plainly there. Also
+   * written to the socket's attachment, at most every few seconds, so it outlives hibernation.
    */
   #heard = 0;
 
@@ -280,13 +282,12 @@ export class Room extends DurableObject<Env> {
     const host =
       this.ctx.getWebSockets("host").find((socket) => socket.readyState === WebSocket.OPEN) ?? null;
     if (!host) return null;
-    const since =
-      this.ctx.getWebSocketAutoResponseTimestamp(host)?.getTime() ??
-      (host.deserializeAttachment() as { since?: number } | null)?.since;
+    const noted = (host.deserializeAttachment() as { since?: number } | null)?.since;
+    const pinged = this.ctx.getWebSocketAutoResponseTimestamp(host)?.getTime();
     // A socket from before this was counted has no time at all: it is left alone.
-    if (since === undefined) return host;
+    if (noted === undefined && pinged === undefined) return host;
     const silent = Number(this.env.HOST_SILENT_MS) || HOST_SILENT_MS;
-    if (Date.now() - Math.max(since, this.#heard) <= silent) return host;
+    if (Date.now() - Math.max(noted ?? 0, pinged ?? 0, this.#heard) <= silent) return host;
     host.serializeAttachment({ role: "host", silent: true } satisfies Attachment);
     end(host, 4004, "silent");
     this.#hostGone(host, asking);
@@ -409,7 +410,10 @@ export class Room extends DurableObject<Env> {
 
   async #fromHost(socket: WebSocket, message: string) {
     if (message.length > HOST_MESSAGE_BYTES) return socket.close(1009, "too large");
-    this.#heard = Date.now();
+    const now = Date.now();
+    if (now - this.#heard > HEARD_NOTE_MS)
+      socket.serializeAttachment({ role: "host", since: now } satisfies Attachment);
+    this.#heard = now;
     const kind = message[0];
     if (kind === "m" || kind === "c" || kind === "a") {
       const cid = message.slice(1, 1 + CID_LENGTH);

@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex, MutexGuard, PoisonError,
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -121,6 +121,8 @@ impl Service {
     /// until remote access is on.
     pub fn start(config: Config, runtime: &tokio::runtime::Handle) -> Result<Self, RegistryError> {
         let mut registry = Registry::load(&config.path)?;
+        // Devices and bot links issued under another site are not this copy's to accept.
+        registry.set_site(&config.site);
         registry.set_scope(&config.profile);
         let shared = Arc::new(Shared {
             link: Mutex::new(if registry.enabled() {
@@ -275,6 +277,8 @@ struct Session {
     /// and does nothing, so a slow open can never replace the chat asked for after it.
     follow: Arc<AtomicU64>,
     following: Arc<tokio::sync::Mutex<()>>,
+    /// The session is over: an open still waiting its turn must not start following for it.
+    ended: Arc<AtomicBool>,
 }
 
 struct Connection {

@@ -50,6 +50,11 @@ pub(super) fn seal(
 
 /// A browser is gone: nothing follows a chat on its behalf any more.
 pub(super) fn closed(shared: &Shared, backend: &dyn Backend, cid: &str, connection: Connection) {
+    // First the mark, then the release: an open that finishes attaching after this sees the
+    // mark and releases what it attached.
+    if let Some(session) = &connection.session {
+        session.ended.store(true, Ordering::SeqCst);
+    }
     backend.release(&owner(cid));
     let Some(session) = connection.session else {
         return;
@@ -186,6 +191,7 @@ fn hello(
         backlog: Arc::new(AtomicUsize::new(0)),
         follow: Arc::new(AtomicU64::new(0)),
         following: Arc::new(tokio::sync::Mutex::new(())),
+        ended: Arc::new(AtomicBool::new(false)),
     });
     Received::Send(vec![
         format!("m{cid} W{welcome}"),
@@ -363,6 +369,7 @@ fn start(
             mine: session.follow.fetch_add(1, Ordering::SeqCst) + 1,
             newest: session.follow.clone(),
             order: session.following.clone(),
+            ended: session.ended.clone(),
         })
     } else {
         None
@@ -380,8 +387,16 @@ fn start(
             Some(turn) => {
                 // In the order they were asked for, and only while still the newest.
                 let _held = turn.order.lock().await;
-                if turn.newest.load(Ordering::SeqCst) == turn.mine {
-                    perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await
+                if turn.ended.load(Ordering::SeqCst) {
+                    Err(BackendError::new("closed", "This session is over."))
+                } else if turn.newest.load(Ordering::SeqCst) == turn.mine {
+                    let result =
+                        perform(&shared, &backend, &out, &cid, &device, backlog, request.op).await;
+                    // The browser left while this ran: nothing may go on following for it.
+                    if turn.ended.load(Ordering::SeqCst) {
+                        backend.release(&owner(&cid));
+                    }
+                    result
                 } else {
                     Err(BackendError::new(
                         "superseded",
@@ -406,6 +421,7 @@ struct Turn {
     mine: u64,
     newest: Arc<AtomicU64>,
     order: Arc<tokio::sync::Mutex<()>>,
+    ended: Arc<AtomicBool>,
 }
 
 enum Performed {

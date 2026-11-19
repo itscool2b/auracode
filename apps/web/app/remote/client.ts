@@ -133,6 +133,11 @@ const PONG_MS = 10_000;
 const PROBE_MS = 3_000;
 /** Most requests; starting a chat or handing it over waits on an agent and gets longer. */
 const REQUEST_MS = 15_000;
+/**
+ * A message, a stop or an answer acts on the computer: giving up early invites sending it twice,
+ * so these wait as long as they always did.
+ */
+const ACT_MS = 30_000;
 const SLOW_REQUEST_MS = 45_000;
 
 /** A look as the computer sent it, kept only when its names are known. */
@@ -258,7 +263,7 @@ export class RemoteClient {
    */
   async start(fragment: string): Promise<void> {
     const hosts = await loadHosts();
-    this.#set({ hosts, look: hosts[0]?.look ?? null });
+    this.#set({ hosts, look: lookOf(hosts[0]?.look) });
     const pairing = parsePairing(fragment);
     if (pairing) {
       this.#credential = {
@@ -286,7 +291,7 @@ export class RemoteClient {
     if (!host) return;
     this.#credential = { kind: "device", host };
     this.#forgetChat();
-    this.#set({ host: null, overview: null, chat: null, opening: null, look: host.look ?? null });
+    this.#set({ host: null, overview: null, chat: null, opening: null, look: lookOf(host.look) });
     this.#connect();
   }
 
@@ -886,26 +891,27 @@ export class RemoteClient {
   }
 
   send(chatId: string, text: string): Promise<PromptAck> {
-    return this.#request({ op: "send", chat_id: chatId, text }) as Promise<PromptAck>;
+    return this.#request({ op: "send", chat_id: chatId, text }, ACT_MS) as Promise<PromptAck>;
   }
 
   async interrupt(chatId: string): Promise<void> {
-    await this.#request({ op: "interrupt", chat_id: chatId });
+    await this.#request({ op: "interrupt", chat_id: chatId }, ACT_MS);
   }
 
   /** Answers a permission request; no option declines it. */
   async permission(chatId: string, requestId: string, optionId: string | null): Promise<void> {
-    await this.#request({
-      op: "permission",
-      chat_id: chatId,
-      request_id: requestId,
-      option_id: optionId,
-    });
+    await this.#request(
+      { op: "permission", chat_id: chatId, request_id: requestId, option_id: optionId },
+      ACT_MS,
+    );
   }
 
   /** Answers a question; no answer dismisses it. */
   async answer(chatId: string, requestId: string, answer: UiAnswer | null): Promise<void> {
-    await this.#request({ op: "answer", chat_id: chatId, request_id: requestId, answer });
+    await this.#request(
+      { op: "answer", chat_id: chatId, request_id: requestId, answer },
+      ACT_MS,
+    );
   }
 
   /** Starts a chat in a project's folder with its first message, and opens it. */

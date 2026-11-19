@@ -60,6 +60,10 @@ pub struct Device {
     /// was ever written by a release) reaches nothing.
     #[serde(default)]
     pub profile: String,
+    /// The website the pairing link pointed at: the origin the browser keeps this key under.
+    /// Empty on a record from before sites were recorded, when the site was auracode.si.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub site: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,6 +81,9 @@ pub struct Bot {
     /// link is made and never changed after: a wider link is a new link.
     #[serde(default)]
     pub full: bool,
+    /// The website whose address the link's token was shown in. Empty as for a device.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub site: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,6 +119,8 @@ pub struct Registry {
     pairing: Option<Pairing>,
     /// The open workspace's id. Empty while none is open.
     scope: String,
+    /// The website new pairing links and bot addresses point at.
+    site: String,
 }
 
 impl Registry {
@@ -154,7 +163,30 @@ impl Registry {
             stored,
             pairing: None,
             scope: String::new(),
+            site: String::new(),
         })
+    }
+
+    /// Names the website this copy pairs through, and removes every device and bot link issued
+    /// under another one, in every workspace. Returns how many went.
+    ///
+    /// A browser keeps a device's key under the site's origin, and a bot's token is part of an
+    /// address at the site. When the site moves, whoever holds the old address later holds a
+    /// page that can use those keys and receives those tokens, so none of them may stay good:
+    /// the phone pairs again and the bot is linked again, at the new address.
+    pub fn set_site(&mut self, site: &str) -> usize {
+        self.site = site.to_owned();
+        let before = self.stored.devices.len() + self.stored.bots.len();
+        self.stored.devices.retain(|device| device.site == site);
+        self.stored.bots.retain(|bot| bot.site == site);
+        let gone = before - self.stored.devices.len() - self.stored.bots.len();
+        if gone > 0 {
+            self.pairing = None;
+            // A save that fails leaves them in the file and out of this run: they are refused
+            // now all the same, and removed again at the next start.
+            let _ = self.save();
+        }
+        gone
     }
 
     /// Names the open workspace. Devices and bot links of any other stop being accepted, and an
@@ -304,6 +336,7 @@ impl Registry {
             created_at: now,
             last_seen_at: now,
             profile: self.scope.clone(),
+            site: self.site.clone(),
         };
         self.stored.devices.push(device.clone());
         if let Err(error) = self.save() {
@@ -383,6 +416,7 @@ impl Registry {
             last_used_at: None,
             profile: self.scope.clone(),
             full,
+            site: self.site.clone(),
         });
         if let Err(error) = self.save() {
             self.stored.bots.pop();
@@ -535,6 +569,86 @@ mod tests {
             assert_eq!(legacy.device_key(&phone.id), None, "{scope}");
             assert!(!legacy.verify_bot(&bot.id, &bot.token, 7), "{scope}");
         }
+    }
+
+    #[test]
+    fn a_device_or_bot_issued_under_another_site_is_removed() {
+        let folder = tempfile::tempdir().expect("folder");
+        let path = folder.path().join("remote.json");
+        let mut registry = Registry::load(&path).expect("load");
+        assert_eq!(registry.set_site("https://old.test"), 0);
+        registry.set_scope("local");
+        let pairing = registry.start_pairing(1).expect("pairing");
+        let phone = registry
+            .pair(&pairing.id, "Phone", 2)
+            .expect("pair")
+            .expect("device");
+        let bot = registry.add_bot("Bot", true, 3).expect("bot");
+        // Another workspace's records go too: the site is the same for all of them.
+        registry.set_scope("other");
+        let pairing = registry.start_pairing(4).expect("pairing");
+        let tablet = registry
+            .pair(&pairing.id, "Tablet", 5)
+            .expect("pair")
+            .expect("device");
+        assert_eq!(phone.site, "https://old.test");
+
+        // The same site again keeps everything.
+        let mut same = Registry::load(&path).expect("reload");
+        assert_eq!(same.set_site("https://old.test"), 0);
+        same.set_scope("local");
+        assert!(same.device_key(&phone.id).is_some());
+        assert!(same.verify_bot(&bot.id, &bot.token, 6));
+
+        // The site moved: nothing issued under the old one is good, here or after a restart.
+        for _ in 0..2 {
+            let mut moved = Registry::load(&path).expect("reload");
+            let gone = moved.set_site("https://new.test");
+            for scope in ["local", "other"] {
+                moved.set_scope(scope);
+                assert!(
+                    moved.devices().is_empty() && moved.bots().is_empty(),
+                    "{scope}"
+                );
+                assert_eq!(moved.device_key(&phone.id), None);
+                assert_eq!(moved.device_key(&tablet.id), None);
+                assert!(!moved.device_elsewhere(&tablet.id));
+                assert!(!moved.verify_bot(&bot.id, &bot.token, 7));
+            }
+            // The second time round they are already gone from the file.
+            assert!(gone == 3 || gone == 0);
+        }
+        let saved = std::fs::read_to_string(&path).expect("file");
+        assert!(!saved.contains(&phone.key) && !saved.contains(&phone.id));
+
+        // What is issued now is kept, and says where it was issued.
+        let mut moved = Registry::load(&path).expect("reload");
+        assert_eq!(moved.set_site("https://new.test"), 0);
+        moved.set_scope("local");
+        let pairing = moved.start_pairing(8).expect("pairing");
+        let again = moved
+            .pair(&pairing.id, "Phone", 9)
+            .expect("pair")
+            .expect("device");
+        assert_eq!(again.site, "https://new.test");
+        let mut kept = Registry::load(&path).expect("reload");
+        assert_eq!(kept.set_site("https://new.test"), 0);
+        kept.set_scope("local");
+        assert!(kept.device_key(&again.id).is_some());
+
+        // A record from before sites were recorded names none: it was issued under the first
+        // address, so it goes when a site is named.
+        let text = std::fs::read_to_string(&path).expect("file");
+        assert!(text.contains(r#""site": "https://new.test""#));
+        std::fs::write(
+            &path,
+            text.replace(r#""site": "https://new.test""#, r#""site": """#),
+        )
+        .expect("write");
+        let mut early = Registry::load(&path).expect("reload");
+        assert_eq!(early.set_site("https://new.test"), 1);
+        early.set_scope("local");
+        assert_eq!(early.device_key(&again.id), None);
     }
 
     fn fresh() -> (tempfile::TempDir, Registry) {

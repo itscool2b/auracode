@@ -1868,3 +1868,34 @@ async fn reconnects_after_the_relay_drops_it() {
     assert_eq!(third.next().await, "l[]");
     rig.service.shutdown();
 }
+
+#[tokio::test]
+async fn an_open_still_waiting_when_the_browser_leaves_follows_nothing() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let (mut phone, _, _) = pair(&rig, &mut relay, "aaaaaaaaaaaaaaaa").await;
+    let owner = "auracode-remote:aaaaaaaaaaaaaaaa";
+    // What was paired says which site it was paired through.
+    let saved = std::fs::read_to_string(&rig.path).expect("saved");
+    assert!(
+        saved.contains(r#""site": "https://auracode.test""#),
+        "{saved}"
+    );
+
+    // One open under way and one waiting its turn when the browser's socket goes.
+    phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "slow" }))
+        .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    phone
+        .send(&mut relay, json!({ "op": "open", "chat_id": "c1" }))
+        .await;
+    relay.send("caaaaaaaaaaaaaaaa").await;
+    // Long enough for the slow open to finish and the waiting one to have had its turn.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    assert!(
+        !rig.app.frames.lock().expect("frames").contains_key(owner),
+        "a chat is followed for a browser that left"
+    );
+    assert!(!rig.service.status().devices[0].connected);
+}
