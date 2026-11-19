@@ -1251,11 +1251,7 @@ mod tests {
             },
             RoleModel {
                 agent: "claude".into(),
-                model: Some(
-                    "x
-y"
-                    .into(),
-                ),
+                model: Some("line\nbreak".into()),
                 effort: None,
             },
             RoleModel {
