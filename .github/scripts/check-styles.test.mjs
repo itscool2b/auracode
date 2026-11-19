@@ -110,16 +110,22 @@ test("problems carry their file and line", () => {
 for (const [name, css, expected] of [
   ["a clean desktop tree", ".a { padding: var(--g-space-8); }", 0],
   ["a desktop tree off the scale", ".a { padding: 10px; }", 1],
+  ["a desktop tree with a token nothing defines", ".a { padding: var(--g-space-10); }", 1],
 ]) {
   test(`the command reports ${name}`, (t) => {
     const root = mkdtempSync(join(tmpdir(), "auracode-styles-"));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     mkdirSync(join(root, "apps/desktop/src/components"), { recursive: true });
     writeFileSync(join(root, "apps/desktop/src/components/a.css"), css);
+    mkdirSync(join(root, "packages/ui/src/graphite"), { recursive: true });
+    writeFileSync(join(root, "packages/ui/src/graphite/tokens.css"), ":root { --g-space-8: 8px; }");
     const result = spawnSync(process.execPath, [script, root], { encoding: "utf8" });
     assert.equal(result.status, expected, result.stderr);
     if (expected !== 0)
-      assert.match(result.stderr, /apps\/desktop\/src\/components\/a\.css:1: 10px/);
+      assert.match(
+        result.stderr,
+        /apps\/desktop\/src\/components\/a\.css:1: (?:10px|--g-space-10 is defined nowhere)/,
+      );
   });
 }
 
@@ -133,4 +139,29 @@ test("eyebrows fail wherever they hide", async () => {
   assert.deepEqual(eyebrows(".cmd::first-letter {\n  text-transform: uppercase;\n}"), []);
   assert.deepEqual(eyebrows('.a::after {\n  content: "+";\n}'), []);
   assert.deepEqual(eyebrows(".title {\n  text-transform: none;\n}"), []);
+});
+
+test("a token nothing defines fails, since the browser drops the whole declaration", async () => {
+  const { definedIn, lintUndefined, lintUndefinedIn } = await import("./check-styles.mjs");
+  const tokens =
+    ":root {\n  --g-space-8: 8px;\n  --g-space-12: 12px;\n}\n/* --g-space-10: 10px; */\n";
+  const script =
+    'node.style.setProperty("--row-height", "28px");\nconst style = { "--depth": 2 };\n';
+  const defined = new Set([...definedIn(tokens, true), ...definedIn(script, false)]);
+  assert.deepEqual([...defined].sort(), ["--depth", "--g-space-12", "--g-space-8", "--row-height"]);
+  const sheet = [
+    ".pill {",
+    "  padding: 0 var(--g-space-12) 0 var(--g-space-10);",
+    "  height: var(--row-height);",
+    "  margin: var(--maybe-unset, 0px);",
+    "  /* gap: var(--in-a-comment); */",
+    "  z-index: var( --depth );",
+    "}",
+  ].join("\n");
+  const found = lintUndefined(sheet, "shell.css", defined);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].line, 2);
+  assert.match(found[0].problem, /--g-space-10 is defined nowhere/);
+  // The repository itself is clean.
+  assert.deepEqual(lintUndefinedIn(fileURLToPath(new URL("../../", import.meta.url))), []);
 });
