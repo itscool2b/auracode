@@ -1382,6 +1382,7 @@ export function ChatView({
                                   }
                                   agentName={agent?.name ?? state.chat?.agent_name}
                                   onAddToPlan={addToPlan}
+                                  planBuild={planBuild}
                                   blobs={state.blobs}
                                   onLoadBlob={(sha256) => void store.loadBlob(sha256)}
                                 />
