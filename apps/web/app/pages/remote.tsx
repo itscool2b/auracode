@@ -1,7 +1,9 @@
-import { Logo } from "@auracode/ui/graphite";
+import { AgentMark, Logo, PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import {
   type FormEvent,
+  memo,
   type ReactNode,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -21,13 +23,22 @@ import type {
 import {
   type RenderedItem,
   type RenderedSegment,
-  renderTranscript,
+  renderCache,
   stopReasonLabel,
 } from "../../../desktop/src/lib/chat/transcript";
-import { type OpenChat, type Overview, RemoteClient, type State } from "../remote/client";
+import {
+  type Look,
+  type OpenChat,
+  type Overview,
+  RemoteClient,
+  type State,
+} from "../remote/client";
 import { Markdown } from "../remote/markdown";
 import { ChatPickers } from "../remote/pickers";
 import { keepsPairings } from "../remote/storage";
+// The desktop's themes, one per agent: the page wears the one its computer wears.
+import "@auracode/ui/themes.css";
+import "../styles/remote.css";
 
 export const meta = () => [
   { title: "Remote · auracode" },
@@ -56,6 +67,40 @@ function relayOrigin(): string {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 }
 
+/** auracode's own default, until the computer says otherwise. */
+const DEFAULT_LOOK: Look = { theme: "claude", appearance: "system" };
+
+/**
+ * Puts the computer's theme on the page: its palette, its appearance (the system's when it follows
+ * the system, followed live), and the browser's own bars in the window's colour.
+ */
+function useLook(look: Look | null) {
+  const { theme, appearance } = look ?? DEFAULT_LOOK;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const query = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = () => {
+      root.dataset.palette = theme;
+      root.dataset.theme =
+        appearance === "system" ? (query.matches ? "light" : "dark") : appearance;
+      const paint = getComputedStyle(root).getPropertyValue("--g-window").trim();
+      for (const tag of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))
+        if (paint) tag.content = paint;
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [theme, appearance]);
+  useEffect(
+    () => () => {
+      // Leaving the page gives the site its own appearance back.
+      delete document.documentElement.dataset.palette;
+      delete document.documentElement.dataset.theme;
+    },
+    [],
+  );
+}
+
 export default function RemotePage() {
   const [client, setClient] = useState<RemoteClient | null>(null);
   // A pairing link waits for a tap. Opening the page pairs nothing by itself, so a program that
@@ -67,51 +112,60 @@ export default function RemotePage() {
     if (fragment.replace(/^#/, "") === "") void next.start("");
     else setAsking(fragment);
     setClient(next);
+    // Back in front, back online, or restored from the back-forward cache: check the session.
     const wake = () => {
       if (document.visibilityState === "visible") next.wake();
     };
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
     return () => {
       document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
       next.stop();
     };
   }, []);
   return (
     <main id="main" className="remote">
       {client && asking !== null ? (
-        <Centered title="Pair this browser?">
-          <p>
-            This link pairs this browser with your computer. Once paired, it can read your chats
-            there and direct your agents, which can edit files and run commands.
-          </p>
-          <p>Go on only if you opened this link from your own computer just now.</p>
-          <p className="remote-card-actions">
-            <button
-              type="button"
-              className="g-button g-button-primary g-button-44"
-              onClick={() => {
-                setAsking(null);
-                void client.start(asking);
-              }}
-            >
-              Pair this browser
-            </button>
-            <button
-              type="button"
-              className="g-button g-button-outline g-button-44"
-              onClick={() => {
-                setAsking(null);
-                void client.start("");
-              }}
-            >
-              Not now
-            </button>
-          </p>
-        </Centered>
+        <Themed client={client}>
+          <Centered title="Pair this browser?">
+            <p>
+              This link pairs this browser with your computer. Once paired, it can read your chats
+              there and direct your agents, which can edit files and run commands.
+            </p>
+            <p>Go on only if you opened this link from your own computer just now.</p>
+            <p className="remote-card-actions">
+              <button
+                type="button"
+                className="g-button g-button-primary remote-button"
+                onClick={() => {
+                  setAsking(null);
+                  void client.start(asking);
+                }}
+              >
+                Pair this browser
+              </button>
+              <button
+                type="button"
+                className="g-button remote-button remote-quiet"
+                onClick={() => {
+                  setAsking(null);
+                  void client.start("");
+                }}
+              >
+                Not now
+              </button>
+            </p>
+          </Centered>
+        </Themed>
       ) : client ? (
-        <Remote client={client} />
+        <Themed client={client}>
+          <Remote client={client} />
+        </Themed>
       ) : (
         <Centered title="Remote">
           <p>Connecting to your computer.</p>
@@ -124,6 +178,18 @@ export default function RemotePage() {
   );
 }
 
+function Themed({
+  client,
+  children,
+}: {
+  readonly client: RemoteClient;
+  readonly children: ReactNode;
+}) {
+  const state = useSyncExternalStore(client.subscribe, client.getState, client.getState);
+  useLook(state.look);
+  return children;
+}
+
 function Remote({ client }: { readonly client: RemoteClient }) {
   const state = useSyncExternalStore(client.subscribe, client.getState, client.getState);
   if (state.phase.name === "empty")
@@ -134,7 +200,7 @@ function Remote({ client }: { readonly client: RemoteClient }) {
           code it shows with this device, or open its link here.
         </p>
         <p>
-          <a className="g-button g-button-outline g-button-44" href="/download">
+          <a className="g-button remote-button remote-quiet" href="/download">
             Get auracode
           </a>
         </p>
@@ -150,7 +216,7 @@ function Remote({ client }: { readonly client: RemoteClient }) {
           <p>
             <button
               type="button"
-              className="g-button g-button-primary g-button-44"
+              className="g-button g-button-primary remote-button"
               onClick={() => client.use(state.hosts[0]?.hostId ?? "")}
             >
               Open {state.hosts[0]?.hostName}
@@ -169,14 +235,14 @@ function Refused({ client, hostId }: { readonly client: RemoteClient; readonly h
     <p className="remote-card-actions">
       <button
         type="button"
-        className="g-button g-button-primary g-button-44"
+        className="g-button g-button-primary remote-button"
         onClick={() => client.use(hostId)}
       >
         Try again
       </button>
       <button
         type="button"
-        className="g-button g-button-outline g-button-44"
+        className="g-button remote-button remote-quiet"
         onClick={() => void client.discard(hostId)}
       >
         Forget this computer
@@ -189,7 +255,7 @@ function Centered({ title, children }: { readonly title: string; readonly childr
   return (
     <div className="remote-centered">
       <a className="remote-mark" href="/" aria-label="auracode">
-        <Logo size={56} />
+        <Logo size={64} />
       </a>
       <h1>{title}</h1>
       {children}
@@ -198,23 +264,37 @@ function Centered({ title, children }: { readonly title: string; readonly childr
 }
 
 /** Where the session stands, in a word or two. */
-function linkWords(state: State): { readonly text: string; readonly tone: "ok" | "wait" } {
+function linkWords(state: State): { readonly text: string; readonly tone: "ok" | "wait" | "away" } {
   switch (state.phase.name) {
     case "ready":
       return { text: "Connected", tone: "ok" };
     case "away":
-      return { text: "Computer is away", tone: "wait" };
+      return { text: "Computer is away", tone: "away" };
     default:
       return { text: "Connecting", tone: "wait" };
   }
 }
 
-function statusWords(chat: WorkspaceChat["chat"]): {
-  readonly text: string;
-  readonly tone: string;
-} {
+/** The connection's state as a dot and its words; a loader while it connects. */
+function LinkState({ state }: { readonly state: State }) {
+  const link = linkWords(state);
+  return (
+    <p className="remote-link" data-tone={link.tone} role="status">
+      {link.tone === "wait" ? (
+        <PixelLoader size={10} tempo="tool" />
+      ) : (
+        <span className="remote-link-dot" aria-hidden="true" />
+      )}
+      {link.text}
+    </p>
+  );
+}
+
+type Tone = "working" | "attention" | "idle" | "failed";
+
+function statusWords(chat: WorkspaceChat["chat"]): { readonly text: string; readonly tone: Tone } {
   if (chat.needs_attention) return { text: "Needs you", tone: "attention" };
-  const words: Record<SessionStatus, readonly [string, string]> = {
+  const words: Record<SessionStatus, readonly [string, Tone]> = {
     running: ["Working", "working"],
     starting: ["Starting", "working"],
     cancelling: ["Stopping", "working"],
@@ -226,6 +306,27 @@ function statusWords(chat: WorkspaceChat["chat"]): {
   };
   const [text, tone] = words[chat.status];
   return { text, tone };
+}
+
+/** An agent's mark with the chat's state in its place, as the desktop's sidebar shows it. */
+function Mark({ chat, size }: { readonly chat: WorkspaceChat["chat"]; readonly size: number }) {
+  const { tone } = statusWords(chat);
+  const state =
+    tone === "attention"
+      ? "waiting"
+      : tone === "working"
+        ? "tool"
+        : tone === "failed"
+          ? "error"
+          : "idle";
+  return (
+    <AgentMark
+      agent={chat.agent_id}
+      size={size}
+      state={state}
+      label={`${chat.agent_name}, ${statusWords(chat).text}`}
+    />
+  );
 }
 
 function ago(at: number, now: number): string {
@@ -253,7 +354,6 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
     return () => clearInterval(timer);
   }, []);
   const overview = state.overview;
-  const link = linkWords(state);
   const groups = useMemo(() => {
     if (!overview) return [];
     return overview.projects
@@ -264,22 +364,51 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
       .filter((group) => group.chats.length > 0)
       .sort((a, b) => (b.chats[0]?.chat.updated_at ?? 0) - (a.chats[0]?.chat.updated_at ?? 0));
   }, [overview]);
+  const waiting = useMemo(
+    () => overview?.chats.filter((entry) => !entry.archived && entry.chat.needs_attention) ?? [],
+    [overview],
+  );
+  const projectName = (id: string) =>
+    overview?.projects.find((project) => project.id === id)?.name ?? "";
   const folders = overview?.projects.flatMap((project) => project.folders) ?? [];
   const open = (id: string) => {
     setError("");
     client.open(id).catch((failure) => setError(message(failure)));
   };
+  const row = (chat: WorkspaceChat["chat"], project?: string) => {
+    const status = statusWords(chat);
+    return (
+      <li key={chat.id}>
+        <button
+          type="button"
+          className="remote-chat-row"
+          data-tone={status.tone}
+          onClick={() => open(chat.id)}
+        >
+          <Mark chat={chat} size={28} />
+          <span className="remote-chat-text">
+            <strong>{chat.title || "Untitled chat"}</strong>
+            <span>
+              {chat.agent_name} · {status.text}
+              {project ? ` · ${project}` : ""}
+            </span>
+          </span>
+          <time dateTime={new Date(chat.updated_at).toISOString()}>
+            {ago(chat.updated_at, now)}
+          </time>
+        </button>
+      </li>
+    );
+  };
   return (
-    <div className="remote-screen">
+    <div className="remote-screen remote-list-screen">
       <header className="remote-bar">
         <a className="remote-mark" href="/" aria-label="auracode">
-          <Logo size={34} />
+          <Logo size={30} />
         </a>
         <div className="remote-bar-title">
           <h1>{state.host?.name || overview?.host_name || "Your computer"}</h1>
-          <p className="remote-link" data-tone={link.tone} role="status">
-            {link.text}
-          </p>
+          <LinkState state={state} />
         </div>
         <button
           type="button"
@@ -292,72 +421,74 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
         </button>
       </header>
       {menu ? <HostMenu client={client} state={state} onClose={() => setMenu(false)} /> : null}
-      {error ? (
-        <p className="remote-error" role="alert">
-          {error}
-        </p>
-      ) : null}
       <div className="remote-list">
+        {error ? (
+          <p className="remote-error" role="alert">
+            {error}
+          </p>
+        ) : null}
         {state.phase.name === "away" ? (
-          <p className="remote-hint">
+          <p className="remote-banner">
             Your computer is not answering. Open auracode there, and check it is awake and online.
             This page connects by itself when it is back.
           </p>
         ) : null}
-        {overview && folders.length > 0 ? (
-          <button
-            type="button"
-            className="g-button g-button-primary g-button-44 remote-new"
-            disabled={state.phase.name !== "ready"}
-            onClick={() => setCreating(true)}
-          >
-            New chat
-          </button>
-        ) : null}
         {overview && groups.length === 0 ? (
           <p className="remote-hint">
             {folders.length > 0
-              ? "No chats yet. Start one above."
+              ? "No chats yet. Start one below."
               : "No projects yet. Add one in auracode on your computer."}
           </p>
         ) : null}
-        {!overview && state.phase.name !== "away" ? (
-          <p className="remote-hint">Reading your chats.</p>
+        {!overview && state.phase.name !== "away" ? <ListSkeleton /> : null}
+        {waiting.length > 0 ? (
+          <section aria-labelledby="remote-waiting">
+            <h2 id="remote-waiting">Needs you</h2>
+            <ul className="remote-chats">
+              {waiting.map((entry) => row(entry.chat, projectName(entry.project_id)))}
+            </ul>
+          </section>
         ) : null}
         {groups.map(({ project, chats }) => (
           <section key={project.id} aria-labelledby={`remote-project-${project.id}`}>
             <h2 id={`remote-project-${project.id}`}>{project.name}</h2>
             <ul className="remote-chats">
-              {chats.map(({ chat }) => {
-                const status = statusWords(chat);
-                return (
-                  <li key={chat.id}>
-                    <button type="button" className="remote-chat-row" onClick={() => open(chat.id)}>
-                      {/* The agent's initial on a disc, its state as the dot on its shoulder. */}
-                      <span className="remote-avatar" aria-hidden="true">
-                        {(chat.agent_name.trim()[0] ?? "A").toUpperCase()}
-                        <span className="remote-dot" data-tone={status.tone} />
-                      </span>
-                      <span className="remote-chat-text">
-                        <strong>{chat.title || "Untitled chat"}</strong>
-                        <span>
-                          {chat.agent_name} · {status.text}
-                        </span>
-                      </span>
-                      <time dateTime={new Date(chat.updated_at).toISOString()}>
-                        {ago(chat.updated_at, now)}
-                      </time>
-                    </button>
-                  </li>
-                );
-              })}
+              {chats.filter((entry) => !entry.chat.needs_attention).map((entry) => row(entry.chat))}
             </ul>
           </section>
         ))}
       </div>
+      {overview && folders.length > 0 ? (
+        <div className="remote-dock">
+          <button
+            type="button"
+            className="g-button g-button-primary remote-button remote-new"
+            disabled={state.phase.name !== "ready"}
+            onClick={() => setCreating(true)}
+          >
+            <Plus />
+            New chat
+          </button>
+        </div>
+      ) : null}
       {creating && overview ? (
         <NewChat client={client} overview={overview} onClose={() => setCreating(false)} />
       ) : null}
+    </div>
+  );
+}
+
+/** Where the chats will be, while the computer reads them. */
+function ListSkeleton() {
+  return (
+    <div className="remote-skeleton" role="status" aria-label="Reading your chats">
+      {[0, 1, 2, 3].map((index) => (
+        <span
+          key={index}
+          className="remote-skeleton-row"
+          style={{ animationDelay: `${index * 90}ms` }}
+        />
+      ))}
     </div>
   );
 }
@@ -378,7 +509,7 @@ function HostMenu({
         <button
           key={host.hostId}
           type="button"
-          className="g-button g-button-outline g-button-44"
+          className="g-button remote-button remote-quiet"
           onClick={() => {
             onClose();
             client.use(host.hostId);
@@ -389,7 +520,7 @@ function HostMenu({
       ))}
       <button
         type="button"
-        className="g-button g-button-outline g-button-44"
+        className="g-button remote-button remote-quiet remote-danger"
         onClick={() => {
           onClose();
           void client.forget();
@@ -405,6 +536,48 @@ function HostMenu({
   );
 }
 
+/** A sheet that rises from the bottom: a modal dialog, closed by Escape or a tap outside. */
+function Sheet({
+  busy = false,
+  onClose,
+  children,
+}: {
+  readonly busy?: boolean;
+  readonly onClose: () => void;
+  readonly children: (titleId: string) => ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const id = useId();
+  const closing = useRef({ busy, onClose });
+  closing.current = { busy, onClose };
+  useEffect(() => {
+    const node = dialog.current;
+    node?.showModal();
+    // A tap on the backdrop, outside the sheet. Escape closes it from the keyboard (onCancel).
+    const tapped = (event: MouseEvent) => {
+      if (event.target === node && !closing.current.busy) closing.current.onClose();
+    };
+    node?.addEventListener("click", tapped);
+    return () => {
+      node?.removeEventListener("click", tapped);
+      node?.close();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="remote-dialog"
+      aria-labelledby={id}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!busy) onClose();
+      }}
+    >
+      {children(id)}
+    </dialog>
+  );
+}
+
 function NewChat({
   client,
   overview,
@@ -414,7 +587,6 @@ function NewChat({
   readonly overview: Overview;
   readonly onClose: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const folders = overview.projects.flatMap((project) =>
     project.folders.map((folder) => ({ project, folder })),
   );
@@ -425,11 +597,6 @@ function NewChat({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const ids = useId();
-  useEffect(() => {
-    const node = dialog.current;
-    node?.showModal();
-    return () => node?.close();
-  }, []);
   const project = folders.find((entry) => entry.folder.id === folder)?.project;
   const usual = project?.default_agent ?? overview.default_agent;
   const usualName = agents.find((entry) => entry.id === usual)?.name;
@@ -447,83 +614,110 @@ function NewChat({
     }
   };
   return (
-    <dialog
-      ref={dialog}
-      className="remote-dialog"
-      aria-labelledby={`${ids}-title`}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!busy) onClose();
-      }}
-    >
-      <form onSubmit={(event) => void submit(event)}>
-        <h2 id={`${ids}-title`}>New chat</h2>
-        <label htmlFor={`${ids}-folder`}>Folder</label>
-        <select
-          id={`${ids}-folder`}
-          className="g-select"
-          value={folder}
-          onChange={(event) => setFolder(event.currentTarget.value)}
-        >
-          {folders.map(({ project: owner, folder: entry }) => (
-            <option key={entry.id} value={entry.id}>
-              {owner.name === entry.display_name
-                ? entry.display_name
-                : `${owner.name} · ${entry.display_name}`}
-            </option>
-          ))}
-        </select>
-        <label htmlFor={`${ids}-agent`}>Agent</label>
-        <select
-          id={`${ids}-agent`}
-          className="g-select"
-          value={agent}
-          onChange={(event) => setAgent(event.currentTarget.value)}
-        >
-          <option value="">{usualName ? `${usualName} (usual)` : "The usual one"}</option>
-          {agents
-            .filter((entry) => entry.id !== usual)
-            .map((entry) => (
+    <Sheet busy={busy} onClose={onClose}>
+      {(titleId) => (
+        <form onSubmit={(event) => void submit(event)}>
+          <h2 id={titleId}>New chat</h2>
+          <label htmlFor={`${ids}-folder`}>Folder</label>
+          <select
+            id={`${ids}-folder`}
+            className="g-select"
+            value={folder}
+            onChange={(event) => setFolder(event.currentTarget.value)}
+          >
+            {folders.map(({ project: owner, folder: entry }) => (
               <option key={entry.id} value={entry.id}>
-                {entry.name}
+                {owner.name === entry.display_name
+                  ? entry.display_name
+                  : `${owner.name} · ${entry.display_name}`}
               </option>
             ))}
-        </select>
-        <label htmlFor={`${ids}-text`}>Message</label>
-        <textarea
-          id={`${ids}-text`}
-          className="g-textarea"
-          rows={4}
-          value={text}
-          placeholder="What should the agent do?"
-          onChange={(event) => setText(event.currentTarget.value)}
-        />
-        {error ? (
-          <p className="remote-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="remote-dialog-actions">
-          <button
-            type="button"
-            className="g-button g-button-outline g-button-44"
-            disabled={busy}
-            onClick={onClose}
+          </select>
+          <label htmlFor={`${ids}-agent`}>Agent</label>
+          <select
+            id={`${ids}-agent`}
+            className="g-select"
+            value={agent}
+            onChange={(event) => setAgent(event.currentTarget.value)}
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="g-button g-button-primary g-button-44"
-            disabled={busy || !text.trim()}
-          >
-            {busy ? "Starting" : "Start chat"}
-          </button>
-        </div>
-      </form>
-    </dialog>
+            <option value="">{usualName ? `${usualName} (usual)` : "The usual one"}</option>
+            {agents
+              .filter((entry) => entry.id !== usual)
+              .map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+          </select>
+          <label htmlFor={`${ids}-text`}>Message</label>
+          <textarea
+            id={`${ids}-text`}
+            className="g-textarea"
+            rows={4}
+            value={text}
+            placeholder="What should the agent do?"
+            onChange={(event) => setText(event.currentTarget.value)}
+          />
+          {error ? (
+            <p className="remote-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="remote-dialog-actions">
+            <button
+              type="button"
+              className="g-button remote-button remote-quiet"
+              disabled={busy}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="g-button g-button-primary remote-button"
+              disabled={busy || !text.trim()}
+            >
+              {busy ? "Starting" : "Start chat"}
+            </button>
+          </div>
+        </form>
+      )}
+    </Sheet>
   );
 }
+
+/** A message sent from here and not yet in the chat: queued behind a turn, or on its way. */
+interface Sending {
+  readonly id: number;
+  readonly text: string;
+  /** How many of the chat's messages read the same when it was sent. */
+  readonly before: number;
+  readonly queued: boolean;
+}
+
+/** What the person sent, without the project memory Aura attaches after it. */
+const MEMORY = "\n\nProject memory (Aura reference context, revision ";
+function ownWords(text: string): string {
+  const at = text.indexOf(MEMORY);
+  return at >= 0 && text.slice(at).includes("\nUse this as project background.")
+    ? text.slice(0, at)
+    : text;
+}
+
+/** How many of the chat's own messages read `text`. */
+function sentCount(chat: OpenChat | null, text: string): number {
+  if (!chat) return 0;
+  let count = 0;
+  for (const item of chat.transcript.items.values())
+    if (item.kind === "user" && ownWords(item.text).trim() === text.trim()) count += 1;
+  return count;
+}
+
+let sendingIds = 0;
+const nextSending = () => {
+  sendingIds += 1;
+  return sendingIds;
+};
 
 function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly state: State }) {
   const chat = state.chat;
@@ -537,11 +731,40 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
   const working = running && !summary?.needs_attention;
   const [error, setError] = useState("");
   const [picking, setPicking] = useState(false);
-  const link = linkWords(state);
+  const [sending, setSending] = useState<readonly Sending[]>([]);
+  // A message leaves "sending" once the chat shows it.
+  useEffect(() => {
+    setSending((current) => {
+      const left = current.filter((entry) => sentCount(chat, entry.text) <= entry.before);
+      return left.length === current.length ? current : left;
+    });
+  }, [chat]);
+  const ready = state.phase.name === "ready";
   // Offered only by an auracode that answers it: an older one ends the session on the request.
-  const pickers = state.features.includes("pickers") && state.phase.name === "ready";
+  const pickers = state.features.includes("pickers") && ready;
+  const send = async (text: string) => {
+    if (!chat) return;
+    setError("");
+    const entry: Sending = {
+      id: nextSending(),
+      text,
+      before: sentCount(chat, text),
+      queued: false,
+    };
+    setSending((current) => [...current, entry]);
+    try {
+      const ack = await client.send(chat.id, text);
+      if (ack.queued)
+        setSending((current) =>
+          current.map((item) => (item.id === entry.id ? { ...item, queued: true } : item)),
+        );
+    } catch (failure) {
+      setSending((current) => current.filter((item) => item.id !== entry.id));
+      throw failure;
+    }
+  };
   return (
-    <div className="remote-screen">
+    <div className="remote-screen remote-chat-screen">
       <header className="remote-bar">
         <button
           type="button"
@@ -551,17 +774,16 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
         >
           <Back />
         </button>
+        {summary ? <Mark chat={summary} size={24} /> : null}
         <div className="remote-bar-title">
           <h1>{summary?.title || "Untitled chat"}</h1>
-          <p
-            className="remote-link"
-            data-tone={state.phase.name === "ready" ? "ok" : "wait"}
-            role="status"
-          >
-            {state.phase.name === "ready"
-              ? [summary?.agent_name, status?.text].filter(Boolean).join(" · ")
-              : link.text}
-          </p>
+          {ready ? (
+            <p className="remote-link" data-tone={status?.tone ?? "idle"} role="status">
+              {[summary?.agent_name, status?.text].filter(Boolean).join(" · ")}
+            </p>
+          ) : (
+            <LinkState state={state} />
+          )}
         </div>
         {chat && summary && pickers ? (
           <button
@@ -586,26 +808,31 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
           onClose={() => setPicking(false)}
         />
       ) : null}
-      {error ? (
-        <p className="remote-error" role="alert">
-          {error}
-        </p>
-      ) : null}
       {chat ? (
-        <ChatBody client={client} chat={chat} working={working} onError={setError} />
+        <ChatBody
+          client={client}
+          chat={chat}
+          working={working}
+          sending={sending}
+          error={error}
+          onError={setError}
+        />
       ) : (
         <div className="remote-transcript">
-          <p className="remote-hint">Opening the chat.</p>
+          <div className="remote-column">
+            <p className="remote-opening" role="status">
+              <PixelLoader size={12} tempo="tool" />
+              {ready ? "Opening the chat." : `Waiting for ${state.host?.name || "your computer"}.`}
+            </p>
+          </div>
         </div>
       )}
       {chat ? (
         <Composer
-          disabled={state.phase.name !== "ready"}
+          key={chat.id}
+          disabled={!ready}
           working={running}
-          onSend={async (text) => {
-            setError("");
-            await client.send(chat.id, text);
-          }}
+          onSend={send}
           onStop={() => {
             setError("");
             client.interrupt(chat.id).catch((failure) => setError(message(failure)));
@@ -621,84 +848,161 @@ function ChatBody({
   client,
   chat,
   working,
+  sending,
+  error,
   onError,
 }: {
   readonly client: RemoteClient;
   readonly chat: OpenChat;
   readonly working: boolean;
+  readonly sending: readonly Sending[];
+  readonly error: string;
   readonly onError: (message: string) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the reader is at the newest words: only then does new text pull the view down. */
   const pinned = useRef(true);
+  /** While older messages load: how far from the bottom the reader was, to keep their place. */
+  const anchor = useRef<number | null>(null);
+  const [below, setBelow] = useState(false);
   const alive = chat.snapshot.chat.status !== "stopped" && chat.snapshot.chat.status !== "failed";
-  const segments = useMemo(
-    () => renderTranscript(chat.transcript, alive),
-    [chat.transcript, alive],
-  );
+  // Each turn keeps its rendering until it changes, so a streamed word redraws one turn.
+  const [cache] = useState(renderCache);
+  const segments = useMemo(() => cache(chat.transcript, alive), [cache, chat.transcript, alive]);
   useLayoutEffect(() => {
     const node = scroller.current;
-    if (node && pinned.current) node.scrollTop = node.scrollHeight;
+    if (!node) return;
+    if (anchor.current !== null && !chat.loadingEarlier) {
+      node.scrollTop = node.scrollHeight - anchor.current;
+      anchor.current = null;
+      return;
+    }
+    if (pinned.current) node.scrollTop = node.scrollHeight;
+    else setBelow(true);
   });
-  const act = (work: Promise<void>) => {
-    onError("");
-    work.catch((failure) => onError(message(failure)));
-  };
+  const onPermission = useCallback(
+    (request: string, option: string | null) => {
+      onError("");
+      client.permission(chat.id, request, option).catch((failure) => onError(message(failure)));
+    },
+    [client, chat.id, onError],
+  );
+  const onAnswer = useCallback(
+    (request: string, answer: UiAnswer | null) => {
+      onError("");
+      client.answer(chat.id, request, answer).catch((failure) => onError(message(failure)));
+    },
+    [client, chat.id, onError],
+  );
   return (
-    <div
-      className="remote-transcript"
-      ref={scroller}
-      onScroll={(event) => {
-        const node = event.currentTarget;
-        pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
-      }}
-    >
-      {chat.hasMore ? (
+    <div className="remote-transcript-wrap">
+      <div
+        className="remote-transcript"
+        ref={scroller}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+          if (pinned.current) setBelow(false);
+        }}
+      >
+        <div className="remote-column">
+          {chat.hasMore ? (
+            <button
+              type="button"
+              className="g-button remote-button remote-quiet remote-earlier"
+              disabled={chat.loadingEarlier}
+              onClick={() => {
+                const node = scroller.current;
+                pinned.current = false;
+                anchor.current = node ? node.scrollHeight - node.scrollTop : null;
+                onError("");
+                client.loadEarlier().catch((failure) => {
+                  anchor.current = null;
+                  onError(message(failure));
+                });
+              }}
+            >
+              {chat.loadingEarlier ? "Loading" : "Earlier messages"}
+            </button>
+          ) : null}
+          {segments.length === 0 && sending.length === 0 ? (
+            <p className="remote-hint">Nothing here yet. Send a message.</p>
+          ) : null}
+          {segments.map((segment) => (
+            <Turn
+              key={segment.key}
+              segment={segment}
+              onPermission={onPermission}
+              onAnswer={onAnswer}
+            />
+          ))}
+          {sending.map((entry) => (
+            <div
+              key={entry.id}
+              className="remote-sending"
+              data-queued={entry.queued ? "" : undefined}
+            >
+              <p className="remote-pending">{entry.text}</p>
+              <span>{entry.queued ? "Queued until this turn ends" : "Sending"}</span>
+            </div>
+          ))}
+          {working ? <WorkingLine /> : null}
+          {error ? (
+            <p className="remote-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {below ? (
         <button
           type="button"
-          className="g-button g-button-outline remote-earlier"
-          disabled={chat.loadingEarlier}
+          className="remote-latest"
           onClick={() => {
-            pinned.current = false;
-            act(client.loadEarlier());
+            const node = scroller.current;
+            pinned.current = true;
+            setBelow(false);
+            node?.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
           }}
         >
-          {chat.loadingEarlier ? "Loading" : "Earlier messages"}
+          <Down />
+          Latest
         </button>
-      ) : null}
-      {segments.length === 0 ? (
-        <p className="remote-hint">Nothing here yet. Send a message.</p>
-      ) : null}
-      {segments.map((segment) => (
-        <Turn
-          key={segment.key}
-          segment={segment}
-          onPermission={(request, option) => act(client.permission(chat.id, request, option))}
-          onAnswer={(request, answer) => act(client.answer(chat.id, request, answer))}
-        />
-      ))}
-      {working ? (
-        <p className="remote-working" role="status">
-          <span className="remote-dot" data-tone="working" aria-hidden="true" />
-          Working
-        </p>
       ) : null}
     </div>
   );
 }
 
-/** How Aura begins the project memory it attaches after a message: reference, not the person's words. */
-const MEMORY = "\n\nProject memory (Aura reference context, revision ";
-function ownWords(text: string): string {
-  const at = text.indexOf(MEMORY);
-  return at >= 0 && text.slice(at).includes("\nUse this as project background.")
-    ? text.slice(0, at)
-    : text;
+/** What the desktop's working line says while a turn runs: one verb at a time, and the time. */
+const VERBS = ["Working", "Thinking", "Reading", "Writing", "Checking"];
+function WorkingLine() {
+  const [started] = useState(() => Date.now());
+  const [now, setNow] = useState(started);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.floor((now - started) / 1000);
+  const verb = VERBS[Math.floor(seconds / 4) % VERBS.length] ?? "Working";
+  return (
+    <p className="remote-working" role="status" aria-label="Working">
+      <span className="remote-working-dot" aria-hidden="true" />
+      <span className="remote-working-verb" key={verb}>
+        {verb}
+      </span>
+      {seconds > 0 ? (
+        <span className="remote-working-time">
+          {seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}
+        </span>
+      ) : null}
+    </p>
+  );
 }
 
 type Tool = Extract<RenderedItem, { kind: "tool" }>;
 
-function Turn({
+/** One turn. Kept while its rendering is the same object, so other turns' words skip it. */
+const Turn = memo(function Turn({
   segment,
   onPermission,
   onAnswer,
@@ -775,10 +1079,10 @@ function Turn({
         }
         return null;
       })}
-      {ended ? <p className="remote-notice">{stopReasonLabel(ended)}</p> : null}
+      {ended ? <p className="remote-notice remote-ended">{stopReasonLabel(ended)}</p> : null}
     </div>
   );
-}
+});
 
 function Steps({ tools }: { readonly tools: readonly Tool[] }) {
   const last = tools[tools.length - 1];
@@ -788,14 +1092,21 @@ function Steps({ tools }: { readonly tools: readonly Tool[] }) {
   const failed = tools.filter((tool) => tool.display === "failed").length;
   const name = (tool: Tool) => tool.title || tool.toolName || "Step";
   return (
-    <details className="remote-steps">
+    <details className="remote-steps" data-running={running ? "" : undefined}>
       <summary>
-        <span>
+        <Chevron />
+        <span className="remote-steps-name">
           {tools.length === 1 ? name(tools[0] as Tool) : `${tools.length} steps`}
           {tools.length > 1 && running && last ? `: ${name(last)}` : ""}
         </span>
         <span className="remote-steps-state">
-          {running ? "running" : failed > 0 ? `${failed} failed` : ""}
+          {running ? (
+            <PixelLoader size={10} tempo="tool" label="running" />
+          ) : failed > 0 ? (
+            `${failed} failed`
+          ) : (
+            ""
+          )}
         </span>
       </summary>
       <ul>
@@ -831,6 +1142,10 @@ function PermissionCard({
   }
   return (
     <section className="remote-card" aria-label="The agent asks for permission">
+      <p className="remote-card-head">
+        <StatusDot tone="volt" size={7} />
+        Waiting on you
+      </p>
       <p className="remote-card-title">{title}</p>
       <div className="remote-card-actions">
         {options.map((option) => (
@@ -839,8 +1154,8 @@ function PermissionCard({
             type="button"
             className={
               option.kind === "allow_once" || option.kind === "allow_always"
-                ? "g-button g-button-primary g-button-44"
-                : "g-button g-button-outline g-button-44"
+                ? "g-button g-button-primary remote-button"
+                : "g-button remote-button remote-quiet"
             }
             onClick={() => onChoose(option.option_id)}
           >
@@ -850,7 +1165,7 @@ function PermissionCard({
         {options.length === 0 ? (
           <button
             type="button"
-            className="g-button g-button-outline g-button-44"
+            className="g-button remote-button remote-quiet"
             onClick={() => onChoose(null)}
           >
             Decline
@@ -876,7 +1191,7 @@ function QuestionCard({
   const dismiss = (
     <button
       type="button"
-      className="g-button g-button-outline g-button-44"
+      className="g-button remote-button remote-quiet"
       onClick={() => onAnswer(null)}
     >
       Dismiss
@@ -884,19 +1199,23 @@ function QuestionCard({
   );
   return (
     <section className="remote-card" aria-label="The agent asks a question">
+      <p className="remote-card-head">
+        <StatusDot tone="volt" size={7} />
+        Waiting on you
+      </p>
       <p className="remote-card-title">{prompt.message}</p>
       {prompt.type === "confirm" ? (
         <div className="remote-card-actions">
           <button
             type="button"
-            className="g-button g-button-primary g-button-44"
+            className="g-button g-button-primary remote-button"
             onClick={() => onAnswer({ type: "confirm", yes: true })}
           >
             Yes
           </button>
           <button
             type="button"
-            className="g-button g-button-outline g-button-44"
+            className="g-button remote-button remote-quiet"
             onClick={() => onAnswer({ type: "confirm", yes: false })}
           >
             No
@@ -904,13 +1223,13 @@ function QuestionCard({
         </div>
       ) : null}
       {prompt.type === "select" ? (
-        <div className="remote-card-actions">
+        <div className="remote-card-actions remote-card-choices">
           {prompt.options.map((option, index) => (
             <button
               // biome-ignore lint/suspicious/noArrayIndexKey: the answer is the option's index.
               key={index}
               type="button"
-              className="g-button g-button-outline g-button-44"
+              className="g-button remote-button remote-quiet"
               onClick={() => onAnswer({ type: "select", index })}
             >
               {option}
@@ -937,7 +1256,7 @@ function QuestionCard({
           <div className="remote-card-actions">
             <button
               type="submit"
-              className="g-button g-button-primary g-button-44"
+              className="g-button g-button-primary remote-button"
               disabled={!text.trim()}
             >
               Answer
@@ -1028,7 +1347,7 @@ function Questions({
       <div className="remote-card-actions">
         <button
           type="submit"
-          className="g-button g-button-primary g-button-44"
+          className="g-button g-button-primary remote-button"
           disabled={!questions.every(answered)}
         >
           Answer
@@ -1039,6 +1358,11 @@ function Questions({
   );
 }
 
+/**
+ * The message box, as the desktop draws it: the raised layer with one faint edge, the words, and
+ * Send as a disc. The box empties as soon as Send is pressed, and the message shows as sending
+ * until the chat has it; a message that could not be sent comes back to the box.
+ */
 function Composer({
   disabled,
   working,
@@ -1053,7 +1377,6 @@ function Composer({
   readonly onError: (message: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const node = field.current;
@@ -1062,55 +1385,60 @@ function Composer({
     node.style.height = "auto";
     node.style.height = `${Math.min(node.scrollHeight, window.innerHeight / 3)}px`;
   });
-  const submit = async () => {
+  const submit = () => {
     const words = text;
-    if (!words.trim() || sending || disabled) return;
-    setSending(true);
-    try {
-      await onSend(words);
-      setText("");
-    } catch (failure) {
-      // What was typed stays, to send again.
+    if (!words.trim() || disabled) return;
+    setText("");
+    onSend(words).catch((failure) => {
+      // What was typed comes back, to send again, unless something new was typed meanwhile.
+      setText((current) => (current.trim() ? current : words));
       onError(message(failure));
-    } finally {
-      setSending(false);
-    }
+    });
   };
+  const empty = !text.trim();
   return (
     <form
       className="remote-composer"
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        submit();
       }}
     >
-      <textarea
-        ref={field}
-        className="g-textarea"
-        rows={1}
-        aria-label="Message"
-        placeholder={working ? "Add to the queue" : "Message the agent"}
-        value={text}
-        onChange={(event) => setText(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-      />
-      {working ? (
-        <button type="button" className="g-button g-button-outline g-button-44" onClick={onStop}>
-          Stop
-        </button>
-      ) : null}
-      <button
-        type="submit"
-        className="g-button g-button-primary g-button-44"
-        disabled={disabled || sending || !text.trim()}
-      >
-        Send
-      </button>
+      <div className="remote-composer-box">
+        <textarea
+          ref={field}
+          className="g-textarea"
+          rows={1}
+          aria-label="Message"
+          placeholder={working ? "Add to the queue" : "Message the agent"}
+          value={text}
+          enterKeyHint="send"
+          onChange={(event) => setText(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <div className="remote-composer-controls">
+          {working ? (
+            <button type="button" className="remote-stop" aria-label="Stop" onClick={onStop}>
+              <Square />
+              <span>Stop</span>
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            className="remote-send"
+            aria-label="Send"
+            disabled={disabled || empty}
+            data-quiet={empty ? "" : undefined}
+          >
+            <Up />
+          </button>
+        </div>
+      </div>
     </form>
   );
 }
@@ -1133,11 +1461,11 @@ function Sliders() {
         d="M3 6.5h6.5M13.5 6.5H17M3 13.5h3.5M10.5 13.5H17"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.6"
         strokeLinecap="round"
       />
-      <circle cx="11.5" cy="6.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="8.5" cy="13.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="11.5" cy="6.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="8.5" cy="13.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }
@@ -1150,6 +1478,73 @@ function Back() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Up() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 13V3.5M3.5 8 8 3.5 12.5 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Down() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 3v9.5M3.5 8 8 12.5 12.5 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Square() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <rect x="1" y="1" width="8" height="8" rx="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function Plus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 3v10M3 8h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg className="remote-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M4.5 2.5 8 6l-3.5 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

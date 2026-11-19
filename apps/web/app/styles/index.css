@@ -1,8 +1,8 @@
 /* auracode.si, in the order the page is built: system, chrome, the app in miniature, the home
-   page, and the inner pages. */
+   page, and the inner pages. The remote page brings its own (remote.css), with the desktop's
+   themes. */
 @import "./base.css";
 @import "./chrome.css";
 @import "./mock.css";
 @import "./home.css";
 @import "./pages.css";
-@import "./remote.css";
