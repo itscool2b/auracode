@@ -18,6 +18,7 @@ pub mod changes;
 pub mod composer;
 pub mod config_vendor;
 pub mod conversation;
+pub mod coordinator;
 pub mod folder_resolution;
 pub mod forms;
 pub mod git;

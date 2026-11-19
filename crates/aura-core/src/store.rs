@@ -111,6 +111,7 @@ static MIGRATIONS: std::sync::LazyLock<[M<'static>; SCHEMA_VERSION as usize]> =
             M::up(include_str!("../migrations/0016_session_controls.sql")).foreign_key_check(),
             M::up(include_str!("../migrations/0017_project_memory.sql")).foreign_key_check(),
             M::up(include_str!("../migrations/0018_shared_mcp.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0019_coordinator.sql")).foreign_key_check(),
         ]
     });
 

@@ -135,7 +135,7 @@ pub fn validate(def: &McpDefinition) -> Result<(), StoreError> {
         || !key(&def.name)
         || matches!(
             def.name.replace('-', "_").as_str(),
-            "aura_project_memory" | "aura_browser"
+            "aura_project_memory" | "aura_browser" | "aura_project"
         )
         || def.project_id.as_ref().is_some_and(|p| !valid_uuid(p))
     {
@@ -876,6 +876,8 @@ pub(crate) mod tests {
             "aura-project-memory",
             "aura_browser",
             "aura-browser",
+            "aura_project",
+            "aura-project",
         ] {
             let conn = fixture();
             let mut def = definition();

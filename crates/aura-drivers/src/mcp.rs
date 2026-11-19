@@ -10,9 +10,14 @@ pub fn managed_browser(server: &ResolvedMcpServer) -> bool {
     server.definition.id == "aura-browser"
         && server.definition.name.replace('-', "_") == "aura_browser"
 }
+/// auracode's project server (a coordinated project's tools, for its coordinator and workers).
+pub fn managed_project(server: &ResolvedMcpServer) -> bool {
+    server.definition.id == "aura-project"
+        && server.definition.name.replace('-', "_") == "aura_project"
+}
 /// One of auracode's own optional servers: left out, not failed, where a connection cannot load it.
 pub fn managed(server: &ResolvedMcpServer) -> bool {
-    managed_memory(server) || managed_browser(server)
+    managed_memory(server) || managed_browser(server) || managed_project(server)
 }
 pub fn acp_session(
     servers: &[ResolvedMcpServer],

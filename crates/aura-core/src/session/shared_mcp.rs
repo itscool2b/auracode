@@ -134,7 +134,7 @@ pub(super) async fn prepare_launch(
         && !names.iter().any(|name| {
             matches!(
                 name.replace('-', "_").as_str(),
-                "aura_project_memory" | "aura_browser"
+                "aura_project_memory" | "aura_browser" | "aura_project"
             )
         });
     match context

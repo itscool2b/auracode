@@ -27,6 +27,7 @@ pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod composer;
 pub(crate) mod conversation;
+pub(crate) mod coordinator;
 mod export;
 pub(crate) mod files;
 pub(crate) mod folder_resolution;
@@ -141,6 +142,38 @@ impl ChatStore {
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?
+    }
+
+    /// Coordinated projects: reads answer at once, writes wait their turn on the writer.
+    pub(crate) async fn coordinator(
+        &self,
+        command: coordinator::Command,
+    ) -> Result<coordinator::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.read_only() {
+            return self
+                .request(Request::Coordinator { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Coordinator { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+
+    /// Every committed change to a project's coordination, from the project page or an agent.
+    pub fn coordinator_changes(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<aura_protocol::coordinator::CoordinatorChanged> {
+        self.shared.coordinator_changes.subscribe()
     }
 
     pub(crate) async fn setup_attempt(
