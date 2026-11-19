@@ -100,6 +100,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     assert!(!catalog.contains(&temp.path().to_string_lossy().to_string()));
     let catalog: Value = serde_json::from_str(&catalog).unwrap();
     assert_eq!(catalog["release"]["downloads"].as_array().unwrap().len(), 6);
+    assert_eq!(catalog["release"]["signed"], true);
     assert_eq!(
         catalog["release"]["downloads"][0]["sha256"]
             .as_str()

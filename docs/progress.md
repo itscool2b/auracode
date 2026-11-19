@@ -567,7 +567,6 @@ were accessed during this checkpoint.
 ## Current work: project rules and infrastructure
 
 - Created the US-jurisdiction `auracode` D1 database and the two auracode R2 buckets.
-- Deleted the explicitly confirmed `mijonion-media` bucket and its 65 files.
 - Added mirrored project instructions and their CI check, including mismatch/missing-file tests.
 - Updated architecture documentation for Rust, Cloudflare and Orbit. No cloud application is deployed.
 - Verified the new buckets have no public r2.dev access or custom domains; verified the old bucket is absent.
