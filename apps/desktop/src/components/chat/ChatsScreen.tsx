@@ -1,7 +1,12 @@
 import { PanelLeft } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
-import { availableUpdates, updateNotices, workingChats } from "../../lib/agentUpdates";
+import {
+  availableUpdates,
+  chatsWorking,
+  updateNotices,
+  workingChats,
+} from "../../lib/agentUpdates";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import {
   type ChatsView,
@@ -22,8 +27,10 @@ import {
 } from "../../lib/projectMemory";
 import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
+import type { UpdatesApi } from "../../lib/updates";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type AgentUpdateActions, AgentUpdateBanner } from "./AgentUpdateBanner";
+import { AppUpdate } from "./AppUpdate";
 import { Banners, noticeItems } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
@@ -98,6 +105,7 @@ export function ChatsScreen({
   setup = setupApi,
   memory = projectMemoryApi,
   onOpenMemory,
+  updates,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -124,6 +132,8 @@ export function ChatsScreen({
   /** Opens Customize > Project memory on a revision, with its changes. */
   /** Opens Settings' Project memory on a project, from a notice of an agent's edit. */
   readonly onOpenMemory?: (projectId: string) => void;
+  /** The app's updater: Update shows at the sidebar's foot while a newer version is on offer. */
+  readonly updates?: UpdatesApi;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const dismissedUpdates = useSyncExternalStore(
@@ -365,6 +375,9 @@ export function ChatsScreen({
         />
         <SidebarFooter
           onSettings={onSettings}
+          update={
+            updates ? <AppUpdate api={updates} working={chatsWorking(snapshot.chats)} /> : undefined
+          }
           notifications={
             <Notifications
               items={noticeItems({

@@ -94,7 +94,7 @@ test("the app is local-only: no account crate, feature, encrypted store or API b
   );
   assert.doesNotMatch(read("Cargo.lock"), /name = "openssl-src"/u);
   assert.doesNotMatch(ci, /sqlcipher|account-sync|@auracode\/api|encrypted_storage/u);
-  for (const workflow of [ci, build, read(".github/workflows/release.yml")])
+  for (const workflow of [ci, build, read(".github/workflows/publish.yml")])
     assert.doesNotMatch(workflow, /select-native-perl|vendored OpenSSL/u);
   // The checkpoint comparison keeps its own job, on the systems its baseline supports.
   assert.match(ci, /checkpoint-benchmarks:[\s\S]*?os: \[macos-26-intel, windows-2025\]/u);

@@ -183,6 +183,11 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-sidebar-footer.mjs
 
+      - name: Check the app update button
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop exec node scripts/check-app-update.mjs
+
       - name: Check New chat's worktree choice
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5

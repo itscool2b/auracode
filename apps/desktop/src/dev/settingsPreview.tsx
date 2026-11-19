@@ -106,6 +106,7 @@ const setup: SetupApi = {
     if (action.type === "agent_memory_writes") general.agent_memory_writes = action.enabled;
     if (action.type === "browser") general.browser = action.enabled;
     if (action.type === "browser_passwords") general.browser_passwords = action.enabled;
+    if (action.type === "automatic_updates") general.automatic_updates = action.enabled;
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },
@@ -153,6 +154,8 @@ const general: GeneralApi = {
 let status: UpdateStatus = {
   channel: new URLSearchParams(location.search).has("staging") ? "staging" : "stable",
   phase: new URLSearchParams(location.search).has("unsigned") ? "disabled" : "idle",
+  current_version: "0.1.1570",
+  automatic: true,
   version: null,
   notes: null,
   downloaded_bytes: 0,

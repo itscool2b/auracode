@@ -9,7 +9,7 @@ export default function Privacy() {
     >
       <article className="prose">
         <p>
-          This notice describes the implemented design as of November 16, 2026. Operator identity,
+          This notice describes the implemented design as of November 19, 2026. Operator identity,
           legal contact details and jurisdiction-specific terms require review before a public
           release.
         </p>
@@ -17,6 +17,12 @@ export default function Privacy() {
         <p>
           Projects, chats, settings and local agent sessions are stored on your machine. There is no
           auracode account, no sign-in and no sync, so nothing is uploaded by one.
+        </p>
+        <p>
+          auracode looks for a newer version of itself a few times a day by reading one public file
+          from the project's releases on GitHub. The request carries nothing about you or your work;
+          GitHub sees it as any download, with your network address. You can turn this off in
+          Settings, and nothing is downloaded or installed until you choose Update.
         </p>
         <p>
           Your chosen agents run through their own harnesses and authentication. Their providers

@@ -73,3 +73,36 @@ test("the plan carries the channel, trimmed notes and the trusted key", () => {
   assert.throws(() => plan({ ...base, channel: "stable", notes: " " }), /notes/u);
   assert.throws(() => plan({ ...base, channel: "stable", publicKey: "" }), /PUBLIC_KEY/u);
 });
+
+test("a numbered build's plan takes its version, and refuses a package built as another", () => {
+  const base = {
+    cargoToml: CARGO,
+    channel: "stable",
+    notes: "n",
+    publicKey: "k",
+    date: "2026-11-19T05:00:00Z",
+  };
+  const numbered = NAMES.map((name) => name.replaceAll("0.2.0", "0.1.1570"));
+  const result = plan({ ...base, names: numbered, version: "0.1.1570" });
+  assert.equal(result.version, "0.1.1570");
+  assert.equal(result.publisher_signed, false, "no publisher signed it unless the plan says so");
+  assert.equal(
+    plan({ ...base, names: numbered, version: "0.1.1570", publisherSigned: true }).publisher_signed,
+    true,
+  );
+  // The workspace's own version when the build was given none.
+  assert.equal(plan({ ...base, names: NAMES }).version, "0.2.0");
+  assert.equal(plan({ ...base, names: NAMES, version: "  " }).version, "0.2.0");
+  // Packages of the workspace version are not this build's.
+  assert.throws(
+    () => plan({ ...base, names: NAMES, version: "0.1.1570" }),
+    /was not built as version 0\.1\.1570/u,
+  );
+  for (const version of ["v0.1.1570", "0.1", "0.1.1570-beta", "0.1.1570+5", "latest"]) {
+    assert.throws(
+      () => plan({ ...base, names: numbered, version }),
+      /three plain numbers/u,
+      version,
+    );
+  }
+});

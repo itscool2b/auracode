@@ -59,6 +59,11 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "general", title: "Keep awake", words: "sleep power" },
   {
     page: "general",
+    title: "Check for updates automatically",
+    words: "update upgrade version release new",
+  },
+  {
+    page: "general",
     title: "Keep running in the background",
     words: "tray menu bar close quit window",
   },

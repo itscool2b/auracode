@@ -5,13 +5,17 @@ import { commandKey } from "./Keys";
 
 /**
  * The foot of the sidebar, as calm as Grok's: the logo, the notifications bell and one Settings
- * button. Profiles, agents and diagnostics live in Settings and the command palette.
+ * button, and Update before them while a newer auracode is on offer. Profiles, agents and
+ * diagnostics live in Settings and the command palette.
  */
 export function SidebarFooter({
   onSettings,
   notifications,
+  update,
 }: {
   readonly onSettings?: () => void;
+  /** The Update pill (`AppUpdate`), which draws nothing while the app is current. */
+  readonly update?: ReactNode;
   /** The notifications bell (`Notifications`), beside Settings. */
   readonly notifications?: ReactNode;
 }) {
@@ -19,6 +23,7 @@ export function SidebarFooter({
     <div className="chat-sidebar-footer">
       <Logo size={30} className="chat-sidebar-footer-logo" />
       <div className="chat-sidebar-footer-actions">
+        {update}
         {notifications}
         {onSettings ? (
           <button

@@ -1,7 +1,8 @@
 //! Settings' General page reaches Rust here: the defaults for new chats, automatic checkpoints,
-//! Instructions' worktree copies and Project memory's agent edits go to the session manager, and
-//! the notification, keep-awake and close-to-tray switches to the native shell. The values live in
-//! the profile's setup preferences (`aura_core::onboarding`).
+//! Instructions' worktree copies and Project memory's agent edits go to the session manager, the
+//! notification, keep-awake and close-to-tray switches to the native shell, and the automatic
+//! update check to the updater. The values live in the profile's setup preferences
+//! (`aura_core::onboarding`).
 
 use aura_core::onboarding::GeneralPreferences;
 use aura_core::session::NewChatDefaults;
@@ -16,6 +17,9 @@ pub fn apply(app: &AppHandle, general: &GeneralPreferences) {
     }
     crate::native_shell::apply_preferences(app, general);
     crate::browser::apply_preferences(app, general);
+    if let Some(updates) = app.try_state::<crate::updater::Updates>() {
+        updates.set_automatic(general.automatic_updates);
+    }
 }
 
 pub(crate) fn apply_to_manager(

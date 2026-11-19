@@ -1898,6 +1898,13 @@ export type GeneralPreferences = {
 	 *  Windows). On by default.
 	 */
 	browser_passwords: boolean,
+	/**
+	 *  Look for a newer auracode shortly after start and a few times a day, and show Update when
+	 *  there is one (owner, 18 November 2026: "an update button pops up for every merge"). It
+	 *  reads one public file from the project's GitHub releases; downloading and installing still
+	 *  wait for the button. On unless the person turns it off in Settings > General.
+	 */
+	automatic_updates: boolean,
 };
 
 export type GitFileState = {
@@ -3296,7 +3303,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns the Browser universal plugin on or off. */
 { type: "browser"; enabled: boolean } | 
 /**  Turns on or off the browser's offer to save sign-ins. */
-{ type: "browser_passwords"; enabled: boolean };
+{ type: "browser_passwords"; enabled: boolean } | 
+/**  Turns on or off looking for a newer auracode by itself. */
+{ type: "automatic_updates"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,
@@ -3692,6 +3701,11 @@ export type UpdatePhase = "disabled" | "idle" | "checking" | "available" | "down
 export type UpdateStatus = {
 	channel: string,
 	phase: UpdatePhase,
+	/**  The version running now. */
+	current_version: string,
+	/**  Whether auracode looks for a newer version by itself (Settings, General). */
+	automatic: boolean,
+	/**  The newer version, once a check has found one. */
 	version: string | null,
 	notes: string | null,
 	downloaded_bytes: number,

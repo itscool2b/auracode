@@ -22,6 +22,7 @@ import { AppStore } from "../lib/chat/appStore";
 import { chatSummary, FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 import type { TerminalTransport } from "../lib/terminal";
+import { fakeUpdates } from "./appUpdateFixture";
 
 const entry = (id: string, name: string, harness: HarnessStatus): AgentEntry =>
   ({
@@ -172,6 +173,8 @@ export function mountAgentUpdatesPreview(container: HTMLElement): void {
   };
   transport.updateTerminal = updateTerminal;
   const app = new AppStore(transport);
+  // `&app-update=<case>`: the app itself has a newer version too (appUpdateFixture.ts).
+  const appUpdate = new URLSearchParams(location.search).get("app-update");
   createRoot(container).render(
     <StrictMode>
       <ChatsScreen
@@ -179,6 +182,7 @@ export function mountAgentUpdatesPreview(container: HTMLElement): void {
         transport={transport}
         info={info}
         setup={setup}
+        updates={appUpdate ? fakeUpdates(appUpdate) : undefined}
         onDiagnostics={() => {}}
         onRecoveryDismissed={() => {}}
         onAgents={() => {

@@ -78,9 +78,18 @@ try {
   const catalog = JSON.parse(await readFile(join(stage, "downloads.json"), "utf8"));
   assert.match(html, /Staging preview/);
   assert.doesNotMatch(html, /Installer coming soon|Not published/);
-  // A signed stage is never described as an unsigned preview build.
+  // A stage has updater signatures, so the page says an installed copy updates itself, and
+  // without a publisher's signature it says each system warns and how to open the installer.
   assert.equal(catalog.release.signed, true);
+  assert.equal(catalog.release.publisher_signed, false);
   assert.doesNotMatch(html, /These installers are unsigned/);
+  assert.match(html, /Once installed, auracode updates itself/);
+  assert.match(html, /Run anyway/);
+  for (const download of catalog.release.downloads)
+    assert.match(
+      download.url,
+      /^https:\/\/github\.com\/itscool2b\/auracode\/releases\/download\/staging-v/,
+    );
   assert.match(html, /&lt;script&gt;not executable&lt;\/script&gt;/);
   for (const download of catalog.release.downloads) {
     assert.ok(html.includes(`href="${download.url}"`));

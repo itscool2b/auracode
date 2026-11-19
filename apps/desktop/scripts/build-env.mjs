@@ -22,6 +22,18 @@ export function releaseBuildEnv(env, roots) {
   return { ...env, CARGO_ENCODED_RUSTFLAGS: flags.join("\x1f") };
 }
 
+/**
+ * A build's version as `--app-version` gives it: three plain numbers, each small enough for a
+ * Windows version field. Anything else (a tag, a pre-release, a stray flag) stops the build.
+ */
+export function appVersion(value) {
+  const parts = /^(\d{1,5})\.(\d{1,5})\.(\d{1,5})$/u.exec(value ?? "");
+  if (!parts || parts.slice(1).some((part) => Number(part) > 65535 || /^0\d/u.test(part))) {
+    throw new Error(`--app-version takes a version like 0.1.1570, not ${JSON.stringify(value)}.`);
+  }
+  return parts[0];
+}
+
 export function requireUpdaterSigning(env) {
   if (!env.AURACODE_UPDATER_PUBLIC_KEY?.trim() || !env.TAURI_SIGNING_PRIVATE_KEY?.trim()) {
     throw new Error(

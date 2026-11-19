@@ -42,6 +42,7 @@ fn plan(root: &Path) -> ReleasePlan {
         pub_date: "2026-10-26T12:00:00Z".into(),
         notes: "Synthetic test release.\nNot an installer.".into(),
         public_key: fixture["public_key"].as_str().unwrap().into(),
+        publisher_signed: false,
         artifacts,
     }
 }
@@ -62,11 +63,11 @@ fn staging_manifests_have_a_separate_prefix_and_visible_channel() {
         catalog["release"]["checksums_url"]
             .as_str()
             .unwrap()
-            .contains("/staging/releases/")
+            .contains("/releases/download/staging-v0.1.0/")
     );
     let latest = fs::read_to_string(stage.join("latest.json")).unwrap();
-    assert!(!latest.contains("si/releases/"));
-    assert!(latest.contains("si/staging/releases/"));
+    assert!(!latest.contains("/releases/download/v0.1.0/"));
+    assert!(latest.contains("/releases/download/staging-v0.1.0/"));
 }
 
 #[test]
@@ -86,7 +87,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     );
     assert_eq!(
         latest["platforms"]["windows-aarch64-nsis"]["url"],
-        "https://download.auracode.si/releases/0.1.0/auracode-arm64.exe"
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/auracode-arm64.exe"
     );
     assert_eq!(
         latest["platforms"]["linux-x86_64"],
@@ -94,13 +95,19 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     );
     assert_eq!(
         latest["platforms"]["linux-x86_64-rpm"]["url"],
-        "https://download.auracode.si/releases/0.1.0/auracode-x86_64.rpm"
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/auracode-x86_64.rpm"
     );
     let catalog = fs::read_to_string(stage.join("downloads.json")).unwrap();
     assert!(!catalog.contains(&temp.path().to_string_lossy().to_string()));
     let catalog: Value = serde_json::from_str(&catalog).unwrap();
     assert_eq!(catalog["release"]["downloads"].as_array().unwrap().len(), 6);
+    // Updater-signed, so a copy updates itself; no publisher signed it, so each system warns.
     assert_eq!(catalog["release"]["signed"], true);
+    assert_eq!(catalog["release"]["publisher_signed"], false);
+    assert_eq!(
+        catalog["release"]["checksums_url"],
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/SHA256SUMS"
+    );
     assert_eq!(
         catalog["release"]["downloads"][0]["sha256"]
             .as_str()

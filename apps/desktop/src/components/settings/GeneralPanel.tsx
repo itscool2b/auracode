@@ -338,6 +338,19 @@ export function GeneralPage({
               onChange={(enabled) => prefs.change({ type: "close_to_tray", enabled })}
             />
           </Row>
+          <Row
+            title="Check for updates"
+            setting="Check for updates automatically"
+            detail="Looks for a newer auracode a few times a day and shows Update. Nothing installs until you choose."
+          >
+            <Switch
+              label="Check for updates automatically"
+              testId="settings-automatic-updates"
+              checked={general.automatic_updates}
+              disabled={disabled}
+              onChange={(enabled) => prefs.change({ type: "automatic_updates", enabled })}
+            />
+          </Row>
         </div>
       </section>
       <section className="settings-section" aria-labelledby="settings-setup">

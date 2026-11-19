@@ -2,6 +2,7 @@
   "release": {
     "channel": "stable",
     "signed": false,
+    "publisher_signed": false,
     "version": "0.1.0",
     "pub_date": "2026-11-18T23:03:00-05:00",
     "notes": "Preview build of main through #145.",

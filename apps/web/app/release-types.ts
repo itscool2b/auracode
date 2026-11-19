@@ -10,10 +10,15 @@ export type Catalog = {
 export type CatalogRelease = {
 	channel: Channel,
 	/**
-	 *  Whether the packages carry verified updater signatures. Preview builds do not: they are
-	 *  unsigned and never update themselves, and the download page says so.
+	 *  Whether the packages carry verified updater signatures, so an installed copy updates
+	 *  itself. Every release this crate prepares does.
 	 */
 	signed: boolean,
+	/**
+	 *  Whether a publisher signed the packages for the operating systems. When not, the download
+	 *  page says each system warns before one runs, and how to open it.
+	 */
+	publisher_signed: boolean,
 	version: string,
 	pub_date: string,
 	notes: string,

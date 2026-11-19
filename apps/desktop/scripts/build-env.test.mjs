@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
+import { appVersion, releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
 
 test("Windows paths and spaces remain single rustc arguments", () => {
   const env = releaseBuildEnv({ RUSTFLAGS: "-C debuginfo=1" }, [
@@ -67,4 +67,24 @@ test("signed updater builds require both public and private material without pri
     AURACODE_UPDATER_PUBLIC_KEY: "fixture-public",
     TAURI_SIGNING_PRIVATE_KEY: "fixture-private",
   });
+});
+
+test("a build's version is three plain numbers that fit a Windows version field", () => {
+  for (const version of ["0.1.1570", "1.0.0", "12.34.65535"]) {
+    assert.equal(appVersion(version), version);
+  }
+  for (const version of [
+    undefined,
+    "",
+    "v0.1.1570",
+    "0.1",
+    "0.1.1570.2",
+    "0.1.1570-beta",
+    "0.1.65536",
+    "0.01.5",
+    "--target",
+    "0.1.1570 ",
+  ]) {
+    assert.throws(() => appVersion(version), /--app-version takes a version/u, String(version));
+  }
 });
