@@ -206,6 +206,11 @@ try {
       await page.getByRole("switch", { name: "Keep awake" }).uncheck();
       await page.getByRole("switch", { name: "Keep running in the tray" }).uncheck();
       await page.waitForFunction(() => !window.settingsFixture.general().close_to_tray);
+      // Looking for a newer auracode is on until turned off, and the switch saves at once.
+      const automatic = page.getByRole("switch", { name: "Check for updates automatically" });
+      assert.equal(await automatic.isChecked(), true);
+      await automatic.uncheck();
+      await page.waitForFunction(() => !window.settingsFixture.general().automatic_updates);
       assert.deepEqual(await general(), {
         default_agent: "codex",
         default_model: "gpt-5.5-codex",
@@ -222,6 +227,7 @@ try {
         editor: null,
         browser: true,
         browser_passwords: true,
+        automatic_updates: false,
       });
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();
@@ -309,6 +315,11 @@ try {
         "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode.";
       await page.getByText(why, { exact: true }).waitFor();
       assert.equal(await page.getByText(why, { exact: true }).count(), 1, `${engine}: said once`);
+      // Every switch waits while the saved preferences load; Notifications is free once they have.
+      await page.waitForFunction(() => {
+        const node = document.querySelector('[data-testid="settings-notifications"]');
+        return node && !node.disabled && node.getAttribute("aria-disabled") !== "true";
+      });
       assert.equal(await page.getByRole("switch", { name: "Notifications" }).isDisabled(), false);
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);

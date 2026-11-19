@@ -328,10 +328,19 @@ async fn check(
         let bytes = bounded_response(response, MAX_MANIFEST, |_| {}).await?;
         let manifest = serde_json::from_slice(&bytes)
             .map_err(|_| error("The update manifest is not valid JSON."))?;
+        // The verifier refuses to exist without an endpoint, though this code fetches the
+        // manifest itself and never asks it to: it gets the one address this build reads. (Until
+        // 19 November 2026 it got none, so no check could ever have passed; no build had updates
+        // on, so nobody met it.)
+        let endpoint = source
+            .manifest
+            .parse()
+            .map_err(|_| error("The update verifier could not be configured."))?;
         let updater = app
             .updater_builder()
             .pubkey(&source.key)
-            .build()
+            .endpoints(vec![endpoint])
+            .and_then(|builder| builder.build())
             .map_err(|_| error("The update verifier could not be configured."))?;
         // This API applies target/version selection and mandates a signed version, even when the
         // manifest was fetched separately. Separate fetch permits a hard metadata size bound.
