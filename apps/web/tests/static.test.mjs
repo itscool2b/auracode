@@ -56,7 +56,7 @@ test("public pages are prerendered to follow the system appearance without JavaS
       assert.ok(downloads.includes(download.sha256), download.file);
       assert.match(
         download.url,
-        /^https:\/\/(github\.com\/itscool2b\/auracode\/releases\/download|download\.auracode\.si)\//,
+        /^https:\/\/(github\.com\/itscool2b\/auracode\/releases\/download|download\.o7\.codes)\//,
       );
     }
     assert.ok(downloads.includes(`href="${release.checksums_url}"`));
