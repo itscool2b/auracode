@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 const ORIGIN = "https://auracode.test";
+/** The address the site had before: its remote page is still let in. */
+const FORMER = "https://former.test";
 const BASE = `${ORIGIN}/api/remote/v1`;
 const id = (bytes) => randomBytes(bytes).toString("base64url");
 /** A computer's id is the start of a hash of its key. */
@@ -35,7 +37,7 @@ before(async () => {
       ],
       compatibilityDate: "2026-10-26",
       durableObjects: { ROOMS: { className: "Room", useSQLite: true } },
-      bindings: { APP_ORIGIN: ORIGIN },
+      bindings: { APP_ORIGIN: ORIGIN, FORMER_ORIGIN: FORMER },
     }),
   );
   await runtime.ready;
@@ -223,7 +225,29 @@ test("a browser socket needs the website's origin", async () => {
   const hostId = idOf(hostKey);
   (await host(hostId, hostKey)).close();
   assert.equal((await upgrade(`client/${hostId}`)).status, 403);
-  assert.equal((await upgrade(`client/${hostId}`, { Origin: "https://evil.test" })).status, 403);
+  // Only the site's origin and the one it had before, each exactly: no other site, no name
+  // that contains one of them, no missing or empty origin.
+  for (const origin of [
+    "https://evil.test",
+    `${ORIGIN}.evil.test`,
+    `${FORMER}.evil.test`,
+    ORIGIN.replace("https://", "http://"),
+    `${FORMER}/`,
+    "null",
+    "",
+    "undefined",
+  ]) {
+    assert.equal((await upgrade(`client/${hostId}`, { Origin: origin })).status, 403, origin);
+  }
+  // The origin the site had before is let in, to the same room: its desktop hears of it.
+  const desk = await host(hostId, hostKey);
+  const former = await upgrade(`client/${hostId}`, { Origin: FORMER });
+  assert.equal(former.status, 101);
+  const phone = reader(former.webSocket);
+  assert.equal(await phone.message(), "h1");
+  assert.match(await desk.message(), /^o[A-Za-z0-9_-]{16}$/);
+  phone.close();
+  desk.close();
   assert.equal(
     (await runtime.dispatchFetch(`${BASE}/client/${hostId}`, { headers: { Origin: ORIGIN } }))
       .status,

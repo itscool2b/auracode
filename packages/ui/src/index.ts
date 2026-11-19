@@ -1,5 +1,5 @@
 /**
- * @auracode/ui: the Aura design system shared by the desktop app and auracode.si.
+ * @auracode/ui: the Aura design system shared by the desktop app and o7.codes.
  *
  * Consumed as TypeScript source (no build step). Import the stylesheets once at the app root:
  *   import "@auracode/ui/fonts.css";

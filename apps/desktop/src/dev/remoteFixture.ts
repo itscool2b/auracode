@@ -87,7 +87,7 @@ export function remoteFixture(): RemoteApi {
       publish({ ...status, pairing_expires_at: expires_at });
       return {
         // The shape of a real link, with nothing secret in it.
-        url: `https://auracode.si/remote#${"h".repeat(22)}.${"p".repeat(11)}.${"k".repeat(43)}`,
+        url: `https://o7.codes/remote#${"h".repeat(22)}.${"p".repeat(11)}.${"k".repeat(43)}`,
         expires_at,
       };
     },
@@ -114,7 +114,7 @@ export function remoteFixture(): RemoteApi {
       return {
         id,
         name: name.trim() || "Bot",
-        url: `https://auracode.si/api/remote/v1/mcp/${"h".repeat(22)}/${"b".repeat(11)}.${"t".repeat(43)}`,
+        url: `https://o7.codes/api/remote/v1/mcp/${"h".repeat(22)}/${"b".repeat(11)}.${"t".repeat(43)}`,
       };
     },
     removeBot: async (id) => {

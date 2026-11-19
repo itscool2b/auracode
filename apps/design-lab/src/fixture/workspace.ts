@@ -227,7 +227,7 @@ export const PROJECTS: readonly Project[] = [
   },
   {
     id: PROJECT_SITE,
-    name: "auracode.si",
+    name: "o7.codes",
     color: "#8c7dff",
     expanded: false,
     chats: [

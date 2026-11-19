@@ -32,7 +32,9 @@ pub const REMOTE_CHANGED: &str = "auracode-remote-changed";
 const PAGE_BYTES: u32 = 256 * 1024;
 
 /// The relay and the website it belongs to. Release builds reach only auracode's own; a
-/// development build may name a relay on this machine.
+/// development build may name a relay on this machine. The site was auracode.si until
+/// 19 November 2026: the relay still answers there for copies from before the move
+/// (docs/remote-sessions.md), and a copy from after it never goes there.
 fn origins() -> (String, String) {
     if cfg!(debug_assertions)
         && let (Ok(relay), Ok(site)) = (
@@ -43,8 +45,8 @@ fn origins() -> (String, String) {
         return (relay, site);
     }
     let site = match option_env!("AURACODE_API_ORIGIN") {
-        Some("https://preview.auracode.si") => "https://preview.auracode.si",
-        _ => "https://auracode.si",
+        Some("https://preview.o7.codes") => "https://preview.o7.codes",
+        _ => "https://o7.codes",
     };
     (site.replacen("https://", "wss://", 1), site.to_owned())
 }

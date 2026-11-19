@@ -1,7 +1,7 @@
 # Agent marks
 
 auracode shows each coding agent's own logo beside its name, in the desktop app and on
-auracode.si. The marks live in `packages/ui/src/graphite/agent-logos/` and are drawn by
+o7.codes. The marks live in `packages/ui/src/graphite/agent-logos/` and are drawn by
 `AgentMark` and `AgentLogo` (`packages/ui/src/graphite/`). Five follow terms their makers publish
 for this kind of use; four (Claude Code, Grok Build, Antigravity, Hermes) are used at the owner's
 direction while the owner handles permissions with those vendors (2026-10-28).

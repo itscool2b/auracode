@@ -1,6 +1,14 @@
 //! Static website responses only. The site has no API of its own; the remote relay is a separate
 //! Worker on the more-specific `/api/remote/*` route.
 
+/// The site's address.
+pub const SITE: &str = "https://o7.codes";
+/// The address the site had until 19 November 2026. A copy of the app from before the move still
+/// makes pairing links to its `/remote`, and a phone paired there keeps its key under that
+/// origin, so that page and the files it loads keep answering there until those copies have
+/// updated. Every other page is sent to [`SITE`].
+const FORMER_HOSTS: &[&str] = &["auracode.si"];
+
 pub struct Asset {
     pub path: &'static str,
     pub route: Option<&'static str>,
@@ -47,8 +55,25 @@ fn error(status: u16, body: &'static [u8], head: bool, common: &[(&str, &str)]) 
     }
 }
 
+/// Sends a page asked for at a former address to the same page at [`SITE`].
+fn moved(path: &str, common: &[(&str, &str)]) -> ResponsePlan {
+    let mut headers: Vec<_> = common
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
+    header(&mut headers, "location", &format!("{SITE}{path}"));
+    header(&mut headers, "cache-control", "public, max-age=3600");
+    header(&mut headers, "content-length", "0");
+    ResponsePlan {
+        status: 308,
+        headers,
+        body: b"",
+    }
+}
+
 pub fn respond(
     method: &str,
+    host: &str,
     path: &str,
     if_none_match: Option<&str>,
     assets: &[Asset],
@@ -73,12 +98,22 @@ pub fn respond(
         header(&mut response.headers, "allow", "GET, HEAD");
         return response;
     }
-    let Some(asset) = assets.iter().find(|asset| {
+    let asset = assets.iter().find(|asset| {
         asset.path == path
             || asset.route.is_some_and(|route| {
                 route == path || (route != "/" && path.strip_suffix('/') == Some(route))
             })
-    }) else {
+    });
+    // At a former address only the remote page and the files a page loads are served; every
+    // other page, and anything unknown, is at the site's address now.
+    if FORMER_HOSTS
+        .iter()
+        .any(|former| host.eq_ignore_ascii_case(former))
+        && asset.is_none_or(|asset| asset.route.is_some_and(|route| route != "/remote"))
+    {
+        return moved(path, common);
+    }
+    let Some(asset) = asset else {
         return error(404, b"Not found\n", head, common);
     };
     let mut headers: Vec<_> = asset
@@ -136,9 +171,11 @@ mod edge {
     #[event(fetch)]
     async fn fetch(request: Request, _env: Env, _context: Context) -> Result<Response> {
         let path = request.path();
+        let host = request.url()?.host_str().unwrap_or_default().to_owned();
         let conditional = request.headers().get("If-None-Match")?;
         let plan = crate::respond(
             request.method().as_ref(),
+            &host,
             &path,
             conditional.as_deref(),
             ASSETS,
@@ -193,8 +230,12 @@ mod tests {
         },
     ];
     fn get(method: &str, path: &str, tag: Option<&str>) -> ResponsePlan {
+        at("o7.codes", method, path, tag)
+    }
+    fn at(host: &str, method: &str, path: &str, tag: Option<&str>) -> ResponsePlan {
         respond(
             method,
+            host,
             path,
             tag,
             ASSETS,
@@ -220,6 +261,52 @@ mod tests {
         }
         assert_eq!(get("GET", "/", None).body, b"home");
         assert_eq!(get("GET", "/index.html", None).body, b"home");
+    }
+
+    #[test]
+    fn the_former_address_keeps_the_remote_page_and_sends_every_other_page_on() {
+        for host in ["auracode.si", "AuraCode.SI"] {
+            // Pages, their aliases and anything unknown move, path kept.
+            for path in [
+                "/",
+                "/index.html",
+                "/download",
+                "/missing",
+                "/assets/missing.js",
+            ] {
+                let response = at(host, "GET", path, None);
+                assert_eq!(response.status, 308, "{host}{path}");
+                assert_eq!(
+                    value(&response, "location"),
+                    Some(format!("https://o7.codes{path}").as_str())
+                );
+                assert!(response.body.is_empty());
+                assert_eq!(value(&response, "x-content-type-options"), Some("nosniff"));
+                assert_eq!(at(host, "HEAD", path, None).status, 308);
+            }
+            // The remote page and the files it loads stay, as they are served at the new address.
+            for path in ["/remote", "/remote/", "/remote/index.html"] {
+                let response = at(host, "GET", path, None);
+                assert_eq!(response.status, 200, "{host}{path}");
+                assert_eq!(response.body, b"remote");
+                assert_eq!(value(&response, "cache-control"), Some("no-store"));
+            }
+            assert_eq!(at(host, "GET", "/assets/app-12345678.js", None).body, b"js");
+            // Nothing else changes there: no page for an API path, no other method, no odd path.
+            assert_eq!(at(host, "GET", "/api/remote/v1/health", None).status, 404);
+            assert_eq!(at(host, "POST", "/download", None).status, 405);
+            assert_eq!(at(host, "GET", "//o7.codes.example", None).status, 400);
+        }
+        // Only the exact former address: a name that merely contains it is not one.
+        for host in [
+            "o7.codes",
+            "preview.o7.codes",
+            "auracode.si.example",
+            "notauracode.si",
+        ] {
+            assert_eq!(at(host, "GET", "/download", None).status, 404, "{host}");
+            assert_eq!(at(host, "GET", "/", None).body, b"home", "{host}");
+        }
     }
 
     #[test]

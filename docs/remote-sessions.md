@@ -12,7 +12,7 @@ including in the tray.
 
 1. **Settings > Remote access > Pair a device.** A dialog shows a code to scan and the same link as text.
    The link opens once, within ten minutes. Asking for it turns remote access on.
-2. **Open the link on the other device and tap Pair this browser.** `auracode.si/remote` takes
+2. **Open the link on the other device and tap Pair this browser.** `o7.codes/remote` takes
    the key out of the address bar and asks first: opening the link pairs nothing by itself, so a
    program that only opens links (a mail or chat scanner) cannot spend it. After the tap it pairs
    and lists the computer's chats by project. From then on that browser opens the
@@ -48,7 +48,7 @@ bot sends messages to agents and answers their permission requests, and agents r
 
 | Part | Where | What it does |
 |---|---|---|
-| Relay | `apps/relay` (Worker `auracode-relay`, route `auracode.si/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
+| Relay | `apps/relay` (Worker `auracode-relay`, route `o7.codes/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
 | Service | `crates/aura-remote` | Pairing links, devices and bot links (`registry.rs`), the sealed channel (`crypto.rs`), one session per browser (`host.rs`, `host/session.rs`), bot tools (`bot.rs`, `render.rs`), the socket (`relay.rs`). |
 | App | `apps/desktop/src-tauri/src/remote.rs` | Starts the service, gives it the open profile's chats through the same lease a window's commands take, and exposes the commands Settings uses. |
 | Settings page | `apps/desktop/src/components/settings/RemotePanel.tsx` | The switch, devices, bots, and the two dialogs that show a secret once. |
@@ -99,7 +99,7 @@ decision about who may do what is made in Rust on the computer.
 
 ### Pairing and keys
 
-A pairing link is `https://auracode.si/remote#<computer id>.<pairing id>.<key>`: 16, 8 and 32
+A pairing link is `https://o7.codes/remote#<computer id>.<pairing id>.<key>`: 16, 8 and 32
 random bytes, base64url. The key is in the fragment, which browsers never send to a server; the
 page reads it once and removes it from the address bar and history before connecting. The pairing
 lives in the computer's memory only, opens once, expires after ten minutes, is replaced by the
@@ -186,8 +186,8 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
 ## Running and testing it
 
 - **Deploy:** `corepack pnpm --filter @auracode/relay exec wrangler deploy --env production`
-  (and `--env preview`). The route `auracode.si/api/remote/*` is more specific than the website's
-  `auracode.si/*`, so those requests reach the relay.
+  (and `--env preview`). The route `o7.codes/api/remote/*` is more specific than the website's
+  `o7.codes/*`, so those requests reach the relay.
 - **Development:** a debug build reads `AURACODE_REMOTE_RELAY` (for example
   `ws://127.0.0.1:8799`) and `AURACODE_REMOTE_SITE` together; release builds reach only
   auracode's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.
@@ -223,7 +223,16 @@ Security, from the review of 10 November 2026 (each is a known limit, not a surp
   device; Settings shows the new device at once and Remove ends it.
 - **A bot link that is sealed end to end**, and one that expires when idle: the first would need
   the bot to run a program of ours.
-- **The relay on an origin of its own.** It answers under `auracode.si`, the page's origin.
+- **The relay on an origin of its own.** It answers under `o7.codes`, the page's origin.
+- **The address before the move.** Until 19 November 2026 the site was auracode.si. A copy of the
+  app from before the move connects to the relay there and makes pairing links to its `/remote`,
+  and a phone paired there keeps its key under that origin (a key cannot be moved between
+  origins: it is stored so that no script can read it). So the relay answers on both addresses,
+  into the same rooms, and lets in a browser from either origin (`FORMER_ORIGIN`); the website
+  Worker serves only `/remote` and its files at the old address and sends every other page to
+  o7.codes. Remove the old routes, `FORMER_ORIGIN`, `FORMER_HOSTS` and the old entry in the
+  page's `connect-src` once those copies have updated; a phone paired at the old address pairs
+  once more at the new one.
 - **Per-room rate limits** at Cloudflare's edge for new sockets and host claims. Since 19 November
   2026 the zone has one rule per address instead: more than 60 requests to `/api/remote/*` in ten
   seconds from one address are refused for ten seconds (infra/README.md). It blunts a flood from

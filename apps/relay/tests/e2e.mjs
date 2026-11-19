@@ -7,6 +7,7 @@
  *   cargo build -p aura-remote --example demo_host
  *   corepack pnpm --filter @auracode/relay worker:build
  *   node apps/relay/tests/e2e.mjs [--host <demo_host executable>] [--engines chromium,webkit]
+ *     [--shots <folder for screenshots>] [--scheme light|dark]
  *
  * Nothing leaves the machine: every address is localhost.
  */
@@ -27,6 +28,8 @@ const { values } = parseArgs({
     host: { type: "string" },
     engines: { type: "string", default: "chromium" },
     shots: { type: "string" },
+    // The system appearance the phone reports: the demo computer follows the system.
+    scheme: { type: "string", default: "light" },
   },
 });
 const hostBinary =
@@ -130,6 +133,7 @@ async function browserFlow(engine, launcher, host, first, shots) {
   try {
     const phone = await browser.newContext({
       ...(engine === "webkit" ? devices["iPhone 14"] : devices["Pixel 7"]),
+      colorScheme: values.scheme === "dark" ? "dark" : "light",
     });
     const tab = await phone.newPage();
     // Every socket to the relay passes through here, so one can be made to go quiet: open as far

@@ -24,13 +24,18 @@ enabled = false
 [env.production]
 name = "auracode-relay"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
-# More specific than the website's `auracode.si/*`, and than the retired account API's
-# `auracode.si/api/*` for as long as that route exists (infra/README.md), so these requests reach
-# this Worker.
-routes = [{ pattern = "auracode.si/api/remote/*", zone_name = "auracode.si" }]
+# More specific than the website's `o7.codes/*`, so these requests reach this Worker.
+# The second route and FORMER_ORIGIN are the address the site had until 19 November 2026: a copy
+# of the app from before the move connects there, and a phone paired there opens the remote page
+# there. Both addresses reach the same rooms. They go once those copies have updated.
+routes = [
+  { pattern = "o7.codes/api/remote/*", zone_name = "o7.codes" },
+  { pattern = "auracode.si/api/remote/*", zone_name = "auracode.si" },
+]
 
 [env.production.vars]
-APP_ORIGIN = "https://auracode.si"
+APP_ORIGIN = "https://o7.codes"
+FORMER_ORIGIN = "https://auracode.si"
 
 [[env.production.durable_objects.bindings]]
 name = "ROOMS"
@@ -43,10 +48,10 @@ new_sqlite_classes = ["Room"]
 [env.preview]
 name = "auracode-relay-preview"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
-routes = [{ pattern = "preview.auracode.si/api/remote/*", zone_name = "auracode.si" }]
+routes = [{ pattern = "preview.o7.codes/api/remote/*", zone_name = "o7.codes" }]
 
 [env.preview.vars]
-APP_ORIGIN = "https://preview.auracode.si"
+APP_ORIGIN = "https://preview.o7.codes"
 
 [[env.preview.durable_objects.bindings]]
 name = "ROOMS"

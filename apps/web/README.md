@@ -1,4 +1,4 @@
-# auracode.si
+# o7.codes
 
 React Router 7 interface that follows the system appearance, prerendered to static HTML. Cloudflare serves `build/client`.
 `entry.server.tsx` is build-time React rendering only; the server output is removed by `ssr:false`.
@@ -48,7 +48,7 @@ default choice and the FAQ opens natively. The standalone notices page is script
 
 The assets-only `wrangler.toml` remains available. The separate [Rust website Worker](../web-worker/README.md)
 embeds the same public build for ordinary code deployment without an Assets upload. It is deployed
-at [auracode.si](https://auracode.si) and [preview.auracode.si](https://preview.auracode.si).
+at [o7.codes](https://o7.codes) and [preview.o7.codes](https://preview.o7.codes).
 Downloads are not published. Production styling deploys automatically from main after merge through Cloudflare Workers Builds;
 verify the deployment against the merged commit. Deploy only one website implementation per route
 and rebuild from the final integrated source. The generated `_headers` supplies a hash-based CSP

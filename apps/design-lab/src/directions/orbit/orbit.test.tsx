@@ -352,7 +352,7 @@ describe("round 3: what the critics found missing", () => {
     const shown = text(render("settled"));
     // The waiting chat is listed (and counted) under Needs you, not again under its project.
     expect(shown).toContain("Projects 3 auracode 3");
-    expect(shown).toContain("auracode.si 1 failed");
+    expect(shown).toContain("o7.codes 1 failed");
   });
 
   it("maps project colours onto four muted tones, never violet and never near the orange", () => {

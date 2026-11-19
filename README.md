@@ -29,7 +29,7 @@ plugins natively. A profile folder an account left in the data folder is never o
 deleted.
 
 Backend and cloud services are Rust-first: the website is a Rust Worker serving the prerendered
-pages, published at [auracode.si](https://auracode.si) and its isolated preview, and remote access
+pages, published at [o7.codes](https://o7.codes) and its isolated preview, and remote access
 goes through the relay Worker (`apps/relay`). The Cloudflare resources are listed in
 [infra/README.md](infra/README.md), with a record of the ones the account system used, which were
 deleted with it.
@@ -37,7 +37,7 @@ React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md file
 Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
 Installers are unsigned preview builds: publisher signing is deferred at the owner's request. They
 are published on this repository's Releases page and listed with their checksums at
-[auracode.si/download](https://auracode.si/download); [docs/releases.md](docs/releases.md) says
+[o7.codes/download](https://o7.codes/download); [docs/releases.md](docs/releases.md) says
 how. auracode is open source under the [MIT License](LICENSE).
 
 Current source includes native agent drivers, the desktop workspace, onboarding, project and Git
@@ -53,7 +53,9 @@ Merged into main.
 
 Done:
 
-- **Domain.** The auracode.si zone has been active on Cloudflare since 2026-10-24.
+- **Domain.** The site is at o7.codes since 2026-11-19. Its first address, auracode.si (a
+  Cloudflare zone since 2026-10-24), sends its pages there and still answers the relay and the
+  remote page for copies of the app from before the move ([infra/README.md](infra/README.md)).
 - **Scaffold.** The Cargo and pnpm workspaces with rustfmt, clippy, and Biome; the event model
   (`aura-protocol`); the data folder, device identity, profiles, and per-profile database (`aura-core`);
   frame batching and the scripted mock agent (`aura-drivers`); the design system and WebGL orb renderer
@@ -116,7 +118,7 @@ The rest (the Cloudflare resource inventory is in infra/README.md):
 crates/aura-config/     per-agent config adapters for the Plugin library and Instructions
 crates/aura-remote/     remote access: pairing, devices, bot links and the sealed channel
 crates/aura-release/    offline preparation and verification of release artifacts
-apps/web/               auracode.si (React Router 7, prerendered)
+apps/web/               o7.codes (React Router 7, prerendered)
 apps/web-worker/        the Rust Worker that serves the prerendered site
 apps/relay/             the Worker behind remote access
 infra/                  the Cloudflare resource inventory

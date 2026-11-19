@@ -22,8 +22,13 @@ const FULL_TOOLS = listed(ALL_TOOLS as readonly Tool[]);
 
 export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
-  /** The website's origin: the only origin a browser socket may come from. */
+  /** The website's origin: the origin a browser socket comes from. */
   readonly APP_ORIGIN: string;
+  /**
+   * An origin the website had before, still let in while the remote page is served there for
+   * browsers paired before the move. Unset once that page is gone.
+   */
+  readonly FORMER_ORIGIN?: string;
   /** Tests only: how long a desktop may go without a keep-alive, in ms (`HOST_SILENT_MS`). */
   readonly HOST_SILENT_MS?: string;
 }
@@ -162,7 +167,9 @@ export default {
       if (own === null || !same(own, hostId)) return json(401, { error: "unauthorized" });
     } else if (kind === "client") {
       if (!isUpgrade(request)) return json(400, { error: "invalid_request" });
-      if (origin !== env.APP_ORIGIN) return json(403, { error: "forbidden" });
+      // An exact match against the one or two origins this deployment names, never a pattern.
+      const known = !!origin && (origin === env.APP_ORIGIN || origin === env.FORMER_ORIGIN);
+      if (!known) return json(403, { error: "forbidden" });
     } else if (kind === "mcp") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     } else {

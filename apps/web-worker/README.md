@@ -67,8 +67,8 @@ which is why these rules are explicitly compiled into the Rust response path.
 The checked-in `wrangler.toml` names local, preview and production scripts. `workers_dev` and preview
 URLs are disabled. No environment variables or secrets are needed. Use ordinary multipart code
 upload with `build/index.js` as the ES module and `build/index_bg.wasm` as the Wasm module. Preserve
-the existing more-specific relay route, `preview.auracode.si/api/remote/*`, before attaching this Worker's
-`preview.auracode.si/*` route. Cloudflare's
+the existing more-specific relay route, `preview.o7.codes/api/remote/*`, before attaching this Worker's
+`preview.o7.codes/*` route. Cloudflare's
 [route precedence](https://developers.cloudflare.com/workers/configuration/routing/routes/)
 selects the more-specific match. This is a deployment check, not a substitute for testing it.
 

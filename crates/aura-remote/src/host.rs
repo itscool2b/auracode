@@ -68,7 +68,7 @@ const WATCHER: &str = "auracode-remote";
 pub struct Config {
     /// `remote.json` in the data folder.
     pub path: PathBuf,
-    /// The relay's WebSocket origin, such as `wss://auracode.si`.
+    /// The relay's WebSocket origin, such as `wss://o7.codes`.
     pub relay: String,
     /// The website's origin, which pairing links and bot addresses start with.
     pub site: String,

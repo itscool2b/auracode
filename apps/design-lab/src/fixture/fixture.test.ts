@@ -284,7 +284,7 @@ describe("the workspace", () => {
       PROJECTS.map((project) => [project.name, project.expanded, project.chats.length]),
     ).toEqual([
       ["auracode", true, 4],
-      ["auracode.si", false, 2],
+      ["o7.codes", false, 2],
       ["dotfiles", false, 1],
     ]);
     expect(PROJECTS[0]?.chats.map((chat) => [chat.title, chat.agent, chat.status])).toEqual([
