@@ -79,4 +79,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   browser_passwords: true,
   automatic_updates: true,
   coordinated_projects: false,
+  roles: { plan: null, build: null, coordinator: null, worker: null },
 };

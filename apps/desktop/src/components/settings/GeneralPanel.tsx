@@ -17,6 +17,7 @@ import { playNotice } from "../../lib/sounds";
 import { TERMINAL_SIZES, terminalFonts } from "../../lib/terminalFont";
 import { Select } from "../Select";
 import type { Preferences } from "./preferences";
+import { RolesSection } from "./RoleModels";
 import { Row, Switch } from "./SettingsRow";
 import { ThemeGallery } from "./ThemeGallery";
 
@@ -353,6 +354,7 @@ export function GeneralPage({
           </Row>
         </div>
       </section>
+      <RolesSection prefs={prefs} lists={lists} agents={agents} />
       <section className="settings-section" aria-labelledby="settings-setup">
         <h2 id="settings-setup">Setup</h2>
         <div className="settings-group">

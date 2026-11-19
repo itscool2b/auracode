@@ -2,7 +2,15 @@ import type { PermissionDecision, Value } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { permissionResolutionLabel } from "../../lib/chat/present";
 import type { PermissionItem } from "../../lib/chat/transcript";
-import { PlanCard, planApproval } from "./PlanCard";
+import { type PlanApproval, PlanCard, planApproval } from "./PlanCard";
+
+/** Handing an accepted plan to Settings' Building role (lib/roles.ts). */
+export interface PlanBuild {
+  /** The role as the button names it: "Codex · gpt-6-astra". */
+  readonly label: string;
+  readonly run: (requestId: string, approval: PlanApproval) => Promise<void>;
+}
+
 import { type BlobProps, EventDetails, Locations, ToolContentView } from "./ToolBlock";
 
 /** The most of a request's raw input the card shows; "Show full details" has the rest. */
@@ -51,6 +59,7 @@ export function PermissionCard({
   onLoadBlob,
   agentName = "The agent",
   onAddToPlan,
+  planBuild,
 }: {
   readonly item: PermissionItem;
   readonly request: RequestState | undefined;
@@ -64,6 +73,8 @@ export function PermissionCard({
     declineOptionId: string,
     note: string,
   ) => Promise<void>;
+  /** A plan card's Accept and build with: Settings' Building role takes the accepted plan. */
+  readonly planBuild?: PlanBuild;
 } & BlobProps) {
   const { request: ask, resolution } = item;
   const plan = planApproval(ask);
@@ -78,6 +89,11 @@ export function PermissionCard({
         onAddToPlan={
           onAddToPlan
             ? (declineOptionId, note) => onAddToPlan(ask.request_id, declineOptionId, note)
+            : undefined
+        }
+        build={
+          planBuild && resolution === null
+            ? { label: planBuild.label, onBuild: () => planBuild.run(ask.request_id, plan) }
             : undefined
         }
       />

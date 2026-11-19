@@ -64,6 +64,40 @@ describe("a plan waiting for review", () => {
     expect(html).toContain("Accepting lets Claude Code start implementing.");
   });
 
+  it("offers the Building model first when one can take the plan, and keeps Accept plan", () => {
+    const html = renderToStaticMarkup(
+      <PermissionCard
+        item={item(request())}
+        request={undefined}
+        onRespond={() => {}}
+        agentName="Claude Code"
+        onAddToPlan={async () => {}}
+        planBuild={{ label: "Codex · gpt-6-astra", run: async () => {} }}
+        blobs={new Map()}
+        onLoadBlob={() => {}}
+      />,
+    );
+    expect(html).toContain("Accept and build with Codex · gpt-6-astra");
+    // The handing button is the filled one; Accept plan stays, as a plain button.
+    expect(html).toMatch(/class="g-button g-button-primary"[^>]*data-testid="plan-build"/);
+    expect(html).toMatch(/class="g-button"[^>]*data-testid="permission-option"[^>]*>Accept plan/);
+    expect(html).toContain(
+      "Accept and build hands the plan to Codex · gpt-6-astra, your Building model. Accept plan lets Claude Code implement it.",
+    );
+    // An answered plan offers nothing more.
+    const answered = renderToStaticMarkup(
+      <PermissionCard
+        item={item(request(), "allow")}
+        request={undefined}
+        onRespond={() => {}}
+        planBuild={{ label: "Codex", run: async () => {} }}
+        blobs={new Map()}
+        onLoadBlob={() => {}}
+      />,
+    );
+    expect(answered).not.toContain("Accept and build");
+  });
+
   it("says what was decided once it is answered", () => {
     const accepted = renderToStaticMarkup(
       <PermissionCard

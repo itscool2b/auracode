@@ -13,6 +13,9 @@ import type {
   ChatSummary,
   ManagedWorktree,
   PendingHandoff,
+  RoleModel,
+  RoleModels,
+  SessionControlChange,
   StorageStatus,
   WorktreeRecreatePreview,
   WorktreeRun,
@@ -35,6 +38,7 @@ import { sameFolder } from "../../lib/gitWorkspace";
 import { useMediaQuery } from "../../lib/hooks";
 import { inTauri } from "../../lib/ipc";
 import { editorName } from "../../lib/projectTools";
+import { buildOffer, buildPrompt, roleChoice, roleOf } from "../../lib/roles";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { runLabel } from "../../lib/worktreeRun";
 import { type AnnotationTarget, BrowserPanel } from "../browser/BrowserPanel";
@@ -54,7 +58,7 @@ import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
-import { planFeedback } from "./PlanCard";
+import { type PlanApproval, planFeedback } from "./PlanCard";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
@@ -99,6 +103,7 @@ export function ChatView({
   terminals = null,
   now,
   onManageAccounts,
+  roles = null,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -121,6 +126,8 @@ export function ChatView({
   readonly now?: () => number;
   /** Opens the Agents page, where accounts are added, chosen for new chats and removed. */
   readonly onManageAccounts?: () => void;
+  /** Settings' models by role: Planning applies with Plan, Building takes an accepted plan. */
+  readonly roles?: RoleModels | null;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
   // New chat's first message (type first): sent once as the chat opens, as its message box would
@@ -705,6 +712,105 @@ export function ChatView({
     [store, transport.composer],
   );
 
+  /** Sets a role's model and thinking level in this chat, where its agent offers them. */
+  const applyRole = useCallback(
+    async (role: RoleModel) => {
+      for (const [category, wanted] of [
+        ["model", role.model],
+        ["effort", role.effort],
+      ] as const) {
+        const choice = roleChoice(store.getSnapshot().lists, category, wanted);
+        if (choice && !choice.current)
+          await store.setOption(choice.option.id, { type: "choice", value: choice.value });
+      }
+    },
+    [store],
+  );
+  const chatAgentId = state.chat?.agent_id;
+  const chatAgentName =
+    agents?.find((entry) => entry.id === chatAgentId)?.name ??
+    state.chat?.agent_name ??
+    "The agent";
+  const offer = buildOffer(roles, chatAgentId, state.lists, agents);
+  const offerLabel = offer?.label ?? null;
+  const conversation = transport.conversation;
+  /**
+   * Accept and build with: Settings' Building role takes the accepted plan. In a chat of the same
+   * agent its model and thinking level are set and the plan is accepted. For another agent the
+   * planner is stopped, the chat is handed over with the app's own handoff, and the builder is
+   * sent the plan as written.
+   */
+  // A hand-over to another agent outlives the plan card, which closes when the planner stops: its
+  // progress and any failure show above the composer.
+  const [handover, setHandover] = useState<{ label: string; error: string | null } | null>(null);
+  const buildPlan = useCallback(
+    async (requestId: string, approval: PlanApproval) => {
+      const now = buildOffer(roles, chatAgentId, store.getSnapshot().lists, agents);
+      if (!now)
+        throw new Error(
+          "Your Building model is not available now. Accept plan continues with this chat's agent.",
+        );
+      if (now.sameAgent) {
+        await applyRole(now.role);
+        await store.respondPermission(requestId, approval.accept.option_id);
+        return;
+      }
+      if (!conversation) throw new Error("This chat cannot be handed to another agent.");
+      setHandover({ label: now.label, error: null });
+      try {
+        await store.stop();
+        // The hand-over waits for the planner to have stopped, which closes its request.
+        for (
+          let waited = 0;
+          hasProcess(store.getSnapshot().session?.status ?? "stopped");
+          waited++
+        ) {
+          if (waited >= 240)
+            throw new Error(
+              "The planner did not stop within a minute. Stop it, then switch the agent from the model picker.",
+            );
+          await new Promise((done) => setTimeout(done, 250));
+        }
+        const preview = await conversation.preview(chatId, {
+          type: "switch_agent",
+          agent_id: now.role.agent,
+        });
+        const result = await conversation.apply(chatId, preview.token);
+        if (result.chat_id === chatId) {
+          await store.reattach();
+          setHandoffRevision((value) => value + 1);
+        }
+        onOpenChat?.(result.chat_id);
+        await applyRole(now.role);
+        await store.send(buildPrompt(approval.plan, chatAgentName));
+        setHandover(null);
+      } catch (failure) {
+        setHandover({ label: now.label, error: errorMessage(failure) });
+        throw failure;
+      }
+    },
+    [roles, chatAgentId, chatAgentName, agents, store, applyRole, conversation, chatId, onOpenChat],
+  );
+  const planBuild = useMemo(
+    () => (offerLabel === null ? undefined : { label: offerLabel, run: buildPlan }),
+    [offerLabel, buildPlan],
+  );
+  /** Turning Plan on in a chat of the Planning role's agent puts the chat on that role. */
+  const planRole = roleOf(roles, "plan");
+  const setControl = useCallback(
+    async (change: SessionControlChange) => {
+      await store.setControl(change);
+      if (
+        change.type === "workflow" &&
+        change.value === "plan" &&
+        planRole &&
+        planRole.agent === chatAgentId
+      )
+        await applyRole(planRole);
+    },
+    [store, planRole, chatAgentId, applyRole],
+  );
+
   const actions = useMemo<TurnActions>(
     () => ({
       blobs: state.blobs,
@@ -713,6 +819,7 @@ export function ChatView({
       onRespondPermission: (requestId, optionId) =>
         void store.respondPermission(requestId, optionId),
       onAddToPlan: addToPlan,
+      planBuild,
       agentName:
         agents?.find((entry) => entry.id === state.chat?.agent_id)?.name ?? state.chat?.agent_name,
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
@@ -749,6 +856,7 @@ export function ChatView({
       missingTree,
       reviewRecreate,
       addToPlan,
+      planBuild,
       agents,
       state.chat?.agent_id,
       state.chat?.agent_name,
@@ -820,7 +928,7 @@ export function ChatView({
         autonomySaving={state.autonomySaving}
         controlSaving={state.controlSaving}
         transitionBlocked={state.queue.length > 0 || pendingRequests.length > 0}
-        onSetControl={transport.setControl ? (change) => void store.setControl(change) : undefined}
+        onSetControl={transport.setControl ? (change) => void setControl(change) : undefined}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
         account={
@@ -861,6 +969,7 @@ export function ChatView({
       state.queue.length,
       pendingRequests.length,
       store,
+      setControl,
     ],
   );
 
@@ -1106,6 +1215,26 @@ export function ChatView({
                     </TaskLinkContext.Provider>
                   )}
                   <div className="chat-dock">
+                    {handover ? (
+                      <p
+                        className="conversation-notice"
+                        role={handover.error ? "alert" : "status"}
+                        data-testid="plan-handover"
+                      >
+                        {handover.error
+                          ? `The plan was not handed to ${handover.label}: ${handover.error}`
+                          : `Handing the plan to ${handover.label}…`}
+                        {handover.error ? (
+                          <button
+                            type="button"
+                            className="g-button g-button-ghost g-button-24"
+                            onClick={() => setHandover(null)}
+                          >
+                            Dismiss
+                          </button>
+                        ) : null}
+                      </p>
+                    ) : null}
                     {fileNote ? (
                       <p
                         className="conversation-notice"
@@ -1287,6 +1416,7 @@ export function ChatView({
                                   }
                                   agentName={agent?.name ?? state.chat?.agent_name}
                                   onAddToPlan={addToPlan}
+                                  planBuild={planBuild}
                                   blobs={state.blobs}
                                   onLoadBlob={(sha256) => void store.loadBlob(sha256)}
                                 />

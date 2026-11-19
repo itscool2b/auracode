@@ -98,6 +98,11 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       return { ...preferences, general: { ...general, automatic_updates: action.enabled } };
     case "coordinated_projects":
       return { ...preferences, general: { ...general, coordinated_projects: action.enabled } };
+    case "role_model":
+      return {
+        ...preferences,
+        general: { ...general, roles: { ...general.roles, [action.role]: action.choice } },
+      };
     default:
       return preferences;
   }

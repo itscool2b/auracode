@@ -46,6 +46,7 @@ describe("Settings' General defaults", () => {
       browser_passwords: true,
       automatic_updates: true,
       coordinated_projects: false,
+      roles: { plan: null, build: null, coordinator: null, worker: null },
     });
   });
 
