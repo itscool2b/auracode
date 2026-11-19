@@ -52,13 +52,13 @@ export function Page({
 }
 
 /**
- * The app as an object: the auracode logo on a disc of the page's ink, the mark the home page sets
- * into its headline. Decorative; the page around it names the app.
+ * The app as an object: the auracode logo on a disc of the page's ink. Decorative; the page around
+ * it names the app.
  */
 export function AppTile({ small = false }: { small?: boolean }) {
   return (
     <span className={small ? "app-tile app-tile-small" : "app-tile"}>
-      <Logo size={small ? 36 : 56} />
+      <Logo size={small ? 44 : 68} />
     </span>
   );
 }

@@ -9,6 +9,7 @@ checks the format.
 
 ## 2026-11-19
 
+- auracode has a new logo: a flying wing with two eyes. It is on the app, its icons, the taskbar and the website. The website also moves now: the wing flies into the headline, blinks and looks toward your pointer, and cards rise into place as you scroll. The app window pictured on the site is a softer grey that stands off the black page. ([#145](https://github.com/itscool2b/auracode/pull/145))
 - auracode is getting ready to open its code. The code is now under the MIT license, with a guide for people who want to help and a private way to report security problems. The download page can now list installers for Windows, macOS and Linux with their checksums, and it says plainly when a build is unsigned. ([#144](https://github.com/itscool2b/auracode/pull/144))
 
 ## 2026-11-18

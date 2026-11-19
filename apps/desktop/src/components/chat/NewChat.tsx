@@ -555,7 +555,7 @@ export function NewChat({
       }}
     >
       <header className="new-chat-hero">
-        <Logo className="new-chat-logo" size={28} />
+        <Logo className="new-chat-logo" size={56} />
         <h1 className="new-chat-title">New chat</h1>
         <p className="new-chat-hint">
           {draft.context

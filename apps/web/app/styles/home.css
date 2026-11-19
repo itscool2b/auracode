@@ -28,7 +28,8 @@
 
 /*
  * The name with its mark set into the line, as dot.com sets its own: 60 on 60, medium, a hair
- * tight. The mark is a disc of the page's ink, a little smaller than the type, sitting on the line.
+ * tight. The mark is the wing itself in the page's ink, one and a half times as wide as the type is
+ * tall, centred on the lowercase letters.
  */
 .hero-title {
   color: var(--s-ink);
@@ -47,23 +48,92 @@
   animation-delay: calc(var(--w, 0) * 70ms);
 }
 
-.hero-mark {
-  position: relative;
-  width: 0.92em;
-  height: 0.92em;
-  margin: 0 -0.04em;
-  border-radius: 50%;
-  background-color: var(--s-primary);
-  color: var(--s-on-primary);
-  vertical-align: -0.1em;
+/*
+ * The wing flies up into the line from below, nose first, banked and large as if it were close,
+ * and levels out; then it hovers there. It turns a little toward the pointer (Wing.tsx).
+ */
+.hero-wing {
+  display: inline-block;
+  width: 1.5em;
+  margin: 0 0.04em;
+  color: var(--s-ink);
+  vertical-align: middle;
+  animation: wing-arrive 1300ms var(--s-expo) 140ms both;
 }
 
-.hero-mark svg {
-  position: absolute;
-  inset: 0;
-  width: 0.56em;
-  height: 0.56em;
-  margin: auto;
+.hero-wing-float {
+  display: block;
+  animation: wing-hover 5200ms ease-in-out 1500ms infinite;
+}
+
+.hero-wing .wing {
+  rotate: calc(var(--look-x, 0) * 5deg);
+}
+
+@keyframes wing-arrive {
+  from {
+    opacity: 0;
+    transform: translate(-22vw, 52vh) rotate(26deg) scale(2.2);
+  }
+
+  35% {
+    opacity: 1;
+  }
+}
+
+@keyframes wing-hover {
+  50% {
+    transform: translateY(-0.05em);
+  }
+}
+
+/* ---------------------------------------------------------------------------------- wing */
+
+/* The logo, alive (Wing.tsx): one shape in the current colour whose eyes blink and look around. */
+.wing {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.wing-body {
+  fill: currentColor;
+}
+
+.wing-look {
+  transform: translate(calc(var(--look-x, 0) * 14px), calc(var(--look-y, 0) * 8px));
+}
+
+.wing-eye {
+  transform-box: fill-box;
+  transform-origin: 50% 70%;
+  animation: wing-blink 5600ms ease-in-out 2400ms infinite;
+}
+
+/* Two quick blinks, then a long look. */
+@keyframes wing-blink {
+  0%,
+  3%,
+  6%,
+  9%,
+  100% {
+    transform: none;
+  }
+
+  1.5%,
+  7.5% {
+    transform: scaleY(0.08);
+  }
+}
+
+/* In line: the outline and the eyes stroked in one hairline, whatever size the wing is drawn. */
+.wing-line :is(.wing-body, .wing-eye) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 /* The lines and the pills settle down out of a blur, then the window follows. */
@@ -184,6 +254,73 @@
   white-space: nowrap;
 }
 
+/*
+ * The agents arrive one after another when the row scrolls in, each rising with a small overshoot
+ * as dot.com's bots land. Only once scripts are in (html.js), so the row is whole without them.
+ */
+html.js .statement-roster[data-reveal] .statement-agent {
+  transition:
+    opacity 500ms var(--s-swift),
+    transform 900ms cubic-bezier(0.2, 1.4, 0.4, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
+html.js .statement-roster[data-reveal]:not([data-revealed]) .statement-agent {
+  opacity: 0;
+  transform: translateY(22px) scale(0.86) rotate(-4deg);
+}
+
+/*
+ * A faint wing crosses behind the statement as the page moves past it, nose first, the way
+ * dot.com's dim mascot drifts by its own. It exists only where the browser can tie an animation to
+ * scrolling, and only when motion is welcome; everywhere else it is not drawn at all.
+ */
+.flyby {
+  display: none;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .statement {
+      position: relative;
+    }
+
+    .statement > .wrap {
+      position: relative;
+      z-index: 1;
+    }
+
+    .flyby {
+      display: block;
+      position: absolute;
+      top: 50%;
+      left: 0;
+      z-index: 0;
+      width: clamp(150px, 20vw, 280px);
+      color: var(--s-art);
+      pointer-events: none;
+      animation: flyby linear both;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+
+    .flyby .wing-eye {
+      animation: none;
+    }
+  }
+}
+
+/* Up and to the right across the section, pointing where it goes. */
+@keyframes flyby {
+  from {
+    transform: translate(-30vw, 320px) rotate(62deg);
+  }
+
+  to {
+    transform: translate(115vw, -360px) rotate(62deg);
+  }
+}
+
 /* ---------------------------------------------------------------------------------- film */
 
 /* The real app in one large rounded frame across the column, where dot.com sets its film. */
@@ -195,7 +332,7 @@
   overflow: hidden;
   border-radius: var(--s-radius);
   background-color: var(--s-card);
-  box-shadow: 0 0 0 1px rgb(var(--s-k) / 0.1);
+  box-shadow: 0 0 0 1px var(--m-frame);
 }
 
 .showcase-frame img {
@@ -829,45 +966,88 @@ html.js .work-card[data-reveal]:not([data-revealed]) .tm-line {
 }
 
 /*
- * The hero's mark, the logo on its disc, drawn very large in one hairline: the disc's top half
- * across the column with the logo inside it, fading into the footer, where dot.com draws its bot.
+ * The wing drawn very large in one hairline across the column, fading into the footer, where
+ * dot.com draws its bot. When the section arrives the line draws itself; without scripts it is
+ * simply there.
  */
 .finale-art {
-  height: 495px;
   margin-top: 80px;
+  padding: 0 1px 8px;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(#000 62%, transparent);
-  mask-image: linear-gradient(#000 62%, transparent);
+  color: var(--s-art);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
+  mask-image: linear-gradient(#000 55%, transparent);
 }
 
-.finale-disc {
-  position: relative;
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--s-art);
+/* A dash longer than the whole outline, whether the browser measures it on the page or in the art. */
+.finale-wing :is(.wing-body, .wing-eye) {
+  stroke-dasharray: 3200;
+  stroke-dashoffset: 0;
 }
 
-.finale-disc svg {
-  position: absolute;
-  top: 14%;
-  left: 50%;
-  width: 34%;
-  height: auto;
-  translate: -50% 0;
-  fill: none;
-  stroke: var(--s-art);
-  stroke-width: 1px;
+html.js .finale-art[data-reveal] :is(.wing-body, .wing-eye) {
+  transition: stroke-dashoffset 2600ms var(--s-glide);
 }
 
-.finale-disc path {
-  vector-effect: non-scaling-stroke;
+html.js .finale-art[data-reveal] .wing-eye {
+  transition-delay: 1500ms;
+}
+
+html.js .finale-art[data-reveal]:not([data-revealed]) :is(.wing-body, .wing-eye) {
+  stroke-dashoffset: 3200;
 }
 
 /* --------------------------------------------------------------- reduced motion, sizes */
 
+/* ---------------------------------------------------------------------- scroll motion */
+
+/*
+ * The page's pictures and cards rise into place as they scroll in, and settle before they reach the
+ * middle of the window: 36px and 3% for a card, more for the workspace frame. Tied to the scroll
+ * itself (a view timeline), so it needs no script, runs both ways, and cannot leave anything
+ * hidden: only position and size move, never opacity, so the text stays readable throughout.
+ * Browsers without view timelines, and visitors who ask for less motion, get the page at rest.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    :is(.work-card, .more-card, .news-card, .getit-row, .faq-item, .agents-view) {
+      animation: rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+
+    .showcase-frame {
+      transform-origin: 50% 0;
+      animation: frame-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 34%;
+    }
+  }
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(36px) scale(0.97);
+  }
+}
+
+@keyframes frame-rise {
+  from {
+    transform: translateY(56px) scale(0.92);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hero-wing,
+  .hero-wing-float,
+  .wing-eye {
+    animation: none;
+  }
+
+  .wing-look {
+    transform: none;
+  }
+
   .hero-word,
   .hero-lead,
   .hero-actions,

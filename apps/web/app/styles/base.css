@@ -49,25 +49,36 @@
    * The illustrated app, in the desktop's flat look (owner, 17 November 2026: the Grok Bot app's
    * solid layers and one ink): the window, the panes a step off it, what floats over a pane, and
    * one ink at set strengths. No glass and no glow.
+   *
+   * In dark its greys are dot.com's own window, measured on 18 November 2026 (owner: "the black
+   * doesnt look like the one on dot.com"): a charcoal window (its shell, rgb(28 28 26) at 62% over
+   * the page) and a clearly lighter pane (rgb(38 38 38) at 84% over that), with no line around
+   * either. The window was near black before, which read as a hole in a near-black page.
    */
   --m-k: 245 245 245;
   --m-ink: #f5f5f5;
   --m-on-ink: #161616;
-  --m-window: #0e0e0e;
-  --m-surface: #161616;
-  --m-raised: #1f1f1f;
+  --m-window: #151514;
+  --m-surface: #232323;
+  --m-raised: #2c2c2c;
   --m-code: #1b1b1b;
-  --m-line: #2c2c2c;
+  --m-line: #333333;
   --m-rim: rgb(245 245 245 / 0.08);
   --m-rim-strong: rgb(245 245 245 / 0.14);
-  --m-ring: rgb(255 255 255 / 0.04);
+  --m-ring: rgb(255 255 255 / 0);
+  /* The quiet grey of the app's text, a step up from the desktop's so it holds 4.5:1 on a field
+     over the lighter pane. */
+  --m-fg-3: #a6a6a6;
+  /* The line around the window and the workspace frame: none in dark, as dot.com's has none. */
+  --m-frame: rgb(255 255 255 / 0);
   --m-fill: rgb(245 245 245 / 0.06);
   --m-fill-hover: rgb(245 245 245 / 0.1);
   --m-card: rgb(245 245 245 / 0.04);
   --m-selected: rgb(245 245 245 / 0.08);
   /* The sent message: the ink a step toward the pane, with the ink on it. */
-  --m-paper: #3a3a3a;
-  --m-paper-ink: #f5f5f5;
+  /* dot.com sets the sent message on an off-white bubble in dark too. */
+  --m-paper: #ecece8;
+  --m-paper-ink: #0a0a0a;
   --m-float: 0 1px 2px rgb(0 0 0 / 0.3);
   --m-pop: 0 0 0 1px rgb(255 255 255 / 0.07), 0 16px 40px -12px rgb(0 0 0 / 0.55);
   --m-green: #3dd68c;
@@ -122,6 +133,8 @@
   --m-rim: rgb(28 28 28 / 0.08);
   --m-rim-strong: rgb(28 28 28 / 0.14);
   --m-ring: rgb(28 28 28 / 0.06);
+  --m-frame: rgb(10 10 10 / 0.1);
+  --m-fg-3: #676767;
   --m-fill: rgb(28 28 28 / 0.05);
   --m-fill-hover: rgb(28 28 28 / 0.08);
   --m-card: rgb(28 28 28 / 0.035);
@@ -172,6 +185,8 @@
     --m-rim: rgb(28 28 28 / 0.08);
     --m-rim-strong: rgb(28 28 28 / 0.14);
     --m-ring: rgb(28 28 28 / 0.06);
+    --m-frame: rgb(10 10 10 / 0.1);
+    --m-fg-3: #676767;
     --m-fill: rgb(28 28 28 / 0.05);
     --m-fill-hover: rgb(28 28 28 / 0.08);
     --m-card: rgb(28 28 28 / 0.035);
@@ -226,7 +241,9 @@
 
 /* ------------------------------------------------------------------------------- document */
 
+/* The root carries the page's colour too, so an overscroll shows the page and not Graphite's. */
 html {
+  background-color: var(--s-bg);
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--s-nav-h) + 24px);
   -webkit-tap-highlight-color: transparent;
@@ -539,6 +556,7 @@ svg {
  */
 
 /* Offscreen zones, and the whole page in a hidden tab, hold their ambient loops (enhance.tsx). */
-:is([data-off], [data-hidden]) :is(.m-loader rect, .m-caret, .m-shimmer, .m-steer, .tm-cursor) {
+:is([data-off], [data-hidden])
+  :is(.m-loader rect, .m-caret, .m-shimmer, .m-steer, .tm-cursor, .wing-eye, .hero-wing-float) {
   animation-play-state: paused;
 }

@@ -1,6 +1,6 @@
 // Regenerates every desktop icon from the logo geometry in @auracode/ui (logoPaths.ts):
 //   app-icon.svg          macOS and PNG source: the macOS grid, an 824px body inset 100px
-//   app-icon-windows.svg  icon.ico source: a full-bleed tile, small-variant logo, legible at 16px
+//   app-icon-windows.svg  icon.ico source: a full-bleed tile, small-variant logo (larger eyes)
 //   tray.png              Windows notification area, 32px tile
 //   tray-template.png     macOS menu bar template image, 36px black logo on transparency
 // then rasterises them through the Tauri CLI. Run with: pnpm --filter @auracode/desktop icons
@@ -19,7 +19,7 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const icons = join(app, "src-tauri", "icons");
 const [vw, vh] = LOGO_VIEWBOX;
 
-/** The logo scaled to `size` px tall-or-wide and centred on (cx, cy). */
+/** The logo scaled to `size` px wide (it is far wider than tall) and centred on (cx, cy). */
 function logo(d, size, cx, cy, fill) {
   const scale = size / Math.max(vw, vh);
   const x = cx - (vw * scale) / 2;
@@ -37,17 +37,17 @@ const sources = {
     [
       `  <rect x="100" y="100" width="824" height="824" rx="185" fill="#000000"/>`,
       `  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#2e2e2e" stroke-width="4"/>`,
-      `  ${logo(LOGO_PATH, 560, 512, 512, "#ededed")}`,
+      `  ${logo(LOGO_PATH, 640, 512, 512, "#ededed")}`,
     ].join("\n"),
-    "The macOS app icon: the seal and turtle in fg-1 on a black tile that follows the macOS grid (an 824px body inset 100px, radius 185), so the system shadow has room.",
+    "The macOS app icon: the wing in fg-1 on a black tile that follows the macOS grid (an 824px body inset 100px, radius 185), so the system shadow has room.",
   ),
   "app-icon-windows.svg": svg(
     [
       `  <rect width="1024" height="1024" rx="192" fill="#000000"/>`,
       `  <rect x="3" y="3" width="1018" height="1018" rx="189" fill="none" stroke="#2e2e2e" stroke-width="6"/>`,
-      `  ${logo(LOGO_SMALL_PATH, 800, 512, 512, "#ededed")}`,
+      `  ${logo(LOGO_SMALL_PATH, 820, 512, 512, "#ededed")}`,
     ].join("\n"),
-    "The Windows icon (icon.ico): the small-variant logo on a full-bleed black tile, so the 16, 24 and 32px frames keep the gaps between the animals open.",
+    "The Windows icon (icon.ico): the small-variant logo on a full-bleed black tile, so the eyes stay open in the 16, 24 and 32px frames.",
   ),
 };
 
@@ -56,12 +56,12 @@ const trays = {
   "tray-windows.svg": svg(
     [
       `  <rect width="1024" height="1024" rx="192" fill="#000000"/>`,
-      `  ${logo(LOGO_SMALL_PATH, 840, 512, 512, "#ededed")}`,
+      `  ${logo(LOGO_SMALL_PATH, 880, 512, 512, "#ededed")}`,
     ].join("\n"),
     "Windows tray icon source.",
   ),
   "tray-macos.svg": svg(
-    `  ${logo(LOGO_SMALL_PATH, 960, 512, 512, "#000000")}`,
+    `  ${logo(LOGO_SMALL_PATH, 1000, 512, 512, "#000000")}`,
     "macOS menu bar template source; only alpha is used.",
   ),
 };

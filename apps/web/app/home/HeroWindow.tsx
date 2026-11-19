@@ -345,7 +345,7 @@ export function HeroWindow({ state }: { state: HandoffState }) {
             parser
           </p>
           <div className="m-foot">
-            <Logo size={20} />
+            <Logo size={28} />
             <span className="m-icon-button">
               <Icon name="settings" />
             </span>
