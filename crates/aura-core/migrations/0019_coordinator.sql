@@ -65,13 +65,15 @@ CREATE TABLE coordinator_file_revisions (
  created_at INTEGER NOT NULL
 );
 CREATE INDEX coordinator_file_history ON coordinator_file_revisions(project_id,path,created_at);
--- Only ever added to.
+-- Only ever added to. The person can retract an entry: it stays in the log, struck out, and
+-- agents are no longer shown it.
 CREATE TABLE coordinator_decisions (
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  number INTEGER NOT NULL,
  text TEXT NOT NULL,
  source TEXT NOT NULL,
  created_at INTEGER NOT NULL,
+ retracted_at INTEGER,
  PRIMARY KEY(project_id,number)
 );
 CREATE TABLE coordinator_routines (

@@ -119,12 +119,15 @@ pub struct ContextRevision {
     pub created_at: i64,
 }
 
-/// One entry of the decision log. Entries are only ever added.
+/// One entry of the decision log. Entries are only ever added, by the person or the coordinator;
+/// `source` says which, and agents are shown the two apart.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CoordinatorDecision {
     pub number: u32,
     pub text: String,
     pub source: String,
+    /// The person took it back: it stays in the log, and agents are no longer shown it.
+    pub retracted: bool,
     #[specta(type = specta_typescript::Number)]
     pub created_at: i64,
 }
@@ -235,6 +238,10 @@ pub enum CoordinatorAction {
     },
     DecisionAdd {
         text: String,
+    },
+    /// Takes a decision back. Only the person can.
+    DecisionRetract {
+        number: u32,
     },
     RoutineSave {
         id: Option<String>,

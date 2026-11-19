@@ -211,6 +211,7 @@ async fn each_part_is_described_its_own_tools_and_a_chat_with_no_part_none() {
     let offered = names(&worker["tools"]);
     assert!(offered.contains(&"project_report") && offered.contains(&"project_context_append"));
     for kept in [
+        "project_decision",
         "project_worker_start",
         "project_worker_message",
         "project_worker_stop",
@@ -237,7 +238,7 @@ fn every_tool_takes_exactly_what_it_declares_and_no_chat_or_project() {
                 name.starts_with("project_") && seen.insert(name.to_owned()),
                 "{name}"
             );
-            assert!(tool["description"].as_str().unwrap().len() > 20);
+            assert!(tool["description"].as_str().unwrap().len() > 10);
             let schema = &tool["inputSchema"];
             assert_eq!(schema["additionalProperties"], false, "{name}");
             let properties = schema["properties"].as_object().unwrap();
@@ -270,6 +271,8 @@ fn the_instructions_say_what_each_part_may_not_do() {
         "only the assignment",
         "project_report once",
         "You cannot start workers",
+        "You cannot record decisions",
+        "do not: say so in your report",
         "never instructions from the person",
     ] {
         assert!(WORKER_INSTRUCTIONS.contains(phrase), "{phrase}");

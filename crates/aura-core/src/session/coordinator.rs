@@ -15,13 +15,13 @@
 //!   hour than [`limits::EVENTS_PER_HOUR`], so two agents answering each other stop.
 //! - None of this is offered to remote devices or bots: they see these chats as the chats they
 //!   are, and no more.
+use super::workspace::bounded;
 use super::*;
 use crate::chatstore::coordinator::{Actor, Command, Delivery, Reply};
 use crate::coordinator_service::{
     Bridge, BridgeFuture, COORDINATOR_INSTRUCTIONS, NO_PART, TURNED_OFF, ToolReply,
     WORKER_INSTRUCTIONS,
 };
-use super::workspace::bounded;
 use aura_protocol::AuraEvent;
 use aura_protocol::coordinator::*;
 use aura_protocol::git::{WorktreeChatInput, WorktreeChatPreview};
@@ -64,7 +64,7 @@ pub(crate) struct Coordination {
 }
 
 impl Coordination {
-    pub(crate) fn bind(&self, manager: Weak<Inner>) {
+    pub(super) fn bind(&self, manager: Weak<Inner>) {
         let _ = self.manager.set(manager);
     }
 
@@ -594,12 +594,6 @@ impl SessionManager {
                 })
                 .await
             }
-            "project_decision" => {
-                apply(CoordinatorAction::DecisionAdd {
-                    text: text_arg(arguments, "text")?,
-                })
-                .await
-            }
             "project_task_update" => {
                 apply(CoordinatorAction::TaskSave {
                     number: Some(task_arg(&arguments["task"])?),
@@ -621,6 +615,9 @@ impl SessionManager {
             "project_report" => Err(
                 "You are the coordinator: you report to the person in this chat, in your own words.".into(),
             ),
+            "project_decision" if !coordinator => Err(
+                "Only the coordinator and the person record decisions. Say what you chose and why in your report.".into(),
+            ),
             "project_task_create"
             | "project_worker_start"
             | "project_worker_message"
@@ -631,6 +628,12 @@ impl SessionManager {
                 if !coordinator =>
             {
                 Err("Only the project's coordinator has that tool. Say what you need in your report.".into())
+            }
+            "project_decision" => {
+                apply(CoordinatorAction::DecisionAdd {
+                    text: text_arg(arguments, "text")?,
+                })
+                .await
             }
             "project_task_create" => {
                 apply(CoordinatorAction::TaskSave {
