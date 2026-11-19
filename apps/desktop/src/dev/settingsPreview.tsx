@@ -154,6 +154,8 @@ const general: GeneralApi = {
 let status: UpdateStatus = {
   channel: new URLSearchParams(location.search).has("staging") ? "staging" : "stable",
   phase: new URLSearchParams(location.search).has("unsigned") ? "disabled" : "idle",
+  current_version: "0.1.1570",
+  automatic: true,
   version: null,
   notes: null,
   downloaded_bytes: 0,

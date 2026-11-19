@@ -88,7 +88,9 @@ fn source() -> Option<Source> {
 
 fn test_source(manifest: Option<String>, key: Option<String>) -> Option<Source> {
     let manifest = manifest?;
-    let key = key.map(|key| key.trim().to_owned()).filter(|key| !key.is_empty())?;
+    let key = key
+        .map(|key| key.trim().to_owned())
+        .filter(|key| !key.is_empty())?;
     let url: reqwest::Url = manifest.parse().ok()?;
     loopback(&url).then(|| Source {
         manifest: url.into(),
@@ -497,7 +499,9 @@ fn client(timeout: Duration, test: bool) -> Result<reqwest::Client, UpdateError>
 /// with no credentials in the address. Its query is GitHub's own short-lived signature.
 fn asset_host(url: &reqwest::Url) -> bool {
     url.scheme() == "https"
-        && url.host_str().is_some_and(|host| ASSET_HOSTS.contains(&host))
+        && url
+            .host_str()
+            .is_some_and(|host| ASSET_HOSTS.contains(&host))
         && url.port().is_none()
         && url.username().is_empty()
         && url.password().is_none()
@@ -794,7 +798,9 @@ async fn rehearse(app: &tauri::AppHandle, updates: &Updates) -> UpdateStatus {
     if !verified {
         updates.phase(
             UpdatePhase::Failed,
-            Some("The update signature or signed version is invalid. Nothing was installed.".into()),
+            Some(
+                "The update signature or signed version is invalid. Nothing was installed.".into(),
+            ),
         );
         return updates.report(app);
     }
@@ -994,17 +1000,26 @@ mod tests {
             "http://evil.example:8123/latest.json",
             "not a url",
         ] {
-            assert_eq!(test_source(Some(manifest.into()), key.clone()), None, "{manifest}");
+            assert_eq!(
+                test_source(Some(manifest.into()), key.clone()),
+                None,
+                "{manifest}"
+            );
         }
         // Its packages come from the same port and nowhere else.
-        assert!(validate_test_url(&"http://127.0.0.1:8123/app.exe".parse().unwrap(), &source).is_ok());
+        assert!(
+            validate_test_url(&"http://127.0.0.1:8123/app.exe".parse().unwrap(), &source).is_ok()
+        );
         for url in [
             "http://127.0.0.1:9000/app.exe",
             "https://github.com/itscool2b/auracode/releases/download/v9.9.9/app.exe",
             "http://127.0.0.1:8123/app.exe?x=1",
             "http://evil.example:8123/app.exe",
         ] {
-            assert!(validate_test_url(&url.parse().unwrap(), &source).is_err(), "{url}");
+            assert!(
+                validate_test_url(&url.parse().unwrap(), &source).is_err(),
+                "{url}"
+            );
         }
         // And a released build's source never accepts a loopback package.
         assert!(
@@ -1013,7 +1028,11 @@ mod tests {
     }
     #[test]
     fn an_automatic_check_never_runs_over_a_download_or_an_installation() {
-        for phase in [UpdatePhase::Idle, UpdatePhase::Available, UpdatePhase::Failed] {
+        for phase in [
+            UpdatePhase::Idle,
+            UpdatePhase::Available,
+            UpdatePhase::Failed,
+        ] {
             assert!(may_check_quietly(phase), "{phase:?}");
         }
         for phase in [
@@ -1039,7 +1058,10 @@ mod tests {
             Some("a test public key".into()),
         ));
         assert_eq!(some.snapshot().phase, UpdatePhase::Idle);
-        assert!(some.snapshot().automatic, "on until Settings says otherwise");
+        assert!(
+            some.snapshot().automatic,
+            "on until Settings says otherwise"
+        );
         some.set_automatic(false);
         assert!(!some.snapshot().automatic);
     }

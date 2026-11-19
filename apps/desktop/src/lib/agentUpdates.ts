@@ -43,6 +43,11 @@ const WORKING: ReadonlySet<SessionStatus> = new Set([
   "stopping",
 ]);
 
+/** How many chats have a turn under way, on any agent: what an app restart would stop. */
+export function chatsWorking(chats: readonly ChatSummary[] | null): number {
+  return (chats ?? []).filter((chat) => WORKING.has(chat.status)).length;
+}
+
 /**
  * How many chats on this agent have a turn under way. Replacing an agent's files under a running
  * turn can fail (Windows holds a running program's files) or break the turn, so an update waits.

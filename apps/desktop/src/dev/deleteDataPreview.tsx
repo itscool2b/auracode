@@ -164,6 +164,8 @@ const general: GeneralApi = {
 const status: UpdateStatus = {
   channel: "stable",
   phase: "idle",
+  current_version: "0.1.1570",
+  automatic: true,
   version: null,
   notes: null,
   downloaded_bytes: 0,

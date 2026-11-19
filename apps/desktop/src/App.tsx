@@ -28,6 +28,7 @@ import { runChatSmoke } from "./lib/smokeChat";
 import { setNoticeSoundsAvailable, subscribeNoticeSounds } from "./lib/sounds";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
+import { updatesApi } from "./lib/updates";
 import type { WorkspaceStore } from "./lib/workspace";
 
 type Boot =
@@ -329,6 +330,7 @@ export function App({
         <div hidden={view !== "chats"} className="app-view">
           <ChatsScreen
             active={view === "chats"}
+            updates={updatesApi}
             workspace={workspace}
             openChatRequest={openChatRequest}
             newChatRequest={newChatRequest}

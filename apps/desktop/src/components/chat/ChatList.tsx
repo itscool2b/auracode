@@ -231,6 +231,7 @@ export function ChatList({
           type="button"
           className="chat-nav-action"
           data-field=""
+          aria-label="Search"
           aria-keyshortcuts="Control+K Meta+K"
           onClick={() => (onSearch ? onSearch() : setSearching((value) => !value))}
           aria-expanded={onSearch ? undefined : searching}
@@ -243,6 +244,7 @@ export function ChatList({
           type="button"
           className="chat-nav-action"
           data-testid="new-chat-button"
+          aria-label="New chat"
           aria-keyshortcuts="Control+N Meta+N"
           onClick={onNewChat}
         >
@@ -256,6 +258,7 @@ export function ChatList({
             className="chat-nav-action"
             onClick={onCustomize}
             data-testid="customize-button"
+            aria-label="Customize"
           >
             <SlidersHorizontal size={16} />
             <span>Customize</span>

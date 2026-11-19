@@ -92,8 +92,17 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
               <>
                 Version <span className="settings-mono">{status.version}</span>
               </>
+            ) : status?.phase === "disabled" ? (
+              "This copy does not update itself."
+            ) : status?.current_version ? (
+              <>
+                You have <span className="settings-mono">{status.current_version}</span>.{" "}
+                {status.automatic
+                  ? "auracode looks for a newer version a few times a day."
+                  : "auracode looks for a newer version only when you ask."}
+              </>
             ) : (
-              "Updates are checked only when you ask."
+              "auracode looks for a newer version a few times a day."
             )}
           </p>
         </div>
