@@ -1,7 +1,8 @@
-import { BookOpen, ChevronRight, History, Pencil } from "lucide-react";
+import { BookOpen, ChevronRight, History, Pencil, Workflow } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import type { ChatImageContext } from "../../bindings";
 import type { MemoryContext } from "../../lib/chat/memoryContext";
+import { type ProjectEvent, projectEvent } from "../../lib/chat/projectEvent";
 import { steeringState, type UserItem } from "../../lib/chat/transcript";
 import { MessageImages } from "./ChatImages";
 import { CopyAction } from "./CopyAction";
@@ -22,6 +23,7 @@ export function UserMessage({
   readonly images?: ChatImageContext;
 }) {
   const delivery = steeringState(item, settled);
+  const event = projectEvent(item.text);
   const [expanded, setExpanded] = useDisclosure(item.key, "prompt", false);
   const [long, setLong] = useState(() => item.text.split("\n").length > 12);
   const measure = useCallback((node: HTMLDivElement | null) => {
@@ -32,6 +34,13 @@ export function UserMessage({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  if (event)
+    return (
+      <div className="chat-user-wrap" data-testid="item" data-test-kind="project-event">
+        <SentEvent itemKey={item.key} event={event} />
+        {item.memory ? <AttachedMemory itemKey={item.key} memory={item.memory} /> : null}
+      </div>
+    );
   return (
     <div className="chat-user-wrap" data-testid="item" data-test-kind="user">
       {/* The block and its actions keep to the words' width when memory opens wider below. */}
@@ -95,6 +104,40 @@ export function UserMessage({
           </span>
           {item.steering?.detail ? <span>{item.steering.detail}</span> : null}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A prompt auracode sent for the chat's coordinated project (a worker's report, an assignment, a
+ * routine): one quiet line naming it, which opens what the agent was sent. The person did not
+ * write it, so it is no bubble and offers no edit or rewind.
+ */
+function SentEvent({ itemKey, event }: { readonly itemKey: string; readonly event: ProjectEvent }) {
+  const [open, setOpen] = useDisclosure(itemKey, "project-event", false);
+  const body = useId();
+  return (
+    <div className="chat-project-event" data-testid="project-event">
+      <button
+        type="button"
+        className="chat-project-event-toggle"
+        aria-expanded={event.body ? open : undefined}
+        aria-controls={event.body ? body : undefined}
+        title="Sent to the agent by auracode for this project"
+        onClick={() => setOpen(!open)}
+      >
+        <Workflow size={14} aria-hidden="true" />
+        <span>{event.title}</span>
+        {event.body ? (
+          <ChevronRight className="chat-disclosure" size={12} aria-hidden="true" />
+        ) : null}
+      </button>
+      {open && event.body ? (
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a long event scrolls by keyboard.
+        <pre className="chat-project-event-body" id={body} tabIndex={0}>
+          {event.body}
+        </pre>
       ) : null}
     </div>
   );

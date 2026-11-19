@@ -1643,7 +1643,9 @@ export type CoordinatorAction = { type: "pause"; paused: boolean } | { type: "br
 /**  Adds text to a file's end, creating it if needed. Never loses what another writer added. */
 { type: "file_append"; path: string; text: string } | { type: "file_delete"; path: string; expected_revision: string } | 
 /**  Puts back an earlier revision's text as a new revision. */
-{ type: "file_restore"; path: string; revision: string } | { type: "decision_add"; text: string } | { type: "routine_save"; id: string | null; title: string; prompt: string; every_minutes: number; enabled: boolean } | { type: "routine_delete"; id: string } | 
+{ type: "file_restore"; path: string; revision: string } | { type: "decision_add"; text: string } | 
+/**  Takes a decision back. Only the person can. */
+{ type: "decision_retract"; number: number } | { type: "routine_save"; id: string | null; title: string; prompt: string; every_minutes: number; enabled: boolean } | { type: "routine_delete"; id: string } | 
 /**  Dismisses a worker from the list. Its chat stays. */
 { type: "worker_close"; chat_id: string };
 
@@ -1652,11 +1654,16 @@ export type CoordinatorChanged = {
 	project_id: string,
 };
 
-/**  One entry of the decision log. Entries are only ever added. */
+/**
+ *  One entry of the decision log. Entries are only ever added, by the person or the coordinator;
+ *  `source` says which, and agents are shown the two apart.
+ */
 export type CoordinatorDecision = {
 	number: number,
 	text: string,
 	source: string,
+	/**  The person took it back: it stays in the log, and agents are no longer shown it. */
+	retracted: boolean,
 	created_at: number,
 };
 

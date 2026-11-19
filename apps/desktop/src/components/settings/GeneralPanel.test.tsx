@@ -45,6 +45,7 @@ describe("Settings' General defaults", () => {
       browser: true,
       browser_passwords: true,
       automatic_updates: true,
+      coordinated_projects: false,
     });
   });
 

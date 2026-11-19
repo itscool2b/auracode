@@ -12,6 +12,7 @@ const PAGES = [
   "Browser",
   "Instructions",
   "Project memory",
+  "Experiments",
   "Remote access",
   "Data & privacy",
   "About",

@@ -128,7 +128,10 @@ export interface ProjectCoordination {
  * A project's coordination as its page follows it: read when the page opens, again after every
  * committed change to this project (an agent's included), and when the window regains focus.
  */
-export function useProjectCoordination(api: CoordinatorApi, projectId: string): ProjectCoordination {
+export function useProjectCoordination(
+  api: CoordinatorApi,
+  projectId: string,
+): ProjectCoordination {
   const [snapshot, setSnapshot] = useState<CoordinatorSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -164,24 +167,21 @@ export function useProjectCoordination(api: CoordinatorApi, projectId: string): 
     };
   }, [api, projectId, read]);
 
-  const run = useCallback(
-    async (work: () => Promise<CoordinatorSnapshot>) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const next = await work();
-        reads.current++;
-        if (alive.current) setSnapshot(next);
-        return true;
-      } catch (failure) {
-        if (alive.current) setError(errorMessage(failure));
-        return false;
-      } finally {
-        if (alive.current) setBusy(false);
-      }
-    },
-    [],
-  );
+  const run = useCallback(async (work: () => Promise<CoordinatorSnapshot>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await work();
+      reads.current++;
+      if (alive.current) setSnapshot(next);
+      return true;
+    } catch (failure) {
+      if (alive.current) setError(errorMessage(failure));
+      return false;
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  }, []);
 
   const apply = useCallback(
     (action: CoordinatorAction) => run(() => api.apply(projectId, action)),

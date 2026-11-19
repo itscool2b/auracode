@@ -1,0 +1,584 @@
+/*
+ * A coordinated project's page (docs/design/visual-language.md, Desktop composition): in the
+ * chat pane's place, with the sidebar beside it. A title and one line of state, a segmented
+ * control, then the board, the agents, the Context files, the decision log or the routines. It is
+ * built from the Dashboard's lanes and flat cards and the settings family's tile, sheet and empty
+ * well, so it wears every theme as they do. Nothing glows.
+ */
+
+.project-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.project-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--g-space-8) var(--g-space-32) var(--g-space-48);
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.project-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g-space-12) var(--g-space-16);
+  margin-bottom: var(--g-space-20);
+}
+
+.project-head-text {
+  min-width: 0;
+}
+
+.project-head h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: var(--g-weight-medium);
+  letter-spacing: var(--g-tracking-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-head p {
+  margin: var(--g-space-4) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-head p[data-paused] {
+  color: var(--g-warning);
+}
+
+.project-head-actions {
+  display: flex;
+  flex: none;
+  gap: var(--g-space-8);
+}
+
+.project-error {
+  margin: 0 0 var(--g-space-16);
+}
+
+.project-loading,
+.project-note,
+.project-lead {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.project-lead {
+  max-width: 72ch;
+  margin-bottom: var(--g-space-16);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.project-note {
+  margin-top: var(--g-space-8);
+}
+
+.project-tabs {
+  margin: 0 0 var(--g-space-20);
+}
+
+/* ------------------------------------------------------------------------------- start */
+
+.project-start {
+  max-width: 760px;
+  margin-bottom: var(--g-space-32);
+}
+
+.project-start > .settings-sheet {
+  margin-top: 0;
+}
+
+.project-brief {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.project-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  color: var(--g-fg-3);
+}
+
+.project-select {
+  width: auto;
+  min-width: 132px;
+}
+
+.project-foot-space {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------------------- board */
+
+.project-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--g-space-24);
+}
+
+@container (min-width: 620px) {
+  .project-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--g-space-16);
+    align-items: start;
+  }
+}
+
+@container (min-width: 980px) {
+  .project-board {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* A lane a task is being dragged over takes the control fill, so the drop has a place. */
+.project-lane {
+  padding: var(--g-space-8);
+  border-radius: var(--g-radius-16);
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+.project-lane[data-over] {
+  background-color: var(--g-glass-control);
+}
+
+.project-task {
+  cursor: grab;
+}
+
+.project-task-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-space-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-task-open:focus-visible {
+  outline: 2px solid var(--g-outline);
+  outline-offset: 6px;
+  border-radius: var(--g-radius-6);
+}
+
+.project-task-number {
+  flex: none;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-key);
+  line-height: var(--g-leading-key);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-task-title {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.project-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-4) var(--g-space-8);
+  margin: var(--g-space-8) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-key);
+  line-height: var(--g-leading-key);
+}
+
+.project-task-worker,
+.project-task-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-4);
+}
+
+.project-task-link {
+  color: var(--g-fg-2);
+  text-decoration: none;
+}
+
+.project-task-link:hover {
+  color: var(--g-fg-1);
+  text-decoration: underline;
+}
+
+.project-chip {
+  padding: 0 var(--g-space-6);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-glass-control);
+  color: var(--g-fg-2);
+}
+
+.project-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-12);
+}
+
+.project-task-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--g-space-12);
+}
+
+.project-task-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+
+.project-danger {
+  color: var(--g-red);
+}
+
+/* ------------------------------------------------------------- agents and routines */
+
+.project-section {
+  max-width: 980px;
+}
+
+.project-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+}
+
+.project-section-head > .g-button {
+  flex: none;
+}
+
+.project-agents,
+.project-routines,
+.project-decisions,
+.project-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-agents,
+.project-routines {
+  overflow: hidden;
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+}
+
+.project-agent,
+.project-routine {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-space-12);
+  padding: var(--g-space-16);
+}
+
+.project-agent + .project-agent,
+.project-routine + .project-routine {
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.project-agent-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--g-space-2);
+}
+
+.project-agent-text > strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.project-agent-state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-6);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-agent-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+
+.project-report {
+  margin-top: var(--g-space-6);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.project-report > summary {
+  color: var(--g-fg-3);
+  cursor: pointer;
+}
+
+.project-report > p,
+.project-routine-prompt {
+  margin: var(--g-space-6) 0 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.project-more {
+  margin-top: var(--g-space-8);
+}
+
+/* ------------------------------------------------------------------------------- context */
+
+.project-context-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--g-space-16);
+  align-items: start;
+}
+
+@container (min-width: 820px) {
+  .project-context-grid {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+}
+
+.project-files > .settings-empty {
+  margin-top: 0;
+}
+
+.project-file {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-space-8);
+  width: 100%;
+  padding: var(--g-space-8) var(--g-space-12);
+  border: 0;
+  border-radius: var(--g-radius-10);
+  background: none;
+  color: var(--g-fg-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-file > svg {
+  flex: none;
+  margin-top: var(--g-space-2);
+  color: var(--g-fg-3);
+}
+
+.project-file:hover:not(:disabled) {
+  background-color: var(--g-glass-control);
+}
+
+.project-file[aria-current="true"] {
+  background-color: var(--g-glass-control-hover);
+  color: var(--g-fg-1);
+}
+
+.project-file:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.project-file:focus-visible {
+  outline: 2px solid var(--g-outline);
+  outline-offset: -2px;
+}
+
+.project-file-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.project-file-name {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.project-file-text > small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-key);
+  line-height: var(--g-leading-key);
+}
+
+.project-new-file {
+  display: flex;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-8);
+}
+
+.project-new-file > .g-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-sheet {
+  margin-top: 0;
+}
+
+.project-file-text-area {
+  min-height: 320px;
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+  resize: vertical;
+}
+
+.project-sheet-status {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------------------- decisions */
+
+.project-decision-form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--g-space-8);
+  margin-bottom: var(--g-space-16);
+}
+
+.project-decision-form > .g-textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+}
+
+.project-decisions {
+  overflow: hidden;
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+}
+
+.project-decision {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16);
+}
+
+.project-decision + .project-decision {
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.project-decision p {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.project-decision small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-key);
+  line-height: var(--g-leading-key);
+}
+
+.project-decision[data-retracted] p {
+  color: var(--g-fg-3);
+  text-decoration: line-through;
+}
+
+/* ----------------------------------------------------- the sidebar and the transcript */
+
+/* A coordinator's or a worker's mark before its chat's title. */
+.chat-row-role {
+  display: inline-flex;
+  flex: none;
+  margin-right: var(--g-space-6);
+  color: var(--g-fg-3);
+  vertical-align: -2px;
+}
+
+/* A prompt auracode sent for the project: one quiet line that opens what was sent. */
+.chat-project-event {
+  align-self: flex-end;
+  max-width: 100%;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-project-event-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  padding: var(--g-space-4) var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chat-project-event-toggle:hover {
+  background-color: var(--g-glass-control);
+  color: var(--g-fg-2);
+}
+
+.chat-project-event-toggle:focus-visible {
+  outline: 2px solid var(--g-outline);
+  outline-offset: 1px;
+}
+
+.chat-project-event-toggle[aria-expanded="true"] > .chat-disclosure {
+  transform: rotate(90deg);
+}
+
+.chat-project-event-body {
+  margin: var(--g-space-6) 0 0;
+  padding: var(--g-space-12);
+  max-height: 320px;
+  overflow: auto;
+  border-radius: var(--g-radius-14);
+  background-color: var(--ui-card-flat);
+  color: var(--g-fg-2);
+  font-family: inherit;
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

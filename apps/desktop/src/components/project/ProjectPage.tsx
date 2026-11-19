@@ -54,17 +54,36 @@ const TABS: readonly { id: Tab; name: string }[] = [
 
 const bytesOf = (text: string) => new TextEncoder().encode(text).length;
 
+/** A link as its site: "github.com" for a pull request there. */
+function linkHost(link: string): string {
+  try {
+    return new URL(link).host || link;
+  } catch {
+    return link;
+  }
+}
+
 /** What a chat is doing, in the page's words. */
-function chatState(chat: ChatSummary | undefined): { word: string; tone: "work" | "you" | "bad" | "idle" } {
+function chatState(chat: ChatSummary | undefined): {
+  word: string;
+  tone: "work" | "you" | "bad" | "idle";
+} {
   if (!chat) return { word: "Not open", tone: "idle" };
   if (chat.needs_attention) return { word: "Needs you", tone: "you" };
   if (chat.status === "running" || chat.status === "starting" || chat.status === "cancelling")
     return { word: "Working", tone: "work" };
-  if (chat.status === "failed" || chat.status === "auth_required") return { word: "Stopped on an error", tone: "bad" };
+  if (chat.status === "failed" || chat.status === "auth_required")
+    return { word: "Stopped on an error", tone: "bad" };
   return { word: "Idle", tone: "idle" };
 }
 
-function StateMark({ tone, label }: { readonly tone: "work" | "you" | "bad" | "idle"; readonly label: string }) {
+function StateMark({
+  tone,
+  label,
+}: {
+  readonly tone: "work" | "you" | "bad" | "idle";
+  readonly label: string;
+}) {
   if (tone === "work") return <PixelLoader size={12} tempo="tool" label={label} />;
   if (tone === "you") return <StatusDot tone="volt" label={label} />;
   if (tone === "bad") return <StatusDot tone="red" label={label} />;
@@ -97,8 +116,12 @@ export function ProjectPage({
   const [tab, setTab] = useState<Tab>("board");
   const { snapshot, error } = coordination;
   const live = new Map(chats.map((chat) => [chat.id, chat]));
-  const coordinator = snapshot?.coordinator_chat_id ? live.get(snapshot.coordinator_chat_id) : undefined;
-  const working = snapshot?.workers.filter((worker) => chatState(live.get(worker.chat_id)).tone === "work").length ?? 0;
+  const coordinator = snapshot?.coordinator_chat_id
+    ? live.get(snapshot.coordinator_chat_id)
+    : undefined;
+  const working =
+    snapshot?.workers.filter((worker) => chatState(live.get(worker.chat_id)).tone === "work")
+      .length ?? 0;
   const open = snapshot?.tasks.filter((task) => task.status !== "done").length ?? 0;
   const summary = !snapshot
     ? ""
@@ -119,7 +142,11 @@ export function ProjectPage({
         <header className="project-head">
           <div className="project-head-text">
             <h1>{project.name}</h1>
-            <p role="status" data-testid="project-summary" data-paused={snapshot?.paused ? "" : undefined}>
+            <p
+              role="status"
+              data-testid="project-summary"
+              data-paused={snapshot?.paused ? "" : undefined}
+            >
               {summary}
             </p>
           </div>
@@ -188,13 +215,22 @@ export function ProjectPage({
             </fieldset>
             {tab === "board" ? <Board snapshot={snapshot} coordination={coordination} /> : null}
             {tab === "agents" ? (
-              <Agents snapshot={snapshot} coordination={coordination} live={live} onOpenChat={onOpenChat} />
+              <Agents
+                snapshot={snapshot}
+                coordination={coordination}
+                live={live}
+                onOpenChat={onOpenChat}
+              />
             ) : null}
             {tab === "context" ? (
               <Context api={api} snapshot={snapshot} coordination={coordination} />
             ) : null}
-            {tab === "decisions" ? <Decisions snapshot={snapshot} coordination={coordination} /> : null}
-            {tab === "routines" ? <Routines snapshot={snapshot} coordination={coordination} /> : null}
+            {tab === "decisions" ? (
+              <Decisions snapshot={snapshot} coordination={coordination} />
+            ) : null}
+            {tab === "routines" ? (
+              <Routines snapshot={snapshot} coordination={coordination} />
+            ) : null}
           </>
         ) : error ? null : (
           <p className="project-loading">Reading the project…</p>
@@ -214,7 +250,7 @@ function StartCoordinator({
   readonly coordination: ProjectCoordination;
 }) {
   const folders = project.folders.filter((folder) => !folder.worktree_of);
-  const ready = (agents ?? []).filter((agent) => agent.availability.type === "ready");
+  const ready = (agents ?? []).filter((agent) => agent.availability.state === "ready");
   const [brief, setBrief] = useState("");
   const [agent, setAgent] = useState(
     () => ready.find((entry) => entry.id === project.default_agent)?.id ?? ready[0]?.id ?? "",
@@ -224,11 +260,19 @@ function StartCoordinator({
   const bytes = bytesOf(brief);
   const chosen = ready.some((entry) => entry.id === agent) ? agent : (ready[0]?.id ?? "");
   return (
-    <section className="project-start" aria-label="Start the coordinator" data-testid="project-start">
+    <section
+      className="project-start"
+      aria-label="Start the coordinator"
+      data-testid="project-start"
+    >
       <div className="settings-sheet">
         <div className="settings-sheet-head">
           <strong>What is this project for?</strong>
-          <span id={size} className="settings-meter" data-over={bytes > BRIEF_BYTES ? "" : undefined}>
+          <span
+            id={size}
+            className="settings-meter"
+            data-over={bytes > BRIEF_BYTES ? "" : undefined}
+          >
             {bytes.toLocaleString()} of {BRIEF_BYTES.toLocaleString()} bytes
           </span>
         </div>
@@ -294,7 +338,9 @@ function StartCoordinator({
         </div>
       </div>
       {ready.length === 0 ? (
-        <p className="project-note">No agent is ready on this computer. Set one up in Settings &gt; Agents.</p>
+        <p className="project-note">
+          No agent is ready on this computer. Set one up in Settings &gt; Agents.
+        </p>
       ) : (
         <p className="project-note">
           The coordinator does not edit files itself. It starts worker chats, each in its own Git
@@ -419,7 +465,7 @@ function Board({
                             rel="noreferrer noopener"
                             title={task.link}
                           >
-                            <LinkIcon size={12} aria-hidden="true" /> Link
+                            <LinkIcon size={12} aria-hidden="true" /> {linkHost(task.link)}
                           </a>
                         ) : null}
                       </p>
@@ -562,7 +608,8 @@ function TaskDialog({
               className="g-button g-button-ghost project-danger"
               disabled={coordination.busy}
               onClick={async () => {
-                if (await coordination.apply({ type: "task_delete", number: task.number })) onClose();
+                if (await coordination.apply({ type: "task_delete", number: task.number }))
+                  onClose();
               }}
             >
               <Trash2 size={14} aria-hidden="true" /> Delete
@@ -717,6 +764,8 @@ function Context({
   const [naming, setNaming] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  // Counts the times the person asked for the file as it reads now, over their own edit.
+  const [reload, setReload] = useState(0);
   const size = useId();
   const listed = snapshot.files.find((entry) => entry.path === path);
   const revision = listed?.revision ?? null;
@@ -745,9 +794,10 @@ function Context({
     return () => {
       live = false;
     };
-  }, [api, snapshot.project_id, path, revision, viewing]);
+  }, [api, snapshot.project_id, path, revision, viewing, reload]);
   const bytes = bytesOf(text);
-  const stale = file !== null && viewing === null && revision !== null && file.revision !== revision;
+  const stale =
+    file !== null && viewing === null && revision !== null && file.revision !== revision;
   const create = async () => {
     const name = (naming ?? "").trim();
     if (!name) return;
@@ -776,7 +826,8 @@ function Context({
         <div className="project-files">
           {snapshot.files.length === 0 ? (
             <p className="settings-empty">
-              <strong>No Context files yet</strong>Agents add them as they learn, or add one yourself.
+              <strong>No Context files yet</strong>Agents add them as they learn, or add one
+              yourself.
             </p>
           ) : (
             <ul className="project-file-list" aria-label="Context files">
@@ -788,7 +839,9 @@ function Context({
                     aria-current={entry.path === path}
                     data-testid="project-file"
                     disabled={dirty && entry.path !== path}
-                    title={dirty && entry.path !== path ? "Save or discard your edit first" : entry.path}
+                    title={
+                      dirty && entry.path !== path ? "Save or discard your edit first" : entry.path
+                    }
                     onClick={() => {
                       setViewing(null);
                       setPath(entry.path);
@@ -836,7 +889,11 @@ function Context({
                   if (event.key === "Escape") setNaming(null);
                 }}
               />
-              <button type="submit" className="g-button g-button-28" disabled={!naming.trim() || coordination.busy}>
+              <button
+                type="submit"
+                className="g-button g-button-28"
+                disabled={!naming.trim() || coordination.busy}
+              >
                 Add
               </button>
             </form>
@@ -939,9 +996,9 @@ function Context({
                     className="g-button g-button-ghost g-button-28"
                     disabled={coordination.busy || (!dirty && !stale)}
                     onClick={() => {
-                      // Reads the current text again.
+                      // Drops the edit, then reads the file as it is now.
                       setText(file.content);
-                      setFile({ ...file, revision: "" });
+                      setReload((count) => count + 1);
                     }}
                   >
                     {stale ? "Take the newer text" : "Discard"}
@@ -989,8 +1046,9 @@ function Decisions({
   return (
     <section className="project-section" aria-label="Decisions">
       <p className="project-lead">
-        What has been settled. Every agent is shown this log before it works, and entries are only
-        ever added, so a decision you made once is not lost when an agent rewrites its notes.
+        What has been settled. Every agent is shown this log before it works, yours apart from the
+        coordinator's, and entries are only ever added, so a decision you made once is not lost when
+        an agent rewrites its notes. Workers cannot write here.
       </p>
       <form
         className="project-decision-form"
@@ -1024,14 +1082,36 @@ function Decisions({
       ) : (
         <ol className="project-decisions" data-testid="project-decisions">
           {snapshot.decisions.map((decision) => (
-            <li key={decision.number} className="project-decision">
+            <li
+              key={decision.number}
+              className="project-decision"
+              data-testid="project-decision"
+              data-retracted={decision.retracted ? "" : undefined}
+            >
               <span className="project-task-number">D-{decision.number}</span>
               <div>
                 <p>{decision.text}</p>
                 <small>
                   {sourceName(decision.source)} · {ago(decision.created_at)}
+                  {decision.retracted ? " · taken back, agents are not shown it" : ""}
                 </small>
               </div>
+              {decision.retracted ? (
+                <span />
+              ) : (
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28"
+                  title="Keep it in the log, struck out, and stop showing it to agents"
+                  aria-label={`Take back D-${decision.number}`}
+                  disabled={coordination.busy}
+                  onClick={() =>
+                    void coordination.apply({ type: "decision_retract", number: decision.number })
+                  }
+                >
+                  Take back
+                </button>
+              )}
             </li>
           ))}
         </ol>
