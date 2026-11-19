@@ -1,24 +1,22 @@
 # Changelog
 
-Every pull request merged into `main`, newest first, under the day it merged (UTC). Each line is
+Every pull request merged into `main`, newest first, under the day it merged in US Eastern time.
+Each line is
 written in simple English about what changed for the person using auracode: short everyday words,
 short sentences, no internal names, and the headline first (owner, 16 November 2026). Each pull
 request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
-checks the format.
+checks the format, and with `--dates` checks each day against the time GitHub says it merged.
 
-## 2026-11-19
+## 2026-11-18
 
 - You can download auracode. The download page now has installers for Windows, macOS and Linux, each with its size and checksum. They are preview builds: nobody has signed them, so your system warns you before one runs, and the page says what to do. The code is public too, under the MIT license. ([#146](https://github.com/itscool2b/auracode/pull/146))
 - auracode has a new logo: a flying wing with two eyes. It is on the app, its icons, the taskbar and the website. The website also moves now: the wing flies into the headline, blinks and looks toward your pointer, and cards rise into place as you scroll. The app window pictured on the site is a softer grey that stands off the black page. ([#145](https://github.com/itscool2b/auracode/pull/145))
 - auracode is getting ready to open its code. The code is now under the MIT license, with a guide for people who want to help and a private way to report security problems. The download page can now list installers for Windows, macOS and Linux with their checksums, and it says plainly when a build is unsigned. ([#144](https://github.com/itscool2b/auracode/pull/144))
 
-## 2026-11-18
-
-- auracode opens on new aircraft pictures. The fifteen text drawings are replaced by ten new pictures, from the Wright Flyer and the P-51 to the 747, the SR-71 and the Space Shuttle. Each one is drawn in your theme's own colours, light or dark, and you still see a different one each start. ([#143](https://github.com/itscool2b/auracode/pull/143))
-
 ## 2026-11-17
 
+- auracode opens on new aircraft pictures. The fifteen text drawings are replaced by ten new pictures, from the Wright Flyer and the P-51 to the 747, the SR-71 and the Space Shuttle. Each one is drawn in your theme's own colours, light or dark, and you still see a different one each start. ([#143](https://github.com/itscool2b/auracode/pull/143))
 - New chats no longer break your other chats, and a second project works. Slow work in one folder no longer holds up the rest. When agents are in the way, auracode names the chats and offers to stop them, and at the limit of 16 agents it stops the one idle longest instead of refusing. Terminals open in every project, two projects can set up at once, and a folder you pick stays in the project it belongs to. ([#142](https://github.com/itscool2b/auracode/pull/142))
 - The website is redesigned after the Grok Bot page, in light and dark. It opens with the app drawn in its new flat look, then six feature cards, every agent in its own colour, the latest changes as cards, and a full-screen menu on phones. ([#141](https://github.com/itscool2b/auracode/pull/141))
 - auracode looks flat, soft and clean, after the Grok Bot app, in every theme. Glass, blur and glow are gone, dark mode uses faint edges instead of shadows, and thin text is a little heavier. New chat starts with the message box, so you type first, every dropdown opens auracode's own menu, and Settings and setup show your agents joining auracode. ([#140](https://github.com/itscool2b/auracode/pull/140))
@@ -47,29 +45,31 @@ checks the format.
 - The website's changelog now lists every change as it ships. The page is built from the project's own list of changes instead of a note written by hand. ([#126](https://github.com/itscool2b/auracode/pull/126))
 - The website has a new design that follows your light or dark setting. It shows the live app window, cards for what the app does, the agents, download links and common questions. ([#125](https://github.com/itscool2b/auracode/pull/125))
 - The website is redesigned with a calmer, lighter look. It has a plain header, the live app window at the top, a row of the agents and a grid of the main features. ([#124](https://github.com/itscool2b/auracode/pull/124))
-- Several terminal chats can run at once. Before, a second terminal chat was refused while the first was running. Now up to eight can be open across the app. ([#123](https://github.com/itscool2b/auracode/pull/123))
 
 ## 2026-11-09
 
+- Several terminal chats can run at once. Before, a second terminal chat was refused while the first was running. Now up to eight can be open across the app. ([#123](https://github.com/itscool2b/auracode/pull/123))
 - A long turn shows just its answer when you reopen the chat. Before, a very long turn showed every step. Now its steps fold under "Worked for" like any other finished turn. ([#122](https://github.com/itscool2b/auracode/pull/122))
 - Behind the scenes: release builds work again. A change that came with the built-in browser had stopped installers from being built. ([#121](https://github.com/itscool2b/auracode/pull/121))
 - A browser now sits beside the chat. Open it with the globe in the chat's header. It has tabs, an address bar, saved passwords and downloads. Agents can open, read and click pages in it but never see your passwords, and Annotate lets you mark part of a page and send a note about it to the agent. ([#120](https://github.com/itscool2b/auracode/pull/120))
 - The message box is plainer, and Canvas narration no longer overflows. The coloured ring around the message box is gone. In Canvas, what you say scrolls inside four lines under the drawing, and Finish puts the drawing and your words straight into the message. ([#119](https://github.com/itscool2b/auracode/pull/119))
+
+## 2026-11-08
+
 - OpenCode and Pi now start on Windows. OpenCode installed with npm and Pi installed with its own installer both showed as broken before. They now work in Chat and in Terminal. ([#118](https://github.com/itscool2b/auracode/pull/118))
 - The website's home page is redesigned. It has a large headline over the live app window and a new section showing terminal chats and the canvas. The number counters and the fact wheel are gone. ([#117](https://github.com/itscool2b/auracode/pull/117))
 - Canvas lets you draw a sketch and add it to your message. Open it beside Attach, then draw with pens, shapes, arrows and text. Press Talk to explain the drawing as you make it. Add to message attaches the drawing and what you said. ([#116](https://github.com/itscool2b/auracode/pull/116))
 - Terminal now works for more agents. Grok Build, OpenCode, Hermes, Pi, oh-my-pi, Cursor and Antigravity can open in their own interface inside auracode, as Claude Code and Codex already could. What happens in the terminal comes back into the chat. ([#115](https://github.com/itscool2b/auracode/pull/115))
-
 
 ## 2026-11-07
 
 - auracode opens on a military aircraft drawn in text characters. There are fifteen, and you see a different one each start. Notices now wait behind a bell beside Settings instead of floating over the page. New chat opens only when you ask for it. ([#114](https://github.com/itscool2b/auracode/pull/114))
 - Notices moved to the top right, under the header. They fold into one until you point at them, and each has a short title and one line. When an agent update fails, Run in terminal runs it again so you can see its output. ([#113](https://github.com/itscool2b/auracode/pull/113))
 - New chat opens on a fighter jet drawn in text characters. There are sixteen, and you see a different one each time auracode starts. It replaces the logo and title. ([#112](https://github.com/itscool2b/auracode/pull/112))
-- A chat's access no longer says "Access unavailable" before its first message. A chat opened after a restart shows its access and lets you change it. A new Claude chat that never got a message now starts again after a restart instead of failing. ([#111](https://github.com/itscool2b/auracode/pull/111))
 
 ## 2026-11-06
 
+- A chat's access no longer says "Access unavailable" before its first message. A chat opened after a restart shows its access and lets you change it. A new Claude chat that never got a message now starts again after a restart instead of failing. ([#111](https://github.com/itscool2b/auracode/pull/111))
 - New chat no longer opens on a long list of folder paths. Folders kept from deleted chats now sit behind one "Retained worktrees" line. It opens by itself only when one of them needs recovery. ([#110](https://github.com/itscool2b/auracode/pull/110))
 - A terminal chat counts as Working only while its agent is busy. On the Dashboard, one that is waiting at its prompt sits under Finished as "Open in the terminal". ([#109](https://github.com/itscool2b/auracode/pull/109))
 - In a terminal chat, every key now goes to the agent. For example, Shift+Tab changes Claude Code's mode instead of moving around the app. Ctrl+Tab leaves the terminal and Ctrl+Shift+C copies. The Dashboard also fills its space again and keeps its cards in order. ([#108](https://github.com/itscool2b/auracode/pull/108))
@@ -82,15 +82,15 @@ checks the format.
 - Processes is now the Dashboard. It shows every chat as a card in three columns, Needs you, Working and Finished. A card opens its chat and shows what a working agent is doing. ([#101](https://github.com/itscool2b/auracode/pull/101))
 - Load earlier now brings back a bigger piece of the chat at once. It keeps loading until 20 more turns appear, and long chats stay light. ([#100](https://github.com/itscool2b/auracode/pull/100))
 - The agent list in New chat now opens downward. A long list no longer runs under the title bar and hides its search box. ([#99](https://github.com/itscool2b/auracode/pull/99))
+
+## 2026-11-05
+
 - Behind the scenes: the project plan was updated. It records that the release tools are done and what is left before the first release. ([#98](https://github.com/itscool2b/auracode/pull/98))
 - Behind the scenes: releases for Mac, Windows and Linux can now be built automatically. The packages are signed, checked and published, and the download page points to the newest one. It waits only for the signing keys. ([#97](https://github.com/itscool2b/auracode/pull/97))
 - Releases now include Linux. The download page lists Linux beside Mac and Windows. Once a signed release is out, auracode on Linux updates itself as it does on the other systems. ([#96](https://github.com/itscool2b/auracode/pull/96))
 - Behind the scenes: the website builds and deploys again. A list of third-party notices had gone out of date after an earlier change. ([#95](https://github.com/itscool2b/auracode/pull/95))
 - Behind the scenes: the automatic tests catch up with recent changes. They now also check dictation, images and the Processes page in two browser engines. ([#94](https://github.com/itscool2b/auracode/pull/94))
 - auracode now runs on Linux. It comes as deb, rpm and AppImage packages. The tray icon, notifications, Keep awake, sounds, dictation and terminals all work, and files open in VS Code, Cursor or Zed. ([#93](https://github.com/itscool2b/auracode/pull/93))
-
-## 2026-11-05
-
 - Share one agent's MCP server with every agent. In Plugins & MCP, choose Preview and copy, then Share with every agent. Its keys stay on this device. Agents that cannot use shared servers now start without them and say so, instead of refusing to start. ([#92](https://github.com/itscool2b/auracode/pull/92))
 - Terminals come back after a restart. A chat's terminal panel offers the terminals it had open, and starts them again when you choose Resume. Nothing starts by itself, and earlier output is not kept. ([#91](https://github.com/itscool2b/auracode/pull/91))
 - Worktree chats get a Run button. Save a Run command for the folder, then start it from the chat's header and open its address until you press Stop. Each worktree gets local ports of its own, so several can run side by side. ([#90](https://github.com/itscool2b/auracode/pull/90))
@@ -106,30 +106,30 @@ checks the format.
 - Answers now show coloured code, maths and diagrams. Code uses the theme's colours, maths is set out properly, and Mermaid diagrams are drawn, with their source a click away. ([#80](https://github.com/itscool2b/auracode/pull/80))
 - Agent steps show more detail. An opened tool call shows what it was given, a web search lists the pages it found as links, and an edit counts its changed lines. Claude's to-do list shows as a checklist, and the chat's menu has Compact conversation. ([#79](https://github.com/itscool2b/auracode/pull/79))
 - Settings is now one screen with a search box. The search finds any setting. Chats can keep the steps of finished turns open, and Voice can test your microphone. ([#78](https://github.com/itscool2b/auracode/pull/78))
+
+## 2026-11-04
+
 - Dictation is built in and has no time limit. It runs on your device. Words appear at the cursor as you speak, Finish adds them to your message and Cancel removes them. ([#77](https://github.com/itscool2b/auracode/pull/77))
 - A finished turn folds its work under one line. The line reads like "Worked for 1 min 42 s · 12 steps" and sits above the final answer. A card under the answer names the files that changed. ([#76](https://github.com/itscool2b/auracode/pull/76))
 - More of a chat fits on screen. Text is a little smaller and answers use the full width. Choose the Comfortable text size in Settings to get the earlier size back. ([#75](https://github.com/itscool2b/auracode/pull/75))
 - Claude Code's theme is now the default look. This applies only if you never chose a theme. A theme you picked, Aura included, is kept. ([#74](https://github.com/itscool2b/auracode/pull/74))
 - The controls around the message box are quieter. Only Send is filled in. Your account shows as its initial with a ring for its usage, and the picker lists models, thinking levels, then every agent. ([#73](https://github.com/itscool2b/auracode/pull/73))
 
-## 2026-11-04
+## 2026-11-03
 
 - Settings offers a theme for every supported agent. There is one each for Claude Code, Codex, Grok Build, Pi, Antigravity, Cursor, OpenCode, oh-my-pi and Hermes, beside Aura. Each comes in light and dark and applies at once. ([#72](https://github.com/itscool2b/auracode/pull/72))
 - Grok Build and Hermes now show their plugins and marketplaces. Claude Code marketplaces show where they come from again. You can add a marketplace from a GitHub repository, a Git address or a local folder. ([#71](https://github.com/itscool2b/auracode/pull/71))
 - See everything your agents are running. A new Processes page lists each chat's subagents, background commands and programs, with a Stop button. Stop in a chat now says it also ends running tasks. ([#70](https://github.com/itscool2b/auracode/pull/70))
 - This changelog is added. Every merged change adds a line to it, and an automatic check keeps its format right. ([#69](https://github.com/itscool2b/auracode/pull/69))
 - Dictation now records on Windows. Before, small audio glitches ended every recording after a tenth of a second. Turning speech into text is also much faster, under a second for 11 seconds of speech instead of 18. ([#68](https://github.com/itscool2b/auracode/pull/68))
-
-## 2026-11-03
-
 - The website gets design polish. Headings have new italic accents, and the two scrolling rows now loop without a gap. ([#67](https://github.com/itscool2b/auracode/pull/67))
 - The working line shows the model maker's logo. While an agent works, you see the logo of the company whose model is doing the work. ([#66](https://github.com/itscool2b/auracode/pull/66))
-- Subagents and background commands appear above the message box. Click one to open a panel that follows its progress. ([#65](https://github.com/itscool2b/auracode/pull/65))
-- The website loses its coloured glows. The depth they gave is made in other ways. ([#64](https://github.com/itscool2b/auracode/pull/64))
-- Switch a Claude Code chat's account from the message box. You can also see how much each account has used, and read a plan before the agent runs it. The app's glow effects are gone. ([#63](https://github.com/itscool2b/auracode/pull/63))
 
 ## 2026-11-02
 
+- Subagents and background commands appear above the message box. Click one to open a panel that follows its progress. ([#65](https://github.com/itscool2b/auracode/pull/65))
+- The website loses its coloured glows. The depth they gave is made in other ways. ([#64](https://github.com/itscool2b/auracode/pull/64))
+- Switch a Claude Code chat's account from the message box. You can also see how much each account has used, and read a plan before the agent runs it. The app's glow effects are gone. ([#63](https://github.com/itscool2b/auracode/pull/63))
 - Behind the scenes: installing a locally built copy of the app on Windows is safer. If the new copy fails to start, the previous app comes back. More of the app is also tested automatically. ([#62](https://github.com/itscool2b/auracode/pull/62))
 - Image attachments show small previews. You see them before sending and in the chat's history, and can open one to see it larger. ([#61](https://github.com/itscool2b/auracode/pull/61))
 - Dictation in the message box works offline. It needs a one-time download first, which is checked before use. ([#60](https://github.com/itscool2b/auracode/pull/60))
@@ -160,6 +160,9 @@ checks the format.
 ## 2026-10-30
 
 - The website and the desktop app share one new look, called Aura. The desktop app follows your system's light or dark setting, and you can choose Light or Dark yourself. ([#42](https://github.com/itscool2b/auracode/pull/42))
+
+## 2026-10-29
+
 - An interrupted clone can be recovered safely. If copying a repository is cut short, auracode remembers it and offers to open the folder or try again in another folder. ([#41](https://github.com/itscool2b/auracode/pull/41))
 - Interrupted changes to Instructions recover safely. Edits you made to those files outside auracode are not lost. ([#40](https://github.com/itscool2b/auracode/pull/40))
 - The Plugin library fills in one agent at a time. You see results sooner, and the row menus stay where they are. ([#39](https://github.com/itscool2b/auracode/pull/39))
@@ -186,6 +189,9 @@ checks the format.
 - Fixes from testing on Windows. Changes made just before quitting are no longer lost. The foot of the sidebar is now only the logo and a Settings button. ([#21](https://github.com/itscool2b/auracode/pull/21))
 - Clone a repository from inside auracode. It is offered when you first set up and in New project. Making an account is an optional step, and more agents can be installed and signed in to from the app. ([#20](https://github.com/itscool2b/auracode/pull/20))
 - Behind the scenes: account tests no longer trip over each other, and the project notes were updated. ([#19](https://github.com/itscool2b/auracode/pull/19))
+
+## 2026-10-27
+
 - Fixes found by testing the app on Windows. Among them, the first message in a worktree chat is no longer held back, and changed lines show in the right order. ([#18](https://github.com/itscool2b/auracode/pull/18))
 - A terminal panel sits at the bottom of each chat. There is also help with merge conflicts, where you can ask the agent to resolve them or open the folder in your editor. More editors are supported, such as Zed and the JetBrains ones. ([#17](https://github.com/itscool2b/auracode/pull/17))
 - Small gaps are closed across chats and Settings. You can edit and reorder queued messages, open the first nine chats with Ctrl or Cmd plus a number, and set a default agent and model. Settings adds switches for notifications, Keep awake and running in the tray. ([#16](https://github.com/itscool2b/auracode/pull/16))
@@ -197,14 +203,11 @@ checks the format.
 - Behind the scenes: a new tool publishes releases safely. It checks every file again before uploading and never overwrites a published file. ([#10](https://github.com/itscool2b/auracode/pull/10))
 - Behind the scenes: new tests for the search behind the command palette. ([#9](https://github.com/itscool2b/auracode/pull/9))
 - The website is rebuilt with a simpler home page. It goes from eight sections to five. Nothing in the app changes. ([#8](https://github.com/itscool2b/auracode/pull/8))
-
-## 2026-10-27
-
 - The seal and turtle logo is now used everywhere. It replaces the old pixel letter in the app, on the website and in every icon. ([#7](https://github.com/itscool2b/auracode/pull/7))
 - The app and the website get a dark look called Graphite. It is black with one lime accent colour. This change also adds the view that shows a chat's conversation. ([#6](https://github.com/itscool2b/auracode/pull/6))
 - Behind the scenes: the project's technical foundation and rules are set. Nothing in the app changes. ([#4](https://github.com/itscool2b/auracode/pull/4))
 
-## 2026-10-26
+## 2026-10-25
 
 - Behind the scenes: two unreliable tests on Mac and Linux are fixed. The app itself is unchanged. ([#3](https://github.com/itscool2b/auracode/pull/3))
 - The first real agent chats work. auracode can now run Hermes, Claude Code and Codex in one chat window. ([#2](https://github.com/itscool2b/auracode/pull/2))

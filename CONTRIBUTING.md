@@ -25,7 +25,8 @@ The hosted CI is started by hand, not by a push, so a pull request shows no test
 own. Say in the description what you ran and what you saw.
 
 - **Add a line to `CHANGELOG.md`.** Every merged pull request has one, newest first under the day
-  it merges, written for someone who uses the app: what changed, then what they will notice.
+  it merges in US Eastern time, written for someone who uses the app: what changed, then what
+  they will notice.
   [docs/developing-in-aura.md](docs/developing-in-aura.md) has the format, and `pnpm lint` checks
   it.
 - **Commit generated files with the change that needs them.** After changing a Rust command or a

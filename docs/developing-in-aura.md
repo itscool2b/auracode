@@ -90,9 +90,14 @@ Get-ChildItem $target -Recurse -Depth 2 -Directory -Filter .fingerprint |
 ## Changelog
 
 Every pull request merged into `main` adds its line to [CHANGELOG.md](../CHANGELOG.md) in the
-same pull request: under `## YYYY-MM-DD` for the day it merges (UTC), newest first, and ending with
-its link, `([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to
-learn its number, then commit the line. If it merges on a later day than planned, move the line.
+same pull request: under `## YYYY-MM-DD` for the day it merges in US Eastern time (the owner's
+clock; 18 November 2026, after evening merges showed under the next day because the days were
+UTC), newest first, and ending with its link,
+`([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to learn its
+number, then commit the line. If it merges on a later day than planned, move the line. Check the
+day twice: `TZ=America/New_York date` when you write the line, and
+`node .github/scripts/check-changelog.mjs --dates` right before and right after the merge, which
+compares every line's day with the time GitHub recorded.
 `pnpm lint` runs `.github/scripts/check-changelog.mjs`, which checks the dates, the order, the
 links, that each pull request appears once, and that no line runs past 600 characters before its
 link.

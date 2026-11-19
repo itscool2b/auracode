@@ -1,7 +1,14 @@
 // CHANGELOG.md lists every pull request merged into main, newest first: `## YYYY-MM-DD` sections
-// by merge date (UTC), each line `- What changed. ([#N](https://github.com/itscool2b/auracode/pull/N))`.
+// by the day it merged in US Eastern time (the owner's clock, 18 November 2026: an evening merge
+// was showing under tomorrow's date, because the days were UTC), each line
+// `- What changed. ([#N](https://github.com/itscool2b/auracode/pull/N))`.
 // Every pull request adds its own line, in simple English about what changed for the person using
 // auracode and short enough to read at a glance (docs/developing-in-aura.md, "Changelog").
+//
+//   node .github/scripts/check-changelog.mjs [folder]          the format, offline (pnpm lint)
+//   node .github/scripts/check-changelog.mjs [folder] --dates  also each day against GitHub's
+//                                                              merge time, through `gh`
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -66,12 +73,79 @@ export function checkChangelog(text) {
   return { problems, count: seen.size };
 }
 
+const EASTERN = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** The calendar day of a moment in US Eastern time, the changelog's clock, as YYYY-MM-DD. */
+export function easternDay(moment) {
+  return EASTERN.format(new Date(moment));
+}
+
+/**
+ * Each entry's day against the day its pull request merged, in US Eastern time. `merged` maps a
+ * pull request's number to the moment GitHub says it merged. A pull request that has not merged
+ * yet (the one being written) must be under today's Eastern day: it moves if it merges tomorrow.
+ */
+export function checkDates(text, merged, now = new Date()) {
+  const problems = [];
+  const today = easternDay(now);
+  let date = null;
+  for (const line of text.replace(/\r\n/g, "\n").split("\n")) {
+    const heading = line.match(DATE);
+    if (heading) {
+      date = heading[1];
+      continue;
+    }
+    const entry = line.match(ENTRY);
+    if (!entry || date === null) continue;
+    const number = Number(entry[2]);
+    const moment = merged.get(number);
+    if (moment === undefined) {
+      if (date !== today)
+        problems.push(
+          `#${number} has not merged, so it belongs under today, ${today}, not ${date}`,
+        );
+      continue;
+    }
+    const day = easternDay(moment);
+    if (day !== date)
+      problems.push(`#${number} is under ${date}, but it merged on ${day} Eastern (${moment})`);
+  }
+  return problems;
+}
+
+/** Every merged pull request's number and merge moment, asked of GitHub through `gh`. */
+function mergedPullRequests(root) {
+  const asked = spawnSync(
+    "gh",
+    ["pr", "list", "--state", "merged", "--limit", "1000", "--json", "number,mergedAt"],
+    { cwd: root, encoding: "utf8", windowsHide: true },
+  );
+  if (asked.error || asked.status !== 0)
+    throw new Error(
+      `could not ask GitHub for merge times: ${asked.error?.message ?? asked.stderr}`,
+    );
+  return new Map(JSON.parse(asked.stdout).map((pull) => [pull.number, pull.mergedAt]));
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const root = resolve(process.argv[2] ?? process.cwd());
+  const args = process.argv.slice(2);
+  const dates = args.includes("--dates");
+  const root = resolve(args.find((arg) => !arg.startsWith("--")) ?? process.cwd());
   try {
-    const { problems, count } = checkChangelog(readFileSync(resolve(root, "CHANGELOG.md"), "utf8"));
+    const text = readFileSync(resolve(root, "CHANGELOG.md"), "utf8");
+    const { problems, count } = checkChangelog(text);
+    if (dates) problems.push(...checkDates(text, mergedPullRequests(root)));
     if (problems.length) throw new Error(problems.join("\n  "));
-    console.log(`CHANGELOG.md lists ${count} pull requests, newest first.`);
+    console.log(
+      dates
+        ? `CHANGELOG.md lists ${count} pull requests, newest first, each under the day it merged in US Eastern time.`
+        : `CHANGELOG.md lists ${count} pull requests, newest first.`,
+    );
   } catch (error) {
     console.error(`CHANGELOG.md needs fixing:\n  ${error.message}`);
     process.exitCode = 1;
