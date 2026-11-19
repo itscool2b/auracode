@@ -402,6 +402,17 @@ impl SessionManager {
         &self,
         request: ProjectChatCreate,
     ) -> Result<WorkspaceChat, SessionError> {
+        self.create_project_chat(request, true).await
+    }
+
+    /// [`chat_project_create`](Self::chat_project_create), starting the agent or not. A project's
+    /// coordinator and workers are recorded as such before their agent starts, so the session
+    /// that starts has their tools.
+    pub(crate) async fn create_project_chat(
+        &self,
+        request: ProjectChatCreate,
+        start: bool,
+    ) -> Result<WorkspaceChat, SessionError> {
         bounded(&request.agent_id, "Agent ID", 128)?;
         if self.deps().detector.agent(&request.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(request.agent_id));
@@ -433,13 +444,15 @@ impl SessionManager {
                 agent_id: aura_agents::agent_of(&request.agent_id).to_owned(),
             })
             .await?;
-        let _ = self
-            .ask(&chat_id, |reply| ChatMsg::Start {
-                fresh: false,
-                explicit: false,
-                reply,
-            })
-            .await;
+        if start {
+            let _ = self
+                .ask(&chat_id, |reply| ChatMsg::Start {
+                    fresh: false,
+                    explicit: false,
+                    reply,
+                })
+                .await;
+        }
         self.workspace_view(organization)
             .await
             .chats

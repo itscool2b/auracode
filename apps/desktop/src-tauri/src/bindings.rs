@@ -51,6 +51,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::PullRequestPreview>()
         // The payload of `auracode-project-memory-changed` (memory_commands::MEMORY_CHANGED).
         .typ::<aura_protocol::memory::ProjectMemoryChanged>()
+        // The payload of `auracode-coordinator-changed` (coordinator_commands::COORDINATOR_CHANGED).
+        .typ::<aura_protocol::coordinator::CoordinatorChanged>()
         // The payload of `auracode-remote-changed` (remote::REMOTE_CHANGED).
         .typ::<aura_protocol::remote::RemoteStatus>()
         // The payload of `auracode-browser` (browser::EVENT).
@@ -101,6 +103,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::shared_mcp::shared_mcp_import,
             crate::shared_mcp::shared_mcp_import_native,
             crate::shared_mcp::shared_mcp_export,
+            crate::coordinator_commands::coordinator_snapshot,
+            crate::coordinator_commands::coordinator_members,
+            crate::coordinator_commands::coordinator_file,
+            crate::coordinator_commands::coordinator_start,
+            crate::coordinator_commands::coordinator_apply,
             crate::memory_commands::read_project_memory,
             crate::memory_commands::save_project_memory,
             crate::memory_commands::propose_project_memory,

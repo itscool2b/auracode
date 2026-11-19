@@ -4,6 +4,7 @@ import {
   BookOpen,
   Bot,
   FileText,
+  FlaskConical,
   Globe,
   Info,
   Keyboard,
@@ -45,6 +46,7 @@ import { PluginLibraryScreen } from "../library/PluginLibraryScreen";
 import { UniversalPlugins } from "../library/UniversalPlugins";
 import { AgentsScreen } from "../setup/AgentsScreen";
 import { DeleteDataDialog } from "./DeleteDataDialog";
+import { ExperimentsPage } from "./ExperimentsPage";
 import { AppearancePage, ChatsPage, GeneralPage } from "./GeneralPanel";
 import { type InstructionsFolder, InstructionsPanel } from "./InstructionsPanel";
 import { NoticesDialog } from "./NoticesDialog";
@@ -78,6 +80,7 @@ const ICONS: Readonly<Record<Page, LucideIcon>> = {
   browser: Globe,
   instructions: FileText,
   memory: BookOpen,
+  experiments: FlaskConical,
   remote: MonitorSmartphone,
   privacy: ShieldCheck,
   about: Info,
@@ -534,6 +537,7 @@ export function SettingsScreen({
               initialProjectId={projectId ?? undefined}
             />,
           )}
+          {pane("experiments", <ExperimentsPage prefs={prefs} />)}
           {pane("remote", <RemotePanel api={remote} />)}
           {pane(
             "privacy",

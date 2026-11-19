@@ -540,6 +540,8 @@ struct TerminalRead {
 /// What a preparation produces.
 struct Prepared {
     memory_mcp_available: bool,
+    /// The chat is a coordinated project's coordinator or one of its workers.
+    coordinated: bool,
     /// Shared MCP servers this agent cannot take, said in the chat as it starts.
     mcp_notice: Option<String>,
     mcp_servers: Vec<aura_protocol::mcp::ResolvedMcpServer>,
@@ -817,6 +819,8 @@ pub(crate) struct ChatActor {
     memory_grant: Option<crate::memory_service::MemoryGrant>,
     /// The Browser plugin's tools for this generation's agent, revoked with the generation.
     browser_grant: Option<crate::browser_service::BrowserGrant>,
+    /// A coordinated project's tools for this generation's agent, revoked with the generation.
+    coordinator_grant: Option<crate::coordinator_service::CoordinatorGrant>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -1023,6 +1027,7 @@ impl ChatActor {
             memory_revision: None,
             memory_grant: None,
             browser_grant: None,
+            coordinator_grant: None,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -2896,6 +2901,7 @@ impl ChatActor {
     fn force_stop(&mut self) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.cancel_checkpoint();
         if !matches!(
             self.status,
@@ -2959,6 +2965,7 @@ impl ChatActor {
     fn force_kill(&mut self) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.force_wait = None;
         self.stop_deadline = None;
         self.end_room_wait();
@@ -3047,6 +3054,7 @@ impl ChatActor {
     fn stop(&mut self) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
@@ -3099,6 +3107,7 @@ impl ChatActor {
     fn graceful_stop(&mut self, plan: StopPlan, auth: bool) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -3556,6 +3565,7 @@ impl ChatActor {
                     why: String| {
             this.memory_grant = None;
             this.browser_grant = None;
+            this.coordinator_grant = None;
             this.release_if_idle();
             this.set_status(SessionStatus::Stopped, None);
             drop(reply.send(Err(SessionError::AgentUnavailable(why))));
@@ -3823,6 +3833,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.terminal_extension = None;
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.release_if_idle();
         self.set_status(SessionStatus::Stopped, None);
         self.revision = self.revision.wrapping_add(1);
@@ -4240,6 +4251,26 @@ The person continues this conversation here, in your terminal. Reply only that y
             }
             _ => None,
         };
+        // A coordinated project's tools (an experiment): for its coordinator and its workers,
+        // under the same conditions as the browser's.
+        self.coordinator_grant = match self.shared.coordination.bridge() {
+            Some(bridge)
+                if prepared.coordinated
+                    && self.chat.agent_host == aura_protocol::agents::AgentHost::Native
+                    && prepared.memory_mcp_available
+                    && spec.kind != aura_protocol::DriverKind::Headless
+                    && self.shared.coordination.enabled.load(Ordering::Acquire) =>
+            {
+                crate::coordinator_service::CoordinatorGrant::start(
+                    bridge,
+                    self.chat_id.clone(),
+                    Arc::clone(&self.shared.coordination.enabled),
+                    &self.shared.deps.rt,
+                )
+                .ok()
+            }
+            _ => None,
+        };
         let setup = SessionSetup {
             mcp_servers: {
                 let mut servers = prepared.mcp_servers;
@@ -4252,6 +4283,13 @@ The person continues this conversation here, in your terminal. Reply only that y
                     servers.push(helper);
                 }
                 if let Some(helper) = self.browser_grant.as_ref().and_then(|grant| grant.mcp()) {
+                    servers.push(helper);
+                }
+                if let Some(helper) = self
+                    .coordinator_grant
+                    .as_ref()
+                    .and_then(|grant| grant.mcp())
+                {
                     servers.push(helper);
                 }
                 deps.redactor.set_secrets(
@@ -4648,6 +4686,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn shutdown(&mut self, plan: StopPlan, reply: oneshot::Sender<()>) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
@@ -6002,6 +6041,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn on_events_closed(&mut self) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -6025,6 +6065,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         }
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         let Some(driver) = self.driver.take() else {
             return;
         };
@@ -6137,6 +6178,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn closed(&mut self, generation: u64, auth: bool) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.book.clear(generation);
         self.release_if_idle();
         let now = now_millis();
@@ -6209,6 +6251,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn crashed(&mut self, generation: u64, message: String, stderr_tail: Option<String>) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.kill_generation(generation);
         self.release_if_idle();
         let detail = stderr_tail
@@ -6275,6 +6318,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn start_failed_exit(&mut self, generation: u64, error: DriverError) {
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.kill_generation(generation);
         if let Some(turn) = self.turn.take() {
             // A driver that reports a failed start mid-turn broke its contract; end the turn anyway.
@@ -6362,6 +6406,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         }
         self.memory_grant = None;
         self.browser_grant = None;
+        self.coordinator_grant = None;
         self.release_if_idle();
         let message = self.error_text(&message, false);
         self.last_error = Some(ErrorInfo {
@@ -6766,6 +6811,10 @@ The person continues this conversation here, in your terminal. Reply only that y
     }
 
     fn push_normalized(&mut self, event: AuraEvent, tag: TurnTag) {
+        // A coordinated project hears of every turn that ends, however it ended.
+        if matches!(event, AuraEvent::TurnEnded { .. }) {
+            self.shared.coordination.turn_ended(&self.chat_id);
+        }
         let flush_now = matches!(
             event,
             AuraEvent::TurnStarted { .. }
@@ -7662,6 +7711,15 @@ async fn prepare(
                 message,
                 folder: None,
             })?;
+    let coordinated = matches!(
+        context
+            .store
+            .coordinator(crate::chatstore::coordinator::Command::Member(
+                context.chat.id.clone(),
+            ))
+            .await,
+        Ok(crate::chatstore::coordinator::Reply::Member(Some(_)))
+    );
     let folder_context = super::workspace_folders::resolve(
         context,
         super::workspace_folders::supported(Some(&*spec), &agent_host),
@@ -7675,6 +7733,7 @@ async fn prepare(
     })?;
     Ok(Prepared {
         memory_mcp_available,
+        coordinated,
         mcp_notice,
         mcp_servers,
         spec,

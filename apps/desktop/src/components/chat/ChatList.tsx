@@ -1,17 +1,25 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   Ellipsis,
+  KanbanSquare,
   LayoutDashboard,
   Pin,
   Plus,
   Search,
   SlidersHorizontal,
   SquarePen,
+  Workflow,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
+import type {
+  ChatSummary,
+  CoordinationMember,
+  ProjectSummary,
+  WorkspaceSnapshot,
+} from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
 import { commandKey, Keys } from "./Keys";
 
@@ -130,6 +138,9 @@ export function ChatList({
   archived = false,
   onShowArchived,
   onSearch,
+  onProjectBoard,
+  boardProject = null,
+  members,
 }: {
   readonly active?: boolean;
   readonly chats: readonly ChatSummary[] | null;
@@ -151,6 +162,15 @@ export function ChatList({
   readonly archived?: boolean;
   readonly onShowArchived?: () => void;
   readonly onSearch?: () => void;
+  /**
+   * Coordinated projects (an experiment): opens a project's page, with its board, agents and
+   * Context. Absent while the experiment is off, and then nothing of it shows here.
+   */
+  readonly onProjectBoard?: (project: ProjectSummary) => void;
+  /** The project whose page is open. */
+  readonly boardProject?: string | null;
+  /** Coordinator and worker chats, by chat: each wears its part's mark before its title. */
+  readonly members?: ReadonlyMap<string, CoordinationMember>;
 }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -401,6 +421,21 @@ export function ChatList({
                           <span>{project.name}</span>
                           {open ? null : <FoldedState chats={project.chats} />}
                         </button>
+                        {onProjectBoard && project.project && !archived ? (
+                          <button
+                            type="button"
+                            className="g-button g-button-ghost g-button-icon g-button-24 chat-project-new"
+                            aria-label={`Board for ${project.name}`}
+                            title={`${project.name}: board, agents and Context`}
+                            aria-pressed={boardProject === project.project.id}
+                            data-testid="project-board-button"
+                            onClick={() => {
+                              if (project.project) onProjectBoard(project.project);
+                            }}
+                          >
+                            <KanbanSquare size={14} />
+                          </button>
+                        ) : null}
                         {onProjectNewChat && project.project && !archived ? (
                           <button
                             type="button"
@@ -441,6 +476,7 @@ export function ChatList({
                                 selected={chat.id === selected}
                                 onSelect={onSelect}
                                 shortcut={visible.indexOf(chat.id)}
+                                member={members?.get(chat.id)}
                               />
                               {membership.get(chat.id)?.pinned ? (
                                 <Pin className="chat-pin-mark" size={10} aria-label="Pinned" />
@@ -507,10 +543,13 @@ function ChatRow({
   selected,
   onSelect,
   shortcut = -1,
+  member,
 }: {
   readonly chat: ChatSummary;
   readonly selected: boolean;
   readonly onSelect: (chatId: string) => void;
+  /** The chat's part in a coordinated project, if it has one. */
+  readonly member?: CoordinationMember;
   /** The row's place among the visible chats: the first nine open with Ctrl+1 to Ctrl+9. */
   readonly shortcut?: number;
 }) {
@@ -524,7 +563,8 @@ function ChatRow({
       type="button"
       className="chat-row"
       aria-current={selected}
-      title={`${chat.agent_name} · ${label}\n${chat.folder}`}
+      title={`${member ? `${member.role === "coordinator" ? "Coordinator" : "Worker"} · ` : ""}${chat.agent_name} · ${label}\n${chat.folder}`}
+      data-test-role={member?.role}
       data-testid="chat-row"
       data-test-chat-id={chat.id}
       data-test-status={chat.status}
@@ -537,6 +577,11 @@ function ChatRow({
       onClick={() => onSelect(chat.id)}
     >
       <span className="chat-row-title" data-testid="chat-row-title">
+        {member ? (
+          <span className="chat-row-role" aria-hidden="true">
+            {member.role === "coordinator" ? <Workflow size={12} /> : <Bot size={12} />}
+          </span>
+        ) : null}
         {chat.title ?? "New chat"}
       </span>
       {chat.needs_attention ? (

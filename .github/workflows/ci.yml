@@ -188,6 +188,11 @@ jobs:
         timeout-minutes: 10
         run: pnpm --filter @auracode/desktop exec node scripts/check-app-update.mjs
 
+      - name: Check coordinated projects
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop exec node scripts/check-coordinator.mjs
+
       - name: Check New chat's worktree choice
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5

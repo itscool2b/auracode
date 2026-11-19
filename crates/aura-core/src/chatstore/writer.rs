@@ -89,6 +89,9 @@ pub(crate) struct Shared {
     /// Each committed memory write, from the editor or an agent's grant alike.
     pub(crate) memory_changes:
         tokio::sync::broadcast::Sender<aura_protocol::memory::ProjectMemoryChanged>,
+    /// Each committed change to a project's coordination.
+    pub(crate) coordinator_changes:
+        tokio::sync::broadcast::Sender<aura_protocol::coordinator::CoordinatorChanged>,
     queue: Mutex<Queue>,
     wake: Condvar,
     pub(crate) count: Arc<Semaphore>,
@@ -152,6 +155,10 @@ pub(crate) enum Request {
     Memory {
         command: super::memory::Command,
         reply: oneshot::Sender<Result<super::memory::Reply, StoreError>>,
+    },
+    Coordinator {
+        command: super::coordinator::Command,
+        reply: oneshot::Sender<Result<super::coordinator::Reply, StoreError>>,
     },
     ReadSetupAttempt {
         chat_id: String,
@@ -518,6 +525,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         Work::Request(Request::Memory { command, .. }) => command.bytes(),
+        Work::Request(Request::Coordinator { command, .. }) => command.bytes(),
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -541,6 +549,7 @@ impl Shared {
         Shared {
             workspace_activity: Arc::default(),
             memory_changes: tokio::sync::broadcast::Sender::new(64),
+            coordinator_changes: tokio::sync::broadcast::Sender::new(256),
             queue: Mutex::new(Queue {
                 items: VecDeque::new(),
                 saved: VecDeque::new(),
@@ -708,6 +717,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::Memory { .. }) => "memory",
+        Work::Request(Request::Coordinator { .. }) => "coordinator",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
 
         Work::Request(Request::Conversation { .. }) => "conversation",
@@ -1420,6 +1430,24 @@ impl Writer {
                         .map(|(reply, changed)| {
                             if let Some(changed) = changed {
                                 let _ = self.shared.memory_changes.send(changed);
+                            }
+                            reply
+                        })
+                };
+                let _ = reply.send(result);
+            }
+            Request::Coordinator { command, reply } => {
+                let now = now_millis();
+                let result = if command.read_only() {
+                    self.read(|conn| super::coordinator::execute(conn, command, now))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    // Committed before it is announced, so an open project page can re-read.
+                    self.write_tx(|conn| super::coordinator::execute_tracked(conn, command, now))
+                        .map(|(reply, changed)| {
+                            if let Some(changed) = changed {
+                                let _ = self.shared.coordinator_changes.send(changed);
                             }
                             reply
                         })

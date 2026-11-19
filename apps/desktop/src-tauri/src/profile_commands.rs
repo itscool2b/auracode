@@ -85,6 +85,7 @@ async fn run(app: tauri::AppHandle, profile_id: String) -> Result<AppInfo, AppEr
         let result =
             activate_serial(&state, selected, Outside::real, mutation, Some(&serial)).await?;
         crate::memory_commands::forward_changes(&app);
+        crate::coordinator_commands::forward_changes(&app);
         if let Some(library) = app.try_state::<Arc<crate::config_library::LibraryService>>() {
             library.reset_profile();
         }

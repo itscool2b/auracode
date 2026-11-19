@@ -101,6 +101,10 @@ void appearanceReady.then(() => {
         void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
           mountQuestionsPreview(container),
         );
+      else if (mode === "coordinator")
+        void import("./dev/coordinatorPreview").then(({ mountCoordinatorPreview }) =>
+          mountCoordinatorPreview(container),
+        );
       else if (mode === "dashboard")
         void import("./dev/dashboardPreview").then(({ mountDashboardPreview }) =>
           mountDashboardPreview(container),

@@ -33,6 +33,7 @@ pub mod composer_commands;
 pub mod config_library;
 pub mod config_vendor;
 pub mod conversation_commands;
+pub mod coordinator_commands;
 pub mod data_cleanup_commands;
 pub mod demo;
 pub mod dictation;
@@ -253,6 +254,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     }
     appearance::refresh(app.handle());
     memory_commands::forward_changes(app.handle());
+    coordinator_commands::forward_changes(app.handle());
 
     #[cfg(unix)]
     {

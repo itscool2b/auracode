@@ -22,6 +22,7 @@ mod composer;
 mod config_library;
 mod config_vendor;
 mod conversation;
+mod coordinator;
 mod editors;
 mod file_open;
 mod folder_guards;
@@ -369,6 +370,8 @@ pub(crate) struct Shared {
     pub(crate) browser_tools: Arc<AtomicBool>,
     /// The app's browser, which runs the tools (none in tests and the CLI).
     pub(crate) browser_bridge: Mutex<Option<Arc<dyn crate::browser_service::BrowserBridge>>>,
+    /// Coordinated projects (an experiment): its switch, and what its engine keeps.
+    pub(crate) coordination: coordinator::Coordination,
     /// The model catalog each agent connection last reported, kept across restarts, so a chat
     /// whose agent is not running still offers models and thinking levels (and Settings too).
     pub(crate) catalogs: Arc<catalogs::Catalogs>,
@@ -530,6 +533,7 @@ impl SessionManager {
                     agent_memory_writes: Arc::new(AtomicBool::new(true)),
                     browser_tools: Arc::new(AtomicBool::new(true)),
                     browser_bridge: Mutex::new(None),
+                    coordination: coordinator::Coordination::default(),
                     catalogs,
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),

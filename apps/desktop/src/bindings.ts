@@ -88,6 +88,15 @@ export const commands = {
 	sharedMcpImport: (expected: number, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import", { expected, document })),
 	sharedMcpImportNative: (expected: number, projectId: string | null, document: string) => typedError<McpSnapshot, AppError>(__TAURI_INVOKE("shared_mcp_import_native", { expected, projectId, document })),
 	sharedMcpExport: () => typedError<string, AppError>(__TAURI_INVOKE("shared_mcp_export")),
+	coordinatorSnapshot: (projectId: string) => typedError<CoordinatorSnapshot, AppError>(__TAURI_INVOKE("coordinator_snapshot", { projectId })),
+	/**  Every coordinator and worker chat, for the sidebar's marks. */
+	coordinatorMembers: () => typedError<CoordinationMember[], AppError>(__TAURI_INVOKE("coordinator_members")),
+	/**  One Context file: as it reads now, or at one of its kept revisions. */
+	coordinatorFile: (projectId: string, path: string, revision: string | null) => typedError<ContextFile, AppError>(__TAURI_INVOKE("coordinator_file", { projectId, path, revision })),
+	/**  Starts a project's coordinator and sends it the brief. */
+	coordinatorStart: (input: CoordinatorStart) => typedError<CoordinatorSnapshot, AppError>(__TAURI_INVOKE("coordinator_start", { input })),
+	/**  One change from the project page; answers the project as it reads afterwards. */
+	coordinatorApply: (projectId: string, action: CoordinatorAction) => typedError<CoordinatorSnapshot, AppError>(__TAURI_INVOKE("coordinator_apply", { projectId, action })),
 	readProjectMemory: (projectId: string) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("read_project_memory", { projectId })),
 	saveProjectMemory: (input: SaveProjectMemory) => typedError<ProjectMemory, AppError>(__TAURI_INVOKE("save_project_memory", { input })),
 	proposeProjectMemory: (input: ProposeProjectMemory) => typedError<MemoryProposal, AppError>(__TAURI_INVOKE("propose_project_memory", { input })),
@@ -1529,6 +1538,38 @@ export type ConfigOption = {
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
 
+/**  One Context file. */
+export type ContextFile = {
+	path: string,
+	revision: string,
+	content: string,
+	source: string,
+	updated_at: number,
+	/**
+	 *  Earlier revisions, newest first: who wrote each and when. The text of one is read by its
+	 *  revision.
+	 */
+	history: ContextRevision[],
+};
+
+/**  One Context file, without its text. */
+export type ContextFileInfo = {
+	path: string,
+	revision: string,
+	bytes: number,
+	/**  Its first heading or line, for the index agents are primed with. */
+	summary: string,
+	source: string,
+	updated_at: number,
+};
+
+export type ContextRevision = {
+	revision: string,
+	source: string,
+	bytes: number,
+	created_at: number,
+};
+
 export type ContinuationAction = { type: "fresh_session" } | { type: "continue_here" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
 
 export type ContinuationPreview = {
@@ -1570,6 +1611,136 @@ export type ConversationTurns = {
 	has_more: boolean,
 	/**  New remote history requires a reviewed visible handoff before a local agent can continue. */
 	can_continue_here?: boolean,
+};
+
+/**  A chat's place in a coordinated project, for the sidebar and the chat's header. */
+export type CoordinationMember = {
+	chat_id: string,
+	project_id: string,
+	role: CoordinationRole,
+	/**  A worker's name; `coordinator` for the coordinator. */
+	name: string,
+};
+
+/**  What a chat is in its project's coordination. */
+export type CoordinationRole = 
+/**  Plans, delegates and reports to the person. It does not do the work itself. */
+"coordinator" | 
+/**  Does one assignment in a context of its own, then reports. */
+"worker";
+
+/**  One change to a project's coordination, from the project page or an agent's tool. */
+export type CoordinatorAction = { type: "pause"; paused: boolean } | { type: "brief"; text: string } | 
+/**  Adds a task (`number: None`) or changes one. Absent fields keep their value. */
+{ type: "task_save"; number: number | null; title: string | null; body: string | null; status: CoordinatorTaskStatus | null; tags: string[] | null; link: string | null } | 
+/**  Moves a task to a column, before the task `before` or to the column's end. */
+{ type: "task_move"; number: number; status: CoordinatorTaskStatus; before: number | null } | { type: "task_delete"; number: number } | 
+/**
+ *  Replaces a file's whole text. `expected_revision` is the revision that was read; `None`
+ *  creates the file and fails if it exists.
+ */
+{ type: "file_save"; path: string; content: string; expected_revision: string | null } | 
+/**  Adds text to a file's end, creating it if needed. Never loses what another writer added. */
+{ type: "file_append"; path: string; text: string } | { type: "file_delete"; path: string; expected_revision: string } | 
+/**  Puts back an earlier revision's text as a new revision. */
+{ type: "file_restore"; path: string; revision: string } | { type: "decision_add"; text: string } | 
+/**  Takes a decision back. Only the person can. */
+{ type: "decision_retract"; number: number } | { type: "routine_save"; id: string | null; title: string; prompt: string; every_minutes: number; enabled: boolean } | { type: "routine_delete"; id: string } | 
+/**  Dismisses a worker from the list. Its chat stays. */
+{ type: "worker_close"; chat_id: string };
+
+/**  What the window hears after a committed change to a project's coordination. */
+export type CoordinatorChanged = {
+	project_id: string,
+};
+
+/**
+ *  One entry of the decision log. Entries are only ever added, by the person or the coordinator;
+ *  `source` says which, and agents are shown the two apart.
+ */
+export type CoordinatorDecision = {
+	number: number,
+	text: string,
+	source: string,
+	/**  The person took it back: it stays in the log, and agents are no longer shown it. */
+	retracted: boolean,
+	created_at: number,
+};
+
+/**  A prompt the coordinator is sent again and again. */
+export type CoordinatorRoutine = {
+	id: string,
+	title: string,
+	prompt: string,
+	every_minutes: number,
+	enabled: boolean,
+	next_at: number,
+	last_at: number | null,
+};
+
+/**  Everything the project page shows. */
+export type CoordinatorSnapshot = {
+	project_id: string,
+	/**  The coordinator's chat, while it exists and is not archived. */
+	coordinator_chat_id: string | null,
+	/**  What the project is for, as the person wrote it. */
+	brief: string,
+	/**  No worker starts, no routine fires and no report is passed on while this is set. */
+	paused: boolean,
+	/**  Why auracode paused it by itself, if it did. */
+	pause_reason: string | null,
+	workers: CoordinatorWorker[],
+	tasks: CoordinatorTask[],
+	files: ContextFileInfo[],
+	/**  Newest first. */
+	decisions: CoordinatorDecision[],
+	routines: CoordinatorRoutine[],
+};
+
+/**  Starting a project's coordinator. */
+export type CoordinatorStart = {
+	project_id: string,
+	/**  The project folder the coordinator works from. */
+	folder_id: string,
+	/**  The agent to coordinate with. `None` takes the Coordinator role's agent, else the project's. */
+	agent_id: string | null,
+	brief: string,
+};
+
+/**  One tracked task. `number` names it everywhere (`T-12`). */
+export type CoordinatorTask = {
+	number: number,
+	title: string,
+	body: string,
+	status: CoordinatorTaskStatus,
+	tags: string[],
+	/**  The worker it is assigned to, by name. */
+	worker: string | null,
+	/**  A pull request or any other address that shows the work. */
+	link: string | null,
+	/**  Who last changed it: `you`, `coordinator` or `worker:<name>`. */
+	source: string,
+	updated_at: number,
+};
+
+/**  A task's column on the board. */
+export type CoordinatorTaskStatus = "todo" | "doing" | "review" | "done";
+
+/**  One worker chat. Whether it is working now is its chat's status. */
+export type CoordinatorWorker = {
+	chat_id: string,
+	name: string,
+	task: number | null,
+	/**  What it last reported, cut to a preview. */
+	report: string | null,
+	/**  Turns it has finished. */
+	turns: number,
+	/**  Its last report has not reached the coordinator yet. */
+	pending: boolean,
+	/**  Dismissed from the list. Its chat stays. */
+	closed: boolean,
+	created_at: number,
+	reported_at: number | null,
 };
 
 export type Cost = {
@@ -1905,6 +2076,13 @@ export type GeneralPreferences = {
 	 *  wait for the button. On unless the person turns it off in Settings > General.
 	 */
 	automatic_updates: boolean,
+	/**
+	 *  Coordinated projects, an experiment (owner, 19 November 2026): a project gets a coordinator
+	 *  chat that plans and delegates to worker chats, with shared Context files, a task board and
+	 *  routines. Off until the person turns it on in Settings > Experiments; off again stops the
+	 *  project tools at once and keeps what the projects hold.
+	 */
+	coordinated_projects: boolean,
 };
 
 export type GitFileState = {
@@ -3305,7 +3483,9 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns on or off the browser's offer to save sign-ins. */
 { type: "browser_passwords"; enabled: boolean } | 
 /**  Turns on or off looking for a newer auracode by itself. */
-{ type: "automatic_updates"; enabled: boolean };
+{ type: "automatic_updates"; enabled: boolean } | 
+/**  Turns the coordinated projects experiment on or off. */
+{ type: "coordinated_projects"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,

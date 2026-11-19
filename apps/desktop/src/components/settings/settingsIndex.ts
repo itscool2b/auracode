@@ -14,13 +14,14 @@ export type Page =
   | "browser"
   | "instructions"
   | "memory"
+  | "experiments"
   | "remote"
   | "privacy"
   | "about";
 
 export const PAGE_GROUPS: readonly (readonly Page[])[] = [
   ["general", "appearance", "chats", "voice", "shortcuts"],
-  ["agents", "plugins", "browser", "instructions", "memory"],
+  ["agents", "plugins", "browser", "instructions", "memory", "experiments"],
   ["remote", "privacy", "about"],
 ];
 
@@ -35,6 +36,7 @@ export const PAGE_LABELS: Readonly<Record<Page, string>> = {
   browser: "Browser",
   instructions: "Instructions",
   memory: "Project memory",
+  experiments: "Experiments",
   remote: "Remote access",
   privacy: "Data & privacy",
   about: "About",
@@ -50,6 +52,11 @@ export interface SettingEntry {
 }
 
 export const SETTINGS_INDEX: readonly SettingEntry[] = [
+  {
+    page: "experiments",
+    title: "Coordinated projects",
+    words: "coordinator workers subagents board tasks context routines experimental labs beta",
+  },
   { page: "general", title: "Agent", words: "default new chat harness" },
   { page: "general", title: "Model", words: "default new chat" },
   { page: "general", title: "Thinking", words: "effort reasoning level default" },

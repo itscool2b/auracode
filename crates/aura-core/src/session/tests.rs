@@ -5,6 +5,7 @@ mod checkpoints;
 mod cloning;
 mod controls;
 mod conversation;
+mod coordinator;
 mod customization_queue;
 mod folder_context;
 mod folder_resolution;

@@ -96,6 +96,8 @@ export function withAction(preferences: SetupPreferences, action: SetupAction): 
       return { ...preferences, general: { ...general, browser_passwords: action.enabled } };
     case "automatic_updates":
       return { ...preferences, general: { ...general, automatic_updates: action.enabled } };
+    case "coordinated_projects":
+      return { ...preferences, general: { ...general, coordinated_projects: action.enabled } };
     default:
       return preferences;
   }

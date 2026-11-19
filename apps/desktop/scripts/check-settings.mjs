@@ -228,6 +228,7 @@ try {
         browser: true,
         browser_passwords: true,
         automatic_updates: false,
+        coordinated_projects: false,
       });
       // Sounds are off until turned on; turning them on plays one and saves the choice.
       await page.getByRole("switch", { name: "Sounds" }).check();

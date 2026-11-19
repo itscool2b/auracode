@@ -37,6 +37,7 @@ pub mod chatstore;
 pub mod checkpoints;
 pub mod cloning;
 mod conversation;
+pub mod coordinator_service;
 pub mod device;
 pub mod error;
 pub mod gitworkspaces;

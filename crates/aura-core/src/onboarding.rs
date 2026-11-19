@@ -162,6 +162,11 @@ pub struct GeneralPreferences {
     /// reads one public file from the project's GitHub releases; downloading and installing still
     /// wait for the button. On unless the person turns it off in Settings > General.
     pub automatic_updates: bool,
+    /// Coordinated projects, an experiment (owner, 19 November 2026): a project gets a coordinator
+    /// chat that plans and delegates to worker chats, with shared Context files, a task board and
+    /// routines. Off until the person turns it on in Settings > Experiments; off again stops the
+    /// project tools at once and keeps what the projects hold.
+    pub coordinated_projects: bool,
 }
 
 impl Default for GeneralPreferences {
@@ -183,6 +188,7 @@ impl Default for GeneralPreferences {
             browser: true,
             browser_passwords: true,
             automatic_updates: true,
+            coordinated_projects: false,
         }
     }
 }
@@ -273,6 +279,10 @@ pub enum SetupAction {
     },
     /// Turns on or off looking for a newer auracode by itself.
     AutomaticUpdates {
+        enabled: bool,
+    },
+    /// Turns the coordinated projects experiment on or off.
+    CoordinatedProjects {
         enabled: bool,
     },
 }
@@ -491,6 +501,9 @@ impl OnboardingStore {
             }
             SetupAction::AutomaticUpdates { enabled } => {
                 next.preferences.general.automatic_updates = enabled;
+            }
+            SetupAction::CoordinatedProjects { enabled } => {
+                next.preferences.general.coordinated_projects = enabled;
             }
         }
         next.preferences.revision = revision
@@ -1140,6 +1153,7 @@ mod tests {
                 browser: true,
                 browser_passwords: true,
                 automatic_updates: true,
+                coordinated_projects: false,
             }
         );
     }

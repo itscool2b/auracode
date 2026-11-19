@@ -15,6 +15,7 @@ import {
   projectChatContext,
 } from "../../lib/chat/newChatContext";
 import type { Transport } from "../../lib/chat/transport";
+import { type CoordinatorApi, coordinatorApi, useCoordinationMembers } from "../../lib/coordinator";
 import { restoreFocusSoon } from "../../lib/focusReturn";
 import { navigationTarget } from "../../lib/nativeNavigation";
 import {
@@ -29,6 +30,7 @@ import { type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import type { UpdatesApi } from "../../lib/updates";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { ProjectPage } from "../project/ProjectPage";
 import { type AgentUpdateActions, AgentUpdateBanner } from "./AgentUpdateBanner";
 import { AppUpdate } from "./AppUpdate";
 import { Banners, noticeItems } from "./Banners";
@@ -106,6 +108,7 @@ export function ChatsScreen({
   memory = projectMemoryApi,
   onOpenMemory,
   updates,
+  coordinator = coordinatorApi,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -134,6 +137,8 @@ export function ChatsScreen({
   readonly onOpenMemory?: (projectId: string) => void;
   /** The app's updater: Update shows at the sidebar's foot while a newer version is on offer. */
   readonly updates?: UpdatesApi;
+  /** Coordinated projects (an experiment): shown only while Settings > Experiments has it on. */
+  readonly coordinator?: CoordinatorApi;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const dismissedUpdates = useSyncExternalStore(
@@ -172,12 +177,21 @@ export function ChatsScreen({
   });
   // Settings' default agent, read again whenever the chats come back into view (from Settings).
   const [defaultAgent, setDefaultAgent] = useState<string | null | undefined>(undefined);
+  // Coordinated projects, an experiment: read with the default agent, so turning it on or off in
+  // Settings shows here when the chats come back into view.
+  const [coordination, setCoordination] = useState(false);
+  // The project whose page is open in the chat pane's place.
+  const [boardProject, setBoardProject] = useState<string | null>(null);
+  const members = useCoordinationMembers(coordinator, coordination);
   useEffect(() => {
     if (!active) return;
     let live = true;
     setup.snapshot().then(
       (saved) => {
-        if (live) setDefaultAgent(saved.preferences.general.default_agent);
+        if (!live) return;
+        setDefaultAgent(saved.preferences.general.default_agent);
+        setCoordination(saved.preferences.general.coordinated_projects);
+        if (!saved.preferences.general.coordinated_projects) setBoardProject(null);
       },
       () => {
         // Without saved preferences New chat simply waits for a choice.
@@ -242,6 +256,11 @@ export function ChatsScreen({
       onDismiss: () => memoryEdits.dismiss(notice),
     };
   });
+  // A project that went away (deleted, or the experiment turned off) closes its page.
+  const boardPage =
+    coordination && boardProject !== null
+      ? (organization.data?.projects.find((project) => project.id === boardProject) ?? null)
+      : null;
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
   const selectedEntry = organization.data?.chats.find((entry) => entry.chat.id === selected);
   const selectedProject =
@@ -293,6 +312,7 @@ export function ChatsScreen({
     setPendingOpen(null);
     if (target.kind === "open") {
       setArchived(target.archived);
+      setBoardProject(null);
       setSelected(target.chatId);
     }
   }, [pendingOpen, snapshot.chats, snapshot.chatsError, organization, workspace]);
@@ -342,6 +362,7 @@ export function ChatsScreen({
             workspace
               ? (project) => {
                   if (!organization.data) return;
+                  setBoardProject(null);
                   setSelected(null);
                   setComposing(true);
                   setArchived(false);
@@ -365,9 +386,18 @@ export function ChatsScreen({
           onDashboard={onDashboard}
           onProjectSettings={workspace ? (project) => setProjectDialog({ project }) : undefined}
           onChatOptions={workspace ? (chat) => setChatOptions(chat.id) : undefined}
-          selected={selected}
-          onSelect={setSelected}
+          onProjectBoard={
+            coordination && workspace ? (project) => setBoardProject(project.id) : undefined
+          }
+          boardProject={boardProject}
+          members={members}
+          selected={boardProject === null ? selected : null}
+          onSelect={(chatId) => {
+            setBoardProject(null);
+            setSelected(chatId);
+          }}
           onNewChat={() => {
+            setBoardProject(null);
             setSelected(null);
             setComposing(true);
             setDraft(new NewChatDraft(transport));
@@ -419,7 +449,20 @@ export function ChatsScreen({
           memoryEdits={memoryBanners.filter((edit) => !toastedEdits.has(edit.key))}
           onExpire={(key) => setToastedEdits((current) => toggled(current, key, true))}
         />
-        {selected === null && !composing ? (
+        {boardPage ? (
+          <ProjectPage
+            key={boardPage.id}
+            api={coordinator}
+            project={boardPage}
+            chats={snapshot.chats ?? []}
+            agents={snapshot.agents}
+            onOpenChat={(chatId) => {
+              setBoardProject(null);
+              setArchived(false);
+              setSelected(chatId);
+            }}
+          />
+        ) : selected === null && !composing ? (
           <LaunchArt />
         ) : selected === null ? (
           <NewChat
@@ -462,7 +505,10 @@ export function ChatsScreen({
           transport={transport}
           chatId={selected}
           onClose={() => setPalette(false)}
-          onChat={setSelected}
+          onChat={(chatId) => {
+            setBoardProject(null);
+            setSelected(chatId);
+          }}
           onProject={
             workspace
               ? (id) => {

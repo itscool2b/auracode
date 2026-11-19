@@ -170,12 +170,29 @@ impl SessionManager {
         &self,
         token: &str,
     ) -> Result<WorktreeChatResult, SessionError> {
+        self.apply_worktree_chat_owned(token, true).await
+    }
+
+    /// [`worktree_chat_apply`](Self::worktree_chat_apply) without starting the agent: a project's
+    /// worker is recorded as one first, so the session that starts has its tools.
+    pub(crate) async fn worktree_chat_apply_stopped(
+        &self,
+        token: &str,
+    ) -> Result<WorktreeChatResult, SessionError> {
+        self.apply_worktree_chat_owned(token, false).await
+    }
+
+    async fn apply_worktree_chat_owned(
+        &self,
+        token: &str,
+        start: bool,
+    ) -> Result<WorktreeChatResult, SessionError> {
         let manager = self.clone();
         let token = token.to_owned();
         // A dropped IPC reply does not interrupt the owned Git command or the rollback journal.
         self.deps()
             .rt
-            .spawn(async move { manager.apply_worktree_chat(&token).await })
+            .spawn(async move { manager.apply_worktree_chat(&token, start).await })
             .await
             .map_err(|_| {
                 invalid(
@@ -184,7 +201,11 @@ impl SessionManager {
             })?
     }
 
-    async fn apply_worktree_chat(&self, token: &str) -> Result<WorktreeChatResult, SessionError> {
+    async fn apply_worktree_chat(
+        &self,
+        token: &str,
+        start: bool,
+    ) -> Result<WorktreeChatResult, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -319,7 +340,7 @@ impl SessionManager {
             || setup
                 .as_ref()
                 .is_some_and(|result| result.warning.is_none() && result.command_token.is_none());
-        if started {
+        if started && start {
             let _ = self
                 .ask(&prepared.chat_id, |reply| ChatMsg::Start {
                     fresh: false,
