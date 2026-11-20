@@ -2023,7 +2023,7 @@ export type GeneralPreferences = {
 	 */
 	default_effort: string | null,
 	default_autonomy: Autonomy,
-	/**  Save an o7 file snapshot before every queued prompt. Off unless explicitly enabled. */
+	/**  Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled. */
 	automatic_checkpoints: boolean,
 	/**  Notify when a background chat finishes, fails or needs you. */
 	notifications: boolean,
@@ -3736,7 +3736,7 @@ export type TextSizePreference = "compact" | "comfortable";
  *  3 November 2026). It belongs to the profile on this device, like appearance, and works in both
  *  appearances. Claude Code's is the default (owner, 4 November 2026): a profile that never chose
  *  one, or a file from a newer build that names a theme this build lacks, reads as it
- *  ([`fill_defaults`]). A saved choice, o7 included, is kept.
+ *  ([`fill_defaults`]). A saved choice, Aura included, is kept.
  */
 export type ThemePreference = "aura" | "claude" | "codex" | "grok" | "pi" | "antigravity" | "cursor" | "opencode" | "oh_my_pi" | "hermes";
 

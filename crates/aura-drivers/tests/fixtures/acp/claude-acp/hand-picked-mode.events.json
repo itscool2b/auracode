@@ -586,7 +586,7 @@
         "auto_answer": {
           "type": "never"
         },
-        "note": "You picked the Plan mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+        "note": "You picked the Plan mode by hand, so o7 asks before every action. Choose an autonomy level to hand control back."
       }
     },
     {

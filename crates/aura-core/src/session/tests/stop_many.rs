@@ -69,7 +69,7 @@ async fn chats_still_stopping_are_named() {
         .await
         .expect("rename");
     let names = rig.manager.chat_names(vec![titled]).await;
-    assert_eq!(names, ["\u{201c}Fix the sidebar\u{201d} in o7"]);
+    assert_eq!(names, ["\u{201c}Fix the sidebar\u{201d} in auracode"]);
     let then = "Switch profiles again in a moment.";
     assert_eq!(
         still_stopping(&names, then),

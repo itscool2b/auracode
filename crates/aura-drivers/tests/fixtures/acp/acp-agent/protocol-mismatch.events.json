@@ -18,7 +18,7 @@
     "type": "start_failed",
     "data": {
       "kind": "protocol_mismatch",
-      "message": "This agent speaks ACP protocol version 2; auracode supports version 1.",
+      "message": "This agent speaks ACP protocol version 2; o7 supports version 1.",
       "detail": null
     }
   }

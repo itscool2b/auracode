@@ -76,7 +76,7 @@
         "event": {
           "type": "notice",
           "level": "warning",
-          "message": "auracode skipped an update from the agent that was larger than 64 MiB."
+          "message": "o7 skipped an update from the agent that was larger than 64 MiB."
         }
       }
     },
@@ -96,7 +96,7 @@
         "usage": null,
         "error": {
           "kind": "protocol_error",
-          "message": "auracode dropped a response of 86 MB; the limit is 64 MiB.",
+          "message": "o7 dropped a response of 86 MB; the limit is 64 MiB.",
           "detail": null
         }
       }
