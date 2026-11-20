@@ -134,10 +134,12 @@ export async function checkDashboard(browser, url, out, engine) {
         assert.ok((await figure()) < everyAgent, "Codex's share is less than all of them");
         await agents.nth(0).click();
         assert.equal(await figure(), everyAgent);
-        assert.deepEqual(
-          await activity.locator(".dashboard-activity-stats dt").allTextContents(),
-          ["Most active month", "Most active day", "Longest streak", "Current streak"],
-        );
+        assert.deepEqual(await activity.locator(".dashboard-activity-stats dt").allTextContents(), [
+          "Most active month",
+          "Most active day",
+          "Longest streak",
+          "Current streak",
+        ]);
         // A square says its day under the pointer.
         await activity.locator('.dashboard-activity-grid > [data-level="4"]').first().hover();
         assert.match(
