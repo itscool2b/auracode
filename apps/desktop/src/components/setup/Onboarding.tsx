@@ -1,5 +1,5 @@
-import { usePrefersReducedMotion } from "@auracode/ui";
-import { Keycap, Wordmark } from "@auracode/ui/graphite";
+import { usePrefersReducedMotion } from "@o7/ui";
+import { Keycap, Wordmark } from "@o7/ui/graphite";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowRight, Check, FolderOpen, GitBranch, RefreshCw } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from "react";

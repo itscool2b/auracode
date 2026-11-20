@@ -2,7 +2,7 @@
 //! anything else starts (no window, no Tauri, no data folder opened).
 //!
 //! Three callers share it, so the decisions stay in one tested piece of Rust
-//! (`aura_core::uninstall`):
+//! (`o7_core::uninstall`):
 //!
 //! - the Windows uninstaller's hook (`windows/hooks.nsh`), with `--interactive` unless it runs
 //!   quietly: it asks about worktrees with unsaved work and says what could not be deleted;
@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use aura_core::uninstall::{
+use o7_core::uninstall::{
     self, GitTool, Os, Plan, PlatformDirs, Report, Retry, Targets, WorktreeChoice,
 };
 
@@ -44,7 +44,7 @@ pub mod exit {
 const USAGE: &str =
     "Usage: auracode --uninstall-cleanup [--dry-run] [--interactive | --report-failures]
        [--data-dir <folder>] [--remove-unsaved-worktrees | --remove-worktree <folder>...]
-       [--after-pid <pid>] [--trash-app <auracode.app>]
+       [--after-pid <pid>] [--trash-app <o7.app>]
 
 Deletes everything o7 keeps on this device. Your agents, their settings and your
 repositories are not touched. Worktrees with unsaved work are kept unless you choose otherwise.";
@@ -52,7 +52,7 @@ repositories are not touched. Worktrees with unsaved work are kept unless you ch
 /// What the command line asked for.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Options {
-    /// Only this data folder (one chosen with `AURACODE_DATA_DIR`), nothing of the installed app's.
+    /// Only this data folder (one chosen with `O7_DATA_DIR`), nothing of the installed app's.
     pub data_dir: Option<PathBuf>,
     /// Wait for this process (the app that started the cleanup) to exit first.
     pub after_pid: Option<u32>,
@@ -121,8 +121,8 @@ pub fn run_from_args() -> Option<i32> {
     attach_console();
     let rest: Vec<OsString> = args.collect();
     let options = parse(&rest).and_then(|options| {
-        scoped_for_build(options, aura_core::paths::DEVELOPMENT_BUILD, || {
-            aura_core::paths::DataRoot::resolve()
+        scoped_for_build(options, o7_core::paths::DEVELOPMENT_BUILD, || {
+            o7_core::paths::DataRoot::resolve()
                 .map(|root| root.root().to_path_buf())
                 .map_err(|error| error.to_string())
         })
@@ -137,7 +137,7 @@ pub fn run_from_args() -> Option<i32> {
 }
 
 /// A development build cleans up only its own data folder, as if `--data-dir` named it
-/// (`resolve`: the development folder, or `AURACODE_DATA_DIR`'s). The machine scope is the
+/// (`resolve`: the development folder, or `O7_DATA_DIR`'s). The machine scope is the
 /// installed app's: it deletes the installed app's data folder, and asks the installed app to quit
 /// first, which ends every chat it runs.
 fn scoped_for_build(
@@ -245,7 +245,7 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
     }
 }
 
-/// A data folder from `AURACODE_DATA_DIR`, by the rule aura-core resolves it with.
+/// A data folder from `O7_DATA_DIR`, by the rule o7-core resolves it with.
 /// Removes each account's token from secure storage; answers how many stayed. With no secure
 /// storage there were never any tokens to remove.
 fn remove_agent_tokens(ids: &[String]) -> usize {
@@ -266,11 +266,11 @@ fn remove_agent_tokens(ids: &[String]) -> usize {
 }
 
 fn environment_root() -> Option<PathBuf> {
-    let value = std::env::var_os(aura_core::paths::DATA_DIR_ENV)?;
+    let value = std::env::var_os(o7_core::paths::DATA_DIR_ENV)?;
     if value.to_str().is_some_and(|text| text.trim().is_empty()) || value.is_empty() {
         return None;
     }
-    aura_core::paths::DataRoot::resolve()
+    o7_core::paths::DataRoot::resolve()
         .ok()
         .map(|root| root.root().to_path_buf())
 }
@@ -429,7 +429,8 @@ fn request_quit() {
     command
         .arg(QUIT_FLAG)
         // The hand-over only reaches the installed app's instance.
-        .env_remove(aura_core::paths::DATA_DIR_ENV)
+        .env_remove(o7_core::paths::DATA_DIR_ENV)
+        .env_remove(o7_core::paths::LEGACY_DATA_DIR_ENV)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -655,7 +656,7 @@ mod windows {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aura_core::uninstall::Worktree;
+    use o7_core::uninstall::Worktree;
 
     fn args(list: &[&str]) -> Vec<OsString> {
         list.iter().map(OsString::from).collect()
@@ -667,7 +668,7 @@ mod tests {
             dry_run: true,
             interactive: true,
             after_pid: Some(123),
-            trash_app: Some("/Applications/auracode.app".into()),
+            trash_app: Some("/Applications/o7.app".into()),
             remove_unsaved: true,
             ..Options::default()
         };
@@ -700,7 +701,7 @@ mod tests {
             "--after-pid",
             "4242",
             "--trash-app",
-            "/Applications/auracode.app",
+            "/Applications/o7.app",
             "--dry-run",
         ]))
         .unwrap();
@@ -716,7 +717,7 @@ mod tests {
                     "/data/profiles/local/worktrees/a".into(),
                     "/data/profiles/local/worktrees/b".into()
                 ],
-                trash_app: Some("/Applications/auracode.app".into()),
+                trash_app: Some("/Applications/o7.app".into()),
                 dry_run: true,
             }
         );
@@ -765,7 +766,7 @@ mod tests {
 
     #[test]
     fn only_the_exact_quit_argument_asks_a_running_copy_to_quit() {
-        let exe = "C:\\Program Files\\auracode\\auracode.exe".to_owned();
+        let exe = "C:\\Program Files\\o7\\o7.exe".to_owned();
         assert!(is_quit_request(&[exe.clone(), QUIT_FLAG.into()]));
         assert!(!is_quit_request(std::slice::from_ref(&exe)));
         assert!(!is_quit_request(&[

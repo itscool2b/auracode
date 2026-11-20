@@ -1,10 +1,10 @@
 //! The error every fallible command returns to the UI.
 //!
 //! A stable `code` is what the UI's logic switches on; `message` is a full sentence it can show as
-//! is, matching the style of aura-core's errors. Every [`SessionError`] maps to exactly one code,
+//! is, matching the style of o7-core's errors. Every [`SessionError`] maps to exactly one code,
 //! with the error's own sentence as the message.
 
-use aura_core::session::SessionError;
+use o7_core::session::SessionError;
 use serde::{Deserialize, Serialize};
 
 /// What went wrong, as a stable code the UI can switch on.
@@ -17,7 +17,7 @@ pub enum AppErrorCode {
     TooManyStreams,
     /// The main window does not exist (it was closed, or creating it failed).
     WindowUnavailable,
-    /// A command that only works in smoke mode (`AURACODE_SMOKE`) was called outside it.
+    /// A command that only works in smoke mode (`O7_SMOKE`) was called outside it.
     NotInSmokeMode,
     /// Startup could not determine a data folder at all, so there is nothing to show.
     DataDirUnknown,
@@ -75,7 +75,7 @@ pub struct AppError {
     pub message: String,
     /// What stands in the way of a folder change (`folder_busy` only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blockers: Option<aura_protocol::workspace::FolderBlockers>,
+    pub blockers: Option<o7_protocol::workspace::FolderBlockers>,
 }
 
 impl AppError {

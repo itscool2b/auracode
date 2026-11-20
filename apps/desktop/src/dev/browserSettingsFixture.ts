@@ -23,8 +23,8 @@ export function createBrowserSettingsFixture(status: Partial<BrowserStatus> = {}
       last_visit: now - 3 * 60 * MINUTE,
     },
     {
-      url: "https://github.com/itscool2b/auracode",
-      title: "itscool2b/auracode",
+      url: "https://github.com/itscool2b/o7",
+      title: "itscool2b/o7",
       visits: 7,
       last_visit: now - 26 * 60 * MINUTE,
     },

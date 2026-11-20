@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import { useEffect, useId, useRef, useState } from "react";
 import type { McpActionResult, McpDefinition, McpSessionAction, McpSnapshot } from "../../bindings";
 import { errorMessage } from "../../lib/errors";

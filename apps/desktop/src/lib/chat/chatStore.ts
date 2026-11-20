@@ -1,5 +1,4 @@
 import type {
-  AuraEvent,
   AuthPrompt,
   Autonomy,
   BackgroundTask,
@@ -10,6 +9,7 @@ import type {
   EventBatch,
   HistoryPage,
   LimitWindow,
+  O7Event,
   QueuedPrompt,
   SendingPrompt,
   SessionControlChange,
@@ -579,7 +579,7 @@ export class ChatStore {
   }
 
   /** The live state a frame's events change: the header, the queue, usage and limits. */
-  #applyLive(state: ChatState, event: AuraEvent): ChatState {
+  #applyLive(state: ChatState, event: O7Event): ChatState {
     switch (event.type) {
       case "turn_started":
         return {

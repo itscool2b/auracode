@@ -3,8 +3,8 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::mcp::Command;
-use aura_protocol::mcp::*;
+use o7_core::mcp::Command;
+use o7_protocol::mcp::*;
 use tauri::State;
 
 #[tauri::command]

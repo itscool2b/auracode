@@ -1,5 +1,5 @@
 {
-  "name": "@auracode/design-lab",
+  "name": "@o7/design-lab",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "shoot": "node scripts/shoot.mjs"
   },
   "dependencies": {
-    "@auracode/ui": "workspace:*",
+    "@o7/ui": "workspace:*",
     "lucide-react": "1.55.0",
     "motion": "14.6.0",
     "react": "19.3.1",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuraEvent, DemoKind, EventBatch } from "../bindings";
+import type { DemoKind, EventBatch, O7Event } from "../bindings";
 import { isRunning, StreamStore, type StreamTransport } from "./session";
 
 /** A shell stand-in: records calls and lets the test push frames into the latest channel. */
@@ -39,13 +39,13 @@ class FakeShell implements StreamTransport {
     return Promise.resolve();
   }
 
-  emit(index: number, seqStart: number, events: AuraEvent[]): void {
+  emit(index: number, seqStart: number, events: O7Event[]): void {
     this.sinks[index]?.({ chat_id: this.sessions[index] ?? "", seq_start: seqStart, events });
   }
 }
 
-const started: AuraEvent = { type: "turn_started", turn_id: "turn-1", prompt_id: null };
-const ended = (reason: "end_turn" | "cancelled"): AuraEvent => ({
+const started: O7Event = { type: "turn_started", turn_id: "turn-1", prompt_id: null };
+const ended = (reason: "end_turn" | "cancelled"): O7Event => ({
   type: "turn_ended",
   turn_id: "turn-1",
   stop_reason: reason,
@@ -53,7 +53,7 @@ const ended = (reason: "end_turn" | "cancelled"): AuraEvent => ({
   duration_ms: null,
   recovered: false,
 });
-const delta = (text: string): AuraEvent => ({ type: "message_delta", message_id: "m", text });
+const delta = (text: string): O7Event => ({ type: "message_delta", message_id: "m", text });
 
 describe("StreamStore", () => {
   it("runs a stream from starting to ended and counts what arrived", async () => {

@@ -1,4 +1,4 @@
-import { springs, squirclePath, usePrefersReducedMotion } from "@auracode/ui";
+import { springs, squirclePath, usePrefersReducedMotion } from "@o7/ui";
 import type { LucideIcon } from "lucide-react";
 import {
   AnimatePresence,

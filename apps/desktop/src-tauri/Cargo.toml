@@ -1,6 +1,6 @@
 [package]
-name = "auracode-desktop"
-description = "The o7 desktop shell: Tauri window, typed commands and channels over aura-core's sessions"
+name = "o7-desktop"
+description = "The o7 desktop shell: Tauri window, typed commands and channels over o7-core's sessions"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,17 +8,17 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-default-run = "auracode"
+default-run = "o7"
 
 # The library holds everything (so tests and the bindings export can reach it); the binary only
 # calls `run`. They have different names on purpose: a bin and a lib that share a name collide on
 # Windows debug artifacts.
 [lib]
-name = "auracode_desktop"
+name = "o7_desktop"
 path = "src/lib.rs"
 
 [[bin]]
-name = "auracode"
+name = "o7"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -28,13 +28,13 @@ embed-resource = "3.0.12"
 tauri-build.workspace = true
 
 [dependencies]
-aura-agents.workspace = true
-aura-config.workspace = true
-aura-core.workspace = true
-aura-drivers.workspace = true
-aura-process.workspace = true
-aura-protocol.workspace = true
-aura-remote.workspace = true
+o7-agents.workspace = true
+o7-config.workspace = true
+o7-core.workspace = true
+o7-drivers.workspace = true
+o7-process.workspace = true
+o7-protocol.workspace = true
+o7-remote.workspace = true
 # The computer's secure storage for added agent accounts' tokens (agent_tokens.rs): entry names
 # are base64url digests, and secret bytes are cleared when dropped.
 base64 = "0.22.1"
@@ -56,7 +56,7 @@ uuid = { workspace = true, features = ["v4"] }
 reqwest.workspace = true
 # Native TLS matches the rest of the desktop; signed-version verification is required.
 tauri-plugin-updater = { version = "=2.14.0", default-features = false, features = ["native-tls", "system-proxy", "zip"] }
-# Same release aura-drivers uses: its `run_script` takes a `CancellationToken`.
+# Same release o7-drivers uses: its `run_script` takes a `CancellationToken`.
 tokio-util = "0.7.20"
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -113,7 +113,7 @@ gtk = "0.18.2"
 # release and API level wry itself uses.
 webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 # Encodes those pictures as JPEG and PNG off the main thread. Already in the tree through
-# aura-core, at this version and with these codecs.
+# o7-core, at this version and with these codecs.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -125,8 +125,8 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 
 [dev-dependencies]
 # The quit, page-load and signal tests run the session manager on fake processes and scripted drivers.
-aura-drivers = { workspace = true, features = ["testing"] }
-aura-process = { workspace = true, features = ["testing"] }
+o7-drivers = { workspace = true, features = ["testing"] }
+o7-process = { workspace = true, features = ["testing"] }
 # Paused time makes the window fallback and the demo stream tests instant and deterministic.
 tokio = { workspace = true, features = ["test-util"] }
 

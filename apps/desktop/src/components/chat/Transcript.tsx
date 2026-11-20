@@ -1,4 +1,4 @@
-import { prefersReducedMotion } from "@auracode/ui";
+import { prefersReducedMotion } from "@o7/ui";
 import {
   type ReactNode,
   useCallback,

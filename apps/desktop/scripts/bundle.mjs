@@ -49,7 +49,7 @@ if (signed >= 0) {
     // committed config leaves empty: the app itself embeds the key at compile time (updater.rs).
     "--config",
     JSON.stringify({
-      plugins: { updater: { pubkey: process.env.AURACODE_UPDATER_PUBLIC_KEY.trim() } },
+      plugins: { updater: { pubkey: process.env.O7_UPDATER_PUBLIC_KEY.trim() } },
     }),
   );
 }
@@ -68,7 +68,7 @@ const env = releaseBuildEnv(process.env, [
   [home, "/build-home"],
   [process.env.CARGO_HOME ?? join(home, ".cargo"), "/cargo"],
   [sysroot.stdout.trim(), "/rust-toolchain"],
-  [repoRoot, "/auracode/"],
+  [repoRoot, "/o7/"],
 ]);
 if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   const lookup = spawnSync("sh", [signingScript, "identity"], {
@@ -80,7 +80,7 @@ if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   } else if (lookup.status === 1) {
     env.APPLE_SIGNING_IDENTITY = "-";
     console.warn(
-      'o7: no "auracode Local Signing" identity on this Mac, so the bundle is signed ad hoc and macOS will treat it as a new app. Create the identity once with: pnpm signing create',
+      'o7: no "o7 Local Signing" identity on this Mac, so the bundle is signed ad hoc and macOS will treat it as a new app. Create the identity once with: pnpm signing create',
     );
   } else {
     // Ambiguous: the script has said which identities clash. Signing with either would be a guess.

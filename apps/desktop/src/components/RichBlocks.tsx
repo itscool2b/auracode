@@ -1,4 +1,4 @@
-import { CopyButton } from "@auracode/ui/graphite";
+import { CopyButton } from "@o7/ui/graphite";
 import {
   type ReactNode,
   useEffect,

@@ -1,5 +1,5 @@
-import { type OrbState, usePrefersReducedMotion } from "@auracode/ui";
-import { AgentMark, ModelMark } from "@auracode/ui/graphite";
+import { type OrbState, usePrefersReducedMotion } from "@o7/ui";
+import { AgentMark, ModelMark } from "@o7/ui/graphite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   formatElapsed,

@@ -1,21 +1,21 @@
 //! Remote access: paired browsers and linked bots reaching this computer's chats through the
-//! relay (`aura-remote`, `docs/remote-sessions.md`). Off until the person turns it on in Settings.
+//! relay (`o7-remote`, `docs/remote-sessions.md`). Off until the person turns it on in Settings.
 //!
 //! The service belongs to the installation: one connection to the relay, whichever profile is
 //! open. A device or a bot link belongs to the profile it was made in and reaches no other
-//! (`aura_remote::Registry`): when another profile opens, browsers are told to start over, the
+//! (`o7_remote::Registry`): when another profile opens, browsers are told to start over, the
 //! other profile's devices are ended, and the relay is given only this profile's bot links.
 
 use std::sync::Arc;
 
-use aura_core::session::{FrameSink, SinkGone, StatusSink};
-use aura_protocol::{
+use o7_core::session::{FrameSink, SinkGone, StatusSink};
+use o7_protocol::{
     EventBatch, UiAnswer,
     remote::{RemoteBotLink, RemotePairing, RemoteStatus},
     session::{Availability, ChatAttach, ChatStatusUpdate, HistoryPage, PromptAck},
     workspace::{ProjectChatCreate, WorkspaceChat, WorkspaceFilter},
 };
-use aura_remote::{
+use o7_remote::{
     Backend, BackendError, BoxFuture, Frames, Overview, RegistryError, RemoteAgent, Service,
     Statuses,
 };
@@ -38,13 +38,13 @@ const PAGE_BYTES: u32 = 256 * 1024;
 fn origins() -> (String, String) {
     if cfg!(debug_assertions)
         && let (Ok(relay), Ok(site)) = (
-            std::env::var("AURACODE_REMOTE_RELAY"),
-            std::env::var("AURACODE_REMOTE_SITE"),
+            std::env::var("O7_REMOTE_RELAY"),
+            std::env::var("O7_REMOTE_SITE"),
         )
     {
         return (relay, site);
     }
-    let site = match option_env!("AURACODE_API_ORIGIN") {
+    let site = match option_env!("O7_API_ORIGIN") {
         Some("https://preview.o7.codes") => "https://preview.o7.codes",
         _ => "https://o7.codes",
     };
@@ -68,7 +68,7 @@ pub(crate) fn setup(app: &tauri::AppHandle, runtime: &tokio::runtime::Handle) {
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "This computer".into());
     let notify = app.clone();
-    let config = aura_remote::Config {
+    let config = o7_remote::Config {
         path: folder.join("remote.json"),
         relay,
         site,
@@ -283,7 +283,7 @@ impl AppBackend {
     /// The bound profile's session manager, under a command lease.
     fn sessions(
         &self,
-    ) -> Result<crate::state::ProfileLease<aura_core::session::SessionManager>, AppError> {
+    ) -> Result<crate::state::ProfileLease<o7_core::session::SessionManager>, AppError> {
         self.state().sessions_of(&self.profile)
     }
 
@@ -327,10 +327,10 @@ impl AppBackend {
 }
 
 /// The open profile's theme and appearance, by their saved names, for a paired page to wear.
-fn look(state: &AppState) -> Option<aura_remote::Look> {
+fn look(state: &AppState) -> Option<o7_remote::Look> {
     let preferences = state.setup_service()?.preferences().ok()?;
     let name = |value: serde_json::Value| value.as_str().map(str::to_owned);
-    Some(aura_remote::Look {
+    Some(o7_remote::Look {
         theme: name(serde_json::to_value(preferences.theme).ok()?)?,
         appearance: name(serde_json::to_value(preferences.appearance).ok()?)?,
     })
@@ -369,18 +369,18 @@ fn on_this_computer(path: &str) -> bool {
 }
 
 /// The words a bot uses for the three access levels.
-fn access_word(autonomy: aura_protocol::Autonomy) -> &'static str {
+fn access_word(autonomy: o7_protocol::Autonomy) -> &'static str {
     match autonomy {
-        aura_protocol::Autonomy::Ask => "ask",
-        aura_protocol::Autonomy::AutoEdit => "auto_edit",
-        aura_protocol::Autonomy::FullAuto => "full_auto",
+        o7_protocol::Autonomy::Ask => "ask",
+        o7_protocol::Autonomy::AutoEdit => "auto_edit",
+        o7_protocol::Autonomy::FullAuto => "full_auto",
     }
 }
 
 /// A chat's model and thinking choices as its pickers show them, and its access levels.
-fn chat_options(lists: &aura_protocol::session::SessionLists) -> aura_remote::ChatOptions {
-    use aura_protocol::session::{ConfigCategory, ConfigKind};
-    use aura_remote::Choice;
+fn chat_options(lists: &o7_protocol::session::SessionLists) -> o7_remote::ChatOptions {
+    use o7_protocol::session::{ConfigCategory, ConfigKind};
+    use o7_remote::Choice;
     let select = |category: ConfigCategory| {
         lists
             .options
@@ -407,9 +407,9 @@ fn chat_options(lists: &aura_protocol::session::SessionLists) -> aura_remote::Ch
     let native = &lists.controls.access.choices;
     let access = if native.is_empty() {
         [
-            aura_protocol::Autonomy::Ask,
-            aura_protocol::Autonomy::AutoEdit,
-            aura_protocol::Autonomy::FullAuto,
+            o7_protocol::Autonomy::Ask,
+            o7_protocol::Autonomy::AutoEdit,
+            o7_protocol::Autonomy::FullAuto,
         ]
         .into_iter()
         .map(|level| Choice {
@@ -428,7 +428,7 @@ fn chat_options(lists: &aura_protocol::session::SessionLists) -> aura_remote::Ch
             })
             .collect()
     };
-    aura_remote::ChatOptions {
+    o7_remote::ChatOptions {
         models,
         model,
         thinking,
@@ -446,7 +446,7 @@ impl Backend for AppBackend {
         })
     }
 
-    fn look(&self) -> Option<aura_remote::Look> {
+    fn look(&self) -> Option<o7_remote::Look> {
         look(&self.state())
     }
 
@@ -454,10 +454,10 @@ impl Backend for AppBackend {
     /// lease and only while this backend's profile is the open one.
     fn act(
         &self,
-        action: aura_remote::Action,
-    ) -> BoxFuture<'_, Result<aura_remote::Outcome, BackendError>> {
-        use aura_protocol::session::{ConfigCategory, ConfigValue, SessionControlChange};
-        use aura_remote::{Action, Outcome};
+        action: o7_remote::Action,
+    ) -> BoxFuture<'_, Result<o7_remote::Outcome, BackendError>> {
+        use o7_protocol::session::{ConfigCategory, ConfigValue, SessionControlChange};
+        use o7_remote::{Action, Outcome};
         Box::pin(async move {
             let sessions = self.sessions().map_err(failed)?;
             // A model or a thinking level, by the value its picker would send.
@@ -530,8 +530,8 @@ impl Backend for AppBackend {
                             .unwrap_or_else(|| "Project".into())
                     });
                     let project = sessions
-                        .project_create(aura_protocol::workspace::ProjectCreate {
-                            project: aura_protocol::workspace::ProjectInput {
+                        .project_create(o7_protocol::workspace::ProjectCreate {
+                            project: o7_protocol::workspace::ProjectInput {
                                 name,
                                 color: None,
                                 default_agent: None,
@@ -561,9 +561,9 @@ impl Backend for AppBackend {
                 }
                 Action::SetAccess { chat_id, access } => {
                     let wanted = match access.as_str() {
-                        "ask" => aura_protocol::Autonomy::Ask,
-                        "auto_edit" => aura_protocol::Autonomy::AutoEdit,
-                        "full_auto" => aura_protocol::Autonomy::FullAuto,
+                        "ask" => o7_protocol::Autonomy::Ask,
+                        "auto_edit" => o7_protocol::Autonomy::AutoEdit,
+                        "full_auto" => o7_protocol::Autonomy::FullAuto,
                         _ => return Err(BackendError::new("invalid", "No such access level.")),
                     };
                     let lists = sessions
@@ -607,9 +607,7 @@ impl Backend for AppBackend {
                     let preview = sessions
                         .continuation_preview(
                             &chat_id,
-                            aura_protocol::conversation::ContinuationAction::SwitchAgent {
-                                agent_id,
-                            },
+                            o7_protocol::conversation::ContinuationAction::SwitchAgent { agent_id },
                         )
                         .await
                         .map_err(|error| failed(error.into()))?;
@@ -660,9 +658,9 @@ impl Backend for AppBackend {
                             .iter()
                             .map(|file| {
                                 let kind = match file.kind {
-                                    aura_protocol::changes::ChangeKind::Added => "added",
-                                    aura_protocol::changes::ChangeKind::Modified => "modified",
-                                    aura_protocol::changes::ChangeKind::Deleted => "deleted",
+                                    o7_protocol::changes::ChangeKind::Added => "added",
+                                    o7_protocol::changes::ChangeKind::Modified => "modified",
+                                    o7_protocol::changes::ChangeKind::Deleted => "deleted",
                                 };
                                 (file.path.clone(), kind.to_owned())
                             })
@@ -721,7 +719,7 @@ impl Backend for AppBackend {
                         .await
                         .map_err(|error| failed(error.into()))?;
                     sessions
-                        .save_project_memory(aura_protocol::memory::SaveProjectMemory {
+                        .save_project_memory(o7_protocol::memory::SaveProjectMemory {
                             project_id,
                             expected_revision: current.revision,
                             markdown,

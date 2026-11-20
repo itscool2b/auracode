@@ -1,4 +1,4 @@
-import type { OrbState } from "@auracode/ui";
+import type { OrbState } from "@o7/ui";
 import {
   Archive,
   ChevronRight,

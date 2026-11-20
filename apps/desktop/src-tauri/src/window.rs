@@ -182,7 +182,7 @@ pub fn create_main(
     let origin = AppOrigin::current(config.use_https_scheme);
     let handle = app.handle().clone();
 
-    let title = main_title(&config.title, aura_core::paths::DEVELOPMENT_BUILD).to_owned();
+    let title = main_title(&config.title, o7_core::paths::DEVELOPMENT_BUILD).to_owned();
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
         .title(title)
         .theme(None)

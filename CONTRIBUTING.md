@@ -30,7 +30,7 @@ own. Say in the description what you ran and what you saw.
   [docs/developing-in-aura.md](docs/developing-in-aura.md) has the format, and `pnpm lint` checks
   it.
 - **Commit generated files with the change that needs them.** After changing a Rust command or a
-  type it uses, run `cargo test -p auracode-desktop export_bindings` and commit
+  type it uses, run `cargo test -p o7-desktop export_bindings` and commit
   `apps/desktop/src/bindings.ts`. After changing any `package.json` or `Cargo.toml`, run
   `node .github/scripts/third-party-notices.mjs --write`.
 - **No real-looking secrets, anywhere.** A scanner checks every commit. Tests that need a token

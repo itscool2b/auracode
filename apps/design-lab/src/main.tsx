@@ -1,7 +1,7 @@
 // First: wraps matchMedia so `?motion=reduce` reaches everything that reads the preference.
 import "./lab/reducedMotion";
 import "./styles.css";
-import { getOrbSupport } from "@auracode/ui";
+import { getOrbSupport } from "@o7/ui";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { DIRECTIONS } from "./directions";

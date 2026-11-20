@@ -1,4 +1,4 @@
-import { Logo } from "@auracode/ui/graphite";
+import { Logo } from "@o7/ui/graphite";
 import { Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { commandKey } from "./Keys";

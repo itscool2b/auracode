@@ -1,4 +1,4 @@
-import { springs, usePrefersReducedMotion } from "@auracode/ui";
+import { springs, usePrefersReducedMotion } from "@o7/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
   createContext,

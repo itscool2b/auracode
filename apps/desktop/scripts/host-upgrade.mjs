@@ -9,7 +9,7 @@
 // waiter snapshots the installed app, runs the installer in update mode (which keeps the data
 // folder; see src-tauri/windows/hooks.nsh), starts o7 again, and restores the snapshot if
 // the new build does not stay up. `rollback` restores a snapshot by hand and, with
-// `--restore-database`, the databases a newer schema migrated (aura-core backs each one up first).
+// `--restore-database`, the databases a newer schema migrated (o7-core backs each one up first).
 // See docs/developing-in-aura.md.
 
 import { spawn, spawnSync } from "node:child_process";
@@ -33,9 +33,9 @@ import { parseArgs } from "node:util";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const REPO = resolve(dirname(SCRIPT), "..", "..", "..");
-const APP_EXE = "auracode.exe";
+const APP_EXE = "o7.exe";
 const UNINSTALLER = "uninstall.exe";
-const HELPER_FLAG = "--aura-memory-helper";
+const HELPER_FLAG = "--o7-memory-helper";
 const SIDECARS = ["", "-wal", "-shm", "-journal"];
 const BACKUP = /^(?<db>.+)\.v(?<from>\d+)-(?<at>\d+)\.bak$/u;
 
@@ -48,12 +48,13 @@ const USAGE = `Usage: node apps/desktop/scripts/host-upgrade.mjs <command> [opti
       --after-exit arms it instead: it runs once o7 quits (default wait 30 minutes).
   rollback [--snapshot <name>] [--restore-database]
       Puts a snapshot back (the newest by default). --restore-database also restores each
-      database a newer build migrated since that snapshot, from aura-core's pre-migration backup.
+      database a newer build migrated since that snapshot, from o7-core's pre-migration backup.
   status    What is installed, running, armed and kept.
   cancel    Stops an armed install.
 
-  --install-dir, --data-dir and --state-dir override %LOCALAPPDATA%\\auracode,
-  %LOCALAPPDATA%\\si.auracode.desktop and %LOCALAPPDATA%\\auracode-upgrades.`;
+  --install-dir, --data-dir and --state-dir override %LOCALAPPDATA%\\o7, the data folder
+  (%LOCALAPPDATA%\\codes.o7.desktop, or si.auracode.desktop on a machine updated from auracode)
+  and %LOCALAPPDATA%\\o7-upgrades (or auracode-upgrades from then).`;
 
 /** The folders the commands work on, from `%LOCALAPPDATA%` unless overridden. */
 export function folders(env, overrides = {}) {
@@ -62,10 +63,29 @@ export function folders(env, overrides = {}) {
     throw new Error("LOCALAPPDATA is not set, so the installed app cannot be found.");
   }
   return {
-    installDir: resolve(overrides.installDir ?? join(local, "auracode")),
-    dataDir: resolve(overrides.dataDir ?? join(local, "si.auracode.desktop")),
-    stateDir: resolve(overrides.stateDir ?? join(local, "auracode-upgrades")),
+    installDir: resolve(overrides.installDir ?? join(local, "o7")),
+    dataDir: resolve(
+      overrides.dataDir ??
+        inUse(join(local, "codes.o7.desktop"), join(local, "si.auracode.desktop"), true),
+    ),
+    stateDir: resolve(
+      overrides.stateDir ?? inUse(join(local, "o7-upgrades"), join(local, "auracode-upgrades")),
+    ),
   };
+}
+
+/**
+ * o7 was auracode until 19 November 2026. A machine updated from then keeps its data, and the
+ * upgrades kept for it, under the earlier names: `current` when it was used, else `earlier` when
+ * that was, else `current`. A data folder is used when it has `device.json` or `profiles`; any
+ * other folder when it exists.
+ */
+export function inUse(current, earlier, data = false) {
+  const used = (path) =>
+    data
+      ? existsSync(join(path, "device.json")) || existsSync(join(path, "profiles"))
+      : existsSync(path);
+  return !used(current) && used(earlier) ? earlier : current;
 }
 
 function inside(path, folder) {
@@ -125,7 +145,7 @@ export function toPrune(names, keep) {
 }
 
 /**
- * For each database in `profilesDir/<profile>/`, the first pre-migration backup aura-core made
+ * For each database in `profilesDir/<profile>/`, the first pre-migration backup o7-core made
  * after `sinceMs`: the database as it was before a newer build first migrated it.
  */
 export function backupsSince(profilesDir, sinceMs) {
@@ -162,7 +182,7 @@ export function backupsSince(profilesDir, sinceMs) {
 export function cleanEnv(env) {
   return Object.fromEntries(
     Object.entries(env).filter(
-      ([name]) => !/^(AURACODE_|AURA_MCP_|CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$)/iu.test(name),
+      ([name]) => !/^(O7_|AURACODE_|AURA_MCP_|CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$)/iu.test(name),
     ),
   );
 }
@@ -194,7 +214,7 @@ const quoted = (text) => `'${text.replaceAll("'", "''")}'`;
 export const windows = {
   processes() {
     const json = powershell(
-      "@(Get-CimInstance Win32_Process -Filter \"Name='auracode.exe' OR Name='node.exe'\" | Select-Object ProcessId, ExecutablePath, CommandLine) | ConvertTo-Json -Compress",
+      "@(Get-CimInstance Win32_Process -Filter \"Name='o7.exe' OR Name='node.exe'\" | Select-Object ProcessId, ExecutablePath, CommandLine) | ConvertTo-Json -Compress",
     );
     if (!json) return [];
     const parsed = JSON.parse(json);

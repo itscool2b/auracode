@@ -8,9 +8,9 @@ repository root:
 | `pnpm dev` | The app with hot reload (Vite for the UI, Cargo for the shell). |
 | `pnpm bundle` | Release bundles (`tauri build`), signed on macOS as described below. Extra arguments go to `tauri build`. |
 | `pnpm signing create` / `pnpm signing status` | The local macOS signing identity (below). |
-| `pnpm --filter @auracode/desktop host-upgrade <command>` | Windows: installs a local build over the installed app with a snapshot to roll back to, also from a chat inside the app (`install --after-exit`). See [docs/developing-in-aura.md](../../docs/developing-in-aura.md). |
-| `pnpm --filter @auracode/desktop test` | UI tests (Vitest). |
-| `cargo test -p auracode-desktop` | Shell tests; also regenerates `src/bindings.ts`. |
+| `pnpm --filter @o7/desktop host-upgrade <command>` | Windows: installs a local build over the installed app with a snapshot to roll back to, also from a chat inside the app (`install --after-exit`). See [docs/developing-in-aura.md](../../docs/developing-in-aura.md). |
+| `pnpm --filter @o7/desktop test` | UI tests (Vitest). |
+| `cargo test -p o7-desktop` | Shell tests; also regenerates `src/bindings.ts`. |
 
 ## Linux
 
@@ -95,7 +95,7 @@ identity (marked `CSSMERR_TP_NOT_TRUSTED`, which is expected).
 - **Bundles:** `pnpm bundle` passes the identity's SHA-1 to `tauri build` as
   `APPLE_SIGNING_IDENTITY`. On a Mac without the identity it signs ad hoc (`-`, as CI does) and
   warns, so the build still works. If you set `APPLE_SIGNING_IDENTITY` yourself, it wins. Check a
-  bundle with `codesign -d -r- target/release/bundle/macos/auracode.app`.
+  bundle with `codesign -d -r- target/release/bundle/macos/o7.app`.
 - **Dev builds:** `src-tauri/.cargo/config.toml` makes `scripts/macos-signing.sh` Cargo's runner on
   macOS, so `pnpm dev` signs `target/debug/auracode` with the identity (and the bundle's
   identifier) just before it starts. Without the identity the build runs as before, with a hint.
@@ -105,7 +105,7 @@ identity (marked `CSSMERR_TP_NOT_TRUSTED`, which is expected).
   read the runner config, which Cargo only loads for commands run inside `src-tauri/`.
 - **Windows and Linux** need nothing: the scripts only sign on macOS.
 
-To keep the identity in another keychain, set `AURACODE_SIGNING_KEYCHAIN` to its path for
+To keep the identity in another keychain, set `O7_SIGNING_KEYCHAIN` to its path for
 `create`, `status` and builds. `codesign` only finds identities in keychains on your search list
 (`security list-keychains`), which the login keychain always is.
 

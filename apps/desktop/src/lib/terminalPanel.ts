@@ -4,7 +4,7 @@ import type { ProjectToolsApi } from "./projectTools";
 import type { TerminalState, TerminalTransport } from "./terminal";
 import { localTerminalMemory, type RememberedTab, type TerminalMemory } from "./terminalMemory";
 
-/** Rust allows eight project shells in the app (aura-core terminal.rs); the panel says so first. */
+/** Rust allows eight project shells in the app (o7-core terminal.rs); the panel says so first. */
 export const PANEL_TERMINAL_LIMIT = 8;
 /** A third of a 1440x900 window: room for a test run without hiding the conversation. */
 export const PANEL_HEIGHT_DEFAULT = 280;

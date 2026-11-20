@@ -1,4 +1,4 @@
-import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
+import { PixelLoader, StatusDot } from "@o7/ui/graphite";
 import {
   Bot,
   ChevronDown,

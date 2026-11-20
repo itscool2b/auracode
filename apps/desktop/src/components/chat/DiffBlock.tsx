@@ -1,4 +1,4 @@
-import { CopyButton } from "@auracode/ui/graphite";
+import { CopyButton } from "@o7/ui/graphite";
 import { MessageSquarePlus, RotateCcw, UnfoldVertical } from "lucide-react";
 import { Fragment, type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { LineHunk } from "../../bindings";

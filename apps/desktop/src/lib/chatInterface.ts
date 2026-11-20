@@ -7,7 +7,7 @@
 export type ChatInterface = "chat" | "terminal";
 
 /**
- * The agents whose own interface a chat can open in, as Rust's `aura_agents::has_terminal` names
+ * The agents whose own interface a chat can open in, as Rust's `o7_agents::has_terminal` names
  * them: an agent's entry carries it (`AgentEntry.terminal`), and this list answers until the
  * entries load, so a chat open in its terminal keeps that view meanwhile.
  */

@@ -1,5 +1,5 @@
 import "./browser.css";
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import {
   AppWindow,
   ArrowLeft,

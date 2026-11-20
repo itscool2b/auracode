@@ -3,7 +3,7 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_protocol::{
+use o7_protocol::{
     folder_resolution::{FolderLocationReview, FolderResolution},
     workspace::ProjectFolder,
 };

@@ -1,13 +1,13 @@
 /** Development-only visual harness. It never starts a process or uses the native transport. */
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
-import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
+import fullAuto from "../../../../crates/o7-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
+import thinking from "../../../../crates/o7-drivers/tests/fixtures/claude/recorded-thinking.events.json";
 import type {
   AgentEntry,
-  AuraEvent,
   Capabilities,
   EventBatch,
+  O7Event,
   QueuedPrompt,
   QueueWait,
   SessionStatus,
@@ -183,26 +183,26 @@ const CHAT_AGENTS: readonly AgentEntry[] =
   new URLSearchParams(location.search).get("agents") === "lineup" ? LINEUP : [AGENT];
 
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
-function recorded(source: { events: readonly { type: string; data: unknown }[] }): AuraEvent[] {
-  const events: AuraEvent[] = [];
+function recorded(source: { events: readonly { type: string; data: unknown }[] }): O7Event[] {
+  const events: O7Event[] = [];
   const turns = new Set<string>();
   for (const envelope of source.events) {
     if (envelope.type === "event") {
-      const data = envelope.data as { turn: string | null; event: AuraEvent };
+      const data = envelope.data as { turn: string | null; event: O7Event };
       if (data.turn !== null && !turns.has(data.turn)) {
         turns.add(data.turn);
         events.push(ev.turnStarted(data.turn));
       }
       events.push(data.event);
     } else if (envelope.type === "turn_ended") {
-      const data = envelope.data as Extract<AuraEvent, { type: "turn_ended" }>;
+      const data = envelope.data as Extract<O7Event, { type: "turn_ended" }>;
       events.push({ ...data, type: "turn_ended", duration_ms: null, recovered: false });
     }
   }
   return events;
 }
 
-function synthetic(mode: string): AuraEvent[] {
+function synthetic(mode: string): O7Event[] {
   // The native smoke's short history crosses a prompt boundary just above the bottom.
   // Keep both resolved permission rows: their measured heights trigger viewport clamping
   // when the sticky prompt releases its reserved space.
@@ -595,12 +595,12 @@ function synthetic(mode: string): AuraEvent[] {
       }),
       ev.toolCall("check", {
         kind: "execute",
-        title: "pnpm --filter @auracode/desktop exec vitest run …",
+        title: "pnpm --filter @o7/desktop exec vitest run …",
         status: "completed",
         tool_name: "Bash",
         raw_input: {
           command:
-            "pnpm --filter @auracode/desktop exec vitest run \\\n  src/components/Sidebar.test.tsx \\\n  --reporter dot",
+            "pnpm --filter @o7/desktop exec vitest run \\\n  src/components/Sidebar.test.tsx \\\n  --reporter dot",
           description: "Run the sidebar tests",
         },
         content: [
@@ -650,7 +650,7 @@ function synthetic(mode: string): AuraEvent[] {
           "",
           "## Verification",
           "",
-          "- `pnpm --filter @auracode/desktop check:chat`",
+          "- `pnpm --filter @o7/desktop check:chat`",
           "- Resize to 960 x 640 and check nothing overflows.",
         ].join("\n"),
       },
@@ -708,8 +708,8 @@ The right panel still overlaps the composer below 880 pixels of chat width. It s
 Next, the permission card takes the composer's place while a request waits, so the answer is always where your hands already are.`;
 
 /** A live turn played out over about ten seconds: a thought, four tools, then a long answer. */
-function streamingScript(): { delay: number; events: AuraEvent[] }[] {
-  const steps: { delay: number; events: AuraEvent[] }[] = [];
+function streamingScript(): { delay: number; events: O7Event[] }[] {
+  const steps: { delay: number; events: O7Event[] }[] = [];
   const words = (text: string, size: number) => {
     const parts = text.split(/(?<= )/);
     const chunks: string[] = [];
@@ -943,7 +943,7 @@ function Preview() {
       }),
     [shown, status],
   );
-  const publishPreview = useRef<((updates: AuraEvent[]) => void) | null>(null);
+  const publishPreview = useRef<((updates: O7Event[]) => void) | null>(null);
   const attached = useRef(false);
   useEffect(() => {
     if (mode !== "streaming") return;
@@ -1182,7 +1182,7 @@ function Preview() {
         },
       ],
     });
-    const publish = (updates: AuraEvent[]) => {
+    const publish = (updates: O7Event[]) => {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
     };
@@ -1462,7 +1462,7 @@ export function mountPreview(container: HTMLElement): void {
 }
 
 /** Completed edits to `count` more files, so the changed-files card has names to fit. */
-function extraEdits(count: number): AuraEvent[] {
+function extraEdits(count: number): O7Event[] {
   const names = [
     "src/lib/dashboard.ts",
     "src/components/dashboard/DashboardScreen.tsx",

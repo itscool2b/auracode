@@ -4,11 +4,11 @@ The Instructions page in Settings manages the markdown files coding agents read 
 instructions (`AGENTS.md`, `CLAUDE.md` and the rest). It replaces the Library's instruction items:
 the Library's user-level instruction copy (Library copies of `CLAUDE.md`, `AGENTS.md` and
 `AGENTS.override.md`) is superseded by this page, and the planned per-agent Library rework can drop
-its instruction items. The Rust logic (`crates/aura-config/src/instructions/`) has no dependency on
+its instruction items. The Rust logic (`crates/o7-config/src/instructions/`) has no dependency on
 the Library interface.
 
-Implementation: `aura-config::instructions` (reading, classification, plans, the transaction),
-`aura-core` (`session/instructions.rs`, `gitworkspaces/instructions.rs`: targets, Git facts,
+Implementation: `o7-config::instructions` (reading, classification, plans, the transaction),
+`o7-core` (`session/instructions.rs`, `gitworkspaces/instructions.rs`: targets, Git facts,
 worktree setup, worktree copies, the single-file commit, owned applies), `apps/desktop/src-tauri/src/instructions_commands.rs`
 (typed commands), and `apps/desktop/src/components/settings/InstructionsPanel.tsx` with its review
 dialog.
@@ -175,7 +175,7 @@ the page then shows only the import line there, which is harmless).
 
 ## Edge cases
 
-Each case has defined behaviour and a test (`aura-config` unless named otherwise).
+Each case has defined behaviour and a test (`o7-config` unless named otherwise).
 
 | Case | Behaviour | Test |
 |---|---|---|
@@ -190,8 +190,8 @@ Each case has defined behaviour and a test (`aura-config` unless named otherwise
 | Not UTF-8, BOM, CRLF, mixed endings | Non-UTF-8 is read-only (copies stay byte-identical); BOM and line endings are kept; mixed endings use the majority and say so | `bom_crlf_non_utf8_and_empty_files_keep_their_bytes`, `text::tests::*` |
 | Empty files | Shown as empty; agents that skip empty files read nothing; saving empty text is allowed and says agents skip it | same |
 | Large files | Per-agent warnings beside the text (Codex 32 KiB or the configured limit, Antigravity 24,000 bytes, Hermes 20,000 characters, Claude 200 and Cursor 500 lines); over 1 MiB is read-only | `large_files_warn_per_agent_and_oversized_ones_are_not_editable`, `a_configured_codex_limit_is_read_and_a_bad_config_falls_back_to_the_default` |
-| Ignored files | Copied into new worktree chats by default (see [Worktree chats](#worktree-chats)) and noted so ("New worktree chats get a copy"); with the switch off, noted ("new worktree chats won't have it") with the offer to copy it through the folder's worktree setup; Grok Build skips ignored files | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; aura-core `ignored_instruction_files_reach_a_new_worktree_without_changing_it`, `new_worktree_chats_get_ignored_instruction_files_unless_turned_off`; desktop `copies ignored files into new worktree chats while the switch is on` |
-| Untracked files | Noted ("new worktree chats won't have it"); offer to copy it through the folder's worktree setup or to commit it alone. Never copied automatically: in a worktree it would be a new change an agent could commit on the chat's branch | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; aura-core `facts_are_read_only_and_a_commit_takes_exactly_one_new_file`, `setup_settings_are_shared_by_folder...` |
+| Ignored files | Copied into new worktree chats by default (see [Worktree chats](#worktree-chats)) and noted so ("New worktree chats get a copy"); with the switch off, noted ("new worktree chats won't have it") with the offer to copy it through the folder's worktree setup; Grok Build skips ignored files | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; o7-core `ignored_instruction_files_reach_a_new_worktree_without_changing_it`, `new_worktree_chats_get_ignored_instruction_files_unless_turned_off`; desktop `copies ignored files into new worktree chats while the switch is on` |
+| Untracked files | Noted ("new worktree chats won't have it"); offer to copy it through the folder's worktree setup or to commit it alone. Never copied automatically: in a worktree it would be a new change an agent could commit on the chat's branch | `untracked_and_ignored_files_are_flagged_for_worktrees_and_grok_skips_ignored`; o7-core `facts_are_read_only_and_a_commit_takes_exactly_one_new_file`, `setup_settings_are_shared_by_folder...` |
 | Nested files in subfolders, files in parent folders | Listed read-only with their readers; a parent `CLAUDE.md` changes what Claude Code reads and one-file mode adds the import it needs | `nested_and_parent_files_are_listed_and_a_parent_claude_md_changes_what_claude_reads` |
 | Path traversal, unknown keys | Only known file keys are accepted | `unknown_keys_traversal_and_links_outside_the_folder_are_refused` |
 | Links outside the folder, linked folders, dangling links | Classified by the OS's own resolution against the canonical folder; outside and dangling links are never followed or written | `link_classification_follows_the_resolved_target_never_the_link_text`, `a_relative_link_through_a_linked_folder_is_classified_by_where_the_os_resolves_it`, `a_dangling_link_reads_as_nothing_and_is_never_written`, `a_linked_agent_folder_pointing_outside_is_never_followed` |

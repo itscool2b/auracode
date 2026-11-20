@@ -1,5 +1,5 @@
-import type { AgentBrandId } from "@auracode/ui";
-import { AGENT_BRANDS } from "@auracode/ui";
+import type { AgentBrandId } from "@o7/ui";
+import { AGENT_BRANDS } from "@o7/ui";
 import type { CSSProperties, ReactNode } from "react";
 import { SpriteMark } from "./Sprite";
 

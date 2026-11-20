@@ -1,6 +1,6 @@
 //! Memory writes retain the active-profile lease until the writer acknowledges the exact revision.
 use crate::{error::AppError, state::AppState};
-use aura_protocol::memory::*;
+use o7_protocol::memory::*;
 use tauri::{Emitter, Manager, State};
 
 /// Sent with a [`ProjectMemoryChanged`] after every committed change to a project's memory,

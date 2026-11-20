@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type {

@@ -1,4 +1,4 @@
-import { AgentMark, Logo } from "@auracode/ui/graphite";
+import { AgentMark, Logo } from "@o7/ui/graphite";
 import { Check } from "lucide-react";
 import type { AgentPhase } from "./AgentRow";
 import "./agent-connect.css";

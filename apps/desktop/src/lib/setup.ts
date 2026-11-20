@@ -1,4 +1,4 @@
-import { setMotionPreference } from "@auracode/ui";
+import { setMotionPreference } from "@o7/ui";
 import {
   type AgentEntry,
   type ConfigChoice,

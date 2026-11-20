@@ -1,4 +1,4 @@
-import { Logo } from "@auracode/ui/graphite";
+import { Logo } from "@o7/ui/graphite";
 import type { ReactNode } from "react";
 
 /**

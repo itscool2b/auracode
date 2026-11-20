@@ -7,9 +7,9 @@ mod power;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use aura_core::onboarding::GeneralPreferences;
-use aura_core::session::{SinkGone, StatusSink};
-use aura_protocol::session::ChatStatusUpdate;
+use o7_core::onboarding::GeneralPreferences;
+use o7_core::session::{SinkGone, StatusSink};
+use o7_protocol::session::ChatStatusUpdate;
 use tauri::{Emitter, Manager};
 use tokio::sync::{mpsc, watch};
 
@@ -560,7 +560,7 @@ mod profile_tests {
         };
         let update = ChatStatusUpdate {
             chat_id: "old-chat".into(),
-            status: aura_protocol::SessionStatus::Running,
+            status: o7_protocol::SessionStatus::Running,
             needs_attention: false,
             title: None,
             updated_at: 1,

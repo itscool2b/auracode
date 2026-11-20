@@ -38,7 +38,7 @@ const CHECK_EVERY: Duration = Duration::from_secs(4 * 60 * 60);
 /// GitHub answers a release asset with at most two redirects; a few more are allowed, not many.
 const MAX_REDIRECTS: usize = 5;
 /// The repository's release assets, and the only hosts GitHub redirects an asset request to.
-const RELEASES: &str = "/itscool2b/auracode/releases/download/";
+const RELEASES: &str = "/itscool2b/o7/releases/download/";
 const ASSET_HOSTS: [&str; 3] = [
     "github.com",
     "objects.githubusercontent.com",
@@ -46,7 +46,7 @@ const ASSET_HOSTS: [&str; 3] = [
 ];
 
 pub(crate) fn staging() -> bool {
-    matches!(option_env!("AURACODE_UPDATER_CHANNEL"), Some("staging"))
+    matches!(option_env!("O7_UPDATER_CHANNEL"), Some("staging"))
 }
 fn channel() -> &'static str {
     if staging() { "staging" } else { "stable" }
@@ -54,9 +54,9 @@ fn channel() -> &'static str {
 /// The newest stable release's manifest, or the one the rolling `staging` release carries.
 fn manifest(staging: bool) -> &'static str {
     if staging {
-        "https://github.com/itscool2b/auracode/releases/download/staging/latest.json"
+        "https://github.com/itscool2b/o7/releases/download/staging/latest.json"
     } else {
-        "https://github.com/itscool2b/auracode/releases/latest/download/latest.json"
+        "https://github.com/itscool2b/o7/releases/latest/download/latest.json"
     }
 }
 
@@ -73,10 +73,10 @@ struct Source {
 /// unless both test variables name a loopback manifest and a key: then it can check, download and
 /// verify against a server on this machine, and never installs.
 fn source() -> Option<Source> {
-    if aura_core::paths::DEVELOPMENT_BUILD {
+    if o7_core::paths::DEVELOPMENT_BUILD {
         return test_source(
-            std::env::var("AURACODE_UPDATE_TEST_MANIFEST").ok(),
-            std::env::var("AURACODE_UPDATE_TEST_PUBLIC_KEY").ok(),
+            std::env::var("O7_UPDATE_TEST_MANIFEST").ok(),
+            std::env::var("O7_UPDATE_TEST_PUBLIC_KEY").ok(),
         );
     }
     public_key().map(|key| Source {
@@ -151,7 +151,7 @@ fn error(message: impl Into<String>) -> UpdateError {
     }
 }
 fn public_key() -> Option<&'static str> {
-    option_env!("AURACODE_UPDATER_PUBLIC_KEY")
+    option_env!("O7_UPDATER_PUBLIC_KEY")
         .map(str::trim)
         .filter(|key| !key.is_empty())
 }
@@ -185,7 +185,7 @@ impl Updates {
         let enabled = source.is_some();
         let message = if enabled {
             None
-        } else if aura_core::paths::DEVELOPMENT_BUILD {
+        } else if o7_core::paths::DEVELOPMENT_BUILD {
             Some("A development build does not update itself.".into())
         } else {
             Some(
@@ -276,7 +276,7 @@ fn available(state: &AppState, updates: &Updates) -> Result<Source, UpdateError>
     // A development build has a source only for the loopback test server, and never installs:
     // an update would replace the installed app, which may be running the session that built it.
     updates.source.clone().ok_or_else(|| {
-        error(if aura_core::paths::DEVELOPMENT_BUILD {
+        error(if o7_core::paths::DEVELOPMENT_BUILD {
             "Application updates are unavailable for a development build."
         } else {
             "This build has no configured update signing key."
@@ -524,7 +524,7 @@ fn validate_download_url(url: &reqwest::Url, source: &Source) -> Result<(), Upda
 }
 
 /// A package the manifest names must be a file of one of this repository's releases on its
-/// channel: `/itscool2b/auracode/releases/download/<tag>/<file>`, the tag starting `v` (stable) or
+/// channel: `/itscool2b/o7/releases/download/<tag>/<file>`, the tag starting `v` (stable) or
 /// `staging-v`, both parts plain names. Nothing else on GitHub, and nothing anywhere else.
 fn validate_channel_url(url: &reqwest::Url, staging: bool) -> Result<(), UpdateError> {
     let outside = || error("The update artifact is outside the trusted release location.");
@@ -637,13 +637,13 @@ impl<H: QuitHost> QuitHost for UpdateQuit<H> {
     fn show_window(&self) {
         self.0.show_window();
     }
-    fn storage(&self) -> aura_protocol::session::StorageStatus {
+    fn storage(&self) -> o7_protocol::session::StorageStatus {
         self.0.storage()
     }
     async fn ask_to_quit_unsaved(&self, _question: QuitQuestion) -> bool {
         false
     }
-    async fn stop_sessions(&self, deadline: Duration) -> aura_core::session::ShutdownSummary {
+    async fn stop_sessions(&self, deadline: Duration) -> o7_core::session::ShutdownSummary {
         self.0.stop_sessions(deadline).await
     }
     async fn close_store(&self, deadline: Duration) -> bool {
@@ -701,7 +701,7 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         .ok_or_else(|| error("The current profile is unavailable. Restart o7 before updating."))?;
     if !matches!(
         chats.manager.storage_status().state,
-        aura_protocol::session::StorageState::Ok
+        o7_protocol::session::StorageState::Ok
     ) {
         updates.phase(
             UpdatePhase::WaitingForIdle,
@@ -717,7 +717,7 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
     state.terminals.close_all();
     let report = chats
         .manager
-        .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
+        .stop_all(o7_core::session::StopScope::All, Duration::from_secs(30))
         .await;
     let _ = chats
         .manager
@@ -728,7 +728,7 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
             "Wait for Git changes and agent updates to finish, then retry installation.".to_owned()
         } else {
             let names = chats.manager.chat_names(report.stopping).await;
-            aura_core::session::still_stopping(&names, "Retry installation in a moment.")
+            o7_core::session::still_stopping(&names, "Retry installation in a moment.")
         };
         updates.phase(UpdatePhase::WaitingForIdle, Some(reason));
         return Ok(updates.report(&app));
@@ -852,9 +852,9 @@ mod tests {
         fn show_window(&self) {
             lock(&self.calls).push("show");
         }
-        fn storage(&self) -> aura_protocol::session::StorageStatus {
-            aura_protocol::session::StorageStatus {
-                state: aura_protocol::session::StorageState::Ok,
+        fn storage(&self) -> o7_protocol::session::StorageStatus {
+            o7_protocol::session::StorageStatus {
+                state: o7_protocol::session::StorageState::Ok,
                 unsaved_bytes: 0,
             }
         }
@@ -862,9 +862,9 @@ mod tests {
             lock(&self.calls).push("discard");
             true
         }
-        async fn stop_sessions(&self, _: Duration) -> aura_core::session::ShutdownSummary {
+        async fn stop_sessions(&self, _: Duration) -> o7_core::session::ShutdownSummary {
             lock(&self.calls).push("stop");
-            aura_core::session::ShutdownSummary {
+            o7_core::session::ShutdownSummary {
                 sessions: 0,
                 graceful: 0,
                 forced: 0,
@@ -915,36 +915,36 @@ mod tests {
         }
     }
 
-    const RELEASE: &str = "https://github.com/itscool2b/auracode/releases/download";
+    const RELEASE: &str = "https://github.com/itscool2b/o7/releases/download";
 
     #[test]
     fn update_artifacts_are_files_of_this_repositorys_releases_and_nothing_else() {
-        let ok = format!("{RELEASE}/v0.1.1570/auracode_0.1.1570_x64-setup.exe");
+        let ok = format!("{RELEASE}/v0.1.1570/o7_0.1.1570_x64-setup.exe");
         assert!(validate_channel_url(&ok.parse().unwrap(), false).is_ok());
         for url in [
             // Another scheme, host, port or a credential.
-            "http://github.com/itscool2b/auracode/releases/download/v0.1.1/app.exe",
-            "https://github.com.evil.example/itscool2b/auracode/releases/download/v0.1.1/app.exe",
-            "https://evil.example/itscool2b/auracode/releases/download/v0.1.1/app.exe",
-            "https://github.com:8443/itscool2b/auracode/releases/download/v0.1.1/app.exe",
-            "https://user@github.com/itscool2b/auracode/releases/download/v0.1.1/app.exe",
+            "http://github.com/itscool2b/o7/releases/download/v0.1.1/app.exe",
+            "https://github.com.evil.example/itscool2b/o7/releases/download/v0.1.1/app.exe",
+            "https://evil.example/itscool2b/o7/releases/download/v0.1.1/app.exe",
+            "https://github.com:8443/itscool2b/o7/releases/download/v0.1.1/app.exe",
+            "https://user@github.com/itscool2b/o7/releases/download/v0.1.1/app.exe",
             // Another repository, or another part of this one.
             "https://github.com/someone/auracode/releases/download/v0.1.1/app.exe",
             "https://github.com/itscool2b/other/releases/download/v0.1.1/app.exe",
-            "https://github.com/itscool2b/auracode/raw/main/app.exe",
-            "https://github.com/itscool2b/auracode/releases/latest/download/app.exe",
+            "https://github.com/itscool2b/o7/raw/main/app.exe",
+            "https://github.com/itscool2b/o7/releases/latest/download/app.exe",
             // A query, a fragment, an encoded or a nested path, a hidden file, no file.
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/app.exe?token=anything",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/app.exe#ignored",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/%2e%2e/app.exe",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/a/app.exe",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/.hidden",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/",
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/app.exe?token=anything",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/app.exe#ignored",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/%2e%2e/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/a/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/.hidden",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1",
             // A tag that is not a version: a hand-made release cannot stand in for one.
-            "https://github.com/itscool2b/auracode/releases/download/build-2026-11-19/app.exe",
-            "https://github.com/itscool2b/auracode/releases/download/vendor/app.exe",
-            "https://github.com/itscool2b/auracode/releases/download/latest/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/build-2026-11-19/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/vendor/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/latest/app.exe",
         ] {
             assert!(
                 validate_channel_url(&url.parse().unwrap(), false).is_err(),
@@ -970,13 +970,13 @@ mod tests {
             let url: reqwest::Url = address.parse().unwrap();
             assert_eq!(url.scheme(), "https");
             assert_eq!(url.host_str(), Some("github.com"));
-            assert!(url.path().starts_with("/itscool2b/auracode/releases/"));
+            assert!(url.path().starts_with("/itscool2b/o7/releases/"));
         }
     }
     #[test]
     fn a_redirect_is_followed_only_to_githubs_asset_hosts_over_https() {
         for url in [
-            "https://github.com/itscool2b/auracode/releases/download/v0.1.1/latest.json",
+            "https://github.com/itscool2b/o7/releases/download/v0.1.1/latest.json",
             "https://release-assets.githubusercontent.com/github-production-release-asset/1/2?sp=r&sig=x",
             "https://objects.githubusercontent.com/github-production-release-asset/1/2?X-Amz-Signature=x",
         ] {
@@ -986,7 +986,7 @@ mod tests {
             "http://release-assets.githubusercontent.com/a",
             "https://release-assets.githubusercontent.com.evil.example/a",
             "https://evil.githubusercontent.com/a",
-            "https://raw.githubusercontent.com/itscool2b/auracode/main/latest.json",
+            "https://raw.githubusercontent.com/itscool2b/o7/main/latest.json",
             "https://release-assets.githubusercontent.com:8443/a",
             "https://user:pass@release-assets.githubusercontent.com/a",
             "https://evil.example/a",
@@ -1027,7 +1027,7 @@ mod tests {
         );
         for url in [
             "http://127.0.0.1:9000/app.exe",
-            "https://github.com/itscool2b/auracode/releases/download/v9.9.9/app.exe",
+            "https://github.com/itscool2b/o7/releases/download/v9.9.9/app.exe",
             "http://127.0.0.1:8123/app.exe?x=1",
             "http://evil.example:8123/app.exe",
         ] {

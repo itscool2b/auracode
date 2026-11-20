@@ -1,4 +1,4 @@
-import { getBrand } from "@auracode/ui";
+import { getBrand } from "@o7/ui";
 import type { FileChange, MessageItem, TranscriptModel } from "../../kit";
 
 /**

@@ -5,7 +5,7 @@ added in it. Your coding agents, their settings and your repositories are not to
 has the same deletion without uninstalling, on Windows, macOS and Linux (macOS and Linux have no
 uninstaller of o7's own).
 
-One piece of Rust decides what goes everywhere: aura-core's `uninstall` module, run by the app
+One piece of Rust decides what goes everywhere: o7-core's `uninstall` module, run by the app
 binary's `--uninstall-cleanup` mode (`apps/desktop/src-tauri/src/uninstall.rs`). The Windows
 uninstaller, Settings and a person in a terminal all run that mode.
 
@@ -25,7 +25,7 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - the WebView2 profile (`EBWebView`).
 - `%APPDATA%\si.auracode.desktop`: the window position.
 - In `%TEMP%`: the updater's downloads (`auracode-<version>-updater-*`) and the CLI's probe
-  folders (`aura-cli-*`).
+  folders (`o7-cli-*`).
 - In Windows Credential Manager, the entries named `auracode.agents.v1:` that hold the tokens of
   agent accounts added in the deleted profiles. Other apps' credentials are never read. See
   [Secure storage](#secure-storage).
@@ -35,7 +35,7 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - `HKCU\Software\auracode\auracode`;
   - Windows' notification settings for o7
     (`HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\si.auracode.desktop`).
-- A data folder chosen with `AURACODE_DATA_DIR`, when the variable is set for the uninstaller.
+- A data folder chosen with `O7_DATA_DIR`, when the variable is set for the uninstaller.
   Only what o7 made in it goes (see [Edge cases](#edge-cases)).
 
 ### macOS
@@ -157,7 +157,7 @@ Open Settings, then Apps, find o7 and choose Uninstall. The confirm page has one
 "Keep my o7 data", which is unticked by default, so uninstalling deletes the data.
 
 Before any file is removed, the uninstaller's hook (`apps/desktop/src-tauri/windows/hooks.nsh`)
-runs `auracode.exe --uninstall-cleanup --interactive`:
+runs `o7.exe --uninstall-cleanup --interactive`:
 
 1. If o7 is running, it is asked to quit. It stops only its own agents and terminals and
    asks no further question.
@@ -193,7 +193,7 @@ running agents. The cleanup waits up to two minutes for o7 to exit, then deletes
 dialog says what could not be deleted, if anything. If o7 does not exit, nothing is deleted
 and the cleanup says so. The next launch is a fresh install.
 
-A copy started with its own `AURACODE_DATA_DIR` reviews and deletes only that folder, and leaves
+A copy started with its own `O7_DATA_DIR` reviews and deletes only that folder, and leaves
 the installed app's data alone.
 
 ### A terminal
@@ -202,9 +202,9 @@ The same cleanup runs from a terminal:
 
 ```sh
 # macOS
-/Applications/auracode.app/Contents/MacOS/auracode --uninstall-cleanup --dry-run
+/Applications/o7.app/Contents/MacOS/auracode --uninstall-cleanup --dry-run
 # Windows (the default per-user install folder)
-"%LOCALAPPDATA%\auracode\auracode.exe" --uninstall-cleanup --dry-run
+"%LOCALAPPDATA%\auracode\o7.exe" --uninstall-cleanup --dry-run
 # Linux (the deb or rpm package; an AppImage takes the same options)
 auracode --uninstall-cleanup --dry-run
 ```
@@ -217,9 +217,9 @@ auracode --uninstall-cleanup --dry-run
 | `--remove-unsaved-worktrees` | Deletes worktrees with unsaved work too |
 | `--remove-worktree <folder>` | Deletes this worktree with unsaved work too; repeat as needed |
 | `--keep-unsaved-worktrees` | The default |
-| `--data-dir <folder>` | Only this `AURACODE_DATA_DIR` folder, nothing of the installed app's |
+| `--data-dir <folder>` | Only this `O7_DATA_DIR` folder, nothing of the installed app's |
 | `--after-pid <pid>` | Waits for that process to exit first |
-| `--trash-app <auracode.app>` | macOS: moves the bundle to the Trash afterwards |
+| `--trash-app <o7.app>` | macOS: moves the bundle to the Trash afterwards |
 
 Exit codes:
 
@@ -264,7 +264,7 @@ Use these steps when the app is already gone.
 | Git is missing, or a repository is gone | Its worktrees count as unsaved and stay unless chosen. A registration Git could not prune is reported, with the command to run. |
 | A link or junction inside the data folder | Removed as a link; what it points to is never touched. |
 | Read-only files (Git objects in checkpoints) | The read-only attribute is cleared, then the file is removed. |
-| A data folder from `AURACODE_DATA_DIR` | Only what o7 made there goes, and the folder goes only if it ends up empty. |
+| A data folder from `O7_DATA_DIR` | Only what o7 made there goes, and the folder goes only if it ends up empty. |
 | A second run | A completed cleanup removes nothing further. |
 | An upgrade through the installer | Keeps everything (see the Windows uninstaller). |
 | macOS app run from a disk image or a translocated copy | "Move to the Trash" is not offered; drag the app to the Trash yourself. |
@@ -272,8 +272,8 @@ Use these steps when the app is already gone.
 
 Covered by tests:
 
-- `cargo test -p aura-core --lib uninstall`, with a temporary data folder and real Git;
-- `cargo test -p auracode-desktop --lib`;
+- `cargo test -p o7-core --lib uninstall`, with a temporary data folder and real Git;
+- `cargo test -p o7-desktop --lib`;
 - `apps/desktop/scripts/uninstaller-hooks.test.mjs`, which checks the hooks against the pinned
   Tauri CLI's embedded installer template;
 - the dialog's Vitest suite;

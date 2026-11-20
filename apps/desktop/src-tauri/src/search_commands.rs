@@ -1,5 +1,5 @@
 use crate::{error::AppError, state::AppState};
-use aura_protocol::search::SearchResults;
+use o7_protocol::search::SearchResults;
 use tauri::State;
 
 #[tauri::command]

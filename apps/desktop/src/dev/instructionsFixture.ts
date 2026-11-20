@@ -1,6 +1,6 @@
 /**
  * Development-only imitation of Rust's Instructions answers, for previews and browser checks. It
- * keeps a small in-memory folder, reviews changes the way aura-config does for these cases, and
+ * keeps a small in-memory folder, reviews changes the way o7-config does for these cases, and
  * changes state only on Apply. Never touches real files.
  */
 import type {
@@ -30,7 +30,7 @@ Rust for every backend piece; React and TypeScript for interfaces.
 ## Commands
 
 - \`pnpm lint\`, \`pnpm typecheck\` and \`pnpm test\` before every commit.
-- \`cargo test -p aura-config\` for configuration changes.
+- \`cargo test -p o7-config\` for configuration changes.
 
 ## Style
 

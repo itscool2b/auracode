@@ -1,4 +1,4 @@
-import { usePrefersReducedMotion } from "@auracode/ui";
+import { usePrefersReducedMotion } from "@o7/ui";
 import {
   ArrowRightLeft,
   Check,

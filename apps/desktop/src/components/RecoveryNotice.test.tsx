@@ -50,12 +50,12 @@ describe("the database repair notice", () => {
   it("is listed with a Dismiss button, beside notices that cannot be dismissed", () => {
     const html = renderToStaticMarkup(
       <InfoCard
-        info={{ ...INFO, notices: ["AURACODE_STRESS was ignored."] }}
+        info={{ ...INFO, notices: ["O7_STRESS was ignored."] }}
         onRecoveryDismissed={() => {}}
       />,
     );
     expect(html).toContain(NOTICE);
-    expect(html).toContain("AURACODE_STRESS was ignored.");
+    expect(html).toContain("O7_STRESS was ignored.");
     expect(html.match(/>Dismiss<\/button>/g)).toHaveLength(1);
     expect(html).toMatch(ENABLED_BUTTON);
   });

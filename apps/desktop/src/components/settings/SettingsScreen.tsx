@@ -1,4 +1,4 @@
-import { Keycap, Logo } from "@auracode/ui/graphite";
+import { Keycap, Logo } from "@o7/ui/graphite";
 import {
   ArrowLeft,
   BookOpen,

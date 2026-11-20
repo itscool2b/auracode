@@ -1,19 +1,19 @@
 # Normal code deployment, with the public prerender output embedded by Rust at build time.
 # There are no Assets, D1, R2, email, secrets or API bindings in this Worker.
-name = "auracode-web-local"
+name = "o7-web-local"
 main = "build/index.js"
 compatibility_date = "2026-10-26"
 workers_dev = false
 preview_urls = false
 
 [build]
-command = "corepack pnpm --filter @auracode/web build && worker-build --release"
+command = "corepack pnpm --filter @o7/web build && worker-build --release"
 
 [observability]
 enabled = false
 
 [env.production]
-name = "auracode-web"
+name = "o7-web"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
 # The second route is the address the site had until 19 November 2026: there the Worker serves
 # only the remote page and sends every other page to o7.codes (FORMER_HOSTS in src/lib.rs). It
@@ -24,6 +24,6 @@ routes = [
 ]
 
 [env.preview]
-name = "auracode-web-preview"
+name = "o7-web-preview"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
 routes = [{ pattern = "preview.o7.codes/*", zone_name = "o7.codes" }]

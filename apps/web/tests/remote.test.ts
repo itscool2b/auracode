@@ -14,10 +14,7 @@ interface Vectors {
 }
 
 const vectors: Vectors = JSON.parse(
-  await readFile(
-    new URL("../../../crates/aura-remote/tests/vectors.json", import.meta.url),
-    "utf8",
-  ),
+  await readFile(new URL("../../../crates/o7-remote/tests/vectors.json", import.meta.url), "utf8"),
 );
 
 async function channels(context = vectors.context, secret = vectors.secret) {

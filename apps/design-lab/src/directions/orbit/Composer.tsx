@@ -1,4 +1,4 @@
-import type { AgentBrandId } from "@auracode/ui";
+import type { AgentBrandId } from "@o7/ui";
 import { ArrowUp, Check, ChevronDown, Pencil, Plus, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {

@@ -4,7 +4,7 @@
 //! The TypeScript side (`apps/desktop/src/bindings.ts`) is generated from these signatures; see
 //! [`crate::bindings`].
 //!
-//! The chat commands wrap aura-core's `SessionManager` ([`AppState::sessions`]); every
+//! The chat commands wrap o7-core's `SessionManager` ([`AppState::sessions`]); every
 //! `SessionError` reaches the UI as one `AppErrorCode` with the error's own sentence. Commands that
 //! belong to a webview (a chat view, the status channel) take the injected `Webview`, whose label
 //! owns the subscription: a reloaded page drops every subscription of its webview.
@@ -14,12 +14,12 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use aura_core::session::SessionError;
-use aura_protocol::session::{
+use o7_core::session::SessionError;
+use o7_protocol::session::{
     AgentEntry, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigChoice, ConfigValue,
     EnvStatus, HistoryPage, PromptAck, QueuedPrompt, SessionLists, StorageStatus,
 };
-use aura_protocol::{Autonomy, EventBatch, UiAnswer};
+use o7_protocol::{Autonomy, EventBatch, UiAnswer};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, Webview};
 
@@ -107,8 +107,8 @@ pub async fn acknowledge_recovery(state: State<'_, AppState>) -> Result<(), AppE
     state.acknowledge_recovery().await
 }
 
-/// Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
-/// `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise, through the quit
+/// Smoke mode only: prints `O7_SMOKE_RESULT <json>` on stdout and, with
+/// `O7_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise, through the quit
 /// flow like any other exit. Only the first report counts.
 #[tauri::command]
 #[specta::specta]
@@ -120,7 +120,7 @@ pub fn smoke_report(
     let Some(plan) = state.launch.smoke_plan() else {
         return Err(AppError::new(
             AppErrorCode::NotInSmokeMode,
-            "Smoke reports are only accepted while AURACODE_SMOKE runs a smoke check.",
+            "Smoke reports are only accepted while O7_SMOKE runs a smoke check.",
         ));
     };
     if state.smoke_reported.swap(true, Ordering::AcqRel) {
@@ -217,7 +217,7 @@ pub fn env_refresh(state: State<'_, AppState>) -> EnvStatus {
 
 /// Shows the system folder picker and returns the chosen folder, or `null` when the user cancelled.
 /// Resolves when the dialog closes. A chat smoke run's picker answers its folder
-/// (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
+/// (`O7_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 #[tauri::command]
 #[specta::specta]
 pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, AppError> {
@@ -282,7 +282,7 @@ pub async fn chat_create(
 pub async fn chat_create_on_host(
     state: State<'_, AppState>,
     agent_id: String,
-    agent_host: aura_protocol::agents::AgentHost,
+    agent_host: o7_protocol::agents::AgentHost,
     folder: String,
 ) -> Result<ChatSummary, AppError> {
     Ok(state
@@ -297,7 +297,7 @@ pub async fn chat_create_on_host(
 pub async fn agent_maintenance(
     state: State<'_, AppState>,
     agent_id: String,
-) -> Result<aura_protocol::agents::AgentMaintenance, AppError> {
+) -> Result<o7_protocol::agents::AgentMaintenance, AppError> {
     Ok(state.sessions()?.agent_maintenance(&agent_id).await)
 }
 
@@ -307,7 +307,7 @@ pub async fn agent_maintenance(
 pub async fn agent_auth_status(
     state: State<'_, AppState>,
     agent_id: String,
-) -> Result<aura_protocol::agents::AgentAuthStatus, AppError> {
+) -> Result<o7_protocol::agents::AgentAuthStatus, AppError> {
     Ok(state.sessions()?.agent_auth_status(&agent_id).await)
 }
 
@@ -405,7 +405,7 @@ pub async fn chat_lists(
 pub async fn chat_folder_context(
     state: State<'_, AppState>,
     chat_id: String,
-) -> Result<aura_protocol::workspace::ChatFolderContext, AppError> {
+) -> Result<o7_protocol::workspace::ChatFolderContext, AppError> {
     Ok(state.sessions()?.chat_folder_context(&chat_id).await?)
 }
 
@@ -594,7 +594,7 @@ pub async fn chat_respond_ui(
 pub async fn chat_set_control(
     state: State<'_, AppState>,
     chat_id: String,
-    change: aura_protocol::session::SessionControlChange,
+    change: o7_protocol::session::SessionControlChange,
 ) -> Result<SessionLists, AppError> {
     Ok(state.sessions()?.set_control(&chat_id, change).await?)
 }

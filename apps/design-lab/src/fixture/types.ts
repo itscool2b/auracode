@@ -1,4 +1,4 @@
-import type { AgentBrandId } from "@auracode/ui";
+import type { AgentBrandId } from "@o7/ui";
 import type { AuraEvent } from "./m0-protocol";
 
 /*

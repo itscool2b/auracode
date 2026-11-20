@@ -332,11 +332,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "aura-agents"
+name = "o7-agents"
 version = "0.1.0"
 dependencies = [
- "aura-process",
- "aura-protocol",
+ "o7-process",
+ "o7-protocol",
  "futures",
  "reqwest",
  "serde",
@@ -350,14 +350,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-cli"
+name = "o7-cli"
 version = "0.1.0"
 dependencies = [
- "aura-agents",
- "aura-core",
- "aura-drivers",
- "aura-process",
- "aura-protocol",
+ "o7-agents",
+ "o7-core",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
  "dirs 6.0.0",
  "futures",
  "hostname",
@@ -371,7 +371,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-config"
+name = "o7-config"
 version = "0.1.0"
 dependencies = [
  "cap-fs-ext",
@@ -392,14 +392,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-core"
+name = "o7-core"
 version = "0.1.0"
 dependencies = [
- "aura-agents",
- "aura-config",
- "aura-drivers",
- "aura-process",
- "aura-protocol",
+ "o7-agents",
+ "o7-config",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
  "base64 0.22.1",
  "cap-fs-ext",
  "cap-std",
@@ -426,12 +426,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-drivers"
+name = "o7-drivers"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol-schema",
- "aura-process",
- "aura-protocol",
+ "o7-process",
+ "o7-protocol",
  "base64 0.23.1",
  "futures",
  "jsonschema",
@@ -451,7 +451,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-process"
+name = "o7-process"
 version = "0.1.0"
 dependencies = [
  "cap-fs-ext",
@@ -472,7 +472,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-protocol"
+name = "o7-protocol"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -483,7 +483,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-release"
+name = "o7-release"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -503,11 +503,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-remote"
+name = "o7-remote"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "aura-protocol",
+ "o7-protocol",
  "base64 0.22.1",
  "futures",
  "getrandom 0.4.3",
@@ -525,17 +525,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "auracode-desktop"
+name = "o7-desktop"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
- "aura-agents",
- "aura-config",
- "aura-core",
- "aura-drivers",
- "aura-process",
- "aura-protocol",
- "aura-remote",
+ "o7-agents",
+ "o7-config",
+ "o7-core",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
+ "o7-remote",
  "base64 0.22.1",
  "cpal",
  "dlopen2",
@@ -581,7 +581,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "auracode-web-worker"
+name = "o7-web-worker"
 version = "0.1.0"
 dependencies = [
  "sha2 0.10.9",

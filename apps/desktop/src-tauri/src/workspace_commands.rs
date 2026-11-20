@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use aura_core::session::{StopReport, StopScope};
-use aura_protocol::workspace::{
+use o7_core::session::{StopReport, StopScope};
+use o7_protocol::workspace::{
     ChatCreatePreview, ChatMove, ChatsStopped, FolderBlockers, FolderMatches, FolderScope,
     ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat,
     WorkspaceFilter, WorkspaceSnapshot,

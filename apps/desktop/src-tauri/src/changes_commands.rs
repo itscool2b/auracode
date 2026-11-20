@@ -1,5 +1,5 @@
 use crate::{error::AppError, state::AppState};
-use aura_protocol::changes::{
+use o7_protocol::changes::{
     ChangeDiff, ChangesSnapshot, HunkRevert, NativeRewind, RevertPreview, RevertResult,
 };
 use tauri::State;

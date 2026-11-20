@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AuraEvent } from "../../bindings";
+import type { O7Event } from "../../bindings";
 import { newestTurnKey } from "../../lib/chat/tasks";
 import { ev, numbered } from "../../lib/chat/testing";
 import {
@@ -15,7 +15,7 @@ import { TaskPanel } from "./TaskPanel";
 import { ToolBlock } from "./ToolBlock";
 import { TaskLinkContext } from "./taskLinks";
 
-function transcript(events: readonly AuraEvent[]): Transcript {
+function transcript(events: readonly O7Event[]): Transcript {
   return applyEntries(emptyTranscript(), numbered(events.map((event) => ["t", event] as const)));
 }
 

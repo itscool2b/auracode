@@ -26,7 +26,7 @@ const PLATFORMS = [
 ] as const;
 
 /** The public source every preview build is made from. */
-const SOURCE = "https://github.com/itscool2b/auracode";
+const SOURCE = "https://github.com/itscool2b/o7";
 
 /**
  * How to open a build nobody has signed, system by system. Shown only for such a build: a signed

@@ -1,4 +1,4 @@
-//! The Agents page's added accounts and the chat's account switch, over aura-core's accounts
+//! The Agents page's added accounts and the chat's account switch, over o7-core's accounts
 //! (docs/agent-accounts.md). A token goes from the page straight into secure storage: no command
 //! returns one, and errors never carry one.
 use crate::agent_tokens::{NativeTokens, TokenEntry, TokenError};
@@ -6,8 +6,8 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::agent_accounts::TokenVault;
-use aura_protocol::agents::{AgentAccounts, AgentUsage};
+use o7_core::agent_accounts::TokenVault;
+use o7_protocol::agents::{AgentAccounts, AgentUsage};
 use tauri::{State, Webview};
 
 /// Credential Manager or the keychain: one entry per added account.

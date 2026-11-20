@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  AuraEvent,
   ChatSnapshot,
   HistoryPage,
+  O7Event,
   PromptAck,
   QueuedPrompt,
   SendingPrompt,
@@ -577,7 +577,7 @@ describe("the session's live state", () => {
       };
       if (ackOrder === "before") await acknowledge();
       let seq = 0;
-      const emit = (events: AuraEvent[]) => {
+      const emit = (events: O7Event[]) => {
         channel.onFrame(frame(CHAT, seq, events));
         seq += events.length;
       };

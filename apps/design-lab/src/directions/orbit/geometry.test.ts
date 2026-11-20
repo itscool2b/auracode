@@ -1,4 +1,4 @@
-import { AGENT_BRAND_IDS } from "@auracode/ui";
+import { AGENT_BRAND_IDS } from "@o7/ui";
 import { describe, expect, it } from "vitest";
 import { APPROVAL } from "../../fixture/approval";
 import { GOLDEN } from "../../fixture/golden";

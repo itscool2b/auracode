@@ -1,4 +1,4 @@
-import { squirclePath } from "@auracode/ui";
+import { squirclePath } from "@o7/ui";
 import {
   type CSSProperties,
   type HTMLAttributes,

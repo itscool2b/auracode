@@ -58,25 +58,22 @@ test("the bundle builds only the NSIS installer on Windows, with the hooks and s
 });
 
 test("the hooks run the Rust cleanup and keep Tauri from deleting the data folder whole", () => {
-  has(hooks, `ExecWait '"\${program}" --uninstall-cleanup $AuracodeCleanupFlags' $R9`);
-  has(hooks, `!insertmacro AURACODE_CLEANUP "$INSTDIR${SEP}${BIN}.exe"`);
+  has(hooks, `ExecWait '"\${program}" --uninstall-cleanup $O7CleanupFlags' $R9`);
+  has(hooks, `!insertmacro O7_CLEANUP "$INSTDIR${SEP}${BIN}.exe"`);
   has(hooks, "StrCpy $DeleteAppDataCheckboxState 0");
   // Updates and the uninstall an installer runs before installing keep the data.
-  has(hooks, `\${If} $UpdateMode = 1\n    StrCpy $AuracodeDeleteData 0`);
-  has(hooks, `\${If} $EXEDIR == $INSTDIR\n    StrCpy $AuracodeDeleteData 0`);
+  has(hooks, `\${If} $UpdateMode = 1\n    StrCpy $O7DeleteData 0`);
+  has(hooks, `\${If} $EXEDIR == $INSTDIR\n    StrCpy $O7DeleteData 0`);
   has(hooks, `\${GetOptions} $CMDLINE "/KEEPDATA" $R9`);
   // A quiet uninstall never shows a dialog.
-  has(hooks, `\${OrIf} \${Silent}\n      StrCpy $AuracodeCleanupFlags ""`);
+  has(hooks, `\${OrIf} \${Silent}\n      StrCpy $O7CleanupFlags ""`);
   // Still running: Tauri's own check closes o7, then a copy of the program cleans up. Its
   // check is inserted once per section, since its labels come from the line number.
   assert.ok(!hooks.includes("!insertmacro CheckIfAppIsRunning"));
+  has(hooks, `CopyFiles /SILENT "$INSTDIR${SEP}${BIN}.exe" "$PLUGINSDIR${SEP}o7-cleanup.exe"`);
   has(
     hooks,
-    `CopyFiles /SILENT "$INSTDIR${SEP}${BIN}.exe" "$PLUGINSDIR${SEP}auracode-cleanup.exe"`,
-  );
-  has(
-    hooks,
-    `\${If} $AuracodeCleanupLater = 1\n    !insertmacro AURACODE_CLEANUP "$PLUGINSDIR${SEP}auracode-cleanup.exe"`,
+    `\${If} $O7CleanupLater = 1\n    !insertmacro O7_CLEANUP "$PLUGINSDIR${SEP}o7-cleanup.exe"`,
   );
   // The exit codes the hooks read are the Rust ones.
   const rust = readFileSync(resolve(tauri, "src/uninstall.rs"), "utf8");
@@ -96,9 +93,7 @@ test("a link registration an earlier version left is removed only when it is thi
     `\${If} $R9 == "$${SEP}"$INSTDIR${SEP}${BIN}.exe$${SEP}" $${SEP}"%1$${SEP}""\n    DeleteRegKey SHCTX "${key}"`,
   );
   // It runs before the cleanup reads its own result from the same register.
-  assert.ok(
-    hooks.indexOf(`DeleteRegKey SHCTX "${key}"`) < hooks.indexOf("$AuracodeCleanupLater = 1"),
-  );
+  assert.ok(hooks.indexOf(`DeleteRegKey SHCTX "${key}"`) < hooks.indexOf("$O7CleanupLater = 1"));
 });
 
 test("the checkbox keeps the data, and every other string is Tauri's", () => {
@@ -132,4 +127,35 @@ test("the custom English file defines every string the pinned CLI's does", {
   const start = text.indexOf(`LangString addOrReinstall \${LANG_ENGLISH}`);
   const end = text.indexOf("\n", text.indexOf(`LangString deleteAppData \${LANG_ENGLISH}`, start));
   assert.deepEqual(keys(english).sort(), keys(text.slice(start, end)).sort());
+});
+
+test("an update from auracode retires auracode's install, and only that", () => {
+  const start = hooks.indexOf("!macro O7_RETIRE_AURACODE");
+  const retire = hooks.slice(start, hooks.indexOf("!macroend", start));
+  // It runs after the install, from the hook Tauri's template inserts there.
+  has(hooks, "!macro NSIS_HOOK_POSTINSTALL\n  !insertmacro O7_RETIRE_AURACODE\n!macroend");
+  // Only the default per-user folder, only with auracode's program in it, never o7's own folder.
+  has(retire, `StrCpy $R7 "$LOCALAPPDATA${SEP}auracode"`);
+  has(retire, `\${If} \${FileExists} "$R7${SEP}auracode.exe"\n  \${AndIf} $R7 != $INSTDIR`);
+  assert.equal([...retire.matchAll(/RMDir/g)].length, 1, "one folder is deleted");
+  has(retire, "RMDir /r $R7\n");
+  assert.doesNotMatch(retire, /ReadRegStr \$R7/, "the folder never comes from the registry");
+  // Shortcuts: o7's in place of auracode's; a taskbar pin is retargeted, not removed.
+  has(
+    retire,
+    `CreateShortcut "$SMPROGRAMS${SEP}\${PRODUCTNAME}.lnk" "$INSTDIR${SEP}\${MAINBINARYNAME}.exe"`,
+  );
+  has(retire, `!insertmacro SetShortcutTarget $R6 "$INSTDIR${SEP}\${MAINBINARYNAME}.exe"`);
+  // auracode's records go; its data is never named.
+  has(
+    retire,
+    `DeleteRegKey HKCU "Software${SEP}Microsoft${SEP}Windows${SEP}CurrentVersion${SEP}Uninstall${SEP}auracode"`,
+  );
+  for (const line of retire.split("\n").filter((text) => /^\s*(Delete|RMDir)\b/.test(text)))
+    assert.doesNotMatch(line, /si\.auracode/, `auracode's data folder is not touched: ${line}`);
+  assert.doesNotMatch(
+    retire,
+    /uninstall\.exe/,
+    "auracode's uninstaller, which deletes data, never runs",
+  );
 });

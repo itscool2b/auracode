@@ -1,9 +1,9 @@
-// Regenerates every desktop icon from the logo geometry in @auracode/ui (logoPaths.ts):
+// Regenerates every desktop icon from the logo geometry in @o7/ui (logoPaths.ts):
 //   app-icon.svg          macOS and PNG source: the macOS grid, an 824px body inset 100px
 //   app-icon-windows.svg  icon.ico source: a full-bleed tile, small-variant logo (larger eyes)
 //   tray.png              Windows notification area, 32px tile
 //   tray-template.png     macOS menu bar template image, 36px black logo on transparency
-// then rasterises them through the Tauri CLI. Run with: pnpm --filter @auracode/desktop icons
+// then rasterises them through the Tauri CLI. Run with: pnpm --filter @o7/desktop icons
 import { execSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

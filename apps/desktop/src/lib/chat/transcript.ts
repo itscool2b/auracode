@@ -1,8 +1,8 @@
 import type {
-  AuraEvent,
   BackgroundTask,
   ErrorKind,
   NoticeLevel,
+  O7Event,
   PermissionDecision,
   PermissionRequest,
   PlanEntry,
@@ -45,7 +45,7 @@ export interface EventEntry {
   readonly seq: number;
   /** The stored row's turn tag; live frames carry none. Grouping never reads it. */
   readonly turnId: string | null;
-  readonly event: AuraEvent;
+  readonly event: O7Event;
 }
 
 /** Where saving paused: rows from `seq` up to the attach point are not saved yet, so not shown. */
@@ -260,7 +260,7 @@ export function compactToolUpdates(entries: readonly Entry[]): Entry[] {
     for (const [field, value] of Object.entries(event)) {
       if (value !== null && value !== undefined) merged[field] = value;
     }
-    folded[at] = { ...first, event: merged as AuraEvent };
+    folded[at] = { ...first, event: merged as O7Event };
   }
   return folded;
 }
@@ -270,7 +270,7 @@ export function reduce(
   model: Transcript,
   seq: number,
   turnId: string | null,
-  event: AuraEvent,
+  event: O7Event,
 ): Transcript {
   return applyEntries(model, [{ seq, turnId, event }]);
 }

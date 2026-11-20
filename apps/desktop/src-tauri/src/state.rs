@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use aura_core::device::DeviceIdentity;
-use aura_core::profile::ProfileMeta;
-use aura_core::session::{SessionError, SessionManager};
+use o7_core::device::DeviceIdentity;
+use o7_core::profile::ProfileMeta;
+use o7_core::session::{SessionError, SessionManager};
 use serde::Serialize;
 
 use crate::boot::{Booted, DbInfo, Recovery};
@@ -83,7 +83,7 @@ pub struct AppState {
     pub catalog_refresh: Arc<crate::catalog_refresh::RefreshGate>,
     pub dictation: Arc<crate::dictation::Dictation>,
     /// Unlogged terminal sessions, owned by the window that explicitly opened them.
-    pub terminals: aura_core::terminal::Terminals,
+    pub terminals: o7_core::terminal::Terminals,
     /// Which chat each terminal chat's terminal holds, so a page that goes ends its own.
     pub terminal_chats: crate::terminal::TerminalChats,
     /// Lazily loaded setup preferences, available only while this process owns the profile.
@@ -234,7 +234,7 @@ impl AppState {
         let mut info = runtime.info.clone();
         if let Some(root) = &self.data_dir {
             info.notices
-                .extend(aura_config::instructions::recovery_notices(
+                .extend(o7_config::instructions::recovery_notices(
                     &root.join("instructions"),
                 ));
         }
@@ -348,7 +348,7 @@ impl AppState {
     }
     pub(crate) async fn wait_profile_commands(
         &self,
-    ) -> Option<aura_core::session::PluginRefreshPause> {
+    ) -> Option<o7_core::session::PluginRefreshPause> {
         let library_pause = lock(&self.runtime)
             .chats
             .as_ref()
@@ -381,7 +381,7 @@ impl AppState {
         *lock(&self.recovery) = booted.recovery;
     }
 
-    /// Dismisses the repair notice for good: aura-core removes the repair's record (keeping the
+    /// Dismisses the repair notice for good: o7-core removes the repair's record (keeping the
     /// damaged copy), so no later launch reports it. It acknowledges exactly the repair startup
     /// reported; nothing can name another path. With no notice (there was none, or it was already
     /// dismissed) this does nothing, so calling it twice is harmless. On failure the notice stays,
@@ -447,8 +447,8 @@ mod tests {
     use super::*;
     use crate::boot::{boot, boot_next};
     use crate::launch::{NO_GLASS_ENV, STRESS_ENV};
-    use aura_core::paths::DataRoot;
-    use aura_core::store::OpenOutcome;
+    use o7_core::paths::DataRoot;
+    use o7_core::store::OpenOutcome;
 
     fn os() -> OsInfo {
         OsInfo {
@@ -498,7 +498,7 @@ mod tests {
         quarantined
     }
 
-    /// `<quarantined>.json`, aura-core's record of the repair: removing it is what acknowledging
+    /// `<quarantined>.json`, o7-core's record of the repair: removing it is what acknowledging
     /// does.
     fn record(quarantined: &str) -> PathBuf {
         PathBuf::from(format!("{quarantined}.json"))
@@ -520,8 +520,8 @@ mod tests {
 
     #[tokio::test]
     async fn checkpoint_policy_is_initialized_before_publishing_each_profile() {
-        use aura_core::onboarding::{OnboardingStore, SetupAction};
-        use aura_core::profile::Profiles;
+        use o7_core::onboarding::{OnboardingStore, SetupAction};
+        use o7_core::profile::Profiles;
 
         let dir = tempfile::tempdir().unwrap();
         let root = DataRoot::at(dir.path().join("data"));
@@ -589,10 +589,10 @@ mod tests {
         assert!(info.device.is_some() && info.profile.is_some());
         assert_eq!(
             info.db.as_ref().map(|db| db.schema_version),
-            Some(aura_core::store::SCHEMA_VERSION)
+            Some(o7_core::store::SCHEMA_VERSION)
         );
         assert_eq!(info.notices.len(), 2, "{:?}", info.notices);
-        assert!(info.notices[0].starts_with("AURACODE_STRESS was ignored"));
+        assert!(info.notices[0].starts_with("O7_STRESS was ignored"));
         assert!(state.sessions().is_ok());
 
         let data = dir.path().join("data");
@@ -712,7 +712,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_startup_still_answers_app_info() {
-        let booted = boot(Err(aura_core::CoreError::NoDataDir));
+        let booted = boot(Err(o7_core::CoreError::NoDataDir));
         let launch = LaunchOptions::from_lookup(|_| None);
         let state = AppState::new(
             booted,

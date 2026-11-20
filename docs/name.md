@@ -35,8 +35,8 @@ one. Renaming one makes an updated app stop recognising what it wrote before.
 
 ## Not renamed yet: internal names
 
-Package names (`@auracode/*`), crate names (`aura-*`), setting names (`AURACODE_*`, `AURA_*`), CSS
-classes and style tokens, tool and server names agents see (`aura_browser`, `aura_memory_read`).
+Package names (`@o7/*`), crate names (`aura-*`), setting names (`AURACODE_*`, `AURA_*`), CSS
+classes and style tokens, tool and server names agents see (`o7_browser`, `o7_memory_read`).
 Nobody using the app reads these. Renaming them is mechanical but touches most files, and two of
 them are contracts: a setting name is used by people's scripts, and a tool name is in agents'
 saved permissions.

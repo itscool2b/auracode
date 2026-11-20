@@ -24,7 +24,7 @@ as the problem is understood. You will be credited in the changelog unless you a
   lists the limits that are already known under "Not done"; a report about one of those is still
   welcome when it shows more than the list says.
 - **The website** at o7.codes and its Worker (`apps/web`, `apps/web-worker`).
-- **The build and release tooling** (`.github/`, `crates/aura-release`).
+- **The build and release tooling** (`.github/`, `crates/o7-release`).
 
 The coding agents o7 drives (Claude Code, Codex and the others) are their vendors' software:
 report a problem in one of them to its vendor.

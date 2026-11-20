@@ -27,16 +27,16 @@ fn identifier(entry: &Value) -> &str {
 }
 
 /// Tauri's `app_local_data_dir()` is the local app data folder joined with the bundle identifier,
-/// and aura-core's default data root (`DataRoot::resolve`) is the same folder joined with
+/// and o7-core's default data root (`DataRoot::resolve`) is the same folder joined with
 /// `APP_IDENTIFIER`. Equal identifiers make them one folder, so the WebView data Tauri keeps there
 /// on Windows and Linux sits beside `device.json` and `profiles/` instead of in a second folder of
-/// its own. `app.appDirectoriesOverride` would move Tauri's folders and not aura-core's.
+/// its own. `app.appDirectoriesOverride` would move Tauri's folders and not o7-core's.
 #[test]
 fn tauri_keeps_its_app_folders_where_aura_core_keeps_the_data() {
     let conf = json(TAURI_CONF);
     assert_eq!(
         conf["identifier"].as_str(),
-        Some(aura_core::paths::APP_IDENTIFIER)
+        Some(o7_core::paths::APP_IDENTIFIER)
     );
     let app = conf["app"].as_object().expect("an app section");
     for key in ["appDirectoriesOverride", "app-directories-override"] {

@@ -1,7 +1,7 @@
 ; o7's hooks for Tauri's NSIS uninstaller (tauri.conf.json: bundle > windows > nsis).
 ;
-; What to delete is decided in Rust, by `auracode.exe --uninstall-cleanup`
-; (apps/desktop/src-tauri/src/uninstall.rs, over aura-core's uninstall module). This file only
+; What to delete is decided in Rust, by `o7.exe --uninstall-cleanup`
+; (apps/desktop/src-tauri/src/uninstall.rs, over o7-core's uninstall module). This file only
 ; decides whether that runs, and stops Tauri's own "delete app data" step, which would remove the
 ; data folder whole, worktrees the person chose to keep included.
 ;
@@ -16,20 +16,20 @@
 ; Exit codes of the cleanup: 0 done, 3 o7 is still running (nothing deleted), 4 something
 ; could not be deleted (the cleanup listed it).
 
-Var AuracodeDeleteData
-Var AuracodeCleanupFlags
-Var AuracodeCleanupLater
+Var O7DeleteData
+Var O7CleanupFlags
+Var O7CleanupLater
 
 ; Runs the cleanup from `program`; its exit code lands in $R9 ("none" when it did not start).
-!macro AURACODE_CLEANUP program
+!macro O7_CLEANUP program
   ClearErrors
-  ExecWait '"${program}" --uninstall-cleanup $AuracodeCleanupFlags' $R9
+  ExecWait '"${program}" --uninstall-cleanup $O7CleanupFlags' $R9
   ${If} ${Errors}
     StrCpy $R9 "none"
   ${EndIf}
 !macroend
 
-!macro AURACODE_CLEANUP_RESULT
+!macro O7_CLEANUP_RESULT
   ${If} $R9 == "0"
     DetailPrint "o7's data is deleted"
   ${ElseIf} $R9 == "4"
@@ -40,40 +40,40 @@ Var AuracodeCleanupLater
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-  StrCpy $AuracodeDeleteData 1
-  StrCpy $AuracodeCleanupLater 0
+  StrCpy $O7DeleteData 1
+  StrCpy $O7CleanupLater 0
   ${If} $DeleteAppDataCheckboxState = 1
-    StrCpy $AuracodeDeleteData 0
+    StrCpy $O7DeleteData 0
   ${EndIf}
   ; Tauri's own step removes both data folders whole; the cleanup does it around kept worktrees.
   StrCpy $DeleteAppDataCheckboxState 0
   ${If} $UpdateMode = 1
-    StrCpy $AuracodeDeleteData 0
+    StrCpy $O7DeleteData 0
   ${EndIf}
   ${If} $EXEDIR == $INSTDIR
-    StrCpy $AuracodeDeleteData 0
+    StrCpy $O7DeleteData 0
   ${EndIf}
   ClearErrors
   ${GetOptions} $CMDLINE "/KEEPDATA" $R9
   ${IfNot} ${Errors}
-    StrCpy $AuracodeDeleteData 0
+    StrCpy $O7DeleteData 0
   ${EndIf}
-  ${If} $AuracodeDeleteData = 1
+  ${If} $O7DeleteData = 1
     DetailPrint "Deleting o7's data"
-    StrCpy $AuracodeCleanupFlags "--interactive"
+    StrCpy $O7CleanupFlags "--interactive"
     ${If} $PassiveMode = 1
     ${OrIf} ${Silent}
-      StrCpy $AuracodeCleanupFlags ""
+      StrCpy $O7CleanupFlags ""
     ${EndIf}
-    !insertmacro AURACODE_CLEANUP "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro O7_CLEANUP "$INSTDIR\${MAINBINARYNAME}.exe"
     ${If} $R9 == "3"
       ; o7 did not quit when asked. Tauri's own check, next, offers to close it; the cleanup
       ; then runs after the files are removed, from a copy of the program.
       InitPluginsDir
-      CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$PLUGINSDIR\auracode-cleanup.exe"
-      StrCpy $AuracodeCleanupLater 1
+      CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$PLUGINSDIR\o7-cleanup.exe"
+      StrCpy $O7CleanupLater 1
     ${Else}
-      !insertmacro AURACODE_CLEANUP_RESULT
+      !insertmacro O7_CLEANUP_RESULT
     ${EndIf}
   ${EndIf}
 !macroend
@@ -88,11 +88,11 @@ Var AuracodeCleanupLater
     DeleteRegKey SHCTX "Software\Classes\auracode"
   ${EndIf}
   ClearErrors
-  ${If} $AuracodeCleanupLater = 1
-    !insertmacro AURACODE_CLEANUP "$PLUGINSDIR\auracode-cleanup.exe"
-    !insertmacro AURACODE_CLEANUP_RESULT
+  ${If} $O7CleanupLater = 1
+    !insertmacro O7_CLEANUP "$PLUGINSDIR\o7-cleanup.exe"
+    !insertmacro O7_CLEANUP_RESULT
   ${EndIf}
-  ${If} $AuracodeDeleteData = 1
+  ${If} $O7DeleteData = 1
     ; The installer's own records, as Tauri's "delete app data" step clears them.
     DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
     DeleteRegKey /ifempty SHCTX "${MANUKEY}"
@@ -102,4 +102,63 @@ Var AuracodeCleanupLater
     ; Windows' notification settings for o7.
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\${BUNDLEID}"
   ${EndIf}
+!macroend
+
+; o7 was called auracode until 19 November 2026, and a product's name is its install folder and its
+; entry in Windows' list of apps. So the update from auracode installs o7 beside it, and Tauri's
+; template, in update mode, makes no shortcuts. This retires auracode's install once o7's files are
+; in place: o7's shortcuts take the place of auracode's, a taskbar pin opens o7, and auracode's
+; program, its entry in the list of apps and its installer records go.
+;
+; Only the per-user install in its default folder is touched, and only when auracode.exe is in it:
+; a folder read from the registry is never deleted. auracode's data is not touched either: o7 opens
+; it where it is (o7-core's paths.rs).
+!macro O7_RETIRE_AURACODE
+  StrCpy $R7 "$LOCALAPPDATA\auracode"
+  ${If} ${FileExists} "$R7\auracode.exe"
+  ${AndIf} $R7 != $INSTDIR
+    DetailPrint "Replacing auracode with o7"
+    ; The Start menu and the desktop: o7's shortcut where auracode's was.
+    ${If} ${FileExists} "$SMPROGRAMS\auracode.lnk"
+      Delete "$SMPROGRAMS\auracode.lnk"
+    ${EndIf}
+    ${IfNot} ${FileExists} "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+      CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+      !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    ${EndIf}
+    ${If} ${FileExists} "$DESKTOP\auracode.lnk"
+      Delete "$DESKTOP\auracode.lnk"
+      ${IfNot} ${FileExists} "$DESKTOP\${PRODUCTNAME}.lnk"
+        CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+        !insertmacro SetLnkAppUserModelId "$DESKTOP\${PRODUCTNAME}.lnk"
+      ${EndIf}
+    ${EndIf}
+    ; A taskbar pin keeps its place and opens o7.
+    StrCpy $R6 "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\auracode.lnk"
+    ${If} ${FileExists} $R6
+      !insertmacro SetShortcutTarget $R6 "$INSTDIR\${MAINBINARYNAME}.exe"
+      !insertmacro SetLnkAppUserModelId $R6
+    ${EndIf}
+    ; auracode's records: its entry in the list of apps, its install location, its notification
+    ; settings, and a link registration from an earlier version still pointing at it.
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\auracode"
+    DeleteRegKey HKCU "Software\auracode\auracode"
+    DeleteRegKey /ifempty HKCU "Software\auracode"
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\si.auracode.desktop"
+    ClearErrors
+    ReadRegStr $R6 HKCU "Software\Classes\auracode\shell\open\command" ""
+    ${If} $R6 == "$\"$R7\auracode.exe$\" $\"%1$\""
+      DeleteRegKey HKCU "Software\Classes\auracode"
+    ${EndIf}
+    ClearErrors
+    ; Its program. The update closed it before this installer started.
+    RMDir /r $R7
+    ${If} ${FileExists} "$R7\auracode.exe"
+      DetailPrint "auracode's old program could not be removed yet: $R7"
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  !insertmacro O7_RETIRE_AURACODE
 !macroend

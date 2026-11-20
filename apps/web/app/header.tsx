@@ -1,4 +1,4 @@
-import { Wordmark } from "@auracode/ui/graphite";
+import { Wordmark } from "@o7/ui/graphite";
 import { useEffect, useRef } from "react";
 
 const SECTIONS = [

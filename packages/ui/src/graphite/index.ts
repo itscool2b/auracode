@@ -1,7 +1,7 @@
 /**
  * Aura's shared foundation retains the Graphite import path for compatibility. Production
  * styling follows docs/design/visual-language.md. Import the stylesheet once at the app root:
- *   import "@auracode/ui/graphite.css"; // or graphite-tokens.css for the variables alone
+ *   import "@o7/ui/graphite.css"; // or graphite-tokens.css for the variables alone
  */
 
 export { createFrameClock, type FrameClock, type FrameHost, frameClock } from "../frameClock";

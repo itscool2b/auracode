@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
-  AuraEvent,
   ChatSummary,
   ManagedWorktree,
+  O7Event,
   QueuedPrompt,
   TerminalChunk,
   WorktreeSetupAttempt,
@@ -58,7 +58,7 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
           : { reason: "held", after: "error" }
         : null,
     });
-  const publish = (events: AuraEvent[] = []) => {
+  const publish = (events: O7Event[] = []) => {
     const all = [...events, ev.session(info())];
     receive?.(frame(chat.id, sequence, all));
     sequence += all.length;
@@ -73,7 +73,7 @@ export function mountSetupRecoveryPreview(container: HTMLElement) {
     }
   };
   const holdQueue = () => {
-    const events: AuraEvent[] = [];
+    const events: O7Event[] = [];
     queue = queue.map((row) => {
       if (row.held) return row;
       events.push(ev.lifecycle(row.prompt_id, "queued", row.preview, true));

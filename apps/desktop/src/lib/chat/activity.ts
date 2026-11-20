@@ -1,4 +1,4 @@
-import type { OrbState } from "@auracode/ui";
+import type { OrbState } from "@o7/ui";
 import type { ToolKind } from "../../bindings";
 import type { ChatState } from "./chatStore";
 import { hasProcess, type RenderedSegment, toolDisplayStatus } from "./transcript";

@@ -406,12 +406,12 @@ fn with_context<T>(profile: &super::Profile, build: impl FnOnce(&mut wry::WebCon
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding";
 
 /// The engine's switches. A development build launched for automation may also open the
-/// browser's DevTools port (`AURACODE_BROWSER_DEBUG_PORT`), so checks can drive real pages;
+/// browser's DevTools port (`O7_BROWSER_DEBUG_PORT`), so checks can drive real pages;
 /// release builds never read it.
 #[cfg(windows)]
 fn browser_args() -> String {
     #[cfg(debug_assertions)]
-    if let Some(port) = std::env::var("AURACODE_BROWSER_DEBUG_PORT")
+    if let Some(port) = std::env::var("O7_BROWSER_DEBUG_PORT")
         .ok()
         .and_then(|port| port.trim().parse::<u16>().ok())
         .filter(|port| *port >= 1024)

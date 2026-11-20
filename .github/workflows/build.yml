@@ -105,7 +105,7 @@ jobs:
           BUNDLE_FORMATS: ${{ matrix.bundles }}
           # The AppImage tools run from their own extraction instead of needing FUSE.
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: pnpm --filter @auracode/desktop bundle --target "$BUNDLE_TARGET" --bundles "$BUNDLE_FORMATS"
+        run: pnpm --filter @o7/desktop bundle --target "$BUNDLE_TARGET" --bundles "$BUNDLE_FORMATS"
       - name: Upload bundles
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

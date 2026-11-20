@@ -1,4 +1,4 @@
-import { setMotionPreference } from "@auracode/ui";
+import { setMotionPreference } from "@o7/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SetupAction, SetupPreferences, SetupSnapshot } from "../../bindings";
 import {

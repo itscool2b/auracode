@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use aura_protocol::SessionStatus;
-use aura_protocol::session::ChatStatusUpdate;
+use o7_protocol::SessionStatus;
+use o7_protocol::session::ChatStatusUpdate;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Counts {

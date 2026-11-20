@@ -1,4 +1,4 @@
-//! The o7 executable. Everything lives in the library (`auracode_desktop`), where tests and
+//! The o7 executable. Everything lives in the library (`o7_desktop`), where tests and
 //! the bindings export can reach it.
 
 // No console window behind the app in Windows release builds.
@@ -9,34 +9,34 @@ fn main() {
     // profile's writer lock. It talks to the already-running app through a scoped grant.
     if std::env::args_os()
         .nth(1)
-        .is_some_and(|arg| arg == "--aura-memory-helper")
+        .is_some_and(|arg| arg == "--o7-memory-helper" || arg == "--aura-memory-helper")
     {
-        aura_core::memory_service::run_helper();
+        o7_core::memory_service::run_helper();
         return;
     }
     // The browser's MCP helper (the Browser plugin's tools), started by an agent the same way.
     if std::env::args_os()
         .nth(1)
-        .is_some_and(|arg| arg == "--aura-browser-helper")
+        .is_some_and(|arg| arg == "--o7-browser-helper" || arg == "--aura-browser-helper")
     {
-        aura_core::browser_service::run_helper();
+        o7_core::browser_service::run_helper();
         return;
     }
     // A coordinated project's MCP helper, started by its coordinator's or a worker's agent.
     if std::env::args_os()
         .nth(1)
-        .is_some_and(|arg| arg == "--aura-project-helper")
+        .is_some_and(|arg| arg == "--o7-project-helper" || arg == "--aura-project-helper")
     {
-        aura_core::coordinator_service::run_helper();
+        o7_core::coordinator_service::run_helper();
         return;
     }
     // `auracode --uninstall-cleanup` deletes o7's data and exits; nothing else starts.
-    if let Some(code) = auracode_desktop::uninstall::run_from_args() {
+    if let Some(code) = o7_desktop::uninstall::run_from_args() {
         std::process::exit(code);
     }
     #[cfg(target_os = "linux")]
     relaunch_with_launch_env();
-    auracode_desktop::run();
+    o7_desktop::run();
 }
 
 /// The NVIDIA driver's own switch for its explicit sync under Wayland.
@@ -45,9 +45,9 @@ const NVIDIA_SWITCH: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 
 /// What o7 sets for itself on Linux before anything starts, which only a new process can
 /// take (changing its own env is unsafe once anything could read it). The program runs itself
-/// again with them (same process, same arguments), once: `AURACODE_LAUNCH_SET` names them, so the
+/// again with them (same process, same arguments), once: `O7_LAUNCH_SET` names them, so the
 /// new process does not run again and agents do not inherit them
-/// (`aura_process::strip_launch_context`). When the restart fails, the app goes on without them.
+/// (`o7_process::strip_launch_context`). When the restart fails, the app goes on without them.
 ///
 /// - **NVIDIA under Wayland.** The window closes as soon as it opens ("Error 71 (Protocol error)
 ///   dispatching to Wayland display"). The driver's EGL layer puts the window's surface under
@@ -59,7 +59,7 @@ const NVIDIA_SWITCH: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 ///   frame: on a 4K screen at 2x a chat scrolled at 21 frames a second against 60, and the stress
 ///   view drew 12 to 25 against 60. So the app sets the driver's switch, unless the person set
 ///   either variable themselves.
-/// - **GStreamer in an AppImage** (`auracode_desktop::browser::media::launch_env`): a registry of
+/// - **GStreamer in an AppImage** (`o7_desktop::browser::media::launch_env`): a registry of
 ///   o7's own, and an image without plugins of its own uses the system's.
 #[cfg(target_os = "linux")]
 fn relaunch_with_launch_env() {
@@ -84,13 +84,13 @@ fn relaunch_with_launch_env() {
     let error = command
         .args(args)
         .envs(set.iter().map(|(name, value)| (*name, value)))
-        .env(aura_process::LAUNCH_SET_ENV, names.join(":"))
+        .env(o7_process::LAUNCH_SET_ENV, names.join(":"))
         .exec();
     eprintln!("o7: could not restart with {}: {error}", names.join(", "));
 }
 
 /// What [`relaunch_with_launch_env`] sets: nothing when this process is already the re-run (or
-/// something set `AURACODE_LAUNCH_SET` for it). `nvidia` says whether NVIDIA's driver is loaded;
+/// something set `O7_LAUNCH_SET` for it). `nvidia` says whether NVIDIA's driver is loaded;
 /// `root` is where the system's folders are.
 #[cfg(target_os = "linux")]
 fn launch_changes(
@@ -98,7 +98,7 @@ fn launch_changes(
     nvidia: bool,
     root: &std::path::Path,
 ) -> Vec<(&'static str, std::ffi::OsString)> {
-    if var(aura_process::LAUNCH_SET_ENV).is_some() {
+    if var(o7_process::LAUNCH_SET_ENV).is_some() {
         return Vec::new();
     }
     let mut set = Vec::new();
@@ -109,7 +109,7 @@ fn launch_changes(
     {
         set.push((NVIDIA_SWITCH, "1".into()));
     }
-    set.extend(auracode_desktop::browser::media::launch_env(var, root));
+    set.extend(o7_desktop::browser::media::launch_env(var, root));
     set
 }
 
@@ -189,7 +189,7 @@ mod tests {
             ("APPDIR", &appdir),
             ("WAYLAND_DISPLAY", "wayland-1"),
             (
-                aura_process::LAUNCH_SET_ENV,
+                o7_process::LAUNCH_SET_ENV,
                 "__NV_DISABLE_EXPLICIT_SYNC:GST_REGISTRY_1_0",
             ),
         ]);

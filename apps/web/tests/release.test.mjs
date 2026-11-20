@@ -13,7 +13,7 @@ const repo = resolve(app, "../..");
 const require = createRequire(import.meta.url);
 const router = join(dirname(require.resolve("@react-router/dev/package.json")), "bin.js");
 const env = { ...process.env };
-delete env.AURACODE_RELEASE_STAGE;
+delete env.O7_RELEASE_STAGE;
 const cargo = env.CARGO ?? "cargo";
 function run(command, args, variables = env, cwd = repo) {
   const result = spawnSync(command, args, {
@@ -34,14 +34,14 @@ const artifacts = join(scratch, "artifacts");
 const stage = join(scratch, "stage");
 await mkdir(artifacts);
 const fixture = JSON.parse(
-  await readFile(join(repo, "crates/aura-release/tests/fixtures/signatures.json"), "utf8"),
+  await readFile(join(repo, "crates/o7-release/tests/fixtures/signatures.json"), "utf8"),
 );
-env.AURACODE_UPDATER_PUBLIC_KEY = fixture.public_key;
+env.O7_UPDATER_PUBLIC_KEY = fixture.public_key;
 const entries = [
-  ["macos_universal_dmg", "auracode-universal.dmg"],
-  ["macos_universal_updater", "auracode.app.tar.gz"],
-  ["windows_x64_nsis", "auracode-x64.exe"],
-  ["windows_arm64_nsis", "auracode-arm64.exe"],
+  ["macos_universal_dmg", "o7-universal.dmg"],
+  ["macos_universal_updater", "o7.app.tar.gz"],
+  ["windows_x64_nsis", "o7-x64.exe"],
+  ["windows_arm64_nsis", "o7-arm64.exe"],
   ["linux_x64_appimage", "auracode-x86_64.AppImage"],
   ["linux_x64_deb", "auracode-amd64.deb"],
   ["linux_x64_rpm", "auracode-x86_64.rpm"],
@@ -65,7 +65,7 @@ run(cargo, [
   "run",
   "--locked",
   "-p",
-  "aura-release",
+  "o7-release",
   "--",
   "prepare",
   join(scratch, "plan.json"),
@@ -73,7 +73,7 @@ run(cargo, [
   stage,
 ]);
 try {
-  run(process.execPath, [router, "build"], { ...env, AURACODE_RELEASE_STAGE: stage }, app);
+  run(process.execPath, [router, "build"], { ...env, O7_RELEASE_STAGE: stage }, app);
   const html = await readFile(join(app, "build/client/download/index.html"), "utf8");
   const catalog = JSON.parse(await readFile(join(stage, "downloads.json"), "utf8"));
   assert.match(html, /Staging preview/);
@@ -166,10 +166,10 @@ try {
     await new Promise((resolve) => server.close(resolve));
   }
   // A modified artifact prevents any site build from activating its catalog.
-  await writeFile(join(stage, "releases/0.1.0/auracode-x64.exe"), "tampered");
+  await writeFile(join(stage, "releases/0.1.0/o7-x64.exe"), "tampered");
   const rejected = spawnSync(process.execPath, [router, "build"], {
     cwd: app,
-    env: { ...env, AURACODE_RELEASE_STAGE: stage },
+    env: { ...env, O7_RELEASE_STAGE: stage },
     encoding: "utf8",
     timeout: 180000,
     windowsHide: true,

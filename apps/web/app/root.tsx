@@ -10,7 +10,7 @@ import {
   useRouteError,
 } from "react-router";
 // Geist and Geist Mono, the site's only faces, come with Graphite.
-import "@auracode/ui/graphite.css";
+import "@o7/ui/graphite.css";
 import "./styles/index.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
 import { SiteFooter } from "./footer";

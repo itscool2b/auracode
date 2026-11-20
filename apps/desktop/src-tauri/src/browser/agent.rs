@@ -1,4 +1,4 @@
-//! The browser tools agents get (aura-core's browser grant and the app's `--aura-browser-helper`
+//! The browser tools agents get (o7-core's browser grant and the app's `--o7-browser-helper`
 //! MCP server carry them here). Each works in the chat's browser, in the tab in front, and the
 //! panel shows what the agent does while it does it. Page content is untrusted: the replies say
 //! what the page shows, never act on it.

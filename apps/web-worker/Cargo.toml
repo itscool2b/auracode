@@ -1,5 +1,5 @@
 [package]
-name = "auracode-web-worker"
+name = "o7-web-worker"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

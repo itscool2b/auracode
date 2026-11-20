@@ -14,11 +14,11 @@ A development build is one with debug assertions: `cargo run`, `cargo test`, `pn
 (`tauri dev`) and `tauri build --debug`. Release builds (`pnpm bundle`, `cargo build --release`)
 behave exactly like the installed app.
 
-- **Its data folder is its own.** Without `AURACODE_DATA_DIR` it opens `si.auracode.desktop.dev`
+- **Its data folder is its own.** Without `O7_DATA_DIR` it opens `si.auracode.desktop.dev`
   next to the installed app's `si.auracode.desktop` (`DEVELOPMENT_FOLDER` in
-  `crates/aura-core/src/paths.rs`). The installed app's chats are never migrated to a newer
+  `crates/o7-core/src/paths.rs`). The installed app's chats are never migrated to a newer
   schema, which the installed app would then refuse, and never cleaned up. The CLI follows the same
-  rule. `AURACODE_DATA_DIR` still points a development build anywhere, the installed app's folder
+  rule. `O7_DATA_DIR` still points a development build anywhere, the installed app's folder
   included, so using real data is a deliberate choice.
 - **It is always its own instance** (`LaunchOptions::single_instance` in
   `apps/desktop/src-tauri/src/launch.rs`). It never hands over to the installed app. Its
@@ -31,7 +31,7 @@ behave exactly like the installed app.
 - **Its window is titled `o7 dev`,** so neither a person nor automation that finds windows
   by title mistakes it for the installed app.
 
-Every smoke run, in any build, needs `AURACODE_DATA_DIR`. Without it the run reports a failure and
+Every smoke run, in any build, needs `O7_DATA_DIR`. Without it the run reports a failure and
 opens nothing, because a smoke run skips the single-instance hand-over and would otherwise open the
 default folder next to a running app.
 
@@ -72,16 +72,16 @@ Get-ChildItem $target -Recurse -Depth 2 -Directory -Filter .fingerprint |
 
 - **The UI:** the browser fixtures first (`check:*` scripts, `?preview=` modes). They need no
   native window and touch no data.
-- **The native app:** `tauri build --debug --no-bundle`, then `target\debug\auracode.exe`. It
-  opens the development folder. For a throwaway first launch, set `AURACODE_DATA_DIR` to a new
+- **The native app:** `tauri build --debug --no-bundle`, then `target\debug\o7.exe`. It
+  opens the development folder. For a throwaway first launch, set `O7_DATA_DIR` to a new
   folder. `pnpm dev` works too, but its Vite port (1420) is fixed, so only one worktree can run it
   at a time.
-- **Stop what you started by its process id.** Never stop `auracode.exe` by name: the installed
+- **Stop what you started by its process id.** Never stop `o7.exe` by name: the installed
   app has the same name.
 - **Drive windows by process id or handle,** and check the window is in the foreground before
   sending input. Otherwise keystrokes land in the installed app's composer.
 - **Launch from a clean environment.** An agent's shell carries `CLAUDECODE` and the installed
-  app's `AURA_MCP_*` values, which include the project-memory helper's address and token. The app
+  app's `O7_MCP_*` values, which include the project-memory helper's address and token. The app
   gives its agents a resolved environment anyway, but nothing it starts needs those values.
 - **Smoke checks:** `.github/scripts/run-smoke.sh` (bash and jq), with a data folder of its own
   per run. `chat-reopen` covers what an upgrade does to running chats: the second launch finds the
@@ -93,7 +93,7 @@ Every pull request merged into `main` adds its line to [CHANGELOG.md](../CHANGEL
 same pull request: under `## YYYY-MM-DD` for the day it merges in US Eastern time (the owner's
 clock; 18 November 2026, after evening merges showed under the next day because the days were
 UTC), newest first, and ending with its link,
-`([#N](https://github.com/itscool2b/auracode/pull/N))`. Open the pull request first to learn its
+`([#N](https://github.com/itscool2b/o7/pull/N))`. Open the pull request first to learn its
 number, then commit the line. If it merges on a later day than planned, move the line. Check the
 day with `node .github/scripts/check-changelog.mjs --dates` right before and right after the
 merge: it compares every line's day with the time GitHub recorded, and wants a line whose pull
@@ -132,7 +132,7 @@ is set in ink and the rest of the line follows it as the body.
 
 On Windows, `apps/desktop/scripts/host-upgrade.mjs` replaces the installed app with a local build
 and keeps the previous one. It runs from the repository root as
-`pnpm --filter @auracode/desktop host-upgrade <command>`.
+`pnpm --filter @o7/desktop host-upgrade <command>`.
 
 1. Build the installer with `pnpm bundle`. It lands in
    `target\<target triple>\release\bundle\nsis\` or `target\release\bundle\nsis\`.
@@ -147,7 +147,7 @@ and keeps the previous one. It runs from the repository root as
    a restore moves them back. The waiter runs the installer in update mode (`/P /UPDATE`, as the
    updater does), which keeps the data folder (`src-tauri/windows/hooks.nsh`); the registration
    stays in the registry, so the installer treats the empty folder as an update. The exit code is
-   not taken as proof: the waiter checks that `auracode.exe` was written and logs its size and
+   not taken as proof: the waiter checks that `o7.exe` was written and logs its size and
    hash next to the previous build's. Then it starts o7 again. If the binary is missing,
    Windows refuses to start it, or it is not running 20 seconds later, the waiter restores the
    snapshot and starts that. A launch error is logged separately from a build that started and
@@ -168,7 +168,7 @@ from a terminal.
 - **It starts but misbehaves:** quit it and run `host-upgrade rollback` from a terminal outside
   o7. That restores the newest snapshot, or the one `--snapshot <name>` names.
 - **The restored app says the database is from a newer o7:** the new build migrated it. Run
-  `host-upgrade rollback --restore-database`. aura-core backs a database up before every migration
+  `host-upgrade rollback --restore-database`. o7-core backs a database up before every migration
   (`profiles\<id>\backups\aura.db.v<from>-<millis>.bak`). This puts back each database as it was
   before its first migration since the snapshot, and keeps the migrated one next to the backups as
   `<database>.rolled-back-<millis>`. Chats changed after the upgrade are only in that kept copy.
@@ -182,7 +182,7 @@ can read the log to see what happened.
 ## Linux
 
 The installed app is an AppImage: `~/Applications/auracode.AppImage`, a link to a versioned file
-beside it (`auracode_0.1.0_amd64.AppImage`), which the desktop entry starts. The development
+beside it (`o7_0.1.0_amd64.AppImage`), which the desktop entry starts. The development
 build's folder is `~/.local/share/si.auracode.desktop.dev`, by the same rule as elsewhere.
 
 **Toolchain.** Rust through rustup (`rust-toolchain.toml` picks stable with rustfmt and clippy),
@@ -195,10 +195,10 @@ Arch: `gst-plugins-base gst-plugins-good patchelf`.
 **What an agent's shell sees.** The AppImage's launcher points `LD_LIBRARY_PATH`, `PATH`,
 `PYTHONHOME`, `PERLLIB`, `XDG_DATA_DIRS`, `GIO_MODULE_DIR` and others into its mount
 (`/tmp/.mount_auraco…`). o7 strips them before it resolves the agents' environment
-(`strip_launch_context` in `crates/aura-process/src/env/mod.rs`), so an agent's `node`, `git`,
+(`strip_launch_context` in `crates/o7-process/src/env/mod.rs`), so an agent's `node`, `git`,
 `python` and `cargo` load the system's libraries, not the image's. o7's own helpers that
 agents start (project memory, browser) run through the image's `AppRun`, which sets the image's
-library path again for them alone (`helper_program` in `crates/aura-core/src/paths.rs`). An
+library path again for them alone (`helper_program` in `crates/o7-core/src/paths.rs`). An
 installed build from before that fix leaks the launcher's variables: there, `node` fails with
 "version `LIBFFI_CALL_PLAN_8.4' not found", `python3` with "No module named 'encodings'" and `git`
 warns about `libpcre2-8.so.0`. Until such a build is replaced, start each command line with
@@ -290,7 +290,7 @@ system's folders in place of the launcher's missing one (a value the person set 
 Every AppImage also gets a GStreamer registry of its own under
 `~/.cache/si.auracode.desktop/gstreamer-1.0/` unless the person chose one: the image's plugins sit
 at a mount that moves with every launch, and in the shared registry they would make the person's
-other GStreamer apps scan everything again. Agents inherit none of these (`AURACODE_LAUNCH_SET`,
+other GStreamer apps scan everything again. Agents inherit none of these (`O7_LAUNCH_SET`,
 and `strip_launch_context` drops the GStreamer hook's variables). An image without plugins loads
 the system's plugins with its own GStreamer, which refuses plugins built for a newer GStreamer: when
 the system's is newer than the image's, media stays off and Settings says so.
@@ -316,8 +316,8 @@ pointer can slide onto it, and check the real monitor stayed at `0x0`); set its 
 (`hyprctl eval 'hl.monitor({ output = "NAME", mode = "3840x2160@60", scale = 1.6 })'`) and move the
 test window to the workspace it shows. A window on a workspace no monitor shows gets no frames, so
 `requestAnimationFrame` stalls and every measurement hangs. Start the build with
-`AURACODE_DATA_DIR` on a scratch folder and `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:<port>`, then
-drive the page over the inspector's WebSocket (`Runtime.evaluate`). `AURACODE_STRESS=orbs=24,seconds=0`
+`O7_DATA_DIR` on a scratch folder and `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:<port>`, then
+drive the page over the inspector's WebSocket (`Runtime.evaluate`). `O7_STRESS=orbs=24,seconds=0`
 opens the stress view; the scripted Demo agent (`mock`) gives a real chat to type, stream and
 scroll in without spending anything. Remove the monitor with `hyprctl output remove NAME`. Measure
 at the window's real size: at half width the same build drew several times the frames. Other
@@ -325,7 +325,7 @@ work on the machine moves the numbers a great deal (a compile in another worktre
 main process's CPU and halved frame rates): lower its priority with `renice`, run each pair of
 variants interleaved, three rounds, and distrust a single reading.
 
-**Getting a change into the installed app.** `pnpm --filter @auracode/desktop host-upgrade`
+**Getting a change into the installed app.** `pnpm --filter @o7/desktop host-upgrade`
 hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
 
 1. Build the AppImage: `pnpm bundle --bundles appimage`. It lands in
@@ -352,7 +352,7 @@ once.
 
 **When the new build is broken.** Quit it and run `host-upgrade rollback` from a terminal: the
 link goes back to the build the last install replaced (or `--to <file>`), and that build starts.
-`--restore-database` also puts back each database the newer build migrated, from aura-core's
+`--restore-database` also puts back each database the newer build migrated, from o7-core's
 pre-migration backups, as on Windows. With no working o7 at all, run Claude Code or Codex
 in a terminal in the main checkout, fix forward, build an AppImage and run `host-upgrade install`.
 
@@ -363,7 +363,7 @@ same rule. WebKit keeps one website-data store per bundle identifier, so a devel
 it with the installed app (`LaunchOptions::webview_data_dir` has no effect there). The app keeps
 nothing in web storage except the stress view's frame log, so this is harmless today. Anything
 that starts keeping state in web storage changes that. `host-upgrade` covers Windows and Linux.
-On macOS, copy `/Applications/auracode.app` aside before replacing it.
+On macOS, copy `/Applications/o7.app` aside before replacing it.
 
 ## Verification
 
@@ -373,15 +373,15 @@ The development build was built from this branch against the main checkout's war
 | Check | Result |
 |---|---|
 | A development build launched beside the running installed app stays up as its own instance, opens `si.auracode.desktop.dev` with its WebView2 profile inside, is titled `o7 dev`, and leaves the installed app's processes alone | pass |
-| A smoke run without `AURACODE_DATA_DIR` prints a failing result naming the reason, exits 1 and opens no store | pass |
+| A smoke run without `O7_DATA_DIR` prints a failing result naming the reason, exits 1 and opens no store | pass |
 | `--uninstall-cleanup --dry-run` from a development build plans only the development folder | pass |
 | Smoke checks with the development build in scratch folders: stream, chat (30 of 30), chat-reopen (8 of 8) | pass |
 | An agent's own processes are in the app's job; a process started through WMI is not (its parent is `WmiPrvSE.exe`) | pass |
 | `host-upgrade` against the real install while it runs: `status` reports it, `install` refuses, `rollback` finds no snapshot, nothing changes | pass |
 | `host-upgrade install --after-exit` against a stand-in install: the WMI waiter polls, proceeds when the stand-in quits, snapshots it, runs the installer, restores the snapshot when the installer fails, starts the app and removes its record; `cancel` stops an armed waiter | pass |
 | The snapshot holds, and a restore puts back, the installed files themselves (same file ids), not copies | pass |
-| Running a real installer over the installed app and reopening it | pass, on the second run. The first run failed: the installer exited 0, wrote its uninstaller and registry entries, and left the fresh copy of the previous `auracode.exe` in place (the installer's payload held the new binary; no Code Integrity event; no file lock could be reproduced), and the waiter reported success from the exit code alone. With the emptied folder and the binary check, the second run logged `Installed auracode.exe: 61048320 bytes, sha256 9640fbef… (previous cce195a7…)`, the installed file matches and carries the new build's smoke message (`SMOKE_NEEDS_DATA_DIR`, absent from the previous build; the development-only strings are compiled out of a release build, as expected), and the app reopened with its chats, the project-memory helper and Resume working |
-| The installed binary is the one the bundle carried, not the file left in `target` | pass, with a caveat: `tauri build` rewrote `target\…\release\auracode.exe` once more after `makensis` had read it (the link at 13:40:22 went into the installer; the file on disk is from 13:40:43, same size, different hash). Compare an install against the hash in the upgrade log, not against that file |
+| Running a real installer over the installed app and reopening it | pass, on the second run. The first run failed: the installer exited 0, wrote its uninstaller and registry entries, and left the fresh copy of the previous `o7.exe` in place (the installer's payload held the new binary; no Code Integrity event; no file lock could be reproduced), and the waiter reported success from the exit code alone. With the emptied folder and the binary check, the second run logged `Installed o7.exe: 61048320 bytes, sha256 9640fbef… (previous cce195a7…)`, the installed file matches and carries the new build's smoke message (`SMOKE_NEEDS_DATA_DIR`, absent from the previous build; the development-only strings are compiled out of a release build, as expected), and the app reopened with its chats, the project-memory helper and Resume working |
+| The installed binary is the one the bundle carried, not the file left in `target` | pass, with a caveat: `tauri build` rewrote `target\…\release\o7.exe` once more after `makensis` had read it (the link at 13:40:22 went into the installer; the file on disk is from 13:40:43, same size, different hash). Compare an install against the hash in the upgrade log, not against that file |
 
 A later install attempt on 2 November 2026 at 00:22 UTC returned `-1` and restored the snapshot.
 Windows Code Integrity events 3033 and 3077 at that time identify the staged installer as blocked
@@ -421,6 +421,6 @@ each with a data folder of its own, driven through WebKit's remote inspector and
 | Pictures | pass: the panel's stand-in is a 1280x800 JPEG with the test page's colours and box where they belong; the agents' viewport JPEG, full page PNG and element PNG come back |
 | Clear browsing data with no page open, on Wayland | pass (it failed with `UnsupportedWindowHandle` before) |
 | `pnpm bundle --bundles appimage` here | pass: stops before building, naming the missing plugin and `patchelf` and the packages for Arch, Debian and Ubuntu, and Fedora |
-| A development AppImage without plugins | pass: the image check passes for an image without media and refuses it as one with media; launched, one re-run sets the system's plugin folders, a registry of o7's own and the NVIDIA switch, and `AURACODE_LAUNCH_SET` names all three |
+| A development AppImage without plugins | pass: the image check passes for an image without media and refuses it as one with media; launched, one re-run sets the system's plugin folders, a registry of o7's own and the NVIDIA switch, and `O7_LAUNCH_SET` names all three |
 | X11 through XWayland (`GDK_BACKEND=x11`, pages as child windows) | pass: media off in a tab, its picture, a page end read as crashed, Clear browsing data with no page open. The first three X11 launches that afternoon left the window's page on `about:blank` (with either renderer); nine later launches of the same code, the very same binary among them, loaded normally, and the cause was not found |
 | An AppImage that carries the plugins; sound and video actually playing | not run: this machine has no `gst-plugins-good` and no `patchelf`. CI's Ubuntu 22.04 job installs the plugin packages |

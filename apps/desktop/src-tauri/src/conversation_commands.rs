@@ -1,5 +1,5 @@
 use crate::{error::AppError, state::AppState};
-use aura_protocol::conversation::{
+use o7_protocol::conversation::{
     ContinuationAction, ContinuationPreview, ContinuationResult, ConversationTurns, EditablePrompt,
 };
 use tauri::State;
@@ -9,7 +9,7 @@ use tauri::State;
 pub async fn conversation_pending(
     state: State<'_, AppState>,
     chat_id: String,
-) -> Result<Option<aura_protocol::conversation::PendingHandoff>, AppError> {
+) -> Result<Option<o7_protocol::conversation::PendingHandoff>, AppError> {
     Ok(state.sessions()?.conversation_pending(&chat_id).await?)
 }
 

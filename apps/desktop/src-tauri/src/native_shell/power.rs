@@ -15,8 +15,8 @@ impl Power {
                 .display(false)
                 .sleep(false)
                 .reason("An o7 agent is working")
-                .app_name("auracode")
-                .app_reverse_domain("si.auracode.desktop")
+                .app_name("o7")
+                .app_reverse_domain("codes.o7.desktop")
                 .create()
             {
                 Ok(assertion) => Some(assertion),

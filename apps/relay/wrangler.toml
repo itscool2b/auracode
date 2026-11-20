@@ -1,7 +1,7 @@
 # The remote-sessions relay: one Durable Object per desktop, holding its sockets. It stores only
 # the hash of a desktop's key and the hashes of its bot tokens; no D1, R2, KV or secrets.
 # Default bindings are local-only. Production requires explicit --env production.
-name = "auracode-relay-local"
+name = "o7-relay-local"
 main = "src/index.ts"
 compatibility_date = "2026-10-26"
 workers_dev = false
@@ -22,7 +22,7 @@ new_sqlite_classes = ["Room"]
 enabled = false
 
 [env.production]
-name = "auracode-relay"
+name = "o7-relay"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
 # More specific than the website's `o7.codes/*`, so these requests reach this Worker.
 # The second route and FORMER_ORIGIN are the address the site had until 19 November 2026: a copy
@@ -46,7 +46,7 @@ tag = "v1"
 new_sqlite_classes = ["Room"]
 
 [env.preview]
-name = "auracode-relay-preview"
+name = "o7-relay-preview"
 account_id = "5feb14f2fe605875bcf1472f348cb7ed"
 routes = [{ pattern = "preview.o7.codes/api/remote/*", zone_name = "o7.codes" }]
 

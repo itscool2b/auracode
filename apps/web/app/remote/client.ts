@@ -14,7 +14,7 @@
  * - Live events are folded as they arrive, and drawn at most once a frame.
  */
 
-import { THEME_IDS } from "@auracode/ui/graphite";
+import { THEME_IDS } from "@o7/ui/graphite";
 import type {
   ChatAttach,
   ChatSnapshot,

@@ -132,103 +132,103 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install worker-build --version 0.8.7 --locked
-          pnpm --filter @auracode/web-worker worker:build
-          pnpm --filter @auracode/web-worker worker:test
+          pnpm --filter @o7/web-worker worker:build
+          pnpm --filter @o7/web-worker worker:test
 
       - name: Install browser test engines
         id: browsers
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: pnpm --filter @auracode/desktop exec playwright install --with-deps chromium webkit
+        run: pnpm --filter @o7/desktop exec playwright install --with-deps chromium webkit
 
       # One engine per step, so each fits its deadline (about 6 and 9 minutes here).
       - name: Check the chat in Chromium
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:chat --engines chromium
+        run: pnpm --filter @o7/desktop check:chat --engines chromium
 
       - name: Check the chat in WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:chat --engines webkit
+        run: pnpm --filter @o7/desktop check:chat --engines webkit
 
       - name: Check settings and explicit update controls in Chromium
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:settings --engines chromium
+        run: pnpm --filter @o7/desktop check:settings --engines chromium
 
       - name: Check settings and explicit update controls in WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:settings --engines webkit
+        run: pnpm --filter @o7/desktop check:settings --engines webkit
 
       - name: Check the Plugin library, instructions, folders, publication and agent accounts
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
         run: |
-          pnpm --filter @auracode/desktop exec node scripts/check-plugin-library.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-instructions.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
-          pnpm --filter @auracode/desktop exec node scripts/check-accounts.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-plugin-library.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-instructions.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-folder-resolution.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-repository-publication.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-workspace-removal.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-agent-installations.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-accounts.mjs
 
       - name: Check explicit installer and clone actions
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-setup-actions.mjs
 
       - name: Check the sidebar footer
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-sidebar-footer.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-sidebar-footer.mjs
 
       - name: Check the app update button
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
-        run: pnpm --filter @auracode/desktop exec node scripts/check-app-update.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-app-update.mjs
 
       - name: Check coordinated projects
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
-        run: pnpm --filter @auracode/desktop exec node scripts/check-coordinator.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-coordinator.mjs
 
       - name: Check New chat's worktree choice
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-new-chat-worktree.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-new-chat-worktree.mjs
 
       - name: Check Customize, native controls, project memory and shared MCP fixtures
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:customization
+        run: pnpm --filter @o7/desktop check:customization
 
       - name: Check the docked terminal panel
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-terminal-panel.mjs
 
       - name: Check dictation, images, the Dashboard, typing, update notices and terminal chats
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
-        run: pnpm --filter @auracode/desktop check:fixtures
+        run: pnpm --filter @o7/desktop check:fixtures
 
       - name: Check Delete all o7 data
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-delete-data.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-delete-data.mjs
 
       - name: Check explicit chat sign-in recovery
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
-        run: pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs
+        run: pnpm --filter @o7/desktop exec node scripts/check-chat-auth.mjs
 
       - name: Check the website and verified release downloads
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: |
-          pnpm --filter @auracode/web test:release
-          pnpm --filter @auracode/web test:browser
+          pnpm --filter @o7/web test:release
+          pnpm --filter @o7/web test:browser
 
       - name: Keep Library, settings and website browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -276,7 +276,7 @@ jobs:
       - name: Check setup in Chromium and WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
-        run: pnpm --filter @auracode/desktop check:setup
+        run: pnpm --filter @o7/desktop check:setup
       - name: Keep setup browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -341,11 +341,11 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
       - name: Install browser test engine
-        run: pnpm --filter @auracode/desktop exec playwright install --with-deps ${{ matrix.engine }}
+        run: pnpm --filter @o7/desktop exec playwright install --with-deps ${{ matrix.engine }}
       - name: Check every preview's layout
         timeout-minutes: 20
         run: >-
-          pnpm --filter @auracode/desktop exec node scripts/check-layout.mjs
+          pnpm --filter @o7/desktop exec node scripts/check-layout.mjs
           --engines ${{ matrix.engine }} --themes ${{ matrix.theme }}
           --sizes 1440x900,960x640 --focus-steps 120
       - name: Keep layout evidence
@@ -519,12 +519,12 @@ jobs:
         timeout-minutes: 30
         env:
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
-        run: pnpm --filter @auracode/desktop tauri build --debug --no-bundle
+        run: pnpm --filter @o7/desktop tauri build --debug --no-bundle
       - name: Smoke test the app (streams)
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 5
         run: |
-          binary=target/debug/auracode
+          binary=target/debug/o7
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           # Linux has no display on the runner: a virtual one, at the window's default size.
           display=()
@@ -534,7 +534,7 @@ jobs:
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 10
         run: |
-          binary=target/debug/auracode
+          binary=target/debug/o7
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           # Linux has no display on the runner: a virtual one, at the window's default size.
           display=()
@@ -558,7 +558,7 @@ jobs:
           NATIVE_DRIVER: ${{ steps.webdriver-native.outputs.native_driver }}
           EXPECTED_WEBVIEW_VERSION: ${{ steps.webdriver-native.outputs.webview_version }}
         run: >-
-          node .github/scripts/webdriver-smoke.mjs "$GITHUB_WORKSPACE/target/debug/auracode.exe"
+          node .github/scripts/webdriver-smoke.mjs "$GITHUB_WORKSPACE/target/debug/o7.exe"
           "$RUNNER_TEMP/webdriver-tools/bin/tauri-driver.exe" "$NATIVE_DRIVER"
           "$RUNNER_TEMP/webdriver-evidence"
       - name: Keep external Windows WebDriver evidence
@@ -612,9 +612,9 @@ jobs:
       - name: Compare checkpoint capture and native prompt latency
         env:
           CHECKPOINT_BASELINE_REF: ${{ inputs.checkpoint_baseline_ref }}
-          AURA_CHECKPOINT_BENCH_COUNTS: ${{ inputs.checkpoint_counts }}
-          AURA_CHECKPOINT_BENCH_WARM: ${{ inputs.checkpoint_warm_samples }}
-          AURA_CHECKPOINT_BENCH_DIAGNOSTICS: "1"
+          O7_CHECKPOINT_BENCH_COUNTS: ${{ inputs.checkpoint_counts }}
+          O7_CHECKPOINT_BENCH_WARM: ${{ inputs.checkpoint_warm_samples }}
+          O7_CHECKPOINT_BENCH_DIAGNOSTICS: "1"
         run: bash .github/scripts/checkpoint-performance.sh
       - name: Keep checkpoint performance evidence
         if: ${{ always() }}

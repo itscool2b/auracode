@@ -1,4 +1,4 @@
-import { AGENT_BRANDS } from "@auracode/ui";
+import { AGENT_BRANDS } from "@o7/ui";
 import type { CSSProperties } from "react";
 import { AGENTS, SpriteMark } from "./Sprite";
 import { Wing } from "./Wing";
