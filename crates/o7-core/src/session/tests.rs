@@ -26,6 +26,8 @@ mod worktree_setup;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use o7_agents::{Detector, FixedAgent};
 use o7_drivers::driver::{
     AgentDriver, DriverContext, DriverEvent, DriverExit, ReadyInfo, ResumeOutcome,
@@ -34,9 +36,7 @@ use o7_drivers::testing::{CommandMatch, ScriptedDriver, Step};
 use o7_process::testing::{FakeAgentEnd, FakeCall, FakeSpawner};
 use o7_process::{EnvKey, EnvMap, LaunchSpec, ProcessCwd, ResolvedEnv};
 use o7_protocol::session::{PauseReason, StorageState};
-use o7_protocol::{O7Event, Capabilities, StopReason};
-use futures::FutureExt;
-use futures::future::BoxFuture;
+use o7_protocol::{Capabilities, O7Event, StopReason};
 
 use super::*;
 use crate::chatstore::WriterConfig;
@@ -413,9 +413,7 @@ async fn disk_full_pauses_without_loss() {
         .items
         .iter()
         .filter_map(|item| match &item.event {
-            O7Event::MessageDelta { message_id, text } if message_id == "m1" => {
-                Some(text.as_str())
-            }
+            O7Event::MessageDelta { message_id, text } if message_id == "m1" => Some(text.as_str()),
             _ => None,
         })
         .collect();
@@ -847,10 +845,12 @@ async fn actor_and_driver_never_deadlock() {
         &lists.options[0].kind,
         o7_protocol::session::ConfigKind::Select { current, .. } if current == "smart"
     ));
-    assert!(handle.commands().iter().any(|command| matches!(
-        command,
-        o7_drivers::driver::LoggedCommand::SetOption { .. }
-    )));
+    assert!(
+        handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, o7_drivers::driver::LoggedCommand::SetOption { .. }))
+    );
     let queued = rig
         .manager
         .send(&chat.id, "next".into())
@@ -868,9 +868,7 @@ async fn actor_and_driver_never_deadlock() {
         .items
         .iter()
         .filter_map(|item| match &item.event {
-            O7Event::MessageDelta { message_id, text } if message_id == "m1" => {
-                Some(text.as_str())
-            }
+            O7Event::MessageDelta { message_id, text } if message_id == "m1" => Some(text.as_str()),
             _ => None,
         })
         .collect();

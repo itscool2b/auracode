@@ -7,12 +7,12 @@ mod common;
 
 use std::sync::Arc;
 
+use common::{GONE_WITHIN, Reaper, launch, next_json, read_pids, spec, wait_gone};
 use o7_process::tree::{Snapshot, StopError, TreeProcess, stop};
 use o7_process::{
     LeftoverRegistry, ProcessControl, ProcessSpawner, ProtocolLog, ShutdownPlan, SpawnedProcess,
     Spawner,
 };
-use common::{GONE_WITHIN, Reaper, launch, next_json, read_pids, spec, wait_gone};
 use serde_json::json;
 use tokio::runtime::Handle;
 
@@ -59,7 +59,7 @@ async fn an_agent_and_its_child_are_listed_and_the_child_stops_on_request() {
         "the agent comes first: {listed:?}"
     );
     assert!(
-        listed[0].name.contains("aura-testbin") && listed[0].parent.is_none(),
+        listed[0].name.contains("o7-testbin") && listed[0].parent.is_none(),
         "the agent's own row: {:?}",
         listed[0]
     );
@@ -68,7 +68,7 @@ async fn an_agent_and_its_child_are_listed_and_the_child_stops_on_request() {
         .find(|entry| entry.pid == child)
         .unwrap_or_else(|| panic!("the child is listed: {listed:?}"));
     assert_eq!(entry.parent, Some(process.control.pid()));
-    assert!(entry.name.contains("aura-testbin"), "{entry:?}");
+    assert!(entry.name.contains("o7-testbin"), "{entry:?}");
     assert!(
         entry
             .command

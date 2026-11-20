@@ -9,7 +9,7 @@ use specta::Type;
 
 use crate::lenient::lenient_enum;
 use crate::{
-    O7Event, AutonomyState, Capabilities, ErrorKind, LimitWindow, Millis, SessionInfo,
+    AutonomyState, Capabilities, ErrorKind, LimitWindow, Millis, O7Event, SessionInfo,
     SessionStatus, SlashCommand, UsageInfo,
 };
 

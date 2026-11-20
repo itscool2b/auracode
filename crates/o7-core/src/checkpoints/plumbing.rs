@@ -314,8 +314,8 @@ mod tests {
     use crate::checkpoints::coordination;
     use crate::paths::DataRoot;
     use crate::profile::Profiles;
-    use o7_process::{EnvResolver, EnvSource, LeftoverRegistry, ResolvedEnv, process_env};
     use futures::FutureExt;
+    use o7_process::{EnvResolver, EnvSource, LeftoverRegistry, ResolvedEnv, process_env};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use tokio::sync::oneshot;

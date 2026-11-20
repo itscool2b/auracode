@@ -9,11 +9,11 @@ mod common;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::{GONE_WITHIN, Reaper, STARTUP, alive, launch, next_json, read_pids, spec, wait_gone};
 use o7_process::{
     DaemonMatch, LeftoverRegistry, ProcessSpawner, ProtocolLog, ShutdownPlan, ShutdownStep,
     SpawnedProcess, Spawner,
 };
-use common::{GONE_WITHIN, Reaper, STARTUP, alive, launch, next_json, read_pids, spec, wait_gone};
 use serde_json::json;
 use tokio::runtime::Handle;
 
@@ -64,7 +64,7 @@ async fn with_children(
 #[cfg(test)]
 fn testbin_daemon() -> Vec<DaemonMatch> {
     vec![DaemonMatch {
-        program: Some("aura-testbin".into()),
+        program: Some("o7-testbin".into()),
         args_in_order: vec!["daemon".into(), "run".into()],
     }]
 }
@@ -577,7 +577,7 @@ async fn the_registry_follows_an_agent_and_its_escapees() {
     assert_eq!(written.len(), 1);
     assert_eq!(written[0]["pid"], json!(process.control.pid()));
     assert_eq!(written[0]["pgid"], json!(process.control.pid()));
-    assert_eq!(written[0]["label"], json!("aura-testbin spawn-pty-child"));
+    assert_eq!(written[0]["label"], json!("o7-testbin spawn-pty-child"));
     assert_eq!(written[0]["escaped"], json!([]));
     process.control.record_escaped().await;
     let written = entries(&file);
@@ -666,7 +666,7 @@ async fn the_sweep_stops_a_dead_instances_agent_and_spares_its_daemon() {
         "instance": dead,
         "entries": [{
             "pid": agent, "pgid": agent, "sid": sid, "start": agent_start,
-            "label": "aura-testbin spawn-setsid-daemon", "spawned_at_ms": 0,
+            "label": "o7-testbin spawn-setsid-daemon", "spawned_at_ms": 0,
             "daemons": testbin_daemon(), "escaped": [],
         }],
     });
@@ -696,7 +696,7 @@ async fn the_sweep_stops_a_dead_instances_agent_and_spares_its_daemon() {
     reaper.assert_gone().await;
 }
 
-/// Starts `aura-testbin orphan 60`, which owns a sleeper through the real spawner, and returns the
+/// Starts `o7-testbin orphan 60`, which owns a sleeper through the real spawner, and returns the
 /// owner and the sleeper's pid. The owner exits without cleanup once it reads a line.
 #[cfg(test)]
 async fn crashing_owner(reaper: &mut Reaper) -> (tokio::process::Child, u32) {

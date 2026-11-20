@@ -10,11 +10,11 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
+use common::{GONE_WITHIN, Reaper, env, read_pids, testbin, wait_gone};
 use o7_process::{
     HelperEnv, HelperSpec, LeftoverRegistry, SpawnError, find_program, process_env, run_helper,
     run_helper_input,
 };
-use common::{GONE_WITHIN, Reaper, env, read_pids, testbin, wait_gone};
 use tokio::runtime::Handle;
 
 #[cfg(test)]
@@ -283,7 +283,7 @@ async fn dropping_a_helper_kills_its_tree() {
         loop {
             let body: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(&file).expect("read")).expect("json");
-            if body["entries"][0]["label"] == serde_json::json!("helper aura-testbin") {
+            if body["entries"][0]["label"] == serde_json::json!("helper o7-testbin") {
                 break;
             }
             assert!(

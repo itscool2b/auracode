@@ -3,7 +3,7 @@ mod support;
 
 use o7_drivers::driver::{DriverEvent, LoggedCommand};
 use o7_drivers::testing::{ScriptedDriver, Step};
-use o7_protocol::{O7Event, ErrorKind, SessionStatus, StopReason};
+use o7_protocol::{ErrorKind, O7Event, SessionStatus, StopReason};
 use std::time::Duration;
 use support::*;
 

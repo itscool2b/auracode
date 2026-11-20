@@ -11,8 +11,8 @@ use std::time::Duration;
 use o7_drivers::driver::{DriverError, DriverEvent, DriverExit, LoggedCommand};
 use o7_drivers::testing::{CommandMatch, ScriptHandle, ScriptedDriver, Step};
 use o7_protocol::{
-    O7Event, Capabilities, ErrorKind, HoldCause, NoticeLevel, PromptPart, QueueWait,
-    SessionStatus, StopReason, UsageInfo,
+    Capabilities, ErrorKind, HoldCause, NoticeLevel, O7Event, PromptPart, QueueWait, SessionStatus,
+    StopReason, UsageInfo,
 };
 use support::*;
 

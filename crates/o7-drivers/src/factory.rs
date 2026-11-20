@@ -38,13 +38,13 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
+    use futures::future::BoxFuture;
     use o7_process::testing::FakeSpawner;
     use o7_process::{
         EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
         SpawnError, SpawnSpec, SpawnedProcess,
     };
     use o7_protocol::Autonomy;
-    use futures::future::BoxFuture;
     use tokio::sync::mpsc;
 
     use super::*;

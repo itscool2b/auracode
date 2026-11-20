@@ -8,10 +8,10 @@ mod common;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use common::{Machine, Reaper, gone, spec};
 use o7_agents::LaunchError;
 use o7_process::ProcessCwd;
 use o7_protocol::session::Availability;
-use common::{Machine, Reaper, gone, spec};
 use tokio::sync::mpsc;
 
 #[cfg(test)]

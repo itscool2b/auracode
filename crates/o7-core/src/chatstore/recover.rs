@@ -16,7 +16,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use o7_protocol::{O7Event, Millis, PermissionDecision, ResolvedBy, StopReason};
+use o7_protocol::{Millis, O7Event, PermissionDecision, ResolvedBy, StopReason};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::compact::{self, CompactLimits};

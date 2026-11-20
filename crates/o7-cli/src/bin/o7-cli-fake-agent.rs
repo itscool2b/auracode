@@ -156,8 +156,7 @@ impl Quirks {
         let millis = |name: &str| -> Option<u64> { std::env::var(name).ok()?.parse().ok() };
         let on = |name: &str| std::env::var_os(name).is_some_and(|value| !value.is_empty());
         Quirks {
-            set_delay: millis("O7_FAKE_SET_DELAY_MS")
-                .map_or(Duration::ZERO, Duration::from_millis),
+            set_delay: millis("O7_FAKE_SET_DELAY_MS").map_or(Duration::ZERO, Duration::from_millis),
             hermes_models: on("O7_FAKE_HERMES_MODELS"),
             refuse_switch_back: std::env::var("O7_FAKE_HERMES_MODELS")
                 .is_ok_and(|value| value == "refuse"),

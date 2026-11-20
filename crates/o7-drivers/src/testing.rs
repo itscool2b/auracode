@@ -23,14 +23,14 @@ use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use o7_process::{
     LaunchSpec, LogFactory, MAX_LINE_BYTES, ProcessSpawner, SpawnError, SpawnSpec, SpawnedProcess,
 };
 use o7_protocol::{
     AutoAnswer, Autonomy, AutonomyState, DriverKind, ErrorKind, StopReason, TokenUsage,
 };
-use futures::FutureExt;
-use futures::future::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
@@ -767,7 +767,7 @@ mod tests {
     use o7_process::{EnvMap, EnvSource, ProcessCwd, ProtocolLog, Redactor, ResolvedEnv};
     use o7_protocol::session::ConfigValue;
     use o7_protocol::{
-        O7Event, NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest,
+        NoticeLevel, O7Event, PermissionOption, PermissionOptionKind, PermissionRequest,
         PromptPart, ToolKind, UsageScope,
     };
     use tokio::sync::oneshot;

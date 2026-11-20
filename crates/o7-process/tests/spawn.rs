@@ -10,12 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::{
+    GONE_WITHIN, Reaper, STARTUP, env_with, launch, next_json, read_pids, spec, testbin, wait_gone,
+};
 use o7_process::{
     EnvKey, LeftoverRegistry, LogFactory, ProcessCwd, ProcessSpawner, ProtocolLog, Redactor,
     SpawnError, Spawner, StdoutItem, TopKeys,
-};
-use common::{
-    GONE_WITHIN, Reaper, STARTUP, env_with, launch, next_json, read_pids, spec, testbin, wait_gone,
 };
 use serde_json::json;
 use tokio::runtime::Handle;
@@ -87,10 +87,7 @@ async fn the_env_is_exactly_the_resolved_env_scrubbed_plus_set() {
     let mut launch = launch(&["print-env"]);
     launch.set_env = vec![
         (OsString::from("O7_TEST_SET"), OsString::from("set")),
-        (
-            OsString::from("O7_TEST_KEEP"),
-            OsString::from("overridden"),
-        ),
+        (OsString::from("O7_TEST_KEEP"), OsString::from("overridden")),
     ];
     let mut spec = spec(launch, folder.path());
     spec.env = Arc::new(env);
@@ -180,7 +177,7 @@ async fn no_env_values_in_logs() {
     assert!(removed.contains(&"CLAUDECODE"), "{removed:?}");
     assert!(!removed.contains(&"O7_TEST_VALUE"), "{removed:?}");
     assert_eq!(spawn["set"], json!(["O7_TEST_SET"]));
-    assert_eq!(spawn["label"], json!("aura-testbin echo"));
+    assert_eq!(spawn["label"], json!("o7-testbin echo"));
     assert!(spawn["pid"].as_u64().is_some());
     // The exit note and the last stdout line come from two tasks, in either order.
     let mut directions: Vec<&str> = records
@@ -485,7 +482,7 @@ async fn spawn_failures_say_what_is_wrong() {
         SpawnError::ProgramNotFound { .. }
     ));
     let mut relative = launch(&["echo"]);
-    relative.program = PathBuf::from("aura-testbin");
+    relative.program = PathBuf::from("o7-testbin");
     assert!(matches!(
         attempt(relative, dir.path().to_path_buf()).await,
         SpawnError::ProgramNotFound { .. }

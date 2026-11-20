@@ -1,11 +1,11 @@
 //! Chat-scoped image previews. No remote requests, arbitrary attachment hashes or active formats.
 use super::*;
 use crate::chatstore::composer::{ComposerCommand, ComposerReply};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use o7_protocol::{
     PromptPart,
     composer::{ChatImage, ChatImageContext, ChatImagePreview, ChatImageSource},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::{
     io::{Cursor, Read},
     path::Component,
@@ -374,8 +374,7 @@ mod tests {
                 .is_err()
         );
         let saved =
-            o7_drivers::attachments::read(store.attachment_dir(), &hash, MAX_SOURCE_BYTES)
-                .unwrap();
+            o7_drivers::attachments::read(store.attachment_dir(), &hash, MAX_SOURCE_BYTES).unwrap();
         assert!(saved.starts_with(b"\x89PNG\r\n\x1a\n"));
         drop(writer);
         assert!(store.shutdown(std::time::Duration::from_secs(5)).await);

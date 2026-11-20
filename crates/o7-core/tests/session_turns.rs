@@ -11,7 +11,7 @@ use o7_process::ExitInfo;
 use o7_process::testing::FakeCall;
 use o7_protocol::session::{AuthCommand, AuthPrompt};
 use o7_protocol::{
-    O7Event, ErrorKind, NoticeLevel, PermissionDecision, PromptPart, ResolvedBy, SessionStatus,
+    ErrorKind, NoticeLevel, O7Event, PermissionDecision, PromptPart, ResolvedBy, SessionStatus,
     StopReason, ToolCall, ToolKind, ToolStatus, ToolUpdate,
 };
 use support::*;

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use futures::{FutureExt, future::BoxFuture};
 use o7_agents::Detector;
 use o7_cli::logs;
 use o7_core::ids::new_id;
@@ -19,8 +20,7 @@ use o7_process::{
     Redactor, ShutdownPlan, SpawnError, SpawnSpec, SpawnedProcess, Spawner,
 };
 use o7_protocol::session::ConfigValue;
-use o7_protocol::{O7Event, Autonomy, PromptPart, StopReason};
-use futures::{FutureExt, future::BoxFuture};
+use o7_protocol::{Autonomy, O7Event, PromptPart, StopReason};
 use serde_json::json;
 use tokio::sync::mpsc;
 

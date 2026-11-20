@@ -1,7 +1,7 @@
 //! Native item streams mapped to the shared transcript vocabulary.
 use o7_protocol::{
-    O7Event, PermissionRequest, PlanEntry, PlanStatus, ToolCall, ToolContent, ToolKind,
-    ToolStatus, ToolUpdate, Truncation, UsageInfo,
+    O7Event, PermissionRequest, PlanEntry, PlanStatus, ToolCall, ToolContent, ToolKind, ToolStatus,
+    ToolUpdate, Truncation, UsageInfo,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};

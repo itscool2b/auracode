@@ -1,9 +1,9 @@
 //! Git generates metadata in an owned temporary directory. Publication creates only a new .git
 //! through a pinned directory handle; Git never initializes or reinitializes the user's path.
 use super::{GitError, GitWorkspaces, Result, git, inspect};
-use o7_protocol::git::{GitInitializePreview, GitWorkspace};
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
+use o7_protocol::git::{GitInitializePreview, GitWorkspace};
 use same_file::Handle;
 use std::{
     io::{Read, Write},

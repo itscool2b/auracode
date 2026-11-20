@@ -18,7 +18,7 @@ use o7_drivers::testing::{CommandMatch, ScriptedDriver, Step};
 use o7_process::testing::FakeCall;
 use o7_protocol::session::{Availability, FolderState};
 use o7_protocol::{
-    O7Event, ErrorKind, NoticeLevel, PermissionDecision, ResolvedBy, SessionInfo, SessionStatus,
+    ErrorKind, NoticeLevel, O7Event, PermissionDecision, ResolvedBy, SessionInfo, SessionStatus,
     StopReason, ToolCall, ToolContent, ToolKind, ToolStatus,
 };
 use sha2::{Digest, Sha256};

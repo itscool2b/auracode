@@ -8,6 +8,7 @@ mod common;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::Machine;
 use o7_cli::args::{Scenario, SmokeArgs};
 use o7_cli::headless::Headless;
 use o7_cli::out::Out;
@@ -24,10 +25,9 @@ use o7_drivers::testing::{
 use o7_process::testing::FakeSpawner;
 use o7_process::{LogFactory, Redactor};
 use o7_protocol::{
-    O7Event, Autonomy, Capabilities, EventBatch, PermissionOption, PermissionOptionKind,
+    Autonomy, Capabilities, EventBatch, O7Event, PermissionOption, PermissionOptionKind,
     PermissionRequest, PromptState, StopReason, ToolCall, ToolKind, ToolStatus,
 };
-use common::Machine;
 
 const TIMINGS: SmokeTimings = SmokeTimings {
     start: Duration::from_secs(5),
@@ -50,9 +50,9 @@ async fn headless(machine: &Machine, driver: ScriptedDriver) -> Headless {
         drivers: ScriptedDriverFactory::new(vec![driver]),
         logs: LogFactory::new(machine.path("logs"), Arc::clone(&redactor), rt.clone()),
         redactor,
-        device_id: o7_core::device::DeviceIdentity::load_or_create(
-            &o7_core::paths::DataRoot::at(&machine.profile_root),
-        )
+        device_id: o7_core::device::DeviceIdentity::load_or_create(&o7_core::paths::DataRoot::at(
+            &machine.profile_root,
+        ))
         .expect("fixture device")
         .identity()
         .device_id

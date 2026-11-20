@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-use o7_protocol::git::GitFileState;
 use cap_fs_ext::DirExt;
 use cap_std::fs::{Dir, OpenOptions};
+use o7_protocol::git::GitFileState;
 
 use super::{GitError, Result};
 use crate::checkpoints::{

@@ -19,7 +19,7 @@
 use std::io;
 use std::sync::Arc;
 
-use o7_protocol::{O7Event, EventBatch, MAX_FRAME_BYTES};
+use o7_protocol::{EventBatch, MAX_FRAME_BYTES, O7Event};
 use unicode_segmentation::GraphemeCursor;
 
 /// The turn an event belongs to, or `None` for an event outside any turn.
@@ -165,15 +165,9 @@ impl DeltaKind {
 /// A delta's kind, id and text, or `None` for any other event.
 fn delta_ref(event: &O7Event) -> Option<(DeltaKind, &str, &str)> {
     match event {
-        O7Event::MessageDelta { message_id, text } => {
-            Some((DeltaKind::Message, message_id, text))
-        }
-        O7Event::ThoughtDelta { thought_id, text } => {
-            Some((DeltaKind::Thought, thought_id, text))
-        }
-        O7Event::UserMessageDelta { message_id, text } => {
-            Some((DeltaKind::User, message_id, text))
-        }
+        O7Event::MessageDelta { message_id, text } => Some((DeltaKind::Message, message_id, text)),
+        O7Event::ThoughtDelta { thought_id, text } => Some((DeltaKind::Thought, thought_id, text)),
+        O7Event::UserMessageDelta { message_id, text } => Some((DeltaKind::User, message_id, text)),
         _ => None,
     }
 }
@@ -181,15 +175,9 @@ fn delta_ref(event: &O7Event) -> Option<(DeltaKind, &str, &str)> {
 /// [`delta_ref`] with the text open for appending.
 fn delta_mut(event: &mut O7Event) -> Option<(DeltaKind, &str, &mut String)> {
     match event {
-        O7Event::MessageDelta { message_id, text } => {
-            Some((DeltaKind::Message, message_id, text))
-        }
-        O7Event::ThoughtDelta { thought_id, text } => {
-            Some((DeltaKind::Thought, thought_id, text))
-        }
-        O7Event::UserMessageDelta { message_id, text } => {
-            Some((DeltaKind::User, message_id, text))
-        }
+        O7Event::MessageDelta { message_id, text } => Some((DeltaKind::Message, message_id, text)),
+        O7Event::ThoughtDelta { thought_id, text } => Some((DeltaKind::Thought, thought_id, text)),
+        O7Event::UserMessageDelta { message_id, text } => Some((DeltaKind::User, message_id, text)),
         _ => None,
     }
 }

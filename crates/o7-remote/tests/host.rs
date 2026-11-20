@@ -12,8 +12,9 @@ use std::{
     time::Duration,
 };
 
+use futures::{SinkExt, StreamExt};
 use o7_protocol::{
-    O7Event, EventBatch, SessionStatus, UiAnswer,
+    EventBatch, O7Event, SessionStatus, UiAnswer,
     remote::RemoteLink,
     session::{ChatAttach, ChatStatusUpdate, HistoryItem, HistoryPage, PromptAck},
     workspace::WorkspaceChat,
@@ -23,7 +24,6 @@ use o7_remote::{
     Overview, RemoteAgent, Service, Statuses,
     crypto::{self, Channel, Side},
 };
-use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_tungstenite::{

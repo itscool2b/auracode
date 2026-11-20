@@ -875,10 +875,9 @@ mod tests {
             let folder = tempfile::tempdir().unwrap();
             let terminals = Terminals::default();
             let mut spec = local_spec(folder.path());
-            spec.launch.set_env.push((
-                "O7_TERMINAL_TEST_EXIT".into(),
-                code.to_string().into(),
-            ));
+            spec.launch
+                .set_env
+                .push(("O7_TERMINAL_TEST_EXIT".into(), code.to_string().into()));
             let (completion, finished) = tokio::sync::oneshot::channel();
             let id = terminals
                 .reserve("setup")

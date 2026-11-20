@@ -135,7 +135,7 @@ fn verification_requires_an_independently_pinned_key() {
     verify(&stage, &plan.public_key).unwrap();
 
     // The CLI must never silently use the key from the stage it is checking.
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_aura-release"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_o7-release"))
         .args(["verify", stage.to_str().unwrap()])
         .env_remove("O7_UPDATER_PUBLIC_KEY")
         .output()

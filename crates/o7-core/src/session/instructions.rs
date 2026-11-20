@@ -4,9 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use o7_config::instructions::{
-    self, ApplyResult, Context, GitFacts, Prepared, ScopeKind, Target,
-};
+use o7_config::instructions::{self, ApplyResult, Context, GitFacts, Prepared, ScopeKind, Target};
 use o7_process::EnvKey;
 use o7_protocol::worktree_setup::WorktreeSetup;
 

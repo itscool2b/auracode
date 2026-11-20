@@ -70,9 +70,8 @@ mod demo {
             assert_passed(&output, needle);
         }
         assert!(
-            output.contains(
-                "INFO  env: set on every agent process, after the scrub: O7_PROBE_TEST"
-            ),
+            output
+                .contains("INFO  env: set on every agent process, after the scrub: O7_PROBE_TEST"),
             "{output}"
         );
         assert!(

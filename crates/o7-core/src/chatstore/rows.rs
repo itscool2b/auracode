@@ -365,8 +365,7 @@ fn reply_hash(conn: &Connection, turn_id: &str) -> rusqlite::Result<Option<Strin
     let payloads = stmt.query_map(params![turn_id], |row| row.get::<_, String>(0))?;
     let mut hasher = ReplyHasher::default();
     for payload in payloads {
-        if let Ok(o7_protocol::O7Event::MessageDelta { text, .. }) =
-            serde_json::from_str(&payload?)
+        if let Ok(o7_protocol::O7Event::MessageDelta { text, .. }) = serde_json::from_str(&payload?)
         {
             hasher.update(&text);
         }

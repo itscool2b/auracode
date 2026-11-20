@@ -24,6 +24,9 @@ mod options;
 mod rewind;
 mod steering;
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
+use futures::stream::{FuturesUnordered, StreamExt};
 use o7_agents::{AgentSpec, LaunchError, Recipe};
 use o7_drivers::batch::{FrameBatcher, TurnTag};
 use o7_drivers::driver::{
@@ -40,14 +43,11 @@ use o7_protocol::session::{
     SendingPrompt, SessionLists,
 };
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, HoldCause,
-    LimitWindow, Millis, NoticeLevel, PermissionDecision, PermissionRequest, PromptPart,
-    PromptState, QueueWait, ResolvedBy, SessionInfo, SessionStatus, SlashCommand, StopReason,
-    UiAnswer, UiPrompt, UiRequest, UsageInfo,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, HoldCause, LimitWindow, Millis,
+    NoticeLevel, O7Event, PermissionDecision, PermissionRequest, PromptPart, PromptState,
+    QueueWait, ResolvedBy, SessionInfo, SessionStatus, SlashCommand, StopReason, UiAnswer,
+    UiPrompt, UiRequest, UsageInfo,
 };
-use futures::FutureExt;
-use futures::future::BoxFuture;
-use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio::time::Instant;
@@ -144,8 +144,7 @@ pub(crate) enum ChatMsg {
     Continue {
         apply: Box<crate::chatstore::conversation::ApplyContinuation>,
         prompt: Option<(String, Vec<PromptPart>)>,
-        reply:
-            oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
+        reply: oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
     },
     CheckpointContext {
         turn_id: Option<String>,
@@ -630,8 +629,7 @@ enum Done {
     Continued {
         result: Result<Box<ChatLoad>, SessionError>,
         prompt: Option<(String, Vec<PromptPart>)>,
-        reply:
-            oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
+        reply: oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
     },
     CheckpointContext {
         result: Result<(ChatRecord, Option<String>), SessionError>,
@@ -1260,8 +1258,15 @@ impl ChatActor {
                 if self.worktree_setup.as_ref().is_some_and(|current| {
                     current.generation > attempt.generation
                         || (current.generation == attempt.generation
-                            && (matches!(current.state,o7_protocol::worktree_setup::WorktreeSetupState::Succeeded | o7_protocol::worktree_setup::WorktreeSetupState::Failed | o7_protocol::worktree_setup::WorktreeSetupState::Interrupted)
-                            || (current.state == o7_protocol::worktree_setup::WorktreeSetupState::Running && attempt.state == o7_protocol::worktree_setup::WorktreeSetupState::Awaiting)))
+                            && (matches!(
+                                current.state,
+                                o7_protocol::worktree_setup::WorktreeSetupState::Succeeded
+                                    | o7_protocol::worktree_setup::WorktreeSetupState::Failed
+                                    | o7_protocol::worktree_setup::WorktreeSetupState::Interrupted
+                            ) || (current.state
+                                == o7_protocol::worktree_setup::WorktreeSetupState::Running
+                                && attempt.state
+                                    == o7_protocol::worktree_setup::WorktreeSetupState::Awaiting)))
                 }) {
                     return;
                 }
@@ -1749,9 +1754,7 @@ impl ChatActor {
         &mut self,
         apply: Box<crate::chatstore::conversation::ApplyContinuation>,
         prompt: Option<(String, Vec<PromptPart>)>,
-        reply: oneshot::Sender<
-            Result<o7_protocol::conversation::ContinuationResult, SessionError>,
-        >,
+        reply: oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
     ) {
         if let Err(error) = self.require_workspace() {
             let _ = reply.send(Err(error));
@@ -1828,9 +1831,7 @@ impl ChatActor {
         &mut self,
         result: Result<Box<ChatLoad>, SessionError>,
         prompt: Option<(String, Vec<PromptPart>)>,
-        reply: oneshot::Sender<
-            Result<o7_protocol::conversation::ContinuationResult, SessionError>,
-        >,
+        reply: oneshot::Sender<Result<o7_protocol::conversation::ContinuationResult, SessionError>>,
     ) {
         self.organizing = false;
         let result = result.and_then(|load| {
@@ -3968,10 +3969,9 @@ The person continues this conversation here, in your terminal. Reply only that y
             };
         }
         if read.unread {
-            let agent = o7_drivers::terminal::TerminalAgent::of(o7_agents::agent_of(
-                &self.chat.agent_id,
-            ))
-            .map_or("The agent", o7_drivers::terminal::TerminalAgent::label);
+            let agent =
+                o7_drivers::terminal::TerminalAgent::of(o7_agents::agent_of(&self.chat.agent_id))
+                    .map_or("The agent", o7_drivers::terminal::TerminalAgent::label);
             let message = if read.session_known {
                 format!(
                     "{agent} keeps the terminal's turns in its own session, which Chat continues. o7 cannot copy them into this chat's history."
@@ -4196,20 +4196,18 @@ The person continues this conversation here, in your terminal. Reply only that y
             return;
         }
         self.memory_revision = None;
-        self.memory_grant = if matches!(
-            self.chat.agent_host,
-            o7_protocol::agents::AgentHost::Native
-        ) {
-            crate::memory_service::MemoryGrant::start(
-                self.store.clone(),
-                self.chat_id.clone(),
-                Arc::clone(&self.shared.agent_memory_writes),
-                &self.shared.deps.rt,
-            )
-            .ok()
-        } else {
-            None
-        };
+        self.memory_grant =
+            if matches!(self.chat.agent_host, o7_protocol::agents::AgentHost::Native) {
+                crate::memory_service::MemoryGrant::start(
+                    self.store.clone(),
+                    self.chat_id.clone(),
+                    Arc::clone(&self.shared.agent_memory_writes),
+                    &self.shared.deps.rt,
+                )
+                .ok()
+            } else {
+                None
+            };
         let generation = self.generation;
         let desired = self.native_desired();
         let model_id = self
@@ -8056,9 +8054,7 @@ fn terminal_home(
             .set_env
             .iter()
             .rev()
-            .find(|(key, _)| {
-                o7_process::EnvKey::new(key.clone()) == o7_process::EnvKey::from(name)
-            })
+            .find(|(key, _)| o7_process::EnvKey::new(key.clone()) == o7_process::EnvKey::from(name))
             .map(|(_, value)| PathBuf::from(value))
             .or_else(|| {
                 env.vars

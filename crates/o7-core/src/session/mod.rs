@@ -69,6 +69,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant};
 
+use futures::stream::{FuturesUnordered, StreamExt};
 use o7_agents::Detector;
 use o7_drivers::driver::{DriverFactory, StopPlan};
 use o7_process::{
@@ -81,7 +82,6 @@ use o7_protocol::session::{
     StorageStatus,
 };
 use o7_protocol::{Autonomy, EventBatch, Millis, SessionStatus, UiAnswer};
-use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -660,17 +660,11 @@ impl SessionManager {
         Ok(detector.cached())
     }
 
-    pub async fn agent_maintenance(
-        &self,
-        agent_id: &str,
-    ) -> o7_protocol::agents::AgentMaintenance {
+    pub async fn agent_maintenance(&self, agent_id: &str) -> o7_protocol::agents::AgentMaintenance {
         self.deps().detector.maintenance(agent_id).await
     }
 
-    pub async fn agent_auth_status(
-        &self,
-        agent_id: &str,
-    ) -> o7_protocol::agents::AgentAuthStatus {
+    pub async fn agent_auth_status(&self, agent_id: &str) -> o7_protocol::agents::AgentAuthStatus {
         self.deps().detector.auth_status(agent_id).await
     }
 

@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod common;
 
-use o7_process::{LeftoverRegistry, ShutdownPlan, Spawner};
 use common::{GONE_WITHIN, Reaper, STARTUP, launch, read_pids, spec, wait_gone};
+use o7_process::{LeftoverRegistry, ShutdownPlan, Spawner};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::runtime::Handle;

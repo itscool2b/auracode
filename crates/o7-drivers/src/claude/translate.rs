@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use o7_protocol::session::{ConfigCategory, ConfigChoice, ConfigKind, ConfigOption};
 use o7_protocol::{
-    O7Event, Cost, LimitWindow, NoticeLevel, PlanEntry, PlanStatus, SlashCommand, TokenUsage,
+    Cost, LimitWindow, NoticeLevel, O7Event, PlanEntry, PlanStatus, SlashCommand, TokenUsage,
     ToolCall, ToolContent, ToolKind, ToolLocation, ToolStatus, ToolUpdate, UsageInfo, UsageScope,
 };
 use serde_json::Value;
@@ -356,13 +356,7 @@ impl Translator {
         }
     }
 
-    fn input_delta(
-        &mut self,
-        message: &str,
-        index: u64,
-        partial: &str,
-        events: &mut Vec<O7Event>,
-    ) {
+    fn input_delta(&mut self, message: &str, index: u64, partial: &str, events: &mut Vec<O7Event>) {
         let Some(block) = self
             .messages
             .get_mut(message)
@@ -1902,8 +1896,6 @@ mod tests {
         let event = O7Event::LimitsUpdated {
             windows: rate_limits(&json!({"unifiedWindows": windows})),
         };
-        assert!(
-            serde_json::to_vec(&event).expect("serialize").len() <= o7_protocol::EVENT_BUDGET
-        );
+        assert!(serde_json::to_vec(&event).expect("serialize").len() <= o7_protocol::EVENT_BUDGET);
     }
 }

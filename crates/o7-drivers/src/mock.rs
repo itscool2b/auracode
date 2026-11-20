@@ -12,7 +12,7 @@
 use std::time::Duration;
 
 use o7_protocol::{
-    O7Event, Cost, EventBatch, PlanEntry, PlanPriority, PlanStatus, SessionInfo, StopReason,
+    Cost, EventBatch, O7Event, PlanEntry, PlanPriority, PlanStatus, SessionInfo, StopReason,
     TokenUsage, ToolCall, ToolContent, ToolKind, ToolLocation, ToolStatus, ToolUpdate, UsageInfo,
     UsageScope,
 };
@@ -1133,17 +1133,21 @@ mod tests {
             O7Event::ToolUpdate(ToolUpdate { status: Some(ToolStatus::Completed), content: Some(content), .. })
                 if matches!(content.as_slice(), [ToolContent::Text { .. }])
         )));
-        assert!(events.iter().any(
-            |event| matches!(event, O7Event::ToolCall(call) if call.kind == ToolKind::Edit)
-        ));
+        assert!(
+            events.iter().any(
+                |event| matches!(event, O7Event::ToolCall(call) if call.kind == ToolKind::Edit)
+            )
+        );
         assert!(events.iter().any(|event| matches!(
             event,
             O7Event::ToolUpdate(ToolUpdate { content: Some(content), .. })
                 if matches!(content.as_slice(), [ToolContent::Diff { old_text: Some(_), .. }])
         )));
-        assert!(events.iter().any(
-            |event| matches!(event, O7Event::PlanUpdated { entries } if entries.len() == 3)
-        ));
+        assert!(
+            events.iter().any(
+                |event| matches!(event, O7Event::PlanUpdated { entries } if entries.len() == 3)
+            )
+        );
         assert!(events.iter().any(|event| matches!(
             event,
             O7Event::SessionUpdated(SessionInfo { model: Some(model), title: Some(_), .. }) if model == "demo"
@@ -1625,10 +1629,7 @@ mod tests {
                 "{total} requested, {counted} streamed"
             );
             let events = emitted(&script);
-            assert!(matches!(
-                events.first(),
-                Some(O7Event::TurnStarted { .. })
-            ));
+            assert!(matches!(events.first(), Some(O7Event::TurnStarted { .. })));
             assert!(matches!(
                 events.last(),
                 Some(O7Event::TurnEnded {

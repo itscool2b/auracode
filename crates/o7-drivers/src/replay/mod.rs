@@ -24,13 +24,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use futures::future::BoxFuture;
 use o7_process::testing::FakeSpawner;
 use o7_process::{
     EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
     ShutdownPlan, SpawnError, SpawnSpec, SpawnedProcess,
 };
-use o7_protocol::{O7Event, Autonomy};
-use futures::future::BoxFuture;
+use o7_protocol::{Autonomy, O7Event};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;

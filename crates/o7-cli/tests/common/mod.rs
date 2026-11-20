@@ -140,7 +140,7 @@ impl Machine {
 
 /// The fake ACP agent this package builds.
 pub fn fake_agent() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_aura-cli-fake-agent"))
+    PathBuf::from(env!("CARGO_BIN_EXE_o7-cli-fake-agent"))
 }
 
 /// Package B's fixture folder.

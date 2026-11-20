@@ -20,7 +20,7 @@ pub const STARTUP: Duration = Duration::from_secs(30);
 pub const GONE_WITHIN: Duration = Duration::from_secs(5);
 
 pub fn testbin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_aura-testbin"))
+    PathBuf::from(env!("CARGO_BIN_EXE_o7-testbin"))
 }
 
 /// The test process's own env, as a resolved env.
@@ -47,7 +47,7 @@ pub fn env_with(extra: &[(&str, &str)]) -> Arc<ResolvedEnv> {
 /// The test child in `mode`, run in the chat folder.
 pub fn launch(args: &[&str]) -> LaunchSpec {
     LaunchSpec {
-        label: format!("aura-testbin {}", args.first().copied().unwrap_or_default()),
+        label: format!("o7-testbin {}", args.first().copied().unwrap_or_default()),
         program: testbin(),
         args: args.iter().map(OsString::from).collect(),
         cwd: ProcessCwd::ChatFolder,

@@ -28,17 +28,17 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use o7_protocol::session::{
     AuthCommand, AuthPrompt, ConfigCategory, ConfigChoice, ConfigKind, ConfigOption, ConfigValue,
 };
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel, O7Event,
     PermissionOption, PermissionOptionKind, PermissionRequest, PromptPart, SlashCommand,
     StopReason, TokenUsage, ToolCall, ToolContent, ToolKind, ToolStatus, ToolUpdate, UiAnswer,
     UiPrompt, UiRequest, UsageScope,
 };
-use futures::FutureExt;
-use futures::future::BoxFuture;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;

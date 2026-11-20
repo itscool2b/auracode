@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
+pub use futures::future::BoxFuture;
 use o7_protocol::{
     EventBatch, UiAnswer,
     session::{ChatAttach, ChatStatusUpdate, HistoryPage, PromptAck},
     workspace::WorkspaceChat,
 };
-pub use futures::future::BoxFuture;
 
 use crate::wire::{Look, Overview};
 

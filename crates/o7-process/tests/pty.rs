@@ -2,11 +2,11 @@
 #[cfg(test)]
 mod common;
 
+use common::{GONE_WITHIN, Reaper, STARTUP, launch, read_pids, spec, wait_gone};
 use o7_process::{
     LeftoverRegistry, Spawner,
     pty::{PtyOutput, PtySize},
 };
-use common::{GONE_WITHIN, Reaper, STARTUP, launch, read_pids, spec, wait_gone};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;

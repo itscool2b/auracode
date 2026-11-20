@@ -10,7 +10,7 @@ use o7_drivers::driver::{DriverError, DriverEvent, DriverExit, LoggedCommand};
 use o7_drivers::testing::{CommandMatch, ScriptedDriver, Step};
 use o7_protocol::session::{ConfigCategory, ConfigChoice, ConfigKind, ConfigOption, ConfigValue};
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, PermissionDecision,
+    AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, O7Event, PermissionDecision,
     ResolvedBy, SessionStatus, StopReason, ToolKind, UiAnswer, UiPrompt, UiRequest,
 };
 use support::*;

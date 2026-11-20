@@ -34,10 +34,8 @@ impl AgentDriver for DelayedCustomization {
                 unreachable!()
             };
             if let DriverEvent::Ready(info) = &mut event {
-                info.capabilities.autonomy_levels = vec![
-                    o7_protocol::Autonomy::Ask,
-                    o7_protocol::Autonomy::FullAuto,
-                ];
+                info.capabilities.autonomy_levels =
+                    vec![o7_protocol::Autonomy::Ask, o7_protocol::Autonomy::FullAuto];
             }
             ctx.events
                 .reserve(event.approx_bytes())

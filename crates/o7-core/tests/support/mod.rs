@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use futures::future::BoxFuture;
 use o7_agents::{AgentSpec, Detector, FixedAgent};
 use o7_core::chatstore::ChatStore;
 use o7_core::owner::ProfileOwner;
@@ -34,11 +35,10 @@ use o7_protocol::session::{
     Availability, ChatStatusUpdate, ChatSummary, HistoryItem, QueuedPrompt,
 };
 use o7_protocol::{
-    O7Event, Capabilities, EventBatch, PermissionOption, PermissionOptionKind, PermissionRequest,
+    Capabilities, EventBatch, O7Event, PermissionOption, PermissionOptionKind, PermissionRequest,
     SessionStatus, ToolKind,
 };
 use o7_protocol::{DriverKind, ErrorKind};
-use futures::future::BoxFuture;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 

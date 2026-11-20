@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod common;
+use common::*;
 use o7_agents::Detector;
 use o7_process::{EnvResolver, LeftoverRegistry};
 use o7_protocol::session::Availability;
-use common::*;
 use std::sync::Arc;
 use tokio::{runtime::Handle, sync::mpsc};
 

@@ -1,6 +1,6 @@
 use super::*;
-use o7_protocol::agents::{AgentInstallationCandidate, AgentInstallations};
 use futures::{StreamExt, stream};
+use o7_protocol::agents::{AgentInstallationCandidate, AgentInstallations};
 use std::path::Path;
 
 impl Detector {

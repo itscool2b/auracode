@@ -7,8 +7,7 @@ pub fn managed_memory(server: &ResolvedMcpServer) -> bool {
 }
 /// o7's browser server (the Browser universal plugin's tools).
 pub fn managed_browser(server: &ResolvedMcpServer) -> bool {
-    server.definition.id == "o7-browser"
-        && server.definition.name.replace('-', "_") == "o7_browser"
+    server.definition.id == "o7-browser" && server.definition.name.replace('-', "_") == "o7_browser"
 }
 /// o7's project server (a coordinated project's tools, for its coordinator and workers).
 pub fn managed_project(server: &ResolvedMcpServer) -> bool {

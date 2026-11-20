@@ -157,8 +157,8 @@ fn turn_agents(
         }
         // A turn names its agent, not the connection its session ran through.
         let agent_id = o7_agents::agent_of(&agent_id).to_owned();
-        let agent_name = o7_agents::get(&agent_id)
-            .map_or_else(|| agent_id.clone(), |spec| spec.name.to_owned());
+        let agent_name =
+            o7_agents::get(&agent_id).map_or_else(|| agent_id.clone(), |spec| spec.name.to_owned());
         agents.push(TurnAgent {
             turn_id,
             agent_id,

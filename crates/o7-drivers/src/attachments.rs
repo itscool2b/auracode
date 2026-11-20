@@ -1,6 +1,6 @@
 //! Bounded, integrity-checked reads of explicit composer imports from the private profile.
-use o7_protocol::PromptPart;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use o7_protocol::PromptPart;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{fs, io::Read, path::Path};

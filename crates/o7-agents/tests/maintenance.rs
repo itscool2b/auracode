@@ -1,9 +1,9 @@
 //! Maintenance uses owned fake binaries. No native login, account, installer or paid prompt runs.
 #![cfg(test)]
 mod common;
+use common::Machine;
 use o7_agents::maintenance::MaintenanceError;
 use o7_protocol::agents::AgentAuthStatus;
-use common::Machine;
 
 fn vendor_machine() -> (Machine, std::path::PathBuf) {
     let machine = Machine::with_tools(&[]);

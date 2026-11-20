@@ -1,7 +1,7 @@
 //! gh owns its credentials. Only bounded public metadata is decoded; raw output is never logged.
 use super::*;
-use o7_process::{EnvKey, HelperEnv, HelperSpec, ResolvedEnv, find_exe, run_helper};
 use futures::future::BoxFuture;
+use o7_process::{EnvKey, HelperEnv, HelperSpec, ResolvedEnv, find_exe, run_helper};
 use std::{ffi::OsString, sync::Arc, time::Duration};
 
 pub(super) struct Response {

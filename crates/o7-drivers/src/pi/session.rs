@@ -7,15 +7,15 @@ use crate::driver::{
     DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
     LoggedCommand, ReadyInfo, ResumeOutcome, SessionSetup, SteerResult, StopPlan,
 };
+use futures::future::BoxFuture;
 use o7_process::{
     LineSink, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES,
     ShutdownPlan, SpawnSpec, StdoutItem,
 };
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
-    PromptPart, StopReason, UiRequest, UsageInfo,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel, O7Event, PromptPart,
+    StopReason, UiRequest, UsageInfo,
 };
-use futures::future::BoxFuture;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -668,9 +668,7 @@ impl Session {
                         Purpose::Commands => {
                             if !self.setup.mcp_servers.is_empty()
                                 && !data["commands"].as_array().is_some_and(|commands| {
-                                    commands
-                                        .iter()
-                                        .any(|c| c["name"] == "o7-shared-mcp-ready")
+                                    commands.iter().any(|c| c["name"] == "o7-shared-mcp-ready")
                                 })
                             {
                                 if self

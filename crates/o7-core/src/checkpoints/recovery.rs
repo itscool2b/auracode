@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use o7_protocol::changes::RevertResult;
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
+use o7_protocol::changes::RevertResult;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

@@ -2,7 +2,7 @@
 use super::{metadata, wire::text};
 use crate::acp::{map::hex, options::truncate};
 use o7_protocol::{
-    O7Event, NoticeLevel, StopReason, TokenUsage, ToolCall, ToolContent, ToolKind, ToolLocation,
+    NoticeLevel, O7Event, StopReason, TokenUsage, ToolCall, ToolContent, ToolKind, ToolLocation,
     ToolStatus, ToolUpdate, UsageScope,
 };
 use serde_json::Value;

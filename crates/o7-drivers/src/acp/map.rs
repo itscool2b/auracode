@@ -16,9 +16,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use o7_protocol::{
-    O7Event, SlashCommand, ToolCall, ToolContent, ToolKind, ToolStatus, ToolUpdate,
-};
+use o7_protocol::{O7Event, SlashCommand, ToolCall, ToolContent, ToolKind, ToolStatus, ToolUpdate};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::time::Instant;

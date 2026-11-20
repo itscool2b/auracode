@@ -31,7 +31,7 @@ use std::sync::Arc;
 
 use o7_protocol::tasks::{BackgroundTask, TaskStatus, TaskStep};
 use o7_protocol::{
-    O7Event, EVENT_BUDGET, Millis, PermissionDecision, PermissionRequest, PlanEntry, PlanStatus,
+    EVENT_BUDGET, Millis, O7Event, PermissionDecision, PermissionRequest, PlanEntry, PlanStatus,
     ResolvedBy, SessionInfo, ToolCall, ToolContent, ToolLocation, ToolUpdate, Truncation, UiAnswer,
     UiPrompt, UiRequest,
 };
@@ -143,9 +143,7 @@ impl Normalizer {
                 }
             }
             O7Event::ToolCall(call) => O7Event::ToolCall(fit_tool_call(call, &mut blobs)),
-            O7Event::ToolUpdate(update) => {
-                O7Event::ToolUpdate(fit_tool_update(update, &mut blobs))
-            }
+            O7Event::ToolUpdate(update) => O7Event::ToolUpdate(fit_tool_update(update, &mut blobs)),
             O7Event::PermissionRequested(request) => {
                 let request = fit_permission(request, &mut blobs);
                 self.cards
@@ -380,11 +378,7 @@ impl Normalizer {
         self.resolve(|tag| tag == Some(turn), by)
     }
 
-    fn close_texts(
-        &mut self,
-        matches: impl Fn(Option<&str>) -> bool,
-        now: Millis,
-    ) -> Vec<O7Event> {
+    fn close_texts(&mut self, matches: impl Fn(Option<&str>) -> bool, now: Millis) -> Vec<O7Event> {
         let mut out = Vec::new();
         self.texts.retain(|text| {
             if !matches(text.tag.as_deref()) {
@@ -407,11 +401,7 @@ impl Normalizer {
         out
     }
 
-    fn resolve(
-        &mut self,
-        matches: impl Fn(Option<&str>) -> bool,
-        by: ResolvedBy,
-    ) -> Vec<O7Event> {
+    fn resolve(&mut self, matches: impl Fn(Option<&str>) -> bool, by: ResolvedBy) -> Vec<O7Event> {
         let mut out = Vec::new();
         self.cards.retain(|card| {
             if !matches(card.tag.as_deref()) {
@@ -1027,10 +1017,7 @@ fn fit_permission(mut request: PermissionRequest, blobs: &mut Vec<Op>) -> Permis
         }
     }
     if cut {
-        request.truncated = Some(event_blob(
-            &O7Event::PermissionRequested(untouched),
-            blobs,
-        ));
+        request.truncated = Some(event_blob(&O7Event::PermissionRequested(untouched), blobs));
     }
     request
 }

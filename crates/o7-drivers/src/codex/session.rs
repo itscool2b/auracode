@@ -5,16 +5,16 @@ use crate::driver::{
     LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup, SteerResult,
 };
 use crate::jsonrpc::{self, Incoming, RpcError, RpcOut};
+use futures::future::BoxFuture;
 use o7_process::{
     LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES, ShutdownPlan,
     SpawnSpec, StdoutItem,
 };
 use o7_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
 use o7_protocol::{
-    O7Event, Autonomy, Capabilities, ErrorKind, LimitWindow, NoticeLevel, StopReason, TokenUsage,
+    Autonomy, Capabilities, ErrorKind, LimitWindow, NoticeLevel, O7Event, StopReason, TokenUsage,
     UiAnswer, UiPrompt, UiRequest, UsageScope,
 };
-use futures::future::BoxFuture;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -76,8 +76,7 @@ enum Purpose {
     Mcp {
         server_name: String,
         action: o7_protocol::mcp::McpSessionAction,
-        reply:
-            tokio::sync::oneshot::Sender<Result<o7_protocol::mcp::McpActionResult, DriverError>>,
+        reply: tokio::sync::oneshot::Sender<Result<o7_protocol::mcp::McpActionResult, DriverError>>,
     },
     Initialize,
     Open,

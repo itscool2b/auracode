@@ -5,17 +5,17 @@ use crate::driver::{
     DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
     FileRewindResult, LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
 };
+use futures::future::BoxFuture;
 use o7_process::{
     LineSink, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES,
     ShutdownPlan, SpawnSpec, StdoutItem,
 };
 use o7_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, LimitWindow,
-    NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest, StopReason, UsageInfo,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, LimitWindow, NoticeLevel,
+    O7Event, PermissionOption, PermissionOptionKind, PermissionRequest, StopReason, UsageInfo,
 };
 use o7_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionOption, UiRequest};
-use futures::future::BoxFuture;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, VecDeque},

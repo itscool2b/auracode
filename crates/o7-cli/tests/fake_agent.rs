@@ -116,10 +116,7 @@ mod process {
             &headless,
             &ProbeArgs {
                 agent: "hermes".into(),
-                env: vec![(
-                    "O7_PROBE_SET".into(),
-                    "a value that is never logged".into(),
-                )],
+                env: vec![("O7_PROBE_SET".into(), "a value that is never logged".into())],
                 folder: None,
             },
             &folder,
@@ -377,10 +374,7 @@ mod process {
     async fn probe_tells_an_option_the_agent_changed_with_the_model_from_a_lost_one() {
         let machine = Machine::with_fake_hermes();
         let headless = machine
-            .headless(&[
-                ("O7_FAKE_OPEN_DELAY_MS", "300"),
-                ("O7_FAKE_EFFORT", "1"),
-            ])
+            .headless(&[("O7_FAKE_OPEN_DELAY_MS", "300"), ("O7_FAKE_EFFORT", "1")])
             .await;
         let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
             .await

@@ -7,13 +7,13 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use o7_drivers::driver::AgentSpawner;
 use o7_process::{
     LogFactory, ProcessControl, ProcessSpawner, SpawnError, SpawnSpec, SpawnedProcess,
 };
 use o7_protocol::tasks::{BackgroundTask, TaskStatus};
-use futures::FutureExt;
-use futures::future::BoxFuture;
 
 use crate::ids::new_id;
 

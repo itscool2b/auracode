@@ -1,8 +1,8 @@
 //! Clone lifecycle only. Git output, progress, environment and credentials never enter this file.
 //! Recovery reads destinations but never removes or repairs them. Dismissal removes one record.
 use super::*;
-use o7_protocol::setup_actions::CloneRecovery;
 use cap_fs_ext::{DirExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
+use o7_protocol::setup_actions::CloneRecovery;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 

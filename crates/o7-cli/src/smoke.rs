@@ -29,7 +29,7 @@ use o7_agents::AgentSpec;
 use o7_drivers::acp::dialect::dialect_for;
 use o7_protocol::session::{ConfigCategory, ConfigKind, ConfigValue, HistoryItem};
 use o7_protocol::{
-    O7Event, Autonomy, DriverKind, PermissionOptionKind, PermissionRequest, ResolvedBy,
+    Autonomy, DriverKind, O7Event, PermissionOptionKind, PermissionRequest, ResolvedBy,
     SessionStatus, StopReason, ToolStatus, UsageScope,
 };
 

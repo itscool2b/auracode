@@ -4,13 +4,11 @@
 #[path = "publish_tests.rs"]
 mod tests;
 
+use futures::future::BoxFuture;
 use o7_process::{
     EnvKey, HelperEnv, HelperSpec, ResolvedEnv, find_exe, run_helper, run_helper_input,
 };
-use o7_protocol::git::{
-    ManagedWorktree, PullRequestInput, PullRequestPreview, PullRequestResult,
-};
-use futures::future::BoxFuture;
+use o7_protocol::git::{ManagedWorktree, PullRequestInput, PullRequestPreview, PullRequestResult};
 use serde::Deserialize;
 use std::{
     ffi::OsString,

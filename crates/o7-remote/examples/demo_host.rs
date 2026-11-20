@@ -17,7 +17,7 @@ use std::{
 };
 
 use o7_protocol::{
-    O7Event, EventBatch, PermissionDecision, PermissionOption, PermissionOptionKind,
+    EventBatch, O7Event, PermissionDecision, PermissionOption, PermissionOptionKind,
     PermissionRequest, ResolvedBy, SessionStatus, StopReason, ToolCall, ToolKind, ToolStatus,
     UiAnswer,
     session::{ChatAttach, ChatStatusUpdate, HistoryItem, HistoryPage, PromptAck},

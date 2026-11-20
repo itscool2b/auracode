@@ -719,9 +719,7 @@ async fn refresh_provider(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use o7_protocol::agents::{
-        AgentHost, AgentInstallation, InstallChannel, VersionVerification,
-    };
+    use o7_protocol::agents::{AgentHost, AgentInstallation, InstallChannel, VersionVerification};
 
     fn agent(id: &str, version: Option<&str>, harness: Option<HarnessStatus>) -> AgentEntry {
         AgentEntry {

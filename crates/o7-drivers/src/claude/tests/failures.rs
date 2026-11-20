@@ -2,7 +2,7 @@ use super::*;
 use crate::driver::{DriverError, PermissionOutcome};
 use o7_process::{ExitInfo, MAX_LINE_BYTES, TopKeys};
 use o7_protocol::session::ConfigValue;
-use o7_protocol::{O7Event, AutoAnswer, ErrorKind};
+use o7_protocol::{AutoAnswer, ErrorKind, O7Event};
 
 fn initialized(mode: &str) -> Value {
     json!({"claude_code_version":"2.1.310","current_permission_mode":mode,

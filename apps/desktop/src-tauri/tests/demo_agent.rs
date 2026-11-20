@@ -19,17 +19,15 @@ mod end_to_end {
 
     use o7_core::paths::DataRoot;
     use o7_core::session::{FrameSink, SessionManager, SinkGone};
-    use o7_process::{
-        EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv, find_exe, process_env,
-    };
-    use o7_protocol::session::{Availability, HistoryItem, HistoryPage};
-    use o7_protocol::{
-        O7Event, Autonomy, EventBatch, NoticeLevel, ResolvedBy, SessionStatus, StopReason,
-        ToolKind, ToolStatus,
-    };
     use o7_desktop::boot::{Booted, boot};
     use o7_desktop::sessions::{
         ChatRuntime, Outside, QUIT_SESSIONS_DEADLINE, QUIT_STORE_DEADLINE, RUN_DIR, start_chats,
+    };
+    use o7_process::{EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv, find_exe, process_env};
+    use o7_protocol::session::{Availability, HistoryItem, HistoryPage};
+    use o7_protocol::{
+        Autonomy, EventBatch, NoticeLevel, O7Event, ResolvedBy, SessionStatus, StopReason,
+        ToolKind, ToolStatus,
     };
     use tokio::runtime::Handle;
 

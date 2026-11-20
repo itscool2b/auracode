@@ -1,9 +1,7 @@
 use super::*;
 
 pub(super) async fn enable_worktree_fixture(rig: &mut Rig) {
-    use o7_process::{
-        HelperEnv, HelperSpec, LeftoverRegistry, find_exe, process_env, run_helper,
-    };
+    use o7_process::{HelperEnv, HelperSpec, LeftoverRegistry, find_exe, process_env, run_helper};
     let vars = process_env();
     let git = find_exe("git", &vars).expect("Git is required for owned worktree tests");
     let resolved = Arc::new(ResolvedEnv {
@@ -690,10 +688,7 @@ async fn exclusive_actions_stop_idle_agents_and_name_working_ones() {
         .isolation_apply(&idle.id, &isolation.token)
         .await
         .expect("isolate once nothing works there");
-    assert_eq!(
-        made.worktree.state,
-        o7_protocol::git::WorktreeState::Ready
-    );
+    assert_eq!(made.worktree.state, o7_protocol::git::WorktreeState::Ready);
     // Then the idle agent was stopped first; it resumes on its next message.
     assert_eq!(quiet_handle.commands(), [LoggedCommand::Shutdown]);
 }

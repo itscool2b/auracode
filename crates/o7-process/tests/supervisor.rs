@@ -8,12 +8,12 @@ mod common;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::{Reaper, STARTUP, alive, read_pids, testbin};
 use o7_process::supervisor::{
     SupervisorContext, serve,
     wire::{self, Ended, Frame, LaunchRequest, Ready, Tag},
 };
 use o7_process::{DaemonMatch, LeftoverRegistry, ProtocolLog, Redactor, Spawner};
-use common::{Reaper, STARTUP, alive, read_pids, testbin};
 use tokio::io::{DuplexStream, ReadHalf, WriteHalf};
 
 struct Rig {
@@ -49,7 +49,7 @@ async fn start(mode: &str, spare_daemon: bool) -> Rig {
         set_env: Default::default(),
         daemons: if spare_daemon {
             vec![DaemonMatch {
-                program: Some("aura-testbin".into()),
+                program: Some("o7-testbin".into()),
                 args_in_order: vec!["daemon".into(), "run".into()],
             }]
         } else {
@@ -146,7 +146,7 @@ async fn losing_the_windows_side_of_the_transport_stops_linux_descendants() {
 
 #[test]
 fn endpoint_version_is_available_without_a_launch_or_environment_resolution() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_aura-host-supervisor"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_o7-host-supervisor"))
         .arg("--version")
         .env_clear()
         .output()

@@ -15,10 +15,8 @@ impl SessionManager {
     pub async fn repository_publication_draft(
         &self,
         folder_id: &str,
-    ) -> Result<
-        Option<o7_protocol::repository_publication::RepositoryPublicationDraft>,
-        SessionError,
-    > {
+    ) -> Result<Option<o7_protocol::repository_publication::RepositoryPublicationDraft>, SessionError>
+    {
         self.publication_folder(folder_id).await?;
         self.deps()
             .worktrees

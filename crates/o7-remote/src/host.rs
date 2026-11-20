@@ -14,12 +14,12 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use futures::{SinkExt, StreamExt};
 use o7_protocol::{
     EventBatch,
     remote::{RemoteBot, RemoteBotLink, RemoteDevice, RemoteLink, RemotePairing, RemoteStatus},
     session::{ChatStatusUpdate, HistoryPage},
 };
-use futures::{SinkExt, StreamExt};
 use tokio::{
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
     time::Instant,
@@ -821,7 +821,7 @@ impl Serving {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-    use o7_protocol::{O7Event, EventBatch};
+    use o7_protocol::{EventBatch, O7Event};
 
     use super::{MERGED_FRAME, Out, merge};
 

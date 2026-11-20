@@ -16,7 +16,7 @@ use o7_process::{
 };
 use o7_protocol::session::{ConfigKind, ConfigValue};
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, PermissionOptionKind,
+    AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, O7Event, PermissionOptionKind,
     PermissionRequest, PromptPart, StopReason, TokenUsage, ToolContent, ToolKind, UsageScope,
 };
 use serde_json::{Value, json};

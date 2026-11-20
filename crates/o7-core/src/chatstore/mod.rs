@@ -1127,7 +1127,7 @@ mod tests {
     use std::time::Duration;
 
     use o7_protocol::session::{PauseReason, StorageState};
-    use o7_protocol::{O7Event, NoticeLevel};
+    use o7_protocol::{NoticeLevel, O7Event};
     use rusqlite::{Connection, params};
     use sha2::{Digest, Sha256};
 

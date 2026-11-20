@@ -9,9 +9,9 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use o7_protocol::changes::{HunkRevert, LineHunk, RevertPreview, RevertResult};
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
+use o7_protocol::changes::{HunkRevert, LineHunk, RevertPreview, RevertResult};
 use sha2::{Digest, Sha256};
 
 use super::{

@@ -29,7 +29,7 @@ use o7_process::{HelperEnv, HelperSpec, find_program, run_helper};
 use o7_protocol::session::{
     Availability, ConfigCategory, ConfigChoice, ConfigKind, ConfigOption, ConfigValue, SessionLists,
 };
-use o7_protocol::{O7Event, AutoAnswer, Autonomy, AutonomyState, DriverKind, SessionStatus};
+use o7_protocol::{AutoAnswer, Autonomy, AutonomyState, DriverKind, O7Event, SessionStatus};
 use serde_json::Value;
 
 use crate::CliError;

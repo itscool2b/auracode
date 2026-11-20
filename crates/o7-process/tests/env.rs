@@ -13,11 +13,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::{GONE_WITHIN, Reaper, testbin, wait_gone};
 use o7_process::{
     EnvKey, EnvMap, EnvResolver, EnvResolverConfig, EnvSource, LeftoverRegistry, Redactor,
     ResolvedEnv, ResolverStatus,
 };
-use common::{GONE_WITHIN, Reaper, testbin, wait_gone};
 use tokio::runtime::Handle;
 
 /// A fake shell named `name` in a temp folder, with a home and the files it records into.
@@ -57,10 +57,7 @@ impl FakeShell {
             ("HOME", self.home.to_str().expect("utf-8")),
             ("O7_TESTBIN_SHELL", mode),
             ("O7_TESTBIN_RECORD", self.record.to_str().expect("utf-8")),
-            (
-                "O7_TESTBIN_PIDFILE",
-                self.pidfile.to_str().expect("utf-8"),
-            ),
+            ("O7_TESTBIN_PIDFILE", self.pidfile.to_str().expect("utf-8")),
         ]
         .into_iter()
         .chain(extra.iter().copied())

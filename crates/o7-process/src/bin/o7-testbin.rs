@@ -72,7 +72,7 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("aura-testbin: {error}");
+            eprintln!("o7-testbin: {error}");
             ExitCode::FAILURE
         }
     }

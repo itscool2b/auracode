@@ -35,6 +35,8 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use o7_process::{
     ExitInfo, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProcessControl, ProtocolLog,
     STDERR_TAIL_BYTES, ShutdownPlan, ShutdownReport, SpawnError, SpawnSpec, SpawnedProcess,
@@ -42,12 +44,10 @@ use o7_process::{
 };
 use o7_protocol::session::{AuthCommand, AuthPrompt, ConfigCategory, ConfigValue};
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel, O7Event,
     PermissionRequest, PromptPart, SlashCommand, StopReason, TokenUsage, UiAnswer, UiRequest,
     UsageScope,
 };
-use futures::FutureExt;
-use futures::future::BoxFuture;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot};

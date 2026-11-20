@@ -48,15 +48,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::future::BoxFuture;
 use o7_process::{
     ExitInfo, LaunchSpec, ResolvedEnv, ShutdownPlan, SpawnError, SpawnSpec, SpawnedProcess,
 };
 use o7_protocol::session::{AuthPrompt, ConfigOption, ConfigValue};
 use o7_protocol::{
-    O7Event, Autonomy, AutonomyState, Capabilities, DriverKind, ErrorKind, PermissionRequest,
+    Autonomy, AutonomyState, Capabilities, DriverKind, ErrorKind, O7Event, PermissionRequest,
     PromptPart, SlashCommand, StopReason, TokenUsage, UiAnswer, UiRequest,
 };
-use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 

@@ -13,7 +13,7 @@ mod binary {
     use crate::common::fixture_root;
 
     fn cli(args: &[&str], configure: impl FnOnce(&mut Command)) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_aura-cli"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_o7-cli"));
         command.args(args).env_remove("RUST_LOG");
         configure(&mut command);
         command.output().expect("run o7-cli")
@@ -102,8 +102,7 @@ mod binary {
         let fixture = dir.path().join("legacy-models-modes.jsonl");
         std::fs::copy(&source, &fixture).expect("copy the fixture");
         let golden = o7_drivers::replay::golden_path(&fixture);
-        std::fs::copy(o7_drivers::replay::golden_path(&source), &golden)
-            .expect("copy the golden");
+        std::fs::copy(o7_drivers::replay::golden_path(&source), &golden).expect("copy the golden");
         let path = fixture.to_str().expect("a UTF-8 path");
 
         let output = cli(&["replay", path], |_| {});

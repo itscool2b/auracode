@@ -8,7 +8,7 @@ use o7_process::{
     EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
     ShutdownPlan, SpawnError, SpawnSpec, SpawnedProcess,
 };
-use o7_protocol::{O7Event, Autonomy, PromptPart, StopReason};
+use o7_protocol::{Autonomy, O7Event, PromptPart, StopReason};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;

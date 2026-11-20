@@ -4,12 +4,12 @@
 
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 
+use futures::{FutureExt, future::BoxFuture};
 use o7_process::{LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ShutdownPlan, SpawnSpec, StdoutItem};
 use o7_protocol::{
-    O7Event, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, PromptPart,
-    StopReason, TokenUsage, UsageScope,
+    AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, O7Event, PromptPart, StopReason,
+    TokenUsage, UsageScope,
 };
-use futures::{FutureExt, future::BoxFuture};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::{sync::mpsc, time::Instant};

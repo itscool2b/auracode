@@ -669,10 +669,7 @@ async fn setup_source(rig: &Rig, project: &ProjectSummary) {
         .unwrap();
 }
 
-async fn failed_setup(
-    rig: &Rig,
-    chat: &str,
-) -> o7_protocol::worktree_setup::WorktreeSetupAttempt {
+async fn failed_setup(rig: &Rig, chat: &str) -> o7_protocol::worktree_setup::WorktreeSetupAttempt {
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let attempt = rig.store.read_setup_attempt(chat).await.unwrap().unwrap();
@@ -1169,10 +1166,7 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
     let port = std::ffi::OsString::from(info.port.to_string());
     assert_eq!(
         plan.spec.launch.set_env,
-        [
-            ("O7_PORT".into(), port.clone()),
-            ("PORT".into(), port)
-        ]
+        [("O7_PORT".into(), port.clone()), ("PORT".into(), port)]
     );
     assert_eq!(canonical(&plan.spec.folder), canonical(&preview.path));
     // Like a project terminal, Run holds the worktree: folder operations wait until it stops.

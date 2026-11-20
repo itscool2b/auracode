@@ -8,11 +8,11 @@ use super::{
     git::{Git, args, oid, text},
     inspect::{Inspection, inspect},
 };
+use client::{Client, Remote, Response};
 use o7_protocol::repository_publication::{
     RepositoryPublicationInput as Input, RepositoryPublicationResult as Outcome,
     RepositoryPublicationReview as Review, RepositoryPublicationState as State,
 };
-use client::{Client, Remote, Response};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},

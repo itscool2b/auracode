@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 use o7_core::session::{FrameSink, SessionError, SessionManager, SinkGone, StatusSink};
 use o7_protocol::session::{ChatAttach, ChatStatusUpdate};
 use o7_protocol::{
-    O7Event, ErrorKind, EventBatch, NoticeLevel, PermissionDecision, PermissionRequest,
-    ResolvedBy, SessionInfo, SessionStatus, StopReason, TokenUsage, ToolStatus,
+    ErrorKind, EventBatch, NoticeLevel, O7Event, PermissionDecision, PermissionRequest, ResolvedBy,
+    SessionInfo, SessionStatus, StopReason, TokenUsage, ToolStatus,
 };
 use tokio::sync::Notify;
 
@@ -273,12 +273,8 @@ impl WatchState {
                 } => view
                     .resolutions
                     .push((request_id.clone(), decision.clone(), *by)),
-                O7Event::Notice { level, message } => {
-                    view.notices.push((*level, message.clone()))
-                }
-                O7Event::Error { kind, message, .. } => {
-                    view.errors.push((*kind, message.clone()))
-                }
+                O7Event::Notice { level, message } => view.notices.push((*level, message.clone())),
+                O7Event::Error { kind, message, .. } => view.errors.push((*kind, message.clone())),
                 O7Event::TurnEnded {
                     turn_id: ended,
                     stop_reason,

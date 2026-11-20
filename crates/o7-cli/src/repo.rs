@@ -17,9 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use o7_agents::{Recipe, catalog};
-use o7_process::{
-    HelperEnv, HelperSpec, LeftoverRegistry, find_program, process_env, run_helper,
-};
+use o7_process::{HelperEnv, HelperSpec, LeftoverRegistry, find_program, process_env, run_helper};
 use serde_json::json;
 
 use crate::CliError;

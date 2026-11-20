@@ -55,8 +55,8 @@ impl Machine {
     pub fn install_tool(&self, dir: &Path, name: &str) -> PathBuf {
         std::fs::create_dir_all(dir).expect("mkdir");
         let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        let binary = option_env!("CARGO_BIN_EXE_aura-agents-testbin")
-            .or(option_env!("CARGO_BIN_EXE_aura-plugin-testbin"))
+        let binary = option_env!("CARGO_BIN_EXE_o7-agents-testbin")
+            .or(option_env!("CARGO_BIN_EXE_o7-plugin-testbin"))
             .expect("the package's fake CLI binary");
         std::fs::copy(binary, &path).expect("copy");
         path

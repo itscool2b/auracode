@@ -3,8 +3,8 @@
 //! only from `fake-listing.json` in that home, so a passing test proves the home was used.
 #![cfg(test)]
 mod common;
-use o7_protocol::plugins::{ListingState, PluginFeature};
 use common::Machine;
+use o7_protocol::plugins::{ListingState, PluginFeature};
 use std::path::{Path, PathBuf};
 
 fn home(machine: &Machine, name: &str, answers: serde_json::Value) -> PathBuf {

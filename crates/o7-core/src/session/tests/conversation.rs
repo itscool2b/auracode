@@ -422,9 +422,7 @@ async fn a_chat_saved_on_the_adapter_keeps_resuming_through_it_across_handoffs()
     let (fourth, _h4) = turn_driver("native-1", "unused");
     let starts = Arc::new(Mutex::new(Vec::new()));
     let factory = Arc::new(RecordingFactory {
-        inner: o7_drivers::testing::ScriptedDriverFactory::new(vec![
-            first, second, third, fourth,
-        ]),
+        inner: o7_drivers::testing::ScriptedDriverFactory::new(vec![first, second, third, fourth]),
         starts: Arc::clone(&starts),
     });
     let mut rig = rig_with(factory, WriterConfig::STANDARD, Knobs::STANDARD);

@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::future::BoxFuture;
 use o7_agents::Detector;
 use o7_core::chatstore::ChatStore;
 use o7_core::device::DeviceIdentity;
@@ -35,7 +36,6 @@ use o7_process::{
     ProtocolLog, Redactor, ResolvedEnv, SpawnError, SpawnSpec, SpawnedProcess, Spawner,
     SweepReport, secret_values, sweep_stale,
 };
-use futures::future::BoxFuture;
 use tokio::runtime::Handle;
 
 use crate::CliError;

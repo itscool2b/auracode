@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use o7_protocol::agents::{AgentInstallation, InstallChannel, LatestRelease};
 use futures::future::BoxFuture;
+use o7_protocol::agents::{AgentInstallation, InstallChannel, LatestRelease};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 

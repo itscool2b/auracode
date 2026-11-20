@@ -21,7 +21,7 @@
 use std::collections::{HashMap, HashSet};
 
 use o7_protocol::tasks::{BackgroundTask, TaskStep};
-use o7_protocol::{O7Event, Millis, ToolCall, ToolKind, ToolStatus, ToolUpdate, Truncation};
+use o7_protocol::{Millis, O7Event, ToolCall, ToolKind, ToolStatus, ToolUpdate, Truncation};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::ids::new_id;
@@ -593,8 +593,8 @@ pub(crate) mod reducer {
     use std::collections::BTreeMap;
 
     use o7_protocol::{
-        O7Event, PermissionDecision, PermissionRequest, PlanEntry, ResolvedBy, ToolCall,
-        UiAnswer, UiRequest, UsageInfo,
+        O7Event, PermissionDecision, PermissionRequest, PlanEntry, ResolvedBy, ToolCall, UiAnswer,
+        UiRequest, UsageInfo,
     };
 
     use super::{DeltaKind, apply_update, default_tool};
@@ -1062,11 +1062,7 @@ mod tests {
                         prompt_id: None,
                     },
                 ),
-                event_row(
-                    1,
-                    Some("t1"),
-                    &O7Event::ToolCall(call("t1.tool", "Build")),
-                ),
+                event_row(1, Some("t1"), &O7Event::ToolCall(call("t1.tool", "Build"))),
                 event_row(2, Some("t1"), &delta("t1.m1", "Building ")),
                 event_row(3, Some("t1"), &delta("t1.m1", "now")),
                 event_row(

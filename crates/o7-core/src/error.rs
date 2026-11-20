@@ -118,9 +118,7 @@ pub enum CoreError {
     #[error("There is no profile with id \"{0}\"")]
     ProfileNotFound(String),
 
-    #[error(
-        "Could not find a folder for app data on this system. Set O7_DATA_DIR to choose one."
-    )]
+    #[error("Could not find a folder for app data on this system. Set O7_DATA_DIR to choose one.")]
     NoDataDir,
 }
 
@@ -214,11 +212,7 @@ mod tests {
             CoreError::InvalidProfileId("../x".into()).to_string(),
             "\"../x\" is not a valid profile id"
         );
-        assert!(
-            CoreError::NoDataDir
-                .to_string()
-                .contains("O7_DATA_DIR")
-        );
+        assert!(CoreError::NoDataDir.to_string().contains("O7_DATA_DIR"));
     }
 
     #[test]

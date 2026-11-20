@@ -7,11 +7,11 @@ mod common;
 
 use std::sync::Arc;
 
+use common::{Machine, Reaper, gone, spec};
 use o7_agents::{Detector, LaunchError};
 use o7_process::{
     LeftoverRegistry, ProcessCwd, ProcessSpawner, ProtocolLog, SpawnSpec, Spawner, StdoutItem,
 };
-use common::{Machine, Reaper, gone, spec};
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;

@@ -18,7 +18,7 @@ mod conformance {
     use o7_drivers::driver::{DriverEvent, PermissionOutcome};
     use o7_protocol::session::{ConfigCategory, ConfigKind, ConfigValue};
     use o7_protocol::{
-        O7Event, Cost, NoticeLevel, PermissionOptionKind, PlanEntry, PlanPriority, PlanStatus,
+        Cost, NoticeLevel, O7Event, PermissionOptionKind, PlanEntry, PlanPriority, PlanStatus,
         StopReason, ToolContent, ToolKind, ToolLocation, ToolStatus, UsageInfo,
     };
     use serde_json::{Value, json};

@@ -7,10 +7,10 @@ mod support;
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
+use machine::Machine;
 use o7_core::session::{ManagerDeps, ManagerLimits, SessionManager, SessionTimings};
 use o7_process::{EnvResolver, LogFactory};
 use o7_protocol::plugins::{ListingState, PluginFeature, PluginLibrary};
-use machine::Machine;
 use tokio::{runtime::Handle, sync::mpsc, time::Instant};
 
 type Refresh = tokio::task::JoinHandle<Result<PluginLibrary, o7_core::session::SessionError>>;

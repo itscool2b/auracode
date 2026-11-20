@@ -1041,10 +1041,7 @@ mod tests {
         let mount = "/tmp/.mount_auracoXyZ12";
         let mut vars = map(&[
             ("APPDIR", mount),
-            (
-                "APPIMAGE",
-                "/home/me/Applications/o7_0.1.0_amd64.AppImage",
-            ),
+            ("APPIMAGE", "/home/me/Applications/o7_0.1.0_amd64.AppImage"),
             ("ARGV0", "/home/me/Applications/auracode.AppImage"),
             ("OWD", "/home/me"),
             (
@@ -1209,10 +1206,7 @@ mod tests {
     #[test]
     fn variables_auracode_set_at_launch_are_stripped() {
         let mut vars = map(&[
-            (
-                "O7_LAUNCH_SET",
-                "__NV_DISABLE_EXPLICIT_SYNC::NOT_PRESENT",
-            ),
+            ("O7_LAUNCH_SET", "__NV_DISABLE_EXPLICIT_SYNC::NOT_PRESENT"),
             ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
             ("PATH", "/usr/bin"),
         ]);
