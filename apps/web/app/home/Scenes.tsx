@@ -368,7 +368,7 @@ const LANES: readonly {
     card: {
       agent: "claude-code",
       title: "Fix the login flow",
-      project: "auracode",
+      project: "o7",
       line: "Waiting on you · 2 min",
       tone: "needs",
     },
@@ -380,7 +380,7 @@ const LANES: readonly {
     card: {
       agent: "codex",
       title: "Tighten the sidebar",
-      project: "auracode",
+      project: "o7",
       line: "Running pnpm test · 0:12",
       tone: "working",
     },

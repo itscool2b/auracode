@@ -352,7 +352,7 @@ export function HeroWindow({ state }: { state: HandoffState }) {
           </div>
         </div>
         <div className="hw-main">
-          <Header title="Ship the frame pacing fix" project="auracode" working={working} />
+          <Header title="Ship the frame pacing fix" project="o7" working={working} />
           <div className="handoff-stage">
             <div className="handoff-prior hw-transcript">
               {shown.map((turn) => (
