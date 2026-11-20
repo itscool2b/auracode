@@ -3,64 +3,64 @@
     "channel": "stable",
     "signed": true,
     "publisher_signed": false,
-    "version": "0.1.1608",
-    "pub_date": "2026-11-19T15:50:32-05:00",
-    "notes": "auracode has a new address, o7.codes, and using your computer from your phone works properly now.",
-    "checksums_url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/SHA256SUMS",
+    "version": "0.1.1612",
+    "pub_date": "2026-11-19T19:29:48-05:00",
+    "notes": "The Update button looks right.",
+    "checksums_url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/SHA256SUMS",
     "downloads": [
       {
         "kind": "macos_universal_dmg",
         "label": "macOS · Apple silicon and Intel",
         "requirements": "macOS 13.3 or newer",
-        "file": "auracode_0.1.1608_universal.dmg",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode_0.1.1608_universal.dmg",
-        "sha256": "bef4b3a278231df7e98ab2ced8ea82d69028eb46b6070b5b1f25d205fb4e941b",
-        "bytes": 166614843
+        "file": "auracode_0.1.1612_universal.dmg",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode_0.1.1612_universal.dmg",
+        "sha256": "161e078737a245c633f017c5cb3613c6ccf6734a7ab5fb7d79764c316d588d50",
+        "bytes": 166612520
       },
       {
         "kind": "windows_x64_nsis",
         "label": "Windows · x64",
         "requirements": "Windows 10 or newer, with Microsoft Edge WebView2",
-        "file": "auracode_0.1.1608_x64-setup.exe",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode_0.1.1608_x64-setup.exe",
-        "sha256": "e56f28a09f4cdf4e8caebaf6a1567bc89f58aa5c64b772905272e6ea6ae9ecab",
-        "bytes": 131054830
+        "file": "auracode_0.1.1612_x64-setup.exe",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode_0.1.1612_x64-setup.exe",
+        "sha256": "e9f35d0a9d54b71b476808bc19bbb19377ba536b42c2827bdf8b346610660159",
+        "bytes": 131044507
       },
       {
         "kind": "windows_arm64_nsis",
         "label": "Windows · ARM64",
         "requirements": "Windows 10 or newer, with Microsoft Edge WebView2",
-        "file": "auracode_0.1.1608_arm64-setup.exe",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode_0.1.1608_arm64-setup.exe",
-        "sha256": "663fddaf3cffbaed043693a2c678736bf1c461e6ae9f12f3efb8c977ea6aa36f",
-        "bytes": 128951460
+        "file": "auracode_0.1.1612_arm64-setup.exe",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode_0.1.1612_arm64-setup.exe",
+        "sha256": "ac1e9808360143ff7c9f396085af68dfb23126756af65d5b164aaf56bfd3ee77",
+        "bytes": 128961700
       },
       {
         "kind": "linux_x64_appimage",
         "label": "Linux · AppImage",
         "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
-        "file": "auracode_0.1.1608_amd64.AppImage",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode_0.1.1608_amd64.AppImage",
-        "sha256": "83bb815bea6127b58fbfc0dfd0882bd49f0b0b516b85cd47f60b0da39a9a7e20",
-        "bytes": 223214072
+        "file": "auracode_0.1.1612_amd64.AppImage",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode_0.1.1612_amd64.AppImage",
+        "sha256": "b73ffa67a72168a23fb3c86aea728cc87eb9790e8b9e121f4ae4d139d3081b92",
+        "bytes": 223205880
       },
       {
         "kind": "linux_x64_deb",
         "label": "Linux · Debian and Ubuntu",
         "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
-        "file": "auracode_0.1.1608_amd64.deb",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode_0.1.1608_amd64.deb",
-        "sha256": "9b1c99384bd27db56da6991ddae14da29026964c412b0c4ac156918b8e014308",
-        "bytes": 140868810
+        "file": "auracode_0.1.1612_amd64.deb",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode_0.1.1612_amd64.deb",
+        "sha256": "c1b7f0a586adb7e15af3f4bc425a93bc244f7ecf383a89618a4c6fdc5c648442",
+        "bytes": 140867882
       },
       {
         "kind": "linux_x64_rpm",
         "label": "Linux · Fedora and other RPM systems",
         "requirements": "x64 Linux with glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
-        "file": "auracode-0.1.1608-1.x86_64.rpm",
-        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1608/auracode-0.1.1608-1.x86_64.rpm",
-        "sha256": "c7efe7c49e2748de096adde8ee1d4a106934e0c8a8afcd4b53e0dedbb30a35bd",
-        "bytes": 140880233
+        "file": "auracode-0.1.1612-1.x86_64.rpm",
+        "url": "https://github.com/itscool2b/auracode/releases/download/v0.1.1612/auracode-0.1.1612-1.x86_64.rpm",
+        "sha256": "6b526531a8636b60f57ff92042da36480f034ee79cb30953c3ec1818f8a2c41c",
+        "bytes": 140880382
       }
     ]
   }
