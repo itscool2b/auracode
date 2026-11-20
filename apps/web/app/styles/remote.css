@@ -18,9 +18,19 @@
   --remote-paper-ink: var(--g-fg-1);
   --remote-text: 15px;
   --remote-leading: 24px;
+  /*
+   * The page is the size and place of what the phone shows (useVisibleArea in remote.tsx): with
+   * a keyboard up that is the part above it, so the message box sits on the keyboard and the
+   * header stays in view. Without script it is the screen.
+   */
+  position: fixed;
+  top: var(--remote-top, 0px);
+  right: 0;
+  left: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: var(--remote-height, 100dvh);
+  overflow: hidden auto;
   background-color: var(--g-window);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -74,7 +84,7 @@
   align-content: center;
   box-sizing: border-box;
   width: min(100%, 480px);
-  min-height: 100dvh;
+  min-height: 100%;
   margin: 0 auto;
   padding: 32px 24px calc(32px + env(safe-area-inset-bottom));
 }
@@ -731,6 +741,11 @@
 }
 
 /* ------------------------------------------------------------------------------- composer */
+
+/* A keyboard covers the phone's own foot: the space kept clear of it is not needed. */
+:root[data-remote-keyboard] .remote-composer {
+  padding-bottom: 8px;
+}
 
 .remote-composer {
   flex: none;

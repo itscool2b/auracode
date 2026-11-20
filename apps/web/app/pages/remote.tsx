@@ -101,7 +101,42 @@ function useLook(look: Look | null) {
   );
 }
 
+/** A keyboard takes a good part of the screen; the browser's own bars coming and going do not. */
+const KEYBOARD_PX = 120;
+
+/**
+ * Keeps the page the size and place of what the phone shows. An on-screen keyboard covers the
+ * page's foot without resizing it (iOS), and the browser then scrolls the whole page to reveal the
+ * field, which hides the header and leaves dead space under the message box. The page takes the
+ * visible area's height and top instead, so the message box sits on the keyboard.
+ */
+function useVisibleArea() {
+  useLayoutEffect(() => {
+    const area = window.visualViewport;
+    if (!area) return;
+    const root = document.documentElement;
+    const sync = () => {
+      // Zoomed in with two fingers, the visible area is a part of the page: leave the page be.
+      if (area.scale > 1.01) return;
+      root.style.setProperty("--remote-height", `${area.height}px`);
+      root.style.setProperty("--remote-top", `${area.offsetTop}px`);
+      root.toggleAttribute("data-remote-keyboard", window.innerHeight - area.height > KEYBOARD_PX);
+    };
+    sync();
+    area.addEventListener("resize", sync);
+    area.addEventListener("scroll", sync);
+    return () => {
+      area.removeEventListener("resize", sync);
+      area.removeEventListener("scroll", sync);
+      root.style.removeProperty("--remote-height");
+      root.style.removeProperty("--remote-top");
+      root.removeAttribute("data-remote-keyboard");
+    };
+  }, []);
+}
+
 export default function RemotePage() {
+  useVisibleArea();
   const [client, setClient] = useState<RemoteClient | null>(null);
   // A pairing link waits for a tap. Opening the page pairs nothing by itself, so a program that
   // only opens links (a mail or chat scanner) cannot spend the link or become a device.
@@ -880,6 +915,16 @@ function ChatBody({
     if (pinned.current) node.scrollTop = node.scrollHeight;
     else setBelow(true);
   });
+  // The keyboard opening makes the transcript shorter: a reader at the newest words stays there.
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(() => {
+      if (pinned.current) node.scrollTop = node.scrollHeight;
+    });
+    watch.observe(node);
+    return () => watch.disconnect();
+  }, []);
   const onPermission = useCallback(
     (request: string, option: string | null) => {
       onError("");

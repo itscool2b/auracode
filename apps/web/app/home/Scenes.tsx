@@ -56,7 +56,7 @@ export function NewChatView({ chosen }: { chosen: AgentBrandId }) {
             <span className="m-folder-icon">
               <Icon name="folder" />
             </span>
-            <code className="m-path">~/code/auracode</code>
+            <code className="m-path">~/code/o7</code>
             <span className="m-button m-button-primary">Create</span>
           </div>
         </div>
