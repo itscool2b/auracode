@@ -206,10 +206,10 @@ warns about `libpcre2-8.so.0`. Until such a build is replaced, start each comman
 first on `PATH`.
 
 **Testing next to the running app.** `pnpm tauri build --debug --no-bundle` from `apps/desktop`,
-then `target/debug/auracode`. It opens the development folder, is titled `o7 dev` and runs
+then `target/debug/o7`. It opens the development folder, is titled `o7 dev` and runs
 beside the installed app. Never stop `auracode` by name (`pkill o7`): the installed app's
 process has the same name. Stop the PID you started. A plain `cargo build` or `cargo test` writes
-`target/debug/auracode` again without the page built in (it loads the Vite dev server's address
+`target/debug/o7` again without the page built in (it loads the Vite dev server's address
 and shows an empty window when none runs), so build with the Tauri command again before starting
 it.
 
